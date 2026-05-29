@@ -26,7 +26,7 @@ fi'
 
 # Opcional: Si existe algún problema con una revisión antigua, limpia la tabla alembic_version
 echo "Limpiando la tabla alembic_version..."
-docker exec -it project-db-1 psql -U postgres -d gestion_obra_db -c "TRUNCATE TABLE alembic_version;"
+docker exec -it project-db-1 psql -U postgres -d gestion_obra_saas -c "TRUNCATE TABLE alembic_version;"
 
 echo "Marcando la versión head en la base de datos..."
 docker exec -it project-web-1 flask db stamp head
