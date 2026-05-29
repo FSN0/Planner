@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Ficha: {{ worker.name }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    .worker-card { background: white; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1.5rem; display: flex; gap: 2rem; align-items: center; }
+    .worker-avatar { width: 80px; height: 80px; background: #f3f4f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: #9ca3af; position: relative; }
+    
+    /* Estilo Puntuación */
+    .reputation-badge {
+        position: absolute; bottom: -5px; right: -5px;
+        background: white; border: 2px solid white;
+        border-radius: 50%; width: 32px; height: 32px;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: bold; font-size: 0.9rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .rep-pos { color: #10b981; border-color: #10b981; }
+    .rep-neg { color: #ef4444; border-color: #ef4444; }
+    .rep-neu { color: #6b7280; border-color: #e5e7eb; }
+
+    #worker-calendar { font-family: system-ui; font-size: 0.85rem; }
+    .rating-btn.active { box-shadow: inset 0 3px 5px rgba(0,0,0,0.125); }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main">
+    <div class="d-flex justify-content-between mb-3 align-items-center">
+        <a href="{{ url_for('admin.personal') }}" class="text-muted small"><i class="fas fa-arrow-left"></i> Volver</a>
+        <div>
+             {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('admin.edit_currante', user_id=worker.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i> Editar</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="worker-card mb-4">
+        <div class="worker-avatar">
+            <i class="fas fa-user"></i>
+            {% set score = worker.reputation_score %}
+            <div class="reputation-badge {{ 'rep-pos' if score > 0 else 'rep-neg' if score < 0 else 'rep-neu' }}" 
+                 title="Reputación Actual">
+                {{ score }}
+            </div>
+        </div>
+        
+        <div class="flex-grow-1">
+            <h1 class="h4 mb-0 font-weight-bold text-dark">{{ worker.name }} {{ worker.lastname }}</h1>
+            <p class="text-muted mb-2">
+                {% if worker.company_rel %}
+                    <span class="badge badge-light border" style="border-left: 3px solid {{ worker.company_rel.color }} !important;">
+                        {{ worker.company_rel.nombre }}
+                    </span>
+                {% else %}
+                    Ext
+                {% endif %}
+                | {{ worker.dni }} | <span class="text-primary">{{ worker.categoria_profesional or 'Sin categoría' }}</span>
+            </p>
+            
+            <div class="d-flex align-items-center gap-2">
+                {% if current_user.role in ['admin', 'jefe_obra'] %}
+                    <button class="btn btn-sm btn-outline-primary" onclick="openRatingModal()">
+                        <i class="far fa-star mr-1"></i> Puntuar
+                    </button>
+                {% endif %}
+
+                {% if current_user.role == 'admin' %}
+                    <a href="{{ url_for('admin.worker_ratings_history', user_id=worker.id) }}" class="btn btn-sm btn-link text-muted">
+                        Ver Historial
+                    </a>
+                    {% if score != 0 %}
+                    <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline ml-2" onsubmit="return confirm('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.');">
+                        <button type="submit" class="btn btn-xs btn-light text-muted border" title="Resetear contador (Archivar actual)">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="text-right">
+            <div class="small text-muted text-uppercase">Estado</div>
+            <span class="badge badge-{{ 'success' if worker.active else 'danger' }}">{{ 'ACTIVO' if worker.active else 'INACTIVO' }}</span>
+            <div class="mt-2 h5 font-weight-bold text-gray-800">{{ events|length }} <small class="text-muted" style="font-size:0.6em;">días asig.</small></div>
+        </div>
+    </div>
+
+    <section class="admin-panel">
+        <div class="admin-panel-header border-bottom pb-2 mb-2">
+            <h2 class="admin-panel-title">Calendario de Asignaciones</h2>
+        </div>
+        <div class="admin-panel-body">
+            <div id="worker-calendar" style="min-height: 500px;"></div>
+        </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="modal fade" id="ratingModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2">
+                <h5 class="modal-title h6">Valorar a {{ worker.name }}</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body text-center">
+                <p class="text-muted small mb-3">Selecciona puntuación (-3 a +3)</p>
+                <div class="d-flex justify-content-center mb-3">
+                    <div class="btn-group mr-2">
+                        <button type="button" class="btn btn-outline-danger rating-btn" data-score="-3">-3</button>
+                        <button type="button" class="btn btn-outline-danger rating-btn" data-score="-2">-2</button>
+                        <button type="button" class="btn btn-outline-danger rating-btn" data-score="-1">-1</button>
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-success rating-btn" data-score="1">+1</button>
+                        <button type="button" class="btn btn-outline-success rating-btn" data-score="2">+2</button>
+                        <button type="button" class="btn btn-outline-success rating-btn" data-score="3">+3</button>
+                    </div>
+                </div>
+                <textarea id="ratingReason" class="form-control form-control-sm mb-3" rows="3" placeholder="Motivo (Opcional)..."></textarea>
+                <button type="button" class="btn btn-primary btn-block" onclick="submitRating()">Guardar Valoración</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
+
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var workerId = {{ worker.id }};
+    
+    window.workerCalendar = new UniversalCalendarManager('worker-calendar', {
+        context: 'worker', 
+        id: workerId,
+        mode: 'obras',
+        entityName: '{{ worker.name }} {{ worker.lastname }}',
+        callbacks: {
+
+            onShowNewPanel: function(containerId, currentObraId) {
+                // ABRE EL PANEL PARA TODOS
+                let container = document.getElementById(containerId);
+                if (container) {
+                    container.innerHTML = `
+                        <label class="small font-weight-bold mb-1 text-secondary">Obra a asignar</label>
+                        <select id="uc-panel-obra-select" class="form-control form-control-sm border-primary">
+                            <option value="">Cargando obras...</option>
+                        </select>
+                    `;
+                    fetch("{{ url_for('api_v6.recursos_activos') }}")
+                        .then(r => r.json())
+                        .then(data => {
+                            let select = document.getElementById('uc-panel-obra-select');
+                            if (!select) return;
+                            select.innerHTML = '<option value="">-- Seleccione Obra --</option>';
+                            data.obras.forEach(obra => {
+                                let opt = new Option(obra.text, obra.id);
+                                if (currentObraId && String(obra.id) === String(currentObraId)) {
+                                    opt.selected = true; 
+                                }
+                                select.add(opt);
+                            });
+                        });
+                }
+            },
+            
+            onSaveNew: function(startStr, endStr, includeWeekends) {
+                // ENVÍA LA PETICIÓN, EL BACKEND DECIDIRÁ SI ASIGNA O CREA SOLICITUD
+                let selectEl = document.getElementById('uc-panel-obra-select');
+                let targetObra = selectEl ? selectEl.value : null;
+                
+                if (!targetObra) {
+                    Swal.fire('Atención', 'Debes seleccionar una obra.', 'warning');
+                    return;
+                }
+
+                let payload = {
+                    worker_id: workerId, target_obra_id: targetObra, old_obra_id: targetObra,
+                    start_date: startStr, end_date: endStr, overwrite_mode: 'check', include_weekends: includeWeekends
+                };
+                enviarAccionPerfil(payload, null);
+            },
+
+            onEventModified: function(payload, revertFunc) {
+                let selectEl = document.getElementById('uc-panel-obra-select');
+                let targetObraId = selectEl && selectEl.value ? selectEl.value : payload.event_data.obra_id;
+
+                let actionPayload = {
+                    worker_id: workerId, 
+                    target_obra_id: targetObraId, 
+                    old_obra_id: payload.event_data.obra_id, 
+                    start_date: payload.new_start, 
+                    end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
+                    original_start: payload.original_start, 
+                    original_end: payload.original_end,
+                    overwrite_mode: 'check', 
+                    include_weekends: payload.include_weekends
+                };
+                enviarAccionPerfil(actionPayload, revertFunc);
+            },
+
+            onDeleteAssignment: function(event) {
+                let dates = [];
+                let start = moment(event.start);
+                let end = event.end ? moment(event.end) : moment(event.start).add(1, 'days');
+                while(start.isBefore(end)) { dates.push(start.format('YYYY-MM-DD')); start.add(1, 'days'); }
+
+                // MAGIA PARA DESASIGNAR: Detectamos si es jefe o admin en tiempo real
+                let isJefe = "{{ current_user.role }}" === "jefe_obra";
+                let endpointUnassign = isJefe ? "/api/v6/unassign_worker" : "/api/v6/unassign_worker";
+
+                $.ajax({
+                    url: endpointUnassign, type: "POST", contentType: "application/json",
+                    data: JSON.stringify({ worker_id: workerId, obra_id: event.extendedProps.obra_id, mode: 'selected', dates: dates }),
+                    success: (res) => {
+                        if (res.success) {
+                            if (isJefe) {
+                                Swal.fire('Solicitud Enviada', 'Se ha pedido a RRHH la desasignación de este operario.', 'success');
+                                window.workerCalendar.hidePanel();
+                            } else {
+                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Desasignado', showConfirmButton: false, timer: 1500});
+                                event.remove(); window.workerCalendar.hidePanel();
+                            }
+                        } else Swal.fire('Error', res.message, 'error');
+                    }
+                });
+            }
+        }
+
+    });
+
+
+    // Puente Global de Conflictos
+    window.enviarAccionPerfil = function(payload, revertFunc) {
+        payload.check_conflicts = true; 
+        if (!payload.overwrite_mode) payload.overwrite_mode = 'check';
+
+        $.ajax({
+            url: "/api/v6/planificador/action", type: "POST", contentType: "application/json",
+            data: JSON.stringify(payload),
+            success: function(res) {
+                if (res.success) {
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                    setTimeout(() => location.reload(), 500); 
+                } else if (res.conflict) {
+                    window.resolverConflictoAsignacion(res, payload, (nuevoPayload) => { enviarAccionPerfil(nuevoPayload, revertFunc); }, revertFunc);
+                } else {
+                    Swal.fire('Error', res.error || res.message, 'error'); if (revertFunc) revertFunc();
+                }
+            },
+            error: function() { Swal.fire('Error', 'Fallo de conexión', 'error'); if (revertFunc) revertFunc(); }
+        });
+    };
+});
+
+// Lógica de Puntuación intacta
+var selectedScore = null;
+function openRatingModal() { $('#ratingModal').modal('show'); selectedScore = null; $('.rating-btn').removeClass('active font-weight-bold'); }
+$(document).on('click', '.rating-btn', function() { $('.rating-btn').removeClass('active font-weight-bold'); $(this).addClass('active font-weight-bold'); selectedScore = $(this).data('score'); });
+function submitRating() {
+    if (!selectedScore) { alert("Selecciona una puntuación."); return; }
+    var reason = $('#ratingReason').val();
+    $.ajax({
+        url: "/admin/api/rate_worker", type: "POST", contentType: "application/json",
+        data: JSON.stringify({ worker_id: {{ worker.id }},entityName: '{{ worker.name }} {{ worker.lastname }}', score: selectedScore, reason: reason }),
+        success: function() { window.location.reload(); },
+        error: function(xhr) { alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.message : "Error")); }
+    });
+}
+</script>
+{% endblock %}

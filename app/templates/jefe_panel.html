@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Mis Obras{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {# Reutilizamos la sidebar, que se adapta automáticamente al rol #}
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    
+    <header class="admin-header mb-4">
+        <div class="d-flex justify-content-between align-items-end">
+            <div>
+                <div class="admin-header-title">Hola, {{ current_user.name }}</div>
+                <p class="admin-header-subtitle">Bienvenido a tu panel de gestión de obras.</p>
+            </div>
+            <div>
+                {# Botón principal para ir al tablero de planificación #}
+                <a href="{{ url_for('jefe.obras_detailed') }}" class="btn btn-primary">
+                    <i class="fas fa-th mr-2"></i> Ir al Tablero de Planificación
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <section class="admin-panel">
+        <div class="admin-panel-header border-bottom pb-3 mb-3">
+            <h2 class="admin-panel-title">Mis Obras Asignadas</h2>
+        </div>
+
+        {% if obras %}
+        <div class="row">
+            {% for obra in obras %}
+            <div class="col-md-4 mb-3">
+                <div class="card h-100 shadow-sm" style="border: 1px solid #e5e7eb; border-radius: 0.75rem;">
+                    <div class="card-body d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h5 class="h6 font-weight-bold text-dark mb-0">{{ obra.nombre }}</h5>
+                            <span class="badge badge-soft-slate">{{ obra.codigo or 'S/C' }}</span>
+                        </div>
+                        <p class="small text-muted mb-3 flex-grow-1">
+                            <i class="fas fa-map-marker-alt mr-1"></i> {{ obra.ubicacion or 'Sin ubicación' }}
+                        </p>
+                        
+                        <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+                            <span class="status-dot {{ 'green' if obra.estado == 'En Curso' else 'gray' }}"></span>
+                            <small class="text-muted">{{ obra.estado }}</small>
+                            
+                            {# Enlace para ir al detalle de ESA obra en el calendario #}
+                            <a href="{{ url_for('jefe.obras_detailed', selected_date=obra.fecha_inicio.strftime('%Y-%m-%d') if obra.fecha_inicio else '') }}" 
+                               class="btn btn-xs btn-outline-primary">
+                                Gestionar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <div class="text-muted mb-3"><i class="fas fa-hard-hat fa-3x"></i></div>
+            <h3 class="h6 text-dark">No tienes obras asignadas</h3>
+            <p class="small text-muted">Contacta con administración para que te asignen como responsable de una obra.</p>
+        </div>
+        {% endif %}
+    </section>
+
+  </main>
+</div>
+{% endblock %}

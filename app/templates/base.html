@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Gestión de Obras{% endblock %}</title>
+    
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='timeline.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        .select2-container .select2-selection--multiple { border-color: #e5e7eb; border-radius: 6px; min-height: 38px; }
+        /* Estilos para el botón de notas al colapsar */
+  .sidebar-collapsed .texto-nueva-nota { display: none !important; }
+  .sidebar-collapsed .nota-btn-container { padding: 0 10px !important; }
+  .sidebar-collapsed .nota-btn-container .btn { padding: 10px 0 !important; }
+  .sidebar-collapsed .nota-btn-container i { margin: 0 !important; font-size: 1.2rem; }
+    </style>
+    <script>
+        (function() {
+            var isCollapsed = localStorage.getItem("sidebarCollapsed") === "1";
+            if (isCollapsed) {
+                document.documentElement.classList.add('sidebar-collapsed');
+            }
+        })();
+    </script>
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="preload {% block body_class %}{% endblock %}">
+    
+    <nav class="navbar navbar-expand-lg navbar-light bg-light" style="display:none !important;">
+    </nav>
+    
+    <div class="container-fluid mt-3" style="position: absolute; z-index: 9999; pointer-events: none;">
+        <div class="row justify-content-center">
+            <div class="col-md-8" style="pointer-events: auto;">
+                 {% include "components/_flashes.html" %}
+            </div>
+        </div>
+    </div>
+
+    {% block wrapper %}
+    <div class="container mt-4">
+        {% block content %}{% endblock %}
+    </div>
+    {% endblock %}
+    
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
+
+    <script src="{{ url_for('static', filename='js/layout.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+
+    {% block extra_js %}{% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    {% if current_user.is_authenticated and current_user.role in ['admin', 'jefe_obra'] %}
+    <div class="modal fade" id="modalNuevaNota" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title font-weight-bold text-dark"><i class="fas fa-pen-alt text-primary mr-2"></i>Redactar Nota / Reunión</h5>
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formNuevaNota">
+                        <input type="hidden" name="nota_id" id="notaGlobalId" value="">
+                        <div class="row">
+                            <div class="col-md-8 form-group">
+                                <label class="font-weight-bold text-muted small">Título de la Reunión/Nota</label>
+                                <input type="text" class="form-control" name="titulo" required placeholder="Ej. Visita obra Edificio Sur...">
+                            </div>
+                            <div class="col-md-4 form-group">
+                                <label class="font-weight-bold text-muted small">Fecha</label>
+                                <input type="date" class="form-control" name="fecha" id="notaGlobalFecha" required>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 form-group">
+                                <label class="font-weight-bold text-muted small"><i class="fas fa-hard-hat mr-1"></i> Obras Implicadas</label>
+                                <select class="form-control select2-modal" name="obras_ids[]" multiple="multiple" id="globalSelectObras" style="width: 100%;">
+                                    </select>
+                            </div>
+                            <div class="col-md-6 form-group">
+                                <label class="font-weight-bold text-muted small"><i class="fas fa-users mr-1"></i> Personas Implicadas</label>
+                                <select class="form-control select2-modal" name="users_ids[]" multiple="multiple" id="globalSelectUsers" style="width: 100%;">
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="font-weight-bold text-muted small">Contenido</label>
+                            <textarea class="form-control" name="contenido" rows="5" required placeholder="Escribe aquí los detalles..."></textarea>
+                        </div>
+
+                        <div class="custom-control custom-switch mt-3">
+                            <input type="checkbox" class="custom-control-input" id="esPrivadaSwitch" name="es_privada" value="true">
+                            <label class="custom-control-label text-dark font-weight-bold" for="esPrivadaSwitch">
+                                <i class="fas fa-lock text-warning mr-1"></i> Nota Privada <span class="text-muted font-weight-normal small">(Solo tú podrás verla)</span>
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-white border" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="guardarNotaGlobal()">Guardar Nota</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Poner la fecha de hoy por defecto
+            let dateInput = document.getElementById('notaGlobalFecha');
+            if(dateInput) dateInput.valueAsDate = new Date();
+            
+            // Inicializar Select2 en el modal
+            $('#globalSelectObras').select2({ placeholder: "Buscar obras...", allowClear: true, dropdownParent: $('#modalNuevaNota') });
+            $('#globalSelectUsers').select2({ placeholder: "Buscar operarios/jefes...", allowClear: true, dropdownParent: $('#modalNuevaNota') });
+
+            // Cargar datos reales de Obras y Personas SIEMPRE
+            fetch("{{ url_for('api_v6.recursos_activos') }}")
+                .then(res => res.json())
+                .then(data => {
+                    $('#globalSelectObras').empty();
+                    $('#globalSelectUsers').empty();
+                    
+                    data.obras.forEach(o => {
+                        $('#globalSelectObras').append(new Option(o.text, o.id, false, false));
+                    });
+                    data.users.forEach(u => {
+                        $('#globalSelectUsers').append(new Option(u.text, u.id, false, false));
+                    });
+                })
+                .catch(err => console.error("Error cargando datos del modal:", err));
+        });
+
+        function guardarNotaGlobal() {
+            let form = document.getElementById('formNuevaNota');
+            if(!form.checkValidity()) { form.reportValidity(); return; }
+
+            let notaId = document.getElementById('notaGlobalId').value;
+            let url = notaId ? `/notas/${notaId}/editar` : '/notas/crear'; // Decide si crea o actualiza
+
+            let formData = new FormData(form);
+            fetch(url, { method: 'POST', body: formData })
+            .then(r => r.json()).then(data => {
+                if(data.success) {
+                    $('#modalNuevaNota').modal('hide');
+                    if (window.location.pathname.includes('/notas')) window.location.reload();
+                    else alert(notaId ? "Nota actualizada." : "Nota guardada."); 
+                } else {
+                    alert("Error: " + data.message);
+                }
+            });
+        }
+
+        // NUEVA FUNCIÓN: Carga los datos de la base de datos al pulsar "Editar"
+        function editarNotaModal(id) {
+            fetch(`/notas/${id}/datos`)
+            .then(res => res.json())
+            .then(data => {
+                if(!data.success) return alert("Error: " + data.message);
+                
+                document.getElementById('notaGlobalId').value = data.id;
+                document.getElementsByName('titulo')[0].value = data.titulo;
+                document.getElementById('notaGlobalFecha').value = data.fecha;
+                document.getElementsByName('contenido')[0].value = data.contenido;
+                document.getElementById('esPrivadaSwitch').checked = data.es_privada;
+                
+                // Setear selects
+                $('#globalSelectObras').val(data.obras_ids).trigger('change');
+                $('#globalSelectUsers').val(data.users_ids).trigger('change');
+                
+                // Cambiar títulos para que quede claro que estamos editando
+                $('.modal-title').html('<i class="fas fa-edit text-warning mr-2"></i>Editar Nota');
+                
+                $('#modalNuevaNota').modal('show');
+            });
+        }
+
+        // Resetear el modal al cerrarlo para que "Nueva Nota" esté limpia
+        $('#modalNuevaNota').on('hidden.bs.modal', function () {
+            document.getElementById('formNuevaNota').reset();
+            document.getElementById('notaGlobalId').value = '';
+            document.getElementById('notaGlobalFecha').valueAsDate = new Date();
+            $('#globalSelectObras').val(null).trigger('change');
+            $('#globalSelectUsers').val(null).trigger('change');
+            $('.modal-title').html('<i class="fas fa-pen-alt text-primary mr-2"></i>Redactar Nota / Reunión');
+        });
+    </script>
+    {% endif %}
+    
+</body>
+</html>

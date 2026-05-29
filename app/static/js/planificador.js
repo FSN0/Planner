@@ -1,0 +1,1249 @@
+document.addEventListener('DOMContentLoaded', function() {
+    
+    window.hiddenGroups = new Set();
+    window.allGroupsMaster = [];
+    window.allEventsMaster = [];
+    window.currentSidebarWidth = 250;
+    
+    window.AppGroups = new vis.DataSet();
+    window.AppItems = new vis.DataSet();
+    window.currentSelectedItem = null; // <-- NUEVO: Para guardar qué trabajador hemos pinchado
+
+    window.toggleEye = function(groupId) {
+        let idStr = String(groupId);
+        if (window.hiddenGroups.has(idStr)) window.hiddenGroups.delete(idStr);
+        else window.hiddenGroups.add(idStr);
+        
+        let g = window.allGroupsMaster.find(x => String(x.id) === idStr);
+        if (g && window.AppGroups) {
+            window.AppGroups.update({ id: g.id, _refresh: Date.now() }); 
+        }
+        window.renderItems();
+    };
+
+    window.renderItems = function() {
+        let visible = window.allEventsMaster.filter(ev => !window.hiddenGroups.has(String(ev.group)));
+        if (window.AppItems) {
+            window.AppItems.clear();
+            window.AppItems.add(visible);
+        }
+    };
+
+    document.body.addEventListener('click', function(e) {
+        let btn = e.target.closest('.btn-ojo-magico');
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.toggleEye(btn.getAttribute('data-group-id'));
+        }
+    }, true);
+
+    document.body.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.btn-ojo-magico')) {
+            e.stopPropagation(); 
+        }
+    }, true);
+
+    window.setSidebarWidth = function(width) {
+        window.currentSidebarWidth = width;
+        let style = document.getElementById('dynamic-sidebar-style');
+        style.innerHTML = `
+            .vis-panel.vis-left, .vis-labelset, .vis-label {
+                width: ${width}px !important;
+                min-width: ${width}px !important;
+                max-width: ${width}px !important;
+            }
+        `;
+    };
+
+    let resizer = document.getElementById('col-resizer');
+    let ghost = document.getElementById('col-resizer-ghost');
+    let isResizing = false;
+
+    // NUEVO CÓDIGO (Ejecución única y bajo demanda):
+    function updateResizerPosition() {
+        let leftPanel = document.querySelector('.vis-panel.vis-left');
+        if (leftPanel && resizer && !isResizing) {
+            resizer.style.left = leftPanel.offsetWidth + 'px';
+        }
+    }
+    // Inicializar después de que cargue el timeline
+    setTimeout(updateResizerPosition, 500); 
+
+    window.setSidebarWidth = function(width) {
+        window.currentSidebarWidth = width;
+        let style = document.getElementById('dynamic-sidebar-style');
+        style.innerHTML = `
+            .vis-panel.vis-left, .vis-labelset, .vis-label {
+                width: ${width}px !important;
+                min-width: ${width}px !important;
+                max-width: ${width}px !important;
+            }
+        `;
+        // Actualizamos la posición aquí de forma eficiente
+        updateResizerPosition(); 
+    };
+    resizer.addEventListener('mousedown', function(e) {
+        isResizing = true;
+        resizer.classList.add('is-resizing');
+        document.body.style.cursor = 'ew-resize';
+        let leftPanel = document.querySelector('.vis-panel.vis-left');
+        if(leftPanel) ghost.style.left = leftPanel.offsetWidth + 'px';
+        ghost.style.display = 'block';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isResizing) return;
+        let rect = document.getElementById('planificador-calendar').getBoundingClientRect();
+        let newWidth = e.clientX - rect.left;
+        if (newWidth < 120) newWidth = 120; 
+        if (newWidth > 600) newWidth = 600; 
+        ghost.style.left = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', function(e) {
+        if (isResizing) {
+            isResizing = false;
+            resizer.classList.remove('is-resizing');
+            document.body.style.cursor = 'default';
+            ghost.style.display = 'none';
+            
+            let rect = document.getElementById('planificador-calendar').getBoundingClientRect();
+            let newWidth = e.clientX - rect.left;
+            if (newWidth < 120) newWidth = 120; 
+            if (newWidth > 600) newWidth = 600; 
+            
+            window.setSidebarWidth(newWidth);
+            if (window.AppTimeline) window.AppTimeline.redraw();
+        }
+    });
+
+    // =========================================================
+    // CABECERA FLOTANTE OPTIMIZADA (Sin bucles pesados)
+    // =========================================================
+    function updateStickyHeader() {
+        let timelineEl = document.querySelector('.vis-timeline');
+        if (!timelineEl) return;
+        
+        let rect = timelineEl.getBoundingClientRect();
+        
+        // Si la parte superior del calendario ha salido de la pantalla por arriba
+        // pero el final del calendario todavía sigue visible en la vista
+        if (rect.top < 0 && Math.abs(rect.top) < rect.height) {
+            let offset = Math.abs(rect.top);
+            document.documentElement.style.setProperty('--sticky-top', offset + 'px');
+        } else {
+            document.documentElement.style.setProperty('--sticky-top', '0px');
+        }
+    }
+
+    // EL TRUCO CLAVE: Usamos 'capture: true' para interceptar scrolls de divs internos
+    // y 'passive: true' para que el navegador no ralentice el renderizado de la página
+    window.addEventListener('scroll', updateStickyHeader, { capture: true, passive: true });
+    
+    // Forzar una ejecución inicial por si se recarga la página a mitad de scroll
+    setTimeout(updateStickyHeader, 300);
+    
+    // Solo lo ejecutamos cuando el usuario hace scroll, usando un listener "passive" muy ligero
+
+
+    var calendarDiv = document.getElementById('planificador-calendar');
+
+    var options = {
+        orientation: 'top',
+        groupHeightMode: 'auto', 
+        stack: true, 
+        groupEditable: true, 
+        groupOrder: 'orden',
+        margin: { item: 2, axis: 5 }, 
+        throttleRedraw: 15,
+        editable: { add: false, updateTime: true, updateGroup: true, remove: false },
+        zoomMin: 1000 * 60 * 60 * 24 * 7, zoomMax: 1000 * 60 * 60 * 24 * 365, locale: 'es',
+
+        order: function(a, b) {
+            let empA = a.empresa_nombre || "ZZ_Sin_Empresa";
+            let empB = b.empresa_nombre || "ZZ_Sin_Empresa";
+            
+            if (empA !== empB) {
+                return empA.localeCompare(empB);
+            }
+            
+            let nameA = a.title || "";
+            let nameB = b.title || "";
+            if (nameA !== nameB) {
+                return nameA.localeCompare(nameB);
+            }
+            
+            return (new Date(a.start).getTime() - new Date(b.start).getTime());
+        },
+
+        groupTemplate: function(group) {
+            var container = document.createElement('div');
+            container.style.position = 'relative'; 
+            container.style.width = '100%';
+            container.style.height = '100%';
+            container.style.minHeight = '36px'; 
+            container.style.padding = '4px 55px 4px 24px';
+            container.style.boxSizing = 'border-box';
+            container.style.borderLeft = '4px solid #3b82f6';
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.justifyContent = 'center';
+            
+            var isHidden = window.hiddenGroups.has(String(group.id));
+            if (isHidden) container.style.opacity = '0.5';
+
+            var dragHandle = document.createElement('div');
+            dragHandle.innerHTML = '<i class="fas fa-grip-vertical" style="color: #cbd5e1; font-size: 14px;"></i>';
+            dragHandle.style.position = 'absolute';
+            dragHandle.style.left = '6px';
+            dragHandle.style.top = '50%';
+            dragHandle.style.transform = 'translateY(-50%)';
+            dragHandle.style.pointerEvents = 'none';
+
+            var titleEl = document.createElement('a');
+            titleEl.href = '/admin/obra_panel/' + group.id; 
+            titleEl.target = '_blank'; 
+            titleEl.textContent = group.title || '';
+            titleEl.style.display = 'block';
+            titleEl.style.fontSize = '12px'; 
+            titleEl.style.fontWeight = 'bold';
+            titleEl.style.lineHeight = '1.2';
+            titleEl.style.color = '#2563eb'; 
+            titleEl.style.textDecoration = 'none';
+            titleEl.style.whiteSpace = 'nowrap';
+            titleEl.style.textOverflow = 'ellipsis';
+            titleEl.style.overflow = 'hidden';
+
+            var codeEl = document.createElement('small');
+            codeEl.style.display = 'block';
+            codeEl.style.fontSize = '9px'; 
+            codeEl.style.color = '#64748b';
+            codeEl.style.whiteSpace = 'nowrap';
+            codeEl.style.textOverflow = 'ellipsis';
+            codeEl.style.overflow = 'hidden';
+            codeEl.style.marginTop = '2px';
+            
+            let htmlStr = group.codigo || '';
+            if (group.fecha_fin) {
+                if (htmlStr) htmlStr += ' | ';
+                htmlStr += '<span style="color:#64748b; font-weight:bold;"><i class="fas fa-flag-checkered mr-1"></i> Fin: ' + group.fecha_fin + '</span>';
+            }
+            codeEl.innerHTML = htmlStr;
+
+            var btn = document.createElement('div');
+            btn.className = 'btn-ojo-magico';
+            btn.setAttribute('data-group-id', group.id);
+            btn.title = 'Mostrar / Ocultar operarios';
+            btn.style.position = 'absolute';
+            btn.style.right = '4px';
+            btn.style.top = '50%';
+            btn.style.transform = 'translateY(-50%)';
+            btn.style.width = '20px';
+            btn.style.height = '20px';
+            btn.style.background = '#f8fafc';
+            btn.style.border = '1px solid #e2e8f0';
+            btn.style.borderRadius = '4px';
+            btn.style.cursor = 'pointer';
+            btn.style.display = 'flex';
+            btn.style.alignItems = 'center';
+            btn.style.justifyContent = 'center';
+            btn.style.zIndex = '10';
+
+            var icon = document.createElement('i');
+            icon.className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
+            icon.style.color = isHidden ? '#94a3b8' : '#3b82f6';
+            icon.style.fontSize = '10px';
+            btn.appendChild(icon);
+
+            // --- NUEVO: BOTÓN A LA APP DE COSTES ---
+            var btnCostes = document.createElement('a');
+            btnCostes.href = window.location.protocol + '//' + window.location.hostname + ':4999/obra/' + group.id;
+            btnCostes.target = '_blank';
+            btnCostes.title = 'Ver Hoja de Costes (BIM)';
+            btnCostes.style.position = 'absolute';
+            // Lo ponemos a 28px de la derecha para que quede justo a la izquierda del ojo mágico
+            btnCostes.style.right = '28px'; 
+            btnCostes.style.top = '50%';
+            btnCostes.style.transform = 'translateY(-50%)';
+            btnCostes.style.width = '20px';
+            btnCostes.style.height = '20px';
+            btnCostes.style.background = '#f0fdf4'; // Fondo verdecito claro
+            btnCostes.style.border = '1px solid #bbf7d0';
+            btnCostes.style.borderRadius = '4px';
+            btnCostes.style.cursor = 'pointer';
+            btnCostes.style.display = 'flex';
+            btnCostes.style.alignItems = 'center';
+            btnCostes.style.justifyContent = 'center';
+            btnCostes.style.textDecoration = 'none';
+            btnCostes.style.zIndex = '10';
+
+            var iconCostes = document.createElement('i');
+            iconCostes.className = 'fas fa-euro-sign';
+            iconCostes.style.color = '#16a34a'; // Verde oscuro
+            iconCostes.style.fontSize = '10px';
+            btnCostes.appendChild(iconCostes);
+            // ---------------------------------------
+
+            container.appendChild(dragHandle);
+            container.appendChild(titleEl);
+            container.appendChild(codeEl);
+            container.appendChild(btnCostes); // Añadimos el nuevo botón al contenedor
+            container.appendChild(btn);       // El ojo mágico al final
+
+            return container;
+        },
+        
+        template: function(item) {
+            if (item.worker_id === 'NEW' || item.worker_id === 'SYSTEM') return item.content || '';
+            
+            // Estilo para las Solicitudes (quitamos el color:white para que use el del style del backend)
+            if (item.worker_id === 'REQUEST') {
+                return `<div class="operario-micro" style="font-weight:bold; font-size:11px;">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>${item.title}
+                        </div>`;
+            }
+            
+            // Estilo para Operarios normales
+            return `<div class="operario-micro"><i class="fas fa-user"></i>${item.title}</div>`;
+        },
+        onUpdate: function (item, callback) {
+            if (item.worker_id === 'NEW') {
+                let start = moment(item.start);
+                let end = moment(item.end);
+                
+                if (end.hours() === 0 && end.minutes() === 0) {
+                    end.subtract(1, 'days');
+                }
+                if (end.isBefore(start, 'day')) {
+                    end = start.clone();
+                }
+                
+                let startStr = start.format('YYYY-MM-DD');
+                let endStr = end.format('YYYY-MM-DD');
+
+                $('#newAsigObraId').val(item.group); 
+                $('#newAsigStartDate').val(startStr); 
+                $('#newAsigEndDate').val(endStr); 
+                
+                let label = moment(startStr).format('DD/MM/YYYY');
+                if (startStr !== endStr) {
+                    label += ' al ' + end.format('DD/MM/YYYY');
+                }
+                $('#newAsigFechasLabel').text(label);
+                
+                $('#workerSelect').val(null).trigger('change'); 
+                $('#modalNuevaAsignacion').modal('show');
+                
+                callback(item); 
+            } else {
+                callback(item); 
+            }
+        },
+
+        onMoving: function (item, callback) {
+            let hoy = moment().startOf('day').toDate();
+            
+            if (item.worker_id === 'NEW') {
+                if (item.start < hoy) item.start = hoy;
+                callback(item);
+                return;
+            }
+
+            let oldItem = window.allEventsMaster.find(e => e.id === item.id);
+            if (oldItem) {
+                let oldStart = moment(oldItem.start).toDate();
+                if (oldStart < hoy) {
+                    if (item.start.getTime() !== oldStart.getTime()) {
+                        item.start = oldStart; 
+                    }
+                } else {
+                    if (item.start < hoy) {
+                        item.start = hoy;
+                    }
+                }
+            }
+            callback(item);
+        },
+
+        onMove: function (item, callback) {
+            if (item.worker_id === 'NEW') {
+                callback(item);
+                return;
+            }
+
+            let hoy = moment().startOf('day');
+            let startReal = moment(item.start); 
+            let endReal = moment(item.end).subtract(1, 'days');
+            
+            let oldItem = window.allEventsMaster.find(e => e.id === item.id);
+            let oldGroup = oldItem ? oldItem.group : item.group;
+            let oldStart = oldItem ? moment(oldItem.start) : startReal;
+            let oldEnd = oldItem ? moment(oldItem.end).subtract(1, 'days') : endReal;
+
+            if (endReal.isBefore(hoy)) {
+                Swal.fire('Acción inválida', 'La fecha de fin de la asignación debe ser al menos hoy.', 'warning');
+                callback(null);
+                return;
+            }
+
+            let startStr = startReal.format('YYYY-MM-DD');
+            let endStr = endReal.format('YYYY-MM-DD');
+
+            pendingAction = { 
+                worker_id: item.worker_id, 
+                target_obra_id: item.group, 
+                old_obra_id: oldGroup, 
+                start_date: startStr, 
+                end_date: endStr,
+                original_start: oldStart.format('YYYY-MM-DD'),
+                original_end: oldEnd.format('YYYY-MM-DD'),
+                overwrite_mode: 'check' 
+            };
+            
+            pendingRevert = function() { callback(null); loadTimelineData(); };
+
+            if (oldGroup !== item.group) {
+                Swal.fire({ 
+                    title: '¿Trasladar a otra Obra?', 
+                    text: `Vas a reasignar al operario del ${moment(startStr).format('DD/MM')} al ${moment(endStr).format('DD/MM')}.`, 
+                    icon: 'question', 
+                    showCancelButton: true, 
+                    confirmButtonText: 'Sí, mover'
+                }).then((result) => { 
+                    if (result.isConfirmed) ejecutarAccionAPI(pendingRevert, function() { callback(item); }); 
+                    else callback(null); 
+                });
+            } else { 
+                ejecutarAccionAPI(pendingRevert, function() { callback(item); }); 
+            }
+        }
+    };
+
+    window.AppTimeline = new vis.Timeline(calendarDiv, window.AppItems, window.AppGroups, options);
+    window.AppTimeline.setWindow(moment().subtract(1, 'weeks').toDate(), moment().add(3, 'months').toDate());
+
+    window.AppTimeline.on('click', function(props) {
+        let popover = document.getElementById('worker-popover');
+        
+        if (props.item && props.item !== 'phantom_new') {
+            let item = window.AppItems.get(props.item);
+            
+            if (!item || item.worker_id === 'SYSTEM') return; 
+            
+            window.currentSelectedItem = item; // <-- GUARDAMOS EL ITEM
+
+            // ==========================================================
+            // --- NUEVO: LÓGICA SI HACEMOS CLIC EN UNA SOLICITUD ---
+            // ==========================================================
+            if (item.worker_id === 'REQUEST') {
+                // 1. Adaptamos la info visual del popover
+                document.getElementById('wp-avatar').textContent = '⚠️';
+                document.getElementById('wp-avatar').style.backgroundColor = item.color || '#f59e0b';
+                
+                document.getElementById('wp-name').textContent = item.title;
+                document.getElementById('wp-name').href = `/admin/solicitudes/${item.solicitud_id}`;
+                
+                let compEl = document.getElementById('wp-company');
+                compEl.textContent = 'Solicitud de Personal';
+                compEl.href = '#';
+                compEl.style.pointerEvents = 'none';
+                compEl.className = 'text-muted';
+                
+                document.getElementById('wp-role').textContent = 'Haz clic en el botón inferior para gestionarla.';
+                document.getElementById('wp-rating').innerHTML = '';
+
+                // 2. Ocultamos automáticamente los botones de "Desasignar" (¡SIN usar la palabra button!)
+                let btnsDesasignar = popover.querySelectorAll('[onclick*="desasignarDesdePop"]');
+                btnsDesasignar.forEach(b => b.style.display = 'none');
+                
+                // 3. Creamos o mostramos nuestro botón dedicado de "Ver Solicitud"
+                let btnVerSol = document.getElementById('btn-ver-solicitud');
+                if (!btnVerSol) {
+                    btnVerSol = document.createElement('a');
+                    btnVerSol.id = 'btn-ver-solicitud';
+                    btnVerSol.className = 'btn btn-warning btn-sm btn-block mt-3 font-weight-bold text-white';
+                    btnVerSol.innerHTML = '<i class="fas fa-external-link-alt mr-1"></i> Ver Solicitud';
+                    popover.appendChild(btnVerSol); // Lo inyectamos al final del popover
+                }
+                btnVerSol.href = `/admin/solicitudes/${item.solicitud_id}`;
+                btnVerSol.style.display = 'block';
+                
+                // Ocultamos el botón del calendario universal si existe
+                let btnVerCal = document.getElementById('btn-ver-calendario');
+                if (btnVerCal) btnVerCal.style.display = 'none';
+
+            } else {
+            // ==========================================================
+            // --- LÓGICA SI HACEMOS CLIC EN UN OPERARIO NORMAL ---
+            // ==========================================================
+                let initials = item.title.substring(0, 2).toUpperCase();
+                document.getElementById('wp-avatar').textContent = initials;
+                document.getElementById('wp-avatar').style.backgroundColor = item.color || '#3b82f6';
+                
+                document.getElementById('wp-name').textContent = item.title;
+                document.getElementById('wp-name').href = `/admin/worker_panel/${item.worker_id}`;
+                
+                let compEl = document.getElementById('wp-company');
+                compEl.textContent = item.empresa_nombre || 'Sin Empresa';
+                if (item.empresa_id && item.empresa_id > 0) {
+                    compEl.href = `/admin/company_panel/${item.empresa_id}`;
+                    compEl.style.pointerEvents = 'auto';
+                    compEl.classList.add('text-primary');
+                    compEl.classList.remove('text-muted');
+                } else {
+                    compEl.href = '#';
+                    compEl.style.pointerEvents = 'none';
+                    compEl.classList.remove('text-primary');
+                    compEl.classList.add('text-muted');
+                }
+                
+                let roleText = item.categoria || 'Sin categoría especificada';
+                if (item.especialidad) roleText += ` (${item.especialidad})`;
+                document.getElementById('wp-role').textContent = roleText;
+                
+               let ratingEl = document.getElementById('wp-rating');
+                
+                // Comprobamos que nota exista de verdad (así permitimos el 0 y los números negativos)
+                if (item.nota !== null && item.nota !== undefined && item.nota !== "") {
+                    
+                    // Le ponemos un "+" delante si es positivo para que quede clara la escala -3 a +3
+                    let displayNota = item.nota > 0 ? "+" + item.nota : item.nota;
+                    
+                    // (Opcional) Damos color al texto: verde si > 0, rojo si < 0, oscuro si es 0
+                    let colorClass = item.nota > 0 ? 'text-success' : (item.nota < 0 ? 'text-danger' : 'text-dark');
+                    
+                    ratingEl.innerHTML = `<strong class="${colorClass}">${displayNota}</strong> <span class="text-primary ml-1" style="font-size:0.75rem;">(Ver notas)</span>`;
+                } else {
+                    ratingEl.innerHTML = `<span class="text-muted">Sin valoraciones</span>`;
+                }
+                ratingEl.href = `/admin/worker/${item.worker_id}/ratings_history`;
+
+                // 1. Ocultamos el botón de "Ver Solicitud" si estuviera visible
+                let btnVerSol = document.getElementById('btn-ver-solicitud');
+                if (btnVerSol) btnVerSol.style.display = 'none';
+
+                // 2. Restauramos los botones de desasignar a su visibilidad original (¡SIN usar la palabra button!)
+                let btnsDesasignar = popover.querySelectorAll('[onclick*="desasignarDesdePop"]');
+                btnsDesasignar.forEach(b => b.style.display = ''); 
+                
+                // 3. NUEVO: BOTÓN DE VER CALENDARIO UNIVERSAL
+                let btnVerCal = document.getElementById('btn-ver-calendario');
+                if (!btnVerCal) {
+                    btnVerCal = document.createElement('a');
+                    btnVerCal.id = 'btn-ver-calendario';
+                    btnVerCal.className = 'btn btn-info btn-sm btn-block mt-2 font-weight-bold text-white shadow-sm';
+                    btnVerCal.innerHTML = '<i class="fas fa-calendar-alt mr-1"></i> Ver Calendario';
+                    btnVerCal.style.cursor = 'pointer';
+                    popover.appendChild(btnVerCal); 
+                    
+                    btnVerCal.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        
+                        // Ocultamos el popover flotante
+                        document.getElementById('worker-popover').classList.add('d-none');
+                        
+                        // --- NUEVO: DINAMIZAMOS EL TÍTULO DEL MODAL ---
+                        let modalTitle = document.querySelector('#quickCalendarModal .modal-title');
+                        if (modalTitle && window.currentSelectedItem) {
+                            let workerId = window.currentSelectedItem.worker_id;
+                            let workerName = window.currentSelectedItem.title;
+                            modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2"></i> Calendario de <a href="/admin/worker_panel/${workerId}" target="_blank" style="color: #fbbf24; text-decoration: underline;">${workerName}</a>`;
+                        }
+                        // ----------------------------------------------
+                        
+                        // Abrimos el modal Bootstrap
+                        $('#quickCalendarModal').modal('show');
+                        
+                        // Inicializamos el calendario con un pequeño delay
+                        // Inicializamos el calendario con un pequeño delay
+                        // Inicializamos el calendario con un pequeño delay
+                        setTimeout(() => {
+                            if (window.quickCalendar) {
+                                window.quickCalendar.destroy(); // <--- AHORA PURGA EL PANEL TAMBIÉN
+                            }
+                            
+                            window.quickCalendar = new UniversalCalendarManager('modal-calendar-container', {
+                                context: 'worker',
+                                id: window.currentSelectedItem.worker_id,
+                                entityName: window.currentSelectedItem.title,
+                                callbacks: {
+                                    // 1. EL CALENDARIO PIDE PINTAR EL SELECTOR
+                                    // 1. EL CALENDARIO PIDE PINTAR EL SELECTOR
+                                    onShowNewPanel: function(containerId, currentObraId) {
+                                        let container = document.getElementById(containerId);
+                                        if (!container) return;
+
+                                        container.innerHTML = `
+                                            <label class="small font-weight-bold mb-1 text-secondary">Obra a asignar</label>
+                                            <select id="uc-panel-obra-select" class="form-control form-control-sm border-primary" style="width: 100%;">
+                                                <option value="">-- Seleccione Obra --</option>
+                                            </select>
+                                        `;
+
+                                        let selectEl = document.getElementById('uc-panel-obra-select');
+                                        let selectFiltro = document.getElementById('obrasSelect');
+                                        
+                                        // 1º Intento: Coger las obras del dropdown general de filtros que ya existe en el planificador
+                                        if (selectFiltro && selectFiltro.options.length > 0) {
+                                            Array.from(selectFiltro.options).forEach(o => {
+                                                if (o.value) { // Saltamos la opción en blanco
+                                                    let opt = document.createElement('option');
+                                                    opt.value = o.value;
+                                                    opt.text = o.text;
+                                                    
+                                                    // Preselección si coincide con la obra actual del bloque
+                                                    if (currentObraId && String(o.value) === String(currentObraId)) {
+                                                        opt.selected = true;
+                                                    }
+                                                    selectEl.appendChild(opt);
+                                                }
+                                            });
+                                        } 
+                                        // 2º Intento (Fallback): Usar las obras que están dibujadas en el panel izquierdo
+                                        else if (window.allGroupsMaster && window.allGroupsMaster.length > 0) {
+                                            window.allGroupsMaster.forEach(g => {
+                                                let opt = document.createElement('option');
+                                                opt.value = g.id;
+                                                opt.text = g.title;
+                                                
+                                                if (currentObraId && String(g.id) === String(currentObraId)) {
+                                                    opt.selected = true;
+                                                }
+                                                selectEl.appendChild(opt);
+                                            });
+                                        } else {
+                                            console.error("No se encontraron obras en el DOM");
+                                            selectEl.innerHTML = '<option value="">Error cargando obras</option>';
+                                        }
+                                        
+                                        // Opcional: Si quieres que el selector sea un Select2 (con buscador) igual que los demás
+                                        if (typeof $ !== 'undefined' && $.fn.select2) {
+                                            $(selectEl).select2({
+                                                dropdownParent: $('#quickCalendarModal')
+                                            });
+                                        }
+                                    },
+                                    
+                                    // 2. EL USUARIO HACE CLIC EN EL CHECK AZUL PARA CREAR
+                                    // 2. EL USUARIO HACE CLIC EN EL CHECK AZUL PARA CREAR
+                                    onSaveNew: function(startStr, endStr, includeWeekends) {
+                                        let selectEl = document.getElementById('uc-panel-obra-select');
+                                        let targetObra = selectEl ? selectEl.value : null;
+                                        
+                                        if (!targetObra) {
+                                            Swal.fire('Atención', 'Debes seleccionar una obra del listado', 'warning');
+                                            return;
+                                        }
+
+                                        pendingAction = {
+                                            worker_id: window.currentSelectedItem.worker_id,
+                                            target_obra_id: targetObra,
+                                            old_obra_id: targetObra,
+                                            start_date: startStr,
+                                            end_date: endStr,
+                                            original_start: null,
+                                            original_end: null,
+                                            overwrite_mode: 'check',
+                                            include_weekends: includeWeekends // Recogemos el interruptor
+                                        };
+                                        
+                                        ejecutarAccionAPI(() => { window.quickCalendar.calendar.refetchEvents(); }, () => {
+                                            window.quickCalendar.calendar.refetchEvents();
+                                            window.quickCalendar.hidePanel();
+                                            window.loadTimelineData();
+                                        });
+                                    },
+                                    
+                                    // 3. EL USUARIO ESTIRA UN BLOQUE O LE DA A GUARDAR EN UNA EDICIÓN
+                                    // 3. EL USUARIO ESTIRA UN BLOQUE O LE DA A GUARDAR EN UNA EDICIÓN
+                                    onEventModified: function(payload, revertFunc) {
+                                        let selectEl = document.getElementById('uc-panel-obra-select');
+                                        let targetObraId = selectEl && selectEl.value ? selectEl.value : payload.event_data.obra_id;
+                                        
+                                        pendingAction = {
+                                            worker_id: payload.entity_id || window.currentSelectedItem.worker_id,
+                                            target_obra_id: targetObraId,
+                                            old_obra_id: payload.event_data.obra_id,
+                                            start_date: payload.new_start,
+                                            end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
+                                            original_start: payload.original_start, 
+                                            original_end: payload.original_end,
+                                            
+                                            // LA MAGIA ESTÁ AQUÍ: 
+                                            // Cambiamos 'check' por 'overwrite'. Al ser una edición, 
+                                            // forzamos al servidor a borrar cualquier solapamiento previo sin preguntar.
+                                            overwrite_mode: 'overwrite', 
+                                            
+                                            include_weekends: payload.include_weekends
+                                        };
+                                        
+                                        pendingRevert = revertFunc;
+                                        ejecutarAccionAPI(revertFunc, () => {
+                                            window.quickCalendar.calendar.refetchEvents();
+                                            window.loadTimelineData();
+                                        });
+                                    },
+                                    
+                                    // 4. EL USUARIO PULSA EL BOTÓN ROJO DE DESASIGNAR
+                                    onDeleteAssignment: function(event, dates, isPartial) {
+                                        let obraId = event.extendedProps.obra_id;
+                                        let workerId = window.currentSelectedItem.worker_id;
+                                        
+                                        fetch('/api/v6/unassign_worker', { // URL NUEVA UNIFICADA
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrf_token') },
+                                            body: JSON.stringify({ worker_id: workerId, obra_id: obraId, dates: dates, mode: 'selected' })
+                                        })
+                                        .then(r => r.json())
+                                        .then(data => {
+                                            if(data.success) {
+                                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Borrado', showConfirmButton: false, timer: 1500});
+                                                window.quickCalendar.calendar.refetchEvents();
+                                                window.loadTimelineData();
+                                            } else {
+                                                Swal.fire('Error', data.message, 'error');
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+                        }, 200);
+                    });
+                }
+                btnVerCal.style.display = 'block'; 
+            }
+
+            // --- CÁLCULO DE POSICIÓN Y MOSTRAR POPOVER ---
+            let x = props.event.clientX + 15;
+            let y = props.event.clientY + 15;
+            
+            if (x + 280 > window.innerWidth) x -= 310;
+            if (y + 160 > window.innerHeight) y -= 190;
+
+            popover.style.left = x + 'px';
+            popover.style.top = y + 'px';
+            popover.classList.remove('d-none');
+            return; 
+        }
+
+        popover.classList.add('d-none');
+    });
+
+    window.AppTimeline.on('doubleClick', function(props) {
+        if (!props.item && props.group && props.time) {
+            let clickedDate = moment(props.time).startOf('day');
+            let hoy = moment().startOf('day');
+            
+            if (clickedDate.isBefore(hoy)) {
+                Swal.fire('Atención', 'Haz doble clic en un día a partir de hoy.', 'info');
+                return;
+            }
+
+            if (window.AppItems) {
+                let existings = window.AppItems.get({ filter: function(i) { return i.worker_id === 'NEW'; } });
+                window.AppItems.remove(existings);
+
+                let newItem = {
+                    id: 'phantom_new',
+                    group: props.group,
+                    content: `<i class="fas fa-plus-circle mr-1"></i> Arrastra y Doble Clic`,
+                    start: clickedDate.toDate(),
+                    end: clickedDate.clone().add(1, 'days').toDate(),
+                    worker_id: 'NEW',
+                    className: 'phantom-item',
+                    editable: { updateTime: true, updateGroup: true, remove: true } 
+                };
+                window.AppItems.add(newItem);
+                window.AppTimeline.setSelection('phantom_new'); 
+            }
+        }
+    });
+
+    // --- LÓGICA DE CARGA DE DATOS ---
+    window.loadTimelineData = function() {
+        let obrasIds = $('#obrasSelect').val() || []; 
+        let jefeId = $('#jefeSelect').val() || null;
+        
+        // --- LÓGICA DE CHECKBOXES EN LUGAR DE SELECT2 ---
+        let totalEmpresas = $('.chk-empresa-filter').length;
+        let checkedEmpresas = $('.chk-empresa-filter:checked').length;
+        let companyIds = [];
+        
+        if (checkedEmpresas < totalEmpresas) {
+            $('.chk-empresa-filter:checked').each(function() {
+                companyIds.push($(this).val());
+            });
+            if (companyIds.length === 0) companyIds = [-1]; // -1 para que el servidor oculte todos
+        }
+        // ------------------------------------------------
+
+        let params = new URLSearchParams();
+        if (jefeId) params.append('jefe_id', jefeId);
+        obrasIds.forEach(id => params.append('obra_ids[]', id));
+        companyIds.forEach(id => params.append('company_ids[]', id));
+
+        params.append('start', moment().subtract(6, 'months').toISOString()); 
+        params.append('end', moment().add(6, 'months').toISOString());
+
+        // 1. Descargamos primero las obras (Eje Y)
+        // 1. Descargamos primero las obras
+        fetch('/admin/api/planificador/resources?' + params.toString()).then(r => r.json()).then(data => {
+            if (data.length > 0) {
+                // 2. Descargamos los eventos (operarios)
+                fetch('/admin/api/planificador/events?' + params.toString()).then(r => r.json()).then(evData => {
+                    
+                    // A) Identificamos qué obras tienen al menos un trabajador o solicitud asignada
+                    let activeGroupIds = new Set();
+                    evData.forEach(e => {
+                        let groupId = e.resourceId || e.group;
+                        // Excluimos eventos de fondo o festivos que no sean operarios reales
+                        if (groupId && e.type !== 'background') {
+                            activeGroupIds.add(String(groupId));
+                        }
+                    });
+
+                    // B) ORDENAMOS LAS OBRAS (NO las ocultamos)
+                    // Las que tienen gente (1) suben arriba. Las que están vacías (0) bajan.
+                    data.sort((a, b) => {
+                        let aActive = activeGroupIds.has(String(a.id)) ? 1 : 0;
+                        let bActive = activeGroupIds.has(String(b.id)) ? 1 : 0;
+
+                        if (aActive !== bActive) {
+                            return bActive - aActive; // Las activas suben
+                        }
+                        // Si empatan (ambas llenas o ambas vacías), ordenamos alfabéticamente
+                        let titleA = a.title || "";
+                        let titleB = b.title || "";
+                        return titleA.localeCompare(titleB);
+                    });
+
+                    // 3. Cargamos los Grupos (Obras) ya ordenados
+                    window.allGroupsMaster = data;
+                    window.AppGroups.clear(); 
+                    window.AppGroups.add(data.map((g, index) => ({ 
+                        id: g.id, 
+                        title: g.title, 
+                        codigo: g.codigo, 
+                        fecha_fin: g.fecha_fin, 
+                        orden: index // El calendario usa este 'orden' para poner las vacías al final
+                    })));
+
+                    // 4. Mapeamos y cargamos los Eventos (Operarios)
+                    window.allEventsMaster = evData.map(e => {
+                        let base = { id: e.id, start: e.start, end: e.end, worker_id: e.worker_id, solicitud_id: e.solicitud_id };
+                        if (e.resourceId) base.group = e.resourceId;
+                        
+                        if (e.type === 'background') {
+                            base.type = e.type; base.content = e.content; base.className = e.className;
+                            base.style = e.color ? `background-color: ${e.color} !important;` : '';
+                        } else {
+                            base.title = e.title;
+                            base.style = e.style ? e.style : (e.color ? `background-color: ${e.color};` : '');
+                            base.color = e.color; base.empresa_nombre = e.empresa_nombre || 'ZZ_Sin_Empresa';
+                            base.empresa_id = e.empresa_id; base.categoria = e.categoria; base.especialidad = e.especialidad; base.nota = e.nota;
+                        }
+                        return base;
+                    });
+                    
+                    window.renderItems();
+                });
+            } else {
+                window.allGroupsMaster = [];
+                window.AppGroups.clear();
+                window.allEventsMaster = [];
+                window.renderItems();
+            }
+        });
+    };
+
+    if ($('#obrasSelect').length) {
+        let $obrasSelect = $('#obrasSelect');
+        let $jefeSelect = $('#jefeSelect');
+        
+        $obrasSelect.select2({ placeholder: "Obras sueltas...", allowClear: true });
+
+        let isUpdating = false;
+
+        $jefeSelect.on('change', function() {
+            if (isUpdating) return;
+            isUpdating = true;
+            $obrasSelect.val(null).trigger('change.select2');
+            loadTimelineData();
+            isUpdating = false;
+        });
+
+        $obrasSelect.on('change', function () {
+            if (isUpdating) return;
+            isUpdating = true;
+            if ($(this).val() && $(this).val().length > 0) $jefeSelect.val(""); 
+            loadTimelineData();
+            isUpdating = false;
+        });
+
+        // ==========================================
+        // ==========================================
+        // LÓGICA DEL DROPDOWN (A prueba de fallos sin Popper.js)
+        // ==========================================
+        
+        // 1. Abrir y cerrar el menú manualmente al hacer clic en el botón
+        $('#dropdownEmpresas').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).next('.dropdown-menu').toggleClass('show');
+        });
+
+        // 2. Cerrar el menú si hacemos clic en cualquier otro lado de la pantalla
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.dropdown').length) {
+                $('.dropdown-menu').removeClass('show');
+            }
+        });
+
+        // 3. Evitar que se cierre al hacer clic dentro de los checkboxes
+        $('.dropdown-menu').on('click', function(e) {
+            e.stopPropagation();
+        });
+
+        // 4. Actualizar el texto del botón según lo marcado
+        function updateEmpresasBtnText() {
+            let total = $('.chk-empresa-filter').length;
+            let checked = $('.chk-empresa-filter:checked').length;
+            let $btnText = $('#empresas-btn-text');
+            
+            if (checked === total) {
+                $btnText.text('Todas las empresas');
+            } else if (checked === 0) {
+                $btnText.text('Ninguna seleccionada');
+            } else if (checked === 1) {
+                let name = $('.chk-empresa-filter:checked').next('label').text().trim().replace('⭐', '');
+                $btnText.text(name);
+            } else {
+                $btnText.text(checked + ' seleccionadas');
+            }
+        }
+
+        // 5. Click en "Seleccionar Todas"
+        $('#chk-empresa-todas').on('change', function() {
+            let isChecked = $(this).is(':checked');
+            $('.chk-empresa-filter').prop('checked', isChecked);
+            updateEmpresasBtnText();
+            if (!isUpdating) loadTimelineData();
+        });
+
+        // 6. Click en cualquier empresa individual
+        $('.chk-empresa-filter').on('change', function() {
+            let total = $('.chk-empresa-filter').length;
+            let checked = $('.chk-empresa-filter:checked').length;
+            
+            $('#chk-empresa-todas').prop('checked', total === checked);
+            
+            updateEmpresasBtnText();
+            if (!isUpdating) loadTimelineData();
+        });
+
+   
+    }
+
+    loadTimelineData();
+
+    $('#workerSelect').select2({ 
+        dropdownParent: $('#modalNuevaAsignacion'), 
+        placeholder: "Escribe un nombre o elige 'CUALQUIERA'...", 
+        ajax: { 
+            url: '/admin/api/planificador/search_workers', 
+            dataType: 'json', 
+            delay: 250, 
+            data: function (params) { return { q: params.term }; }, 
+            processResults: function (data) { return { results: data.results }; } 
+        } 
+    }).on('change', function() { 
+        if ($(this).val() === 'GENERICO') $('#genericDetailsDiv').slideDown(); 
+        else $('#genericDetailsDiv').slideUp(); 
+    });
+
+    let pendingAction = null; let pendingRevert = null;
+    
+    window.submitNuevaAsignacion = function() {
+        let workerId = $('#workerSelect').val();
+        if (!workerId) { Swal.fire('Error', 'Debes seleccionar un trabajador.', 'error'); return; }
+        
+        let targetObra = $('#newAsigObraId').val();
+        
+        pendingAction = { 
+            worker_id: workerId, target_obra_id: targetObra, old_obra_id: targetObra, 
+            start_date: $('#newAsigStartDate').val(), end_date: $('#newAsigEndDate').val(),
+            original_start: null, original_end: null,
+            detalles: $('#genericDetails').val(), overwrite_mode: 'check' 
+        };
+        $('#modalNuevaAsignacion').modal('hide'); 
+        ejecutarAccionAPI(null, loadTimelineData);
+    };
+
+    function ejecutarAccionAPI(revertFunc, successCallback) {
+        if (!pendingAction) return;
+        if (!pendingAction.overwrite_mode) pendingAction.overwrite_mode = 'check';
+        pendingAction.check_conflicts = true;
+
+        $.ajax({
+            url: "/api/v6/planificador/action",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify(pendingAction),
+            success: function(data) {
+                if (data.success) {
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: data.message || 'Guardado', showConfirmButton: false, timer: 1500});
+                    pendingAction = null; 
+                    pendingRevert = null;
+                    if (successCallback) successCallback();
+                } else if (data.conflict) {
+                    // LLAMADA A LA FUNCIÓN GLOBAL: Código limpio
+                    window.resolverConflictoAsignacion(data, pendingAction, 
+                        (nuevoPayload) => { pendingAction = nuevoPayload; ejecutarAccionAPI(revertFunc, successCallback); }, 
+                        revertFunc
+                    );
+                } else {
+                    Swal.fire('Error', data.error || data.message, 'error');
+                    if (revertFunc) revertFunc();
+                }
+            },
+            error: function(xhr) {
+                Swal.fire('Error', 'Error de conexión', 'error');
+                if (revertFunc) revertFunc();
+            }
+        });
+    }
+
+    // CORREGIDO: Eliminamos la función duplicada
+    window.resolveConflicto = function(mode) { 
+        pendingAction.overwrite_mode = mode; 
+        $('#modalConflicto').modal('hide'); 
+        ejecutarAccionAPI(null, loadTimelineData); 
+    };
+    
+    $('#modalConflicto').on('hidden.bs.modal', function () { 
+        if (pendingRevert) { pendingRevert(); pendingRevert = null; } 
+    });
+    
+    function getCookie(name) { 
+        let value = "; " + document.cookie; 
+        let parts = value.split("; " + name + "="); 
+        if (parts.length === 2) return parts.pop().split(";").shift(); 
+        return ""; 
+    }
+
+    window.addEventListener('scroll', function() {
+        let popover = document.getElementById('worker-popover');
+        if (popover && !popover.classList.contains('d-none')) { popover.classList.add('d-none'); }
+    }, { capture: true, passive: true });
+
+    window.AppTimeline.on('rangechanged', function() {
+        let popover = document.getElementById('worker-popover');
+        if (popover && !popover.classList.contains('d-none')) { popover.classList.add('d-none'); }
+    });
+
+    // --- NUEVO: FUNCIÓN PARA DESASIGNAR DIRECTAMENTE DESDE EL POPOVER ---
+    // --- NUEVO: FUNCIÓN PARA DESASIGNAR DIRECTAMENTE DESDE EL POPOVER ---
+    window.desasignarDesdePop = function(mode) {
+        if (!window.currentSelectedItem) return;
+
+        let item = window.currentSelectedItem;
+        let workerId = item.worker_id;
+        let obraId = item.group; 
+        
+        let startDate = moment(item.start);
+        let endDate = moment(item.end).subtract(1, 'days');
+        
+        // LA CLAVE: Definimos "HOY" para el motor de JavaScript
+        let hoy = moment().startOf('day'); 
+        
+        if (mode === 'periodo') {
+            // 1. Si TODO el bloque está en el pasado, lo bloqueamos de raíz
+            if (endDate.isBefore(hoy)) {
+                Swal.fire('Histórico Protegido', 'Este bloque pertenece íntegramente al pasado y no se puede borrar.', 'info');
+                return;
+            }
+
+            // 2. Si empezó en el pasado pero pisa el presente, "recortamos" el inicio para que empiece hoy
+            let startToErase = startDate.isBefore(hoy) ? hoy.clone() : startDate.clone();
+
+            let dates = [];
+            let current = startToErase.clone();
+            while (current.isSameOrBefore(endDate)) {
+                dates.push(current.format('YYYY-MM-DD'));
+                current.add(1, 'days');
+            }
+            if (dates.length === 0) return;
+            
+            // 3. Avisamos visualmente de que le estamos salvando el histórico
+            let msjExtra = startDate.isBefore(hoy) 
+                ? `<br><br><small class="text-info"><i class="fas fa-info-circle"></i> Se conservará el histórico de trabajo desde el ${startDate.format('DD/MM')} hasta ayer.</small>` 
+                : '';
+            
+            lanzarConfirmacionBaja(workerId, obraId, dates, `Se van a eliminar ${dates.length} días de asignación.` + msjExtra);
+            
+        } else if (mode === 'futuro') {
+            let maxEnd = endDate.clone();
+            window.allEventsMaster.forEach(e => {
+                if (e.worker_id === workerId && e.group === obraId) {
+                    let eEnd = moment(e.end).subtract(1, 'days');
+                    if (eEnd.isAfter(maxEnd)) maxEnd = eEnd;
+                }
+            });
+
+            if (maxEnd.isBefore(hoy)) {
+                Swal.fire('Atención', 'Este trabajador no tiene asignaciones futuras en esta obra. No hay nada que dar de baja.', 'info');
+                return;
+            }
+
+            document.getElementById('worker-popover').classList.add('d-none');
+
+            let hoyStr = hoy.format('YYYY-MM-DD');
+            
+            Swal.fire({
+                title: 'Seleccionar Fecha de Baja',
+                html: `
+                    <p class="mb-3 text-muted small">Elige a partir de qué día (incluido) quieres eliminar las asignaciones futuras.</p>
+                    <input type="date" id="input-fecha-baja" class="form-control text-center font-weight-bold" value="${hoyStr}" min="${hoyStr}">
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Continuar',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    let val = document.getElementById('input-fecha-baja').value;
+                    if (!val) {
+                        Swal.showValidationMessage('Debes seleccionar una fecha válida');
+                    } else if (moment(val).startOf('day').isBefore(hoy)) {
+                        // PROTECCIÓN FRONT: Por si intentan trampear el input escribiendo a mano
+                        Swal.showValidationMessage('No puedes dar de baja en una fecha pasada');
+                    }
+                    return val;
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    let selectedDate = moment(result.value).startOf('day');
+                    
+                    if (selectedDate.isAfter(maxEnd)) {
+                        Swal.fire('Aviso', 'La fecha seleccionada es posterior al último día que tiene asignado. No hay nada que borrar.', 'info');
+                        return;
+                    }
+
+                    let dates = [];
+                    let current = selectedDate.clone();
+                    while (current.isSameOrBefore(maxEnd)) {
+                        dates.push(current.format('YYYY-MM-DD'));
+                        current.add(1, 'days');
+                    }
+
+                    lanzarConfirmacionBaja(workerId, obraId, dates, `Se van a eliminar ${dates.length} días de asignación a partir del ${selectedDate.format('DD/MM/YYYY')}.`);
+                }
+            });
+        }
+    };
+
+    // Función auxiliar para no repetir código de borrado
+    function lanzarConfirmacionBaja(workerId, obraId, dates, mensajeTexto) {
+        Swal.fire({
+            title: '¿Confirmar Desasignación?',
+            text: mensajeTexto + ' Esta acción es inmediata.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, desasignar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('worker-popover').classList.add('d-none');
+                
+                fetch('/api/v6/unassign_worker', { // URL NUEVA UNIFICADA
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrf_token') },
+                    body: JSON.stringify({
+                        worker_id: workerId,
+                        obra_id: obraId,
+                        dates: dates,
+                        mode: 'selected' 
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('Completado', data.message, 'success');
+                        window.loadTimelineData(); 
+                    } else {
+                        Swal.fire('Error', data.message || 'Ocurrió un error', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('Error', 'Fallo de conexión.', 'error');
+                });
+            }
+        });
+    }
+    window.reordenarPorVentanaVisible = function() {
+        if (!window.AppTimeline || !window.allGroupsMaster || !window.allEventsMaster) return;
+
+        // 1. Obtener la ventana de fechas que el usuario está viendo en pantalla
+        let windowRange = window.AppTimeline.getWindow();
+        let visibleStart = moment(windowRange.start);
+        let visibleEnd = moment(windowRange.end);
+
+        // 2. Comprobar qué obras tienen trabajadores en esta ventana específica
+        let activeGroupIds = new Set();
+        window.allEventsMaster.forEach(e => {
+            let groupId = e.resourceId || e.group;
+            
+            // Ignorar eventos de fondo como los festivos y barreras rojas de fin de obra
+            if (groupId && e.type !== 'background') {
+                let evStart = moment(e.start);
+                // Restamos 1 día a la fecha de fin porque vis.js/Fullcalendar trata el fin como exclusivo (00:00 del día siguiente)
+                let evEnd = e.end ? moment(e.end).subtract(1, 'days') : evStart.clone();
+
+                // Lógica de solapamiento: empieza antes de que acabe la pantalla y acaba después de que empiece la pantalla
+                if (evStart.isSameOrBefore(visibleEnd) && evEnd.isSameOrAfter(visibleStart)) {
+                    activeGroupIds.add(String(groupId));
+                }
+            }
+        });
+
+        // 3. Reordenar nuestro array maestro (las obras activas en pantalla suben)
+        window.allGroupsMaster.sort((a, b) => {
+            let aActive = activeGroupIds.has(String(a.id)) ? 1 : 0;
+            let bActive = activeGroupIds.has(String(b.id)) ? 1 : 0;
+
+            if (aActive !== bActive) {
+                return bActive - aActive; 
+            }
+            // Desempate por orden alfabético
+            let titleA = a.title || "";
+            let titleB = b.title || "";
+            return titleA.localeCompare(titleB);
+        });
+
+        // 4. Actualizar los grupos visualmente cambiando su atributo 'orden'
+        let updatedGroups = window.allGroupsMaster.map((g, index) => {
+            return {
+                id: g.id,
+                orden: index 
+            };
+        });
+
+        window.AppGroups.update(updatedGroups);
+
+        // 5. Notificación sutil (Toast de SweetAlert)
+        Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'success',
+            title: 'Vista ordenada',
+            showConfirmButton: false,
+            timer: 1500
+        });
+    };
+});

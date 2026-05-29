@@ -1,0 +1,155 @@
+<aside class="admin-sidebar">
+  <div class="admin-logo">
+    <div class="admin-logo-mark"><i class="fas fa-hard-hat"></i></div>
+    <div class="admin-logo-text">
+      <span>Control de Obra</span>
+      <span>Planning</span>
+    </div>
+  </div>
+
+  <div class="sidebar-toggle-wrapper mb-4">
+      <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle" title="Contraer/Expandir menú">
+        <i class="fas fa-angle-left"></i>
+      </button>
+  </div>
+
+  <div class="admin-user">
+    Conectado como <strong>{{ current_user.name }}</strong>
+    <div style="font-size: 0.7rem; color: #6b7280; margin-top: 2px;">{{ current_user.role|upper }}</div>
+  </div>
+
+  <div class="sidebar-section-title">Principal</div>
+  <ul class="sidebar-nav">
+    <li>
+        <a href="{{ url_for('main.dashboard') }}" class="sidebar-link {% if request.endpoint == 'main.dashboard' %}is-active{% endif %}">
+            <i class="fas fa-home fa-fw"></i> <span>Mi Panel</span>
+        </a>
+    </li>
+    
+    {% if current_user.role == 'currante' %}
+    <li>
+        <a href="{{ url_for('currantes.calendar') }}" class="sidebar-link {% if 'calendar' in request.endpoint %}is-active{% endif %}">
+            <i class="far fa-calendar-alt fa-fw"></i> <span>Mi Calendario</span>
+        </a>
+    </li>
+    {% endif %}
+  </ul>
+
+{% if current_user.role in ['admin', 'jefe_obra'] %}
+  <div class="px-3 mb-3 nota-btn-container">
+      <button class="btn btn-primary btn-block font-weight-bold shadow-sm d-flex align-items-center justify-content-center" style="border-radius: 8px; overflow: hidden; white-space: nowrap;" onclick="$('#modalNuevaNota').modal('show')" title="Nueva Nota / Reunión">
+          <i class="fas fa-plus"></i>
+          <span class="texto-nueva-nota ml-2">Nueva Nota</span>
+      </button>
+  </div>
+  {% endif %}
+
+  
+  {% if current_user.role in ['admin', 'jefe_obra'] %}
+  <div class="sidebar-section-title">Operaciones</div>
+  <ul class="sidebar-nav">
+    <li>
+        <a href="{{ url_for('notas.centro_mando') }}" class="sidebar-link {% if 'notas' in request.endpoint %}is-active{% endif %}">
+            <i class="fas fa-book-open fa-fw"></i> <span>Reuniones y Notas</span>
+        </a>
+    </li>
+    <li>
+        <a href="{{ url_for('admin.planificador_jo') }}" class="sidebar-link {% if 'planificador' in request.endpoint %}is-active{% endif %}">
+            <i class="fas fa-calendar-check fa-fw"></i> <span>Planificador</span>
+        </a>
+    </li>
+    
+    {% if current_user.role == 'admin' %}
+    <li>
+        <a href="{{ url_for('admin.obras_detailed') }}" class="sidebar-link {% if request.endpoint == 'admin.obras_detailed' %}is-active{% endif %}">
+            <i class="fas fa-project-diagram fa-fw"></i> <span>Tablero de Obras</span>
+        </a>
+    </li>
+    <li>
+        <a href="{{ url_for('admin.obras_list') }}" class="sidebar-link {% if request.endpoint == 'admin.obras_list' %}is-active{% endif %}">
+            <i class="fas fa-building fa-fw"></i> <span>Directorio Obras</span>
+        </a>
+    </li>
+    {% endif %}
+  </ul>
+  {% endif %}
+
+  {% if current_user.role in ['admin', 'rrhh', 'jefe_obra'] %}
+  <div class="sidebar-section-title">Equipo y Personal</div>
+  <ul class="sidebar-nav">
+    
+    {% if current_user.role in ['admin', 'rrhh'] %}
+    <li>
+      <a href="{{ url_for('admin.personal') }}" class="sidebar-link {% if 'personal' in request.endpoint %}is-active{% endif %}">
+        <i class="fas fa-users fa-fw"></i> <span>Trabajadores</span>
+      </a>
+    </li>
+    {% endif %}
+
+    {% if current_user.role == 'admin' %}
+    <li>
+      <a href="{{ url_for('admin.companies') }}" class="sidebar-link {% if 'companies' in request.endpoint %}is-active{% endif %}">
+        <i class="fas fa-industry fa-fw"></i> <span>Subcontratas</span>
+      </a>
+    </li>
+    {% endif %}
+
+    {% if current_user.role in ['admin', 'jefe_obra'] %}
+    <li>
+      <a href="{{ url_for('admin.solicitudes_list') }}" class="sidebar-link {% if 'solicitud' in request.endpoint %}is-active{% endif %}">
+        <i class="fas fa-user-plus fa-fw"></i> 
+        <span>Peticiones Personal</span>
+        {% if pending_notifications and pending_notifications > 0 %}
+          <span class="badge-soft badge-soft-amber" style="margin-left:auto;">{{ pending_notifications }}</span>
+        {% endif %}
+      </a>
+    </li>
+<li>
+        <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="sidebar-link" target="_blank" title="Abre el panel de altas de Odoo">
+            <i class="fas fa-address-book fa-fw"></i> 
+            <span>Alta en Odoo <i class="fas fa-external-link-alt text-muted" style="font-size: 0.65rem; margin-left: 4px;"></i></span>
+        </a>
+    </li>
+    {% endif %}
+  </ul>
+  {% endif %}
+
+  {% if current_user.role in ['admin', 'jefe_obra'] %}
+  <div class="sidebar-section-title">Control y Sistema</div>
+  <ul class="sidebar-nav">
+    <li>
+      <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if 'auditoria' in request.endpoint %}is-active{% endif %}">
+        <i class="fas fa-user-clock fa-fw"></i> <span>Auditoría Fichajes</span>
+      </a>
+    </li>
+    
+    {% if current_user.role == 'admin' %}
+    <li>
+        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if 'sync' in request.endpoint and 'auditoria' not in request.endpoint %}is-active{% endif %}">
+            <i class="fas fa-sync-alt fa-fw"></i> <span>Sincronizar Odoo</span>
+        </a>
+    </li> 
+    <li>
+        <a href="{{ url_for('admin.configuracion_global') }}" class="sidebar-link {% if 'configuracion' in request.endpoint %}is-active{% endif %}">
+            <i class="fas fa-cogs fa-fw"></i> <span>Configuración Global</span>
+        </a>
+    </li>
+    {% endif %}
+  </ul>
+  {% endif %}
+
+  <div class="sidebar-spacer"></div>
+
+  <ul class="sidebar-nav mt-3">
+    <li>
+        <a href="{{ url_for('auth.logout') }}" class="sidebar-link" style="color: #ef4444; font-weight: 500;">
+            <i class="fas fa-sign-out-alt fa-fw"></i>
+            <span>Cerrar Sesión</span>
+        </a>
+    </li>
+  </ul>
+
+  <div class="sidebar-footer">
+    v2.0 · {{ current_user.company_code or 'Interno' }}
+  </div>
+</aside>

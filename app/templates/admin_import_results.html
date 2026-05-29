@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Resultados de la Importación{% endblock %}
+{% block content %}
+<div class="container mt-5">
+  <h2>Resultados de la Importación</h2>
+  <div class="mb-3">
+    <button class="btn btn-info" type="button" data-toggle="collapse" data-target="#importResults" aria-expanded="false" aria-controls="importResults">
+      Ver Detalles de Usuarios Importados
+    </button>
+  </div>
+  <div class="collapse" id="importResults">
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Email</th><th>Rol</th><th>Nombre</th><th>Apellidos</th><th>DNI</th><th>Empresa</th><th>Creó Empresa</th><th>Activo</th><th>Recibir Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in imported %}
+        <tr>
+          <td>{{ row.email }}</td>
+          <td>{{ row.role }}</td>
+          <td>{{ row.name }}</td>
+          <td>{{ row.lastname }}</td>
+          <td>{{ row.dni }}</td>
+          <td>{{ row.empresa }}</td>
+          <td>{{ 'Sí' if row.company_created else 'No' }}</td>
+          <td>{{ 'Sí' if row.active else 'No' }}</td>
+          <td>{{ 'Sí' if row.receive_emails else 'No' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if created_companies %}
+  <div class="mt-4">
+    <h5>Empresas creadas:</h5>
+    <ul>
+      {% for comp in created_companies %}
+      <li>{{ comp }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <a href="{{ url_for('admin.personal', tab='internos') }}" class="btn btn-secondary mt-3">Volver a Gestión de Personal</a>
+</div>
+{% endblock %}

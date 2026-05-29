@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Panel de Obra: {{ obra.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    .obra-header-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    .obra-stat {
+        text-align: center;
+        padding: 0 1.5rem;
+        border-right: 1px solid #e5e7eb;
+    }
+    .obra-stat:last-child { border-right: none; }
+    .obra-stat-val { font-size: 1.1rem; font-weight: 700; color: #111827; }
+    .obra-stat-label { font-size: 0.7rem; text-transform: uppercase; color: #6b7280; letter-spacing: 0.05em; margin-top: 2px; }
+
+    /* Ajustes FC v6 */
+    .fc .fc-toolbar-title { font-size: 1rem !important; text-transform: capitalize; }
+    .fc .fc-button { font-size: 0.8rem !important; padding: 0.2rem 0.5rem !important; }
+    .fc-theme-standard th { border-color: #f3f4f6 !important; }
+    .fc-daygrid-day-number { font-size: 0.75rem; color: #9ca3af; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <a href="{{ url_for('admin.obras_list') }}" class="text-muted small mb-1 d-inline-block">
+                <i class="fas fa-arrow-left"></i> Volver al listado
+            </a>
+            <div class="d-flex align-items-baseline">
+                <h1 class="admin-page-title mb-0 mr-3">{{ obra.nombre }}</h1>
+                <span class="badge badge-light border">{{ obra.codigo or 'S/C' }}</span>
+            </div>
+        </div>
+        <div>
+            <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-pencil-alt mr-1"></i> Editar
+            </a>
+            <a href="{{ url_for('admin.obras_detailed', selected_date=obra.fecha_inicio.strftime('%Y-%m-%d')) }}" 
+               class="btn btn-primary btn-sm ml-2">
+                <i class="fas fa-th mr-1"></i> Tablero
+            </a>
+        </div>
+    </div>
+
+    <div class="obra-header-card">
+        <div class="d-flex flex-column" style="flex: 1;">
+            
+            {# --- FILA 1: CLIENTE --- #}
+            <div class="mb-3">
+                <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Cliente</span>
+                <span class="font-weight-bold text-dark h6 mb-0">{{ obra.cliente or 'No especificado' }}</span>
+            </div>
+
+            {# --- FILA 2: UBICACIÓN Y PRL --- #}
+            <div class="d-flex">
+                <div class="mr-5">
+                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Ubicación</span>
+                    <span class="text-dark">{{ obra.ubicacion or 'No especificada' }}</span>
+                </div>
+                <div>
+                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Plataforma PRL</span>
+                    {% if obra.url_prl %}
+                        <a href="{{ obra.url_prl }}" target="_blank" class="text-primary font-weight-bold" title="{{ obra.url_prl }}">
+                            Enlace Externo <i class="fas fa-external-link-alt ml-1 small"></i>
+                        </a>
+                    {% else %}
+                        <span class="text-muted small font-italic">Sin asignar</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# --- FILA 3: RESPONSABLES --- #}
+            <div class="d-flex mt-3 pt-3 border-top">
+                <div class="mr-5">
+                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Jefe de Obra</span>
+                    <span class="text-dark font-weight-bold">
+                        {% if obra.jefe_obra %}
+                            {{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}
+                        {% else %}
+                            <span class="text-muted font-italic">Sin asignar</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div>
+                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Encargado</span>
+                    <span class="text-dark font-weight-bold">
+                        {% if obra.encargado %}
+                            <i class="fas fa-hard-hat text-warning mr-1"></i> {{ obra.encargado.name }} {{ obra.encargado.lastname }}
+                        {% else %}
+                            <span class="text-muted font-italic">Sin asignar</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+        </div>
+
+        {# --- COLUMNA DERECHA: ESTADÍSTICAS --- #}
+        <div class="d-flex border-left pl-4">
+            <div class="obra-stat">
+                <div class="obra-stat-val text-primary">{{ obra.estado }}</div>
+                <div class="obra-stat-label">Estado</div>
+            </div>
+            <div class="obra-stat">
+                <div class="obra-stat-val">{{ obra.fecha_inicio.strftime('%d/%m/%Y') }}</div>
+                <div class="obra-stat-label">Inicio</div>
+            </div>
+            <div class="obra-stat">
+                <div class="obra-stat-val">
+                    {% if obra.fecha_fin %}
+                        {{ obra.fecha_fin.strftime('%d/%m/%Y') }}
+                    {% else %}
+                        En curso
+                    {% endif %}
+                </div>
+                <div class="obra-stat-label">Fin</div>
+            </div>
+        </div>
+    </div>
+
+    <section class="admin-panel shadow-sm">
+        <div class="admin-panel-header border-bottom pb-3 mb-3 d-flex justify-content-between align-items-center">
+            <h2 class="admin-panel-title m-0" style="font-size: 1.05rem;">
+                <i class="fas fa-calendar-alt text-primary mr-2"></i> Cronograma de Asignaciones
+            </h2>
+            
+            <div class="btn-group btn-group-sm shadow-sm" role="group">
+                <button type="button" class="btn btn-primary active" id="btnModeEmpresas" onclick="switchCalendarMode('empresas')">
+                    <i class="fas fa-building mr-1"></i> Por Empresas
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="btnModeEmpleados" onclick="switchCalendarMode('empleados')">
+                    <i class="fas fa-users mr-1"></i> Por Trabajadores
+                </button>
+            </div>
+        </div>
+        
+        <div class="admin-panel-body pt-0">
+            <div id="obra-panel-calendar" style="background: white; padding: 10px; border-radius: 8px;"></div>
+        </div>
+    </section>
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+
+<script>
+let obraCalendarInstance = null;
+const CURRENT_OBRA_ID = {{ obra.id }}; 
+
+document.addEventListener('DOMContentLoaded', function() {
+    
+    var today = new Date().toISOString().split('T')[0];
+    var startDate = "{{ obra.fecha_inicio.strftime('%Y-%m-%d') if obra.fecha_inicio else '' }}";
+    var endDate = "{{ obra.fecha_fin.strftime('%Y-%m-%d') if obra.fecha_fin else '' }}";
+    var initialDate = today;
+    if (startDate && today < startDate) initialDate = startDate; 
+    else if (endDate && today > endDate) initialDate = endDate;  
+
+    obraCalendarInstance = new UniversalCalendarManager('obra-panel-calendar', {
+        context: 'obra',
+        id: CURRENT_OBRA_ID,
+        entityName: '{{ obra.nombre }}',
+        mode: 'empresas', 
+        callbacks: {
+            
+            onShowNewPanel: function(containerId) {
+                let container = document.getElementById(containerId);
+                if (!container) return;
+                
+                container.innerHTML = `
+                    <label class="small font-weight-bold mb-1 text-secondary">Seleccionar Trabajador</label>
+                    <select id="uc-panel-worker-select" class="form-control border-primary" style="width: 100%;"></select>
+                `;
+                
+                // Le damos 150ms de margen para que el "parche global" no machaque esta configuración AJAX
+                setTimeout(() => {
+                    $('#uc-panel-worker-select').select2({
+                        placeholder: "Escribe un nombre para buscar...",
+                        dropdownParent: $('#uc-panel-worker-select').parent(), // CRÍTICO: Evita que se abra por detrás
+                        ajax: { 
+                            url: '/admin/api/planificador/search_workers', 
+                            dataType: 'json', 
+                            delay: 250,
+                            data: function(params) { return { q: params.term }; }, 
+                            processResults: function(data) { return { results: data.results }; } 
+                        }
+                    });
+                }, 150);
+            },
+            
+            onSaveNew: function(startStr, endStr, includeWeekends) {
+                let workerId = $('#uc-panel-worker-select').val();
+                if (!workerId) return Swal.fire('Atención', 'Selecciona un trabajador.', 'warning');
+                
+                let payload = {
+                    worker_id: workerId, target_obra_id: CURRENT_OBRA_ID, old_obra_id: CURRENT_OBRA_ID, 
+                    start_date: startStr, end_date: endStr, original_start: null, original_end: null,
+                    overwrite_mode: 'check', include_weekends: includeWeekends
+                };
+                
+                // MAGIA: El calendario se guarda a sí mismo
+                obraCalendarInstance.executeSave(payload, null);
+            },
+            
+            onEventModified: function(payload, revertFunc) {
+                let actionPayload = {
+                    worker_id: payload.event_data.worker_id, target_obra_id: CURRENT_OBRA_ID, old_obra_id: CURRENT_OBRA_ID,
+                    start_date: payload.new_start, end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
+                    original_start: payload.original_start, original_end: payload.original_end,
+                    overwrite_mode: 'overwrite', include_weekends: payload.include_weekends
+                };
+                
+                // MAGIA: El calendario se guarda a sí mismo
+                obraCalendarInstance.executeSave(actionPayload, revertFunc);
+            },
+
+            onDeleteAssignment: function(event, dates, isPartial) {
+                if (!event.extendedProps.worker_id) return Swal.fire('Aviso', 'Cambia al modo "Por Trabajadores" para poder desasignar.', 'info');
+                
+                // NUEVO ENRUTAMIENTO: Si es jefe, va a solicitud, si no, lo borra real
+                let isJefe = "{{ current_user.role }}" === "jefe_obra";
+                let urlUnassign = isJefe ? '/api/v6/unassign_worker' : '/api/v6/unassign_worker';
+
+                fetch(urlUnassign, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ worker_id: event.extendedProps.worker_id, obra_id: CURRENT_OBRA_ID, dates: dates, mode: 'selected' })
+                }).then(r => r.json()).then(data => {
+                    if(data.success) { 
+                        if (isJefe) {
+                            Swal.fire('Solicitud Enviada', 'La petición de baja se ha enviado a RRHH.', 'success');
+                            obraCalendarInstance.hidePanel();
+                        } else {
+                            if (isPartial) obraCalendarInstance.calendar.refetchEvents(); 
+                            else event.remove(); 
+                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Borrado', showConfirmButton: false, timer: 1500}); 
+                        }
+                    } else { 
+                        Swal.fire('Error', data.message, 'error'); 
+                    }
+                });
+            }
+        }
+    });
+    
+    setTimeout(() => { if (obraCalendarInstance.calendar && initialDate !== today) obraCalendarInstance.calendar.gotoDate(initialDate); }, 100);
+});
+
+window.switchCalendarMode = function(mode) {
+    $('.btn-group .btn').removeClass('active btn-primary').addClass('btn-outline-primary');
+    if (mode === 'empresas') $('#btnModeEmpresas').removeClass('btn-outline-primary').addClass('active btn-primary');
+    else $('#btnModeEmpleados').removeClass('btn-outline-primary').addClass('active btn-primary');
+    obraCalendarInstance.changeMode(mode);
+};
+</script>
+{% endblock %}

@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+.timeline-panel {
+  background: #ffffff;
+  border: 1px solid #e3e3e3;
+  padding: 15px;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-top: 15px;
+  font-family: 'Roboto', sans-serif;
+}
+
+.timeline-container {
+  border-left: 3px solid #007bff;
+  padding-left: 15px;
+}
+
+.timeline-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.timeline-date {
+    width: 80px;
+    font-weight: bold;
+    color: #007bff;
+    white-space: nowrap;
+  }
+  
+
+.timeline-content {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+  position: relative;
+}
+
+.timeline-left,
+.timeline-right {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.timeline-left .timeline-entry {
+  background: #d4edda;
+  color: #155724;
+  padding: 5px 8px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.timeline-right .timeline-entry {
+  background: #f8d7da;
+  color: #721c24;
+  padding: 5px 8px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* Estilo para las filas de gap */
+.timeline-gap {
+  text-align: center;
+  font-style: italic;
+  color: #6c757d;
+  margin: 8px 0;
+  font-size: 0.9em;
+}
+
+/* Aseguramos que las celdas de eventos tengan un padding consistente */
+/* Aseguramos que las celdas de eventos tengan un padding consistente */
+.event-cell {
+  padding: 0.5rem;  /* Equivalente a p-2 */
+}
+
+/* Estilo para la entrada de evento */
+.event-entry {
+  border-left: 2px solid;
+  padding-left: 0.5rem;
+  margin-bottom: 2px;
+  text-align: left;
+  font-size: 0.7em;
+  cursor: help;
+}
+
+/* Borde verde para free (desasignaciones) */
+.free-event .event-entry {
+  border-color: green;
+}
+
+/* Borde rojo para new (asignaciones) */
+.new-event .event-entry {
+  border-color: red;
+}
+
+

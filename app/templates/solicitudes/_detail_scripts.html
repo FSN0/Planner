@@ -1,0 +1,464 @@
+{# ÚNICAMENTE EL MODAL DE DESASIGNAR (Los conflictos los maneja tu common.js) #}
+<div class="modal fade" id="unassignModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-danger">
+      <div class="modal-header bg-danger text-white py-2">
+        <h5 class="modal-title h6"><i class="fas fa-user-minus"></i> Confirmar Desasignación</h5>
+        <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Eliminar asignaciones de <strong id="unassignWorkerName"></strong> en este periodo?</p>
+        <input type="hidden" id="unassignWorkerId">
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="executeUnassignApi()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================
+ A. FUNCIONES GLOBALES DE VISIBILIDAD DE TABLA
+ ========================================== */
+function refreshTableFilters() {
+  var table = document.querySelector('.filterable-table');
+  if (!table) return;
+
+  var btnBusy = document.getElementById('btnToggleBusy');
+  var btnPartial = document.getElementById('btnTogglePartial');
+  var showBusy = btnBusy ? (btnBusy.getAttribute('data-state') === 'visible') : false;
+  var showPartial = btnPartial ? (btnPartial.getAttribute('data-state') === 'visible') : true;
+
+  var inputs = table.querySelectorAll('.table-filter-input');
+  var activeFilters = {};
+  inputs.forEach(function (input) {
+      var col = input.getAttribute('data-col');
+      var val = input.value.trim().toLowerCase();
+      if (val) activeFilters[col] = val;
+  });
+
+  var rows = table.querySelectorAll('tbody tr');
+  rows.forEach(function (row) {
+      var visible = true;
+      Object.keys(activeFilters).forEach(function (colIdx) {
+          var cell = row.cells[parseInt(colIdx, 10)];
+          if (cell && cell.textContent.toLowerCase().indexOf(activeFilters[colIdx]) === -1) visible = false;
+      });
+      if (row.classList.contains('row-busy') && !showBusy) visible = false;
+      if (row.classList.contains('row-partial') && !showPartial) visible = false;
+      row.style.display = visible ? '' : 'none';
+  });
+}
+
+function toggleRowVisibility(type) {
+  var btnId = (type === 'busy') ? 'btnToggleBusy' : 'btnTogglePartial';
+  var btn = document.getElementById(btnId);
+  if (!btn) return;
+
+  var currentState = btn.getAttribute('data-state') || ((type === 'busy') ? 'hidden' : 'visible');
+  var newState = (currentState === 'visible') ? 'hidden' : 'visible';
+  btn.setAttribute('data-state', newState);
+
+  if (type === 'busy') {
+      if (newState === 'visible') {
+          btn.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar Ocupados';
+          btn.classList.replace('btn-outline-secondary', 'btn-secondary');
+      } else {
+          btn.innerHTML = '<i class="fas fa-eye"></i> Ver Ocupados';
+          btn.classList.replace('btn-secondary', 'btn-outline-secondary');
+      }
+  } else if (type === 'partial') {
+      if (newState === 'visible') {
+          btn.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar Parciales';
+          btn.classList.replace('btn-outline-warning', 'btn-warning');
+          btn.classList.remove('text-dark');
+      } else {
+          btn.innerHTML = '<i class="fas fa-eye"></i> Ver Parciales';
+          btn.classList.replace('btn-warning', 'btn-outline-warning');
+          btn.classList.add('text-dark');
+      }
+  }
+  refreshTableFilters();
+}
+
+var selectAll = document.getElementById('selectAll');
+if(selectAll){
+  selectAll.addEventListener('change', function() {
+      document.querySelectorAll('.worker-check').forEach(cb => {
+          if(cb.closest('tr').style.display !== 'none') cb.checked = this.checked;
+      });
+  });
+}
+
+/* ==========================================
+ B. VARIABLES GLOBALES DE FECHA
+ ========================================== */
+{% set real_end_date = solicitud.fecha_fin %}
+{% if solicitud.accion == 'DESASIGNAR' and solicitud.comentarios and 'all_obra' in solicitud.comentarios %}
+    {% if solicitud.obra and solicitud.obra.fecha_fin %}
+        {% set real_end_date = solicitud.obra.fecha_fin %}
+    {% else %}
+        {% set real_end_date = solicitud.fecha_inicio.replace(year=solicitud.fecha_inicio.year + 1) %}
+    {% endif %}
+{% endif %}
+
+var GLOBAL_START_DATE = "{{ solicitud.fecha_inicio.strftime('%Y-%m-%d') }}";
+var GLOBAL_END_DATE   = "{{ real_end_date.strftime('%Y-%m-%d') }}";
+var GLOBAL_OBRA_ID    = "{{ solicitud.obra_id }}";
+
+
+/* ==========================================
+ C. LÓGICA DE ASIGNACIÓN TOTAL (CON CONEXIÓN A API PLANIFICADOR)
+ ========================================== */
+
+// 1. Asignación de TODO el periodo (SOLICITUD GENÉRICA)
+// 1. Asignación de TODO el periodo (SOLICITUD GENÉRICA)
+window.submitGenericTotal = function() {
+  var checkboxes = document.querySelectorAll('.worker-check:checked');
+  if (checkboxes.length === 0) { alert("⚠️ Selecciona al menos un candidato."); return; }
+  
+  var checks = [];
+  var workerNames = {};
+  var workerIds = []; // Recolectamos los IDs limpios
+  
+  var $btn = $('button[onclick="submitGenericTotal()"]');
+  var originalHtml = $btn.html();
+  $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Comprobando...');
+
+  checkboxes.forEach(cb => { 
+      workerNames[cb.value] = cb.dataset.name;
+      workerIds.push(cb.value);
+      checks.push(
+          $.ajax({
+              url: "/api/v6/planificador/action",
+              type: "POST", contentType: "application/json",
+              data: JSON.stringify({
+                  worker_id: cb.value, target_obra_id: GLOBAL_OBRA_ID,
+                  start_date: GLOBAL_START_DATE, end_date: GLOBAL_END_DATE,
+                  overwrite_mode: 'check'
+              })
+          })
+      );
+  });
+
+  Promise.all(checks).then(results => {
+      $btn.prop('disabled', false).html(originalHtml);
+      var conflicts = {};
+      var hasConflict = false;
+      
+      results.forEach((res, index) => {
+          if (res.conflict) {
+              hasConflict = true;
+              var wId = checkboxes[index].value;
+              var detailsStr = res.conflict_details ? Object.keys(res.conflict_details).join(', ') : 'Ver calendario';
+              conflicts[workerNames[wId]] = ['Ocupado en: ' + detailsStr];
+          }
+      });
+
+      if (hasConflict) {
+          var mockData = { conflict_type: 'admin_hard', message: 'Hay trabajadores ocupados.', conflict_details: conflicts };
+          window.resolverConflictoAsignacion(mockData, { action: 'total' }, function(payload) {
+              var forceMove = (payload.overwrite_mode === 'overwrite' || payload.overwrite_mode === 'assign_and_request');
+              ejecutarAsignacionTotalApi(workerIds, forceMove); // Ejecuta API
+          });
+      } else {
+          ejecutarAsignacionTotalApi(workerIds, false); // Ejecuta API
+      }
+  }).catch(err => { 
+      $btn.prop('disabled', false).html(originalHtml);
+      alert("Error de conexión al comprobar la disponibilidad."); 
+  });
+};
+
+// Función helper que aísla la llamada al backend
+function ejecutarAsignacionTotalApi(workerIds, forceMove) {
+    $.ajax({
+        url: "/api/v6/solicitudes/{{ solicitud.id }}/asignar_candidatos",
+        type: "POST", contentType: "application/json",
+        data: JSON.stringify({ worker_ids: workerIds, force_move: forceMove }),
+        success: function(res) {
+            if(res.success) location.reload(); // Recarga la página limpia tras guardar
+            else alert(res.message);
+        },
+        error: function(xhr) { alert("Error del servidor: " + xhr.statusText); }
+    });
+}
+
+// 2. Asignación de TODO el periodo (SOLICITUD CONCRETA) - REESCRITO PARA LA API
+window.submitConcretaTotal = function() {
+    var $btn = $('button[onclick="submitConcretaTotal()"]');
+    var originalHtml = $btn.html();
+
+    {% if solicitud.tipo|lower == 'concreta' and solicitud.empleado %}
+    var workerId = "{{ solicitud.empleado.id }}";
+    var payload = {
+        worker_id: workerId,
+        target_obra_id: GLOBAL_OBRA_ID,
+        start_date: GLOBAL_START_DATE,
+        end_date: GLOBAL_END_DATE,
+        overwrite_mode: 'check'
+    };
+    
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Comprobando...');
+
+    // Consulta en vivo a la API del planificador para ver si choca con otra obra
+    $.ajax({
+        url: "/api/v6/planificador/action",
+        type: "POST", contentType: "application/json",
+        data: JSON.stringify(payload),
+        success: function(res) {
+            if (res.conflict) {
+                $btn.prop('disabled', false).html(originalHtml);
+                res.message = "El trabajador solicitado ya tiene otras asignaciones en estas fechas.";
+                
+                // LLAMADA AL MODAL GLOBAL DE COMMON.JS PARA RESOLVER CONFLICTO (Ej: Pluriempleo)
+                window.resolverConflictoAsignacion(res, payload, function(resolvedPayload) {
+                    // Si el usuario elige forzar/sobrescribir, disparamos la resolución
+                    ejecutarAsignacionConcretaApi();
+                });
+            } else {
+                // Sin conflictos, enviamos a la API directamente
+                ejecutarAsignacionConcretaApi();
+            }
+        },
+        error: function() {
+            $btn.prop('disabled', false).html(originalHtml);
+            alert("Error al comprobar la disponibilidad del operario.");
+        }
+    });
+    {% else %}
+    // Fallback si no hay empleado asignado (ej. baja general)
+    ejecutarAsignacionConcretaApi();
+    {% endif %}
+};
+
+// Función de apoyo para ejecutar la acción tras comprobar conflictos
+function ejecutarAsignacionConcretaApi() {
+    var $btn = $('button[onclick="submitConcretaTotal()"]');
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Asignando...');
+    
+    $.ajax({
+        url: "/api/v6/solicitudes/{{ solicitud.id }}/resolver",
+        type: "POST", contentType: "application/json",
+        data: JSON.stringify({ accion: 'aceptar_concreta' }),
+        success: function(res) {
+            if(res.success) location.reload(); // La recarga actualizará los contadores y cerrará el modal
+            else { alert(res.message); $btn.prop('disabled', false).html('<i class="fas fa-check-double mr-1"></i> Todo el periodo'); }
+        },
+        error: function(xhr) { 
+            alert("Error del servidor."); 
+            $btn.prop('disabled', false).html('<i class="fas fa-check-double mr-1"></i> Todo el periodo'); 
+        }
+    });
+}
+
+// 3. LA FUNCIÓN PARA DENEGAR Y REABRIR (Esta es la que faltaba y te daba error en la consola)
+window.resolverSolicitudApi = function(solicitudId, accion) {
+    var mensajes = {
+        'denegar': '¿Seguro que quieres DENEGAR esta solicitud?',
+        'reabrir': '¿Quieres reabrir esta solicitud?'
+    };
+    if (mensajes[accion] && !confirm(mensajes[accion])) return;
+
+    $.ajax({
+        url: "/api/v6/solicitudes/" + solicitudId + "/resolver",
+        type: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ accion: accion }),
+        success: function(res) {
+            if(res.success) location.reload();
+            else alert(res.message);
+        },
+        error: function(xhr) {
+            alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.message : "Error de conexión"));
+        }
+    });
+};
+
+function confirmUnassign(id, name) {
+  document.getElementById('unassignWorkerId').value = id;
+  document.getElementById('unassignWorkerName').innerText = name;
+  $('#unassignModal').modal('show');
+}
+
+window.executeUnassignApi = function() {
+    var workerId = document.getElementById('unassignWorkerId').value;
+    var btn = document.querySelector('#unassignModal .btn-danger');
+    btn.innerHTML = 'Procesando...'; btn.disabled = true;
+
+    $.ajax({
+        url: "/api/v6/solicitudes/{{ solicitud.id }}/desasignar_candidato",
+        type: "POST", contentType: "application/json",
+        data: JSON.stringify({ worker_id: workerId }),
+        success: function(res) {
+            if(res.success) location.reload();
+            else { alert(res.message); btn.innerHTML = 'Confirmar'; btn.disabled = false; }
+        },
+        error: function() { alert("Error de conexión"); btn.innerHTML = 'Confirmar'; btn.disabled = false; }
+    });
+}
+
+/* ==========================================
+ D. INICIALIZACIÓN Y LÓGICA DE DÍAS SUELTOS (CALENDARIO)
+ ========================================== */
+document.addEventListener('DOMContentLoaded', function() {
+  var rawComments = {{ solicitud.comentarios | tojson | safe }};
+  var pendingDates = [];
+  try {
+      var c = (typeof rawComments === 'string') ? JSON.parse(rawComments) : rawComments;
+      if(c && c.dates) pendingDates = c.dates;
+  } catch(e) {}
+
+  window.selectedPartialDates = new Set();
+  var isSolicitudActiva = {% if solicitud.estado in ['PENDIENTE', 'EN_PROCESO'] %}true{% else %}false{% endif %};
+
+  window.initSummaryCalendar = function(context, id, mode) {
+      if (window.resumenCalendar) window.resumenCalendar.destroy();
+      
+      window.selectedPartialDates.clear();
+      updatePartialButtonBadge();
+
+      window.resumenCalendar = new UniversalCalendarManager('solicitud-obra-calendar', {
+          context: context, id: id, mode: mode, readonly: true, partialSelectionMode: isSolicitudActiva, 
+          callbacks: { onDateToggle: function(dateStr) { togglePartialDate(dateStr); } }
+      });
+
+      setTimeout(function() {
+          window.resumenCalendar.calendar.gotoDate(GLOBAL_START_DATE);
+
+          if (isSolicitudActiva) {
+              var backgroundEvents = [];
+              var bgColor = 'rgba(34, 197, 94, 0.4)';
+
+              if (pendingDates.length > 0) {
+                  pendingDates.forEach(d => { backgroundEvents.push({ start: d, display: 'background', backgroundColor: bgColor }); });
+              } else {
+                  var curr = moment(GLOBAL_START_DATE);
+                  var end = moment(GLOBAL_END_DATE);
+                  while(curr.isSameOrBefore(end)) {
+                      backgroundEvents.push({ start: curr.format('YYYY-MM-DD'), display: 'background', backgroundColor: bgColor });
+                      curr.add(1, 'days');
+                  }
+              }
+              window.resumenCalendar.calendar.addEventSource(backgroundEvents);
+          }
+      }, 300);
+  };
+
+  {% if solicitud.obra_id %}
+  setTimeout(function() { initSummaryCalendar('obra', {{ solicitud.obra_id }}, 'empresas'); }, 200);
+  {% endif %}
+
+  window.switchCalendarView = function(newContext, newId, newMode) {
+      let btnObra = document.getElementById('btn-view-obra'); let btnWorker = document.getElementById('btn-view-worker');
+      if (btnObra && btnWorker) {
+          if (newContext === 'obra') { btnObra.className = "btn btn-primary active btn-sm"; btnWorker.className = "btn btn-outline-secondary btn-sm"; } 
+          else { btnWorker.className = "btn btn-primary active btn-sm"; btnObra.className = "btn btn-outline-secondary btn-sm"; }
+      }
+      setTimeout(function() { initSummaryCalendar(newContext, newId, newMode); }, 50);
+  };
+
+  var lastToggleTime = 0;
+  var lastToggleDate = "";
+
+  function togglePartialDate(dateStr) {
+      if (!isSolicitudActiva) return;
+
+      var now = new Date().getTime();
+      if (dateStr === lastToggleDate && (now - lastToggleTime) < 150) return; 
+      lastToggleTime = now;
+      lastToggleDate = dateStr;
+
+      var isPending = (pendingDates.length === 0) || pendingDates.includes(dateStr);
+      if (!isPending) return; 
+      if (dateStr < GLOBAL_START_DATE || dateStr > GLOBAL_END_DATE) return;
+
+      var cal = window.resumenCalendar.calendar;
+
+      if (window.selectedPartialDates.has(dateStr)) {
+          window.selectedPartialDates.delete(dateStr);
+          var ev = cal.getEventById('sel-' + dateStr);
+          if (ev) ev.remove();
+      } else {
+          window.selectedPartialDates.add(dateStr);
+          cal.addEvent({
+              id: 'sel-' + dateStr, start: dateStr,
+              display: 'background', backgroundColor: 'rgba(59, 130, 246, 0.7)'
+          });
+      }
+      updatePartialButtonBadge();
+  }
+
+  function updatePartialButtonBadge() {
+      document.querySelectorAll('#btn-assign-partial').forEach(btn => {
+          if (window.selectedPartialDates.size > 0) {
+              btn.innerHTML = `<i class="far fa-calendar-check mr-1"></i> Asignar Días Sueltos (${window.selectedPartialDates.size})`;
+              btn.classList.replace('btn-info', 'btn-primary');
+          } else {
+              btn.innerHTML = `<i class="far fa-calendar-check mr-1"></i> Asignar Días Sueltos`;
+              btn.classList.replace('btn-primary', 'btn-info');
+          }
+      });
+  }
+
+  // 3. ENVÍO DE DÍAS SUELTOS (CON MODAL GLOBAL COMMON.JS)
+  window.submitPartialFromMain = function() {
+      if (!isSolicitudActiva) return;
+      if (window.selectedPartialDates.size === 0) { 
+          alert("⚠️ Haz clic en los días del calendario superior que deseas asignar antes de pulsar este botón."); return; 
+      }
+
+      var workerId = null;
+      {% if solicitud.tipo|lower == 'concreta' and solicitud.empleado %}
+          workerId = "{{ solicitud.empleado.id }}";
+      {% else %}
+          var selected = document.querySelectorAll('.worker-check:checked');
+          if (selected.length === 0) { alert("⚠️ Selecciona un candidato en la tabla primero."); return; }
+          if (selected.length > 1) { alert("⚠️ Para días sueltos, selecciona SOLO UNO en la tabla."); return; }
+          workerId = selected[0].value;
+      {% endif %}
+
+      var doAjaxSubmit = function(payload) {
+          var btn = document.getElementById('btn-assign-partial');
+          if (btn) { btn.disabled = true; btn.innerHTML = 'Guardando...'; }
+
+          $.ajax({
+              url: "{{ url_for('asignaciones_api.api_solicitud_asignar_parcial', solicitud_id=solicitud.id) }}",
+              type: "POST", contentType: "application/json",
+              data: JSON.stringify(payload),
+              success: function(response) { 
+                  if (response.success) {
+                      location.reload(); 
+                  } else if (response.conflict) {
+                      if (btn) { btn.disabled = false; updatePartialButtonBadge(); }
+                      
+                      // LLAMADA A TU FUNCIÓN GLOBAL EN common.js
+                      window.resolverConflictoAsignacion(response, payload, function(nuevoPayload) {
+                          nuevoPayload.mode = nuevoPayload.overwrite_mode; 
+                          doAjaxSubmit(nuevoPayload);
+                      });
+                  } else {
+                      alert(response.message || "Error al procesar la asignación.");
+                      if (btn) { btn.disabled = false; updatePartialButtonBadge(); }
+                  }
+              },
+              error: function(xhr) { 
+                  if (btn) { btn.disabled = false; updatePartialButtonBadge(); }
+                  alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.message : "Error desconocido")); 
+              }
+          });
+      };
+
+      // Mandamos la primera petición con mode: 'check'
+      var initialPayload = {
+          worker_id: workerId,
+          dates: Array.from(window.selectedPartialDates),
+          mode: 'check' 
+      };
+      
+      doAjaxSubmit(initialPayload);
+  }
+});
+</script>

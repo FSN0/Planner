@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Nueva Empresa{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    /* Estilos exclusivos para el Switch (Interruptor) */
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 26px;
+    }
+    .switch input { 
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 34px;
+    }
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+    }
+    input:checked + .slider {
+        background-color: #22c55e; /* Verde */
+    }
+    input:focus + .slider {
+        box-shadow: 0 0 1px #22c55e;
+    }
+    input:checked + .slider:before {
+        transform: translateX(24px);
+    }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    <div class="row justify-content-center">
+      <div class="col-lg-8 col-xl-6">
+        
+        <div class="d-flex align-items-center mb-4">
+            <a href="{{ url_for('admin.companies') }}" class="btn btn-sm btn-link text-muted pl-0">
+                <i class="fas fa-arrow-left"></i> Volver al listado
+            </a>
+        </div>
+
+        {# --- BLOQUE DE MENSAJES (FLASH) AÑADIDO AQUÍ --- #}
+        <div class="mb-3">
+           
+        </div>
+        {# ----------------------------------------------- #}
+
+        <div class="admin-panel">
+            <div class="admin-panel-header border-bottom pb-3 mb-4">
+                <h2 class="admin-panel-title" style="font-size: 1.1rem;">Nueva Empresa</h2>
+                <p class="admin-panel-subtitle mb-0">
+                    Registra una nueva subcontrata o entidad interna.
+                </p>
+            </div>
+
+            <form action="{{ url_for('admin.create_company') }}" method="POST">
+                <div class="form-row">
+                    <div class="form-group col-md-4">
+                        <label class="small font-weight-bold text-dark">Código Interno</label>
+                        <input type="text" name="code" class="form-control" placeholder="Ej: SOLTEC" required>
+                        <small class="form-text text-muted">Identificador único.</small>
+                    </div>
+                    <div class="form-group col-md-8">
+                        <label class="small font-weight-bold text-dark">Nombre Fiscal</label>
+                        <input type="text" name="nombre" class="form-control" placeholder="Nombre de la empresa" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="small font-weight-bold text-dark">NIF / CIF</label>
+                    <input type="text" name="nif" class="form-control" placeholder="A-12345678">
+                </div>
+
+                <div class="form-group">
+                    <label class="small font-weight-bold text-dark">Descripción</label>
+                    <textarea name="descripcion" class="form-control" rows="3" placeholder="Notas internas..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label class="small font-weight-bold text-dark">Gremio</label>
+                        <input type="text" name="gremio" class="form-control" placeholder="Ej: Electricidad">
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label class="small font-weight-bold text-dark">Email</label>
+                        <input type="email" name="email" class="form-control" placeholder="contacto@empresa.com">
+                    </div>
+                </div>
+
+                <div class="form-group bg-light p-3 rounded border">
+                    <label class="small font-weight-bold text-dark mb-2">Color</label>
+                    <div class="d-flex align-items-center">
+                        <input type="color" name="color" class="form-control form-control-color mr-3" value="#cccccc">
+                        <span class="text-muted small">Identificativo en el calendario.</span>
+                    </div>
+                </div>
+
+                {# --- INTERRUPTOR EMPRESA INTERNA --- #}
+                <div class="form-group bg-light p-3 rounded border mt-3">
+                    <div class="d-flex align-items-center">
+                        <label class="switch mr-3">
+                            <input type="checkbox" name="is_internal">
+                            <span class="slider"></span>
+                        </label>
+                        <div>
+                            <label class="font-weight-bold text-dark mb-0" style="cursor: pointer;" onclick="this.parentElement.previousElementSibling.querySelector('input').click()">
+                                Marca como Empresa Interna (Propia)
+                            </label>
+                            <div class="text-muted small mt-1">
+                                Si activas esto, la empresa y sus trabajadores se considerarán "de la casa".
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex justify-content-end">
+                    <a href="{{ url_for('admin.companies') }}" class="btn btn-link text-muted mr-2">Cancelar</a>
+                    <button type="submit" class="btn btn-primary px-4">Crear Empresa</button>
+                </div>
+            </form>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

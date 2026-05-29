@@ -1,0 +1,188 @@
+{# --- app/templates/components/_kanban_col_libres.html --- #}
+
+{# 1. CONTENEDOR PRINCIPAL #}
+<div class="d-flex flex-column mr-3" 
+     style="background-color: #f8fafc; position: sticky; top: 110px; height: calc(100vh - 130px); z-index: 99; min-width: 260px;">
+    
+    {# 2. CABECERA: Barra de búsqueda #}
+    <div class="p-2 border-bottom bg-white" style="z-index: 10; flex-shrink: 0;">
+        <div class="input-group input-group-sm">
+            <div class="input-group-prepend">
+                <span class="input-group-text bg-light border-0">
+                    <i class="fas fa-search text-muted"></i>
+                </span>
+            </div>
+            <input type="text" id="search-libres-input" class="form-control border-0 bg-light" 
+                   placeholder="Buscar operario o empresa..." autocomplete="off">
+        </div>
+        {# Contador resumen #}
+        <div class="d-flex justify-content-between mt-2 px-1">
+            <small class="text-muted font-weight-bold">Libres: {{ free_workers|length }}</small>
+            <small class="text-muted">Total: {{ free_workers|length + busy_workers|length }}</small>
+        </div>
+    </div>
+
+    {# 3. CUERPO DE LA LISTA (Con Scroll) #}
+    <div class="worker-list-body flex-grow-1 overflow-auto p-2" id="list-libres-body" data-obra-id="0" data-obra-name="Libres">
+        
+        {# --- BLOQUE A: OPERARIOS LIBRES --- #}
+        {% for worker in free_workers %}
+            {% set comp = worker.empresa_obj if worker.empresa_obj else worker.company_rel %}
+            {% set border_color = comp.color if comp else '#cbd5e1' %}
+            {% set comp_code = comp.code if comp else 'Ext' %}
+            {% set comp_name = comp.nombre if comp else 'Sin Empresa' %}
+            
+            {# CAMBIO: AÑADIDOS DATOS DE EMPRESA AL DATASET #}
+            <div class="worker-chip filterable-worker bg-white shadow-sm mb-2 p-2 rounded" 
+                 data-worker-id="{{ worker.id }}" 
+                 data-worker-name="{{ worker.name }} {{ worker.lastname }}"
+                 data-company-name="{{ comp_name }}"
+                 data-company-code="{{ comp_code }}"
+                 style="border-left: 5px solid {{ border_color }}; cursor: grab; transition: transform 0.1s;">
+                
+                <div class="d-flex justify-content-between align-items-center">
+                    
+                    {# MODIFICADO: Inyección de pelotita al lado del nombre #}
+                    <div class="text-truncate d-flex align-items-center" style="max-width: 160px;">
+                        {% if current_user.role == 'admin' and worker.temp_estado_fichaje %}
+                            {% set st = worker.temp_estado_fichaje %}
+                            {% if st == 'Correcto' %}
+                                <span class="status-dot-kanban dot-success" title="Correcto"></span>
+                            {% elif st == 'Correcto_Automatico' %}
+                                <span class="status-dot-kanban dot-auto" title="Auto-Asignado"></span>
+                            {% elif st == 'Ausencia' %}
+                                <span class="status-dot-kanban dot-warning" title="Ausencia"></span>
+                            {% elif st == 'Conflicto' or st == 'Paracaidista' %}
+                                <span class="status-dot-kanban dot-danger" title="Conflicto"></span>
+                            {% elif st.startswith('Resuelto') %}
+                                <span class="status-dot-kanban dot-info" title="Resuelto"></span>
+                            {% else %}
+                                <span class="status-dot-kanban dot-secondary" title="Sin Registro"></span>
+                            {% endif %}
+                        {% endif %}
+                        
+                        <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" 
+                           class="worker-name text-truncate text-dark font-weight-bold" 
+                           style="text-decoration: none; font-size: 0.85rem;">
+                            {{ worker.name }} {{ worker.lastname }}
+                        </a>
+                    </div>
+                    
+                    {% set rep = worker.reputation_score %}
+                    {% if rep != 0 %}
+                        <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}" 
+                              style="font-size: 0.6rem; padding: 1px 4px;">
+                            {{ '+' if rep > 0 }}{{ rep }}
+                        </span>
+                    {% endif %}
+                </div>
+                
+                <div class="worker-meta d-flex justify-content-between align-items-center mt-1">
+                    <div class="text-truncate d-flex align-items-center" style="max-width: 60%;">
+                        <i class="fas fa-hard-hat text-warning mr-1" style="font-size: 0.65rem;"></i>
+                        <span class="small text-muted" style="font-size: 0.75rem;">{{ worker.categoria_profesional if worker.categoria_profesional else '-' }}</span>
+                    </div>
+                    {# Texto empresa en gris #}
+                    <div class="text-truncate d-flex align-items-center" style="max-width: 35%;">
+                        <span title="{{ comp_name }}" class="text-secondary font-weight-bold" style="font-size: 0.7rem;">
+                            {{ comp_code }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+
+        {# --- BLOQUE B: OPERARIOS OCUPADOS --- #}
+        {% if busy_workers %}
+            <div class="text-uppercase font-weight-bold text-muted mt-4 mb-2 pl-1" 
+                 style="font-size: 0.65rem; border-top: 1px solid #e2e8f0; padding-top: 10px; letter-spacing: 0.5px;">
+                Ocupados hoy ({{ busy_workers|length }})
+            </div>
+
+            {% for worker in busy_workers %}
+                {% set comp = worker.empresa_obj if worker.empresa_obj else worker.company_rel %}
+                {% set border_color = comp.color if comp else '#cbd5e1' %}
+                {% set comp_code = comp.code if comp else 'Ext' %}
+                {% set comp_name = comp.nombre if comp else 'Sin Empresa' %}
+                
+                {# CAMBIO: AÑADIDOS DATOS DE EMPRESA AL DATASET TAMBIÉN AQUÍ #}
+                <div class="worker-chip filterable-worker mb-2 p-2 rounded" 
+                     data-worker-id="{{ worker.id }}" 
+                     data-worker-name="{{ worker.name }} {{ worker.lastname }}"
+                     data-company-name="{{ comp_name }}"
+                     data-company-code="{{ comp_code }}"
+                     style="border-left: 5px solid {{ border_color }}; opacity: 0.6; background-color: #f1f5f9; cursor: not-allowed;">
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="worker-name text-truncate text-muted" style="max-width: 160px; font-size: 0.85rem;">
+                            {{ worker.name }} {{ worker.lastname }}
+                        </span>
+                        <i class="fas fa-briefcase text-muted" style="font-size: 0.7rem;" title="Ocupado en otra obra"></i>
+                    </div>
+                    
+                    <div class="worker-meta d-flex justify-content-between align-items-center mt-1" style="opacity: 0.7;">
+                        <div class="text-truncate" style="max-width: 60%;">
+                            <span class="small" style="font-size: 0.75rem;">{{ worker.categoria_profesional or '-' }}</span>
+                        </div>
+                        {# Texto empresa en gris #}
+                        <div class="text-truncate" style="max-width: 35%;">
+                             <span class="text-muted font-weight-bold" style="font-size: 0.7rem;">
+                                {{ comp_code }}
+                             </span>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        {% if not free_workers and not busy_workers %}
+            <div class="text-center text-muted small mt-5">
+                <i class="fas fa-users mb-2" style="font-size: 1.5rem; opacity: 0.3;"></i><br>
+                No hay operarios.
+            </div>
+        {% endif %}
+
+        <div id="libres-no-match" class="text-center text-muted small mt-4 d-none">
+            No se encontraron coincidencias.
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const inputLibres = document.getElementById('search-libres-input');
+    const containerLibres = document.getElementById('list-libres-body');
+    const msgNoMatch = document.getElementById('libres-no-match');
+    
+    if(inputLibres && containerLibres) {
+        inputLibres.addEventListener('keyup', function(e) {
+            const term = e.target.value.toLowerCase().trim();
+            const items = containerLibres.querySelectorAll('.filterable-worker');
+            let visibleCount = 0;
+
+            items.forEach(function(item) {
+                // CAMBIO: Ahora buscamos en Nombre, Nombre Empresa y Código Empresa
+                const name = (item.getAttribute('data-worker-name') || '').toLowerCase();
+                const compName = (item.getAttribute('data-company-name') || '').toLowerCase();
+                const compCode = (item.getAttribute('data-company-code') || '').toLowerCase();
+
+                // Lógica "OR": Si coincide CUALQUIERA de los tres, se muestra
+                if (name.includes(term) || compName.includes(term) || compCode.includes(term)) {
+                    item.classList.remove('d-none');
+                    visibleCount++;
+                } else {
+                    item.classList.add('d-none');
+                }
+            });
+
+            if (msgNoMatch) {
+                if (visibleCount === 0 && items.length > 0) {
+                    msgNoMatch.classList.remove('d-none');
+                } else {
+                    msgNoMatch.classList.add('d-none');
+                }
+            }
+        });
+    }
+});
+</script>

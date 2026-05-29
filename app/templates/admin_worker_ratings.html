@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Historial: {{ worker.name }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    /* Estilos específicos para esta tabla compacta */
+    .table-ratings th {
+        background-color: #f8f9fa;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        color: #6c757d;
+        border-bottom: 2px solid #e9ecef;
+        vertical-align: middle;
+    }
+    .table-ratings td {
+        vertical-align: middle;
+        font-size: 0.85rem;
+    }
+    /* Columna Motivo: Texto normal, no centrado */
+    .col-reason {
+        white-space: normal; /* Asegura que el texto largo baje de línea */
+        line-height: 1.4;
+    }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main">
+    
+    <div class="d-flex align-items-center mb-4">
+        <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" class="btn btn-sm btn-link text-muted pl-0">
+            <i class="fas fa-arrow-left"></i> Volver a la ficha
+        </a>
+    </div>
+
+    <div class="admin-panel">
+        <div class="admin-panel-header border-bottom pb-3 mb-0 d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="admin-panel-title">Historial de Reputación</h2>
+                <p class="admin-panel-subtitle mb-0">{{ worker.name }} {{ worker.lastname }}</p>
+            </div>
+            <div class="text-right">
+                <span class="small text-muted d-block">Puntuación Actual</span>
+                <span class="h3 mb-0 font-weight-bold {{ 'text-success' if worker.reputation_score > 0 else 'text-danger' if worker.reputation_score < 0 else 'text-muted' }}">
+                    {{ '+' if worker.reputation_score > 0 }}{{ worker.reputation_score }}
+                </span>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-sm table-ratings mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 140px;">Fecha</th>
+                        <th style="width: 80px;" class="text-center">Puntos</th>
+                        <th style="width: 90px;" class="text-center">Estado</th>
+                        
+                        <th>Motivo</th>
+                        
+                        <th style="width: 200px;">Evaluador</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rating in ratings %}
+                    <tr class="{{ 'text-muted bg-light' if not rating.is_active else '' }}">
+                        
+                        <td class="text-nowrap text-muted small">
+                            {{ rating.created_at.strftime('%d/%m/%Y %H:%M') }}
+                        </td>
+                        
+                        <td class="text-center">
+                            {% if rating.score > 0 %}
+                                <span class="badge badge-success" style="min-width: 30px;">+{{ rating.score }}</span>
+                            {% else %}
+                                <span class="badge badge-danger" style="min-width: 30px;">{{ rating.score }}</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td class="text-center">
+                            {% if rating.is_active %}
+                                <span class="badge badge-light border text-dark">Activo</span>
+                            {% else %}
+                                <span class="badge badge-secondary">Archivado</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td class="col-reason text-dark">
+                            {% if rating.reason %}
+                                {{ rating.reason }}
+                            {% else %}
+                                <span class="text-muted font-italic small">Sin motivo especificado</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="font-weight-bold text-dark mr-1">{{ rating.created_by.name }}</div>
+                                <small class="text-muted">({{ rating.created_by.role }})</small>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-5 text-muted">
+                            <i class="far fa-folder-open fa-2x mb-3 d-block opacity-50"></i>
+                            Aún no hay valoraciones registradas para este trabajador.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

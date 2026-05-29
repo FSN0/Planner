@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Ficha: {{ company.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    #company-timeline { font-family: system-ui; font-size: 0.8rem; }
+    .fc .fc-toolbar-title { font-size: 1rem !important; text-transform: capitalize; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main">
+    <div class="d-flex justify-content-between mb-3 align-items-center">
+        <a href="{{ url_for('admin.companies') }}" class="text-muted small"><i class="fas fa-arrow-left"></i> Volver</a>
+        <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i> Editar</a>
+    </div>
+
+    <div class="admin-panel mb-4">
+        <div class="admin-panel-header border-bottom pb-3 mb-3 d-flex justify-content-between align-items-start">
+            <div>
+                 <h1 class="h4 mb-0 font-weight-bold text-dark">{{ company.nombre }}</h1>
+                <p class="text-muted mb-0">{{ company.code }} | {{ company.nif or 'Sin NIF' }}</p>
+            </div>
+            <div class="text-right">
+                <div class="status-dot" style="background-color: {{ company.color }}; width: 15px; height: 15px;"></div>
+            </div>
+        </div>
+        <div class="row text-center">
+            <div class="col-4 border-right">
+                <div class="h5 font-weight-bold mb-0">{{ company.users|length }}</div>
+                <div class="small text-muted text-uppercase">Trabajadores</div>
+            </div>
+            <div class="col-4 border-right">
+                <div class="h5 font-weight-bold mb-0">-</div>
+                <div class="small text-muted text-uppercase">Intervenciones</div>
+            </div>
+            <div class="col-4">
+                <div class="h5 font-weight-bold mb-0 text-primary">{{ 'SI' if company.is_internal else 'NO' }}</div>
+                <div class="small text-muted text-uppercase">Interna</div>
+            </div>
+        </div>
+    </div>
+
+    <section class="admin-panel">
+        <div class="admin-panel-header border-bottom pb-2 mb-2">
+            <h2 class="admin-panel-title">Cronograma de Obras</h2>
+            <p class="admin-panel-subtitle">Obras donde esta empresa tiene personal asignado.</p>
+        </div>
+        <div class="admin-panel-body">
+            <div id="company-timeline"></div>
+        </div>
+    </section>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+
+<script>
+let companyCalendarInstance = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    companyCalendarInstance = new UniversalCalendarManager('company-timeline', {
+        context: 'empresa',
+        id: {{ company.id }},
+        entityName: '{{ company.nombre }}', // Banner interactivo clickable hacia la ficha
+        mode: 'empleados', 
+        callbacks: {
+            
+            // 1. EL CALENDARIO PIDE PINTAR EL SELECTOR PARA NUEVAS ASIGNACIONES
+            onShowNewPanel: function(containerId) {
+                let container = document.getElementById(containerId);
+                if (!container) return;
+                
+                container.innerHTML = `
+                    <label class="small font-weight-bold mb-1 text-secondary">Asignar a Obra</label>
+                    <select id="uc-panel-company-obra-select" class="form-control border-primary" style="width: 100%;"></select>
+                `;
+                
+                $('#uc-panel-company-obra-select').select2({
+                    placeholder: "Buscar obra destino...",
+                    ajax: { 
+                        url: '/admin/api/planificador/search_obras', 
+                        dataType: 'json',
+                        delay: 250,
+                        data: function(params) { return { q: params.term }; },
+                        processResults: function(data) { return { results: data.results }; }
+                    }
+                });
+            },
+
+            // 2. EL USUARIO LE DA AL BOTÓN AZUL (GUARDAR NUEVA ASIGNACIÓN DESDE LA EMPRESA)
+            onSaveNew: function(startStr, endStr, includeWeekends) {
+                // Al estar en el contexto de la empresa, el "Elemento Pulsado" del panel inferior es la Obra,
+                // y el "dueño" del calendario (el operario activo) lo sacamos del contexto del evento si existiera,
+                // pero como es una asignación vacía en la parrilla global de la empresa, necesitamos saber a qué operario.
+                // Por usabilidad, en la ficha de la empresa, para crear nuevas asignaciones lo ideal es usar el Planificador o el Kanban.
+                // No obstante, dejamos el gancho listo por si necesitas recuperar un operario:
+                Swal.fire('Información', 'Para crear nuevas asignaciones utiliza el Planificador General o el Tablero Kanban de Obras arrastrando al operario.', 'info');
+                companyCalendarInstance.hidePanel();
+            },
+            
+            // 3. EL USUARIO REAJUSTA LAS FECHAS ARRASTRANDO, ESTIRANDO O EDITANDO DESDE EL PANEL
+            onEventModified: function(payload, revertFunc) {
+                // Capturamos el selector si el usuario lo cambió manualmente en el panel de edición
+                let selectEl = document.getElementById('uc-panel-company-obra-select');
+                let targetObraId = selectEl && selectEl.value ? selectEl.value : payload.event_data.obra_id;
+
+                let actionPayload = {
+                    worker_id: payload.event_data.worker_id, // El ID del operario viaja en las extendedProps del bloque
+                    target_obra_id: targetObraId,
+                    old_obra_id: payload.event_data.obra_id,
+                    start_date: payload.new_start,
+                    end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
+                    original_start: payload.original_start,
+                    original_end: payload.original_end,
+                    overwrite_mode: 'check', // Pasa por el filtro de conflictos de horario automático
+                    include_weekends: payload.include_weekends
+                };
+                
+                // Llama al resolvedor global si el backend detecta solapamientos de fechas
+                companyCalendarInstance.executeSave(actionPayload, revertFunc);
+            },
+
+            // 4. EL USUARIO PULSA EL BOTÓN ROJO DE DESASIGNAR (O LA TECLA SUPRIMIR + ENTER)
+            onDeleteAssignment: function(event, dates, isPartial) {
+                if (!event.extendedProps.worker_id || !event.extendedProps.obra_id) return Swal.fire('Error', 'No se han podido recuperar las credenciales.', 'error');
+
+                fetch('/api/v6/unassign_worker', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ worker_id: event.extendedProps.worker_id, obra_id: event.extendedProps.obra_id, dates: dates, mode: 'selected' })
+                }).then(r => r.json()).then(data => {
+                    if(data.success) { 
+                        if (isPartial) companyCalendarInstance.calendar.refetchEvents(); 
+                        else event.remove();
+                        Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Bloque eliminado', showConfirmButton: false, timer: 1500}); 
+                    } else { 
+                        Swal.fire('Error', data.message, 'error'); 
+                    }
+                });
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+{% block title %}Preview Empleados{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    .sync-list-item { border-left: 5px solid; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .sync-new { border-left-color: #28a745; }
+    .sync-update { border-left-color: #ffc107; }
+    .sync-ok { border-left-color: #6c757d; opacity: 0.7; }
+    .sync-conflict { border-left-color: #dc3545; background-color: #fff8f8; }
+    .change-arrow { color: #007bff; font-weight: bold; margin: 0 5px; }
+    .info-label { font-size: 0.8rem; text-transform: uppercase; color: #6c757d; font-weight: bold; letter-spacing: 0.5px; }
+    .info-value { font-size: 1rem; color: #343a40; margin-bottom: 10px; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="admin-header-title">Auditoría de Importación: Personal</h1>
+        <button class="btn btn-success font-weight-bold btn-lg shadow-sm" onclick="confirmSyncEmpleados()">
+            <i class="fas fa-save mr-1"></i> Guardar Cambios en BD
+        </button>
+    </div>
+
+    <div class="alert alert-info shadow-sm">
+        <i class="fas fa-info-circle fa-lg mr-2"></i> Se han encontrado <strong>{{ diff.nuevos|length }}</strong> empleados nuevos, 
+        <strong>{{ diff.actualizados|length }}</strong> con cambios y 
+        <strong>{{ diff.sin_cambios|length }}</strong> que ya están perfectamente sincronizados.
+    </div>
+
+    <div class="list-group">
+        {% for emp in diff.nuevos %}
+        <div class="list-group-item sync-list-item sync-new flex-column align-items-start">
+            <div class="d-flex w-100 justify-content-between border-bottom pb-2 mb-3">
+                <h5 class="mb-0 text-success"><i class="fas fa-user-plus mr-2"></i>ALTA DE NUEVO EMPLEADO</h5>
+                <span class="badge badge-success" style="font-size: 0.9rem;">Odoo ID: {{ emp.odoo_id }}</span>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="info-label">Nombre Completo</div>
+                    <div class="info-value"><i class="fas fa-user text-muted mr-1"></i> {{ emp.name }} {{ emp.lastname }}</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-label">DNI / Identificación</div>
+                    <div class="info-value"><i class="fas fa-id-card text-muted mr-1"></i> {{ emp.dni }}</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-label">Correo Electrónico</div>
+                    <div class="info-value"><i class="fas fa-envelope text-muted mr-1"></i> {{ emp.email }}</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-label">Rol Asignado</div>
+                    <div class="info-value">
+                        <span class="badge badge-primary px-2 py-1">{{ emp.role | upper }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-12">
+                    <div class="info-label">Empresa Destino</div>
+                    <div class="info-value text-primary"><i class="fas fa-building mr-1"></i> Empresa Principal (Se asignará por defecto para que sea visible en tus paneles)</div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% for emp in diff.actualizados %}
+        <div class="list-group-item sync-list-item {% if emp.conflicto %}sync-conflict{% else %}sync-update{% endif %} flex-column align-items-start">
+            <div class="d-flex w-100 justify-content-between border-bottom pb-2 mb-2">
+                <h5 class="mb-0 {% if emp.conflicto %}text-danger{% else %}text-warning{% endif %}">
+                    {% if emp.conflicto %}
+                        <i class="fas fa-exclamation-triangle mr-2"></i>CONFLICTO DE DUPLICADOS
+                    {% else %}
+                        <i class="fas fa-user-edit mr-2"></i>ACTUALIZAR EMPLEADO
+                    {% endif %}
+                </h5>
+                <div>
+                    <span class="badge badge-secondary mr-2">Local ID: {{ emp.local_id }}</span>
+                    <span class="badge badge-warning text-dark">Odoo ID: {{ emp.odoo_id }}</span>
+                </div>
+            </div>
+            
+            <h6 class="mt-2 text-dark font-weight-bold" style="font-size: 1.1rem;">{{ emp.name }} {{ emp.lastname }}</h6>
+            
+            <div class="bg-white p-3 rounded mt-2 border">
+                {% if emp.conflicto %}
+                    <div class="alert alert-danger mb-0 p-3 shadow-sm border-danger">
+                        <h6 class="font-weight-bold text-danger mb-3">
+                            <i class="fas fa-balance-scale"></i> Conflicto Detectado ({{ emp.conflicto.tipo }} duplicado): <u>{{ emp.conflicto.valor }}</u>
+                        </h6>
+                        <p class="mb-3 text-dark">Existen dos usuarios en tu base de datos compitiendo por este dato. Selecciona quién debe permanecer activo (el otro será desactivado automáticamente):</p>
+                        
+                        <div class="p-3 bg-white rounded border mb-2">
+                            <div class="custom-control custom-radio">
+                                <input class="custom-control-input" type="radio" name="conflict_{{ emp.odoo_id }}" id="keep_actual_{{ emp.odoo_id }}" value="keep_actual" checked>
+                                <label class="custom-control-label" style="cursor: pointer;" for="keep_actual_{{ emp.odoo_id }}">
+                                    <b>OPCIÓN A:</b> Mantener a <b class="text-primary">{{ emp.conflicto.actual.nombre }} (ID: {{ emp.conflicto.actual.id }})</b> y enlazarlo con Odoo.<br>
+                                    <small class="text-muted">El otro usuario será renombrado y marcado como borrado.</small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="p-3 bg-white rounded border mb-3">
+                            <div class="custom-control custom-radio">
+                                <input class="custom-control-input" type="radio" name="conflict_{{ emp.odoo_id }}" id="keep_blocker_{{ emp.odoo_id }}" value="keep_blocker">
+                                <label class="custom-control-label" style="cursor: pointer;" for="keep_blocker_{{ emp.odoo_id }}">
+                                    <b>OPCIÓN B:</b> Mantener al duplicado <b class="text-primary">{{ emp.conflicto.bloqueador.nombre }} (ID: {{ emp.conflicto.bloqueador.id }})</b> y enlazarlo con Odoo.<br>
+                                    <small class="text-muted">El usuario actual será renombrado y marcado como borrado.</small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-danger font-weight-bold" onclick='resolveConflict({{ emp | tojson | safe }})'>
+                            <i class="fas fa-wrench mr-1"></i> Resolver este conflicto ahora
+                        </button>
+                    </div>
+                {% else %}
+                    <strong class="text-dark d-block mb-3 border-bottom pb-2">Resumen de Cambios (Valor en tu BD <span class="change-arrow">➔</span> Valor en Odoo):</strong>
+                    {% if emp.cambios %}
+                        <div class="row">
+                        {% for campo, valor in emp.cambios.items() %}
+                            <div class="col-md-6 mb-2">
+                                <div class="p-2 bg-light rounded border-left border-info">
+                                    <span class="info-label d-block mb-1">{{ campo }}</span>
+                                    <span class="text-dark">{{ valor }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        </div>
+                        <p class="small text-muted mt-2 mb-0"><i class="fas fa-info-circle"></i> Los campos que no aparecen aquí se mantendrán exactamente igual.</p>
+                    {% else %}
+                        <div class="alert alert-light mb-0 border">
+                            <i class="fas fa-link text-success mr-2"></i> <strong>Todos los datos principales coinciden.</strong> Solo se va a enlazar internamente su Odoo ID para futuras sincronizaciones (o reasignar a su empresa si era un usuario sin empresa).
+                        </div>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        
+        {% if diff.sin_cambios %}
+        <div class="mt-4 mb-2 text-center">
+            <button class="btn btn-outline-secondary font-weight-bold" type="button" data-toggle="collapse" data-target="#collapseSinCambios" aria-expanded="false" aria-controls="collapseSinCambios">
+                <i class="fas fa-eye mr-1"></i> Mostrar {{ diff.sin_cambios|length }} empleados ya sincronizados y perfectos
+            </button>
+        </div>
+        <div class="collapse" id="collapseSinCambios">
+            <div class="row">
+            {% for emp in diff.sin_cambios %}
+                <div class="col-md-4 mb-2">
+                    <div class="p-2 border rounded bg-light d-flex justify-content-between align-items-center">
+                        <span class="small font-weight-bold text-secondary text-truncate" style="max-width: 70%;">
+                            <i class="fas fa-check-circle text-success mr-1"></i> {{ emp.name }} {{ emp.lastname }}
+                        </span>
+                        <span class="badge badge-light border">Odoo: {{ emp.odoo_id }}</span>
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// FUNCIÓN 1: Para procesar los conflictos a mano uno por uno
+function resolveConflict(empData) {
+    let selectedRadio = document.querySelector(`input[name="conflict_${empData.odoo_id}"]:checked`);
+    if(!selectedRadio) {
+        alert("Por favor, selecciona una de las dos opciones (A o B) antes de resolver.");
+        return;
+    }
+    
+    let action = selectedRadio.value;
+    
+    if(confirm("¿Estás seguro de resolver el conflicto? El usuario descartado se desactivará permanentemente.")) {
+        fetch("{{ url_for('sync.resolve_conflict_empleado') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ emp: empData, action: action })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                alert("¡Conflicto resuelto! La página se recargará para actualizar la lista.");
+                location.reload(); 
+            } else {
+                alert("Error al resolver: " + data.error);
+            }
+        });
+    }
+}
+
+// FUNCIÓN 2: Botón Global de Guardar
+function confirmSyncEmpleados() {
+    let payload = {{ diff | tojson | safe }};
+    
+    // IMPORTANTE: Filtramos para que el botón de Guardar Global NO intente guardar a los que tienen conflicto
+    let cleanUpdates = payload.actualizados.filter(emp => !emp.conflicto);
+    let conflictsCount = payload.actualizados.length - cleanUpdates.length;
+
+    if(conflictsCount > 0) {
+        alert(`Tienes ${conflictsCount} conflicto(s) pendiente(s) de resolver (cajas rojas).\n\nVamos a guardar los empleados válidos, pero tendrás que resolver los conflictos manualmente usando los botones rojos.`);
+    }
+
+    let finalPayload = {
+        'nuevos': payload.nuevos,
+        'actualizados': cleanUpdates
+    };
+
+    fetch("{{ url_for('sync.commit_empleados') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(finalPayload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if(data.success) {
+            alert("¡Personal sincronizado con éxito!");
+            // Solo nos vamos de la página si ya no quedan conflictos por resolver
+            if(conflictsCount === 0) {
+                window.location.href = "{{ url_for('admin.personal') }}";
+            } else {
+                location.reload(); // Recargamos para que siga viendo las rojas
+            }
+        } else {
+            alert("Error al guardar: " + data.error);
+        }
+    });
+}
+</script>
+{% endblock %}

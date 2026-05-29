@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Panel de Administrador{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    <div class="admin-flashes">
+
+    </div>
+
+    <header class="admin-header">
+      <div class="admin-header-title">
+        Panel de administrador
+      </div>
+      <p class="admin-header-subtitle">
+        Resumen rápido de personal, obras y responsables. Desde aquí accedes a toda la configuración.
+      </p>
+    </header>
+
+    <section class="admin-card-grid">
+      <article class="admin-stat-card">
+        <div class="admin-stat-label">Operarios totales</div>
+        <div class="admin-stat-value">{{ total_currantes }}</div>
+        <div class="admin-stat-caption">
+          Incluye internos y externos activos.
+        </div>
+      </article>
+
+      <article class="admin-stat-card">
+        <div class="admin-stat-label">Obras activas</div>
+        <div class="admin-stat-value">{{ total_obras }}</div>
+        <div class="admin-stat-caption">
+          Obras con planificación abierta.
+        </div>
+      </article>
+
+      <article class="admin-stat-card">
+        <div class="admin-stat-label">Jefes de obra</div>
+        <div class="admin-stat-value">{{ total_jefes }}</div>
+        <div class="admin-stat-caption">
+          Usuarios con rol de jefe de obra.
+        </div>
+      </article>
+
+      <article class="admin-stat-card">
+        <div class="admin-stat-label">Usuarios RRHH</div>
+        <div class="admin-stat-value">{{ total_rrhh }}</div>
+        <div class="admin-stat-caption">
+          Usuarios de soporte administrativo.
+        </div>
+      </article>
+    </section>
+
+    <section class="admin-panels-grid">
+      <div class="admin-panel">
+        <div class="admin-panel-header">
+          <h2 class="admin-panel-title">Últimas obras creadas</h2>
+          <span class="admin-panel-subtitle">Acceso rápido a planificación</span>
+        </div>
+        {% if recent_obras %}
+          <table class="table-modern">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Jefe</th>
+                <th>Estado</th>
+                <th>Inicio</th>
+                <th>Fin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for obra in recent_obras %}
+              <tr>
+                <td>{{ obra.codigo or obra.id }}</td>
+                <td>
+                  {# De momento enlazamos al panel de obras en la fecha de inicio de la obra #}
+                  <a href="{{ url_for('admin.obras_detailed',
+                                      selected_date=(obra.fecha_inicio or obra.fecha_fin or loop.index0)|string) }}"
+                     class="text-decoration-none">
+                    {{ obra.nombre }}
+                  </a>
+                </td>
+                <td>{{ obra.jefe_obra.name if obra.jefe_obra else '-' }}</td>
+                <td>
+                  <span class="badge-soft badge-soft-slate">{{ obra.estado }}</span>
+                </td>
+                <td>{{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra.fecha_inicio }}</td>
+                <td>{{ obra.fecha_fin.strftime('%d/%m/%Y') if obra.fecha_fin }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="mb-0 text-muted" style="font-size: 0.85rem;">
+            Todavía no hay obras recientes para mostrar.
+          </p>
+        {% endif %}
+      </div>
+
+      <div class="admin-panel">
+        <div class="admin-panel-header">
+          <h2 class="admin-panel-title">Resumen de personal</h2>
+          <span class="admin-panel-subtitle">Internos vs externos</span>
+        </div>
+        <table class="table-modern">
+          <tbody>
+            <tr>
+              <th>Currantes internos</th>
+              <td>{{ total_internos }}</td>
+            </tr>
+            <tr>
+              <th>Currantes externos</th>
+              <td>{{ total_externos }}</td>
+            </tr>
+            <tr>
+              <th>Empresas activas</th>
+              <td>{{ total_companies }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}

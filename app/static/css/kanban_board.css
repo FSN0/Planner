@@ -1,0 +1,230 @@
+/* app/static/css/kanban_board.css */
+
+/* ==========================================================================
+   0. AJUSTES GLOBALES Y DESBLOQUEO DE SCROLL
+   ========================================================================== */
+
+/* Ocultar la barra superior antigua */
+nav.navbar, .navbar { display: none !important; }
+
+/* 1. CAMBIO: Permitimos scroll vertical en la página, pero ocultamos horizontal del body */
+html, body {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto !important; /* <--- PERMITE BAJAR EN LA WEB */
+    overflow-x: hidden;
+    background-color: #f1f5f9;
+    min-height: 100vh; /* Asegura fondo completo */
+}
+
+/* 2. CAMBIO: El shell crece con el contenido (min-height) en vez de bloquearse */
+.admin-shell {
+    display: flex;
+    min-height: 100vh; /* <--- CAMBIO */
+    width: 100vw;
+    overflow: visible; /* <--- DEJA QUE EL CONTENIDO SE VEA AL BAJAR */
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+    position: relative;
+}
+
+/* ==========================================================================
+   1. ZONA PRINCIPAL
+   ========================================================================== */
+
+.admin-main.kanban-layout {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* <--- SE ADAPTA */
+    min-width: 0;
+    background-color: #f1f5f9;
+    padding: 0 !important;
+    overflow: visible; /* <--- CRÍTICO */
+    position: relative;
+}
+
+/* --- Cabecera de Tiempo (Timeline Header) --- */
+.timeline-header-wrapper {
+    flex-shrink: 0;
+    z-index: 20;
+    background: #fff;
+    position: sticky; /* <--- MEJORA: SE QUEDA FIJA AL BAJAR */
+    top: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Cápsula de día (INTACTO) */
+.day-capsule {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 60px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background-color: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    text-decoration: none !important;
+    color: #475569;
+    flex-shrink: 0;
+}
+.day-capsule:hover { border-color: #94a3b8; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); color: #1e293b; }
+.day-capsule.active { background-color: #eff6ff; border-color: #3b82f6; color: #1e40af; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+.day-name { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; margin-bottom: 2px; }
+.day-number { font-size: 1.1rem; font-weight: 800; line-height: 1; }
+.day-indicators { display: flex; gap: 2px; margin-top: 4px; height: 4px; }
+.indicator-dot { width: 4px; height: 4px; border-radius: 50%; }
+.dot-free { background-color: #22c55e; } 
+.dot-in { background-color: #3b82f6; } 
+.dot-out { background-color: #ef4444; }
+
+
+/* ==========================================================================
+   2. CONTENEDOR DEL TABLERO
+   ========================================================================== */
+
+.kanban-container {
+    flex: 1;
+    display: flex;
+    padding: 20px;
+    
+    /* SCROLL HORIZONTAL ACTIVO, VERTICAL VISIBLE */
+    overflow-x: auto; 
+    overflow-y: visible; /* <--- DEJA SALIR EL CONTENIDO HACIA ABAJO */
+    
+    align-items: flex-start;
+    background-color: #f1f5f9;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* --- Columnas Generales --- */
+.kanban-col {
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    /* max-height: 100%; <--- QUITADO PARA QUE PUEDAN CRECER */
+    flex-shrink: 0;
+}
+
+.kanban-col-wrapper {
+    /* height: 100%; <--- QUITADO */
+    display: flex;
+    flex-direction: column;
+}
+
+/* --------------------------------------------------------
+   AQUÍ ESTÁ LA CLAVE: LA COLUMNA LIBRES SE PROTEGE
+   --------------------------------------------------------
+*/
+.col-libres {
+    width: 260px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    margin-right: 20px;
+    box-shadow: 4px 0 15px rgba(0,0,0,0.03);
+    
+    /* ESTO MANTIENE EL COMPORTAMIENTO DE "CAJÓN" CON SCROLL INTERNO */
+    height: calc(100vh - 100px) !important; 
+    max-height: 850px;
+    position: sticky; /* Se queda quieta mientras bajas */
+    top: 90px; 
+    overflow: hidden; /* Mantiene su estructura, el scroll va dentro */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Wrapper de Obras */
+.kanban-works-wrapper {
+    display: flex;
+    gap: 16px;
+    padding-right: 20px;
+    align-items: flex-start; /* Alineadas arriba */
+}
+
+/* --------------------------------------------------------
+   LAS OBRAS: ESTAS SÍ CRECEN INFINITAMENTE
+   --------------------------------------------------------
+*/
+.obra-card {
+    width: 280px;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    
+    /* Height auto = crece según los tíos que haya */
+    height: auto !important; 
+    display: flex;
+    flex-direction: column;
+}
+
+/* Cabeceras de Columna (INTACTO) */
+.col-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    border-radius: 12px 12px 0 0;
+    background-color: #fff;
+    position: relative;
+    flex-shrink: 0;
+}
+.col-header .header-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1e293b; }
+.col-header .header-subtitle { font-size: 0.75rem; opacity: 0.8; display: flex; justify-content: space-between; align-items: center; color: #334155; }
+
+/* Cuerpo de la lista GENERAL (Base) */
+.worker-list-body {
+    flex: 1;
+    overflow-y: auto; 
+    overflow-x: hidden;
+    padding: 10px;
+    min-height: 100px;
+    scrollbar-width: thin;
+}
+
+/* MODIFICACIÓN ESPECÍFICA PARA QUE OBRAS NO TENGAN SCROLL INTERNO 
+   (Sobrescribe la regla anterior solo para las obras)
+*/
+.obra-card .worker-list-body {
+    overflow: visible !important; /* Sin scroll interno */
+    height: auto !important;      /* Crece lo que necesite */
+    flex: none;
+}
+
+/* --- Chips de Trabajador (INTACTO) --- */
+.worker-chip {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    cursor: grab;
+    transition: all 0.15s;
+    border-left: 4px solid transparent;
+    position: relative;
+}
+.worker-chip:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transform: translateY(-1px); border-color: #cbd5e1; }
+.worker-name { font-weight: 600; font-size: 0.8rem; color: #334155; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.worker-meta { font-size: 0.65rem; color: #64748b; margin-top: 2px; display: flex; justify-content: space-between; }
+
+/* Drag & Drop (INTACTO) */
+.ui-sortable-helper { transform: rotate(2deg); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2) !important; cursor: grabbing; opacity: 0.95; z-index: 9999; }
+.droppable-hover { background-color: #eff6ff !important; border: 2px dashed #3b82f6 !important; }
+.hover-primary:hover { color: #3b82f6 !important; transform: scale(1.1); transition: all 0.2s; }
+
+/* Tooltips (INTACTO) */
+.fc-event-tooltip { position: absolute; z-index: 99999999 !important; background: rgba(31, 41, 55, 0.95); color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 0.8rem; pointer-events: none; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6); max-width: 280px; line-height: 1.4; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(4px); }
+.fc-event-tooltip strong { display: block; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px; margin-bottom: 4px; font-size: 0.85rem; color: #fbbf24; }
+.fc-event-tooltip ul { margin: 0; padding-left: 16px; list-style-type: square; }
+.fc-event-tooltip li { margin-bottom: 1px; color: #e5e7eb; }
+
+/* Modal Calendario (INTACTO) */
+.swal2-popup { width: 600px !important; overflow: visible !important; }
+.swal2-html-container { overflow: visible !important; margin: 0 !important; }
+#calendar-container-wrapper { min-height: 320px; display: flex; justify-content: center; margin-top: 10px; }
+.flatpickr-calendar.inline { margin: 0 auto !important; box-shadow: none !important; border: 1px solid #e2e8f0; position: relative !important; top: 0 !important; }
+.flatpickr-day.has-work { font-weight: bold; position: relative; }
+.flatpickr-day.has-work::after { content: ''; position: absolute; bottom: 2px; left: 15%; width: 70%; height: 3px; background-color: #cbd5e1; border-radius: 2px; }

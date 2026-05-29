@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Cuaderno de Bitácora{% endblock %}
+{% block body_class %}layout-admin bg-light{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
+<style>
+    .table-pro { font-size: 0.85rem; color: #374151; }
+    .table-pro th { background-color: #f9fafb; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.75rem 1rem; border-bottom: 2px solid #e5e7eb; }
+    .table-pro td { vertical-align: middle; padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; }
+    .badge-soft { background-color: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; font-weight: 600; padding: 0.35em 0.65em; }
+    .nota-preview { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #6b7280; font-size: 0.8rem; }
+    
+    /* Para que DataTables se vea moderno */
+    .dataTables_wrapper .dataTables_filter input { border: 1px solid #d1d5db; border-radius: 6px; padding: 0.25rem 0.5rem; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main p-4">
+    
+    <div class="d-flex justify-content-between align-items-end mb-4 border-bottom pb-3">
+        <div>
+            <h2 class="font-weight-bolder text-dark mb-1" style="font-size: 1.5rem; letter-spacing: -0.5px;">
+                <i class="fas fa-book text-primary mr-2"></i>Cuaderno de Bitácora
+            </h2>
+            <p class="text-muted small mb-0">Registro maestro de reuniones, notas operativas e incidencias.</p>
+        </div>
+        <button class="btn btn-primary font-weight-bold shadow-sm" onclick="$('#modalNuevaNota').modal('show')">
+            <i class="fas fa-plus mr-2"></i>Nueva Nota / Reunión
+        </button>
+    </div>
+
+    <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden;">
+        <div class="card-body p-0">
+            <div class="table-responsive p-3">
+                <table id="notasTable" class="table table-pro table-hover w-100 mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">Fecha</th>
+                            <th style="width: 25%;">Asunto / Resumen</th>
+                            <th style="width: 20%;">Obras</th>
+                            <th style="width: 20%;">Implicados</th>
+                            <th style="width: 10%; text-align: center;">Acceso</th>
+                            <th style="width: 15%; text-align: right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for nota in notas %}
+                        <tr>
+                            <td data-sort="{{ nota.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark">
+                                {{ nota.fecha.strftime('%d/%m/%Y') }}
+                            </td>
+                            
+                            <td>
+                                <strong class="text-dark d-block">{{ nota.titulo }}</strong>
+                                <div class="nota-preview" title="{{ nota.contenido }}">{{ nota.contenido }}</div>
+                            </td>
+                            
+                            <td>
+                                {% for o in nota.obras %}
+                                    <span class="badge badge-soft mb-1"><i class="fas fa-hard-hat text-muted mr-1"></i>{{ o.nombre }}</span>
+                                {% else %}
+                                    <span class="text-muted small font-italic">-</span>
+                                {% endfor %}
+                            </td>
+                            
+                            <td>
+                                {% for u in nota.usuarios_implicados %}
+                                    <span class="badge badge-soft mb-1"><i class="fas fa-user text-muted mr-1"></i>{{ u.name }}</span>
+                                {% else %}
+                                    <span class="text-muted small font-italic">-</span>
+                                {% endfor %}
+                            </td>
+                            
+                            <td class="text-center">
+                                {% if nota.es_privada %}
+                                    <span class="badge badge-warning text-dark"><i class="fas fa-lock mr-1"></i>Privada</span>
+                                {% else %}
+                                    <span class="badge badge-info text-white"><i class="fas fa-globe mr-1"></i>Pública</span>
+                                {% endif %}
+                                <div class="text-muted" style="font-size: 0.7rem; margin-top: 2px;">{{ nota.autor.name }}</div>
+                            </td>
+                            
+                            <td class="text-right">
+                                <button class="btn btn-sm btn-light border font-weight-bold text-primary mr-1" onclick="editarNotaModal({{ nota.id }})">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#notasTable').DataTable({
+        "order": [[ 0, "desc" ]], // Ordenar por la columna 0 (Fecha) descendente
+        "language": {
+            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+        },
+        "pageLength": 25,
+        "lengthMenu": [[10, 25, 50, 100], [10, 25, 50, 100]],
+        "columnDefs": [
+            { "orderable": false, "targets": 5 } // Desactivar ordenar por la columna de botones
+        ]
+    });
+});
+</script>
+{% endblock %}

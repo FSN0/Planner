@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+{% block title %}Obras{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <style>
+      /* Estilos para tabla ULTRA compacta */
+      .table-compact th, 
+      .table-compact td {
+          padding: 0.25rem 0.5rem !important;
+          vertical-align: middle !important;
+          font-size: 0.8rem;
+      }
+      
+      .filter-input {
+          width: 100%;
+          font-size: 0.7rem;
+          padding: 2px 4px;
+          border: 1px solid #d1d5db;
+          border-radius: 3px;
+          background-color: #f9fafb;
+      }
+      
+      .editable-cell {
+          cursor: pointer;
+          border-bottom: 1px dashed #ccc;
+          transition: background 0.2s;
+      }
+      .editable-cell:hover { background-color: #fff3cd; }
+      
+      .badge-notify {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 20px;
+          background-color: #ef4444;
+          color: white;
+          font-size: 0.7rem;
+          font-weight: bold;
+          border-radius: 50%;
+          text-decoration: none;
+          transition: transform 0.1s;
+      }
+      .badge-notify:hover {
+          transform: scale(1.1);
+          background-color: #dc2626;
+          color: white;
+          text-decoration: none;
+      }
+      
+      .select2-container .select2-selection--single {
+          height: 24px !important;
+          font-size: 0.75rem;
+          line-height: 24px;
+      }
+      .select2-container--default .select2-selection--single .select2-selection__rendered {
+          line-height: 22px !important;
+      }
+      .select2-container--default .select2-selection--single .select2-selection__arrow {
+          height: 22px !important;
+      }
+
+      /* Estilo para la cabecera ordenable */
+      .sortable-col {
+          cursor: pointer;
+          user-select: none;
+          transition: background 0.2s;
+      }
+      .sortable-col:hover {
+          background-color: #e2e8f0 !important;
+      }
+  </style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    
+    <div class="admin-flashes"></div>
+
+    <header class="admin-header mb-3">
+      <div class="d-flex justify-content-between align-items-end">
+          <div>
+              <h1 class="admin-header-title h5 mb-0">Listado de Obras</h1>
+              <p class="admin-header-subtitle mb-0 small text-muted">Gestión rápida y filtrado.</p>
+          </div>
+          <div class="d-flex gap-2">
+              <a href="{{ url_for('admin.import_obras') }}" class="btn btn-xs btn-outline-secondary">
+                  <i class="fas fa-file-excel"></i> Importar
+              </a>
+              <a href="{{ url_for('admin.create_obra') }}" class="btn btn-xs btn-primary">
+                  <i class="fas fa-plus"></i> Nueva Obra
+              </a>
+          </div>
+      </div>
+    </header>
+
+    <div id="bulk-actions-toolbar" class="d-none mb-3 p-2 bg-light border rounded d-flex align-items-center">
+        <span class="mr-3 font-weight-bold text-primary">
+            <span id="selected-count">0</span> obras seleccionadas:
+        </span>
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-sm btn-outline-warning" onclick="changeBulkStatus('Pendiente')">
+                <i class="fas fa-pause mr-1"></i> Pasar a Pendiente
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success" onclick="changeBulkStatus('En Curso')">
+                <i class="fas fa-play mr-1"></i> Pasar a En Curso
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="changeBulkStatus('Finalizada')">
+                <i class="fas fa-flag-checkered mr-1"></i> Finalizar
+            </button>
+        </div>
+    </div>
+
+    <section class="admin-panel p-0" style="border: 1px solid #e5e7eb;">
+      
+        <div class="table-responsive" style="max-height: 75vh; overflow-y: auto;">
+            <table class="table table-bordered table-hover table-compact mb-0" id="obrasTable">
+              <thead class="bg-light sticky-top" style="z-index: 10;">
+              <tr>
+                <th style="width: 40px; text-align: center;">
+                    <input type="checkbox" id="selectAllObras">
+                </th>
+                <th style="width: 80px;">Código</th>
+                <th style="min-width: 200px;">Nombre Obra</th>
+                <th style="width: 150px;">Cliente</th>
+                <th style="width: 200px;">Jefe de Obra (Clic para cambiar)</th>
+                <th style="width: 100px;">Estado</th>
+                <th style="width: 90px;">Inicio</th>
+                <th style="width: 90px;">Fin</th>
+                
+                {# NUEVA COLUMNA CON CLIC PARA ORDENAR #}
+                <th style="width: 100px;" class="sortable-col bg-light" onclick="sortTableByImportacion(this)" data-sort="none" title="Clic para ordenar">
+                    Importación <i class="fas fa-sort text-muted ml-1 sort-icon"></i>
+                </th>
+                
+                <th style="width: 50px;" class="text-center">Sols.</th>
+                <th style="width: 60px;" class="text-right">Acción</th>
+              </tr>
+              
+              <tr class="bg-white">
+                  <th></th> <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 1, this.value)" placeholder="Filtro..."></th>
+                  <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 2, this.value)" placeholder="Filtro..."></th>
+                  <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 3, this.value)" placeholder="Filtro..."></th>
+                  <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 4, this.value)" placeholder="Filtro..."></th>
+                  <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 5, this.value)" placeholder="Filtro..."></th>
+                  <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 6, this.value)" placeholder="Filtro..."></th>
+                  <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 7, this.value)" placeholder="Filtro..."></th>
+                  <th><input type="text" class="filter-input" onkeyup="filterTable('obrasTable', 8, this.value)" placeholder="Filtro..."></th>
+                  <th></th>
+                  <th></th>
+              </tr>
+            </thead>
+            <tbody id="obrasTableBody">
+              {% for obra in obras %}
+                <tr class="data-row">
+                  <td style="text-align: center;">
+                      <input type="checkbox" class="obra-checkbox" value="{{ obra.id }}">
+                  </td>
+                  <td class="font-weight-bold text-muted">{{ obra.codigo or obra.id }}</td>
+                  <td>
+                    <a href="{{ url_for('admin.obra_panel', obra_id=obra.id) }}" class="text-dark font-weight-bold text-decoration-none">
+                        {{ obra.nombre }}
+                    </a>
+                  </td>
+                  <td>{{ obra.cliente or '' }}</td>
+                  
+                  <td class="editable-jefe-cell" data-obra-id="{{ obra.id }}">
+                      <span class="jefe-display d-flex align-items-center">
+                          {% if obra.jefe_obra %}
+                              <i class="fas fa-user-tie text-muted mr-2" style="font-size: 0.7rem;"></i>
+                              <span class="jefe-name-text">{{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}</span>
+                          {% else %}
+                              <span class="text-danger small">Sin asignar</span>
+                          {% endif %}
+                      </span>
+                      <div class="jefe-edit d-none">
+                          <select class="form-control select-jefe" style="width: 100%;">
+                              <option value="">-- Sin asignar --</option>
+                              {% for j in jefes %}
+                                  <option value="{{ j.id }}" {% if obra.jefe_obra_id == j.id %}selected{% endif %}>
+                                      {{ j.name }} {{ j.lastname }}
+                                  </option>
+                              {% endfor %}
+                          </select>
+                      </div>
+                  </td>
+
+                  <td>
+                    {% if obra.estado == 'En Curso' %}
+                      <span class="badge badge-success" style="font-size: 0.65rem;">En curso</span>
+                    {% elif obra.estado == 'Finalizada' %}
+                      <span class="badge badge-secondary" style="font-size: 0.65rem;">Finalizada</span>
+                    {% else %}
+                      <span class="badge badge-warning" style="font-size: 0.65rem;">{{ obra.estado }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ obra.fecha_inicio.strftime('%d/%m/%y') if obra.fecha_inicio }}</td>
+                  <td>{{ obra.fecha_fin.strftime('%d/%m/%y') if obra.fecha_fin }}</td>
+                  
+                  {# --- CELDA DE FECHA IMPORTACIÓN (Con el valor oculto para ordenar) --- #}
+                  {% set sort_value = obra.fecha_importacion.strftime('%Y%m%d%H%M%S') if obra.fecha_importacion else '00000000000000' %}
+                  <td class="text-center" data-sort-value="{{ sort_value }}">
+                      {% if obra.fecha_importacion %}
+                          <span class="badge badge-info shadow-sm" style="font-size: 0.65rem;" title="Importada a las {{ obra.fecha_importacion.strftime('%H:%M') }}">
+                              <i class="fas fa-cloud-download-alt mr-1"></i> {{ obra.fecha_importacion.strftime('%d/%m/%y') }}
+                          </span>
+                      {% else %}
+                          <span class="badge badge-light border text-muted" style="font-size: 0.65rem;">
+                              <i class="fas fa-keyboard mr-1"></i> Manual
+                          </span>
+                      {% endif %}
+                  </td>
+                  
+                  <td class="text-center p-1">
+                    {% set pends = obra.solicitudes|selectattr('estado', 'in', ['PENDIENTE','EN_PROCESO'])|list|length %}
+                    {% if pends > 0 %}
+                        <a href="{{ url_for('admin.solicitudes_list', obra_id=obra.id, estado='PENDIENTE') }}" 
+                           class="badge-notify" title="Ver {{ pends }} solicitudes pendientes">{{ pends }}</a>
+                    {% else %}
+                        <a href="{{ url_for('admin.solicitudes_list', obra_id=obra.id) }}" 
+                           class="text-muted" style="font-size: 0.7rem; opacity: 0.4;"><i class="fas fa-history"></i></a>
+                    {% endif %}
+                  </td>
+
+                  <td class="text-right">
+                    <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="text-secondary" title="Configurar">
+                      <i class="fas fa-cog"></i>
+                    </a>
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                    <td colspan="11" class="text-center py-3 small text-muted">No hay datos.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    // --- LÓGICA DE ORDENACIÓN (3 ESTADOS) ---
+    let originalRowsOrder = [];
+
+    // Guardamos el orden original nada más cargar la página
+    document.addEventListener("DOMContentLoaded", function() {
+        let tbody = document.getElementById("obrasTableBody");
+        if(tbody) {
+            originalRowsOrder = Array.from(tbody.querySelectorAll("tr.data-row"));
+        }
+    });
+
+    function sortTableByImportacion(thElement) {
+        let tbody = document.getElementById("obrasTableBody");
+        let rows = Array.from(tbody.querySelectorAll("tr.data-row"));
+        if (rows.length === 0) return;
+
+        let currentState = thElement.getAttribute("data-sort");
+        let icon = thElement.querySelector(".sort-icon");
+        let newState = "";
+
+        // Lógica de los 3 clics
+        if (currentState === "none") {
+            newState = "desc"; // Clic 1: Odoo (Más recientes) primero
+            icon.className = "fas fa-sort-down text-primary ml-1 sort-icon";
+        } else if (currentState === "desc") {
+            newState = "asc"; // Clic 2: Manuales primero
+            icon.className = "fas fa-sort-up text-primary ml-1 sort-icon";
+        } else {
+            newState = "none"; // Clic 3: Restablecer
+            icon.className = "fas fa-sort text-muted ml-1 sort-icon";
+        }
+
+        thElement.setAttribute("data-sort", newState);
+
+        if (newState === "none") {
+            // Restaurar orden original
+            originalRowsOrder.forEach(row => tbody.appendChild(row));
+            return;
+        }
+
+        // Ordenar las filas basándose en el "data-sort-value" (La fecha oculta en formato YYYYMMDDHHMMSS o 000000)
+        rows.sort((a, b) => {
+            // AHORA ES cells[8] PORQUE HEMOS METIDO LA COLUMNA DEL CHECKBOX AL PRINCIPIO
+            let valA = a.cells[8].getAttribute("data-sort-value"); 
+            let valB = b.cells[8].getAttribute("data-sort-value");
+
+            if (newState === "desc") {
+                return valB.localeCompare(valA); // De mayor a menor
+            } else {
+                return valA.localeCompare(valB); // De menor a mayor
+            }
+        });
+
+        // Aplicar el nuevo orden a la tabla
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+
+    // --- LÓGICA DE EDICIÓN INLINE DE JEFE ---
+    $(document).ready(function() {
+        $('.editable-jefe-cell').on('click', function(e) {
+            if ($(this).find('.jefe-edit').is(':visible')) return;
+            
+            $('.jefe-edit').addClass('d-none');
+            $('.jefe-display').removeClass('d-none');
+
+            var $cell = $(this);
+            var $display = $cell.find('.jefe-display');
+            var $edit = $cell.find('.jefe-edit');
+            var $select = $cell.find('.select-jefe');
+
+            $display.addClass('d-none');
+            $edit.removeClass('d-none');
+
+            if (!$select.data('select2')) {
+                $select.select2({ width: '100%', dropdownAutoWidth: true });
+                $select.select2('open');
+
+                $select.on('select2:select', function(e) {
+                    var newJefeId = e.params.data.id;
+                    var obraId = $cell.data('obra-id');
+                    
+                    $.ajax({
+                        url: "{{ url_for('admin.api_update_obra_jefe') }}",
+                        type: "POST",
+                        contentType: "application/json",
+                        data: JSON.stringify({ obra_id: obraId, jefe_id: newJefeId }),
+                        success: function(resp) {
+                            if(resp.success) {
+                                var htmlIcon = '<i class="fas fa-user-tie text-muted mr-2" style="font-size: 0.7rem;"></i> ';
+                                if (!newJefeId) {
+                                    $display.html('<span class="text-danger small">Sin asignar</span>');
+                                } else {
+                                    $display.html(htmlIcon + '<span class="jefe-name-text">' + resp.new_name + '</span>');
+                                }
+                                $edit.addClass('d-none');
+                                $display.removeClass('d-none');
+                            } else {
+                                alert("Error: " + resp.error);
+                            }
+                        },
+                        error: function() { alert("Error de conexión."); }
+                    });
+                });
+                
+                $select.on('select2:close', function(e) {
+                    setTimeout(function(){
+                        if ($select.select2('isOpen') === false) {
+                            $edit.addClass('d-none');
+                            $display.removeClass('d-none');
+                        }
+                    }, 200);
+                });
+            } else {
+                $select.select2('open');
+            }
+        });
+    });
+
+    // --- NUEVO: LÓGICA DE SELECCIÓN Y ACTUALIZACIÓN MASIVA DE ESTADOS ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllBtn = document.getElementById('selectAllObras');
+        const checkboxes = document.querySelectorAll('.obra-checkbox');
+        const toolbar = document.getElementById('bulk-actions-toolbar');
+        const countDisplay = document.getElementById('selected-count');
+
+        // Helper para obtener token CSRF si está en una cookie (Típico en Flask)
+        function getCsrfToken() {
+            let value = "; " + document.cookie;
+            let parts = value.split("; csrf_token=");
+            if (parts.length === 2) return parts.pop().split(";").shift();
+            return "";
+        }
+
+        // Mostrar u ocultar la barra dependiendo de si hay cuadros marcados
+        function updateToolbar() {
+            const selected = document.querySelectorAll('.obra-checkbox:checked').length;
+            countDisplay.textContent = selected;
+            if (selected > 0) {
+                toolbar.classList.remove('d-none');
+            } else {
+                toolbar.classList.add('d-none');
+                if(selectAllBtn) selectAllBtn.checked = false;
+            }
+        }
+
+        // Evento para marcar/desmarcar todos
+        if(selectAllBtn) {
+            selectAllBtn.addEventListener('change', function(e) {
+                checkboxes.forEach(cb => cb.checked = e.target.checked);
+                updateToolbar();
+            });
+        }
+
+        // Evento para marcar individuales
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', updateToolbar);
+        });
+
+        // Evento que dispara la petición al Backend
+        window.changeBulkStatus = function(newStatus) {
+            const selectedIds = Array.from(document.querySelectorAll('.obra-checkbox:checked')).map(cb => cb.value);
+            
+            if (selectedIds.length === 0) return;
+
+            let warningText = `Vas a cambiar el estado de ${selectedIds.length} obra(s) a "${newStatus}".`;
+            if (newStatus === 'Pendiente' || newStatus === 'Finalizada') {
+                warningText += ` ¡ATENCIÓN! Esto borrará automáticamente todas las asignaciones futuras de los trabajadores en estas obras para que queden liberados.`;
+            }
+
+            Swal.fire({
+                title: '¿Confirmar cambio masivo?',
+                text: warningText,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Sí, aplicar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); }});
+
+                    fetch('/admin/api/obras/batch_status', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrfToken() || '{{ csrf_token() if csrf_token else "" }}' 
+                        },
+                        body: JSON.stringify({
+                            obra_ids: selectedIds,
+                            new_status: newStatus
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            Swal.fire('¡Éxito!', data.message, 'success').then(() => {
+                                window.location.reload(); 
+                            });
+                        } else {
+                            Swal.fire('Error', data.message, 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error:", error);
+                        Swal.fire('Error', 'Fallo de conexión al servidor.', 'error');
+                    });
+                }
+            });
+        };
+    });
+</script>
+{% endblock %}

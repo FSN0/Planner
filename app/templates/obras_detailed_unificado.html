@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}Tablero de Planificación{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+  {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+
+  {# 2. Luego cargar los estilos específicos del tablero #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}">
+  
+
+  
+  <style>
+    .filter-tags-container {
+        display: flex;
+        align-items: center;
+        background: white;
+        padding: 8px 20px;
+        border-bottom: 1px solid #e2e8f0;
+        gap: 10px;
+        height: 50px;
+    }
+    .filter-input-wrapper {
+        position: relative;
+        flex-grow: 1;
+        max-width: 400px;
+    }
+    #kanbanFilterInput {
+        width: 100%;
+        padding: 6px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        outline: none;
+        transition: border-color 0.2s;
+        background-color: #f8fafc;
+    }
+    #kanbanFilterInput:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); background-color: #fff; }
+    
+    .active-filters {
+        display: flex;
+        gap: 5px;
+    }
+    .filter-tag {
+        background-color: #e0f2fe;
+        color: #0369a1;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        border: 1px solid #bae6fd;
+    }
+    .filter-tag .remove-tag {
+        margin-left: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        opacity: 0.6;
+        font-size: 1rem;
+        line-height: 0.8;
+    }
+    .filter-tag .remove-tag:hover { opacity: 1; color: #ef4444; }
+
+    /* ESTILOS AÑADIDOS PARA LAS PELOTITAS EN KANBAN CARDS */
+    .status-dot-kanban {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+        box-shadow: 0 0 3px rgba(0,0,0,0.3);
+    }
+    .dot-success { background-color: #10b981; }
+    .dot-auto { background-color: #34d399; }
+    .dot-danger { background-color: #ef4444; }
+    .dot-warning { background-color: #f59e0b; }
+    .dot-info { background-color: #3b82f6; }
+    .dot-secondary { background-color: #94a3b8; }
+  </style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main kanban-layout">
+    
+    {% include "components/_timeline_header.html" %}
+
+    {# --- NUEVO: BARRA DE FILTRO --- #}
+    <div class="filter-tags-container">
+        <div class="text-muted small font-weight-bold text-uppercase mr-2">
+            <i class="fas fa-filter"></i> Filtrar:
+        </div>
+        
+        <div class="active-filters" id="activeFiltersList">
+            </div>
+
+        <div class="filter-input-wrapper">
+            <input type="text" id="kanbanFilterInput" placeholder="Escribe obra o código y pulsa Enter...">
+        </div>
+        
+        <button class="btn btn-xs btn-link text-muted" onclick="clearKanbanFilters()" id="btnClearFilters" style="display:none;">
+            Limpiar todo
+        </button>
+    </div>
+
+    {# --- TABLERO --- #}
+    <div class="kanban-container" id="kanbanContainer">
+        
+        {% include "components/_kanban_col_libres.html" %}
+
+        <div class="kanban-works-wrapper" id="kanbanWorksWrapper">
+            {% for item in obra_data %}
+                <div class="kanban-col-wrapper filterable-obra" 
+                     data-id="{{ item.obra.id }}" 
+                     data-search-text="{{ item.obra.nombre | lower }} {{ item.obra.codigo | lower }} {% for w in item.workers %}{{ w.name | lower }} {{ w.lastname | lower }} {% endfor %}">
+                    
+                    {% include "components/_kanban_card_obra.html" %}
+                
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+  </main>
+</div>
+
+{# --- MODALES --- #}
+{% include "components/_modal_assignment.html" %}
+{% include "components/_modal_request_generic.html" %}
+
+<div class="modal fade" id="modalEditStaff" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2 bg-light">
+                <h6 class="modal-title font-weight-bold text-uppercase text-dark" id="modalStaffTitle">Cambiar Responsable</h6>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            {# AÑADIDO: class text-dark para asegurar legibilidad #}
+            <div class="modal-body text-dark">
+                <input type="hidden" id="staffObraId">
+                <input type="hidden" id="staffRoleType"> 
+                
+                {# AÑADIDO: Mostrar nombre de la obra #}
+                <div class="mb-3 p-2 bg-light border rounded text-center">
+                    <small class="text-muted text-uppercase d-block mb-1" style="font-size:0.7rem;">Editando obra</small>
+                    <strong class="text-primary" id="staffObraNameDisplay"></strong>
+                </div>
+  
+                <div class="form-group mb-3">
+                    <label class="small text-muted mb-1">Selecciona nuevo usuario:</label>
+                    <select id="staffSelect" class="form-control form-control-sm" style="width:100%">
+                    </select>
+                </div>
+                
+                <button type="button" class="btn btn-primary btn-sm btn-block" onclick="submitStaffChange()">
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+  </div>
+
+<div class="modal fade" id="ratingModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white py-2">
+                <h5 class="modal-title h6"><i class="fas fa-star mr-2 text-warning"></i>Valorar a <span id="ratingWorkerName"></span></h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body text-center">
+                <input type="hidden" id="ratingWorkerId">
+                <p class="text-muted small mb-3">Selecciona puntuación:</p>
+                <div class="btn-group mb-3">
+                    <button type="button" class="btn btn-outline-danger rating-btn" data-score="-3">-3</button>
+                    <button type="button" class="btn btn-outline-danger rating-btn" data-score="-2">-2</button>
+                    <button type="button" class="btn btn-outline-danger rating-btn" data-score="-1">-1</button>
+                    <button type="button" class="btn btn-outline-success rating-btn" data-score="1">+1</button>
+                    <button type="button" class="btn btn-outline-success rating-btn" data-score="2">+2</button>
+                    <button type="button" class="btn btn-outline-success rating-btn" data-score="3">+3</button>
+                </div>
+                <textarea id="ratingReason" class="form-control form-control-sm" rows="2" placeholder="Motivo..."></textarea>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitRating()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalMoveToLibres" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title">
+            <i class="fas fa-calendar-times mr-2 text-danger"></i>
+            Desasignar a: <span id="libresWorkerName" class="text-warning font-weight-bold"></span>
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      
+      <div class="modal-body bg-light p-4">
+        <div class="alert alert-info py-2 small mb-3 shadow-sm border-0" style="border-left: 4px solid #f59e0b;">
+            Estás viendo la agenda de este trabajador. <strong>Haz clic en un bloque de la obra <span id="libresSourceName"></span></strong> en el calendario para acortarlo o borrarlo.
+        </div>
+        
+        <div id="libres-calendar-container" style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: 480px;"></div>
+        
+        <input type="hidden" id="libresWorkerId">
+        <input type="hidden" id="libresSourceObraId">
+
+        <div class="mt-4 pt-3 border-top text-right">
+            <div class="custom-control custom-switch d-inline-block mr-3">
+                <input type="checkbox" class="custom-control-input" id="chk-libres-all">
+                <label class="custom-control-label text-danger font-weight-bold" for="chk-libres-all" style="cursor:pointer;">
+                    Baja Total (Desasignar de toda la obra)
+                </label>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="submitUnassignFromLibres()">Confirmar Baja Total</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+  var LISTA_JEFES = [
+      {id: "", text: "-- Sin Jefe --"},
+      {% for u in jefes %}
+      {id: "{{ u.id }}", text: "{{ u.name }} {{ u.lastname }}"},
+      {% endfor %}
+  ];
+  
+  var LISTA_ENCARGADOS = [
+      {id: "", text: "-- Sin Encargado --"},
+      {% for u in encargados %}
+      {id: "{{ u.id }}", text: "{{ u.name }} {{ u.lastname }}"},
+      {% endfor %}
+  ];
+
+  // Funciones rápidas para el rating (el resto está en kanban_logic.js pero esto asegura funcionamiento en modal)
+  function openRatingModal(workerId, workerName) {
+      $('#ratingWorkerId').val(workerId);
+      $('#ratingWorkerName').text(workerName);
+      $('#ratingReason').val('');
+      $('.rating-btn').removeClass('active font-weight-bold');
+      $('#ratingModal').modal('show');
+  }
+  
+  // Delegación de eventos para rating botones se mueve a kanban_logic o script global
+</script>
+{% endblock %} 
+
+{% block extra_js %}
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+  <script>
+        // Variable global de seguridad para JS
+        const CURRENT_USER_ROLE = "{{ current_user.role }}";
+    </script>
+  
+  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+  
+  
+  <script src="https://cdn.jsdelivr.net/npm/dom-autoscroller@2.3.4/dist/dom-autoscroller.min.js"></script>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        // Variable global de seguridad para JS
+        window.CURRENT_USER_ROLE = "{{ current_user.role }}"
+    </script>
+  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}"></script>
+  
+  <script>
+    $(document).on('click', '.rating-btn', function() {
+        $('.rating-btn').removeClass('active font-weight-bold');
+        $(this).addClass('active font-weight-bold');
+        window.selectedRatingScore = $(this).data('score');
+    });
+
+    function submitRating() {
+        if (!window.selectedRatingScore) { alert("Selecciona puntuación"); return; }
+        $.ajax({
+            url: "/admin/api/rate_worker",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ 
+                worker_id: $('#ratingWorkerId').val(), 
+                score: window.selectedRatingScore, 
+                reason: $('#ratingReason').val() 
+            }),
+            success: function() { location.reload(); },
+            error: function(e) { alert("Error: " + e.responseJSON.message); }
+        });
+    }
+  </script>
+
+
+
+{% endblock %}

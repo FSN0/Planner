@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Solicitud #{{ solicitud.id }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    /* Estilos específicos locales */
+    .table-compact th, 
+    .table-compact td {
+        padding: 0.2rem 0.4rem !important;
+        font-size: 0.75rem !important;
+        vertical-align: middle !important;
+    }
+    .candidates-scroll-box {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
+        background: white;
+    }
+    
+    /* Colores de estado y conflicto */
+    .table-warning { background-color: #fff3cd !important; }
+    .table-warning td { border-top-color: #ffeeba !important; }
+    .row-busy { color: #856404; }
+    .row-busy .font-weight-bold { color: #856404; }
+    
+    /* Checkbox alineado */
+    .table-compact input[type="checkbox"] { margin-top: 2px; cursor: pointer; }
+
+    /* Botón desasignar */
+    .assigned-row .btn-unassign {
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        color: #dc3545;
+        cursor: pointer;
+        background: none;
+        border: none;
+        padding: 0 5px;
+    }
+    .assigned-row:hover .btn-unassign { opacity: 1; }
+    .assigned-row:hover { background-color: #fff5f5 !important; }
+
+    /* ============================================================
+       CALENDARIO MINI (RESUMEN) - ESTILOS AISLADOS
+       ============================================================ */
+    
+    #solicitud-obra-calendar {
+        font-size: 0.75rem;
+        max-width: 100%;
+    }
+
+    #solicitud-obra-calendar .fc-toolbar {
+        margin-bottom: 0.2rem !important;
+    }
+    #solicitud-obra-calendar .fc-toolbar-title {
+        font-size: 0.85rem !important;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+    #solicitud-obra-calendar .fc-button {
+        padding: 0px 0.3rem !important;
+        font-size: 0.7rem !important;
+        height: 22px !important;
+        line-height: 1 !important;
+    }
+
+    #solicitud-obra-calendar .fc-daygrid-day-frame {
+        min-height: 45px !important; 
+    }
+    
+    #solicitud-obra-calendar .fc-daygrid-day-top {
+        flex-direction: row;
+    }
+    #solicitud-obra-calendar .fc-daygrid-day-number {
+        font-size: 0.65rem !important;
+        padding: 1px 3px !important;
+        color: #9ca3af;
+    }
+
+    /* Eventos compactos */
+    #solicitud-obra-calendar .fc-event-custom-summary {
+        font-size: 0.65rem !important;
+        padding: 0px 3px !important;
+        line-height: 1.2 !important;
+        margin-bottom: 1px !important;
+        border-radius: 2px;
+    }
+
+    /* Quitar bordes azules solo en el mini */
+    #solicitud-obra-calendar .fc-v-event { border: none; background: transparent; }
+    
+    /* Contenedor */
+    .admin-panel-body.solicitud-calendar-card {
+        padding: 0 !important;
+    }
+    /* --- NUEVO: ESTILOS PARA DESTACAR SOLICITUD --- */
+    .evento-actual-destacado {
+        border: 2px solid #333 !important;
+        filter: brightness(0.9) saturate(1.2); /* Más oscuro e intenso */
+        box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+        z-index: 50 !important;
+        transform: scale(1.02);
+        font-weight: bold;
+    }
+    
+    .evento-otro {
+        opacity: 0.6; /* Los demás se ven un poco apagados */
+    }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    
+    {# --- CABECERA ELIMINADA (Para ganar espacio) --- #}
+    <div class="pt-3"></div> 
+
+    {# 1. SECCIÓN DE DATOS Y CALENDARIO (Resumen) #}
+    {% include "solicitudes/_detail_resumen.html" %}
+
+    {# 2. SECCIÓN DE TABLAS (SOLO SI NO ES DESASIGNACIÓN) #}
+    {% if solicitud.accion != 'DESASIGNAR' %}
+        {# Solo mostramos candidatos y personal actual si estamos ASIGNANDO (Entrada) #}
+        {% include "solicitudes/_detail_tablas.html" %}
+    {% endif %}
+
+    {# 3. BARRA DE ACCIONES INFERIOR #}
+    {% if es_admin %}
+        {% include "solicitudes/_detail_acciones.html" %}
+    {% endif %}
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
+
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+
+{% include "solicitudes/_detail_scripts.html" %}
+{% endblock %}

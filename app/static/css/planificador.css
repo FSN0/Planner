@@ -1,0 +1,166 @@
+.planificador-container {
+    display: flex;
+    flex-direction: column;
+    border-radius: 8px;
+    background: #fff;
+    margin-bottom: 50px; 
+    position: relative; 
+}
+
+#planificador-calendar {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.vis-timeline { 
+    border: 1px solid #e2e8f0; 
+    border-radius: 8px; 
+    border: none; 
+}
+
+/* =========================================================
+   CABECERA FLOTANTE - HACHAZO A LOS CLICS FANTASMAS CORREGIDO
+   ========================================================= */
+
+/* 1. Anulamos la sombra nativa de vis.js que bloquea las primeras filas */
+.vis-shadow {
+    pointer-events: none !important;
+    display: none !important;
+}
+
+.vis-panel.vis-top {
+    transform: translateY(var(--sticky-top, 0px));
+    z-index: 100 !important;
+    background-color: #ffffff !important;
+}
+
+/* 2. Hacemos que TODO el panel superior (incluidos los textos) sea traspasable */
+.vis-panel.vis-top,
+.vis-panel.vis-top * {
+    pointer-events: none !important; 
+}
+
+/* IMPORTANTE: BORRA la regla de .vis-panel.vis-top .vis-text que tenías aquí. 
+   Es la que te estaba bloqueando a los operarios de arriba cuando la cabecera bajaba. */
+
+.vis-time-axis { background-color: #ffffff; }
+.vis-panel.vis-left, .vis-panel.vis-center, .vis-panel.vis-right, .vis-panel.vis-bottom { border-color: #f1f5f9; }
+.vis-time-axis .vis-text { font-size: 12px; font-weight: 600; color: #1e293b; }
+.vis-time-axis .vis-grid.vis-minor { border-color: #f8fafc; }
+.vis-time-axis .vis-grid.vis-major { border-color: #e2e8f0; border-width: 2px; }
+
+/* Para indicar que se pueden arrastrar las obras */
+.vis-label { cursor: grab !important; touch-action: none; }
+.vis-label:active { cursor: grabbing !important; }
+.vis-label a { pointer-events: auto; }
+
+/* LIMPIEZA DE MÁRGENES */
+.vis-label .vis-inner {
+    padding: 0 !important; 
+    margin: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    display: block !important;
+}
+
+.btn-ojo-magico:hover { background-color: #e2e8f0 !important; }
+
+/* EL TIRADOR DE CAMBIO DE TAMAÑO */
+#col-resizer {
+    position: absolute; top: 0; bottom: 0; width: 14px; margin-left: -7px; 
+    cursor: ew-resize; z-index: 200; background: transparent;
+}
+#col-resizer:hover, #col-resizer.is-resizing {
+    background: rgba(59, 130, 246, 0.3); border-left: 2px solid #3b82f6;
+}
+#col-resizer-ghost {
+    display: none; position: absolute; top: 0; bottom: 0; width: 2px;
+    background: #2563eb; z-index: 201; pointer-events: none;
+}
+
+/* =========================================================
+   TAMAÑO Y DISEÑO DE LOS OPERARIOS
+   ========================================================= */
+.vis-timeline .vis-item.vis-range { 
+    height: 18px !important; min-height: 18px !important;
+    border-radius: 4px !important; border: none !important; 
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important; 
+    cursor: pointer !important; margin: 0 !important; padding: 0 !important;
+    pointer-events: auto !important; z-index: 5 !important;
+}
+.vis-timeline .vis-item.vis-range .vis-item-overflow {
+    height: 18px !important; min-height: 18px !important;
+    padding: 0 !important; margin: 0 !important;
+}
+.vis-timeline .vis-item.vis-range .vis-item-content { 
+    height: 18px !important; min-height: 18px !important;
+    padding: 0 4px !important; display: flex !important;
+    align-items: center !important; font-size: 9px !important; 
+    font-family: sans-serif !important; line-height: 18px !important;
+}
+
+.operario-micro {
+    display: flex; align-items: center; color: white !important;
+    font-size: 9px !important; font-weight: 600 !important;
+    white-space: nowrap !important; height: 100% !important;
+}
+.operario-micro i {
+    font-size: 8px !important; margin-right: 4px !important;
+    background: rgba(255,255,255,0.2); padding: 3px; border-radius: 50%;
+}
+
+.vis-timeline .vis-label, .vis-timeline .vis-group {
+    box-sizing: content-box !important; padding-bottom: 2px !important; 
+}
+
+/* RESALTO VISUAL Y TIRADORES */
+.vis-timeline .vis-item.vis-selected {
+    border: 2px solid #ef4444 !important; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6) !important;
+    z-index: 10 !important; transform: scale(1.05) translateY(-1px); 
+}
+.vis-timeline .vis-item.vis-selected .operario-micro { font-weight: 900 !important; }
+.vis-timeline .vis-item .vis-drag-left, .vis-timeline .vis-item .vis-drag-right {
+    width: 8px !important; background-color: rgba(255, 255, 255, 0.3) !important; cursor: ew-resize !important;
+}
+.vis-timeline .vis-item .vis-drag-left:hover, .vis-timeline .vis-item .vis-drag-right:hover {
+    background-color: #ef4444 !important; 
+}
+
+/* BLOQUE TEMPORAL (PHANTOM) */
+.phantom-item {
+    background-color: #fcd34d !important; border: 2px dashed #d97706 !important;
+    color: #92400e !important; z-index: 20 !important; animation: pulse-phantom 1.5s infinite;
+}
+.phantom-item .vis-item-content { font-size: 11px !important; font-weight: bold !important; justify-content: center !important; }
+@keyframes pulse-phantom {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+    70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.vis-item.vis-background.obra-deadline-line {
+    background-color: transparent !important; border-right: 2px dashed #ef4444 !important; 
+    z-index: 0 !important; pointer-events: none !important; 
+}
+
+/* POPOVER FIJADO EN PANTALLA */
+#worker-popover {
+    position: fixed; z-index: 9999; border: 1px solid #cbd5e1; width: 280px; transition: opacity 0.2s;
+}
+
+/* =========================================================
+   DESTRUCCIÓN DE CAPAS FANTASMA QUE ROBAN CLICS
+   ========================================================= */
+
+/* Hacemos que CUALQUIER evento de fondo y las líneas del calendario dejen pasar el clic */
+.vis-item.vis-background, 
+.vis-panel.vis-background, 
+.vis-time-axis.vis-background {
+    pointer-events: none !important;
+    z-index: 0 !important;
+}
+
+/* Forzamos a que el panel de las Obras permita el motor táctil (para poder arrastrar) */
+.vis-label { 
+    touch-action: none !important; 
+    pointer-events: auto !important; 
+}

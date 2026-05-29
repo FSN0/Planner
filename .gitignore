@@ -1,0 +1,13 @@
+# Entornos y secretos
+.env
+__pycache__/
+*.pyc
+
+# Backups y subidas (vital no meter los .tar.gz ni los .sql en git)
+backups/
+app/static/uploads/
+uploads/
+
+# Archivos del SO
+.DS_Store
+Thumbs.db

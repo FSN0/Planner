@@ -1,0 +1,37 @@
+<div class="modal fade" id="assignmentModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document"> 
+    <div class="modal-content">
+      
+      <div class="modal-header bg-dark text-white align-items-center">
+        <h5 class="modal-title mb-0">
+            <i class="fas fa-user-check mr-2"></i>
+            Asignación: <span id="modalWorkerDisplay" class="text-warning font-weight-bold"></span>
+        </h5>
+        
+        <div class="ml-auto mr-3">
+            <div class="btn-group btn-group-sm bg-white rounded" role="group">
+                <button type="button" class="btn btn-primary font-weight-bold" id="btnViewObra">Ver Destino</button>
+                <button type="button" class="btn btn-outline-primary font-weight-bold" id="btnViewWorker">Ver Operario</button>
+            </div>
+        </div>
+
+        <button type="button" class="close text-white ml-0" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      
+      <div class="modal-body bg-light p-4">
+        <div class="alert alert-info py-2 small mb-3 shadow-sm border-0" style="border-left: 4px solid #3b82f6;">
+            Vas a asignar a este trabajador a la obra: <strong id="modalObraDisplay" class="text-dark"></strong>.
+            <br>Haz clic en los días vacíos para añadirlo o estira los bloques existentes.
+        </div>
+
+        <div id="modal-calendar-container" style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: 480px;"></div>
+        
+        <input type="hidden" id="modalWorkerId">
+        <input type="hidden" id="modalTargetObraId">
+      </div>
+      
+    </div>
+  </div>
+</div>

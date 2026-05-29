@@ -1,0 +1,450 @@
+# app/models.py
+from . import db, login_manager
+from flask_login import UserMixin
+from datetime import datetime, date
+import random
+
+# --- CONSTANTES DE ROLES ---
+ROLE_CURRANTE = 'currante'
+ROLE_JEFE = 'jefe_obra'
+ROLE_RRHH = 'rrhh'
+ROLE_ADMIN = 'admin'
+
+def generate_random_color():
+    """Genera un color pastel aleatorio para las obras/empresas."""
+    palette = ["#a8d5ba", "#f4d06f", "#f7a072", "#d291bc", "#b8a9c9",
+               "#a3cef1", "#c2b9b0", "#e3d4b9", "#9dc08b", "#c8d6e5"]
+    return random.choice(palette)
+
+class Company(db.Model):
+    """
+    Representa empresas. Puede ser la empresa 'madre' (Interna) o subcontratas.
+    is_internal: True si es la empresa propia, False si es externa.
+    """
+    __tablename__ = 'companies'
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Identificador único corto (ej: "SOLTEC", "ELEC_PEPE")
+    code = db.Column(db.String(20), unique=True, nullable=True) 
+    nombre = db.Column(db.String(100), nullable=False)
+    nif = db.Column(db.String(20), nullable=True)
+    
+    odoo_id = db.Column(db.Integer, unique=True, nullable=True)
+    
+    descripcion = db.Column(db.Text)
+    gremio = db.Column(db.String(100)) # Ej: Electricidad, Albañilería
+    
+    email = db.Column(db.String(120), nullable=True) # Email de contacto principal
+    color = db.Column(db.String(7), nullable=True, default='#ffffff')
+    
+    # Flag clave para distinguir personal propio de subcontratado
+    is_internal = db.Column(db.Boolean, nullable=False, default=False)
+    
+    def __repr__(self):
+        return f'<Company {self.nombre} ({self.code})>'
+
+class User(UserMixin, db.Model):
+    """
+    Modelo unificado de Usuario (Admin, Jefes, RRHH, Currantes).
+    """
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    
+    odoo_id = db.Column(db.Integer, unique=True, nullable=True)
+    
+    # Autenticación
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, currante
+    
+    # Datos Personales
+    name = db.Column(db.String(100), nullable=False)
+    lastname = db.Column(db.String(100), nullable=False)
+    dni = db.Column(db.String(20), unique=True, nullable=False)
+    
+    # Datos de Empresa  
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
+    company_rel = db.relationship('Company', backref='users')
+
+    # Datos Profesionales
+    categoria_profesional = db.Column(db.String(100), nullable=True) # Ej: Oficial 1ª, Peón
+
+    # Estados y Ciclo de vida
+    active = db.Column(db.Boolean, default=False)  # Aprobado por RRHH (para currantes)
+    is_deleted = db.Column(db.Boolean, default=False)  # Soft delete
+    
+    # Configuración
+    receive_emails = db.Column(db.Boolean, default=True)
+    especialidad = db.Column(db.String(100), nullable=True) # Electricista, Fontanero, Albañil...
+    
+    # Programación de estados (Activación/Desactivación futura)
+    scheduled_activation_date = db.Column(db.Date, nullable=True)
+    scheduled_deactivation_date = db.Column(db.Date, nullable=True)
+
+    # Relación con documentos
+    documents = db.relationship('Document', backref='user', lazy=True)
+    
+    @property
+    def reputation_score(self):
+        """
+        Calcula la media de las valoraciones activas.
+        Devuelve un valor redondeado a 1 decimal (ej: 2.5).
+        """
+        # --- CORRECCIÓN AQUÍ ---
+        # Usamos 'ratings_received' porque así lo llamaste en el backref de la clase Rating
+        if not hasattr(self, 'ratings_received'):
+            return 0.0
+
+        valid_ratings = [r for r in self.ratings_received if r.is_active]
+        
+        if not valid_ratings:
+            return 0.0
+            
+        # 2. Suma total de puntos
+        total = sum(r.score for r in valid_ratings)
+        
+        # 3. Cálculo de la media
+        media = total / len(valid_ratings)
+        
+        # 4. Devolver redondeado
+        return round(media, 1)
+    
+    @property
+    def tipo_empleado(self):
+        """Devuelve 'INTERNO' o 'EXTERNO' según la empresa asignada."""
+        if self.company_rel and self.company_rel.is_internal:
+            return 'INTERNO'
+        return 'EXTERNO'
+
+    def soft_delete(self):
+        """
+        Marca al usuario como eliminado, libera su DNI (añadiendo sufijo)
+        y elimina asignaciones futuras para liberar planificación.
+        """
+        today = date.today()
+        # Modificar DNI para permitir re-registro si fuera necesario en el futuro
+        new_dni = f"{self.dni}-del-{self.id}"
+        self.dni = new_dni[:20]
+        
+        self.is_deleted = True
+        self.active = False
+        self.scheduled_activation_date = None
+        self.scheduled_deactivation_date = None
+
+        # Limpiar asignaciones futuras
+        if self.role == ROLE_CURRANTE:
+            from app.models import Asignacion
+            future_assignments = Asignacion.query.filter(
+                Asignacion.user_id == self.id,
+                Asignacion.fecha > today
+            ).all()
+            for assignment in future_assignments:
+                db.session.delete(assignment)
+
+        # Si es jefe, quitarle la jefatura de obras activas
+        elif self.role in [ROLE_JEFE, ROLE_ADMIN]:
+            from app.models import Obra
+            active_obras = Obra.query.filter(
+                Obra.jefe_obra_id == self.id,
+                Obra.fecha_fin >= today
+            ).all()
+            for obra in active_obras:
+                obra.jefe_obra_id = None
+
+    def __repr__(self):
+        return f'<User {self.email} - {self.role}>'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+class Document(db.Model):
+    """Documentos subidos por el currante."""
+    __tablename__ = 'documents'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    doc1 = db.Column(db.String(200))
+    doc2 = db.Column(db.String(200))
+    doc3 = db.Column(db.String(200))
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Document for user {self.user_id}>'
+
+
+class UserObraConfig(db.Model):
+    """
+    Guarda la configuración personalizada de un usuario para una obra específica.
+    - is_pinned: Si está anclada al principio.
+    - position: El orden manual (solo aplica si is_pinned=True).
+    """
+    __tablename__ = 'user_obra_config'
+    
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), primary_key=True)
+    
+    is_pinned = db.Column(db.Boolean, default=False)
+    position = db.Column(db.Integer, default=0)
+    
+    # Relaciones
+    user = db.relationship('User', backref=db.backref('obra_configs', cascade='all, delete-orphan'))
+    obra = db.relationship('Obra', backref=db.backref('user_configs', cascade='all, delete-orphan'))
+
+    def __repr__(self):
+        return f"<UserObraConfig U:{self.user_id} O:{self.obra_id} Pinned:{self.is_pinned}>"
+    
+class Obra(db.Model):
+    """
+    Unidad central de planificación.
+    """
+    __tablename__ = 'obras'
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Identificación
+    codigo = db.Column(db.String(20), unique=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    descripcion = db.Column(db.Text)
+    cliente = db.Column(db.String(100))
+    ubicacion = db.Column(db.String(100))
+    fecha_sincronizacion = db.Column(db.DateTime, nullable=True)
+    odoo_id = db.Column(db.Integer, unique=True, nullable=True)
+    
+    # Fechas
+    fecha_inicio = db.Column(db.Date)
+    fecha_fin = db.Column(db.Date)
+    fecha_importacion = db.Column(db.DateTime, nullable=True)
+    
+    # Estado y Gestión
+    estado = db.Column(db.String(20), default='PLANIFICADA')
+    limite_trabajadores = db.Column(db.Integer, nullable=False, default=0)
+    
+    # PRL (Enlace externo)
+    url_prl = db.Column(db.String(255), nullable=True)
+    
+    # Responsable (Usuario Interno)
+    jefe_obra_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    jefe_obra = db.relationship('User', foreign_keys=[jefe_obra_id])
+    
+    encargado_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    encargado = db.relationship('User', foreign_keys=[encargado_id])
+    
+    # Estilo
+    color = db.Column(db.String(7), nullable=False, default=generate_random_color)
+    is_deleted = db.Column(db.Boolean, default=False)
+
+    # Relación inversa
+    asignaciones = db.relationship('Asignacion', backref='obra', lazy=True)
+
+    def __repr__(self):
+        return f'<Obra {self.nombre}>'
+
+class Asignacion(db.Model):
+    """
+    Tabla de hechos: Empleado en Obra en Fecha.
+    """
+    __tablename__ = 'asignaciones'
+    id = db.Column(db.Integer, primary_key=True)
+    
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', backref='asignaciones')
+    fecha = db.Column(db.Date, nullable=False)
+    
+    # Snapshot: Empresa del trabajador en el momento de la asignación
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
+    company = db.relationship('Company')
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    solicitud_id = db.Column(db.Integer, db.ForeignKey('solicitudes.id', ondelete="SET NULL"), nullable=True)
+    solicitud = db.relationship('Solicitud', backref='asignaciones_vinculadas')
+    __table_args__ = (
+        # Restricción: Un usuario no puede estar dos veces en la MISMA obra el MISMO día.
+        # PERO sí puede estar en Obra A y Obra B el mismo día (Multi-asignación).
+        db.UniqueConstraint('obra_id', 'user_id', 'fecha', name='uq_obra_user_fecha'),
+    )
+    
+    def __repr__(self):
+        return f'<Asignacion Obra:{self.obra_id} User:{self.user_id} Fecha:{self.fecha}>'
+
+class HistorialAsignacion(db.Model):
+    """Auditoría de cambios en asignaciones."""
+    __tablename__ = 'historial_asignaciones'
+    id = db.Column(db.Integer, primary_key=True)
+    asignacion_id = db.Column(db.Integer, db.ForeignKey('asignaciones.id', ondelete="SET NULL"), nullable=True)
+    accion = db.Column(db.String(100))  # Creada, Borrada, Modificada
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    realizado_por = db.Column(db.Integer, db.ForeignKey('users.id'))
+
+    def __repr__(self):
+        return f'<Historial Asignacion {self.id} - {self.accion}>'
+
+class SyncLog(db.Model):
+    __tablename__ = 'sync_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    tipo = db.Column(db.String(50)) # 'Obras' o 'Empleados'
+    modo = db.Column(db.String(50)) # 'Manual' o 'Automático'
+    nuevos = db.Column(db.Integer, default=0)
+    actualizados = db.Column(db.Integer, default=0)
+    finalizados = db.Column(db.Integer, default=0)
+    errores = db.Column(db.Integer, default=0) # Los que dejamos pendientes
+    detalles = db.Column(db.Text, nullable=True) # Para notas extra
+    
+    
+class RegistroFichaje(db.Model):
+    __tablename__ = 'registros_fichajes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    fecha = db.Column(db.Date)
+    
+    check_in = db.Column(db.DateTime, nullable=True)
+    check_out = db.Column(db.DateTime, nullable=True)
+    
+    # Lo que decía tu aplicación
+    obra_planificada_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
+    # Dónde pisó realmente la obra
+    obra_real_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
+    
+    # Estados: 'Correcto', 'Conflicto', 'Ausencia', 'Resuelto_Movido', 'Resuelto_Dividido', 'Resuelto_Ignorado'
+    estado = db.Column(db.String(50), default='Pendiente') 
+    notas_resolucion = db.Column(db.Text, nullable=True)
+    fecha_auditoria = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Trazabilidad: Quién resolvió el conflicto
+    resuelto_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Relaciones para navegar fácilmente desde Jinja
+    user = db.relationship('User', backref='fichajes_diarios', foreign_keys=[user_id])
+    obra_planificada = db.relationship('Obra', foreign_keys=[obra_planificada_id])
+    obra_real = db.relationship('Obra', foreign_keys=[obra_real_id])
+    resuelto_por = db.relationship('User', foreign_keys=[resuelto_por_id])
+    
+class Solicitud(db.Model):
+    """
+    Petición de recursos (Personal) realizada por Jefes de Obra a Administración.
+    """
+    __tablename__ = 'solicitudes'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # TIPO: 'generica' (Pido perfil) | 'concreta' (Pido persona específica)
+    tipo = db.Column(db.String(20), nullable=False)
+    # Fíjate que ponemos server_default
+    accion = db.Column(db.String(20), nullable=False, server_default='ASIGNAR')
+    
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    requested_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Solo para solicitudes CONCRETAS
+    empleado_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Rango de fechas solicitado
+    fecha_inicio = db.Column(db.Date, nullable=False)
+    fecha_fin = db.Column(db.Date, nullable=False)
+
+    # Solo para solicitudes GENÉRICAS
+    perfil_categoria = db.Column(db.String(50), nullable=True) # Ej: "Oficial 1ª"
+    perfil_empresa_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
+
+    cantidad_solicitada = db.Column(db.Integer, nullable=False, default=1)
+    
+    # Cantidad cubierta actualmente (calculada dinámicamente según asignaciones)
+    cantidad_cubierta = db.Column(db.Integer, nullable=False, default=0)
+
+    # ESTADOS: PENDIENTE, EN_PROCESO, CUMPLIDA, CERRADA_PARCIAL, DENEGADA
+    estado = db.Column(db.String(20), nullable=False, default='PENDIENTE')
+    
+    # True si el sistema la marcó como CUMPLIDA automáticamente al detectar asignaciones
+    auto_fulfilled = db.Column(db.Boolean, nullable=False, default=False)
+
+    comentarios = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+    # Relaciones
+    obra = db.relationship('Obra', backref='solicitudes')
+    requested_by = db.relationship('User', foreign_keys=[requested_by_id])
+    empleado = db.relationship('User', foreign_keys=[empleado_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+    perfil_empresa = db.relationship('Company')
+
+    def __repr__(self):
+        return f'<Solicitud {self.id} {self.tipo} {self.estado}>'
+    
+    
+class Rating(db.Model):
+    """Sistema de Puntuación/Reputación para Currantes."""
+    __tablename__ = 'ratings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    score = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # >>> NUEVO: Para poder resetear la suma sin borrar el dato
+    is_active = db.Column(db.Boolean, default=True, nullable=False) 
+    
+    user = db.relationship('User', foreign_keys=[user_id], backref='ratings_received')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+    
+    
+class Festivo(db.Model):
+    __tablename__ = 'festivos'
+    id = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.Date, nullable=False, unique=True)
+    descripcion = db.Column(db.String(100))
+
+    def __repr__(self):
+        return f'<Festivo {self.fecha}: {self.descripcion}>'
+    
+class ConfiguracionGlobal(db.Model):
+    __tablename__ = 'configuracion_global'
+    id = db.Column(db.Integer, primary_key=True)
+    clave = db.Column(db.String(50), unique=True, nullable=False)
+    valor = db.Column(db.String(255), nullable=False)
+
+    def __repr__(self):
+        return f'<ConfiguracionGlobal {self.clave}={self.valor}>'
+    
+
+# ==========================================
+# MÓDULO DE NOTAS Y REUNIONES (CRM INTERNO)
+# ==========================================
+nota_obra = db.Table('nota_obra',
+    db.Column('nota_id', db.Integer, db.ForeignKey('notas.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('obra_id', db.Integer, db.ForeignKey('obras.id', ondelete='CASCADE'), primary_key=True)
+)
+
+nota_user = db.Table('nota_user',
+    db.Column('nota_id', db.Integer, db.ForeignKey('notas.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+)
+
+class Nota(db.Model):
+    __tablename__ = 'notas'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(200), nullable=False)
+    contenido = db.Column(db.Text, nullable=False)
+    fecha = db.Column(db.Date, default=date.today, nullable=False)
+    es_privada = db.Column(db.Boolean, default=False, nullable=False)
+    
+    autor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relaciones
+    autor = db.relationship('User', foreign_keys=[autor_id])
+    
+    # Las notas aparecerán mágicamente en Obra.notas y User.notas_implicado
+    obras = db.relationship('Obra', secondary=nota_obra, backref=db.backref('notas', lazy='dynamic'))
+    usuarios_implicados = db.relationship('User', secondary=nota_user, backref=db.backref('notas_implicado', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<Nota {self.titulo} - Autor: {self.autor_id}>'

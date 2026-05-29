@@ -1,0 +1,49 @@
+<div class="admin-actions-bar">
+    <div class="admin-actions-text small">
+        <span class="text-muted">Estado: <strong>{{ solicitud.estado }}</strong></span>
+    </div>
+
+    <div class="admin-actions-buttons">
+        {% if solicitud.estado in ['PENDIENTE', 'EN_PROCESO'] %}
+        
+            {# --- CASO CONCRETA --- #}
+            {% if solicitud.tipo|lower == 'concreta' %}
+                
+                {# 1. Aceptar Total (Sin etiqueta form) #}
+                {# 1. Aceptar Total (Sin etiqueta form) #}
+                {# 1. Aceptar Total (Sin etiqueta form) #}
+                    <button type="button" onclick="submitConcretaTotal()" class="btn btn-success btn-sm font-weight-bold px-3">
+                    <i class="fas fa-check-double mr-1"></i> Todo el periodo
+                    </button>
+
+                {# 2. Parcial (Azul) - Botón integrado #}
+                <button type="button" id="btn-assign-partial" class="btn btn-info btn-sm font-weight-bold px-3 ml-1" onclick="submitPartialFromMain()">
+                    <i class="far fa-calendar-check mr-1"></i> Asignar Días Sueltos
+                </button>
+
+            {# --- CASO GENÉRICA --- #}
+            {% else %}
+                
+                {# 1. Aceptar Total #}
+                <button type="button" class="btn btn-success btn-sm font-weight-bold px-3" onclick="submitGenericTotal()">
+                    <i class="fas fa-check-double mr-1"></i> Asignar Seleccionados (Total)
+                </button>
+
+                {# 2. Parcial (Azul) - Botón integrado #}
+                <button type="button" id="btn-assign-partial" class="btn btn-info btn-sm font-weight-bold px-3 ml-1" onclick="submitPartialFromMain()">
+                    <i class="far fa-calendar-check mr-1"></i> Asignar Días Sueltos
+                </button>
+
+            {% endif %}
+
+            {# 3. DENEGAR (Común - Sin etiqueta form) #}
+            <button type="button" onclick="resolverSolicitudApi('{{ solicitud.id }}', 'denegar')" class="btn btn-outline-danger btn-sm ml-2">Denegar</button>
+
+        {% else %}
+            {# CASO CERRADA: REABRIR (Sin etiqueta form) #}
+            <button type="button" onclick="resolverSolicitudApi('{{ solicitud.id }}', 'reabrir')" class="btn btn-secondary btn-sm">
+                <i class="fas fa-undo mr-1"></i> Reabrir
+            </button>
+        {% endif %}
+    </div>
+</div>

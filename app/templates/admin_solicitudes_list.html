@@ -1,0 +1,262 @@
+{# templates/admin_solicitudes_list.html #}
+{% extends "base.html" %}
+{% block title %}Solicitudes de personal{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+  <style>
+      /* Estilos para barra de progreso mini */
+      .progress-mini {
+          height: 6px;
+          background-color: #e9ecef;
+          border-radius: 3px;
+          overflow: hidden;
+          margin-top: 4px;
+          width: 100%;
+          min-width: 80px;
+      }
+      .progress-bar-mini {
+          height: 100%;
+          background-color: #22c55e; /* Verde por defecto */
+          transition: width 0.3s ease;
+      }
+      .progress-bar-warning { background-color: #f59e0b; } /* Ámbar si está en proceso */
+      .progress-bar-danger { background-color: #ef4444; } /* Rojo si está denegada o 0 */
+
+      /* Ajuste para la celda de progreso */
+      .cell-progress {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+      }
+  </style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+
+    {# Mensajes flash #}
+    <div class="admin-flashes">
+
+    </div>
+
+    <header class="admin-header">
+      <div class="admin-header-title">
+        Solicitudes de personal
+      </div>
+      <div class="admin-header-subtitle">
+        Peticiones de jefes de obra para asignación o movimiento de operarios.
+      </div>
+    </header>
+
+    <section class="admin-panel">
+      <div class="admin-panel-header">
+        <h2 class="admin-panel-title">Todas las solicitudes</h2>
+        <span class="admin-panel-subtitle">
+          {{ solicitudes|length }} registros
+        </span>
+      </div>
+
+      <div class="mb-3">
+        
+        {# AVISO DE FILTROS ACTIVOS (OBRA + FECHA) #}
+        {% if obra_filtro or date_filtro %}
+           <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center py-2 px-3 mb-3">
+              <div>
+                  <i class="fas fa-filter mr-2"></i> Filtros activos:
+                  
+                  {% if obra_filtro %}
+                    <span class="badge badge-light text-info border border-info ml-1">
+                        Obra: {{ obra_filtro.nombre }}
+                    </span>
+                  {% endif %}
+
+                  {% if date_filtro %}
+                    <span class="badge badge-light text-info border border-info ml-1">
+                        Fecha: {{ date_filtro.strftime('%d/%m/%Y') }}
+                    </span>
+                  {% endif %}
+              </div>
+              
+              {# Botón limpiar todo #}
+              <a href="{{ url_for('admin.solicitudes_list') }}" class="btn btn-xs btn-outline-info bg-white text-info">
+                  <i class="fas fa-times"></i> Limpiar filtros
+              </a>
+          </div>
+        {% endif %}
+
+        {# FORMULARIO DE FILTROS #}
+        <form class="form-inline" method="get">
+          {% if obra_filtro %}
+              <input type="hidden" name="obra_id" value="{{ obra_filtro.id }}">
+          {% endif %}
+
+          <div class="form-group mr-2">
+            <label for="estado" class="mr-2 mb-0 text-muted small font-weight-bold">ESTADO</label>
+            <select id="estado" name="estado" class="form-control form-control-sm custom-select" onchange="this.form.submit()">
+              {% for e in estados_posibles %}
+                <option value="{{ e }}" {% if e == estado_filtro %}selected{% endif %}>
+                  {{ "Todos" if e == "todas" else e }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="form-group mr-2">
+            <label for="tipo" class="mr-2 mb-0 text-muted small font-weight-bold">TIPO</label>
+            <select id="tipo" name="tipo" class="form-control form-control-sm custom-select" onchange="this.form.submit()">
+              {% for t in tipos_posibles %}
+                <option value="{{ t }}" {% if t == tipo_filtro %}selected{% endif %}>
+                  {% if t == "todas" %} Todos
+                  {% elif t == "generica" %} Asignación (Genérica)
+                  {% elif t == "concreta" %} Movimiento (Concreta)
+                  {% else %} {{ t }}
+                  {% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <noscript>
+              <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+          </noscript>
+        </form>
+      </div>
+
+      {% if solicitudes %}
+      <div style="overflow-x:auto; max-height: 70vh; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 6px;">
+        <table class="table-modern">
+          <thead class="sticky-top bg-white" style="z-index: 10; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+            <tr>
+              <th>ID</th>
+              <th>Tipo</th>
+                <th>Obra (código + nombre)</th>
+                <th>Jefe de obra</th>
+                <th>Fecha Petición</th>
+                <th>Fechas Trabajo</th>
+                <th>Perfil / Operario</th>
+                
+                <th class="text-center">Cobertura</th>
+                <th class="text-center">Plazas</th>
+
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in solicitudes %}
+                {# Recuperar estadísticas pasadas desde el backend (routes.py) #}
+                {% set stat = stats[s.id] %}
+                
+                <tr>
+                  <td>
+                    <a href="{{ url_for('admin.solicitud_detail', solicitud_id=s.id) }}" class="font-weight-bold text-dark">
+                      #{{ s.id }}
+                    </a>
+                  </td>
+
+                  <td>
+                    
+                    {% if s.accion == 'DESASIGNAR' %}
+                        <span class="badge badge-danger border text-uppercase" style="font-size: 0.65rem;">SALIDA</span>
+                    {% elif s.tipo == 'GENERICA' %}
+                        <span class="badge badge-light border text-uppercase" style="font-size: 0.65rem;">Genérica</span>
+                    {% else %}
+                        <span class="badge badge-info text-uppercase" style="font-size: 0.65rem;">Concreta</span>
+                    {% endif %}
+                  </td>
+
+                  <td>
+                    {% if s.obra %}
+                      {{ s.obra.codigo or s.obra.id }} — <strong>{{ s.obra.nombre }}</strong>
+                    {% else %} - {% endif %}
+                  </td>
+
+                  <td>
+                    {% if s.obra and s.obra.jefe_obra %}
+                      {{ s.obra.jefe_obra.name }} {{ s.obra.jefe_obra.lastname }}
+                    {% else %} <span class="text-muted">-</span> {% endif %}
+                  </td>
+
+                  <td class="text-muted small">
+                    {{ s.created_at.strftime('%d/%m/%y') if s.created_at else '-' }}
+                  </td>
+
+                  <td class="small">
+                    {% if s.fecha_inicio %}
+                        <span class="text-nowrap">{{ s.fecha_inicio.strftime('%d/%m') }}</span> - 
+                        <span class="text-nowrap">{{ s.fecha_fin.strftime('%d/%m') }}</span>
+                    {% endif %}
+                  </td>
+
+                  <td>
+                    {% if s.tipo == 'GENERICA' %}
+                      <span class="font-weight-bold text-dark">{{ s.perfil_categoria or 'Varios' }}</span>
+                    {% else %}
+                      {% if s.empleado %}
+                        {{ s.empleado.name }} {{ s.empleado.lastname }}
+                      {% else %} - {% endif %}
+                    {% endif %}
+                  </td>
+
+                  <td class="text-center align-middle">
+                    <div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 30px;">
+                        {% if s.tipo == 'GENERICA' %}
+                            <div class="small font-weight-bold">{{ stat.pct }}%</div>
+                            <div class="progress-mini">
+                                {% set bar_class = 'progress-bar-mini' %}
+                                {% if stat.pct == 100 %} {% set bar_class = 'progress-bar-mini' %} 
+                                {% elif stat.pct > 0 %} {% set bar_class = 'progress-bar-mini progress-bar-warning' %}
+                                {% else %} {% set bar_class = 'progress-bar-mini progress-bar-danger' %} 
+                                {% endif %}
+                                
+                                <div class="{{ bar_class }}" style="width: {{ stat.pct }}%;"></div>
+                            </div>
+                        {% else %}
+                            {# Iconos para Concretas #}
+                            {% if s.estado in ['CUMPLIDA'] %}
+                                <i class="fas fa-check-circle text-success fa-lg"></i>
+                            {% elif s.estado == 'DENEGADA' %}
+                                <i class="fas fa-times-circle text-danger fa-lg"></i>
+                            {% else %}
+                                <i class="far fa-clock text-muted fa-lg"></i>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                  </td>
+
+                  <td class="text-center">
+                    {% if s.tipo == 'GENERICA' %}
+                        <span class="font-weight-bold">{{ s.cantidad_cubierta }}</span> <span class="text-muted">/ {{ s.cantidad_solicitada }}</span>
+                    {% else %}
+                        <span class="text-muted small">-</span>
+                    {% endif %}
+                  </td>
+
+                  <td>
+                    {% set est = s.estado %}
+                    {% if est == 'PENDIENTE' %} <span class="badge-soft badge-soft-amber">Pendiente</span>
+                    {% elif est == 'EN_PROCESO' %} <span class="badge-soft badge-soft-blue">En proceso</span>
+                    {% elif est == 'CUMPLIDA' %} <span class="badge-soft badge-soft-green">Cumplida</span>
+                    {% elif est == 'CERRADA_PARCIAL' %} <span class="badge-soft badge-soft-gray">Cerrada P.</span>
+                    {% elif est == 'DENEGADA' %} <span class="badge-soft badge-soft-red">Denegada</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="mb-0 text-muted" style="font-size:0.85rem;">
+          No hay solicitudes con los filtros actuales.
+        </p>
+      {% endif %}
+    </section>
+  </main>
+</div>
+{% endblock %}

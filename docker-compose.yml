@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    expose:
+      - "5000"
+    volumes:
+      - ./uploads:/app/uploads
+    environment:
+      - SECRET_KEY=your_secret_key
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_db
+      - MAIL_USERNAME=soltec.app.adm@gmail.com
+      - MAIL_PASSWORD="sgnn bkpf acno cnhv"
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - ODOO_URL=${ODOO_URL}
+      - ODOO_DB=${ODOO_DB}
+      - ODOO_USER=${ODOO_USER}
+      - ODOO_PASSWORD=${ODOO_PASSWORD}
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gestion_obra_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+      
+  # EL WORKER: Ejecuta las tareas pesadas
+  celery_worker:
+    build: .
+    command: celery -A app.celery_worker.celery worker --loglevel=info
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - MAIL_USERNAME=soltec.app.adm@gmail.com
+      - MAIL_PASSWORD="sgnn bkpf acno cnhv"
+      - SECRET_KEY=your_secret_key
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_db
+      - ODOO_URL=${ODOO_URL}
+      - ODOO_DB=${ODOO_DB}
+      - ODOO_USER=${ODOO_USER}
+      - ODOO_PASSWORD=${ODOO_PASSWORD}
+    depends_on:
+      - redis
+      - db
+
+  # EL BEAT: El reloj que dispara las tareas programadas automáticamente
+  celery_beat:
+    build: .
+    command: celery -A app.celery_worker.celery beat --loglevel=info
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_db
+    depends_on:
+      - redis
+      - db
+
+  # --- PROXY INVERSO CON CADDY ---
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
