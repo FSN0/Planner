@@ -9,7 +9,31 @@ ROLE_CURRANTE = 'currante'
 ROLE_JEFE = 'jefe_obra'
 ROLE_RRHH = 'rrhh'
 ROLE_ADMIN = 'admin'
+from sqlalchemy import event
 
+# Esta función se dispara cada vez que SQLAlchemy hace una consulta
+@event.listens_for(db.Model, 'before_insert', propagate=True)
+def before_insert(mapper, connection, target):
+    # Esto asegura que si estamos en un tenant, no intente insertar en public
+    pass
+class Tenant(db.Model):
+    """
+    Representa a cada cliente/empresa que contrata el SaaS.
+    Este modelo reside estrictamente en el esquema 'public'.
+    """
+    __tablename__ = 'tenants'
+    __table_args__ = {'schema': 'public'}  # Fuerza a que esta tabla viva siempre fuera de los esquemas aislados
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    subdominio = db.Column(db.String(50), unique=True, nullable=False)  # Ej: 'soltec', 'acme'
+    schema_name = db.Column(db.String(50), unique=True, nullable=False) # Ej: 'tenant_soltec', 'tenant_acme'
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Tenant {self.nombre} - Subdominio: {self.subdominio}>'
+    
 def generate_random_color():
     """Genera un color pastel aleatorio para las obras/empresas."""
     palette = ["#a8d5ba", "#f4d06f", "#f7a072", "#d291bc", "#b8a9c9",
@@ -24,12 +48,13 @@ class Company(db.Model):
     __tablename__ = 'companies'
     id = db.Column(db.Integer, primary_key=True)
     
-    # Identificador único corto (ej: "SOLTEC", "ELEC_PEPE")
+    # Identificador único corto (ej: "EMPRESA_A", "ELEC_PEPE")
     code = db.Column(db.String(20), unique=True, nullable=True) 
     nombre = db.Column(db.String(100), nullable=False)
     nif = db.Column(db.String(20), nullable=True)
     
-    odoo_id = db.Column(db.Integer, unique=True, nullable=True)
+    # TODO SaaS: Reemplazado por sistema de integraciones genérico
+    # odoo_id = db.Column(db.Integer, unique=True, nullable=True)
     
     descripcion = db.Column(db.Text)
     gremio = db.Column(db.String(100)) # Ej: Electricidad, Albañilería
@@ -43,12 +68,15 @@ class Company(db.Model):
     def __repr__(self):
         return f'<Company {self.nombre} ({self.code})>'
 
+
+
 class User(UserMixin, db.Model):
     """
     Modelo unificado de Usuario (Admin, Jefes, RRHH, Currantes).
     """
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
+
     
     odoo_id = db.Column(db.Integer, unique=True, nullable=True)
     
@@ -207,7 +235,7 @@ class Obra(db.Model):
     cliente = db.Column(db.String(100))
     ubicacion = db.Column(db.String(100))
     fecha_sincronizacion = db.Column(db.DateTime, nullable=True)
-    odoo_id = db.Column(db.Integer, unique=True, nullable=True)
+
     
     # Fechas
     fecha_inicio = db.Column(db.Date)

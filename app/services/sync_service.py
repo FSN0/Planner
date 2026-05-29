@@ -160,7 +160,7 @@ class OdooSyncService:
             else:
                 role = 'currante'
 
-            email = emp.get('work_email') or f"sin_email_{emp['id']}@soltec.local"
+            email = emp.get('work_email') or f"sin_email_{emp['id']}@local.tuappsaas.com"
             
             local_user = User.query.filter(User.odoo_id == emp['id']).first()
             if not local_user and dni:

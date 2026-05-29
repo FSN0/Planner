@@ -10,7 +10,7 @@ services:
     environment:
       - SECRET_KEY=your_secret_key
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_saas
-      - MAIL_USERNAME=soltec.app.adm@gmail.com
+      - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD="sgnn bkpf acno cnhv"
       - CELERY_BROKER_URL=redis://redis:6379/0
       - ODOO_URL=${ODOO_URL}
@@ -42,7 +42,7 @@ services:
     command: celery -A app.celery_worker.celery worker --loglevel=info
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - MAIL_USERNAME=soltec.app.adm@gmail.com
+      - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD="sgnn bkpf acno cnhv"
       - SECRET_KEY=your_secret_key
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_saas

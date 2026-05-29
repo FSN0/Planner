@@ -9,7 +9,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}=== SISTEMA DE RESTAURACIÓN SOLTEC ===${NC}"
+echo -e "${YELLOW}=== SISTEMA DE RESTAURACIÓN SAAS ===${NC}"
 
 # 1. Listar backups disponibles
 if [ -z "$(ls -A $BACKUP_DIR/*.sql 2>/dev/null)" ]; then

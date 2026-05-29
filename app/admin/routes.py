@@ -1863,7 +1863,7 @@ def batch_update_obras_status():
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def sso_odoo_contactos():
 
-    sso_secret = "soltec_master_key_998877"
+    sso_secret = current_app.config.get('SSO_SECRET_KEY', 'default_dev_secret_key')
     dominio_base = request.host.split(':')[0]
     odoo_url = f"{request.scheme}://{dominio_base}:5002"
 

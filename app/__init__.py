@@ -38,7 +38,21 @@ def create_app():
     from app.sync.routes import sync_bp
     from app.api.asignaciones import asignaciones_api
     app.register_blueprint(asignaciones_api, url_prefix='/api')
+# (Tus importaciones anteriores...)
+    from app.sync.routes import sync_bp
+    from app.api.asignaciones import asignaciones_api
+    
+    # 1. IMPORTA AQUÍ EL NUEVO BLUEPRINT:
+    from app.superadmin import superadmin_bp 
 
+    app.register_blueprint(asignaciones_api, url_prefix='/api')
+
+
+
+
+    
+    # 2. REGÍSTRALO AQUÍ:
+    app.register_blueprint(superadmin_bp)
     # ---------------------------------------------------------
     # Registro de Blueprints y utilidades de Jinja
     # ---------------------------------------------------------
@@ -111,5 +125,40 @@ def create_app():
         if current_user.is_authenticated:
             return redirect_by_role(current_user)
         return redirect(url_for('auth.login'))
+    # ---------------------------------------------------------
+    # Enrutamiento Dinámico Multi-Tenant (PostgreSQL Schemas)
+    # ---------------------------------------------------------
+    from flask import request, g, abort
+    from sqlalchemy import text
 
+    @app.before_request
+    def handle_tenant_routing():
+        """
+        Intercepta la petición, analiza el subdominio y conmuta el 
+        search_path de PostgreSQL al esquema aislado del inquilino.
+        """
+        # Omitir la lógica de esquemas para archivos estáticos (rendimiento)
+        if request.endpoint == 'static':
+            return
+
+        host = request.host  # Ej: 'soltec.tusaas.com:5000' o 'localhost:5000'
+        parts = host.split('.')
+
+        # Identificar si existe un subdominio válido
+        if len(parts) > 2 and parts[0] not in ['www', 'admin']:
+            subdomain = parts[0]
+            
+            from app.models import Tenant
+            # Buscamos el inquilino en la tabla global del esquema público
+            tenant = Tenant.query.filter_by(subdomain=subdomain, is_active=True).first()
+            
+            if tenant:
+                g.current_tenant = tenant
+                # Comando clave de Postgres: Prioriza el esquema del inquilino, manteniendo 'public' como fallback
+                db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
+            else:
+                abort(404, description="La organización solicitada no existe o se encuentra inactiva.")
+        else:
+            # Si acceden desde el dominio principal (Landing Page corporativa o panel de SuperAdmin)
+            db.session.execute(text("SET search_path TO public"))
     return app

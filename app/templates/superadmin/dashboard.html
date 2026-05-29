@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>🚀 Panel SuperAdmin SaaS</h2>
+        <span class="badge bg-dark">Esquema: public</span>
+    </div>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Provisionar Nuevo Cliente (Tenant)</h5>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('superadmin.create_tenant') }}" method="POST" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Nombre Empresa</label>
+                    <input type="text" name="nombre" class="form-control" placeholder="Ej: Construcciones López" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Subdominio (URL)</label>
+                    <div class="input-group">
+                        <input type="text" name="subdominio" class="form-control" placeholder="lopez" required>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Email del Admin</label>
+                    <input type="email" name="admin_email" class="form-control" placeholder="jefe@lopez.com" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Contraseña Admin</label>
+                    <input type="password" name="admin_password" class="form-control" required>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-success w-100">Crear y Lanzar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <h4>Clientes Activos (Bases de datos aisladas)</h4>
+    <table class="table table-hover bg-white shadow-sm border">
+        <thead class="table-light">
+            <tr>
+                <th>ID</th>
+                <th>Nombre Cliente</th>
+                <th>Subdominio de acceso</th>
+                <th>Esquema (Postgres)</th>
+                <th>Estado</th>
+                <th>Fecha Alta</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in tenants %}
+            <tr>
+                <td>{{ t.id }}</td>
+                <td><strong>{{ t.nombre }}</strong></td>
+                <td>
+                    <a href="http://{{ t.subdominio }}.localhost:5000" target="_blank">{{ t.subdominio }}.tusaas.com</a>
+                </td>
+                <td><code>{{ t.schema_name }}</code></td>
+                <td>
+                    {% if t.is_active %}
+                        <span class="badge bg-success">Activo</span>
+                    {% else %}
+                        <span class="badge bg-danger">Inactivo</span>
+                    {% endif %}
+                </td>
+                <td>{{ t.created_at.strftime('%Y-%m-%d') }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6" class="text-center text-muted">Aún no hay clientes registrados.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
