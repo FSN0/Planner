@@ -5,7 +5,7 @@ import io
 import zipfile
 from flask import send_file, flash, redirect, url_for
 from app.models import Document
-
+#ss
 def get_document_for_user(user_id):
     """
     Obtiene el registro de documentos para un usuario.
