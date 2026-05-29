@@ -10,7 +10,6 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
     schema_name = f"tenant_{subdominio.lower().strip()}"
     
     try:
-        # 1. Asegurar estar en public para registrar el Tenant
         db.session.execute(text("SET search_path TO public"))
         
         if Tenant.query.filter_by(subdominio=subdominio).first():
@@ -24,43 +23,43 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
         db.session.add(nuevo_tenant)
         db.session.commit()
         
-        # 2. Crear infraestructura física (Esquema)
+        # --- SOLUCIÓN: Guardamos el ID como número suelto ANTES de borrar la sesión ---
+        tenant_id = nuevo_tenant.id
+        
+        # Crear esquema
         db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
         db.session.commit()
         
-        # 3. EL TRUCO: Cerrar la sesión actual para forzar a SQLAlchemy a olvidar 
-        # cualquier caché de tablas y metadatos de la sesión anterior.
+        # Amnesia de sesión para limpiar caché
         db.session.remove() 
         
-        # 4. Cambiar el search_path en esta NUEVA sesión limpia
+        # Foco en nuevo esquema
         db.session.execute(text(f"SET search_path TO {schema_name}"))
-        
-        # 5. Crear tablas en el nuevo esquema
         db.metadata.create_all(db.engine)
         
-        # 6. Crear el administrador (ahora este insert irá al esquema tenant_X)
+        # Crear administrador
         admin_user = User(
             email=admin_email,
             password_hash=generate_password_hash(admin_password),
             role=ROLE_ADMIN,
             name="Administrador",
             lastname=nombre_empresa,
-            dni=f"ADMIN-{nuevo_tenant.id}", 
+            dni=f"ADMIN-{tenant_id}",  # Usamos la variable numérica suelta
             active=True
         )
         db.session.add(admin_user)
         db.session.commit()
         
-        # 7. Regresar al estado limpio
+        # Volver al esquema público
         db.session.execute(text("SET search_path TO public"))
         db.session.commit()
         
-        return nuevo_tenant
+        # --- SOLUCIÓN: Volvemos a pedirle a la base de datos el Tenant para devolverlo "conectado" ---
+        tenant_final = db.session.query(Tenant).get(tenant_id)
+        return tenant_final
 
     except Exception as e:
-        # Siempre hacemos rollback ante cualquier error
         db.session.rollback()
-        # Volvemos a public para no dejar la sesión "colgada" en un esquema fallido
         try:
             db.session.execute(text("SET search_path TO public"))
         except:

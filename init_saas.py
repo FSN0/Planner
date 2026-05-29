@@ -20,7 +20,12 @@ with app.app_context():
     print("🏗️ Provisionando el primer Inquilino (Tenant)...")
     try:
         # Cambia 'demo' por el subdominio que quieras probar en local (ej: localhost:5000 para public, demo.localhost:5000 para el tenant)
-        tenant = provision_new_tenant(nombre_empresa="Constructora Demo S.L.", subdominio="demo")
+        tenant = provision_new_tenant(
+            nombre_empresa="Constructora Demo S.L.", 
+            subdominio="demo",
+            admin_email="admin@demo.com",
+            admin_password="1234"
+        )
         print(f"✅ ¡Éxito! Inquilino creado: {tenant.nombre} en el esquema '{tenant.schema_name}'")
         
         # Aquí podrías inyectar el primer usuario administrador (ROLE_ADMIN) para este tenant.
