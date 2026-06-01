@@ -641,7 +641,7 @@ class UniversalCalendarManager {
 
                 let payload = {
                     start_date: startVal,
-                    end_date: moment(endVal).add(1, 'days').format('YYYY-MM-DD'),
+                    end_date: endVal, // <-- SOLUCIONADO: Ya no suma un día de más
                     original_start: this.activeEvent.extendedProps.real_original_start,
                     original_end: this.activeEvent.extendedProps.real_original_end ? moment(this.activeEvent.extendedProps.real_original_end).subtract(1, 'days').format('YYYY-MM-DD') : null,
                     overwrite_mode: 'overwrite', 
