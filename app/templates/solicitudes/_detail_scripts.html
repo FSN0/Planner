@@ -114,14 +114,13 @@ var GLOBAL_OBRA_ID    = "{{ solicitud.obra_id }}";
  ========================================== */
 
 // 1. Asignación de TODO el periodo (SOLICITUD GENÉRICA)
-// 1. Asignación de TODO el periodo (SOLICITUD GENÉRICA)
 window.submitGenericTotal = function() {
   var checkboxes = document.querySelectorAll('.worker-check:checked');
   if (checkboxes.length === 0) { alert("⚠️ Selecciona al menos un candidato."); return; }
   
   var checks = [];
   var workerNames = {};
-  var workerIds = []; // Recolectamos los IDs limpios
+  var workerIds = []; 
   
   var $btn = $('button[onclick="submitGenericTotal()"]');
   var originalHtml = $btn.html();
@@ -137,7 +136,7 @@ window.submitGenericTotal = function() {
               data: JSON.stringify({
                   worker_id: cb.value, target_obra_id: GLOBAL_OBRA_ID,
                   start_date: GLOBAL_START_DATE, end_date: GLOBAL_END_DATE,
-                  overwrite_mode: 'check'
+                  overwrite_mode: 'pure_check' // FIX: MIRAR Y NO TOCAR LA BD
               })
           })
       );
@@ -161,10 +160,10 @@ window.submitGenericTotal = function() {
           var mockData = { conflict_type: 'admin_hard', message: 'Hay trabajadores ocupados.', conflict_details: conflicts };
           window.resolverConflictoAsignacion(mockData, { action: 'total' }, function(payload) {
               var forceMove = (payload.overwrite_mode === 'overwrite' || payload.overwrite_mode === 'assign_and_request');
-              ejecutarAsignacionTotalApi(workerIds, forceMove); // Ejecuta API
+              ejecutarAsignacionTotalApi(workerIds, forceMove); 
           });
       } else {
-          ejecutarAsignacionTotalApi(workerIds, false); // Ejecuta API
+          ejecutarAsignacionTotalApi(workerIds, false);
       }
   }).catch(err => { 
       $btn.prop('disabled', false).html(originalHtml);
@@ -172,21 +171,20 @@ window.submitGenericTotal = function() {
   });
 };
 
-// Función helper que aísla la llamada al backend
 function ejecutarAsignacionTotalApi(workerIds, forceMove) {
     $.ajax({
         url: "/api/v6/solicitudes/{{ solicitud.id }}/asignar_candidatos",
         type: "POST", contentType: "application/json",
         data: JSON.stringify({ worker_ids: workerIds, force_move: forceMove }),
         success: function(res) {
-            if(res.success) location.reload(); // Recarga la página limpia tras guardar
+            if(res.success) location.reload(); 
             else alert(res.message);
         },
         error: function(xhr) { alert("Error del servidor: " + xhr.statusText); }
     });
 }
 
-// 2. Asignación de TODO el periodo (SOLICITUD CONCRETA) - REESCRITO PARA LA API
+// 2. Asignación de TODO el periodo (SOLICITUD CONCRETA)
 window.submitConcretaTotal = function() {
     var $btn = $('button[onclick="submitConcretaTotal()"]');
     var originalHtml = $btn.html();
@@ -198,12 +196,11 @@ window.submitConcretaTotal = function() {
         target_obra_id: GLOBAL_OBRA_ID,
         start_date: GLOBAL_START_DATE,
         end_date: GLOBAL_END_DATE,
-        overwrite_mode: 'check'
+        overwrite_mode: 'pure_check' // FIX: MIRAR Y NO TOCAR LA BD
     };
     
     $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Comprobando...');
 
-    // Consulta en vivo a la API del planificador para ver si choca con otra obra
     $.ajax({
         url: "/api/v6/planificador/action",
         type: "POST", contentType: "application/json",
@@ -213,13 +210,10 @@ window.submitConcretaTotal = function() {
                 $btn.prop('disabled', false).html(originalHtml);
                 res.message = "El trabajador solicitado ya tiene otras asignaciones en estas fechas.";
                 
-                // LLAMADA AL MODAL GLOBAL DE COMMON.JS PARA RESOLVER CONFLICTO (Ej: Pluriempleo)
                 window.resolverConflictoAsignacion(res, payload, function(resolvedPayload) {
-                    // Si el usuario elige forzar/sobrescribir, disparamos la resolución
                     ejecutarAsignacionConcretaApi();
                 });
             } else {
-                // Sin conflictos, enviamos a la API directamente
                 ejecutarAsignacionConcretaApi();
             }
         },
@@ -229,12 +223,10 @@ window.submitConcretaTotal = function() {
         }
     });
     {% else %}
-    // Fallback si no hay empleado asignado (ej. baja general)
     ejecutarAsignacionConcretaApi();
     {% endif %}
 };
 
-// Función de apoyo para ejecutar la acción tras comprobar conflictos
 function ejecutarAsignacionConcretaApi() {
     var $btn = $('button[onclick="submitConcretaTotal()"]');
     $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Asignando...');
@@ -244,7 +236,7 @@ function ejecutarAsignacionConcretaApi() {
         type: "POST", contentType: "application/json",
         data: JSON.stringify({ accion: 'aceptar_concreta' }),
         success: function(res) {
-            if(res.success) location.reload(); // La recarga actualizará los contadores y cerrará el modal
+            if(res.success) location.reload();
             else { alert(res.message); $btn.prop('disabled', false).html('<i class="fas fa-check-double mr-1"></i> Todo el periodo'); }
         },
         error: function(xhr) { 
@@ -254,7 +246,7 @@ function ejecutarAsignacionConcretaApi() {
     });
 }
 
-// 3. LA FUNCIÓN PARA DENEGAR Y REABRIR (Esta es la que faltaba y te daba error en la consola)
+// 3. LA FUNCIÓN PARA DENEGAR Y REABRIR
 window.resolverSolicitudApi = function(solicitudId, accion) {
     var mensajes = {
         'denegar': '¿Seguro que quieres DENEGAR esta solicitud?',
@@ -434,7 +426,6 @@ document.addEventListener('DOMContentLoaded', function() {
                   } else if (response.conflict) {
                       if (btn) { btn.disabled = false; updatePartialButtonBadge(); }
                       
-                      // LLAMADA A TU FUNCIÓN GLOBAL EN common.js
                       window.resolverConflictoAsignacion(response, payload, function(nuevoPayload) {
                           nuevoPayload.mode = nuevoPayload.overwrite_mode; 
                           doAjaxSubmit(nuevoPayload);
@@ -451,7 +442,6 @@ document.addEventListener('DOMContentLoaded', function() {
           });
       };
 
-      // Mandamos la primera petición con mode: 'check'
       var initialPayload = {
           worker_id: workerId,
           dates: Array.from(window.selectedPartialDates),

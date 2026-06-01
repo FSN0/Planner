@@ -35,15 +35,6 @@
     {% endif %}
   </ul>
 
-{% if current_user.role in ['admin', 'jefe_obra'] %}
-  <div class="px-3 mb-3 nota-btn-container">
-      <button class="btn btn-primary btn-block font-weight-bold shadow-sm d-flex align-items-center justify-content-center" style="border-radius: 8px; overflow: hidden; white-space: nowrap;" onclick="$('#modalNuevaNota').modal('show')" title="Nueva Nota / Reunión">
-          <i class="fas fa-plus"></i>
-          <span class="texto-nueva-nota ml-2">Nueva Nota</span>
-      </button>
-  </div>
-  {% endif %}
-
   
   {% if current_user.role in ['admin', 'jefe_obra'] %}
   <div class="sidebar-section-title">Operaciones</div>

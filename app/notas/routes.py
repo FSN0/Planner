@@ -1,37 +1,53 @@
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
-from app.models import Nota, Obra, User, ROLE_ADMIN, ROLE_JEFE
 from app import db
 from datetime import datetime
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
+from app.models import Nota, Obra, User, nota_obra, nota_user, Asignacion, ROLE_ADMIN, ROLE_JEFE
 
 notas_bp = Blueprint('notas', __name__, url_prefix='/notas')
 
 @notas_bp.route('/', methods=['GET'])
 @login_required
 def centro_mando():
-    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE]:
-        flash("Acceso denegado.", "danger")
-        return redirect(url_for('main.dashboard'))
-
-    # Lógica de Privacidad: Vemos las públicas + las privadas donde YO soy el autor
-    query = Nota.query.filter(
-        or_(
+    # 1. Condición base: Siempre veo las notas donde yo soy el autor
+    cond_autor = Nota.autor_id == current_user.id
+    
+    # 2. Condición: La nota es pública y me han etiquetado explícitamente a mí
+    cond_implicado = and_(
+        Nota.es_privada == False,
+        Nota.usuarios_implicados.any(User.id == current_user.id)
+    )
+    
+    # 3. Condición: La nota es pública y está vinculada a una obra a la que pertenezco
+    if current_user.role == ROLE_ADMIN:
+        # Los admins gestionan todo: ven las notas de todas las obras
+        # (Pero si la nota NO tiene obras ni implicados, .any() es False -> privada a efectos prácticos)
+        cond_obra = and_(Nota.es_privada == False, Nota.obras.any())
+        
+    elif current_user.role == ROLE_JEFE:
+        # Los jefes solo ven las notas de las obras de las que son responsables
+        cond_obra = and_(
             Nota.es_privada == False,
-            Nota.autor_id == current_user.id
+            Nota.obras.any(or_(Obra.jefe_obra_id == current_user.id, Obra.encargado_id == current_user.id))
         )
-    ).order_by(Nota.fecha.desc(), Nota.created_at.desc())
-    
-    notas = query.all()
-    
-    # Listas para el modal de nueva nota
-    todas_obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
-    todos_usuarios = User.query.filter_by(is_deleted=False).order_by(User.name).all()
+    else:
+        # Currantes y RRHH ven las notas de las obras donde han sido asignados alguna vez
+        obras_asignadas_subquery = db.session.query(Asignacion.obra_id).filter(Asignacion.user_id == current_user.id).subquery()
+        cond_obra = and_(
+            Nota.es_privada == False,
+            Nota.obras.any(Obra.id.in_(obras_asignadas_subquery))
+        )
 
-    return render_template('notas/centro_mando.html', 
-                           notas=notas, 
-                           obras=todas_obras, 
-                           usuarios=todos_usuarios)
+    # Aplicamos el filtro: Te la muestro si cumples AL MENOS UNA de las 3 condiciones
+    notas = Nota.query.filter(
+        or_(cond_autor, cond_implicado, cond_obra)
+    ).order_by(Nota.fecha.desc()).all()
+
+    obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
+    usuarios = User.query.filter_by(is_deleted=False).order_by(User.name).all()
+
+    return render_template('notas/centro_mando.html', notas=notas, obras=obras, usuarios=usuarios)
 
 @notas_bp.route('/crear', methods=['POST'])
 @login_required
@@ -43,7 +59,10 @@ def crear_nota():
         titulo = request.form.get('titulo')
         contenido = request.form.get('contenido')
         fecha_str = request.form.get('fecha')
-        es_privada = True if request.form.get('es_privada') == 'true' else False
+        
+        # Validación robusta de privacidad
+        val_privacidad = str(request.form.get('es_privada')).lower()
+        es_privada = val_privacidad in ['true', 'on', '1', 'yes']
         
         # Arrays desde select2 múltiple
         obras_ids = request.form.getlist('obras_ids[]')
@@ -82,8 +101,29 @@ def crear_nota():
 def obtener_nota(nota_id):
     nota = Nota.query.get_or_404(nota_id)
     
-    # Seguridad: Si es privada y no es suya, bloqueo
-    if nota.es_privada and nota.autor_id != current_user.id:
+    # --- LÓGICA DE ACCESO RESTRINGIDO (Aplica las mismas reglas que el panel) ---
+    tiene_acceso = False
+    
+    if nota.autor_id == current_user.id:
+        tiene_acceso = True
+    elif not nota.es_privada:
+        if current_user in nota.usuarios_implicados:
+            tiene_acceso = True
+        elif nota.obras:
+            if current_user.role == ROLE_ADMIN:
+                tiene_acceso = True
+            elif current_user.role == ROLE_JEFE:
+                for obra in nota.obras:
+                    if obra.jefe_obra_id == current_user.id or obra.encargado_id == current_user.id:
+                        tiene_acceso = True
+                        break
+            else:
+                for obra in nota.obras:
+                    if Asignacion.query.filter_by(user_id=current_user.id, obra_id=obra.id).first():
+                        tiene_acceso = True
+                        break
+                        
+    if not tiene_acceso:
         return jsonify({'success': False, 'message': 'Acceso denegado'}), 403
 
     return jsonify({
@@ -102,14 +142,36 @@ def obtener_nota(nota_id):
 def editar_nota(nota_id):
     nota = Nota.query.get_or_404(nota_id)
     
-    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE] or (nota.es_privada and nota.autor_id != current_user.id):
+    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE]:
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
+        
+    # --- BLOQUEO DE EDICIÓN CON LAS MISMAS REGLAS DE PRIVACIDAD ---
+    tiene_acceso = False
+    if nota.autor_id == current_user.id:
+        tiene_acceso = True
+    elif not nota.es_privada:
+        if current_user in nota.usuarios_implicados:
+            tiene_acceso = True
+        elif nota.obras:
+            if current_user.role == ROLE_ADMIN:
+                tiene_acceso = True
+            elif current_user.role == ROLE_JEFE:
+                for obra in nota.obras:
+                    if obra.jefe_obra_id == current_user.id or obra.encargado_id == current_user.id:
+                        tiene_acceso = True
+                        break
+                        
+    if not tiene_acceso:
+        return jsonify({'success': False, 'message': 'No autorizado para editar esta nota'}), 403
 
     try:
         nota.titulo = request.form.get('titulo')
         nota.contenido = request.form.get('contenido')
         fecha_str = request.form.get('fecha')
-        nota.es_privada = True if request.form.get('es_privada') == 'true' else False
+        
+        # Validación robusta de privacidad al editar (arregla el error silencioso)
+        val_privacidad = str(request.form.get('es_privada')).lower()
+        nota.es_privada = val_privacidad in ['true', 'on', '1', 'yes']
         
         if fecha_str:
             nota.fecha = datetime.strptime(fecha_str, "%Y-%m-%d").date()
@@ -123,6 +185,24 @@ def editar_nota(nota_id):
 
         db.session.commit()
         return jsonify({'success': True, 'message': 'Nota actualizada correctamente.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    
+    
+@notas_bp.route('/<int:nota_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_nota(nota_id):
+    nota = Nota.query.get_or_404(nota_id)
+    
+    # Seguridad: Solo puede borrar la nota quien la creó (o un admin supremo)
+    if nota.autor_id != current_user.id and current_user.role != ROLE_ADMIN:
+        return jsonify({'success': False, 'message': 'No autorizado para eliminar esta nota'}), 403
+
+    try:
+        db.session.delete(nota)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Nota eliminada correctamente.'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500

@@ -80,7 +80,7 @@ def get_universal_calendar_events():
     mode = request.args.get('mode', 'empleados') # 'empleados' o 'empresas'
     start_str = request.args.get('start')
     end_str = request.args.get('end')
-
+    show_fichajes = request.args.get('show_fichajes') == '1'
     if not start_str or not end_str: return jsonify([])
 
     try:
@@ -117,7 +117,69 @@ def get_universal_calendar_events():
                 'color': obra_color,
                 'extendedProps': {'type': 'asignacion', 'obra_id': obra.id if obra else 0}
             })
+        # Agrupamos los raw_events en bloques continuos (Capa 1)
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
+
+        # --- MOTOR UNIVERSAL DE PRIORIDADES PARA FICHAJES MULTI-OBRA (Capa 2) ---
+        show_fichajes = request.args.get('show_fichajes') == '1'
+        
+        if show_fichajes:
+            from app.models import RegistroFichaje
+            fichajes = RegistroFichaje.query.filter(
+                RegistroFichaje.user_id == entity_id,
+                RegistroFichaje.fecha >= start_date,
+                RegistroFichaje.fecha < end_date
+            ).all()
+
+            # Agrupamos los fichajes que existan por fecha
+            fichajes_dict = {}
+            for f in fichajes:
+                if f.fecha not in fichajes_dict:
+                    fichajes_dict[f.fecha] = []
+                fichajes_dict[f.fecha].append(f)
+
+            # EXTRAEMOS TODAS LAS FECHAS ASIGNADAS (Para obligar a pintar la bola gris si no hay datos)
+            fechas_asignadas = set(a.fecha for a in asignaciones)
+
+            for fecha in fechas_asignadas:
+                lista_fichajes = fichajes_dict.get(fecha, [])
+                
+                if not lista_fichajes:
+                    color_final = "#94a3b8"  # ⚪ Gris (Sin datos en BD)
+                    tooltip_html = f"<div style='text-align:left;'><strong>{fecha.strftime('%d/%m/%Y')}:</strong><br>⚪ Sin Registro (Aún no ha fichado)</div>"
+                else:
+                    estados = [f.estado for f in lista_fichajes]
+                    
+                    # Matriz de prioridades
+                    if any(est in ['Conflicto', 'Paracaidista', 'Resuelto_Ausencia'] for est in estados):
+                        color_final = "#ef4444" # 🔴 Rojo
+                    elif any(est in ['Ausencia', 'Pendiente', 'Retraso'] for est in estados) or len(set(estados)) > 1:
+                        color_final = "#f59e0b" # 🟠 Naranja
+                    elif any(est.startswith('Resuelto') for est in estados):
+                        color_final = "#3b82f6" # 🔵 Azul
+                    else:
+                        color_final = "#10b981" # 🟢 Verde
+
+                    html_items = []
+                    for f in lista_fichajes:
+                        icono = "🔴" if f.estado in ['Conflicto', 'Paracaidista', 'Resuelto_Ausencia'] else \
+                                "🟠" if f.estado in ['Ausencia', 'Pendiente', 'Retraso'] else \
+                                "🔵" if f.estado.startswith('Resuelto') else \
+                                "⚪" if f.estado == 'Sin_Registro' else "🟢"
+                        nom_obra = f.obra_planificada.nombre if f.obra_planificada else "Obra Externa"
+                        html_items.append(f"<li>{icono} <b>{nom_obra}</b>: {f.estado.replace('_', ' ')}</li>")
+
+                    tooltip_html = f"<div style='text-align:left;'><strong style='border-bottom:1px solid #ccc; padding-bottom:3px; display:block; margin-bottom:5px;'>Fichajes ({fecha.strftime('%d/%m/%Y')}):</strong><ul style='padding-left:15px; margin-bottom:0; font-size:0.85em; list-style:none;'>{''.join(html_items)}</ul></div>"
+
+                events.append({
+                    "start": fecha.strftime("%Y-%m-%d"),
+                    "display": "background",
+                    "extendedProps": {
+                        "isFichaje": True,
+                        "estado_color": color_final,
+                        "tooltipContent": tooltip_html
+                    }
+                })
 
         # --- AÑADIR SOLICITUDES ---
         solicitudes = Solicitud.query.filter(

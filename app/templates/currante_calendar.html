@@ -55,124 +55,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 1. INICIALIZAMOS EL CALENDARIO UNIVERSAL
     window.workerCalendar = new UniversalCalendarManager('calendar', {
-        context: 'worker', // Contexto de operario
+        context: 'worker',
         id: workerId,
-        mode: 'obras',     // Mostramos a qué obras está asignado
-        callbacks: {
-            
-            // CUANDO PINCHA EN UN DÍA VACÍO
-            onShowNewPanel: function(containerId) {
-                {% if current_user.role == 'admin' %}
-                let container = document.getElementById(containerId);
-                if (container) {
-                    container.innerHTML = `
-                        <label class="small font-weight-bold mb-1 text-secondary">Obra a asignar</label>
-                        <select id="uc-panel-obra-select" class="form-control form-control-sm border-primary">
-                            <option value="">Cargando obras activas...</option>
-                        </select>
-                    `;
-                    // Cargamos dinámicamente las obras
-                    fetch("{{ url_for('admin.active_obras') }}")
-                        .then(r => r.json())
-                        .then(data => {
-                            let select = document.getElementById('uc-panel-obra-select');
-                            if (!select) return;
-                            select.innerHTML = '<option value="">-- Seleccione Obra --</option>';
-                            data.forEach(obra => {
-                                select.add(new Option(obra.nombre, obra.id));
-                            });
-                        });
-                }
-                {% else %}
-                    // El currante no puede autoasignarse
-                    document.getElementById(containerId).innerHTML = '<span class="text-danger font-weight-bold">Solo vista: No tienes permisos para planificar.</span>';
-                    let btnSave = document.getElementById(window.workerCalendar.panelId + '-save');
-                    if (btnSave) btnSave.style.display = 'none';
-                {% endif %}
-            },
-            
-            // GUARDAR UNA NUEVA ASIGNACIÓN (Clic en el tick azul)
-            onSaveNew: function(startStr, endStr, includeWeekends) {
-                {% if current_user.role == 'admin' %}
-                let selectEl = document.getElementById('uc-panel-obra-select');
-                let targetObra = selectEl ? selectEl.value : null;
-                
-                if (!targetObra) {
-                    Swal.fire('Atención', 'Debes seleccionar una obra de la lista.', 'warning');
-                    return;
-                }
-
-                let payload = {
-                    worker_id: workerId,
-                    target_obra_id: targetObra,
-                    old_obra_id: targetObra,
-                    start_date: startStr,
-                    end_date: endStr,
-                    original_start: null,
-                    original_end: null,
-                    overwrite_mode: 'check',
-                    include_weekends: includeWeekends
-                };
-                enviarAccionPerfil(payload, null);
-                {% endif %}
-            },
-
-            // EDITAR/ESTIRAR UN BLOQUE EXISTENTE
-            onEventModified: function(payload, revertFunc) {
-                {% if current_user.role == 'admin' %}
-                let actionPayload = {
-                    worker_id: workerId,
-                    target_obra_id: payload.event_data.obra_id,
-                    old_obra_id: payload.event_data.obra_id,
-                    start_date: payload.new_start,
-                    end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
-                    original_start: payload.original_start,
-                    original_end: payload.original_end,
-                    overwrite_mode: 'check',
-                    include_weekends: payload.include_weekends
-                };
-                enviarAccionPerfil(actionPayload, revertFunc);
-                {% else %}
-                revertFunc();
-                Swal.fire('Atención', 'No tienes permisos para modificar asignaciones.', 'error');
-                {% endif %}
-            },
-
-            // BORRAR (Desasignar) UN BLOQUE
-            onDeleteAssignment: function(event) {
-                {% if current_user.role == 'admin' %}
-                let dates = [];
-                let start = moment(event.start);
-                let end = event.end ? moment(event.end) : moment(event.start).add(1, 'days');
-                
-                while(start.isBefore(end)) {
-                    dates.push(start.format('YYYY-MM-DD'));
-                    start.add(1, 'days');
-                }
-
-                $.ajax({
-                    url: "/api/v6/unassign_worker",
-                    type: "POST",
-                    contentType: "application/json",
-                    data: JSON.stringify({
-                        worker_id: workerId,
-                        obra_id: event.extendedProps.obra_id,
-                        mode: 'selected',
-                        dates: dates
-                    }),
-                    success: (res) => {
-                        if (res.success) {
-                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Desasignado', showConfirmButton: false, timer: 1500});
-                            event.remove();
-                            window.workerCalendar.hidePanel();
-                        } else {
-                            Swal.fire('Error', res.message, 'error');
-                        }
-                    }
-                });
-                {% endif %}
-            }
-        }
+        mode: 'obras',
+        // MAGIA: El calendario se vuelve de solo lectura si no eres admin
+        readonly: {% if current_user.role == 'admin' %}false{% else %}true{% endif %},
+        showFichajes: true
     });
 
     // 2. EL PUENTE UNIVERSAL (Que llama a tu Popup Global)
