@@ -144,103 +144,11 @@
 document.addEventListener('DOMContentLoaded', function() {
     var workerId = {{ worker.id }};
     
-    window.workerCalendar = new UniversalCalendarManager('worker-calendar', {
-        context: 'worker', 
+   window.workerCalendar = new UniversalCalendarManager('worker-calendar', {
+        context: 'worker',
         id: workerId,
         mode: 'obras',
-        entityName: '{{ worker.name }} {{ worker.lastname }}',
-        callbacks: {
-
-            onShowNewPanel: function(containerId, currentObraId) {
-                // ABRE EL PANEL PARA TODOS
-                let container = document.getElementById(containerId);
-                if (container) {
-                    container.innerHTML = `
-                        <label class="small font-weight-bold mb-1 text-secondary">Obra a asignar</label>
-                        <select id="uc-panel-obra-select" class="form-control form-control-sm border-primary">
-                            <option value="">Cargando obras...</option>
-                        </select>
-                    `;
-                    fetch("{{ url_for('api_v6.recursos_activos') }}")
-                        .then(r => r.json())
-                        .then(data => {
-                            let select = document.getElementById('uc-panel-obra-select');
-                            if (!select) return;
-                            select.innerHTML = '<option value="">-- Seleccione Obra --</option>';
-                            data.obras.forEach(obra => {
-                                let opt = new Option(obra.text, obra.id);
-                                if (currentObraId && String(obra.id) === String(currentObraId)) {
-                                    opt.selected = true; 
-                                }
-                                select.add(opt);
-                            });
-                        });
-                }
-            },
-            
-            onSaveNew: function(startStr, endStr, includeWeekends) {
-                // ENVÍA LA PETICIÓN, EL BACKEND DECIDIRÁ SI ASIGNA O CREA SOLICITUD
-                let selectEl = document.getElementById('uc-panel-obra-select');
-                let targetObra = selectEl ? selectEl.value : null;
-                
-                if (!targetObra) {
-                    Swal.fire('Atención', 'Debes seleccionar una obra.', 'warning');
-                    return;
-                }
-
-                let payload = {
-                    worker_id: workerId, target_obra_id: targetObra, old_obra_id: targetObra,
-                    start_date: startStr, end_date: endStr, overwrite_mode: 'check', include_weekends: includeWeekends
-                };
-                enviarAccionPerfil(payload, null);
-            },
-
-            onEventModified: function(payload, revertFunc) {
-                let selectEl = document.getElementById('uc-panel-obra-select');
-                let targetObraId = selectEl && selectEl.value ? selectEl.value : payload.event_data.obra_id;
-
-                let actionPayload = {
-                    worker_id: workerId, 
-                    target_obra_id: targetObraId, 
-                    old_obra_id: payload.event_data.obra_id, 
-                    start_date: payload.new_start, 
-                    end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
-                    original_start: payload.original_start, 
-                    original_end: payload.original_end,
-                    overwrite_mode: 'check', 
-                    include_weekends: payload.include_weekends
-                };
-                enviarAccionPerfil(actionPayload, revertFunc);
-            },
-
-            onDeleteAssignment: function(event) {
-                let dates = [];
-                let start = moment(event.start);
-                let end = event.end ? moment(event.end) : moment(event.start).add(1, 'days');
-                while(start.isBefore(end)) { dates.push(start.format('YYYY-MM-DD')); start.add(1, 'days'); }
-
-                // MAGIA PARA DESASIGNAR: Detectamos si es jefe o admin en tiempo real
-                let isJefe = "{{ current_user.role }}" === "jefe_obra";
-                let endpointUnassign = isJefe ? "/api/v6/unassign_worker" : "/api/v6/unassign_worker";
-
-                $.ajax({
-                    url: endpointUnassign, type: "POST", contentType: "application/json",
-                    data: JSON.stringify({ worker_id: workerId, obra_id: event.extendedProps.obra_id, mode: 'selected', dates: dates }),
-                    success: (res) => {
-                        if (res.success) {
-                            if (isJefe) {
-                                Swal.fire('Solicitud Enviada', 'Se ha pedido a RRHH la desasignación de este operario.', 'success');
-                                window.workerCalendar.hidePanel();
-                            } else {
-                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Desasignado', showConfirmButton: false, timer: 1500});
-                                event.remove(); window.workerCalendar.hidePanel();
-                            }
-                        } else Swal.fire('Error', res.message, 'error');
-                    }
-                });
-            }
-        }
-
+        entityName: '{{ worker.name }} {{ worker.lastname }}'
     });
 
 

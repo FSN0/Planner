@@ -57,84 +57,8 @@ $(document).ready(function() {
         modalCalendarInstance = new UniversalCalendarManager('modal-calendar-container', {
             context: context,
             id: entityId,
-            mode: mode, 
-            entityName: eName, 
-            callbacks: {
-                onShowNewPanel: function(containerId) {
-                    let container = document.getElementById(containerId);
-                    if (container) {
-                        if (viewType === 'obra') {
-                            container.innerHTML = `
-                                <label class="small font-weight-bold mb-1 text-secondary">Trabajador a asignar</label>
-                                <div class="form-control form-control-sm bg-light text-dark font-weight-bold" style="cursor: not-allowed; border: 1px solid #e2e8f0;">
-                                    ${workerName}
-                                </div>
-                            `;
-                        } else {
-                            container.innerHTML = `
-                                <label class="small font-weight-bold mb-1 text-secondary">Obra destino</label>
-                                <div class="form-control form-control-sm bg-light text-dark font-weight-bold" style="cursor: not-allowed; border: 1px solid #e2e8f0;">
-                                    ${obraName}
-                                </div>
-                            `;
-                        }
-                    }
-                },
-                onSaveNew: function(startStr, endStr, includeWeekends) {
-                    let payload = {
-                        worker_id: workerId,
-                        target_obra_id: targetObraId,
-                        old_obra_id: sourceObraId || 0, 
-                        start_date: startStr,
-                        end_date: endStr,
-                        original_start: null,
-                        original_end: null,
-                        overwrite_mode: 'check',
-                        include_weekends: includeWeekends
-                    };
-                    enviarAccionKanban(payload, null);
-                },
-                onEventModified: function(payload, revertFunc) {
-                    let actionPayload = {
-                        worker_id: payload.event_data.worker_id || workerId,
-                        target_obra_id: targetObraId,
-                        old_obra_id: payload.event_data.obra_id || targetObraId, 
-                        start_date: payload.new_start,
-                        end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
-                        original_start: payload.original_start,
-                        original_end: payload.original_end,
-                        overwrite_mode: 'check',
-                        include_weekends: payload.include_weekends
-                    };
-                    enviarAccionKanban(actionPayload, revertFunc);
-                }, // <--- COMA IMPORTANTE AQUI
-                // =========================================================
-                // CORRECCIÓN BUG: FALTABA LA LÓGICA PARA EL BOTÓN DE BORRAR
-                // =========================================================
-                onDeleteAssignment: function(event, dates, isPartial) {
-                    let payload = {
-                        worker_id: workerId,
-                        obra_id: event.extendedProps.obra_id || targetObraId,
-                        dates: dates,
-                        mode: 'selected'
-                    };
-                    
-                    $.ajax({
-                        url: "/api/v6/unassign_worker", // URL NUEVA UNIFICADA
-                        type: "POST",
-                        contentType: "application/json",
-                        data: JSON.stringify(payload),
-                        success: function(res) {
-                            if (res.success) {
-                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Desasignado', showConfirmButton: false, timer: 1500});
-                                if (modalCalendarInstance) modalCalendarInstance.calendar.refetchEvents();
-                            } else {
-                                Swal.fire('Error', res.message, 'error');
-                            }
-                        }
-                    });
-                }
-            }
+            mode: mode,
+            entityName: eName
         });
     }
 
@@ -244,52 +168,6 @@ $(document).ready(function() {
                 id: workerId,
                 entityName: workerName,
                 mode: 'obras',
-                callbacks: {
-                    onShowNewPanel: function(containerId) {
-                        let c = document.getElementById(containerId);
-                        if(c) c.innerHTML = '<div class="alert alert-info py-1 px-2 m-0 small">Haz clic en un bloque de la obra si deseas acortarlo o borrarlo.</div>';
-                    },
-                    onSaveNew: function(startStr, endStr, includeWeekends) {
-                        Swal.fire('Información', 'Desde aquí no se crean asignaciones. Para desasignar días sueltos, haz clic en el bloque de la obra y dale a "Desasignar bloque".', 'info');
-                        libresCalendarInstance.hidePanel();
-                    },
-                    onEventModified: function(payload, revertFunc) {
-                        let actionPayload = {
-                            worker_id: workerId,
-                            target_obra_id: payload.event_data.obra_id,
-                            old_obra_id: payload.event_data.obra_id,
-                            start_date: payload.new_start,
-                            end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
-                            original_start: payload.original_start,
-                            original_end: payload.original_end,
-                            overwrite_mode: 'check',
-                            include_weekends: payload.include_weekends
-                        };
-                        enviarAccionKanban(actionPayload, revertFunc);
-                    },
-                    onDeleteAssignment: function(event, dates, isPartial) {
-                        $.ajax({
-                            url: "/api/v6/unassign_worker", // URL NUEVA UNIFICADA
-                            type: "POST",
-                            contentType: "application/json",
-                            data: JSON.stringify({
-                                worker_id: workerId,
-                                obra_id: event.extendedProps.obra_id || sourceObraId,
-                                mode: 'selected',
-                                dates: dates 
-                            }),
-                            success: (res) => {
-                                if (res.success) {
-                                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Desasignado', showConfirmButton: false, timer: 1500});
-                                    if (isPartial && libresCalendarInstance) libresCalendarInstance.calendar.refetchEvents();
-                                    else event.remove(); 
-                                } else {
-                                    Swal.fire('Error', res.message, 'error');
-                                }
-                            }
-                        });
-                    }
-                }
             });
         }, 300);
     };

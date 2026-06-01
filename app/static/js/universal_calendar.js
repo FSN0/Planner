@@ -3,13 +3,14 @@ class UniversalCalendarManager {
         this.element = document.getElementById(elementId);
         if (!this.element) return;
 
+        this.element._calendarInstance = this;
+
         this.context = config.context; 
         this.entityId = config.id;
         this.entityName = config.entityName || null;
         this.mode = config.mode || 'empleados'; 
         this.callbacks = config.callbacks || {};
         
-
         this.readonly = config.readonly || false;
         this.partialSelectionMode = config.partialSelectionMode || false;
 
@@ -32,14 +33,9 @@ class UniversalCalendarManager {
         let oldTitle = document.getElementById(this.titleId);
         if (oldTitle) oldTitle.remove();
 
-        // LIMPIEZA EXTREMA
         this.element.innerHTML = ''; 
 
-        // -----------------------------------------------------------
-        // INYECTAR PANELES SOLO SI NO ESTAMOS EN MODO SOLO LECTURA
-        // -----------------------------------------------------------
         if (!this.readonly) {
-            // --- MAGIA: GENERADOR AUTOMÁTICO DE CABECERA INTERACTIVA ---
             let icon = 'fa-calendar-alt';
             let typeName = 'Elemento';
             let prep = 'de';
@@ -58,7 +54,6 @@ class UniversalCalendarManager {
                 headerUrl = `/admin/company_panel/${this.entityId}`;
             }
 
-            // Si tenemos un nombre y una URL válida, lo envolvemos en un enlace interactivo premium
             let titleText = `Calendario ${prep} ${typeName}`;
             if (this.entityName) {
                 if (headerUrl) {
@@ -68,14 +63,28 @@ class UniversalCalendarManager {
                 }
             }
 
+            let switcherHTML = '';
+            if (this.context === 'obra') {
+                let actEmp = this.mode === 'empresas' ? 'active' : '';
+                let actOpe = this.mode === 'empleados' ? 'active' : '';
+                switcherHTML = `
+                    <div class="btn-group btn-group-sm ml-auto" role="group">
+                        <button type="button" class="btn btn-outline-primary ${actEmp}" onclick="document.getElementById('${this.element.id}')._calendarInstance.changeMode('empresas')"><i class="fas fa-briefcase mr-1"></i> Empresas</button>
+                        <button type="button" class="btn btn-outline-primary ${actOpe}" onclick="document.getElementById('${this.element.id}')._calendarInstance.changeMode('empleados')"><i class="fas fa-users mr-1"></i> Empleados</button>
+                    </div>
+                `;
+            }
+
             let titleHTML = `
-            <div id="${this.titleId}" class="mb-3 p-2 bg-white rounded shadow-sm d-flex align-items-center border" style="border-left: 4px solid #3b82f6 !important;">
-                <i class="fas ${icon} text-primary mr-2 ml-2" style="font-size: 1.25rem;"></i>
-                <h5 class="m-0 font-weight-bold text-dark" style="font-size: 1.05rem;">${titleText}</h5>
+            <div id="${this.titleId}" class="mb-3 p-2 bg-white rounded shadow-sm d-flex align-items-center justify-content-between border" style="border-left: 4px solid #3b82f6 !important;">
+                <div class="d-flex align-items-center">
+                    <i class="fas ${icon} text-primary mr-2 ml-2" style="font-size: 1.25rem;"></i>
+                    <h5 class="m-0 font-weight-bold text-dark" style="font-size: 1.05rem;">${titleText}</h5>
+                </div>
+                ${switcherHTML}
             </div>`;
             
             this.element.insertAdjacentHTML('beforebegin', titleHTML);
-            // -----------------------------------------------------------
 
             let panelHTML = `
             <div id="${this.panelId}" class="mt-3 border rounded shadow-sm bg-white" style="display: none; border-left: 4px solid #3b82f6 !important; transition: all 0.2s ease-in-out;">
@@ -102,6 +111,12 @@ class UniversalCalendarManager {
                             <button id="${this.panelId}-save" class="btn btn-sm btn-primary w-100" title="Guardar cambios (Enter)"><i class="fas fa-check"></i></button>
                         </div>
                     </div>
+                    <div class="row mt-2" id="${this.panelId}-generic-options" style="display: none;">
+                        <div class="col-md-3">
+                            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-users mr-1"></i> Cantidad de operarios</label>
+                            <input type="number" id="${this.panelId}-quantity" class="form-control form-control-sm font-weight-bold text-center" value="1" min="1" max="50">
+                        </div>
+                    </div>
                     
                     <div class="row mt-2">
                         <div class="col-md-12 text-right">
@@ -123,12 +138,11 @@ class UniversalCalendarManager {
             `;
             this.element.insertAdjacentHTML('afterend', panelHTML);
             this.bindPanelEvents();
-        } // <--- FIN DEL CONDICIONAL READONLY
+        }
 
         let calendarConfig = {
             initialView: 'dayGridMonth',
             locale: 'es',
-            // MAGIA DE LECTURA: Bloqueamos los clicks y arrastres si es readonly
             editable: !this.readonly, 
             selectable: !this.readonly, 
             height: 'auto', 
@@ -183,6 +197,7 @@ class UniversalCalendarManager {
             },
 
             eventDidMount: function(info) {
+                // 1. Lógica original de los Tooltips
                 if (info.event.extendedProps && info.event.extendedProps.tooltipContent) {
                     if (typeof tippy !== 'undefined') {
                         tippy(info.el, { 
@@ -190,12 +205,46 @@ class UniversalCalendarManager {
                             allowHTML: true, 
                             placement: 'top', 
                             theme: 'light-border'
-                            // ELIMINADAS: followCursor y plugins: [tippy.followCursor]
                         });
                     } else if (typeof $ !== 'undefined' && $.fn.tooltip) {
                         $(info.el).tooltip({ title: info.event.extendedProps.tooltipContent, html: true, sanitize: false, placement: 'top', container: 'body' });
                     }
                 }
+
+                // 2. NUEVA LÓGICA: Detector de Doble Clic Nativo
+                info.el.addEventListener('dblclick', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Si es el bloque de nueva asignación, no hacemos nada
+                    if (info.event.id === _this.ghostEventId) return;
+
+                    let props = info.event.extendedProps || {};
+                    
+                    // Si el evento ya trae una URL directa (como las solicitudes), la usamos
+                    if (info.event.url) {
+                        window.open(info.event.url, '_blank');
+                        return;
+                    }
+
+                    // Calculamos la ruta de la ficha de forma inteligente según el contexto
+                    let targetUrl = null;
+                    if (props.worker_id && _this.context !== 'worker') {
+                        targetUrl = `/admin/worker_panel/${props.worker_id}`;
+                    } else if (props.obra_id && _this.context !== 'obra') {
+                        targetUrl = `/admin/obra_panel/${props.obra_id}`;
+                    } else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
+                        let cid = props.empresa_id || props.company_id;
+                        targetUrl = `/admin/company_panel/${cid}`;
+                    } else if (props.type === 'empresa_group' && _this.context !== 'empresa') {
+                        targetUrl = `/admin/companies`; 
+                    }
+                    
+                    // Si hemos encontrado un destino válido, lo abrimos en pestaña nueva
+                    if (targetUrl) {
+                        window.open(targetUrl, '_blank');
+                    }
+                });
             },
             eventWillUnmount: function(info) {
                 try {
@@ -218,7 +267,7 @@ class UniversalCalendarManager {
                     if (_this.callbacks.onDateToggle) _this.callbacks.onDateToggle(info.dateStr);
                     return;
                 }
-                if (_this.readonly) return; // BLOQUEO DE SOLO LECTURA
+                if (_this.readonly) return; 
                 
                 let today = moment().startOf('day');
                 let clickedDate = moment(info.dateStr).startOf('day');
@@ -231,66 +280,36 @@ class UniversalCalendarManager {
 
             eventClick: function(info) {
                 info.jsEvent.preventDefault();
-                
                 let props = info.event.extendedProps || {};
                 
-                // --- 1. INTERCEPTAR EL FONDO VERDE/AZUL ---
-                // Si hacemos clic en el cuadrado de fondo, no es una empresa ni un enlace.
                 if (info.event.display === 'background') {
                     if (_this.partialSelectionMode && _this.callbacks.onDateToggle) {
                         let dStr = moment(info.event.start).format('YYYY-MM-DD');
                         _this.callbacks.onDateToggle(dStr);
                     }
-                    return; // Paramos aquí. Sin redirecciones.
+                    return; 
                 }
 
-                // --- 2. ENLACES NATIVOS (Como el bloque de la propia solicitud) ---
                 if (info.event.url) {
-                    if (_this.readonly) {
-                        // En modo lectura/selección, abrimos en pestaña nueva para no sacarte de la pantalla
-                        window.open(info.event.url, '_blank'); 
-                    } else {
-                        window.location.href = info.event.url;
-                    }
+                    if (_this.readonly) window.open(info.event.url, '_blank'); 
+                    else window.location.href = info.event.url;
                     return;
                 }
 
-                // =========================================================
-                // MAGIA: CALCULAR LA URL DE DESTINO SEGÚN EL TIPO DE BLOQUE
-                // =========================================================
                 let targetUrl = null;
-
-                if (props.worker_id && _this.context !== 'worker') {
-                    targetUrl = `/admin/worker_panel/${props.worker_id}`;
-                } 
-                else if (props.obra_id && _this.context !== 'obra') {
-                    targetUrl = `/admin/obra_panel/${props.obra_id}`;
-                } 
+                if (props.worker_id && _this.context !== 'worker') targetUrl = `/admin/worker_panel/${props.worker_id}`;
+                else if (props.obra_id && _this.context !== 'obra') targetUrl = `/admin/obra_panel/${props.obra_id}`;
                 else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
                     let cid = props.empresa_id || props.company_id;
                     targetUrl = `/admin/company_panel/${cid}`;
                 } 
-                else if (props.type === 'empresa_group' && _this.context !== 'empresa') {
-                    targetUrl = `/admin/companies`; 
-                }
+                else if (props.type === 'empresa_group' && _this.context !== 'empresa') targetUrl = `/admin/companies`; 
 
-                // =========================================================
-                // SI ES SOLO LECTURA (O MODO SELECCIÓN), REDIRIGIMOS
-                // =========================================================
                 if (_this.readonly) {
-                    // Si clicamos en una EMPRESA/OPERARIO, te lo abre en pestaña nueva
-                    if (targetUrl) {
-                        window.open(targetUrl, '_blank'); 
-                    }
-                    return; // Paramos aquí para no abrir modales de edición
+                    if (targetUrl) window.open(targetUrl, '_blank'); 
+                    return; 
                 }
 
-                // --- A PARTIR DE AQUÍ CONTINÚA LA LÓGICA NORMAL DE EDICIÓN ---
-
-                // --- A PARTIR DE AQUÍ CONTINÚA LA LÓGICA NORMAL DE EDICIÓN ---
-                // (ghost event, comprobar si es pasado, etc)...
-
-                // --- A PARTIR DE AQUÍ CONTINÚA LA LÓGICA NORMAL DE EDICIÓN ---
                 if (info.event.id === _this.ghostEventId) {
                     _this.showBottomPanel(info.event, true);
                     return;
@@ -398,15 +417,13 @@ class UniversalCalendarManager {
         this.calendar = new FullCalendar.Calendar(this.element, calendarConfig);
         this.calendar.render();
 
-        // LOS EVENTOS DE TECLADO TAMBIÉN SE DESACTIVAN EN READONLY
         if (!this.readonly) {
             this.keydownHandler = (e) => {
                 if (typeof Swal !== 'undefined' && Swal.isVisible()) {
                     if (e.key === 'Enter') {
                         let confirmBtn = Swal.getConfirmButton();
                         if (confirmBtn && document.activeElement !== confirmBtn) {
-                            e.preventDefault();
-                            confirmBtn.click();
+                            e.preventDefault(); confirmBtn.click();
                         }
                     }
                     return; 
@@ -419,7 +436,6 @@ class UniversalCalendarManager {
                         document.getElementById(`${this.panelId}-save`).click();
                     } else if (e.key === 'Delete' || e.key === 'Backspace') {
                         if (e.target.tagName === 'INPUT' && e.key === 'Backspace') return; 
-                        
                         if (this.activeEvent && this.activeEvent.id !== this.ghostEventId) {
                             e.preventDefault();
                             document.getElementById(`${this.panelId}-delete`).click();
@@ -432,11 +448,11 @@ class UniversalCalendarManager {
     }
 
     showBottomPanel(event, isNew) {
-        if (this.readonly) return; // Doble seguridad
+        if (this.readonly) return; 
         
         let isSameEvent = (this.activeEvent && this.activeEvent.id === event.id);
-        
         this.activeEvent = event;
+        
         let panel = document.getElementById(this.panelId);
         let titleEl = document.getElementById(`${this.panelId}-title`);
         let container = document.getElementById(`${this.panelId}-selector-container`);
@@ -447,34 +463,81 @@ class UniversalCalendarManager {
 
         if (!isSameEvent) {
             if (isNew) {
+                if (this.context === 'solicitud') {
+                    this.hidePanel();
+                    if (this.activeEvent && this.activeEvent.id === this.ghostEventId) this.activeEvent.remove();
+                    if (typeof Swal !== 'undefined') Swal.fire('Aviso', 'No puedes crear asignaciones libres directamente desde la vista de solicitudes.', 'info');
+                    return;
+                }
+
                 titleEl.innerHTML = '<i class="fas fa-plus-circle mr-2 text-success"></i>Nueva Asignación';
                 extraBtns.style.display = 'none';
-                if (this.callbacks.onShowNewPanel) {
-                    this.callbacks.onShowNewPanel(`${this.panelId}-selector-container`);
-                }
+
+                let selectLabel = this.context === 'obra' ? 'Trabajador a asignar' : 'Obra destino';
+                
+                container.innerHTML = `
+                    <label class="small font-weight-bold mb-1 text-secondary">${selectLabel}</label>
+                    <select id="${this.panelId}-select" class="form-control form-control-sm" style="width: 100%;">
+                        <option></option>
+                    </select>
+                `;
+
+                setTimeout(() => {
+                    let $select = $(`#${this.panelId}-select`);
+                    if (this.context === 'obra') {
+                        if (typeof $ !== 'undefined' && $.fn.select2) {
+                            $select.select2({
+                                dropdownParent: $(`#${this.panelId}`).parent(),
+                                placeholder: "Escribe o elige 'CUALQUIERA'...",
+                                allowClear: true,
+                                ajax: {
+                                    url: '/admin/api/planificador/search_workers',
+                                    dataType: 'json', delay: 250,
+                                    data: (p) => ({ q: p.term }),
+                                    processResults: (d) => ({ results: d.results })
+                                }
+                            }).on('change', (e) => {
+                                let gRow = document.getElementById(`${this.panelId}-generic-options`);
+                                if(gRow) { e.target.value === 'GENERICO' ? $(gRow).slideDown(150) : $(gRow).slideUp(150); }
+                            });
+                        }
+                    } else if (this.context === 'worker') {
+                        fetch('/api/v6/recursos_activos').then(r=>r.json()).then(data => {
+                            if (typeof $ !== 'undefined' && $.fn.select2) {
+                                $select.select2({
+                                    dropdownParent: $(`#${this.panelId}`).parent(),
+                                    placeholder: "Selecciona una obra...",
+                                    allowClear: true,
+                                    data: data.obras 
+                                });
+                            }
+                        });
+                    }
+                }, 150);
+
             } else {
                 titleEl.innerHTML = '<i class="fas fa-edit mr-2 text-info"></i>Editar Asignación';
                 extraBtns.style.display = 'block';
                 
-                if (this.context === 'worker') {
-                    if (this.callbacks.onShowNewPanel) {
-                        let currentObraId = event.extendedProps ? event.extendedProps.obra_id : null;
-                        this.callbacks.onShowNewPanel(`${this.panelId}-selector-container`, currentObraId);
-                    }
-                } else {
-                    container.innerHTML = `
-                        <label class="small font-weight-bold mb-1 text-secondary">Elemento Asignado</label>
-                        <div class="form-control form-control-sm bg-light text-dark font-weight-bold" style="cursor: not-allowed; border: 1px solid #e2e8f0;">
-                            ${event.title}
-                        </div>
-                    `;
-                }
+                container.innerHTML = `
+                    <label class="small font-weight-bold mb-1 text-secondary">Elemento Asignado</label>
+                    <div class="form-control form-control-sm bg-light text-dark font-weight-bold" style="cursor: not-allowed; border: 1px solid #e2e8f0;">
+                        ${event.title}
+                    </div>
+                `;
 
                 let btnView = document.getElementById(`${this.panelId}-view`);
-                btnView.onclick = () => {
-                    if(event.extendedProps && event.extendedProps.obra_url) window.open(event.extendedProps.obra_url, '_blank');
-                    else if(typeof Swal !== 'undefined') Swal.fire('Información', 'No hay enlace directo disponible.', 'info');
-                };
+                if (btnView) {
+                    btnView.onclick = () => {
+                        if(event.extendedProps && event.extendedProps.obra_url) { window.open(event.extendedProps.obra_url, '_blank'); return;}
+                        let targetUrl = null;
+                        if (this.context === 'worker') targetUrl = `/admin/obra_panel/${event.extendedProps.obra_id}`;
+                        else if (this.context === 'obra') targetUrl = `/admin/worker_panel/${event.extendedProps.worker_id}`;
+                        
+                        if (targetUrl) window.open(targetUrl, '_blank');
+                        else if(typeof Swal !== 'undefined') Swal.fire('Información', 'No hay enlace directo disponible.', 'info');
+                    };
+                }
             }
         }
     }
@@ -517,7 +580,39 @@ class UniversalCalendarManager {
                     if(typeof Swal !== 'undefined') Swal.fire('Error', 'No puedes planificar en el pasado.', 'error');
                     return;
                 }
-                if (this.callbacks.onSaveNew) this.callbacks.onSaveNew(startVal, endVal, includeWeekends);
+                
+                let selEl = document.getElementById(`${this.panelId}-select`);
+                let selVal = selEl ? selEl.value : null;
+
+                if (this.callbacks.onSaveNew && !selEl) {
+                    this.callbacks.onSaveNew(startVal, endVal, includeWeekends);
+                    return;
+                }
+
+                if (!selVal) {
+                    Swal.fire('Atención', 'Debes seleccionar un destino/trabajador.', 'warning');
+                    return;
+                }
+
+                let qtyEl = document.getElementById(`${this.panelId}-quantity`);
+                let qty = qtyEl ? parseInt(qtyEl.value) || 1 : 1;
+
+                let payload = {
+                    start_date: startVal, end_date: endVal, original_start: null, original_end: null,
+                    overwrite_mode: 'check', include_weekends: includeWeekends, cantidad: selVal === 'GENERICO' ? qty : 1
+                };
+
+                if (this.context === 'obra') {
+                    payload.worker_id = selVal; payload.target_obra_id = this.entityId; payload.old_obra_id = this.entityId;
+                } else if (this.context === 'worker') {
+                    payload.worker_id = this.entityId; payload.target_obra_id = selVal; payload.old_obra_id = selVal;
+                }
+
+                this.executeSave(payload, () => {
+                    this.calendar.refetchEvents(); this.hidePanel();
+                    if (window.loadTimelineData) window.loadTimelineData(); 
+                });
+
             } else {
                 let originalStart = moment(this.activeEvent.extendedProps.real_original_start || this.activeEvent.start).startOf('day');
                 
@@ -530,16 +625,33 @@ class UniversalCalendarManager {
                     return;
                 }
 
-                let pseudoEvent = {
-                    extendedProps: this.activeEvent.extendedProps,
-                    startStr: startVal,
-                    endStr: moment(endVal).add(1, 'days').format('YYYY-MM-DD'),
-                    id: this.activeEvent.id,
+                let payload = {
+                    start_date: startVal,
+                    end_date: moment(endVal).add(1, 'days').format('YYYY-MM-DD'),
+                    original_start: this.activeEvent.extendedProps.real_original_start,
+                    original_end: this.activeEvent.extendedProps.real_original_end ? moment(this.activeEvent.extendedProps.real_original_end).subtract(1, 'days').format('YYYY-MM-DD') : null,
+                    overwrite_mode: 'overwrite', 
                     include_weekends: includeWeekends
                 };
-                
-                this.triggerBackendAction(pseudoEvent, 'edit', null);
-                document.getElementById(this.panelId).style.display = 'none';
+
+                if (this.context === 'worker') {
+                    payload.worker_id = this.entityId;
+                    payload.target_obra_id = this.activeEvent.extendedProps.obra_id;
+                    payload.old_obra_id = this.activeEvent.extendedProps.obra_id;
+                } else {
+                    payload.worker_id = this.activeEvent.extendedProps.worker_id || this.entityId;
+                    payload.target_obra_id = this.entityId;
+                    payload.old_obra_id = this.entityId;
+                }
+
+                if (this.callbacks.onEventModified) {
+                    this.callbacks.onEventModified(payload, null); 
+                } else {
+                    this.executeSave(payload, () => {
+                        this.calendar.refetchEvents(); this.hidePanel();
+                        if (window.loadTimelineData) window.loadTimelineData();
+                    });
+                }
             }
         });
 
@@ -572,25 +684,32 @@ class UniversalCalendarManager {
                     : `Se vaciarán <b class="text-danger">${daysCount} día(s)</b>.`;
 
                 Swal.fire({
-                    title: '¿Desasignar bloque?',
-                    html: msg,
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#d33',
-                    cancelButtonColor: '#64748b',
-                    confirmButtonText: 'Sí, borrar (Intro)',
-                    cancelButtonText: 'Cancelar',
-                    focusConfirm: true,
-                    didOpen: () => {
-                        let confirmBtn = Swal.getConfirmButton();
-                        if(confirmBtn) confirmBtn.focus();
-                    }
+                    title: '¿Desasignar bloque?', html: msg, icon: 'warning', showCancelButton: true,
+                    confirmButtonColor: '#d33', cancelButtonColor: '#64748b', confirmButtonText: 'Sí, borrar', cancelButtonText: 'Cancelar'
                 }).then((res) => {
                     if (res.isConfirmed) {
                         if (this.callbacks.onDeleteAssignment) {
                             this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today));
+                            this.hidePanel();
+                        } else {
+                            let wId = this.context === 'worker' ? this.entityId : this.activeEvent.extendedProps.worker_id;
+                            let oId = this.context === 'obra' ? this.entityId : this.activeEvent.extendedProps.obra_id;
+
+                            let csrf = "";
+                            let parts = ("; " + document.cookie).split("; csrf_token=");
+                            if (parts.length === 2) csrf = parts.pop().split(";").shift();
+
+                            fetch('/api/v6/unassign_worker', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                                body: JSON.stringify({ worker_id: wId, obra_id: oId, dates: dates, mode: 'selected' })
+                            }).then(r=>r.json()).then(data => {
+                                if(data.success) {
+                                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Borrado', showConfirmButton: false, timer: 1500});
+                                    this.calendar.refetchEvents(); this.hidePanel();
+                                    if (window.loadTimelineData) window.loadTimelineData();
+                                } else { Swal.fire('Error', data.message, 'error'); }
+                            });
                         }
-                        this.hidePanel();
                     }
                 });
             }
@@ -619,6 +738,11 @@ class UniversalCalendarManager {
     hidePanel() { 
         let p = document.getElementById(this.panelId);
         if(p) p.style.display = 'none'; 
+
+        let genericRow = document.getElementById(`${this.panelId}-generic-options`);
+        if (genericRow) genericRow.style.display = 'none';
+        let qtyInput = document.getElementById(`${this.panelId}-quantity`);
+        if (qtyInput) qtyInput.value = 1;
     }
 
     createGhostEvent(dateStr) {
@@ -628,15 +752,23 @@ class UniversalCalendarManager {
         let endStr = moment(dateStr).add(1, 'days').format('YYYY-MM-DD');
 
         let ghost = this.calendar.addEvent({
-            id: this.ghostEventId,
-            title: 'NUEVA ASIGNACIÓN',
-            start: dateStr,
-            end: endStr,
-            className: 'fc-ghost-event',
-            editable: true,
-            extendedProps: { isGhost: 1 }
+            id: this.ghostEventId, title: 'NUEVA ASIGNACIÓN', start: dateStr, end: endStr,
+            className: 'fc-ghost-event', editable: true, extendedProps: { isGhost: 1 }
         });
 
+        this.showBottomPanel(ghost, true);
+    }
+    
+    createGhostEventRange(startStr, endStr) {
+        let existingGhost = this.calendar.getEventById(this.ghostEventId);
+        if (existingGhost) existingGhost.remove();
+
+        let endObj = moment(endStr).add(1, 'days').format('YYYY-MM-DD'); 
+        
+        let ghost = this.calendar.addEvent({
+            id: this.ghostEventId, title: 'NUEVA ASIGNACIÓN', start: startStr, end: endObj,
+            className: 'fc-ghost-event', editable: true, extendedProps: { isGhost: 1 }
+        });
         this.showBottomPanel(ghost, true);
     }
 
@@ -644,6 +776,17 @@ class UniversalCalendarManager {
         this.mode = newMode;
         this.calendar.removeAllEventSources();
         this.calendar.addEventSource(`/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}`);
+        
+        let btnEmpresas = document.querySelector(`#${this.titleId} .btn-outline-primary:nth-child(1)`);
+        let btnEmpleados = document.querySelector(`#${this.titleId} .btn-outline-primary:nth-child(2)`);
+        
+        if (btnEmpresas && btnEmpleados) {
+            if (newMode === 'empresas') {
+                btnEmpresas.classList.add('active'); btnEmpleados.classList.remove('active');
+            } else {
+                btnEmpleados.classList.add('active'); btnEmpresas.classList.remove('active');
+            }
+        }
     }
 
     destroy() {
@@ -670,19 +813,18 @@ class UniversalCalendarManager {
                     if(typeof Swal !== 'undefined') Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
                     this.calendar.refetchEvents();
                     this.hidePanel();
+                    if(revertFunc) revertFunc();
                     
                 } else if (res.conflict || res.action === 'confirm_overwrite') {
                     if (typeof window.resolverConflictoAsignacion === 'function') {
                         window.resolverConflictoAsignacion(
-                            res, 
-                            payload, 
+                            res, payload, 
                             (nuevoPayload) => { this.executeSave(nuevoPayload, revertFunc); }, 
                             revertFunc
                         );
                     } else {
                         console.error("CRÍTICO: No se encontró window.resolverConflictoAsignacion.");
                     }
-                    
                 } else {
                     if(typeof Swal !== 'undefined') Swal.fire('Error', res.error || res.message || 'Error desconocido', 'error');
                     if (revertFunc) revertFunc();
@@ -696,63 +838,31 @@ class UniversalCalendarManager {
     }
 }
 
-// =====================================================================
-// PARCHE GLOBAL: CERRAR DESPLEGABLES FLOTANTES AL HACER SCROLL
-// =====================================================================
 window.addEventListener('scroll', function(e) {
-    if (e.target && e.target.nodeType === 1 && e.target.classList.contains('select2-results__options')) {
-        return;
-    }
-
-    if (typeof $ !== 'undefined' && $.fn.select2) {
-        $('.select2-hidden-accessible').select2('close');
-    }
-
-    if (typeof $ !== 'undefined') {
-        $('.tooltip.show').remove();
-    }
-
-    document.querySelectorAll('[data-tippy-root]').forEach(el => {
-        if (el._tippy) el._tippy.hide();
-    });
-
-    if (document.activeElement && document.activeElement.type === 'date') {
-        document.activeElement.blur();
-    }
-
+    if (e.target && e.target.nodeType === 1 && e.target.classList.contains('select2-results__options')) { return; }
+    if (typeof $ !== 'undefined' && $.fn.select2) { $('.select2-hidden-accessible').select2('close'); }
+    if (typeof $ !== 'undefined') { $('.tooltip.show').remove(); }
+    document.querySelectorAll('[data-tippy-root]').forEach(el => { if (el._tippy) el._tippy.hide(); });
+    if (document.activeElement && document.activeElement.type === 'date') { document.activeElement.blur(); }
 }, { capture: true, passive: true });
 
-// =====================================================================
-// PARCHE GLOBAL 2: FIJAR COORDENADAS DE LOS DESPLEGABLES (Efecto Fantasma)
-// =====================================================================
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof $ !== 'undefined' && $.fn.select2) {
-        
         const fixSelect2Scroll = ($select) => {
             if ($select.closest('[id$="-bottom-panel"]').length > 0) {
                 setTimeout(() => {
-                    $select.select2({ 
-                        width: '100%', 
-                        dropdownParent: $select.parent() 
-                    });
+                    $select.select2({ width: '100%', dropdownParent: $select.parent() });
                 }, 50);
             }
         };
 
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
-                if (mutation.target.nodeName === 'SELECT') {
-                    fixSelect2Scroll($(mutation.target));
-                }
+                if (mutation.target.nodeName === 'SELECT') { fixSelect2Scroll($(mutation.target)); }
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === 1) { 
-                        if (node.nodeName === 'SELECT') {
-                            fixSelect2Scroll($(node));
-                        } else {
-                            $(node).find('select').each(function() { 
-                                fixSelect2Scroll($(this)); 
-                            });
-                        }
+                        if (node.nodeName === 'SELECT') { fixSelect2Scroll($(node)); } 
+                        else { $(node).find('select').each(function() { fixSelect2Scroll($(this)); }); }
                     }
                 });
             });

@@ -310,33 +310,36 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         onUpdate: function (item, callback) {
             if (item.worker_id === 'NEW') {
-                let start = moment(item.start);
-                let end = moment(item.end);
-                
-                if (end.hours() === 0 && end.minutes() === 0) {
-                    end.subtract(1, 'days');
-                }
-                if (end.isBefore(start, 'day')) {
-                    end = start.clone();
-                }
-                
-                let startStr = start.format('YYYY-MM-DD');
-                let endStr = end.format('YYYY-MM-DD');
+                let startStr = moment(item.start).format('YYYY-MM-DD');
+                let endStr = moment(item.end).format('YYYY-MM-DD');
+                let obraId = item.group;
+                let obraObj = window.allGroupsMaster.find(x => String(x.id) === String(obraId));
+                let obraNombre = obraObj ? obraObj.title : 'Obra';
 
-                $('#newAsigObraId').val(item.group); 
-                $('#newAsigStartDate').val(startStr); 
-                $('#newAsigEndDate').val(endStr); 
+                // 1. CANCELAMOS LA ACCIÓN DE VIS.JS INMEDIATAMENTE
+                callback(null); 
+                if (window.AppItems) window.AppItems.remove('phantom_new');
+
+                // 2. FORZAMOS A VIS.JS A SOLTAR EL ARRASTRE DEL RATÓN
+                document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+                let modalTitle = document.querySelector('#quickCalendarModal .modal-title');
+                if (modalTitle) modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2 text-warning"></i> Gestión de Asignaciones`;
+
+                $('#quickCalendarModal').modal('show');
                 
-                let label = moment(startStr).format('DD/MM/YYYY');
-                if (startStr !== endStr) {
-                    label += ' al ' + end.format('DD/MM/YYYY');
-                }
-                $('#newAsigFechasLabel').text(label);
-                
-                $('#workerSelect').val(null).trigger('change'); 
-                $('#modalNuevaAsignacion').modal('show');
-                
-                callback(item); 
+                setTimeout(() => {
+                    if (window.quickCalendar) window.quickCalendar.destroy(); 
+                    
+                    window.quickCalendar = new UniversalCalendarManager('modal-calendar-container', {
+                        context: 'obra',
+                        id: obraId,
+                        entityName: obraNombre,
+                        mode: 'empresas'
+                    });
+                    
+                    window.quickCalendar.createGhostEventRange(startStr, endStr);
+                }, 200);
             } else {
                 callback(item); 
             }
@@ -541,173 +544,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     btnVerCal.addEventListener('click', function(e) {
                         e.preventDefault();
                         
-                        // Ocultamos el popover flotante
                         document.getElementById('worker-popover').classList.add('d-none');
                         
-                        // --- NUEVO: DINAMIZAMOS EL TÍTULO DEL MODAL ---
                         let modalTitle = document.querySelector('#quickCalendarModal .modal-title');
                         if (modalTitle && window.currentSelectedItem) {
-                            let workerId = window.currentSelectedItem.worker_id;
-                            let workerName = window.currentSelectedItem.title;
-                            modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2"></i> Calendario de <a href="/admin/worker_panel/${workerId}" target="_blank" style="color: #fbbf24; text-decoration: underline;">${workerName}</a>`;
+                            modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2"></i> Calendario de <span style="color: #fbbf24;">${window.currentSelectedItem.title}</span>`;
                         }
-                        // ----------------------------------------------
-                        
-                        // Abrimos el modal Bootstrap
+
                         $('#quickCalendarModal').modal('show');
                         
-                        // Inicializamos el calendario con un pequeño delay
-                        // Inicializamos el calendario con un pequeño delay
-                        // Inicializamos el calendario con un pequeño delay
                         setTimeout(() => {
-                            if (window.quickCalendar) {
-                                window.quickCalendar.destroy(); // <--- AHORA PURGA EL PANEL TAMBIÉN
-                            }
+                            if (window.quickCalendar) window.quickCalendar.destroy(); 
                             
+                            // CERO LÓGICA DE NEGOCIO AQUÍ. Solo lo instanciamos como 'worker'
                             window.quickCalendar = new UniversalCalendarManager('modal-calendar-container', {
                                 context: 'worker',
                                 id: window.currentSelectedItem.worker_id,
-                                entityName: window.currentSelectedItem.title,
-                                callbacks: {
-                                    // 1. EL CALENDARIO PIDE PINTAR EL SELECTOR
-                                    // 1. EL CALENDARIO PIDE PINTAR EL SELECTOR
-                                    onShowNewPanel: function(containerId, currentObraId) {
-                                        let container = document.getElementById(containerId);
-                                        if (!container) return;
-
-                                        container.innerHTML = `
-                                            <label class="small font-weight-bold mb-1 text-secondary">Obra a asignar</label>
-                                            <select id="uc-panel-obra-select" class="form-control form-control-sm border-primary" style="width: 100%;">
-                                                <option value="">-- Seleccione Obra --</option>
-                                            </select>
-                                        `;
-
-                                        let selectEl = document.getElementById('uc-panel-obra-select');
-                                        let selectFiltro = document.getElementById('obrasSelect');
-                                        
-                                        // 1º Intento: Coger las obras del dropdown general de filtros que ya existe en el planificador
-                                        if (selectFiltro && selectFiltro.options.length > 0) {
-                                            Array.from(selectFiltro.options).forEach(o => {
-                                                if (o.value) { // Saltamos la opción en blanco
-                                                    let opt = document.createElement('option');
-                                                    opt.value = o.value;
-                                                    opt.text = o.text;
-                                                    
-                                                    // Preselección si coincide con la obra actual del bloque
-                                                    if (currentObraId && String(o.value) === String(currentObraId)) {
-                                                        opt.selected = true;
-                                                    }
-                                                    selectEl.appendChild(opt);
-                                                }
-                                            });
-                                        } 
-                                        // 2º Intento (Fallback): Usar las obras que están dibujadas en el panel izquierdo
-                                        else if (window.allGroupsMaster && window.allGroupsMaster.length > 0) {
-                                            window.allGroupsMaster.forEach(g => {
-                                                let opt = document.createElement('option');
-                                                opt.value = g.id;
-                                                opt.text = g.title;
-                                                
-                                                if (currentObraId && String(g.id) === String(currentObraId)) {
-                                                    opt.selected = true;
-                                                }
-                                                selectEl.appendChild(opt);
-                                            });
-                                        } else {
-                                            console.error("No se encontraron obras en el DOM");
-                                            selectEl.innerHTML = '<option value="">Error cargando obras</option>';
-                                        }
-                                        
-                                        // Opcional: Si quieres que el selector sea un Select2 (con buscador) igual que los demás
-                                        if (typeof $ !== 'undefined' && $.fn.select2) {
-                                            $(selectEl).select2({
-                                                dropdownParent: $('#quickCalendarModal')
-                                            });
-                                        }
-                                    },
-                                    
-                                    // 2. EL USUARIO HACE CLIC EN EL CHECK AZUL PARA CREAR
-                                    // 2. EL USUARIO HACE CLIC EN EL CHECK AZUL PARA CREAR
-                                    onSaveNew: function(startStr, endStr, includeWeekends) {
-                                        let selectEl = document.getElementById('uc-panel-obra-select');
-                                        let targetObra = selectEl ? selectEl.value : null;
-                                        
-                                        if (!targetObra) {
-                                            Swal.fire('Atención', 'Debes seleccionar una obra del listado', 'warning');
-                                            return;
-                                        }
-
-                                        pendingAction = {
-                                            worker_id: window.currentSelectedItem.worker_id,
-                                            target_obra_id: targetObra,
-                                            old_obra_id: targetObra,
-                                            start_date: startStr,
-                                            end_date: endStr,
-                                            original_start: null,
-                                            original_end: null,
-                                            overwrite_mode: 'check',
-                                            include_weekends: includeWeekends // Recogemos el interruptor
-                                        };
-                                        
-                                        ejecutarAccionAPI(() => { window.quickCalendar.calendar.refetchEvents(); }, () => {
-                                            window.quickCalendar.calendar.refetchEvents();
-                                            window.quickCalendar.hidePanel();
-                                            window.loadTimelineData();
-                                        });
-                                    },
-                                    
-                                    // 3. EL USUARIO ESTIRA UN BLOQUE O LE DA A GUARDAR EN UNA EDICIÓN
-                                    // 3. EL USUARIO ESTIRA UN BLOQUE O LE DA A GUARDAR EN UNA EDICIÓN
-                                    onEventModified: function(payload, revertFunc) {
-                                        let selectEl = document.getElementById('uc-panel-obra-select');
-                                        let targetObraId = selectEl && selectEl.value ? selectEl.value : payload.event_data.obra_id;
-                                        
-                                        pendingAction = {
-                                            worker_id: payload.entity_id || window.currentSelectedItem.worker_id,
-                                            target_obra_id: targetObraId,
-                                            old_obra_id: payload.event_data.obra_id,
-                                            start_date: payload.new_start,
-                                            end_date: moment(payload.new_end).subtract(1, 'days').format('YYYY-MM-DD'),
-                                            original_start: payload.original_start, 
-                                            original_end: payload.original_end,
-                                            
-                                            // LA MAGIA ESTÁ AQUÍ: 
-                                            // Cambiamos 'check' por 'overwrite'. Al ser una edición, 
-                                            // forzamos al servidor a borrar cualquier solapamiento previo sin preguntar.
-                                            overwrite_mode: 'overwrite', 
-                                            
-                                            include_weekends: payload.include_weekends
-                                        };
-                                        
-                                        pendingRevert = revertFunc;
-                                        ejecutarAccionAPI(revertFunc, () => {
-                                            window.quickCalendar.calendar.refetchEvents();
-                                            window.loadTimelineData();
-                                        });
-                                    },
-                                    
-                                    // 4. EL USUARIO PULSA EL BOTÓN ROJO DE DESASIGNAR
-                                    onDeleteAssignment: function(event, dates, isPartial) {
-                                        let obraId = event.extendedProps.obra_id;
-                                        let workerId = window.currentSelectedItem.worker_id;
-                                        
-                                        fetch('/api/v6/unassign_worker', { // URL NUEVA UNIFICADA
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrf_token') },
-                                            body: JSON.stringify({ worker_id: workerId, obra_id: obraId, dates: dates, mode: 'selected' })
-                                        })
-                                        .then(r => r.json())
-                                        .then(data => {
-                                            if(data.success) {
-                                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Borrado', showConfirmButton: false, timer: 1500});
-                                                window.quickCalendar.calendar.refetchEvents();
-                                                window.loadTimelineData();
-                                            } else {
-                                                Swal.fire('Error', data.message, 'error');
-                                            }
-                                        });
-                                    }
-                                }
+                                entityName: window.currentSelectedItem.title
                             });
                         }, 200);
                     });
@@ -948,38 +801,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     loadTimelineData();
 
-    $('#workerSelect').select2({ 
-        dropdownParent: $('#modalNuevaAsignacion'), 
-        placeholder: "Escribe un nombre o elige 'CUALQUIERA'...", 
-        ajax: { 
-            url: '/admin/api/planificador/search_workers', 
-            dataType: 'json', 
-            delay: 250, 
-            data: function (params) { return { q: params.term }; }, 
-            processResults: function (data) { return { results: data.results }; } 
-        } 
-    }).on('change', function() { 
-        if ($(this).val() === 'GENERICO') $('#genericDetailsDiv').slideDown(); 
-        else $('#genericDetailsDiv').slideUp(); 
-    });
-
-    let pendingAction = null; let pendingRevert = null;
-    
-    window.submitNuevaAsignacion = function() {
-        let workerId = $('#workerSelect').val();
-        if (!workerId) { Swal.fire('Error', 'Debes seleccionar un trabajador.', 'error'); return; }
-        
-        let targetObra = $('#newAsigObraId').val();
-        
-        pendingAction = { 
-            worker_id: workerId, target_obra_id: targetObra, old_obra_id: targetObra, 
-            start_date: $('#newAsigStartDate').val(), end_date: $('#newAsigEndDate').val(),
-            original_start: null, original_end: null,
-            detalles: $('#genericDetails').val(), overwrite_mode: 'check' 
-        };
-        $('#modalNuevaAsignacion').modal('hide'); 
-        ejecutarAccionAPI(null, loadTimelineData);
-    };
 
     function ejecutarAccionAPI(revertFunc, successCallback) {
         if (!pendingAction) return;

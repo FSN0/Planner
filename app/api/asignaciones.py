@@ -307,12 +307,16 @@ def api_planificador_action():
             return jsonify({"success": True, "message": "No hubo cambios."})
 
         # --- LÓGICA DE AÑADIR/MOVER ---
+        # --- LÓGICA DE AÑADIR/MOVER ---
         if str(worker_id) == 'GENERICO':
             detalles = data.get('detalles', 'Personal Genérico')
+            cantidad_pedida = int(data.get('cantidad', 1)) # <--- CAPTURAMOS EL NÚMERO
+            
             SolicitudService.create_solicitud_generica(
                 solicitante_id=current_user.id, obra_id=target_obra_id,
                 fecha_inicio=fechas_a_procesar[0], fecha_fin=fechas_a_procesar[-1],
-                cantidad=1, perfil=detalles, comentarios=f"Creado desde Planificador: {detalles}"
+                cantidad=cantidad_pedida, # <--- SE LO PASAMOS AL SERVICIO
+                perfil=detalles, comentarios=f"Creado desde Planificador: {detalles}"
             )
             return jsonify({"success": True, "action": "requested_generic", "message": "Solicitud genérica enviada."})
 
