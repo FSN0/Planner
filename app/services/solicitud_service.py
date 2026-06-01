@@ -26,16 +26,13 @@ def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=
     # 1. Buscamos TODAS las solicitudes abiertas en esa obra y fecha
     qs = Solicitud.query.filter(
         Solicitud.obra_id == obra_id,
-        Solicitud.estado.in_(["PENDIENTE", "EN_PROCESO", "CUMPLIDA"]),
+        Solicitud.estado.in_(["PENDIENTE", "EN_PROCESO"]),
         Solicitud.fecha_inicio <= fecha,
         Solicitud.fecha_fin >= fecha,
     ).all()
 
     for sol in qs:
-        # Si la solicitud especifica una empresa obligatoria y el currante es de otra, no le afecta (Solo genéricas)
-        if sol.tipo == "GENERICA" and sol.perfil_empresa_id and sol.perfil_empresa_id != worker.company_id:
-            continue
-        
+               
         # Si es concreta para OTRO empleado distinto, la ignoramos (optimización)
         if sol.tipo == "CONCRETA" and sol.empleado_id != worker_id:
             continue
@@ -118,12 +115,8 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
 
         # 3. Asignado libremente en el cuadrante general (exigimos que coincida con lo pedido)
         cond_libre = [Asignacion.solicitud_id == None]
-        if solicitud.perfil_categoria:
-            cond_libre.append(User.categoria_profesional.ilike(f"%{solicitud.perfil_categoria}%"))
         if solicitud.created_at:
             cond_libre.append(Asignacion.created_at >= solicitud.created_at)
-        if solicitud.perfil_empresa_id:
-            cond_libre.append(User.company_id == solicitud.perfil_empresa_id)
 
         # Unimos todo y ejecutamos
         q = Asignacion.query.join(User).filter(
@@ -146,6 +139,12 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
             solicitud.estado = "CUMPLIDA"
             solicitud.resolved_at = datetime.utcnow()
             if resolved_by_id: solicitud.resolved_by_id = resolved_by_id
+
+            for a in asignaciones:
+                if a.solicitud_id is None:
+                    a.solicitud_id = solicitud.id
+
+
         elif total_assignments_count > 0:
             solicitud.estado = "EN_PROCESO"
         else:
