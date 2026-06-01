@@ -10,7 +10,7 @@ class UniversalCalendarManager {
         this.entityName = config.entityName || null;
         this.mode = config.mode || 'empleados'; 
         this.callbacks = config.callbacks || {};
-        
+        this.showFichajes = config.showFichajes || false;
         this.readonly = config.readonly || false;
         this.partialSelectionMode = config.partialSelectionMode || false;
 
@@ -148,8 +148,8 @@ class UniversalCalendarManager {
             height: 'auto', 
             
             eventOrder: '-isGhost,start,title',
+            events: `/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}` + (this.showFichajes ? '&show_fichajes=1' : ''),
             
-            events: `/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}`,
             
             eventDataTransform: function(eventData) {
                 let bgColor = eventData.backgroundColor || eventData.color || '#3b82f6';
@@ -197,53 +197,67 @@ class UniversalCalendarManager {
             },
 
             eventDidMount: function(info) {
-                // 1. Lógica original de los Tooltips
+                // 1. CAPA DE FONDO: PELOTITAS DE FICHAJES
+                if (info.event.extendedProps && info.event.extendedProps.isFichaje) {
+                    let dotColor = info.event.extendedProps.estado_color || '#94a3b8';
+                    let htmlTooltip = info.event.extendedProps.tooltipContent || '';
+
+                    // Hacemos el fondo invisible para no ensuciar las barras
+                    info.el.style.backgroundColor = 'transparent';
+                    info.el.style.border = 'none';
+
+                    // Buscamos la celda del día
+                    let dayCell = info.el.closest('.fc-daygrid-day');
+                    if (dayCell) {
+                        // Borramos la bola anterior si Fullcalendar repinta
+                        let existingDot = dayCell.querySelector('.fc-fichaje-dot-float');
+                        if (existingDot) existingDot.remove();
+
+                        // Creamos la bola flotante arriba a la izquierda
+                        let dotEl = document.createElement('div');
+                        dotEl.className = 'fc-fichaje-dot-float';
+                        dotEl.style = 'position: absolute; top: 4px; left: 4px; z-index: 99; pointer-events: auto;';
+                        dotEl.innerHTML = `<span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${dotColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.5); border: 2px solid #fff; cursor: help;"></span>`;
+                        
+                        // La inyectamos de forma segura dentro del cuadro del día
+                        let targetFrame = dayCell.querySelector('.fc-daygrid-day-frame');
+                        if (targetFrame) targetFrame.appendChild(dotEl);
+                        else dayCell.appendChild(dotEl);
+
+                        // Le aplicamos el Tooltip
+                        let targetSpan = dotEl.querySelector('span');
+                        if (targetSpan && htmlTooltip) {
+                            if (typeof tippy !== 'undefined') tippy(targetSpan, { content: htmlTooltip, allowHTML: true, placement: 'top', theme: 'light-border' });
+                            else if (typeof $ !== 'undefined' && $.fn.tooltip) $(targetSpan).tooltip({ title: htmlTooltip, html: true, sanitize: false, placement: 'top', container: 'body' });
+                        }
+                    }
+                    return;
+                }
+
+                // 2. LOGICA NORMAL DE OBRAS (Tooltips y Doble Clic)
                 if (info.event.extendedProps && info.event.extendedProps.tooltipContent) {
                     if (typeof tippy !== 'undefined') {
-                        tippy(info.el, { 
-                            content: info.event.extendedProps.tooltipContent, 
-                            allowHTML: true, 
-                            placement: 'top', 
-                            theme: 'light-border'
-                        });
+                        tippy(info.el, { content: info.event.extendedProps.tooltipContent, allowHTML: true, placement: 'top', theme: 'light-border' });
                     } else if (typeof $ !== 'undefined' && $.fn.tooltip) {
                         $(info.el).tooltip({ title: info.event.extendedProps.tooltipContent, html: true, sanitize: false, placement: 'top', container: 'body' });
                     }
                 }
 
-                // 2. NUEVA LÓGICA: Detector de Doble Clic Nativo
                 info.el.addEventListener('dblclick', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Si es el bloque de nueva asignación, no hacemos nada
+                    e.preventDefault(); e.stopPropagation();
                     if (info.event.id === _this.ghostEventId) return;
 
                     let props = info.event.extendedProps || {};
-                    
-                    // Si el evento ya trae una URL directa (como las solicitudes), la usamos
-                    if (info.event.url) {
-                        window.open(info.event.url, '_blank');
-                        return;
-                    }
+                    if (info.event.url) { window.open(info.event.url, '_blank'); return; }
 
-                    // Calculamos la ruta de la ficha de forma inteligente según el contexto
                     let targetUrl = null;
-                    if (props.worker_id && _this.context !== 'worker') {
-                        targetUrl = `/admin/worker_panel/${props.worker_id}`;
-                    } else if (props.obra_id && _this.context !== 'obra') {
-                        targetUrl = `/admin/obra_panel/${props.obra_id}`;
-                    } else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
-                        let cid = props.empresa_id || props.company_id;
-                        targetUrl = `/admin/company_panel/${cid}`;
-                    } else if (props.type === 'empresa_group' && _this.context !== 'empresa') {
-                        targetUrl = `/admin/companies`; 
-                    }
+                    if (props.worker_id && _this.context !== 'worker') targetUrl = `/admin/worker_panel/${props.worker_id}`;
+                    else if (props.obra_id && _this.context !== 'obra') targetUrl = `/admin/obra_panel/${props.obra_id}`;
+                    else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
+                        let cid = props.empresa_id || props.company_id; targetUrl = `/admin/company_panel/${cid}`;
+                    } else if (props.type === 'empresa_group' && _this.context !== 'empresa') targetUrl = `/admin/companies`; 
                     
-                    // Si hemos encontrado un destino válido, lo abrimos en pestaña nueva
-                    if (targetUrl) {
-                        window.open(targetUrl, '_blank');
-                    }
+                    if (targetUrl) window.open(targetUrl, '_blank');
                 });
             },
             eventWillUnmount: function(info) {
@@ -775,7 +789,7 @@ class UniversalCalendarManager {
     changeMode(newMode) {
         this.mode = newMode;
         this.calendar.removeAllEventSources();
-        this.calendar.addEventSource(`/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}`);
+        this.calendar.addEventSource(`/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}` + (this.showFichajes ? '&show_fichajes=1' : ''));
         
         let btnEmpresas = document.querySelector(`#${this.titleId} .btn-outline-primary:nth-child(1)`);
         let btnEmpleados = document.querySelector(`#${this.titleId} .btn-outline-primary:nth-child(2)`);

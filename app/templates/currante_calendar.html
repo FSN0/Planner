@@ -59,7 +59,8 @@ document.addEventListener('DOMContentLoaded', function() {
         id: workerId,
         mode: 'obras',
         // MAGIA: El calendario se vuelve de solo lectura si no eres admin
-        readonly: {% if current_user.role == 'admin' %}false{% else %}true{% endif %}
+        readonly: {% if current_user.role == 'admin' %}false{% else %}true{% endif %},
+        showFichajes: true
     });
 
     // 2. EL PUENTE UNIVERSAL (Que llama a tu Popup Global)
