@@ -318,28 +318,32 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // 1. CANCELAMOS LA ACCIÓN DE VIS.JS INMEDIATAMENTE
                 callback(null); 
-                if (window.AppItems) window.AppItems.remove('phantom_new');
 
-                // 2. FORZAMOS A VIS.JS A SOLTAR EL ARRASTRE DEL RATÓN
-                document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-
-                let modalTitle = document.querySelector('#quickCalendarModal .modal-title');
-                if (modalTitle) modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2 text-warning"></i> Gestión de Asignaciones`;
-
-                $('#quickCalendarModal').modal('show');
-                
+                // 2. RETRASAMOS 50ms LA APERTURA DEL MODAL
+                // Esto permite que el navegador lance el evento nativo 'mouseup' 
+                // y Vis.js suelte el arrastre del fondo correctamente.
                 setTimeout(() => {
-                    if (window.quickCalendar) window.quickCalendar.destroy(); 
+                    if (window.AppItems) window.AppItems.remove('phantom_new');
+
+                    let modalTitle = document.querySelector('#quickCalendarModal .modal-title');
+                    if (modalTitle) modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2 text-warning"></i> Gestión de Asignaciones`;
+
+                    $('#quickCalendarModal').modal('show');
                     
-                    window.quickCalendar = new UniversalCalendarManager('modal-calendar-container', {
-                        context: 'obra',
-                        id: obraId,
-                        entityName: obraNombre,
-                        mode: 'empresas'
-                    });
-                    
-                    window.quickCalendar.createGhostEventRange(startStr, endStr);
-                }, 200);
+                    setTimeout(() => {
+                        if (window.quickCalendar) window.quickCalendar.destroy(); 
+                        
+                        window.quickCalendar = new UniversalCalendarManager('modal-calendar-container', {
+                            context: 'obra',
+                            id: obraId,
+                            entityName: obraNombre,
+                            mode: 'empresas'
+                        });
+                        
+                        window.quickCalendar.createGhostEventRange(startStr, endStr);
+                    }, 200);
+                }, 50);
+
             } else {
                 callback(item); 
             }

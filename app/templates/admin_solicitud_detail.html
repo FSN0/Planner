@@ -109,6 +109,7 @@
     .evento-otro {
         opacity: 0.6; /* Los demás se ven un poco apagados */
     }
+    .oculto-por-filtro { display: none !important; }
 </style>
 {% endblock %}
 
@@ -145,6 +146,54 @@
 <script src="https://unpkg.com/tippy.js@6"></script>
 
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Seleccionamos las 3 cajitas de búsqueda de las columnas
+    const inputsFiltro = document.querySelectorAll('.table-filter-input');
+    
+    if (inputsFiltro.length > 0) {
+        // Le decimos a cada cajita que reaccione al momento de teclear ('input')
+        inputsFiltro.forEach(input => {
+            input.addEventListener('input', filtrarTabla);
+        });
+    }
+
+    function filtrarTabla() {
+        // Capturamos lo que has escrito en las 3 columnas y lo pasamos a minúsculas
+        const filtroTrabajador = document.querySelector('input[data-col="1"]').value.toLowerCase().trim();
+        const filtroEspecialidad = document.querySelector('input[data-col="2"]').value.toLowerCase().trim();
+        const filtroEmpresa = document.querySelector('input[data-col="3"]').value.toLowerCase().trim();
+
+        // Seleccionamos a todos los trabajadores de la tabla
+        const filas = document.querySelectorAll('.candidate-row');
+
+        filas.forEach(fila => {
+            const celdas = fila.querySelectorAll('td');
+            
+            // Verificamos que sea una fila con datos (tiene 4 o más columnas)
+            if (celdas.length >= 4) {
+                // Sacamos el texto exacto que hay en cada celda
+                // [1] es Trabajador, [2] es Especialidad, [3] es Empresa (la [0] es el checkbox)
+                const textoTrabajador = celdas[1].textContent.toLowerCase();
+                const textoEspecialidad = celdas[2].textContent.toLowerCase();
+                const textoEmpresa = celdas[3].textContent.toLowerCase();
+
+                // Comprobamos si lo que has escrito coincide
+                const cumpleTrabajador = textoTrabajador.includes(filtroTrabajador);
+                const cumpleEspecialidad = textoEspecialidad.includes(filtroEspecialidad);
+                const cumpleEmpresa = textoEmpresa.includes(filtroEmpresa);
+
+                // Si cumple con los 3 filtros a la vez, quitamos la clase, si no, lo ocultamos
+                if (cumpleTrabajador && cumpleEspecialidad && cumpleEmpresa) {
+                    fila.classList.remove('oculto-por-filtro');
+                } else {
+                    fila.classList.add('oculto-por-filtro');
+                }
+            }
+        });
+    }
+});
+</script>
 
 {% include "solicitudes/_detail_scripts.html" %}
 {% endblock %}
