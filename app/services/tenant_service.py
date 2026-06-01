@@ -23,38 +23,43 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
         db.session.add(nuevo_tenant)
         db.session.commit()
         
-        # --- SOLUCIÓN: Guardamos el ID como número suelto ANTES de borrar la sesión ---
         tenant_id = nuevo_tenant.id
         
-        # Crear esquema
+        # 2. Crear infraestructura física
         db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
         db.session.commit()
         
-        # Amnesia de sesión para limpiar caché
+        # 3. Limpiamos la caché de la sesión actual
         db.session.remove() 
         
-        # Foco en nuevo esquema
-        db.session.execute(text(f"SET search_path TO {schema_name}"))
-        db.metadata.create_all(db.engine)
+        # --- AQUÍ ESTÁ LA CORRECCIÓN CLAVE ---
+        # 4. Obtenemos la conexión ACTIVA de esta transacción específica
+        connection = db.session.connection()
         
-        # Crear administrador
+        # 5. Aplicamos el esquema SOLO a esta conexión
+        connection.execute(text(f"SET search_path TO {schema_name}"))
+        
+        # 6. Creamos las tablas pasándole explícitamente esta misma conexión (bind=connection)
+        db.metadata.create_all(bind=connection)
+        # ------------------------------------
+
+        # 7. Crear el administrador
         admin_user = User(
             email=admin_email,
             password_hash=generate_password_hash(admin_password),
             role=ROLE_ADMIN,
             name="Administrador",
             lastname=nombre_empresa,
-            dni=f"ADMIN-{tenant_id}",  # Usamos la variable numérica suelta
+            dni=f"ADMIN-{tenant_id}", 
             active=True
         )
         db.session.add(admin_user)
         db.session.commit()
         
-        # Volver al esquema público
+        # 8. Regresar a public
         db.session.execute(text("SET search_path TO public"))
         db.session.commit()
         
-        # --- SOLUCIÓN: Volvemos a pedirle a la base de datos el Tenant para devolverlo "conectado" ---
         tenant_final = db.session.query(Tenant).get(tenant_id)
         return tenant_final
 

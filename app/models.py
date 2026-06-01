@@ -182,8 +182,15 @@ class User(UserMixin, db.Model):
     def __repr__(self):
         return f'<User {self.email} - {self.role}>'
 
+from flask import g
+
 @login_manager.user_loader
 def load_user(user_id):
+    # Asegurarnos de que hay un tenant activo en la petición actual
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        return None
+    
+    # Buscamos al usuario en el esquema actual
     return User.query.get(int(user_id))
 
 class Document(db.Model):
