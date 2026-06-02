@@ -1,11 +1,12 @@
 from app import db
 from sqlalchemy import text
-from app.models import Tenant, User, ROLE_ADMIN
+from app.models import Tenant, User, ROLE_ADMIN, Company # <--- AÑADIDO Company
 from werkzeug.security import generate_password_hash
+from flask_migrate import stamp 
 
 def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password):
     """
-    Registra un nuevo cliente, construye su esquema aislado y crea su primer administrador.
+    Registra un nuevo cliente, construye su esquema aislado, crea su empresa matriz y su primer administrador.
     """
     schema_name = f"tenant_{subdominio.lower().strip()}"
     
@@ -32,7 +33,6 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
         # 3. Limpiamos la caché de la sesión actual
         db.session.remove() 
         
-        # --- AQUÍ ESTÁ LA CORRECCIÓN CLAVE ---
         # 4. Obtenemos la conexión ACTIVA de esta transacción específica
         connection = db.session.connection()
         
@@ -41,9 +41,22 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
         
         # 6. Creamos las tablas pasándole explícitamente esta misma conexión (bind=connection)
         db.metadata.create_all(bind=connection)
-        # ------------------------------------
 
-        # 7. Crear el administrador
+        # ========================================================
+        # 6.5. EL SELLO ORTODOXO: Marcar como migrado a la última versión
+        # ========================================================
+        stamp(directory='migrations', revision='head')
+
+        # >>> NUEVO: 7. Crear la Empresa Interna matriz <<<
+        empresa_interna = Company(
+            nombre=nombre_empresa,
+            is_internal=True,      # Fundamental para que Odoo sepa dónde meter a la plantilla
+            code=subdominio[:15].upper() # Generamos un código corto basado en el subdominio
+        )
+        db.session.add(empresa_interna)
+        db.session.flush() # Flush para que la base de datos le asigne un ID sin cerrar la transacción
+
+        # 8. Crear el administrador asignado a esta nueva empresa
         admin_user = User(
             email=admin_email,
             password_hash=generate_password_hash(admin_password),
@@ -51,12 +64,13 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
             name="Administrador",
             lastname=nombre_empresa,
             dni=f"ADMIN-{tenant_id}", 
-            active=True
+            active=True,
+            company_id=empresa_interna.id # <--- VINCULAMOS AL ADMIN CON LA EMPRESA
         )
         db.session.add(admin_user)
         db.session.commit()
         
-        # 8. Regresar a public
+        # 9. Regresar a public
         db.session.execute(text("SET search_path TO public"))
         db.session.commit()
         

@@ -4,7 +4,7 @@
 <div class="container mt-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>🚀 Panel SuperAdmin SaaS</h2>
-        <span class="badge bg-dark">Esquema: public</span>
+        <span class="badge badge-dark">Esquema: public</span>
     </div>
     
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -47,13 +47,14 @@
     </div>
 
     <h4>Clientes Activos (Bases de datos aisladas)</h4>
-    <table class="table table-hover bg-white shadow-sm border">
+    <table class="table table-hover bg-white shadow-sm border align-middle">
         <thead class="table-light">
             <tr>
                 <th>ID</th>
                 <th>Nombre Cliente</th>
                 <th>Subdominio de acceso</th>
                 <th>Esquema (Postgres)</th>
+                <th>Módulos (Addons)</th> 
                 <th>Estado</th>
                 <th>Fecha Alta</th>
             </tr>
@@ -61,27 +62,100 @@
         <tbody>
             {% for t in tenants %}
             <tr>
-                <td>{{ t.id }}</td>
-                <td><strong>{{ t.nombre }}</strong></td>
-                <td>
+                <td class="align-middle">{{ t.id }}</td>
+                <td class="align-middle"><strong>{{ t.nombre }}</strong></td>
+                <td class="align-middle">
                     <a href="http://{{ t.subdominio }}.localhost:5000" target="_blank">{{ t.subdominio }}.tusaas.com</a>
                 </td>
-                <td><code>{{ t.schema_name }}</code></td>
-                <td>
+                <td class="align-middle"><code>{{ t.schema_name }}</code></td>
+                
+                <td class="align-middle">
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#modalModulos_{{ t.id }}">
+                        <i class="fas fa-cubes mr-1"></i> Configurar Módulos
+                    </button>
+                </td>
+                
+                <td class="align-middle">
                     {% if t.is_active %}
-                        <span class="badge bg-success">Activo</span>
+                        <span class="badge badge-success">Activo</span>
                     {% else %}
-                        <span class="badge bg-danger">Inactivo</span>
+                        <span class="badge badge-danger">Inactivo</span>
                     {% endif %}
                 </td>
-                <td>{{ t.created_at.strftime('%Y-%m-%d') }}</td>
+                <td class="align-middle">{{ t.created_at.strftime('%d/%m/%Y') }}</td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="6" class="text-center text-muted">Aún no hay clientes registrados.</td>
+                <td colspan="7" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+
+{% for t in tenants %}
+<div class="modal fade" id="modalModulos_{{ t.id }}" tabindex="-1" role="dialog" aria-labelledby="modalLabel_{{ t.id }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="modalLabel_{{ t.id }}">📦 Módulos para {{ t.nombre }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      
+      <form action="{{ url_for('superadmin.configurar_modulos_tenant', id_tenant=t.id) }}" method="POST">
+          <div class="modal-body p-4">
+            
+            {% for key, nombre in modulos.items() %}
+                {% set activo = t.modulos_activos and t.modulos_activos.get(key) %}
+                
+                <div class="custom-control custom-switch mb-3">
+                    <input type="checkbox" class="custom-control-input odoo-switch" data-tenant="{{ t.id }}" data-modulo="{{ key }}" name="modulos" value="{{ key }}" id="modModal_{{ t.id }}_{{ key }}" {% if activo %}checked{% endif %}>
+                    <label class="custom-control-label font-weight-bold" style="font-size: 1.1rem; cursor: pointer;" for="modModal_{{ t.id }}_{{ key }}">
+                        {{ nombre }}
+                    </label>
+                </div>
+                
+                {% if key == 'odoo' %}
+                    <div id="config_odoo_{{ t.id }}" class="mb-4 ml-4 bg-light p-3 rounded border border-info" style="{% if not activo %}display: none;{% endif %}">
+                        <label class="text-muted mb-2 font-weight-bold" style="font-size: 0.85rem;"><i class="fas fa-plug"></i> Adaptador API Odoo:</label>
+                        <select name="odoo_adapter" class="form-control mb-2 form-control-sm">
+                            <option value="">-- Selecciona el traductor --</option>
+                            {% for adapter_key, adapter_name in adaptadores_odoo.items() %}
+                                <option value="{{ adapter_key }}" {% if t.modulos_activos and t.modulos_activos.get('odoo_adapter') == adapter_key %}selected{% endif %}>{{ adapter_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted"><i class="fas fa-info-circle"></i> El cliente introducirá sus credenciales desde su propio panel de integraciones.</small>
+                    </div>
+                {% endif %}
+            {% endfor %}
+            
+          </div>
+          <div class="modal-footer bg-light">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Guardar Configuración</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const switches = document.querySelectorAll('.odoo-switch');
+    switches.forEach(function(chk) {
+        chk.addEventListener('change', function() {
+            if(this.dataset.modulo === 'odoo') {
+                const tenantId = this.dataset.tenant;
+                const configDiv = document.getElementById('config_odoo_' + tenantId);
+                if(configDiv) {
+                    configDiv.style.display = this.checked ? 'block' : 'none';
+                }
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

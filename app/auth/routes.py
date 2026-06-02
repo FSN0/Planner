@@ -1,6 +1,6 @@
 # app/auth/routes.py
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g,session
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models import User, ROLE_OPERARIO, Company
@@ -41,7 +41,12 @@ def login():
             # 4. Verificar que el usuario no esté desactivado
             if getattr(user, 'active', True):
                 login_user(user, remember=remember)
+
+                session['tenant_id'] = g.current_tenant.id
+                
                 flash("Inicio de sesión exitoso", "success")
+                
+                # Redirección inteligente según rol
                 
                 # Redirección inteligente según rol
                 if user.role == 'admin':

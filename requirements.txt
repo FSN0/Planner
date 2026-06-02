@@ -12,3 +12,4 @@ redis>=3.5.3
 pandas
 openpyxl
 python-dotenv==1.0.0
+cryptography>=41.0.0

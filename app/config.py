@@ -8,7 +8,8 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/gestion_obra_db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-
+    ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY')
+    
     # Configuración de correo (usa una cuenta Gmail configurada con app password)
     MAIL_SERVER = 'smtp.gmail.com'
     MAIL_PORT = 587

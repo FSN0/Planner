@@ -95,12 +95,6 @@
         {% endif %}
       </a>
     </li>
-<li>
-        <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="sidebar-link" target="_blank" title="Abre el panel de altas de Odoo">
-            <i class="fas fa-address-book fa-fw"></i> 
-            <span>Alta en Odoo <i class="fas fa-external-link-alt text-muted" style="font-size: 0.65rem; margin-left: 4px;"></i></span>
-        </a>
-    </li>
     {% endif %}
   </ul>
   {% endif %}
@@ -117,7 +111,7 @@
     {% if current_user.role == 'admin' %}
     <li>
         <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if 'sync' in request.endpoint and 'auditoria' not in request.endpoint %}is-active{% endif %}">
-            <i class="fas fa-sync-alt fa-fw"></i> <span>Sincronizar Odoo</span>
+            <i class="fas fa-plug fa-fw"></i> <span>Módulos e Integraciones</span>
         </a>
     </li> 
     <li>

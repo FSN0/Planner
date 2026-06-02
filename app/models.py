@@ -3,6 +3,7 @@ from . import db, login_manager
 from flask_login import UserMixin
 from datetime import datetime, date
 import random
+from sqlalchemy.dialects.postgresql import JSONB
 
 # --- CONSTANTES DE ROLES ---
 ROLE_OPERARIO = 'operario'
@@ -31,6 +32,8 @@ class Tenant(db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    modulos_activos = db.Column(db.JSON, nullable=False, server_default='{}')
+    
     def __repr__(self):
         return f'<Tenant {self.nombre} - Subdominio: {self.subdominio}>'
     
@@ -53,8 +56,7 @@ class Company(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     nif = db.Column(db.String(20), nullable=True)
     
-    # TODO SaaS: Reemplazado por sistema de integraciones genérico
-    # odoo_id = db.Column(db.Integer, unique=True, nullable=True)
+    external_ids = db.Column(JSONB, server_default='{}', nullable=False)
     
     descripcion = db.Column(db.Text)
     gremio = db.Column(db.String(100)) # Ej: Electricidad, Albañilería
@@ -78,7 +80,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
     
-    odoo_id = db.Column(db.Integer, unique=True, nullable=True)
+    external_ids = db.Column(JSONB, server_default='{}', nullable=False)
     
     # Autenticación
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -182,12 +184,16 @@ class User(UserMixin, db.Model):
     def __repr__(self):
         return f'<User {self.email} - {self.role}>'
 
-from flask import g
+from flask import g, session
 
 @login_manager.user_loader
 def load_user(user_id):
     # Asegurarnos de que hay un tenant activo en la petición actual
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        return None
+        
+    # SEGURIDAD SAAS: Evitar que una cookie de la "Empresa A" abra la cuenta en "Empresa B"
+    if session.get('tenant_id') != g.current_tenant.id:
         return None
     
     # Buscamos al usuario en el esquema actual
@@ -231,6 +237,7 @@ class Obra(db.Model):
     ubicacion = db.Column(db.String(100))
     fecha_sincronizacion = db.Column(db.DateTime, nullable=True)
 
+    external_ids = db.Column(JSONB, server_default='{}', nullable=False)
     
     # Fechas
     fecha_inicio = db.Column(db.Date)

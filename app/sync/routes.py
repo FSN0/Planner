@@ -3,17 +3,93 @@ from flask_login import login_required, current_user # <--- OJO: AÑADE current_
 from werkzeug.security import generate_password_hash
 from datetime import datetime
 from app import db
-from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje # <--- AÑADE TAMBIÉN Asignacion y RegistroFichaje AQUÍ
-from app.services.sync_service import OdooSyncService
+from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje 
+from app.sync.dispatcher import get_sync_adapter
 from sqlalchemy import or_
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, g
+import xmlrpc.client
+from app.services.config_service import set_tenant_config, get_tenant_config
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
-
 @sync_bp.route('/')
 @login_required
 def panel():
+    """El ESCAPARATE DE MÓDULOS. Lee el JSON del tenant para saber qué pintar."""
+    modulos_activos = getattr(g.current_tenant, 'modulos_activos', {})
+    if not modulos_activos:
+        modulos_activos = {}
+        
+    return render_template('sync/panel.html', modulos_activos=modulos_activos)
+
+
+@sync_bp.route('/odoo')
+@login_required
+def odoo_panel():
+    """EL PANEL AISLADO DE ODOO (Configuración + Operaciones)"""
+    modulos_activos = getattr(g.current_tenant, 'modulos_activos', {})
+    
+    # CAMBIO AQUÍ: Buscamos 'odoo', no 'odoo_soltec'
+    if not modulos_activos.get('odoo'):
+        flash("Tu empresa no tiene habilitado el módulo de Odoo.", "danger")
+        return redirect(url_for('sync.panel'))
+        
+    # Extraemos la config actual (desencriptando el pass) para mostrarla en los inputs
+    config = {
+        'url': get_tenant_config('odoo_url', default=''),
+        'db': get_tenant_config('odoo_db', default=''),
+        'user': get_tenant_config('odoo_user', default=''),
+        'password': get_tenant_config('odoo_password', desencriptar=True, default='')
+    }
+    
     logs = SyncLog.query.order_by(SyncLog.fecha.desc()).limit(15).all()
-    return render_template('sync/panel.html', logs=logs)
+    return render_template('sync/odoo_panel.html', config=config, logs=logs)
+
+
+@sync_bp.route('/odoo/save_config', methods=['POST'])
+@login_required
+def odoo_save_config():
+    """Ruta puramente técnica para guardar credenciales. Solo Admin."""
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        
+    try:
+        set_tenant_config('odoo_url', request.form.get('url', '').strip())
+        set_tenant_config('odoo_db', request.form.get('db', '').strip())
+        set_tenant_config('odoo_user', request.form.get('user', '').strip())
+        # OJO: La contraseña se encripta
+        set_tenant_config('odoo_password', request.form.get('password', '').strip(), encriptar=True)
+        
+        flash("Credenciales de Odoo guardadas de forma segura.", "success")
+        return redirect(url_for('sync.odoo_panel'))
+    except Exception as e:
+        flash(f"Error al guardar credenciales: {str(e)}", "danger")
+        return redirect(url_for('sync.odoo_panel'))
+
+
+@sync_bp.route('/odoo/test_connection', methods=['POST'])
+@login_required
+def odoo_test_connection():
+    """Intenta hacer un login contra Odoo al vuelo con las credenciales actuales."""
+    if current_user.role != 'admin':
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        
+    url = get_tenant_config('odoo_url', default='')
+    db_name = get_tenant_config('odoo_db', default='')
+    user = get_tenant_config('odoo_user', default='')
+    pwd = get_tenant_config('odoo_password', desencriptar=True, default='')
+    
+    if not url or not pwd:
+        return jsonify({'success': False, 'error': 'Faltan credenciales por configurar.'})
+        
+    try:
+        common = xmlrpc.client.ServerProxy(f'{url}/xmlrpc/2/common')
+        uid = common.authenticate(db_name, user, pwd, {})
+        if uid:
+            return jsonify({'success': True, 'message': '¡Conexión establecida correctamente con Odoo!'})
+        else:
+            return jsonify({'success': False, 'error': 'Usuario, contraseña o base de datos incorrectos.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Error de red o servidor: {str(e)}'})
 
 @sync_bp.route('/resolve_conflict_empleado', methods=['POST'])
 @login_required
@@ -68,7 +144,7 @@ def resolve_conflict_empleado():
 @login_required
 def preview_obras():
     try:
-        service = OdooSyncService()
+        service = get_sync_adapter()
         diff = service.get_diff_obras()
         jefes_locales = User.query.filter(User.role.in_(['jefe_obra', 'admin'])).all()
         encargados_locales = User.query.filter_by(active=True).all()
@@ -148,7 +224,7 @@ def commit_obras():
 @login_required
 def preview_empleados():
     try:
-        service = OdooSyncService()
+        service = get_sync_adapter()
         diff = service.get_diff_empleados()
         return render_template('sync/preview_empleados.html', diff=diff)
     except Exception as e:
@@ -159,7 +235,7 @@ def preview_empleados():
 @login_required
 def preview_subcontratas():
     try:
-        service = OdooSyncService()
+        service = get_sync_adapter()
         diff = service.get_diff_subcontratas()
         # Puedes crear un HTML similar al de preview_empleados.html adaptado
         return render_template('sync/preview_subcontratas.html', diff=diff)
@@ -279,11 +355,18 @@ def commit_subcontratas():
 @login_required
 def commit_empleados():
     data = request.json
-    ahora = datetime.now() # Añadimos esto para el historial
+    ahora = datetime.now() 
     try:
-        # Buscamos la primera empresa local para asignarla y que no sean "fantasmas"
-        default_company = Company.query.first()
+        # --- 1. SOLUCIÓN EMPRESAS: Buscar explícitamente la empresa INTERNA ---
+        default_company = Company.query.filter_by(is_internal=True).first()
+        if not default_company:
+            # Fallback de emergencia
+            default_company = Company.query.first()
         default_company_id = default_company.id if default_company else None
+
+        # --- 2. SOLUCIÓN COLISIONES: Memoria de transacción ---
+        dnis_en_transaccion = set()
+        emails_en_transaccion = set()
 
         for obj in data.get('actualizados', []):
             user = User.query.get(obj['local_id'])
@@ -300,43 +383,54 @@ def commit_empleados():
                 if not choque_dni: user.dni = obj['dni']
                 if not choque_email: user.email = obj['email']
                 
-                # --- NUEVA LÓGICA PARA INTERNALIZACIONES ---
-                # 1. Asignamos siempre la empresa interna ya que estamos sincronizando desde hr.employee
+                # Reasignamos a la empresa correcta por si estaban perdidos
                 user.company_id = default_company_id 
-                # 2. Reactivamos al usuario por si venía de un borrado lógico o inactividad
                 user.active = True
                 user.is_deleted = False
 
-        # 2. Procesar Nuevos (Con asignación de empresa)
+                dnis_en_transaccion.add(user.dni)
+                emails_en_transaccion.add(user.email)
+
+        # Procesar Nuevos 
         for obj in data.get('nuevos', []):
-            existe = User.query.filter((User.dni == obj['dni']) | (User.email == obj['email'])).first()
-            if not existe:
-                nuevo_user = User(
-                    odoo_id=obj['odoo_id'],
-                    name=obj['name'],
-                    lastname=obj['lastname'],
-                    dni=obj['dni'],
-                    email=obj['email'],
-                    role=obj['role'],
-                    categoria_profesional=obj.get('categoria_profesional', 'Sin definir'), # <--- AÑADIR ESTO
-                    active=True,
-                    company_id=default_company_id,
-                    password_hash=generate_password_hash(obj['dni'])
-                )
-                db.session.add(nuevo_user)
+            dni_limpio = obj['dni']
+            email_limpio = obj['email']
+
+            # Comprobamos tanto en la BD física como en la memoria de la transacción actual
+            existe_bd = User.query.filter((User.dni == dni_limpio) | (User.email == email_limpio)).first()
+            
+            if existe_bd or dni_limpio in dnis_en_transaccion or email_limpio in emails_en_transaccion:
+                # Si hay colisión, le inyectamos un identificador único para que no rompa el commit
+                dni_limpio = f"{dni_limpio}-Odoo{obj['odoo_id']}"
+                email_limpio = f"colision_{obj['odoo_id']}@local.tuappsaas.com"
                 
-        # --- AÑADIR REGISTRO DE HISTORIAL ---
+            dnis_en_transaccion.add(dni_limpio)
+            emails_en_transaccion.add(email_limpio)
+
+            nuevo_user = User(
+                odoo_id=obj['odoo_id'],
+                name=obj['name'],
+                lastname=obj['lastname'],
+                dni=dni_limpio,
+                email=email_limpio,
+                role=obj['role'],
+                categoria_profesional=obj.get('categoria_profesional', 'Sin definir'), 
+                active=True,
+                company_id=default_company_id,
+                password_hash=generate_password_hash(dni_limpio)
+            )
+            db.session.add(nuevo_user)
+                
         db.session.add(SyncLog(
             fecha=ahora,
             tipo='Empleados',
             modo='Manual',
             nuevos=len(data.get('nuevos', [])),
-            actualizados=len(data.get('actualizadas', [])),
+            actualizados=len(data.get('actualizados', [])),
             finalizados=0,
-            errores=data.get('errores', 0),
-            detalles="Sincronización manual de empleados completada."
+            errores=0,
+            detalles="Sincronización manual completada (Corrección Multi-Tenant)."
         ))
-        # ------------------------------------
 
         db.session.commit()
         return jsonify({'success': True})
@@ -503,7 +597,9 @@ def sync_fichajes_manual():
         data = request.get_json() or {}
         dias_atras = int(data.get('dias', 7))
         
-        service = OdooSyncService()
+        from app.services.sync_service import procesar_fichajes_diarios
+        procesar_fichajes_diarios(fecha_str=fecha_revision)
+        service = get_sync_adapter()                
         
         # BUCLE: Sincroniza hoy y retrocede "dias_atras"
         for i in range(dias_atras + 1):

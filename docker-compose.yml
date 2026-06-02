@@ -7,8 +7,10 @@ services:
       - "5000"
     volumes:
       - ./uploads:/app/uploads
+      - .:/app
     environment:
       - SECRET_KEY=your_secret_key
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_saas
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD="sgnn bkpf acno cnhv"
@@ -40,8 +42,11 @@ services:
   celery_worker:
     build: .
     command: celery -A app.celery_worker.celery worker --loglevel=info
+    volumes:
+      - .:/app
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - MAIL_USERNAME=${MAIL_USERNAME}
       - MAIL_PASSWORD="sgnn bkpf acno cnhv"
       - SECRET_KEY=your_secret_key
@@ -58,9 +63,12 @@ services:
   celery_beat:
     build: .
     command: celery -A app.celery_worker.celery beat --loglevel=info
+    volumes:
+      - .:/app
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_db
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_saas
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     depends_on:
       - redis
       - db

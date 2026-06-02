@@ -54,7 +54,6 @@ def verificar_hora_corte():
         from sqlalchemy import text
         from app.models import Tenant, ConfiguracionGlobal
         from datetime import datetime, timedelta
-        from app.services.sync_service import OdooSyncService
         from app.services.email_service import enviar_super_reporte_diario
         
         # 1. Obtenemos todos los clientes desde el esquema global
@@ -78,9 +77,13 @@ def verificar_hora_corte():
                     if not conf_ultimo or conf_ultimo.valor != hoy_str:
                         app.logger.info(f">>> HORA DE CORTE ALCANZADA PARA {tenant.subdominio.upper()}")
                         
-                        # Al instanciar, cogerá las credenciales Odoo de ESTE inquilino
-                        service = OdooSyncService()
-                        service.sync_fichajes_diarios()
+                        # INYECCIÓN PARA EL DISPATCHER
+                        from flask import g
+                        from app.sync.dispatcher import get_sync_adapter
+                        g.current_tenant = tenant 
+                        
+                        from app.services.sync_service import procesar_fichajes_diarios
+                        procesar_fichajes_diarios()
                         enviar_super_reporte_diario()
                         
                         if not conf_ultimo:
@@ -97,7 +100,6 @@ def fichajes_en_vivo():
     with app.app_context():
         from sqlalchemy import text
         from app.models import Tenant
-        from app.services.sync_service import OdooSyncService
         
         db.session.execute(text("SET search_path TO public"))
         tenants = Tenant.query.filter_by(is_active=True).all()
@@ -107,7 +109,11 @@ def fichajes_en_vivo():
                 db.session.execute(text(f"SET search_path TO {tenant.schema_name}"))
                 app.logger.info(f">>> SYNC FICHAJES EN VIVO -> {tenant.subdominio.upper()}")
                 
-                service = OdooSyncService()
+                from flask import g
+                from app.sync.dispatcher import get_sync_adapter
+                g.current_tenant = tenant
+                
+                service = get_sync_adapter()
                 service.sync_fichajes_diarios()
                 db.session.commit()
             except Exception as e:
@@ -119,7 +125,6 @@ def auto_sync_odoo():
     with app.app_context():
         from sqlalchemy import text
         from app.models import Tenant, Obra, User, Company, SyncLog
-        from app.services.sync_service import OdooSyncService
         
         db.session.execute(text("SET search_path TO public"))
         tenants = Tenant.query.filter_by(is_active=True).all()
@@ -129,7 +134,11 @@ def auto_sync_odoo():
                 db.session.execute(text(f"SET search_path TO {tenant.schema_name}"))
                 app.logger.info(f">>> SYNC NOCTURNA TOTAL -> {tenant.subdominio.upper()}")
                 
-                service = OdooSyncService()
+                from flask import g
+                from app.sync.dispatcher import get_sync_adapter
+                g.current_tenant = tenant
+                
+                service = get_sync_adapter()
                 ahora = datetime.now()
                 
                 # --- 1. OBRAS ---

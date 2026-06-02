@@ -1,128 +1,29 @@
 {% extends "base.html" %}
-{% block title %}Sincronización Odoo{% endblock %}
-{% block body_class %}layout-admin{% endblock %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    #loading-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(255, 255, 255, 0.92); z-index: 9999;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-    }
-</style>
-{% endblock %}
-
-{% block wrapper %}
-<div id="loading-overlay" class="d-none">
-    <div class="spinner-border text-primary mb-3" style="width: 4rem; height: 4rem; border-width: 0.4em;" role="status"></div>
-    <h3 class="text-primary font-weight-bold">Conectando con Odoo...</h3>
-    <p id="loading-text" class="text-muted font-weight-bold text-center">
-        Analizando datos en tiempo real.<br>Esto puede tardar unos segundos, por favor no cierres la ventana.
-    </p>
-</div>
-
-<div class="admin-shell">
-  {% include "_admin_sidebar.html" %}
-  <main class="admin-main">
-    <div class="admin-flashes"></div>
-    <header class="admin-header mb-4">
-        <h1 class="admin-header-title">Centro de Sincronización</h1>
-        <p class="admin-header-subtitle">Descarga novedades o revisa las importaciones automáticas nocturnas.</p>
-    </header>
-
-    <div class="row mb-4">
-        <div class="col-md-6 mb-4">
-            <div class="admin-panel text-center py-5 shadow-sm h-100 border-top-primary" style="border-top-width: 4px !important;">
-                <i class="fas fa-building fa-3x text-primary mb-3"></i>
-                <h3 class="h5 font-weight-bold">Obras / Proyectos</h3>
-                <p class="text-muted small px-3">Carga las novedades de Odoo a tu base de datos.</p>
-                <a href="{{ url_for('sync.preview_obras') }}" class="btn btn-outline-primary mt-2 font-weight-bold px-4" onclick="showLoader('Obras')">
-                    <i class="fas fa-search mr-1"></i> Buscar Novedades
-                </a>
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-plug text-primary"></i> Hub de Integraciones</h2>
+    <p class="text-muted">Gestiona los módulos adicionales contratados para tu entorno.</p>
+    
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card h-100 shadow-sm {% if not modulos_activos.get('odoo') %}bg-light opacity-75{% endif %}">
+                <div class="card-body text-center">
+                    <h3 style="color: #714B67;"><i class="fas fa-database"></i> Odoo ERP</h3>
+                    <p class="mt-3 text-muted small">
+                        Sincronización bidireccional de Obras, Empleados, Subcontratas y Control de Presencia (Fichajes).
+                    </p>
+                    
+                    {% if modulos_activos.get('odoo') %}
+                        <div class="badge badge-success mb-3">Módulo Activo</div><br>
+                        <a href="{{ url_for('sync.odoo_panel') }}" class="btn btn-primary w-100">Abrir Panel Odoo</a>
+                    {% else %}
+                        <div class="badge badge-secondary mb-3">Módulo No Contratado</div><br>
+                        <button class="btn btn-outline-secondary w-100" disabled>Contactar a Soporte</button>
+                    {% endif %}
+                </div>
             </div>
         </div>
-        <div class="col-md-6 mb-4">
-            <div class="admin-panel text-center py-5 shadow-sm h-100 border-top-info" style="border-top-width: 4px !important;">
-                <i class="fas fa-users fa-3x text-info mb-3"></i>
-                <h3 class="h5 font-weight-bold">Personal Interno</h3>
-                <p class="text-muted small px-3">Importa nuevos empleados y detecta conflictos.</p>
-                <a href="{{ url_for('sync.preview_empleados') }}" class="btn btn-outline-info mt-2 font-weight-bold px-4" onclick="showLoader('Empleados')">
-                    <i class="fas fa-search mr-1"></i> Buscar Novedades
-                </a>
-            </div>
-        </div>
-        <div class="col-md-6 mb-4">
-            <div class="admin-panel text-center py-5 shadow-sm h-100 border-top-warning" style="border-top-width: 4px !important;">
-                <i class="fas fa-hard-hat fa-3x text-warning mb-3"></i>
-                <h3 class="h5 font-weight-bold">Subcontratas</h3>
-                <p class="text-muted small px-3">Importa empresas y trabajadores externos etiquetados.</p>
-                <a href="{{ url_for('sync.preview_subcontratas') }}" class="btn btn-outline-warning mt-2 font-weight-bold text-dark px-4" onclick="showLoader('Subcontratas y Externos')">
-                    <i class="fas fa-search mr-1"></i> Buscar Novedades
-                </a>
-            </div>
-        </div>
-        <div class="col-md-6 mb-4">
-            <div class="admin-panel text-center py-5 shadow-sm h-100 border-top-danger" style="border-top-width: 4px !important; background-color: #fffafb;">
-                <i class="fas fa-balance-scale fa-3x text-danger mb-3"></i>
-                <h3 class="h5 font-weight-bold text-danger">Auditoría de Fichajes</h3>
-                <p class="text-muted small px-3">Revisa las discrepancias entre la planificación de la obra y los fichajes reales en Odoo.</p>
-                <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn btn-danger mt-2 font-weight-bold px-4 shadow-sm">
-                    <i class="fas fa-gavel mr-1"></i> Ir al Centro de Auditoría
-                </a>
-            </div>
-        </div>
+
     </div>
-
-    <h4 class="font-weight-bold mt-4 mb-3 border-bottom pb-2"><i class="fas fa-history mr-2"></i>Historial de Sincronizaciones</h4>
-    <div class="table-responsive bg-white border rounded shadow-sm">
-        <table class="table table-hover table-sm mb-0">
-            <thead class="bg-light text-secondary text-uppercase" style="font-size: 0.8rem;">
-                <tr>
-                    <th class="p-2">Fecha y Hora</th>
-                    <th class="p-2">Módulo</th>
-                    <th class="p-2">Modo</th>
-                    <th class="text-center p-2">Nuevos</th>
-                    <th class="text-center p-2">Actualizados</th>
-                    <th class="text-center p-2">Finalizados</th>
-                    <th class="text-center p-2">Pendientes / Errores</th>
-                </tr>
-            </thead>
-            <tbody style="font-size: 0.85rem;">
-                {% for log in logs %}
-                <tr>
-                    <td class="align-middle p-2"><strong>{{ log.fecha.strftime('%d/%m/%Y %H:%M') }}</strong></td>
-                    <td class="align-middle p-2">
-                        {% if log.tipo == 'Obras' %} <span class="badge badge-primary"><i class="fas fa-building"></i> Obras</span>
-                        {% elif log.tipo == 'Empleados' %} <span class="badge badge-info text-white"><i class="fas fa-users"></i> Internos</span>
-                        {% else %} <span class="badge badge-warning text-dark"><i class="fas fa-hard-hat"></i> Subcontratas</span> {% endif %}
-                    </td>
-                    <td class="align-middle p-2">
-                        {% if log.modo == 'Automático' %}<i class="fas fa-robot text-muted"></i> Auto{% else %}<i class="fas fa-user text-muted"></i> Manual{% endif %}
-                    </td>
-                    <td class="text-center text-success font-weight-bold align-middle p-2">+{{ log.nuevos }}</td>
-                    <td class="text-center text-warning font-weight-bold align-middle p-2">~{{ log.actualizados }}</td>
-                    <td class="text-center text-secondary font-weight-bold align-middle p-2">-{{ log.finalizados }}</td>
-                    <td class="text-center align-middle p-2">
-                        {% if log.errores > 0 %} <span class="badge badge-danger">{{ log.errores }} omitidos</span>
-                        {% else %} <span class="text-muted"><i class="fas fa-check"></i> 0</span> {% endif %}
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" class="text-center py-4 text-muted">No hay registros recientes.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-  </main>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    function showLoader(tipo) {
-        document.getElementById('loading-overlay').classList.remove('d-none');
-        document.getElementById('loading-text').innerHTML = `Analizando <b>${tipo}</b> en Odoo.<br>Esto puede tardar unos segundos, no cierres la ventana.`;
-    }
-</script>
 {% endblock %}

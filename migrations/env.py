@@ -30,63 +30,16 @@ target_metadata = current_app.extensions['migrate'].db.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-
-
 def run_migrations_online():
-    """Run migrations in 'online' mode.
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-    """
-    connectable = current_app.extensions['migrate'].db.engine
+    """Run migrations in 'online' mode."""
+    
+    # ---> 1. AÑADIMOS ESTE FILTRO PARA IGNORAR LA TABLA DE ALEMBIC <---
+    def include_object(object, name, type_, reflected, compare_to):
+        if type_ == "table" and name == "alembic_version":
+            return False
+        return True
+    # -----------------------------------------------------------------
 
-    with connectable.connect() as connection:
-        from sqlalchemy import text
-        
-        # 1. MIGRAR ESQUEMA PUBLIC PRIMERO
-        # Nos aseguramos de que el esquema principal (donde viven los tenants) se actualice
-        connection.execute(text("SET search_path TO public"))
-        context.configure(
-            connection=connection, 
-            target_metadata=target_metadata,
-            version_table_schema='public'
-        )
-        with context.begin_transaction():
-            context.run_migrations()
-
-        # 2. OBTENER INQUILINOS Y MIGRAR CADA UNO
-        try:
-            # Buscamos los esquemas de los clientes activos
-            result = connection.execute(text("SELECT schema_name FROM tenants WHERE is_active = true"))
-            tenant_schemas = [row[0] for row in result]
-        except Exception:
-            # Si la tabla tenants no existe aún (ej: base de datos virgen), evitamos el crash
-            tenant_schemas = []
-
-        for schema in tenant_schemas:
-            print(f"🚀 Aplicando migraciones al inquilino: {schema}")
-            connection.execute(text(f"SET search_path TO {schema}"))
-            
-            # Reconfiguramos el contexto de Alembic aislando el esquema
-            context.configure(
-                connection=connection, 
-                target_metadata=target_metadata,
-                version_table_schema=schema
-            )
-            with context.begin_transaction():
-                context.run_migrations()
-
-
-def run_migrations_online():
-    """Run migrations in 'online' mode.
-
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
-
-    # this callback is used to prevent an auto-migration from being generated
-    # when there are no changes to the schema
-    # reference: http://alembic.zzzcomputing.com/en/latest/cookbook.html
     def process_revision_directives(context, revision, directives):
         if getattr(config.cmd_opts, 'autogenerate', False):
             script = directives[0]
@@ -94,19 +47,50 @@ def run_migrations_online():
                 directives[:] = []
                 logger.info('No changes in schema detected.')
 
-    connectable = current_app.extensions['migrate'].db.get_engine()
+    connectable = current_app.extensions['migrate'].db.engine
 
     with connectable.connect() as connection:
+        from sqlalchemy import text
+        
+        # 1. MIGRAR ESQUEMA PUBLIC PRIMERO
+        connection.execute(text("SET search_path TO public"))
         context.configure(
-            connection=connection,
+            connection=connection, 
             target_metadata=target_metadata,
+            version_table_schema='public',
+            include_object=include_object,  # <--- LE PASAMOS EL FILTRO AQUÍ
             process_revision_directives=process_revision_directives,
             **current_app.extensions['migrate'].configure_args
         )
-
         with context.begin_transaction():
             context.run_migrations()
 
+        # Si estamos generando el archivo de migración, paramos aquí.
+        if getattr(config.cmd_opts, 'autogenerate', False):
+            return
+
+        # 2. OBTENER INQUILINOS Y MIGRAR CADA UNO (Solo ocurre al hacer Upgrade)
+        try:
+            result = connection.execute(text("SELECT schema_name FROM tenants WHERE is_active = true"))
+            tenant_schemas = [row[0] for row in result]
+        except Exception:
+            tenant_schemas = []
+
+        for schema in tenant_schemas:
+            print(f"🚀 Aplicando migraciones al inquilino: {schema}")
+            connection.execute(text(f"SET search_path TO {schema}"))
+            
+            context.configure(
+                connection=connection, 
+                target_metadata=target_metadata,
+                version_table_schema=schema,
+                include_object=include_object,  # <--- LE PASAMOS EL FILTRO AQUÍ TAMBIÉN
+                process_revision_directives=process_revision_directives,
+                **current_app.extensions['migrate'].configure_args
+            )
+            with context.begin_transaction():
+                context.run_migrations()
+                
 
 if context.is_offline_mode():
     run_migrations_offline()
