@@ -158,7 +158,7 @@ class OdooSyncService:
             if 'JO ' in department or 'Jefe de obra' in department or 'jefe' in categoria.lower():
                 role = 'jefe_obra'
             else:
-                role = 'currante'
+                role = 'operario'
 
             email = emp.get('work_email') or f"sin_email_{emp['id']}@soltec.local"
             
@@ -309,7 +309,7 @@ class OdooSyncService:
                 'lastname': lastname,
                 'dni': dni_seguro,
                 'email': email,
-                'role': 'currante',
+                'role': 'operario',
                 'categoria_profesional': o_cont.get('function') or 'Externo',
                 'odoo_company_id': odoo_company_id,
                 'cambios': {}

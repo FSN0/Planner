@@ -32,7 +32,7 @@ def centro_mando():
             Nota.obras.any(or_(Obra.jefe_obra_id == current_user.id, Obra.encargado_id == current_user.id))
         )
     else:
-        # Currantes y RRHH ven las notas de las obras donde han sido asignados alguna vez
+        # Operarios y RRHH ven las notas de las obras donde han sido asignados alguna vez
         obras_asignadas_subquery = db.session.query(Asignacion.obra_id).filter(Asignacion.user_id == current_user.id).subquery()
         cond_obra = and_(
             Nota.es_privada == False,

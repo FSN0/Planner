@@ -8,7 +8,7 @@ from flask import url_for
 
 from app import db
 # IMPORTANTE: Añadido RegistroFichaje a los imports
-from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_CURRANTE, ROLE_ADMIN, UserObraConfig, RegistroFichaje
+from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN, UserObraConfig, RegistroFichaje
 
 def parse_date(date_str):
     """Utilidad interna para parsear fechas de forma segura"""
@@ -126,7 +126,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     _, num_days = calendar.monthrange(year, month)
     header_days = []
     
-    all_currantes_count = User.query.filter_by(role=ROLE_CURRANTE, active=True, is_deleted=False).count()
+    all_operarios_count = User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).count()
     
     month_start = date(year, month, 1)
     month_end = date(year, month, num_days)
@@ -140,7 +140,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     for day in range(1, num_days + 1):
         current = date(year, month, day)
         ocupados = ocupados_por_dia.get(current, 0)
-        libres = max(0, all_currantes_count - ocupados)
+        libres = max(0, all_operarios_count - ocupados)
         
         header_days.append({
             'date': current,
@@ -185,7 +185,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
         timeline_data.append({'obra': obra, 'days': days_status})
 
     # 7. Listas Auxiliares
-    all_currantes = User.query.filter_by(role=ROLE_CURRANTE, active=True, is_deleted=False).order_by(User.name).all()
+    all_operarios = User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).order_by(User.name).all()
     
     asig_global_hoy = Asignacion.query.filter_by(fecha=selected_date).all()
     busy_ids = {a.user_id for a in asig_global_hoy}
@@ -193,7 +193,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     free_workers = []
     busy_workers = []
     
-    for w in all_currantes:
+    for w in all_operarios:
         # Inyectamos estado de fichaje al usuario libre/ocupado
         w.temp_estado_fichaje = fichajes_dict.get(w.id, 'Sin_Registro') if user.role == ROLE_ADMIN else None
         

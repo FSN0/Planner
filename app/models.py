@@ -5,7 +5,7 @@ from datetime import datetime, date
 import random
 
 # --- CONSTANTES DE ROLES ---
-ROLE_CURRANTE = 'currante'
+ROLE_OPERARIO = 'operario'
 ROLE_JEFE = 'jefe_obra'
 ROLE_RRHH = 'rrhh'
 ROLE_ADMIN = 'admin'
@@ -45,7 +45,7 @@ class Company(db.Model):
 
 class User(UserMixin, db.Model):
     """
-    Modelo unificado de Usuario (Admin, Jefes, RRHH, Currantes).
+    Modelo unificado de Usuario (Admin, Jefes, RRHH, Operarios).
     """
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -55,7 +55,7 @@ class User(UserMixin, db.Model):
     # Autenticación
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, currante
+    role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, operario
     
     # Datos Personales
     name = db.Column(db.String(100), nullable=False)
@@ -70,7 +70,7 @@ class User(UserMixin, db.Model):
     categoria_profesional = db.Column(db.String(100), nullable=True) # Ej: Oficial 1ª, Peón
 
     # Estados y Ciclo de vida
-    active = db.Column(db.Boolean, default=False)  # Aprobado por RRHH (para currantes)
+    active = db.Column(db.Boolean, default=False)  # Aprobado por RRHH (para operarios)
     is_deleted = db.Column(db.Boolean, default=False)  # Soft delete
     
     # Configuración
@@ -132,7 +132,7 @@ class User(UserMixin, db.Model):
         self.scheduled_deactivation_date = None
 
         # Limpiar asignaciones futuras
-        if self.role == ROLE_CURRANTE:
+        if self.role == ROLE_OPERARIO:
             from app.models import Asignacion
             future_assignments = Asignacion.query.filter(
                 Asignacion.user_id == self.id,
@@ -159,7 +159,7 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 class Document(db.Model):
-    """Documentos subidos por el currante."""
+    """Documentos subidos por el operario."""
     __tablename__ = 'documents'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -378,7 +378,7 @@ class Solicitud(db.Model):
     
     
 class Rating(db.Model):
-    """Sistema de Puntuación/Reputación para Currantes."""
+    """Sistema de Puntuación/Reputación para Operarios."""
     __tablename__ = 'ratings'
     
     id = db.Column(db.Integer, primary_key=True)

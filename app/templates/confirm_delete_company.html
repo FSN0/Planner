@@ -78,13 +78,13 @@
                 </p>
 
                 {# CASO A: TIENE TRABAJADORES (CONFLICTO) #}
-                {% if currantes|length > 0 %}
+                {% if operarios|length > 0 %}
                     <div class="alert alert-warning text-left small mb-4 border-warning">
                         <div class="d-flex">
                             <i class="fas fa-exclamation-triangle fa-2x mr-3 mt-1 text-warning"></i>
                             <div>
                                 <strong class="text-dark">Atención:</strong> Esta empresa tiene 
-                                <span class="badge badge-warning text-dark">{{ currantes|length }} trabajadores</span> asociados.
+                                <span class="badge badge-warning text-dark">{{ operarios|length }} trabajadores</span> asociados.
                                 <div class="mt-1">No se puede eliminar sin resolver qué hacer con el personal.</div>
                             </div>
                         </div>
@@ -123,7 +123,7 @@
                                     </label>
                                 </div>
                                 <div class="small text-danger ml-4">
-                                    Se archivarán los {{ currantes|length }} trabajadores. Esta acción es destructiva.
+                                    Se archivarán los {{ operarios|length }} trabajadores. Esta acción es destructiva.
                                 </div>
                             </div>
                         </div>

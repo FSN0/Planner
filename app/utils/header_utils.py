@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 import calendar
-from app.models import Asignacion, User, ROLE_CURRANTE
+from app.models import Asignacion, User, ROLE_OPERARIO
 from sqlalchemy import func
 
 def get_header_day_data(year, month, selected_date_obj):
@@ -19,7 +19,7 @@ def get_header_day_data(year, month, selected_date_obj):
     header_days = []
     
     # Total activos base
-    total_active = User.query.filter_by(role=ROLE_CURRANTE, active=True, is_deleted=False).count()
+    total_active = User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).count()
 
     # Pre-cargar todas las asignaciones del mes para no hacer 30 queries
     start_month = date(year, month, 1)
