@@ -12,9 +12,7 @@ with app.app_context():
     # 1. Forzar el esquema público
     db.session.execute(text("SET search_path TO public"))
     
-    # 2. Crear la tabla de Tenants en el esquema público
-    print("📁 Creando estructura global...")
-    db.create_all()
+    # 2. Crear la tabla de Tenants en el esquema p
     
     # 3. Crear tu primer cliente (Por ejemplo, tu cliente original para no perder sus datos, o uno de demo)
     print("🏗️ Provisionando el primer Inquilino (Tenant)...")

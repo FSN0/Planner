@@ -4,7 +4,7 @@ from flask_login import login_required
 from app.models import User, ROLE_RRHH, ROLE_CURRANTE
 from app import db
 import os, zipfile, io
-from app.document_utils import download_document_file, download_documents_zip
+
 from app.decorators import roles_required
 
 rrhh_bp = Blueprint('rrhh', __name__, url_prefix='/rrhh')
@@ -43,17 +43,7 @@ def deactivate(user_id):
         flash("Usuario no encontrado o rol inválido", "danger")
     return redirect(request.referrer or url_for('admin.personal'))
 
-@rrhh_bp.route('/download/<int:user_id>/<doc_type>')
-@login_required
-@roles_required(ROLE_RRHH)
-def download_document(user_id, doc_type):
-    return download_document_file(user_id, doc_type, 'rrhh.panel')
 
-@rrhh_bp.route('/download_zip/<int:user_id>')
-@login_required
-@roles_required(ROLE_RRHH)
-def download_zip(user_id):
-    return download_documents_zip(user_id, 'rrhh.panel')
 
 @rrhh_bp.route('/gestion_personal', methods=['GET'])
 @login_required

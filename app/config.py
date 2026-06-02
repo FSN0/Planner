@@ -2,10 +2,12 @@ import os
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev_secret_key')
+    # --- CREDENCIALES DEL SUPERADMIN ---
+    SUPERADMIN_USER = os.environ.get('SUPERADMIN_USER', 'fsn')
+    SUPERADMIN_PASS = os.environ.get('SUPERADMIN_PASS', '123')
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres@db:5432/gestion_obra_db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', '/app/uploads')
-    MAX_CONTENT_LENGTH = int(0.5 * 1024 * 1024 * 1024)
+
 
     # Configuración de correo (usa una cuenta Gmail configurada con app password)
     MAIL_SERVER = 'smtp.gmail.com'

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, date
 
 from app.services.solicitud_service import update_solicitudes_for_assignment
 from app.services.assignment_service import process_assignment_action
-from app.document_utils import download_documents_zip, download_document_file
+
 from app.decorators import roles_required
 from itsdangerous import URLSafeTimedSerializer
 import os
@@ -1270,17 +1270,6 @@ def approve_currante(user_id):
     return redirect(url_for("admin.personal", tab="currantes"))
 
 
-@admin_bp.route("/download_document/<int:user_id>/<doc_type>")
-@login_required
-def download_document(user_id, doc_type):
-    return download_document_file(user_id, doc_type, "admin.personal")
-
-
-@admin_bp.route("/download_zip/<int:user_id>")
-@login_required
-def download_zip(user_id):
-    return download_documents_zip(user_id, "admin.personal")
-
 
 
 
@@ -1756,14 +1745,23 @@ def update_config():
         db.session.add(ConfiguracionGlobal(clave='aceptar_primer_fichaje', valor=primer_fichaje_val))
     else:
         conf_primer.valor = primer_fichaje_val
-        # --------------------------
 
+    odoo_url = request.form.get('odoo_url')
+    if odoo_url:
+        conf_odoo = ConfiguracionGlobal.query.filter_by(clave='odoo_url').first()
+        if not conf_odoo:
+            db.session.add(ConfiguracionGlobal(clave='odoo_url', valor=odoo_url))
+        else:
+            conf_odoo.valor = odoo_url
+            
     try:
             db.session.commit()
             flash('Configuración global actualizada correctamente.', 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al guardar la configuración: {str(e)}', 'danger')
+        
+    
             
     return redirect(url_for('admin.configuracion_global'))
 
@@ -1862,12 +1860,23 @@ def batch_update_obras_status():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def sso_odoo_contactos():
+    from app.models import ConfiguracionGlobal
+    from itsdangerous import URLSafeTimedSerializer
+    import datetime
 
     sso_secret = current_app.config.get('SSO_SECRET_KEY', 'default_dev_secret_key')
-    dominio_base = request.host.split(':')[0]
-    odoo_url = f"{request.scheme}://{dominio_base}:5002"
+    
+    # 1. Buscar si el cliente tiene una instancia de Odoo configurada
+    conf_odoo = ConfiguracionGlobal.query.filter_by(clave='odoo_url').first()
+    
+    if conf_odoo and conf_odoo.valor:
+        odoo_url = conf_odoo.valor.rstrip('/') # Quitamos barra final para evitar errores
+    else:
+        # Fallback por defecto (puerto 5002) si no ha configurado nada
+        dominio_base = request.host.split(':')[0]
+        odoo_url = f"{request.scheme}://{dominio_base}:5002"
 
-    # Limpieza de nombre para evitar el "None"
+    # Limpieza de nombre
     u_name = current_user.name if current_user.name and str(current_user.name).lower() != 'none' else ""
     u_last = current_user.lastname if current_user.lastname and str(current_user.lastname).lower() != 'none' else ""
     full_name = f"{u_name} {u_last}".strip() or current_user.username
@@ -1875,9 +1884,9 @@ def sso_odoo_contactos():
     serializer = URLSafeTimedSerializer(sso_secret)
     payload = {
         'user_id': current_user.id,
-        'odoo_id': current_user.odoo_id, # IMPORTANTE: Enviamos el ID de Odoo
+        'odoo_id': current_user.odoo_id,
         'name': full_name,
-        'iat': datetime.utcnow().timestamp()
+        'iat': datetime.datetime.utcnow().timestamp()
     }
     token = serializer.dumps(payload)
     

@@ -110,7 +110,7 @@ class User(UserMixin, db.Model):
     scheduled_deactivation_date = db.Column(db.Date, nullable=True)
 
     # Relación con documentos
-    documents = db.relationship('Document', backref='user', lazy=True)
+    
     
     @property
     def reputation_score(self):
@@ -193,18 +193,6 @@ def load_user(user_id):
     # Buscamos al usuario en el esquema actual
     return User.query.get(int(user_id))
 
-class Document(db.Model):
-    """Documentos subidos por el currante."""
-    __tablename__ = 'documents'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    doc1 = db.Column(db.String(200))
-    doc2 = db.Column(db.String(200))
-    doc3 = db.Column(db.String(200))
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def __repr__(self):
-        return f'<Document for user {self.user_id}>'
 
 
 class UserObraConfig(db.Model):

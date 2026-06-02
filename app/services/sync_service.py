@@ -6,19 +6,28 @@ from app.models import Obra, User, Company
 
 class OdooSyncService:
     def __init__(self):
-        self.url = os.environ.get('ODOO_URL', '').strip()
-        self.db_name = os.environ.get('ODOO_DB', '').strip()
-        self.user = os.environ.get('ODOO_USER', '').strip()
-        self.pwd = os.environ.get('ODOO_PASSWORD', '').strip()
+        from app.models import ConfiguracionGlobal
+        
+        # 1. Buscamos las credenciales en el esquema del cliente activo
+        conf_url = ConfiguracionGlobal.query.filter_by(clave='odoo_url').first()
+        conf_db = ConfiguracionGlobal.query.filter_by(clave='odoo_db').first()
+        conf_user = ConfiguracionGlobal.query.filter_by(clave='odoo_user').first()
+        conf_pwd = ConfiguracionGlobal.query.filter_by(clave='odoo_password').first()
+
+        # 2. Asignamos con Fallback a las variables de entorno (por si estás haciendo pruebas)
+        self.url = conf_url.valor.strip() if conf_url and conf_url.valor else os.environ.get('ODOO_URL', '').strip()
+        self.db_name = conf_db.valor.strip() if conf_db and conf_db.valor else os.environ.get('ODOO_DB', '').strip()
+        self.user = conf_user.valor.strip() if conf_user and conf_user.valor else os.environ.get('ODOO_USER', '').strip()
+        self.pwd = conf_pwd.valor.strip() if conf_pwd and conf_pwd.valor else os.environ.get('ODOO_PASSWORD', '').strip()
         
         if not self.url or not self.url.startswith('http'):
-            raise ValueError("Falta configurar la variable ODOO_URL en Docker o no empieza por http://")
+            raise ValueError("No hay ODOO_URL configurada para este inquilino.")
             
         try:
             self.common = xmlrpc.client.ServerProxy(f'{self.url}/xmlrpc/2/common')
             self.uid = self.common.authenticate(self.db_name, self.user, self.pwd, {})
             if not self.uid:
-                raise ValueError("Credenciales de Odoo incorrectas.")
+                raise ValueError("Credenciales de Odoo incorrectas para este inquilino.")
             self.models = xmlrpc.client.ServerProxy(f'{self.url}/xmlrpc/2/object')
         except Exception as e:
             raise ValueError(f"No se pudo establecer conexión XML-RPC: {str(e)}")
