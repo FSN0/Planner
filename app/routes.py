@@ -11,8 +11,8 @@ main_bp = Blueprint('main', __name__)
 @login_required
 def dashboard():
     # Dashboard general que redirige a vistas específicas según el rol del usuario.
-    if current_user.role == 'currante':
-        return render_template('currante_dashboard.html')
+    if current_user.role == 'operario':
+        return render_template('operario_dashboard.html')
     elif current_user.role == 'jefe_obra':
         return redirect(url_for('jefe.obras_detailed', selected_date=""))
     elif current_user.role == 'admin':

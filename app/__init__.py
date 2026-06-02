@@ -29,7 +29,7 @@ def create_app():
     # Importación de Blueprints
     # ---------------------------------------------------------
     from app.auth.routes import auth_bp
-    from app.currantes.routes import currantes_bp
+    from app.operarios.routes import operarios_bp
     from app.jefe_obra.routes import jefe_bp
     from app.rrhh.routes import rrhh_bp
     from app.admin.routes import admin_bp
@@ -47,7 +47,7 @@ def create_app():
     app.register_blueprint(admin_bp, url_prefix='/admin')
     app.register_blueprint(jefe_bp, url_prefix='/jefe')
     app.register_blueprint(rrhh_bp, url_prefix='/rrhh')
-    app.register_blueprint(currantes_bp, url_prefix='/currantes')
+    app.register_blueprint(operarios_bp, url_prefix='/operarios')
     app.register_blueprint(notas_bp, url_prefix='/notas')
     app.register_blueprint(api_bp, url_prefix='/api/v6')
     app.register_blueprint(sync_bp, url_prefix='/sync')
@@ -60,7 +60,7 @@ def create_app():
     from app.utils.date_utils import get_weekday_initial
     app.jinja_env.globals.update(get_weekday_initial=get_weekday_initial)
 
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_RRHH, ROLE_CURRANTE
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_RRHH, ROLE_OPERARIO
 
     @app.context_processor
     def inject_notifications():

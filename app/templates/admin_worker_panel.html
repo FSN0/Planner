@@ -34,7 +34,7 @@
         <a href="{{ url_for('admin.personal') }}" class="text-muted small"><i class="fas fa-arrow-left"></i> Volver</a>
         <div>
              {% if current_user.role == 'admin' %}
-            <a href="{{ url_for('admin.edit_currante', user_id=worker.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i> Editar</a>
+            <a href="{{ url_for('admin.edit_operario', user_id=worker.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i> Editar</a>
             {% endif %}
         </div>
     </div>

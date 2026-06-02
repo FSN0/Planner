@@ -9,7 +9,7 @@ from app.models import (
     ROLE_ADMIN,
     ROLE_JEFE,
     ROLE_RRHH,
-    ROLE_CURRANTE,
+    ROLE_OPERARIO,
     Company,
     Solicitud,
 )
@@ -282,7 +282,7 @@ def solicitud_detail(solicitud_id):
 
     if fecha_inicio and fecha_fin:
         query = User.query.filter(
-            User.role == ROLE_CURRANTE, 
+            User.role == ROLE_OPERARIO, 
             User.active.is_(True), 
             User.is_deleted.is_(False)
         )
@@ -396,7 +396,7 @@ def schedule_status(user_id):
         return jsonify({"success": False, "error": "Fecha inválida"}), 400
 
     user = User.query.get(user_id)
-    if not user or user.role != ROLE_CURRANTE:
+    if not user or user.role != ROLE_OPERARIO:
         return jsonify({"success": False, "error": "Usuario no encontrado o rol inválido"}), 404
 
     if action == "deactivate":
@@ -419,7 +419,7 @@ def buscar_obras():
     start_date_str = request.args.get("start_date", "")
     end_date_str = request.args.get("end_date", "")
     jefe_id = request.args.get("jefe_id", "")
-    currante_id = request.args.get("currante_id", "")
+    operario_id = request.args.get("operario_id", "")
 
     start_date = parse_date(start_date_str, default=None)
     end_date = parse_date(end_date_str, default=None)
@@ -442,17 +442,17 @@ def buscar_obras():
         except ValueError:
             pass
 
-    if currante_id:
+    if operario_id:
         try:
-            currante_id_int = int(currante_id)
-            query = query.join(Asignacion).filter(Asignacion.user_id == currante_id_int).distinct()
+            operario_id_int = int(operario_id)
+            query = query.join(Asignacion).filter(Asignacion.user_id == operario_id_int).distinct()
         except ValueError:
             pass
 
     obras = query.order_by(Obra.fecha_inicio.desc()).all()
 
     jefes = User.query.filter(User.role.in_([ROLE_JEFE, ROLE_ADMIN])).all()
-    currantes = User.query.filter_by(role=ROLE_CURRANTE).all()
+    operarios = User.query.filter_by(role=ROLE_OPERARIO).all()
 
     return render_template(
         "admin_busqueda_obras.html",
@@ -460,9 +460,9 @@ def buscar_obras():
         start_date=start_date_str,
         end_date=end_date_str,
         jefe_id=jefe_id,
-        currante_id=currante_id,
+        operario_id=operario_id,
         jefes=jefes,
-        currantes=currantes,
+        operarios=operarios,
     )
 
 
@@ -740,16 +740,16 @@ def obras_detailed():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_RRHH)
 def personal():
-    # 1. Usuarios INTERNOS (No currantes, O currantes de empresa interna)
+    # 1. Usuarios INTERNOS (No operarios, O operarios de empresa interna)
     internos = User.query.join(Company, User.company_id == Company.id, isouter=True).filter(
-        (User.role != ROLE_CURRANTE) | 
-        ((User.role == ROLE_CURRANTE) & (Company.is_internal == True)),
+        (User.role != ROLE_OPERARIO) | 
+        ((User.role == ROLE_OPERARIO) & (Company.is_internal == True)),
         User.is_deleted == False
     ).order_by(User.name).all()
 
-    # 2. Currantes EXTERNOS (Empresa con is_internal=False)
-    base_currantes = User.query.join(Company).filter(
-        User.role == ROLE_CURRANTE, 
+    # 2. Operarios EXTERNOS (Empresa con is_internal=False)
+    base_operarios = User.query.join(Company).filter(
+        User.role == ROLE_OPERARIO, 
         Company.is_internal == False, 
         User.is_deleted == False
     )
@@ -757,10 +757,10 @@ def personal():
     # Filtro por empresa en la URL (?company_id=5)
     company_filter_id = request.args.get("company_id")
     if company_filter_id:
-        base_currantes = base_currantes.filter(User.company_id == int(company_filter_id))
+        base_operarios = base_operarios.filter(User.company_id == int(company_filter_id))
 
-    currantes_activos = base_currantes.filter(User.active == True).order_by(User.name).all()
-    currantes_pendientes = base_currantes.filter(User.active == False).order_by(User.name).all()
+    operarios_activos = base_operarios.filter(User.active == True).order_by(User.name).all()
+    operarios_pendientes = base_operarios.filter(User.active == False).order_by(User.name).all()
 
     # Para el dropdown de filtros en la vista
     companies = Company.query.filter_by(is_internal=False).all()
@@ -769,34 +769,34 @@ def personal():
         "gestion_personal_unificado.html",
         view_mode="admin",
         internos=internos,
-        currantes_activos=currantes_activos,
-        currantes_pendientes=currantes_pendientes,
-        active_count=len(currantes_activos),
-        pending_count=len(currantes_pendientes),
+        operarios_activos=operarios_activos,
+        operarios_pendientes=operarios_pendientes,
+        active_count=len(operarios_activos),
+        pending_count=len(operarios_pendientes),
         companies=companies, # Pasamos objetos, no strings
         company_filter=company_filter_id,
         next_url=request.path
     )
 
 
-@admin_bp.route("/deactivate_currante/<int:user_id>", methods=["POST"])
+@admin_bp.route("/deactivate_operario/<int:user_id>", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_RRHH)
-def deactivate_currante(user_id):
+def deactivate_operario(user_id):
     user = User.query.get(user_id)
-    if user and user.role == ROLE_CURRANTE:
+    if user and user.role == ROLE_OPERARIO:
         user.active = False
         db.session.commit()
         flash("Operario desactivado", "success")
     else:
         flash("Usuario no encontrado o rol inválido", "danger")
-    return redirect(request.referrer or url_for("admin.personal", tab="currantes"))
+    return redirect(request.referrer or url_for("admin.personal", tab="operarios"))
 
 
-@admin_bp.route("/edit_currante/<int:user_id>", methods=["GET", "POST"])
+@admin_bp.route("/edit_operario/<int:user_id>", methods=["GET", "POST"])
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_RRHH)
-def edit_currante(user_id):
+def edit_operario(user_id):
     user = User.query.get_or_404(user_id)
     companies = Company.query.all()
 
@@ -812,10 +812,10 @@ def edit_currante(user_id):
             flash(f"Error: El DNI {new_dni} ya pertenece a otro usuario ({existing_dni.name}).", "danger")
             # Devolvemos la plantilla directamente para no perder lo escrito, pero sin guardar
             return render_template(
-                "gestion_currante_form.html",
+                "gestion_operario_form.html",
                 edit_mode=True,
                 user=user, # Ojo: user sigue teniendo los datos viejos en memoria
-                action_url=url_for("admin.edit_currante", user_id=user.id),
+                action_url=url_for("admin.edit_operario", user_id=user.id),
                 cancel_url=url_for("admin.personal"),
                 companies=companies,
             )
@@ -825,10 +825,10 @@ def edit_currante(user_id):
         if existing_email:
             flash(f"Error: El email {new_email} ya está registrado.", "danger")
             return render_template(
-                "gestion_currante_form.html",
+                "gestion_operario_form.html",
                 edit_mode=True,
                 user=user,
-                action_url=url_for("admin.edit_currante", user_id=user.id),
+                action_url=url_for("admin.edit_operario", user_id=user.id),
                 cancel_url=url_for("admin.personal"),
                 companies=companies,
             )
@@ -870,10 +870,10 @@ def edit_currante(user_id):
 
     # GET Request o si falla algo
     return render_template(
-        "gestion_currante_form.html",
+        "gestion_operario_form.html",
         edit_mode=True,
         user=user,
-        action_url=url_for("admin.edit_currante", user_id=user.id),
+        action_url=url_for("admin.edit_operario", user_id=user.id),
         cancel_url=url_for("admin.personal"),
         companies=companies,
     )
@@ -886,7 +886,7 @@ def edit_currante(user_id):
 @roles_required(ROLE_ADMIN)
 def panel():
     # --- Estadísticas Generales ---
-    total_currantes = User.query.filter_by(role=ROLE_CURRANTE, is_deleted=False).count()
+    total_operarios = User.query.filter_by(role=ROLE_OPERARIO, is_deleted=False).count()
     total_obras = Obra.query.filter(Obra.is_deleted != True).count()
     
     total_jefes = User.query.filter(
@@ -905,23 +905,23 @@ def panel():
 
     # --- CORRECCIÓN CRÍTICA: Usar relación SQL en lugar de company_code ---
     
-    # 1. Internos: Currantes asociados a una empresa con flag is_internal=True
+    # 1. Internos: Operarios asociados a una empresa con flag is_internal=True
     total_internos = (
         User.query
         .join(Company) # Hacemos Join con la tabla de empresas
         .filter(
-            User.role == ROLE_CURRANTE,
+            User.role == ROLE_OPERARIO,
             User.is_deleted == False,
             Company.is_internal == True # Filtramos por la propiedad de la empresa
         ).count()
     )
 
-    # 2. Externos: Currantes asociados a una empresa con flag is_internal=False
+    # 2. Externos: Operarios asociados a una empresa con flag is_internal=False
     total_externos = (
         User.query
         .join(Company)
         .filter(
-            User.role == ROLE_CURRANTE,
+            User.role == ROLE_OPERARIO,
             User.is_deleted == False,
             Company.is_internal == False
         ).count()
@@ -931,7 +931,7 @@ def panel():
 
     return render_template(
         "admin_panel.html",
-        total_currantes=total_currantes,
+        total_operarios=total_operarios,
         total_obras=total_obras,
         total_jefes=total_jefes,
         total_rrhh=total_rrhh,
@@ -948,7 +948,7 @@ def create_obra():
     # Cargar listas necesarias
     jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).all()
     encargados = User.query.join(Company).filter(
-        User.role == ROLE_CURRANTE,
+        User.role == ROLE_OPERARIO,
         User.active == True,
         User.is_deleted == False,
         Company.is_internal == True 
@@ -1024,7 +1024,7 @@ def edit_obra(obra_id):
     obra = Obra.query.get_or_404(obra_id)
     jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).all()
     encargados = User.query.join(Company).filter(
-        User.role == ROLE_CURRANTE,
+        User.role == ROLE_OPERARIO,
         User.active == True,
         User.is_deleted == False,
         Company.is_internal == True
@@ -1107,8 +1107,8 @@ def confirm_delete_company(company_id):
     company = Company.query.get_or_404(company_id)
     
     # CORREGIDO: Filtrar por company_id, NO por company_code
-    currantes = User.query.filter_by(
-        role=ROLE_CURRANTE, 
+    operarios = User.query.filter_by(
+        role=ROLE_OPERARIO, 
         company_id=company.id,  # <--- CAMBIO AQUÍ
         is_deleted=False
     ).all()
@@ -1118,7 +1118,7 @@ def confirm_delete_company(company_id):
     return render_template(
         "confirm_delete_company.html",
         company=company,
-        currantes=currantes,
+        operarios=operarios,
         companies=companies,
     )
     
@@ -1130,7 +1130,7 @@ def delete_company(company_id):
     
     # CORREGIDO: Filtrar por ID
     associated_workers = User.query.filter_by(
-        role=ROLE_CURRANTE, 
+        role=ROLE_OPERARIO, 
         company_id=company.id # <--- CAMBIO AQUÍ
     ).all()
     
@@ -1247,7 +1247,7 @@ def create_user():
     dummy_user = User() 
 
     return render_template(
-        "gestion_currante_form.html",
+        "gestion_operario_form.html",
         edit_mode=False,
         user=dummy_user,  # <--- ESTA ES LA LÍNEA QUE FALTABA
         action_url=url_for("admin.create_user"),
@@ -1256,18 +1256,18 @@ def create_user():
    )
 
 
-@admin_bp.route("/approve_currante/<int:user_id>", methods=["POST"])
+@admin_bp.route("/approve_operario/<int:user_id>", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_RRHH)
-def approve_currante(user_id):
+def approve_operario(user_id):
     user = User.query.get_or_404(user_id)
-    if user.role == ROLE_CURRANTE:
+    if user.role == ROLE_OPERARIO:
         user.active = True
         db.session.commit()
         flash("Operario activado", "success")
     else:
-        flash("El usuario no es un currante", "danger")
-    return redirect(url_for("admin.personal", tab="currantes"))
+        flash("El usuario no es un operario", "danger")
+    return redirect(url_for("admin.personal", tab="operarios"))
 
 
 
@@ -1648,7 +1648,7 @@ def search_workers():
     results = [{"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"}]
     
     # 2. Buscar en BD
-    query = User.query.filter(User.role == 'currante', User.active == True, User.is_deleted == False)
+    query = User.query.filter(User.role == 'operario', User.active == True, User.is_deleted == False)
     if q:
         query = query.filter(or_(
             func.lower(User.name).contains(q),

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 from sqlalchemy import func
 from app import db
-from app.models import Obra, User, Company, ROLE_CURRANTE
+from app.models import Obra, User, Company, ROLE_OPERARIO
 
 def process_obras_import(file):
     """
@@ -124,7 +124,7 @@ def process_users_import(file):
             new_user = User(
                 email=email,
                 password_hash=generate_password_hash(pwd) if pwd else generate_password_hash("123456"),
-                role=role if role else ROLE_CURRANTE,
+                role=role if role else ROLE_OPERARIO,
                 name=name,
                 lastname=lastname,
                 dni=dni,

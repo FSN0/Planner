@@ -37,7 +37,7 @@
         <div class="admin-panel-body pt-2">
             <ul class="nav nav-tabs" id="personalTab" role="tablist">
                 <li class="nav-item"><a class="nav-link active" id="internos-tab" data-toggle="tab" href="#internos">Internos</a></li>
-                <li class="nav-item"><a class="nav-link" id="currantes-tab" data-toggle="tab" href="#currantes">Externos</a></li>
+                <li class="nav-item"><a class="nav-link" id="operarios-tab" data-toggle="tab" href="#operarios">Externos</a></li>
             </ul>
 
             <div class="tab-content px-0 pb-0">
@@ -95,7 +95,7 @@
                                             <i class="fas fa-key"></i>
                                         </button>
 
-                                        <a href="{{ url_for('admin.edit_currante', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary" title="Editar">
+                                        <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary" title="Editar">
                                             <i class="fas fa-pencil-alt"></i>
                                         </a>
                                         
@@ -113,7 +113,7 @@
                 </div>
 
                 {# TAB EXTERNOS #}
-                <div class="tab-pane fade" id="currantes">
+                <div class="tab-pane fade" id="operarios">
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover table-compact mb-0" id="tableExternos">
                             <thead class="bg-light">
@@ -137,7 +137,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for user in currantes_activos + currantes_pendientes %}
+                                {% for user in operarios_activos + operarios_pendientes %}
                                 <tr>
                                     <td><a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="text-dark font-weight-bold">{{ user.name }} {{ user.lastname }}</a></td>
                                     <td>
@@ -172,10 +172,10 @@
                                             <i class="fas fa-key"></i>
                                         </button>
 
-                                        <a href="{{ url_for('admin.edit_currante', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i></a>
+                                        <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i></a>
                                         
                                         {% if view_mode == 'admin' %}
-                                            <form action="{{ url_for('admin.deactivate_currante', user_id=user.id) }}" method="post" style="display:inline;">
+                                            <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
                                                 <button type="submit" class="btn btn-xs btn-warning" title="Desactivar"><i class="fas fa-ban"></i></button>
                                             </form>
                                         {% endif %}

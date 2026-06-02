@@ -26,9 +26,9 @@
         </a>
     </li>
     
-    {% if current_user.role == 'currante' %}
+    {% if current_user.role == 'operario' %}
     <li>
-        <a href="{{ url_for('currantes.calendar') }}" class="sidebar-link {% if 'calendar' in request.endpoint %}is-active{% endif %}">
+        <a href="{{ url_for('operarios.calendar') }}" class="sidebar-link {% if 'calendar' in request.endpoint %}is-active{% endif %}">
             <i class="far fa-calendar-alt fa-fw"></i> <span>Mi Calendario</span>
         </a>
     </li>

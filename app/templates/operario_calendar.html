@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Calendario{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+    #calendar { font-family: system-ui, -apple-system, sans-serif; font-size: 0.85rem; }
+    .fc-event { cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            {% if current_user.role == 'admin' or current_user.role == 'jefe_obra' %}
+                <a href="{{ request.referrer or url_for('admin.personal') }}" class="text-muted small mb-1 d-inline-block">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </a>
+                <h1 class="admin-page-title mb-0">Calendario: {{ worker.name }} {{ worker.lastname }}</h1>
+            {% else %}
+                <h1 class="admin-page-title mb-0">Mi Calendario</h1>
+                <p class="admin-header-subtitle mb-0">Consulta tus asignaciones planificadas y fichajes.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="admin-panel">
+        <div class="admin-panel-body p-4">
+            <div id="calendar" style="min-height: 500px;"></div>
+        </div>
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
+
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var workerId = {% if worker %}{{ worker.id }}{% else %}{{ current_user.id }}{% endif %};
+    var defaultDate = "{{ selected_date }}";
+    if (!defaultDate || defaultDate === "None") {
+        defaultDate = new Date().toISOString().split('T')[0];
+    }
+
+    // 1. INICIALIZAMOS EL CALENDARIO UNIVERSAL
+    window.workerCalendar = new UniversalCalendarManager('calendar', {
+        context: 'worker',
+        id: workerId,
+        mode: 'obras',
+        // MAGIA: El calendario se vuelve de solo lectura si no eres admin
+        readonly: {% if current_user.role == 'admin' %}false{% else %}true{% endif %},
+        showFichajes: true
+    });
+
+    // 2. EL PUENTE UNIVERSAL (Que llama a tu Popup Global)
+    window.enviarAccionPerfil = function(payload, revertFunc) {
+        payload.check_conflicts = true; 
+        if (!payload.overwrite_mode) payload.overwrite_mode = 'check';
+
+        $.ajax({
+            url: "/api/v6/planificador/action",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify(payload),
+            success: function(res) {
+                if (res.success) {
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                    window.workerCalendar.calendar.refetchEvents();
+                    window.workerCalendar.hidePanel();
+                } else if (res.conflict) {
+                    // ¡BINGO! Llama a la ventana global que hemos creado antes
+                    window.resolverConflictoAsignacion(res, payload, 
+                        (nuevoPayload) => { enviarAccionPerfil(nuevoPayload, revertFunc); }, 
+                        revertFunc
+                    );
+                } else {
+                    Swal.fire('Error', res.error || res.message, 'error');
+                    if (revertFunc) revertFunc();
+                }
+            },
+            error: function() {
+                Swal.fire('Error', 'Fallo de conexión', 'error');
+                if (revertFunc) revertFunc();
+            }
+        });
+    };
+});
+</script>
+{% endblock %}

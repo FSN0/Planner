@@ -3,7 +3,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
-from app.models import User, ROLE_CURRANTE, Company
+from app.models import User, ROLE_OPERARIO, Company
 from app import db
 from sqlalchemy.exc import IntegrityError
 from datetime import date
@@ -22,7 +22,7 @@ def login():
         elif current_user.role == 'rrhh':
             return redirect(url_for('rrhh.panel'))
         else:
-            return redirect(url_for('currantes.panel')) 
+            return redirect(url_for('operarios.panel')) 
             
     # 2. SEGURIDAD SAAS: Si no hay tenant en la URL, lo bloqueamos
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
@@ -51,7 +51,7 @@ def login():
                 elif user.role == 'rrhh':
                     return redirect(url_for('rrhh.panel'))
                 else:
-                    return redirect(url_for('currantes.panel'))
+                    return redirect(url_for('operarios.panel'))
             else:
                 flash("Esta cuenta ha sido desactivada por el administrador.", "danger")
         else:
@@ -90,7 +90,7 @@ def register():
         new_user = User(
             email=email,
             password_hash=generate_password_hash(password),
-            role=ROLE_CURRANTE,
+            role=ROLE_OPERARIO,
             name=name,
             lastname=lastname,
             dni=dni,
