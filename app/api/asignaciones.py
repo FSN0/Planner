@@ -91,15 +91,54 @@ def api_solicitud_asignar_parcial(solicitud_id):
     if not worker_id or not selected_dates:
         return jsonify({'success': False, 'message': 'Faltan datos.'}), 400
 
-    # LÓGICA ESTRICTA: Saltamos los días que ya estén llenos
+    accion = getattr(solicitud, 'accion', 'ASIGNAR')
+    count_processed = 0
+
+    # =========================================================================
+    # LÓGICA EXCLUSIVA PARA DESASIGNACIONES (BAJAS) - BYPASS DE CONFLICTOS
+    # =========================================================================
+    if accion == 'DESASIGNAR':
+        for d_str in selected_dates:
+            try:
+                d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
+                asig = Asignacion.query.filter_by(user_id=int(worker_id), obra_id=solicitud.obra_id, fecha=d_obj).first()
+                if asig:
+                    db.session.delete(asig)
+                    count_processed += 1
+            except ValueError: 
+                continue
+                
+        db.session.flush()
+        
+        # Mandamos recalcular al motor puro de coberturas
+        for d_str in selected_dates:
+            try:
+                d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
+                update_solicitudes_for_assignment(solicitud.obra_id, int(worker_id), d_obj, resolved_by_id=current_user.id)
+            except ValueError:
+                pass
+                
+        db.session.commit()
+        db.session.refresh(solicitud)
+        
+        # El motor ya ha evaluado si quedan asignaciones. Si es 0, la habrá puesto como CUMPLIDA.
+        if solicitud.estado == 'CUMPLIDA':
+            msg = f"Baja procesada ({count_processed} días). Ya no hay asignaciones, solicitud cerrada."
+        else:
+            msg = f"Se borraron {count_processed} días, pero siguen quedando días asignados a este trabajador."
+            
+        flash(msg, "success")
+        return jsonify({'success': True})
+    
+    # =========================================================================
+    # LÓGICA ORIGINAL PARA ASIGNACIONES (ALTAS)
+    # =========================================================================
     if getattr(solicitud, 'tipo', '') == 'GENERICA':
         requested = solicitud.cantidad_solicitada or 1
         valid_selected_dates = []
         for d_str in selected_dates:
             try:
                 d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-                
-                # Auto-Corrección: Atar si el simulador JS lo metió libre por accidente
                 existing = Asignacion.query.filter_by(user_id=int(worker_id), obra_id=solicitud.obra_id, fecha=d_obj).first()
                 if existing and existing.solicitud_id is None:
                     existing.solicitud_id = solicitud.id
@@ -116,36 +155,22 @@ def api_solicitud_asignar_parcial(solicitud_id):
                 continue
                 
         if not valid_selected_dates:
-            return jsonify({'success': False, 'message': 'Los días seleccionados ya tienen el cupo completo. Se han ignorado para no sobrepasar el límite de la solicitud.'}), 400
+            return jsonify({'success': False, 'message': 'Los días seleccionados ya tienen el cupo completo.'}), 400
         
         selected_dates = valid_selected_dates
 
-    accion = getattr(solicitud, 'accion', 'ASIGNAR')
-    count_processed = 0
-
-    if accion == 'DESASIGNAR':
-        for d_str in selected_dates:
-            try:
-                d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-                asig = Asignacion.query.filter_by(user_id=int(worker_id), obra_id=solicitud.obra_id, fecha=d_obj).first()
-                if asig:
-                    db.session.delete(asig)
-                    count_processed += 1
-            except ValueError: 
-                continue
-    else:
-        res = process_assignment_action(
-            actor_user=current_user, 
-            worker_id=int(worker_id),
-            target_obra_id=solicitud.obra_id, 
-            date_list=selected_dates, 
-            mode=mode, 
-            solicitud_id=solicitud.id  # <-- SIEMPRE PASAMOS EL ID PARA ATARLO A LA SOLICITUD
-        )
-        
-        if res.get('conflict'): return jsonify(res) 
-        if not res.get('success'): return jsonify(res), 400
-        count_processed = len(selected_dates)
+    res = process_assignment_action(
+        actor_user=current_user, 
+        worker_id=int(worker_id),
+        target_obra_id=solicitud.obra_id, 
+        date_list=selected_dates, 
+        mode=mode, 
+        solicitud_id=solicitud.id
+    )
+    
+    if res.get('conflict'): return jsonify(res) 
+    if not res.get('success'): return jsonify(res), 400
+    count_processed = len(selected_dates)
 
     if solicitud.tipo == "CONCRETA":
         try:
@@ -380,12 +405,33 @@ def api_solicitud_asignar_candidatos(solicitud_id):
             curr += timedelta(days=1)
 
     count_exito = 0
+    # Obtenemos qué tipo de acción es la solicitud antes de entrar al bucle
+    accion = getattr(solicitud, 'accion', 'ASIGNAR') 
     
     for wid in worker_ids:
         try:
+            # =========================================================================
+            # BLOQUE NUEVO: BYPASS PARA SOLICITUDES DE DESASIGNACIÓN (BAJAS)
+            # =========================================================================
+            if accion == 'DESASIGNAR':
+                asignaciones_a_borrar = Asignacion.query.filter(
+                    Asignacion.obra_id == solicitud.obra_id,
+                    Asignacion.user_id == int(wid),
+                    Asignacion.fecha.in_(dias_base)
+                ).all()
+                
+                if asignaciones_a_borrar:
+                    for a in asignaciones_a_borrar:
+                        db.session.delete(a)
+                    count_exito += 1
+                    db.session.flush()
+                    
+                continue # Saltamos a la siguiente iteración del for, no validamos nada más
+            # =========================================================================
+
             dias_para_este_trabajador = []
             
-            # LÓGICA ESTRICTA DÍA A DÍA
+            # LÓGICA ESTRICTA DÍA A DÍA (Solo para asignaciones reales)
             if solicitud.tipo == "GENERICA":
                 requested = solicitud.cantidad_solicitada or 1
                 for d_obj in dias_base:
@@ -446,7 +492,8 @@ def api_solicitud_asignar_candidatos(solicitud_id):
             from app.services.email_service import notificar_resolucion_solicitud
             notificar_resolucion_solicitud(solicitud, current_user.name)
         
-        flash(f'Se han procesado {count_exito} asignaciones (ignorando automáticamente los días llenos).', 'success')
+        accion_txt = "desasignaciones" if accion == 'DESASIGNAR' else "asignaciones"
+        flash(f'Se han procesado {count_exito} {accion_txt} correctamente.', 'success')
         return jsonify({'success': True})
     
     return jsonify({'success': False, 'message': 'No hay hueco en ningún día de esta solicitud o ya estaban cubiertos.'}), 400

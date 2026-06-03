@@ -136,23 +136,8 @@
         </div>
     </div>
 
-    <section class="admin-panel shadow-sm">
-        <div class="admin-panel-header border-bottom pb-3 mb-3 d-flex justify-content-between align-items-center">
-            <h2 class="admin-panel-title m-0" style="font-size: 1.05rem;">
-                <i class="fas fa-calendar-alt text-primary mr-2"></i> Cronograma de Asignaciones
-            </h2>
-            
-            <div class="btn-group btn-group-sm shadow-sm" role="group">
-                <button type="button" class="btn btn-primary active" id="btnModeEmpresas" onclick="switchCalendarMode('empresas')">
-                    <i class="fas fa-building mr-1"></i> Por Empresas
-                </button>
-                <button type="button" class="btn btn-outline-primary" id="btnModeEmpleados" onclick="switchCalendarMode('empleados')">
-                    <i class="fas fa-users mr-1"></i> Por Trabajadores
-                </button>
-            </div>
-        </div>
-        
-        <div class="admin-panel-body pt-0">
+    <section class="admin-panel shadow-sm border-0 bg-transparent">
+        <div class="admin-panel-body p-0">
             <div id="obra-panel-calendar" style="background: white; padding: 10px; border-radius: 8px;"></div>
         </div>
     </section>
@@ -187,11 +172,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => { if (obraCalendarInstance.calendar && initialDate !== today) obraCalendarInstance.calendar.gotoDate(initialDate); }, 100);
 });
 
-window.switchCalendarMode = function(mode) {
-    $('.btn-group .btn').removeClass('active btn-primary').addClass('btn-outline-primary');
-    if (mode === 'empresas') $('#btnModeEmpresas').removeClass('btn-outline-primary').addClass('active btn-primary');
-    else $('#btnModeEmpleados').removeClass('btn-outline-primary').addClass('active btn-primary');
-    obraCalendarInstance.changeMode(mode);
-};
+
 </script>
 {% endblock %}
