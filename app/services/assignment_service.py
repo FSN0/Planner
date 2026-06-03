@@ -287,6 +287,15 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
         update_solicitudes_for_assignment(obra.id, worker.id, d, resolved_by_id=actor.id)
 
     db.session.commit()
+    
+    from app.utils import register_log
+    worker_name = f"{worker.name} {worker.lastname}" if worker else f"ID {worker.id}"
+    register_log(
+        user_id=actor.id,
+        category='planificacion',
+        action='Asignación Realizada',
+        detail=f"Ha asignado a {worker_name} a la obra '{obra.nombre}' durante {count} días."
+    )
 
     return {'success': True, 'action': 'assigned', 'message': f'Asignación realizada ({count} días).'}
 
@@ -348,6 +357,16 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
     if target_obra_id and count > 0:
         worker = User.query.get(worker_id)
         worker_name = f"{worker.name} {worker.lastname}" if worker else f"ID {worker_id}"
+        
+        from app.utils import register_log
+        obra = Obra.query.get(target_obra_id)
+        obra_nombre = obra.nombre if obra else f"ID {target_obra_id}"
+        register_log(
+            user_id=actor_user.id,
+            category='planificacion',
+            action='Desasignación',
+            detail=f"Ha desasignado a {worker_name} de la obra '{obra_nombre}' ({count} días borrados)."
+        )
         
         if len(fechas_borradas) > 10:
             fechas_str = ", ".join(fechas_borradas[:10]) + f" ... y {len(fechas_borradas)-10} días más."

@@ -38,28 +38,36 @@ def login():
         user = User.query.filter_by(email=email).first()
         
         if user and check_password_hash(user.password_hash, password):
-            # 4. Verificar que el usuario no esté desactivado
-            if getattr(user, 'active', True):
-                login_user(user, remember=remember)
-
-                session['tenant_id'] = g.current_tenant.id
-                
-                flash("Inicio de sesión exitoso", "success")
-                
-                # Redirección inteligente según rol
-                
-                # Redirección inteligente según rol
-                if user.role == 'admin':
-                    return redirect(url_for('admin.panel'))
-                elif user.role == 'jefe_obra':
-                    return redirect(url_for('jefe.obras_detailed', selected_date=date.today()))
-                elif user.role == 'rrhh':
-                    return redirect(url_for('rrhh.panel'))
-                else:
-                    return redirect(url_for('operarios.panel'))
+            login_user(user, remember=remember)
+            from app.utils import register_log
+            register_log(
+                user_id=user.id,
+                category='accesos',
+                action='Inicio de Sesión',
+                detail=f"Login exitoso desde IP: {request.remote_addr or 'Desconocida'}"
+            )
+            flash("Inicio de sesión exitoso", "success")
+            
+            # Redirección inteligente según rol
+            if user.role == 'admin':
+                return redirect(url_for('admin.panel'))
+            elif user.role == 'jefe_obra':
+                # CAMBIO AQUÍ TAMBIÉN
+                return redirect(url_for('jefe.obras_detailed', selected_date=date.today()))
+            elif user.role == 'rrhh':
+                return redirect(url_for('rrhh.panel'))
             else:
-                flash("Esta cuenta ha sido desactivada por el administrador.", "danger")
+                return redirect(url_for('operarios.panel'))
         else:
+            if user: # Solo grabamos log si el email existe pero la contraseña falló
+                from app.utils import register_log
+                register_log(
+                    user_id=user.id,
+                    category='accesos',
+                    action='Intento fallido de login',
+                    detail=f"Contraseña incorrecta. IP: {request.remote_addr or 'Desconocida'}"
+                )
+            # --------------------------------------------
             flash("Credenciales inválidas", "danger")
             
     return render_template('login.html', tenant_name=g.current_tenant.nombre)
