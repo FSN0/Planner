@@ -317,11 +317,17 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
 
     if not date_objs:
         return {'success': False, 'message': 'No hay fechas válidas.'}
-
+    
+    fechas_con_asignacion = [a.fecha for a in asignaciones]
+    
     if actor_user.role == ROLE_JEFE:
-        sol, status = SolicitudService.create_or_merge_solicitud_baja(actor_user.id, target_obra_id, worker_id, date_objs)
+        if not fechas_con_asignacion:
+            return {'success': False, 'message': 'El trabajador no tiene asignaciones en este periodo.'}
+            
+        sol, status = SolicitudService.create_or_merge_solicitud_baja(actor_user.id, target_obra_id, worker_id, fechas_con_asignacion)
         msg = 'Se ha generado una solicitud de baja.' if status == 'new' else 'Se han añadido los días a una solicitud existente.'
         return {'success': True, 'action': 'requested', 'message': msg}
+
 
     count = len(asignaciones)
     fechas_borradas = [a.fecha.strftime('%d/%m/%Y') for a in asignaciones]

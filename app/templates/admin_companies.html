@@ -6,6 +6,11 @@
 <style>
     .table-compact th, .table-compact td { padding: 0.25rem 0.5rem !important; font-size: 0.8rem; vertical-align: middle !important; }
     .filter-input { width: 100%; font-size: 0.7rem; padding: 2px 4px; border: 1px solid #d1d5db; border-radius: 3px; background-color: #f9fafb; }
+    
+    /* Estilos para cabeceras ordenables */
+    .th-sortable { cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+    .th-sortable:hover { background-color: #e5e7eb !important; }
+    .sort-icon { font-size: 0.75rem; vertical-align: middle; }
 </style>
 {% endblock %}
 
@@ -26,8 +31,16 @@
     <section class="admin-panel p-0">
         <div class="table-responsive" style="max-height: 75vh; overflow-y: auto;">
             <table class="table table-bordered table-hover table-compact mb-0" id="companiesTable">
-                <thead class="bg-light sticky-top" style="z-index: 10;"> <tr>
-                        <th>Código</th><th>Nombre</th><th>NIF</th><th>Gremio</th><th>Email</th><th>Tipo</th><th class="text-right">Acción</th>
+                <thead class="bg-light sticky-top" style="z-index: 10;"> 
+                    <tr>
+                        <th class="th-sortable" onclick="sortTable('companiesTable', 0)">Código <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                        <th class="th-sortable" onclick="sortTable('companiesTable', 1)">Nombre <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                        <th class="th-sortable" onclick="sortTable('companiesTable', 2)">NIF <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                        <th class="th-sortable" onclick="sortTable('companiesTable', 3)">Gremio <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                        <th class="th-sortable" onclick="sortTable('companiesTable', 4)">Email <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                        <th class="th-sortable" onclick="sortTable('companiesTable', 5)">Tipo <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                        <th class="th-sortable" onclick="sortTable('companiesTable', 6)">Valoración <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                        <th class="text-right">Acción</th>
                     </tr>
                     <tr class="bg-white">
                         <th><input type="text" class="filter-input" onkeyup="filterTable(0, this.value)"></th>
@@ -35,14 +48,16 @@
                         <th><input type="text" class="filter-input" onkeyup="filterTable(2, this.value)"></th>
                         <th><input type="text" class="filter-input" onkeyup="filterTable(3, this.value)"></th>
                         <th><input type="text" class="filter-input" onkeyup="filterTable(4, this.value)"></th>
-                        <th></th><th></th>
+                        <th><input type="text" class="filter-input" onkeyup="filterTable(5, this.value)"></th>
+                        <th><input type="text" class="filter-input" onkeyup="filterTable(6, this.value)"></th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for c in companies %}
                     <tr>
                         <td><strong>{{ c.code }}</strong></td>
-                        <td>
+                        <td data-sort="{{ c.nombre }}">
                             <span class="status-dot" style="background-color: {{ c.color }};"></span>
                             <a href="{{ url_for('admin.company_panel', company_id=c.id) }}" class="text-dark font-weight-bold">{{ c.nombre }}</a>
                         </td>
@@ -50,12 +65,35 @@
                         <td>{{ c.gremio or '-' }}</td>
                         <td>{{ c.email or '-' }}</td>
                         <td><span class="badge badge-light border">{{ 'INTERNA' if c.is_internal else 'EXTERNA' }}</span></td>
+                        
+                        {# CELDA VALORACIÓN #}
+                        {% set ns = namespace(total=0, count=0) %}
+                        {% for u in c.users %}
+                            {% if u.reputation_score and u.reputation_score > 0 %}
+                                {% set ns.total = ns.total + u.reputation_score %}
+                                {% set ns.count = ns.count + 1 %}
+                            {% endif %}
+                        {% endfor %}
+                        {% set avg_score = (ns.total / ns.count)|round(1) if ns.count > 0 else 0 %}
+                        
+                        <td data-sort="{{ avg_score if ns.count > 0 else 0 }}">
+                            <a href="{{ url_for('admin.personal', company_id=c.id) }}{{ '#internos' if c.is_internal else '#operarios' }}" style="text-decoration: none; display: block;" title="Ver listado y valoraciones">
+                                {% if ns.count > 0 %}
+                                    <span class="font-weight-bold text-dark">
+                                        <i class="fas fa-star text-warning mr-1"></i>{{ avg_score }}
+                                    </span> 
+                                    <span class="text-muted small">({{ ns.count }})</span>
+                                {% else %}
+                                    <span class="text-muted small text-dark">- (0)</span>
+                                {% endif %}
+                            </a>
+                        </td>
+
                         <td class="text-right">
                             <a href="{{ url_for('admin.edit_company', company_id=c.id) }}" class="text-secondary"><i class="fas fa-cog"></i></a>
                             <a href="{{ url_for('admin.confirm_delete_company', company_id=c.id) }}" class="text-danger" title="Eliminar empresa">
                                 <i class="fas fa-trash-alt"></i>
                             </a>
-                            
                         </td>
                     </tr>
                     {% endfor %}
@@ -65,6 +103,7 @@
     </section>
   </main>
 </div>
+
 <script>
 function filterTable(colIndex, value) {
     var filter = value.toUpperCase();
@@ -77,6 +116,59 @@ function filterTable(colIndex, value) {
             if (txtValue.toUpperCase().indexOf(filter) > -1) tr[i].style.display = "";
             else tr[i].style.display = "none";
         }       
+    }
+}
+
+// --- MOTOR DINÁMICO DE ORDENACIÓN DE TABLAS ---
+function sortTable(tableId, colIndex) {
+    var table = document.getElementById(tableId);
+    var switching = true;
+    var dir = "asc";
+    var switchcount = 0;
+    var i, shouldSwitch, rows;
+
+    $(table).find('th .sort-icon').removeClass('fa-sort-up fa-sort-down text-primary').addClass('fa-sort text-muted');
+
+    while (switching) {
+        switching = false;
+        rows = table.rows;
+
+        for (i = 2; i < (rows.length - 1); i++) {
+            shouldSwitch = false;
+            var x = rows[i].getElementsByTagName("TD")[colIndex];
+            var y = rows[i + 1].getElementsByTagName("TD")[colIndex];
+            
+            if (!x || !y) continue;
+
+            // Usa data-sort para ordenar correctamente las notas y nombres
+            var xStr = x.hasAttribute('data-sort') ? x.getAttribute('data-sort') : (x.innerText || x.textContent).trim();
+            var yStr = y.hasAttribute('data-sort') ? y.getAttribute('data-sort') : (y.innerText || y.textContent).trim();
+
+            var xVal = isNaN(parseFloat(xStr)) ? xStr.toLowerCase() : parseFloat(xStr);
+            var yVal = isNaN(parseFloat(yStr)) ? yStr.toLowerCase() : parseFloat(yStr);
+
+            if (dir === "asc") {
+                if (xVal > yVal) { shouldSwitch = true; break; }
+            } else if (dir === "desc") {
+                if (xVal < yVal) { shouldSwitch = true; break; }
+            }
+        }
+        
+        if (shouldSwitch) {
+            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+            switching = true;
+            switchcount++;
+        } else {
+            if (switchcount === 0 && dir === "asc") {
+                dir = "desc";
+                switching = true;
+            }
+        }
+    }
+    
+    var icon = table.rows[0].getElementsByTagName("TH")[colIndex].querySelector('.sort-icon');
+    if (icon) {
+        icon.className = `fas sort-icon ml-1 text-primary ${dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down'}`;
     }
 }
 </script>

@@ -201,6 +201,7 @@ def load_user(user_id):
 
 
 
+
 class UserObraConfig(db.Model):
     """
     Guarda la configuración personalizada de un usuario para una obra específica.

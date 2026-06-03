@@ -1,6 +1,10 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from flask_login import login_required, current_user
+<<<<<<< HEAD
 from app.models import  ROLE_OPERARIO, Asignacion, Obra
+=======
+from app.models import Document, ROLE_OPERARIO, Asignacion, Obra
+>>>>>>> main
 from app import db
 import os
 from datetime import timedelta, datetime

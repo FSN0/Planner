@@ -12,6 +12,11 @@
     
     .table-compact th, .table-compact td { padding: 0.25rem 0.5rem !important; font-size: 0.8rem; vertical-align: middle !important; }
     .filter-input { width: 100%; font-size: 0.7rem; padding: 2px 4px; border: 1px solid #d1d5db; border-radius: 3px; background-color: #f9fafb; }
+
+    /* Estilos para cabeceras ordenables */
+    .th-sortable { cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+    .th-sortable:hover { background-color: #e5e7eb !important; }
+    .sort-icon { font-size: 0.75rem; vertical-align: middle; }
 </style>
 {% endblock %}
 
@@ -41,27 +46,29 @@
             </ul>
 
             <div class="tab-content px-0 pb-0">
+                {# ========================================================= #}
                 {# TAB INTERNOS #}
+                {# ========================================================= #}
                 <div class="tab-pane fade show active" id="internos">
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover table-compact mb-0" id="tableInternos">
                             <thead class="bg-light">
                                 <tr>
-                                    <th>Nombre</th>
-                                    <th>Email</th>
-                                    <th>Rol</th>
-                                    {# NUEVA COLUMNA CATEGORÍA #}
-                                    <th>Categoría</th>
-                                    <th>Estado</th>
+                                    <th class="th-sortable" onclick="sortTable('tableInternos', 0)">Nombre <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableInternos', 1)">Email <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableInternos', 2)">Rol <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableInternos', 3)">Categoría <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableInternos', 4)">Valoración <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableInternos', 5)">Estado <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
                                     <th class="text-right">Acción</th>
                                 </tr>
                                 <tr class="bg-white">
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 0, this.value)" placeholder="Filtro..."></th>
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 1, this.value)" placeholder="Filtro..."></th>
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 2, this.value)" placeholder="Filtro..."></th>
-                                    {# NUEVO FILTRO PARA CATEGORÍA #}
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 3, this.value)" placeholder="Filtro..."></th>
-                                    <th></th>
+                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 4, this.value)" placeholder="Filtro..."></th>
+                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 5, this.value)" placeholder="Filtro..."></th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -72,7 +79,6 @@
                                     <td>{{ user.email }}</td>
                                     <td><span class="badge badge-light border">{{ user.role|upper }}</span></td>
                                     
-                                    {# NUEVA CELDA CATEGORÍA #}
                                     <td>
                                         {% if user.categoria_profesional %}
                                             <span class="d-block font-weight-bold text-dark">{{ user.categoria_profesional }}</span>
@@ -85,9 +91,24 @@
                                         {% endif %}
                                     </td>
 
+                                    {# CELDA VALORACIÓN INTERNOS CON DATA-SORT (CORREGIDO EL URL_FOR) #}
+                                    {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
+                                    {% set r_count = active_ratings|length %}
+                                    <td data-sort="{{ user.reputation_score if r_count > 0 else 0 }}">
+                                        <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" style="text-decoration: none; display: block;" title="Ver historial de valoraciones">
+                                            {% if r_count > 0 %}
+                                                <span class="font-weight-bold text-dark">
+                                                    <i class="fas fa-star text-warning mr-1"></i>{{ user.reputation_score }}
+                                                </span> 
+                                                <span class="text-muted small">({{ r_count }})</span>
+                                            {% else %}
+                                                <span class="text-muted small text-dark">- (0)</span>
+                                            {% endif %}
+                                        </a>
+                                    </td>
+
                                     <td><span class="badge badge-{{ 'success' if user.active else 'secondary' }}">{{ 'Activo' if user.active else 'Inactivo' }}</span></td>
                                     <td class="text-right">
-                                        {# BOTÓN MODAL CAMBIO CONTRASEÑA #}
                                         <button type="button" class="btn btn-xs btn-outline-secondary reset-pwd-btn" 
                                                 data-userid="{{ user.id }}" 
                                                 data-username="{{ user.name }}"
@@ -112,27 +133,28 @@
                     </div>
                 </div>
 
+                {# ========================================================= #}
                 {# TAB EXTERNOS #}
-                <div class="tab-pane fade" id="operarios">
+                <div class="tab-pane fade" id="currantes">
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover table-compact mb-0" id="tableExternos">
                             <thead class="bg-light">
                                 <tr>
-                                    <th>Nombre</th>
-                                    <th>Empresa</th>
-                                    <th>DNI</th>
-                                    {# NUEVA COLUMNA CATEGORÍA #}
-                                    <th>Categoría</th>
-                                    <th>Estado</th>
+                                    <th class="th-sortable" onclick="sortTable('tableExternos', 0)">Nombre <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableExternos', 1)">Empresa <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableExternos', 2)">DNI <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableExternos', 3)">Categoría <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableExternos', 4)">Valoración <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
+                                    <th class="th-sortable" onclick="sortTable('tableExternos', 5)">Estado <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
                                     <th class="text-right">Acción</th>
                                 </tr>
                                 <tr class="bg-white">
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 0, this.value)" placeholder="Filtro..."></th>
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 1, this.value)" placeholder="Filtro..."></th>
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 2, this.value)" placeholder="Filtro..."></th>
-                                    {# NUEVO FILTRO PARA CATEGORÍA #}
                                     <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 3, this.value)" placeholder="Filtro..."></th>
-                                    <th></th>
+                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 4, this.value)" placeholder="Filtro..."></th>
+                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 5, this.value)" placeholder="Filtro..."></th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -149,7 +171,6 @@
                                     </td>
                                     <td>{{ user.dni }}</td>
                                     
-                                    {# NUEVA CELDA CATEGORÍA #}
                                     <td>
                                         {% if user.categoria_profesional %}
                                             <span class="d-block font-weight-bold text-dark">{{ user.categoria_profesional }}</span>
@@ -162,9 +183,24 @@
                                         {% endif %}
                                     </td>
 
+                                    {# CELDA VALORACIÓN EXTERNOS CON DATA-SORT (CORREGIDO EL URL_FOR) #}
+                                    {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
+                                    {% set r_count = active_ratings|length %}
+                                    <td data-sort="{{ user.reputation_score if r_count > 0 else 0 }}">
+                                        <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" style="text-decoration: none; display: block;" title="Ver historial de valoraciones">
+                                            {% if r_count > 0 %}
+                                                <span class="font-weight-bold text-dark">
+                                                    <i class="fas fa-star text-warning mr-1"></i>{{ user.reputation_score }}
+                                                </span> 
+                                                <span class="text-muted small">({{ r_count }})</span>
+                                            {% else %}
+                                                <span class="text-muted small text-dark">- (0)</span>
+                                            {% endif %}
+                                        </a>
+                                    </td>
+
                                     <td><span class="badge badge-{{ 'success' if user.active else 'warning' }}">{{ 'Activo' if user.active else 'Pendiente' }}</span></td>
                                     <td class="text-right">
-                                        {# BOTÓN MODAL CAMBIO CONTRASEÑA #}
                                         <button type="button" class="btn btn-xs btn-outline-secondary reset-pwd-btn" 
                                                 data-userid="{{ user.id }}" 
                                                 data-username="{{ user.name }}"
@@ -230,7 +266,7 @@
   </div>
 </div>
 
-{# --- MODAL: PROGRAMAR ESTADO (Ya existente) --- #}
+{# --- MODAL: PROGRAMAR ESTADO --- #}
 <div class="modal fade" id="scheduleModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <form id="scheduleForm" autocomplete="off">
@@ -261,28 +297,75 @@
 {# CARGAMOS EL JS COMÚN PARA EL FILTRO #}
 <script src="{{ url_for('static', filename='js/common.js') }}"></script>
 <script>
-// --- 1. Lógica de Filtrado ELIMINADA (Ahora usa common.js) ---
+// --- MOTOR DINÁMICO DE ORDENACIÓN DE TABLAS ---
+function sortTable(tableId, colIndex) {
+    var table = document.getElementById(tableId);
+    var switching = true;
+    var dir = "asc";
+    var switchcount = 0;
+    var i, shouldSwitch, rows;
 
-// 2. JS para Modal de Contraseña
+    // Resetea visualmente todos los iconos a neutro antes de ordenar
+    $(table).find('th .sort-icon').removeClass('fa-sort-up fa-sort-down text-primary').addClass('fa-sort text-muted');
+
+    while (switching) {
+        switching = false;
+        rows = table.rows;
+
+        // i = 2 porque nos saltamos la fila 0 (Cabeceras) y fila 1 (Inputs de filtro)
+        for (i = 2; i < (rows.length - 1); i++) {
+            shouldSwitch = false;
+            var x = rows[i].getElementsByTagName("TD")[colIndex];
+            var y = rows[i + 1].getElementsByTagName("TD")[colIndex];
+            
+            if (!x || !y) continue;
+
+            // Lógica con DATA-SORT: Ahora sí prioriza el valor numérico oculto
+            var xStr = x.hasAttribute('data-sort') ? x.getAttribute('data-sort') : (x.innerText || x.textContent).trim();
+            var yStr = y.hasAttribute('data-sort') ? y.getAttribute('data-sort') : (y.innerText || y.textContent).trim();
+
+            var xVal = isNaN(parseFloat(xStr)) ? xStr.toLowerCase() : parseFloat(xStr);
+            var yVal = isNaN(parseFloat(yStr)) ? yStr.toLowerCase() : parseFloat(yStr);
+
+            if (dir === "asc") {
+                if (xVal > yVal) { shouldSwitch = true; break; }
+            } else if (dir === "desc") {
+                if (xVal < yVal) { shouldSwitch = true; break; }
+            }
+        }
+        
+        if (shouldSwitch) {
+            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+            switching = true;
+            switchcount++;
+        } else {
+            if (switchcount === 0 && dir === "asc") {
+                dir = "desc";
+                switching = true;
+            }
+        }
+    }
+    
+    // Ilumina la flecha de la cabecera actual mostrando la dirección del orden
+    var icon = table.rows[0].getElementsByTagName("TH")[colIndex].querySelector('.sort-icon');
+    if (icon) {
+        icon.className = `fas sort-icon ml-1 text-primary ${dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down'}`;
+    }
+}
+
+// JS para Modal de Contraseña
 document.addEventListener("DOMContentLoaded", function() {
-    // Usamos delegación de eventos por si la tabla cambia dinámicamente
     $(document).on('click', '.reset-pwd-btn', function() {
         var userId = $(this).data('userid');
         var username = $(this).data('username');
-        
-        // Actualizar texto del modal
         $('#resetUsernameDisplay').text(username);
-        
-        // Actualizar acción del formulario
         var actionUrl = "/admin/reset_password/" + userId;
         $('#resetPasswordForm').attr('action', actionUrl);
-        
-        // Mostrar modal
         $('#resetPasswordModal').modal('show');
     });
 });
 
-// 3. JS para Programación (Existente)
+// JS para Programación 
 $(document).on('click', '.schedule-btn', function(){
     var userId = $(this).data('user-id');
     var action = $(this).data('action');
@@ -318,6 +401,23 @@ $('#scheduleForm').submit(function(e){
             alert('Error al programar el cambio de estado.');
         }
     });
+});
+
+// AÑADIR ESTE SCRIPT AL FINAL DEL ARCHIVO
+document.addEventListener("DOMContentLoaded", function() {
+    let hash = window.location.hash;
+    if (hash) {
+        let targetTab = document.querySelector('.nav-tabs a[href="' + hash + '"]');
+        if (targetTab) {
+            // Activa la pestaña correspondiente de Bootstrap
+            if (typeof $ !== 'undefined' && $.fn.tab) {
+                $(targetTab).tab('show'); // Bootstrap 4
+            } else {
+                let tab = new bootstrap.Tab(targetTab); // Bootstrap 5
+                tab.show();
+            }
+        }
+    }
 });
 </script>
 {% endblock %}

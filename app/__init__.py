@@ -60,7 +60,18 @@ def create_app():
     from app.utils.date_utils import get_weekday_initial
     app.jinja_env.globals.update(get_weekday_initial=get_weekday_initial)
 
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_RRHH, ROLE_OPERARIO
+    app.register_blueprint(main_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(jefe_bp)
+    app.register_blueprint(rrhh_bp)
+    app.register_blueprint(currantes_bp)
+    app.register_blueprint(notas_bp)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(sync_bp)
+
+    # Importación local de constantes para evitar referencias circulares
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_RRHH, ROLE_CURRANTE
 
     @app.context_processor
     def inject_notifications():

@@ -6,6 +6,23 @@
 <style>
     #company-timeline { font-family: system-ui; font-size: 0.8rem; }
     .fc .fc-toolbar-title { font-size: 1rem !important; text-transform: capitalize; }
+    
+    /* Efecto interactivo para los bloques de estadísticas clicables */
+    .stat-link {
+        display: block;
+        text-decoration: none !important;
+        color: inherit;
+        border-radius: 8px;
+        padding: 8px 4px;
+        transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    .stat-link:hover {
+        transform: scale(1.05);
+        background-color: #f8fafc;
+    }
+    .stat-link:hover .h5 {
+        color: #3b82f6 !important; /* Azul destacado al pasar el ratón */
+    }
 </style>
 {% endblock %}
 
@@ -28,19 +45,53 @@
                 <div class="status-dot" style="background-color: {{ company.color }}; width: 15px; height: 15px;"></div>
             </div>
         </div>
-        <div class="row text-center">
-            <div class="col-4 border-right">
-                <div class="h5 font-weight-bold mb-0">{{ company.users|length }}</div>
-                <div class="small text-muted text-uppercase">Trabajadores</div>
+        
+        {# LÓGICA JINJA: Calcular la media de los trabajadores que sí tienen valoración #}
+        {% set ns = namespace(total=0, count=0) %}
+        {% for u in company.users %}
+            {% if u.reputation_score > 0 %}
+                {% set ns.total = ns.total + u.reputation_score %}
+                {% set ns.count = ns.count + 1 %}
+            {% endif %}
+        {% endfor %}
+        {% set avg_score = (ns.total / ns.count)|round(1) if ns.count > 0 else 0 %}
+
+        <div class="row text-center align-items-center">
+            
+            {# 1. TRABAJADORES (Clicable) #}
+            <div class="col-3 border-right">
+                <<a href="{{ url_for('admin.personal', company_id=company.id) }}{{ '#internos' if company.is_internal else '#operarios' }}" class="stat-link" title="Ver listado y valoraciones">
+                    <div class="h5 font-weight-bold mb-0 text-dark">{{ company.users|length }}</div>
+                    <div class="small text-muted text-uppercase">Trabajadores</div>
+                </a>
             </div>
-            <div class="col-4 border-right">
-                <div class="h5 font-weight-bold mb-0">-</div>
+            
+            {# 2. INTERVENCIONES #}
+            <div class="col-3 border-right">
+                <div class="h5 font-weight-bold mb-0 text-dark">-</div>
                 <div class="small text-muted text-uppercase">Intervenciones</div>
             </div>
-            <div class="col-4">
-                <div class="h5 font-weight-bold mb-0 text-primary">{{ 'SI' if company.is_internal else 'NO' }}</div>
+            
+            {# 3. INTERNA #}
+            <div class="col-3 border-right">
+                <div class="h5 font-weight-bold mb-0 {{ 'text-primary' if company.is_internal else 'text-dark' }}">{{ 'SI' if company.is_internal else 'NO' }}</div>
                 <div class="small text-muted text-uppercase">Interna</div>
             </div>
+            
+            {# 4. VALORACIÓN MEDIA (Clicable) #}
+            <div class="col-3">
+                <a href="{{ url_for('admin.personal', company_id=company.id) }}" class="stat-link" title="Ver listado y valoraciones">
+                    <div class="h5 font-weight-bold mb-0 text-dark">
+                        {% if ns.count > 0 %}
+                            <i class="fas fa-star text-warning mr-1"></i>{{ avg_score }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </div>
+                    <div class="small text-muted text-uppercase">Valoración</div>
+                </a>
+            </div>
+
         </div>
     </div>
 
