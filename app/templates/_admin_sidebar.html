@@ -125,6 +125,14 @@
             <i class="fas fa-cogs fa-fw"></i> <span>Configuración Global</span>
         </a>
     </li>
+    <li>
+        <a href="{{ url_for('admin.system_logs') }}" class="sidebar-link {% if 'system_logs' in request.endpoint %}is-active{% endif %}">
+            <i class="fas fa-history fa-fw"></i> <span>Logs del Sistema</span>
+            {% if unread_logs_count and unread_logs_count > 0 %}
+              <span class="badge-soft badge-soft-danger" style="margin-left:auto;">{{ unread_logs_count }}</span>
+            {% endif %}
+        </a>
+    </li>
     {% endif %}
   </ul>
   {% endif %}

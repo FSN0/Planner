@@ -629,6 +629,16 @@ def rate_worker():
         )
         db.session.add(new_rating)
         db.session.commit()
+        from app.utils import register_log
+        operario = User.query.get(int(worker_id))
+        nombre_operario = f"{operario.name} {operario.lastname}" if operario else f"ID {worker_id}"
+        
+        register_log(
+            user_id=current_user.id,
+            category='valoraciones',
+            action='Nueva Valoración',
+            detail=f"Ha puntuado a {nombre_operario} con un {score}. Motivo: {reason}"
+        )
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -646,6 +656,13 @@ def reset_worker_ratings(user_id):
             r.is_active = False
             
     db.session.commit()
+    from app.utils import register_log
+    register_log(
+        user_id=current_user.id,
+        category='valoraciones',
+        action='Reseteo de Historial',
+        detail=f"Ha reseteado a 0.0 todas las valoraciones de {worker.name} {worker.lastname}."
+    )
     flash(f"Puntuación de {worker.name} restablecida a 0. El historial se ha guardado.", "success")
     return redirect(url_for('admin.worker_panel', user_id=worker.id))
 
@@ -1005,6 +1022,14 @@ def create_obra():
             db.session.add(nueva_obra)
             db.session.commit()
             
+            from app.utils import register_log
+            register_log(
+                user_id=current_user.id,
+                category='obras',
+                action='Crear Obra',
+                detail=f"Ha creado la obra '{nombre}' (Código: {codigo})"
+            )
+            
             flash("Obra creada exitosamente", "success")
             return redirect(url_for("admin.obras_detailed", selected_date=nueva_obra.fecha_inicio.strftime("%Y-%m-%d")))
             
@@ -1088,6 +1113,13 @@ def edit_obra(obra_id):
 
         try:
             db.session.commit()
+            from app.utils import register_log
+            register_log(
+                user_id=current_user.id,
+                category='obras',
+                action='Editar Obra',
+                detail=f"Ha editado la obra '{obra.nombre}'. Estado actual: {obra.estado}"
+            )
             flash("Obra actualizada correctamente", "success")
             return redirect(url_for("admin.obras_detailed", selected_date=str(date.today())))
         except Exception as e:
@@ -1882,3 +1914,48 @@ def sso_odoo_contactos():
     token = serializer.dumps(payload)
     
     return redirect(f"{odoo_url}/sso_login?token={token}")
+
+# --- NUEVO MÓDULO DE LOGS Y AUDITORÍA ---
+@admin_bp.route("/logs", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def system_logs():
+    from app.models import SystemLog, LogPreference
+    from datetime import datetime
+    
+    category = request.args.get('category', 'accesos')
+    
+    # 1. Traer los logs de la categoría seleccionada
+    logs = SystemLog.query.filter_by(category=category).order_by(SystemLog.timestamp.desc()).limit(300).all()
+    
+    # 2. Resetear el contador de notificaciones para esta pestaña al entrar
+    pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
+    if pref and pref.is_active:
+        pref.last_read_at = datetime.utcnow()
+        db.session.commit()
+        
+    # 3. Traer qué preferencias tiene activas para marcar los checkboxes
+    all_prefs = LogPreference.query.filter_by(user_id=current_user.id).all()
+    active_prefs = [p.category for p in all_prefs if p.is_active]
+    
+    return render_template("admin_logs.html", logs=logs, current_category=category, active_prefs=active_prefs)
+
+@admin_bp.route("/logs/preferencias", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def save_log_preferences():
+    from app.models import LogPreference
+    categorias = ['accesos', 'valoraciones', 'planificacion', 'obras', 'fichajes']
+    
+    for cat in categorias:
+        pref = LogPreference.query.filter_by(user_id=current_user.id, category=cat).first()
+        if not pref:
+            pref = LogPreference(user_id=current_user.id, category=cat)
+            db.session.add(pref)
+            
+        # Si el checkbox está marcado viene 'on', si no, False
+        pref.is_active = True if request.form.get(f'pref_{cat}') == 'on' else False
+        
+    db.session.commit()
+    flash("Preferencias de notificaciones actualizadas.", "success")
+    return redirect(url_for('admin.system_logs', category=request.form.get('current_category', 'accesos')))

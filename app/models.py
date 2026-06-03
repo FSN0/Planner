@@ -193,6 +193,29 @@ class UserObraConfig(db.Model):
     def __repr__(self):
         return f"<UserObraConfig U:{self.user_id} O:{self.obra_id} Pinned:{self.is_pinned}>"
     
+class SystemLog(db.Model):
+    __tablename__ = 'system_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    # --- AQUÍ ESTABA EL ERROR: Cambiado 'user.id' por 'users.id' ---
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
+    category = db.Column(db.String(50), nullable=False) 
+    action = db.Column(db.String(150), nullable=False) 
+    detail = db.Column(db.Text, nullable=True) 
+
+    user = db.relationship('User', foreign_keys=[user_id])
+
+class LogPreference(db.Model):
+    __tablename__ = 'log_preferences'
+    id = db.Column(db.Integer, primary_key=True)
+    # --- AQUÍ TAMBIÉN: Cambiado 'user.id' por 'users.id' ---
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    category = db.Column(db.String(50), nullable=False)
+    is_active = db.Column(db.Boolean, default=False) 
+    last_read_at = db.Column(db.DateTime, default=datetime.utcnow) 
+
+    user = db.relationship('User', backref=db.backref('log_preferences', lazy='dynamic'))
+    
 class Obra(db.Model):
     """
     Unidad central de planificación.

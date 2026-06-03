@@ -34,6 +34,13 @@ def login():
         # Nota: Asumo que usas check_password_hash porque así estaba en tu snippet
         if user and check_password_hash(user.password_hash, password):
             login_user(user, remember=remember)
+            from app.utils import register_log
+            register_log(
+                user_id=user.id,
+                category='accesos',
+                action='Inicio de Sesión',
+                detail=f"Login exitoso desde IP: {request.remote_addr or 'Desconocida'}"
+            )
             flash("Inicio de sesión exitoso", "success")
             
             # Redirección inteligente según rol
@@ -47,6 +54,15 @@ def login():
             else:
                 return redirect(url_for('operarios.panel'))
         else:
+            if user: # Solo grabamos log si el email existe pero la contraseña falló
+                from app.utils import register_log
+                register_log(
+                    user_id=user.id,
+                    category='accesos',
+                    action='Intento fallido de login',
+                    detail=f"Contraseña incorrecta. IP: {request.remote_addr or 'Desconocida'}"
+                )
+            # --------------------------------------------
             flash("Credenciales inválidas", "danger")
             
     return render_template('login.html')

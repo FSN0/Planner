@@ -60,9 +60,10 @@ def create_app():
 
     @app.context_processor
     def inject_notifications():
-        from app.models import Solicitud, ROLE_ADMIN, ROLE_JEFE
+        from app.models import Solicitud, ROLE_ADMIN, ROLE_JEFE, SystemLog, LogPreference
         
         pending_count = 0
+        unread_logs_count = 0 # <-- NUEVO CONTADOR
 
         if current_user.is_authenticated:
             # 1. ADMIN: Solo contamos cuántas hay PENDIENTES o EN_PROCESO
@@ -70,6 +71,16 @@ def create_app():
                 pending_count = Solicitud.query.filter(
                     Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
                 ).count()
+                
+                # --- NUEVO: CÁLCULO DE LA BURBUJA DE LOGS ---
+                prefs = LogPreference.query.filter_by(user_id=current_user.id, is_active=True).all()
+                for pref in prefs:
+                    # Cuenta cuántos logs de esta categoría se han creado DESPUÉS de su última lectura
+                    unread_logs_count += SystemLog.query.filter(
+                        SystemLog.category == pref.category,
+                        SystemLog.timestamp > pref.last_read_at
+                    ).count()
+                # --------------------------------------------
 
             # 2. JEFE DE OBRA: Solo contamos cuántas de SUS solicitudes tienen feedback
             elif current_user.role == ROLE_JEFE:
@@ -79,7 +90,7 @@ def create_app():
                 ).count()
 
         # Ya no enviamos 'notifications' vacío, solo el conteo
-        return dict(pending_notifications=pending_count)
+        return dict(pending_notifications=pending_count, unread_logs_count=unread_logs_count)
 
     # ---------------------------------------------------------
     # Función auxiliar para unificar las redirecciones

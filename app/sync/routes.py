@@ -100,6 +100,13 @@ def commit_obras():
                 fecha_importacion=ahora  # <--- GUARDAMOS LA FECHA AQUÍ
             )
             db.session.add(nueva_obra)
+            from app.utils import register_log
+            register_log(
+                user_id=current_user.id,
+                category='obras',
+                action='Crear Obra (Sincronización)',
+                detail=f"Obra importada desde Odoo: '{obj['nombre']}' (Código: {obj['codigo']})"
+            )
             
         # 2. Procesar Actualizadas
         for obj in data.get('actualizadas', []):
@@ -137,7 +144,14 @@ def commit_obras():
             detalles="Sincronización manual de obras completada."
         ))
         # ------------------------------------
-
+        from app.utils import register_log
+        register_log(
+            user_id=current_user.id,
+            category='obras',
+            action='Finalizar Obra (Sincronización)',
+            detail=f"Obra marcada como Finalizada automáticamente por Odoo: '{obra.nombre}'"
+        )
+                
         db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -480,7 +494,17 @@ def resolver_fichaje():
         elif accion == 'confirmar_ausencia':
             registro.estado = 'Resuelto_Ausencia'
             registro.notas_resolucion = "Ausencia confirmada manualmente."
-            
+        
+        from app.utils import register_log
+        operario = User.query.get(registro.user_id)
+        nombre_op = f"{operario.name} {operario.lastname}" if operario else f"ID {registro.user_id}"
+        accion_limpia = accion.replace('_', ' ').title()
+        register_log(
+            user_id=current_user.id,
+            category='fichajes',
+            action=f"Resolución de Fichaje",
+            detail=f"Ha resuelto un conflicto de {nombre_op} del {registro.fecha.strftime('%d/%m/%Y')}. Acción tomada: {accion_limpia}"
+        )
         # Al no reventar aquí, el commit funcionará y dejará el histórico
         db.session.commit()
         return jsonify({'success': True})
