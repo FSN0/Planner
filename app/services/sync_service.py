@@ -3,6 +3,7 @@ import os
 import re
 from app import db
 from app.models import Obra, User, Company
+from zoneinfo import ZoneInfo
 
 class OdooSyncService:
     def __init__(self):
@@ -489,7 +490,8 @@ class OdooSyncService:
             check_in_dt = None
             if f.get('check_in'):
                 try:
-                    check_in_dt = datetime.strptime(f['check_in'], '%Y-%m-%d %H:%M:%S') + timedelta(hours=2)
+                    dt_utc = datetime.strptime(f['check_in'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("UTC"))
+                    check_in_dt = dt_utc.astimezone(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
                 except ValueError:
                     pass
             check_out_dt = None
