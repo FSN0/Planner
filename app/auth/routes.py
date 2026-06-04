@@ -39,6 +39,7 @@ def login():
         
         if user and check_password_hash(user.password_hash, password):
             login_user(user, remember=remember)
+            session['tenant_id'] = g.current_tenant.id
             from app.utils import register_log
             register_log(
                 user_id=user.id,

@@ -165,7 +165,7 @@ def commit_obras():
             fecha = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
             
             nueva_obra = Obra(
-                odoo_id=obj['odoo_id'],
+                external_ids={'odoo': str(obj['odoo_id'])},
                 codigo=obj['codigo'],
                 nombre=obj['nombre'],
                 descripcion=obj.get('cliente', ''),
@@ -188,7 +188,9 @@ def commit_obras():
         for obj in data.get('actualizadas', []):
             obra = Obra.query.get(obj['local_id'])
             if obra:
-                obra.odoo_id = obj['odoo_id']
+                ext_ids = obra.external_ids.copy() if obra.external_ids else {}
+                ext_ids['odoo'] = str(obj['odoo_id'])
+                obra.external_ids = ext_ids
                 obra.codigo = obj['codigo']
                 obra.nombre = obj['nombre']
                 obra.descripcion = obj.get('cliente', '')
@@ -270,13 +272,15 @@ def commit_subcontratas():
         for obj in data.get('empresas', {}).get('actualizadas', []):
             comp = Company.query.get(obj['local_id'])
             if comp:
-                comp.odoo_id = obj['odoo_id']
+                ext_ids = comp.external_ids.copy() if comp.external_ids else {}
+                ext_ids['odoo'] = str(obj['odoo_id'])
+                comp.external_ids = ext_ids
                 comp.nombre = obj['nombre']
                 mapa_empresas[obj['odoo_id']] = comp.id
                 
         for obj in data.get('empresas', {}).get('nuevas', []):
             nueva_comp = Company(
-                odoo_id=obj['odoo_id'],
+                external_ids={'odoo': str(obj['odoo_id'])},
                 nombre=obj['nombre']
             )
             db.session.add(nueva_comp)
@@ -287,7 +291,9 @@ def commit_subcontratas():
         for obj in data.get('empleados', {}).get('actualizados', []):
             user = User.query.get(obj['local_id'])
             if user:
-                user.odoo_id = obj['odoo_id']
+                ext_ids = user.external_ids.copy() if user.external_ids else {}
+                ext_ids['odoo'] = str(obj['odoo_id'])
+                user.external_ids = ext_ids
                 user.name = obj['name']
                 user.lastname = obj['lastname']
                 user.categoria_profesional = obj.get('categoria_profesional')
@@ -337,7 +343,7 @@ def commit_subcontratas():
             dnis_en_transaccion.add(dni_limpio)
             
             nuevo_user = User(
-                odoo_id=obj['odoo_id'],
+                external_ids={'odoo': str(obj['odoo_id'])},
                 name=obj['name'],
                 lastname=obj['lastname'],
                 dni=dni_limpio,
