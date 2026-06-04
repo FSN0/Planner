@@ -357,23 +357,36 @@ class OdooSyncService:
         fichajes_crudos = []
 
         # 1. Bajar Fichajes de Odoo (AHORA CON HORAS)
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             att_int = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.attendance', 'search_read', [domain], {'fields': ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out']})
+            if not isinstance(att_int, list):
+                logger.error(f"🚨 [Odoo Sync] Error: hr.attendance devolvio no-lista. Abortando.")
+                return
+
             for a in att_int:
                 if a.get('employee_id') and a.get('project_id'):
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
                     fichajes_crudos.append({'odoo_user': a['employee_id'][0], 'odoo_obra': a['project_id'][0], 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
         except Exception as e:
-            pass
+            logger.error(f"🚨 [Odoo Sync] CRITICO: Fallo conexion hr.attendance: {str(e)}")
+            return # ABORTA LA FUNCION SI FALLA LA CONEXION
 
         try:
             att_ext = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'partner.attendance', 'search_read', [domain], {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out']})
+            if not isinstance(att_ext, list):
+                logger.error(f"🚨 [Odoo Sync] Error: partner.attendance devolvio no-lista. Abortando.")
+                return
+
             for a in att_ext:
                 if a.get('partner_id') and a.get('project_id'):
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
                     fichajes_crudos.append({'odoo_user': a['partner_id'][0], 'odoo_obra': a['project_id'][0], 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
         except Exception as e:
-            pass
+            logger.error(f"🚨 [Odoo Sync] CRITICO: Fallo conexion partner.attendance: {str(e)}")
+            return # ABORTA LA FUNCION SI FALLA LA CONEXION
 
         fichajes_unicos = {}
         for f in fichajes_crudos:
