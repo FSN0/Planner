@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from app import db
 from app.models import RegistroFichaje, Asignacion, User, Obra, Festivo, ConfiguracionGlobal
 from app.sync.dispatcher import get_sync_adapter
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,8 @@ def procesar_fichajes_diarios(fecha_str=None):
         check_in_dt = None
         if f.get('check_in'):
             try:
-                check_in_dt = datetime.strptime(f['check_in'], '%Y-%m-%d %H:%M:%S') + timedelta(hours=2)
+                dt_utc = datetime.strptime(f['check_in'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("UTC"))
+                check_in_dt = dt_utc.astimezone(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
             except ValueError:
                 pass
         check_out_dt = None

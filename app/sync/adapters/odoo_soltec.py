@@ -30,13 +30,17 @@ class Adapter(BaseSyncAdapter):
             raise ValueError(f"No se pudo establecer conexión XML-RPC: {str(e)}")
 
     def get_fichajes_diarios(self, fecha_str=None) -> list:
+        import logging
+        logger = logging.getLogger(__name__)
         from datetime import date
+        
         if not fecha_str:
             fecha_str = date.today().strftime('%Y-%m-%d')
             
         domain = [('check_in', 'ilike', f'{fecha_str}%')]
         fichajes_estandarizados = []
 
+        # --- FICHAJES INTERNOS ---
         try:
             att_int = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd, 
@@ -44,6 +48,12 @@ class Adapter(BaseSyncAdapter):
                 [domain], 
                 {'fields': ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out']}
             )
+            
+            # Seguro contra respuestas malformadas de Odoo (típico de XML-RPC cuando falla)
+            if not isinstance(att_int, list):
+                logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] hr.attendance no devolvió una lista.")
+                raise ConnectionError("Respuesta inválida de Odoo para fichajes internos.")
+
             for a in att_int:
                 if a.get('employee_id') and a.get('project_id'):
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
@@ -56,8 +66,10 @@ class Adapter(BaseSyncAdapter):
                         'autor': modificado_por  
                     })
         except Exception as e:
-            pass 
+            logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en hr.attendance. Error: {str(e)}")
+            raise e  # <- CRÍTICO: Lanzamos el error hacia arriba para abortar la sincronización de este tenant
 
+        # --- FICHAJES SUBCONTRATAS ---
         try:
             att_ext = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd, 
@@ -65,6 +77,11 @@ class Adapter(BaseSyncAdapter):
                 [domain], 
                 {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out']}
             )
+            
+            if not isinstance(att_ext, list):
+                logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] partner.attendance no devolvió una lista.")
+                raise ConnectionError("Respuesta inválida de Odoo para fichajes de subcontratas.")
+
             for a in att_ext:
                 if a.get('partner_id') and a.get('project_id'):
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
@@ -77,7 +94,8 @@ class Adapter(BaseSyncAdapter):
                         'autor': modificado_por
                     })
         except Exception as e:
-            pass
+            logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en partner.attendance. Error: {str(e)}")
+            raise e  # <- CRÍTICO: Lanzamos el error hacia arriba
 
         return fichajes_estandarizados
     
