@@ -42,6 +42,7 @@
             </div>
 
             <form action="{{ action_url }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
                 {# --- Sección de Cuenta --- #}
                 <h6 class="text-uppercase text-muted small font-weight-bold mb-3">Datos de Cuenta</h6>

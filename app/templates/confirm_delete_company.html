@@ -91,6 +91,7 @@
                     </div>
 
                     <form method="POST" action="{{ url_for('admin.delete_company', company_id=company.id) }}" id="deleteForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="text-left mb-4">
                             <label class="small text-uppercase text-muted font-weight-bold mb-2">Selecciona una acción:</label>
                             
@@ -149,6 +150,7 @@
                     </div>
 
                     <form method="POST" action="{{ url_for('admin.delete_company', company_id=company.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action_option" value="none">
                         <div class="d-flex justify-content-center gap-3 mt-4">
                             <a href="{{ url_for('admin.companies') }}" class="btn btn-light border text-muted mr-2">Cancelar</a>

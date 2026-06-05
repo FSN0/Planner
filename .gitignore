@@ -1,5 +1,6 @@
 # Entornos y secretos
 .env
+.env.test
 __pycache__/
 *.pyc
 
@@ -7,6 +8,13 @@ __pycache__/
 backups/
 app/static/uploads/
 uploads/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.coverage
+.tox/
 
 # Archivos del SO
 .DS_Store

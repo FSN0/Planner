@@ -109,30 +109,36 @@ def resolve_conflict_empleado():
             u.dni = f"DEL-{u.id}"
             if u.email: 
                 u.email = f"del-{u.id}@borrado.local"
-            # OJO: Quitamos también el odoo_id por si acaso estaba pisado
-            u.odoo_id = None 
+            # Quitamos también el external_id de Odoo por si acaso estaba pisado
+            if u.external_ids and 'odoo' in u.external_ids:
+                u.external_ids = {k: v for k, v in u.external_ids.items() if k != 'odoo'}
+                db.session.add(u)  # Marca como modificado para JSONB
             
         if action == 'keep_actual':
             retirar_usuario(blocker_user)
             db.session.flush() # <--- ESTA ES LA CLAVE: Fuerza a la BD a liberar el DNI/Email ahora mismo
             
-            actual_user.odoo_id = emp_data['odoo_id']
+            actual_user.external_ids = actual_user.external_ids or {}
+            actual_user.external_ids['odoo'] = str(emp_data['odoo_id'])
             actual_user.name = emp_data['name']
             actual_user.lastname = emp_data['lastname']
             actual_user.dni = emp_data['dni']
             actual_user.email = emp_data['email']
             actual_user.role = emp_data['role']
+            db.session.add(actual_user)  # Marca como modificado para JSONB
             
         elif action == 'keep_blocker':
             retirar_usuario(actual_user)
             db.session.flush() # <--- Y AQUÍ TAMBIÉN
             
-            blocker_user.odoo_id = emp_data['odoo_id']
+            blocker_user.external_ids = blocker_user.external_ids or {}
+            blocker_user.external_ids['odoo'] = str(emp_data['odoo_id'])
             blocker_user.name = emp_data['name']
             blocker_user.lastname = emp_data['lastname']
             blocker_user.dni = emp_data['dni']
             blocker_user.email = emp_data['email']
             blocker_user.role = emp_data['role']
+            db.session.add(blocker_user)  # Marca como modificado para JSONB
             
         db.session.commit()
         return jsonify({'success': True})
@@ -394,7 +400,8 @@ def commit_empleados():
                 choque_dni = User.query.filter(User.dni == obj['dni'], User.id != user.id).first()
                 choque_email = User.query.filter(User.email == obj['email'], User.id != user.id).first()
                 
-                user.odoo_id = obj['odoo_id']
+                user.external_ids = user.external_ids or {}
+                user.external_ids['odoo'] = str(obj['odoo_id'])
                 user.name = obj['name']
                 user.lastname = obj['lastname']
                 user.role = obj['role']
@@ -407,6 +414,7 @@ def commit_empleados():
                 user.company_id = default_company_id 
                 user.active = True
                 user.is_deleted = False
+                db.session.add(user)  # Marca como modificado para JSONB
 
                 dnis_en_transaccion.add(user.dni)
                 emails_en_transaccion.add(user.email)
@@ -428,7 +436,6 @@ def commit_empleados():
             emails_en_transaccion.add(email_limpio)
 
             nuevo_user = User(
-                odoo_id=obj['odoo_id'],
                 name=obj['name'],
                 lastname=obj['lastname'],
                 dni=dni_limpio,
@@ -437,7 +444,8 @@ def commit_empleados():
                 categoria_profesional=obj.get('categoria_profesional', 'Sin definir'), 
                 active=True,
                 company_id=default_company_id,
-                password_hash=generate_password_hash(dni_limpio)
+                password_hash=generate_password_hash(dni_limpio),
+                external_ids={'odoo': str(obj['odoo_id'])}
             )
             db.session.add(nuevo_user)
                 
@@ -628,13 +636,11 @@ def sync_fichajes_manual():
         dias_atras = int(data.get('dias', 7))
         
         from app.services.sync_service import procesar_fichajes_diarios
-        procesar_fichajes_diarios(fecha_str=fecha_revision)
-        service = get_sync_adapter()                
         
         # BUCLE: Sincroniza hoy y retrocede "dias_atras"
         for i in range(dias_atras + 1):
             fecha_revision = (date.today() - timedelta(days=i)).strftime('%Y-%m-%d')
-            service.sync_fichajes_diarios(fecha_str=fecha_revision)
+            procesar_fichajes_diarios(fecha_str=fecha_revision)
         
         # Guardamos en el log cuántos días hemos revisado
         texto_log = f"Sincronización manual de fichajes (Revisión de Hoy + últimos {dias_atras} días)."

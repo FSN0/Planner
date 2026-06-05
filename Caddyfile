@@ -1,3 +1,26 @@
+# Configuración Caddy para desarrollo y producción
+#
+# DESARROLLO LOCAL (sin DOMAIN definido):
+#   - Escucha en :80 (HTTP)
+#   - Accesible desde cliente.localhost
+#
+# PRODUCCIÓN (con DOMAIN=tudominio.com):
+#   - HTTPS automático con Let's Encrypt
+#   - Para multi-tenant: DOMAIN="tudominio.com, *.tudominio.com"
+
 :80 {
     reverse_proxy web:5000
+    encode gzip
 }
+
+# Descomentar para producción con dominio real:
+# {$DOMAIN} {
+#     reverse_proxy web:5000
+#     encode gzip
+#     header {
+#         Strict-Transport-Security "max-age=31536000; includeSubDomains"
+#         X-Content-Type-Options "nosniff"
+#         X-Frame-Options "SAMEORIGIN"
+#         Referrer-Policy "strict-origin-when-cross-origin"
+#     }
+# }

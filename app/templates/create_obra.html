@@ -34,6 +34,7 @@
             </div>
 
             <form action="{{ url_for('admin.create_obra') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
                 <h6 class="text-uppercase text-muted small font-weight-bold mb-3">Identificación</h6>
                 <div class="form-row">

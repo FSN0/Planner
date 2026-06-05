@@ -75,6 +75,7 @@
                     </a>
                     {% if score != 0 %}
                     <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline ml-2" onsubmit="return confirm('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-xs btn-light text-muted border" title="Resetear contador (Archivar actual)">
                             <i class="fas fa-sync-alt"></i>
                         </button>

@@ -44,6 +44,7 @@
                 
                 <div class="card-body">
                     <form action="{{ url_for('admin.add_festivo') }}" method="POST" class="mb-4 bg-light p-3 rounded border">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="row form-row align-items-center">
                             <div class="col-4">
                                 <label class="small font-weight-bold text-muted mb-1">Fecha</label>
@@ -112,6 +113,7 @@
                 
                 <div class="card-body">
                     <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-group mb-4">
                             <label class="font-weight-bold text-dark mb-1">Límite de Custodia de Jefes de Obra (Días)</label>
                             <p class="text-muted small mb-3">Tiempo máximo que un Jefe de Obra mantiene el "derecho" sobre un operario después de su último día trabajado en su obra. Si intenta volver a asignarlo dentro de este límite y el operario está libre, no requerirá solicitud a RRHH.</p>
@@ -176,6 +178,7 @@
                 
                 <div class="card-body p-0">
                     <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="table-responsive">
                             <table class="table table-hover mb-0 text-center">
                                 <thead class="thead-light">

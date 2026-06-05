@@ -115,6 +115,16 @@ class User(UserMixin, db.Model):
     
     
     @property
+    def is_active(self):
+        """Flask-Login usa esta propiedad para permitir/denegar el login.
+
+        Sobreescribimos UserMixin (que siempre devolvía True) para que los
+        usuarios no aprobados por RRHH (active=False) o eliminados no puedan
+        iniciar sesión.
+        """
+        return bool(self.active) and not bool(self.is_deleted)
+
+    @property
     def reputation_score(self):
         """
         Calcula la media de las valoraciones activas.

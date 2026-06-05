@@ -58,6 +58,7 @@
                     <p class="admin-panel-subtitle mb-0">Sube aquí tus cursos y certificados.</p>
                 </div>
                 <form action="{{ url_for('operarios.panel') }}" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     </form>
             </div>
         </div>c

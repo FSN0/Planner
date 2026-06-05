@@ -1,3 +1,4 @@
+import re
 from app import db
 from sqlalchemy import text
 from app.models import Tenant, User, ROLE_ADMIN, Company # <--- AÑADIDO Company
@@ -8,8 +9,14 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
     """
     Registra un nuevo cliente, construye su esquema aislado, crea su empresa matriz y su primer administrador.
     """
-    schema_name = f"tenant_{subdominio.lower().strip()}"
-    
+    subdominio = (subdominio or '').lower().strip()
+    # Validación estricta: solo letras minúsculas, números y guiones.
+    # Evita inyección SQL al construir el nombre de esquema y CREATE SCHEMA.
+    if not re.match(r'^[a-z0-9-]+$', subdominio):
+        raise ValueError("El subdominio solo puede contener letras minúsculas, números y guiones.")
+
+    schema_name = f"tenant_{subdominio.replace('-', '_')}"
+
     try:
         db.session.execute(text("SET search_path TO public"))
         

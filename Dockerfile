@@ -16,7 +16,9 @@ RUN mkdir -p /app/uploads
 
 EXPOSE 5000
 
-CMD ["python", "run.py"]
+# Servidor de producción (NO usar el servidor de desarrollo de Flask).
+# Ajusta el número de workers según los núcleos del servidor.
+CMD ["gunicorn", "--workers", "4", "--timeout", "120", "--bind", "0.0.0.0:5000", "run:app"]
 
 
 

@@ -35,6 +35,7 @@
             </div>
 
             <form method="POST" id="editObraForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
                 <div class="form-row">
                     <div class="form-group col-md-3">
@@ -144,7 +145,8 @@
             </form>
 
             {% if current_user.role == 'admin' %}
-                <form id="deleteForm" method="POST" action="{{ url_for('admin.delete_obra', obra_id=obra.id) }}" style="display:none;"></form>
+                <form id="deleteForm" method="POST" action="{{ url_for('admin.delete_obra', obra_id=obra.id) }}" style="display:none;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
             {% endif %}
         </div>
       </div>

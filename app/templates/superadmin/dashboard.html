@@ -21,6 +21,7 @@
         </div>
         <div class="card-body">
             <form action="{{ url_for('superadmin.create_tenant') }}" method="POST" class="row g-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="col-md-3">
                     <label class="form-label">Nombre Empresa</label>
                     <input type="text" name="nombre" class="form-control" placeholder="Ej: Construcciones López" required>
@@ -105,6 +106,7 @@
       </div>
       
       <form action="{{ url_for('superadmin.configurar_modulos_tenant', id_tenant=t.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="modal-body p-4">
             
             {% for key, nombre in modulos.items() %}

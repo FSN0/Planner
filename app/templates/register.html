@@ -15,6 +15,7 @@
     <p class="auth-subtitle">Registro para nuevos operarios</p>
 
     <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-row">
             <div class="form-group col-md-6">
                 <label>Nombre</label>

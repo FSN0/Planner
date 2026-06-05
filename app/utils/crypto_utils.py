@@ -9,7 +9,12 @@ def get_fernet():
     key = current_app.config.get('ENCRYPTION_KEY')
     if not key:
         raise ValueError("CRÍTICO: ENCRYPTION_KEY no está configurada en las variables de entorno.")
-    return Fernet(key.encode('utf-8'))
+    
+    # Si la clave es un string, convertirla a bytes
+    if isinstance(key, str):
+        key = key.encode('utf-8')
+    
+    return Fernet(key)
 
 def encrypt_data(text: str) -> str:
     """Encripta un string en texto plano."""

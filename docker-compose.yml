@@ -1,20 +1,23 @@
-version: '3.8'
-
 services:
   web:
     build: .
+    restart: always
     expose:
       - "5000"
     volumes:
-      - ./uploads:/app/uploads
+      # DESARROLLO: Bind mount del código para ver cambios sin rebuild
       - .:/app
+      - ./uploads:/app/uploads
     environment:
-      - SECRET_KEY=your_secret_key
+      - SECRET_KEY=${SECRET_KEY}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_saas
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/gestion_obra_saas
+      - SUPERADMIN_USER=${SUPERADMIN_USER}
+      - SUPERADMIN_PASS=${SUPERADMIN_PASS}
       - MAIL_USERNAME=${MAIL_USERNAME}
-      - MAIL_PASSWORD="sgnn bkpf acno cnhv"
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_TASK_ALWAYS_EAGER=false
       - ODOO_URL=${ODOO_URL}
       - ODOO_DB=${ODOO_DB}
       - ODOO_USER=${ODOO_USER}
@@ -26,31 +29,38 @@ services:
   db:
     image: postgres:13
     restart: always
+    ports:
+      - "5432:5432"  # Exponer puerto para tests
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: gestion_obra_saas
     volumes:
       - postgres_data_saas:/var/lib/postgresql/data
 
   redis:
     image: redis:6-alpine
-    ports:
-      - "6379:6379"
-      
+    restart: always
+    # Sin exponer el puerto al host: solo accesible dentro de la red de Docker.
+    expose:
+      - "6379"
+
   # EL WORKER: Ejecuta las tareas pesadas
   celery_worker:
     build: .
+    restart: always
     command: celery -A app.celery_worker.celery worker --loglevel=info
     volumes:
       - .:/app
+      - ./uploads:/app/uploads
     environment:
+      - SECRET_KEY=${SECRET_KEY}
       - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_TASK_ALWAYS_EAGER=false
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - MAIL_USERNAME=${MAIL_USERNAME}
-      - MAIL_PASSWORD="sgnn bkpf acno cnhv"
-      - SECRET_KEY=your_secret_key
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_saas
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/gestion_obra_saas
       - ODOO_URL=${ODOO_URL}
       - ODOO_DB=${ODOO_DB}
       - ODOO_USER=${ODOO_USER}
@@ -62,12 +72,15 @@ services:
   # EL BEAT: El reloj que dispara las tareas programadas automáticamente
   celery_beat:
     build: .
+    restart: always
     command: celery -A app.celery_worker.celery beat --loglevel=info
     volumes:
       - .:/app
     environment:
+      - SECRET_KEY=${SECRET_KEY}
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/gestion_obra_saas
+      - CELERY_TASK_ALWAYS_EAGER=false
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/gestion_obra_saas
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     depends_on:
       - redis

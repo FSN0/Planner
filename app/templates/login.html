@@ -32,6 +32,7 @@
         {% endwith %}
 
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group mb-3">
                 <label for="email" class="form-label font-weight-bold small text-secondary">Correo Electrónico</label>
                 <input type="email" name="email" id="email" class="form-control" placeholder="nombre@empresa.com" required>

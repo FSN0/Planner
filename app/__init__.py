@@ -1,21 +1,49 @@
+import os
 from flask import Flask, redirect, url_for, request, g, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
 from flask_mail import Mail
+from flask_wtf import CSRFProtect
+from flask_wtf.csrf import generate_csrf
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 from .config import Config
 import logging
+import re
 
 # Instancias globales
 db = SQLAlchemy()
 login_manager = LoginManager()
 migrate = Migrate()
 mail = Mail()
+csrf = CSRFProtect()
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=os.environ.get('RATELIMIT_STORAGE_URI', Config.CELERY_BROKER_URL),
+    default_limits=[],
+)
+
+# Patrón seguro para nombres de esquema/subdominio (evita inyección SQL en search_path)
+_SCHEMA_SAFE_RE = re.compile(r'^[a-z0-9_]+$')
+
+
+def is_safe_schema_name(name):
+    """Valida que un nombre de esquema solo contenga caracteres seguros."""
+    return bool(name) and bool(_SCHEMA_SAFE_RE.match(name))
+
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    # --- Verificación de configuración crítica ---
+    if not app.config.get('SECRET_KEY'):
+        raise RuntimeError(
+            "SECRET_KEY no está configurada. Define la variable de entorno SECRET_KEY "
+            "(un valor aleatorio y secreto) antes de arrancar la aplicación."
+        )
 
     logging.basicConfig(level=logging.INFO)
 
@@ -24,6 +52,25 @@ def create_app():
     login_manager.init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)
+    csrf.init_app(app)
+    if app.config.get('TESTING'):
+        app.config['RATELIMIT_ENABLED'] = False
+    limiter.init_app(app)
+
+    # Exponemos el token CSRF en una cookie legible por JS (patrón double-submit)
+    # para que las peticiones AJAX/fetch existentes puedan enviarlo en la cabecera.
+    @app.after_request
+    def set_csrf_cookie(response):
+        try:
+            response.set_cookie(
+                'csrf_token',
+                generate_csrf(),
+                secure=app.config.get('SESSION_COOKIE_SECURE', False),
+                samesite='Lax',
+            )
+        except Exception:
+            pass
+        return response
 
     # ---------------------------------------------------------
     # Importación de Blueprints
@@ -142,6 +189,9 @@ def create_app():
             tenant = Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
             
             if tenant:
+                # Defensa en profundidad: nunca interpolar un schema_name no validado
+                if not is_safe_schema_name(tenant.schema_name):
+                    abort(500, description="Configuración de esquema inválida para esta organización.")
                 g.current_tenant = tenant
                 db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
             else:

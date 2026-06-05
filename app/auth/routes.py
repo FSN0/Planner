@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, login_required, current_user
 from app.models import User, ROLE_OPERARIO, Company
-from app import db
+from app import db, limiter
 from sqlalchemy.exc import IntegrityError
 from datetime import date
 
@@ -12,6 +12,7 @@ from datetime import date
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 50 per hour', methods=['POST'])
 def login():
     # 1. Si el usuario ya está autenticado, redirige a su panel
     if current_user.is_authenticated:
@@ -38,6 +39,10 @@ def login():
         user = User.query.filter_by(email=email).first()
         
         if user and check_password_hash(user.password_hash, password):
+            # Bloqueamos a usuarios no aprobados por RRHH o eliminados.
+            if not user.is_active:
+                flash("Tu cuenta aún no está activa. Espera la aprobación de RRHH.", "warning")
+                return render_template('login.html', tenant_name=g.current_tenant.nombre)
             login_user(user, remember=remember)
             session['tenant_id'] = g.current_tenant.id
             from app.utils import register_log

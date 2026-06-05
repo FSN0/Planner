@@ -1,9 +1,10 @@
+import hmac
 from flask import render_template, request, redirect, url_for, flash, current_app, Response
 from app.superadmin import superadmin_bp
 from app.models import Tenant
 from app.services.tenant_service import provision_new_tenant
 from app.services.config_service import set_tenant_config
-from app import db
+from app import db, csrf
 from sqlalchemy import text
 
 # ==========================================
@@ -23,8 +24,18 @@ ADAPTADORES_ODOO = {
 # PROTECCIÓN DEL PANEL SUPERADMIN (Basic Auth)
 # ==========================================
 def check_auth(username, password):
-    """Comprueba si las credenciales coinciden con la configuración."""
-    return username == current_app.config['SUPERADMIN_USER'] and password == current_app.config['SUPERADMIN_PASS']
+    """Comprueba si las credenciales coinciden con la configuración.
+
+    Si SUPERADMIN_USER/SUPERADMIN_PASS no están configuradas, el acceso queda
+    bloqueado (devuelve False). Se usa compare_digest para evitar ataques de tiempo.
+    """
+    cfg_user = current_app.config.get('SUPERADMIN_USER')
+    cfg_pass = current_app.config.get('SUPERADMIN_PASS')
+    if not cfg_user or not cfg_pass:
+        return False
+    user_ok = hmac.compare_digest(str(username or ''), str(cfg_user))
+    pass_ok = hmac.compare_digest(str(password or ''), str(cfg_pass))
+    return user_ok and pass_ok
 
 def authenticate():
     """Envía un error 401 que fuerza al navegador a mostrar el popup de login."""

@@ -114,7 +114,7 @@ def fichajes_en_vivo():
                 g.current_tenant = tenant
                 
                 service = get_sync_adapter()
-                service.sync_fichajes_diarios()
+                service.get_fichajes_diarios()
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
@@ -148,20 +148,39 @@ def auto_sync_odoo():
                 
                 for obj in nuevas_limpias:
                     f_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
-                    db.session.add(Obra(odoo_id=obj['odoo_id'], codigo=obj['codigo'], nombre=obj['nombre'], descripcion=obj.get('cliente', ''), fecha_inicio=f_inicio, estado='Pendiente', jefe_obra_id=obj.get('jefe_obra_id'), encargado_id=obj.get('encargado_id'), fecha_importacion=ahora))
+                    nueva_obra = Obra(
+                        codigo=obj['codigo'],
+                        nombre=obj['nombre'],
+                        descripcion=obj.get('cliente', ''),
+                        fecha_inicio=f_inicio,
+                        estado='Pendiente',
+                        jefe_obra_id=obj.get('jefe_obra_id'),
+                        encargado_id=obj.get('encargado_id'),
+                        fecha_importacion=ahora,
+                        external_ids={'odoo': str(obj['odoo_id'])}
+                    )
+                    db.session.add(nueva_obra)
                     
                 for obj in act_limpias:
                     obra = Obra.query.get(obj['local_id'])
                     if obra:
-                        obra.odoo_id, obra.codigo, obra.nombre, obra.descripcion, obra.fecha_importacion = obj['odoo_id'], obj['codigo'], obj['nombre'], obj.get('cliente', ''), ahora
+                        obra.external_ids = obra.external_ids or {}
+                        obra.external_ids['odoo'] = str(obj['odoo_id'])
+                        obra.codigo = obj['codigo']
+                        obra.nombre = obj['nombre']
+                        obra.descripcion = obj.get('cliente', '')
+                        obra.fecha_importacion = ahora
                         if obj.get('fecha_inicio'): obra.fecha_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date()
                         if obj.get('jefe_obra_id'): obra.jefe_obra_id = obj['jefe_obra_id']
                         if obj.get('encargado_id'): obra.encargado_id = obj['encargado_id']
+                        db.session.add(obra)  # Marca como modificado para JSONB
                         
                 for obj in diff_obras['finalizadas']:
                     obra = Obra.query.get(obj['local_id'])
                     if obra:
-                        obra.estado, obra.fecha_fin, obra.fecha_importacion = 'Finalizada', ahora.date(), ahora
+                        obra.estado = 'Finalizada'
+                        obra.fecha_fin = ahora.date()
+                        obra.fecha_importacion = ahora
 
                 # --- 2. EMPLEADOS ---
                 diff_emp = service.get_diff_empleados()
@@ -169,13 +188,30 @@ def auto_sync_odoo():
                 default_company_id = default_company.id if default_company else None
 
                 for obj in diff_emp['nuevos']:
-                    db.session.add(User(odoo_id=obj['odoo_id'], name=obj['name'], lastname=obj['lastname'], dni=obj['dni'], email=obj['email'], role=obj['role'], categoria_profesional=obj.get('categoria_profesional', 'Sin definir'), company_id=default_company_id, active=True, password_hash=generate_password_hash("123456")))
+                    nuevo_user = User(
+                        name=obj['name'],
+                        lastname=obj['lastname'],
+                        dni=obj['dni'],
+                        email=obj['email'],
+                        role=obj['role'],
+                        categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
+                        company_id=default_company_id,
+                        active=True,
+                        password_hash=generate_password_hash("123456"),
+                        external_ids={'odoo': str(obj['odoo_id'])}
+                    )
+                    db.session.add(nuevo_user)
                 
                 for obj in [e for e in diff_emp['actualizados'] if not e.get('conflicto')]:
                     user = User.query.get(obj['local_id'])
                     if user:
-                        user.odoo_id, user.name, user.lastname, user.role = obj['odoo_id'], obj['name'], obj['lastname'], obj['role']
-                        user.categoria_profesional = obj.get('categoria_profesional', user.categoria_profesional) 
+                        user.external_ids = user.external_ids or {}
+                        user.external_ids['odoo'] = str(obj['odoo_id'])
+                        user.name = obj['name']
+                        user.lastname = obj['lastname']
+                        user.role = obj['role']
+                        user.categoria_profesional = obj.get('categoria_profesional', user.categoria_profesional)
+                        db.session.add(user)  # Marca como modificado para JSONB 
 
                 db.session.add(SyncLog(fecha=ahora, tipo='Global', modo='Automático', detalles="Sync completada para este inquilino."))
                 db.session.commit()

@@ -121,6 +121,7 @@
                                         </a>
                                         
                                         <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar usuario?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-xs btn-outline-danger" title="Eliminar">
                                                 <i class="fas fa-trash"></i>
                                             </button>
@@ -212,6 +213,7 @@
                                         
                                         {% if view_mode == 'admin' %}
                                             <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-xs btn-warning" title="Desactivar"><i class="fas fa-ban"></i></button>
                                             </form>
                                         {% endif %}
@@ -221,6 +223,7 @@
                                         </button>
                                         {% if current_user.role == 'admin' %}
                                         <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar definitivamente a este trabajador?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-xs btn-outline-danger ml-1" title="Eliminar">
                                                 <i class="fas fa-trash"></i>
                                             </button>
@@ -243,6 +246,7 @@
 <div class="modal fade" id="resetPasswordModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <form id="resetPasswordForm" method="POST" action="">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="modal-content">
         <div class="modal-header bg-white text-dark border-bottom">
            <h5 class="modal-title">Restablecer Contraseña</h5>

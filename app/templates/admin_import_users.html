@@ -34,6 +34,7 @@
             </div>
 
             <form action="{{ url_for('admin.import_users') }}" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 
                 <div class="form-group text-center p-5 border rounded bg-light mb-4" style="border-style: dashed !important; border-color: #cbd5e1 !important;">
                     <i class="fas fa-users fa-3x text-primary mb-3"></i>
