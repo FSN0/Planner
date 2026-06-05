@@ -1896,7 +1896,10 @@ def sso_odoo_contactos():
     from itsdangerous import URLSafeTimedSerializer
     import datetime
 
-    sso_secret = current_app.config.get('SSO_SECRET_KEY', 'default_dev_secret_key')
+    sso_secret = current_app.config.get('SSO_SECRET_KEY')
+    if not sso_secret:
+        flash('SSO no configurado. Contacte al administrador.', 'danger')
+        return redirect(url_for('admin.panel'))
     
     # 1. Buscar si el cliente tiene una instancia de Odoo configurada
     conf_odoo = ConfiguracionGlobal.query.filter_by(clave='odoo_url').first()

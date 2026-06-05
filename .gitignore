@@ -1,13 +1,18 @@
 # Entornos y secretos
 .env
 .env.test
+.env.production
 __pycache__/
 *.pyc
 
-# Backups y subidas (vital no meter los .tar.gz ni los .sql en git)
+# Backups y subidas
 backups/
 app/static/uploads/
 uploads/
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
 
 # Testing
 .pytest_cache/

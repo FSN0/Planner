@@ -1,4 +1,5 @@
 # app/celery_worker.py
+import secrets
 from celery import Celery
 from celery.schedules import crontab
 from app import create_app, mail, db
@@ -197,7 +198,7 @@ def auto_sync_odoo():
                         categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
                         company_id=default_company_id,
                         active=True,
-                        password_hash=generate_password_hash("123456"),
+                        password_hash=generate_password_hash(secrets.token_urlsafe(16)),
                         external_ids={'odoo': str(obj['odoo_id'])}
                     )
                     db.session.add(nuevo_user)

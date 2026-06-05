@@ -1,3 +1,4 @@
+import secrets
 import pandas as pd
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
@@ -123,7 +124,7 @@ def process_users_import(file):
 
             new_user = User(
                 email=email,
-                password_hash=generate_password_hash(pwd) if pwd else generate_password_hash("123456"),
+                password_hash=generate_password_hash(pwd) if pwd else generate_password_hash(secrets.token_urlsafe(16)),
                 role=role if role else ROLE_OPERARIO,
                 name=name,
                 lastname=lastname,

@@ -1,12 +1,12 @@
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
-from flask_login import login_required, current_user # <--- OJO: AÑADE current_user AQUÍ
+import secrets
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, g
+from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from datetime import datetime
 from app import db
-from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje 
+from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje
 from app.sync.dispatcher import get_sync_adapter
 from sqlalchemy import or_
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, g
 import xmlrpc.client
 from app.services.config_service import set_tenant_config, get_tenant_config
 
@@ -358,7 +358,7 @@ def commit_subcontratas():
                 categoria_profesional=obj.get('categoria_profesional'),
                 company_id=local_comp_id, 
                 active=True,
-                password_hash=generate_password_hash("123456")
+                password_hash=generate_password_hash(secrets.token_urlsafe(16))
             )
             db.session.add(nuevo_user)
 

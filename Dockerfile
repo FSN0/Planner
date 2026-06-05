@@ -1,24 +1,31 @@
 FROM python:3.9-slim-bullseye
-# Instala dependencias y wkhtmltopdf
-RUN apt-get update && apt-get install -y \
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wkhtmltopdf \
     xfonts-75dpi \
-    xfonts-base
+    xfonts-base \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -r appuser
 
 WORKDIR /app
 
 COPY requirements.txt requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/uploads
+RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
+RUN chmod +x /app/entrypoint.prod.sh
+
+USER appuser
 
 EXPOSE 5000
 
-# Servidor de producción (NO usar el servidor de desarrollo de Flask).
-# Ajusta el número de workers según los núcleos del servidor.
-CMD ["gunicorn", "--workers", "4", "--timeout", "120", "--bind", "0.0.0.0:5000", "run:app"]
+ENV FLASK_APP=run.py
+
+CMD ["/app/entrypoint.prod.sh"]
 
 
 
