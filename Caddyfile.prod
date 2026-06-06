@@ -1,11 +1,13 @@
 {
     on_demand_tls {
-        interval 2m
-        burst 5
+        # Ahora sí apunta al contenedor 'web' y a la ruta exacta de tu API v6
+        ask http://web:5000/api/v6/check-domain
+
     }
 }
 
-signaplan.com {
+# Dominios base (generan el certificado normal)
+signaplan.com, www.signaplan.com {
     reverse_proxy web:5000
     encode gzip
 
@@ -19,7 +21,8 @@ signaplan.com {
     }
 }
 
-*.signaplan.com {
+# Bloque atrapalotodo para los subdominios de los clientes (On-Demand TLS)
+https:// {
     tls {
         on_demand
     }

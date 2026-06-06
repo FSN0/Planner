@@ -176,15 +176,24 @@ def create_app():
         host = request.host.split(':')[0]
 
         # Si acceden desde localhost o IP pura, van al esquema principal
-        if host == 'localhost' or host.replace('.', '').isnumeric():
+        if host in ['localhost', 'web'] or host.replace('.', '').isnumeric():
             db.session.execute(text("SET search_path TO public"))
             return
 
         # Separamos la URL por puntos para sacar la empresa
+       # Separamos la URL por puntos para sacar la empresa
         parts = host.split('.')
+        
+        # Si acceden al dominio raíz (ej: signaplan.com), parts tendrá solo 2 elementos.
+        # Lo enviamos directamente al esquema público.
+        if len(parts) == 2:
+            db.session.execute(text("SET search_path TO public"))
+            return
+
         subdomain = parts[0]
 
-        if subdomain not in ['www', 'admin', 'superadmin']:
+        # Añadimos tu dominio base 'signaplan' a la lista por seguridad adicional
+        if subdomain not in ['www', 'admin', 'superadmin', 'signaplan']:
             from app.models import Tenant
             tenant = Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
             
