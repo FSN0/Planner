@@ -95,14 +95,23 @@ restore: ## Restaurar backup. Uso: make restore TS=20260607_120000
 # ─────────────────────────────────────────────────────────────────────────────
 # TESTS
 # ─────────────────────────────────────────────────────────────────────────────
-test: ## Ejecutar todos los tests
+test: ## Ejecutar todos los tests (dev - usa DB de test)
 	docker compose -f $(DEV_COMPOSE) exec web bash -c "pip install -q -r requirements-test.txt 2>/dev/null && pytest tests/ -v --tb=short"
 
-test-unit: ## Solo tests unitarios
+test-unit: ## Solo tests unitarios (dev)
 	docker compose -f $(DEV_COMPOSE) exec web bash -c "pip install -q -r requirements-test.txt 2>/dev/null && pytest tests/unit/ -v"
 
-test-integration: ## Solo tests de integración
+test-integration: ## Solo tests de integración (dev)
 	docker compose -f $(DEV_COMPOSE) exec web bash -c "pip install -q -r requirements-test.txt 2>/dev/null && pytest tests/integration/ -v"
+
+smoke: ## Smoke tests post-deploy (seguro en prod). Uso: make smoke DOMAIN=signaplan.com
+	@bash scripts/smoke-test.sh $(DOMAIN)
+
+smoke-prod: ## Smoke tests en producción (signaplan.com)
+	@COMPOSE_FILE=$(PROD_COMPOSE) bash scripts/smoke-test.sh signaplan.com
+
+smoke-dev: ## Smoke tests en desarrollo (localhost)
+	@COMPOSE_FILE=$(DEV_COMPOSE) bash scripts/smoke-test.sh localhost
 
 # ─────────────────────────────────────────────────────────────────────────────
 # UTILIDADES

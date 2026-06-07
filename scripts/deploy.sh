@@ -80,12 +80,16 @@ docker image prune -f
 
 # --- Verificación ---
 print_step "Verificando estado de los servicios..."
-sleep 3
+sleep 5
 docker compose -f $COMPOSE_FILE ps
+
+# --- Smoke tests ---
+print_step "Ejecutando smoke tests..."
+COMPOSE_FILE=$COMPOSE_FILE bash scripts/smoke-test.sh "${DOMAIN:-signaplan.com}" || true
 
 echo ""
 echo -e "${GREEN}════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Deploy completado correctamente.${NC}"
+echo -e "${GREEN}  Deploy completado.${NC}"
 echo ""
 echo "  Panel:  https://${DOMAIN:-signaplan.com}/superadmin"
 echo "  Logs:   docker compose -f $COMPOSE_FILE logs -f"
