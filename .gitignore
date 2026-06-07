@@ -1,26 +1,51 @@
-# Entornos y secretos
+# =============================================================================
+# SignaPlan - .gitignore
+# =============================================================================
+
+# --- Entornos y secretos ---
 .env
 .env.test
 .env.production
+.env.local
+
+# --- Python ---
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
 
-# Backups y subidas
+# --- Backups y subidas ---
 backups/
-app/static/uploads/
 uploads/
+app/static/uploads/
 
-# Celery
+# --- Celery ---
 celerybeat-schedule
 celerybeat-schedule.db
+celerybeat-schedule.dir
+celerybeat-schedule.bak
 
-# Testing
+# --- Testing ---
 .pytest_cache/
 .coverage
 htmlcov/
 *.coverage
 .tox/
+coverage.xml
 
-# Archivos del SO
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS ---
 .DS_Store
 Thumbs.db
+
+# --- Docker (no ignorar compose files) ---
+# Los volúmenes de datos se manejan por Docker, no por el repo

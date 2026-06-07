@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r re
 COPY . .
 
 RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
-RUN chmod +x /app/entrypoint.prod.sh
+RUN chmod +x /app/entrypoint.sh /app/entrypoint.prod.sh
 
 USER appuser
 
@@ -26,7 +26,3 @@ EXPOSE 5000
 ENV FLASK_APP=run.py
 
 CMD ["/app/entrypoint.prod.sh"]
-
-
-
-

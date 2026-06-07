@@ -1,18 +1,17 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-echo "Verificando migraciones..."
-if [ ! -f "migrations/env.py" ]; then
-    echo "No se encontró migrations/env.py, inicializando migraciones..."
-    flask db init
+echo "=== SignaPlan DEV - Iniciando ==="
+
+echo "[1/3] Verificando migraciones..."
+if [ ! -d "migrations/versions" ] || [ -z "$(ls -A migrations/versions/ 2>/dev/null)" ]; then
+    echo "  → No hay migraciones, inicializando..."
+    flask db init 2>/dev/null || true
     flask db migrate -m "Initial migration"
 fi
 
-echo "Ejecutando migraciones..."
+echo "[2/3] Aplicando migraciones..."
 flask db upgrade
 
-echo "Creando usuario administrador (si no existe)..."
-python create_admin.py
-
-echo "Iniciando la aplicación..."
+echo "[3/3] Arrancando servidor de desarrollo..."
 exec python run.py
