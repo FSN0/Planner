@@ -96,13 +96,13 @@ restore: ## Restaurar backup. Uso: make restore TS=20260607_120000
 # TESTS
 # ─────────────────────────────────────────────────────────────────────────────
 test: ## Ejecutar todos los tests
-	docker compose -f $(DEV_COMPOSE) exec web pytest tests/ -v --tb=short
+	docker compose -f $(DEV_COMPOSE) exec web bash -c "pip install -q -r requirements-test.txt 2>/dev/null && pytest tests/ -v --tb=short"
 
 test-unit: ## Solo tests unitarios
-	docker compose -f $(DEV_COMPOSE) exec web pytest tests/unit/ -v
+	docker compose -f $(DEV_COMPOSE) exec web bash -c "pip install -q -r requirements-test.txt 2>/dev/null && pytest tests/unit/ -v"
 
 test-integration: ## Solo tests de integración
-	docker compose -f $(DEV_COMPOSE) exec web pytest tests/integration/ -v
+	docker compose -f $(DEV_COMPOSE) exec web bash -c "pip install -q -r requirements-test.txt 2>/dev/null && pytest tests/integration/ -v"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # UTILIDADES
