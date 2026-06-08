@@ -368,9 +368,11 @@ class OdooSyncService:
                 return
 
             for a in att_int:
-                if a.get('employee_id') and a.get('project_id'):
+                if a.get('employee_id'):
+                    # Extraemos la obra de forma segura por si Odoo manda False (Obra quitada por RRHH)
+                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
-                    fichajes_crudos.append({'odoo_user': a['employee_id'][0], 'odoo_obra': a['project_id'][0], 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
+                    fichajes_crudos.append({'odoo_user': a['employee_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
         except Exception as e:
             logger.error(f"🚨 [Odoo Sync] CRITICO: Fallo conexion hr.attendance: {str(e)}")
             return # ABORTA LA FUNCION SI FALLA LA CONEXION
@@ -382,9 +384,13 @@ class OdooSyncService:
                 return
 
             for a in att_ext:
-                if a.get('partner_id') and a.get('project_id'):
+                if a.get('partner_id'):
+                    # Extraemos la obra de forma segura por si Odoo manda False
+                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
-                    fichajes_crudos.append({'odoo_user': a['partner_id'][0], 'odoo_obra': a['project_id'][0], 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
+                    fichajes_crudos.append({'odoo_user': a['partner_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
+        
+        
         except Exception as e:
             logger.error(f"🚨 [Odoo Sync] CRITICO: Fallo conexion partner.attendance: {str(e)}")
             return # ABORTA LA FUNCION SI FALLA LA CONEXION
@@ -436,10 +442,10 @@ class OdooSyncService:
 
             if o_real.odoo_id not in obras_odoo_del_usuario:
                 # 1. Borrar asignaciones mágicas
-                if reg_local.estado in ['Correcto_Automatico', 'Paracaidista', 'Resuelto_Asignado', 'Resuelto_Dividido', 'Resuelto_Movido']:
-                    asig_fantasma = Asignacion.query.filter_by(user_id=u_local.id, fecha=fecha_obj, obra_id=o_real.id).first()
-                    if asig_fantasma:
-                        db.session.delete(asig_fantasma)
+                
+                asig_fantasma = Asignacion.query.filter_by(user_id=u_local.id, fecha=fecha_obj, obra_id=o_real.id).first()
+                if asig_fantasma:
+                    db.session.delete(asig_fantasma)
 
                 # 2. Buscar datos de la NUEVA obra (si lo han movido)
                 o_nueva_id = ""
