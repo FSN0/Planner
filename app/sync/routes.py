@@ -320,6 +320,14 @@ def commit_empleados():
                 # 2. Reactivamos al usuario por si venía de un borrado lógico o inactividad
                 user.active = True
                 user.is_deleted = False
+                from app.utils import register_log
+                register_log(
+                    user_id=current_user.id,
+                    category='rrhh_sync',
+                    action="Empleado Actualizado desde Odoo",
+                    detail=f"Datos modificados para: {user.name} {user.lastname}",
+                    target_user_id=user.id
+                )
 
         # 2. Procesar Nuevos (Con asignación de empresa)
         for obj in data.get('nuevos', []):
@@ -499,11 +507,15 @@ def resolver_fichaje():
         operario = User.query.get(registro.user_id)
         nombre_op = f"{operario.name} {operario.lastname}" if operario else f"ID {registro.user_id}"
         accion_limpia = accion.replace('_', ' ').title()
+        
+        # Ojo, ahora pasamos las dos variables extra para alimentar la Caja Negra
         register_log(
             user_id=current_user.id,
             category='fichajes',
-            action=f"Resolución de Fichaje",
-            detail=f"Ha resuelto un conflicto de {nombre_op} del {registro.fecha.strftime('%d/%m/%Y')}. Acción tomada: {accion_limpia}"
+            action=f"Resolución de Fichaje: {accion_limpia}",
+            detail=registro.notas_resolucion or "Ajuste manual del cuadrante/fichaje.",
+            target_user_id=registro.user_id,
+            target_date=registro.fecha
         )
         # Al no reventar aquí, el commit funcionará y dejará el histórico
         db.session.commit()
@@ -548,3 +560,69 @@ def sync_fichajes_manual():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+    
+    
+    
+
+# ==============================================================================
+# ENDPOINT: VISTA DE AUDITORÍA BASADA PURAMENTE EN LOGS DEL SISTEMA
+# ==============================================================================
+@sync_bp.route('/timeline_dia/<int:user_id>/<string:fecha_str>', methods=['GET'])
+@login_required
+def get_timeline_dia(user_id, fecha_str):
+    from app.models import User, SystemLog, RegistroFichaje
+    from datetime import datetime
+
+    user = User.query.get_or_404(user_id)
+    fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    hitos = []
+
+    # 1. Leemos los logs del sistema vinculados a este trabajador en este día
+    logs_del_dia = SystemLog.query.filter_by(target_user_id=user_id, target_date=fecha_obj).order_by(SystemLog.timestamp.asc()).all()
+    
+    for log in logs_del_dia:
+        icono = "⚙️"
+        if log.category == 'planificacion': icono = "📅" if "Añadida" in log.action else "🗑️"
+        elif log.category == 'fichajes': icono = "⚖️"
+        
+        hitos.append({
+            "sort_time": log.timestamp.strftime('%H:%M:%S'),
+            "fecha": log.timestamp.strftime('%H:%M'), 
+            "icono": icono,
+            "titulo": log.action,
+            "autor": log.user.name if log.user else "Sistema",
+            "descripcion": log.detail
+        })
+
+    # 2. Leemos los fichajes físicos que hizo desde su móvil (Solo para el check-in)
+    registros = RegistroFichaje.query.filter_by(user_id=user_id, fecha=fecha_obj).all()
+    for reg in registros:
+        if reg.check_in:
+            hora_in = reg.check_in.strftime('%H:%M')
+            hora_out = reg.check_out.strftime('%H:%M') if reg.check_out else "No registrado"
+            obra_nom = reg.obra_real.codigo if reg.obra_real else "Desconocida"
+            hitos.append({
+                "sort_time": hora_in + ":00",
+                "fecha": hora_in,
+                "icono": "📍",
+                "titulo": f"Fichaje físico en obra: {obra_nom}",
+                "autor": "Operario (App)",
+                "descripcion": f"Fichó entrada a las {hora_in} y salida a las {hora_out}."
+            })
+
+    # 3. Ordenamos cronológicamente y devolvemos
+    hitos.sort(key=lambda x: x["sort_time"])
+
+    if not hitos:
+        hitos.append({
+            "sort_time": "00:00:00", "fecha": "--:--", "icono": "👻", "titulo": "Sin actividad",
+            "autor": "-", "descripcion": "No hay ningún evento histórico en el sistema para este día."
+        })
+
+    return jsonify({
+        "success": True,
+        "empleado": f"{user.name} {user.lastname}",
+        "fecha": fecha_obj.strftime('%d/%m/%Y'),
+        "estado_actual": "Registro Histórico (Logs)",
+        "hitos": hitos
+    })

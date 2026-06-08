@@ -197,13 +197,18 @@ class SystemLog(db.Model):
     __tablename__ = 'system_logs'
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    # --- AQUÍ ESTABA EL ERROR: Cambiado 'user.id' por 'users.id' ---
+    
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
     category = db.Column(db.String(50), nullable=False) 
     action = db.Column(db.String(150), nullable=False) 
     detail = db.Column(db.Text, nullable=True) 
 
+    # --- NUEVOS CAMPOS PARA AUDITORÍA (LA CAJA NEGRA) ---
+    target_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
+    target_date = db.Column(db.Date, nullable=True)
+
     user = db.relationship('User', foreign_keys=[user_id])
+    target_user = db.relationship('User', foreign_keys=[target_user_id])
 
 class LogPreference(db.Model):
     __tablename__ = 'log_preferences'
@@ -449,6 +454,7 @@ nota_user = db.Table('nota_user',
     db.Column('nota_id', db.Integer, db.ForeignKey('notas.id', ondelete='CASCADE'), primary_key=True),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
 )
+
 
 class Nota(db.Model):
     __tablename__ = 'notas'

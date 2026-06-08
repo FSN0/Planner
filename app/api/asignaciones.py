@@ -71,6 +71,19 @@ def api_unassign_worker():
             date_list=dates,
             mode=mode
         )
+        
+        if result.get('success'):
+            from app.utils import register_log
+            from datetime import datetime
+            obra_log = Obra.query.get(obra_id)
+            for d_str in dates:
+                f_date = datetime.strptime(d_str, '%Y-%m-%d').date()
+                register_log(
+                    user_id=current_user.id, category='planificacion', action="Planificación Eliminada",
+                    detail=f"Eliminado del cuadrante de la obra: {obra_log.codigo if obra_log else obra_id}",
+                    target_user_id=int(worker_id), target_date=f_date
+                )
+                
         status_code = 200 if result.get('success') else 400
         return jsonify(result), status_code
     except Exception as e:
@@ -354,7 +367,16 @@ def api_planificador_action():
             actor_user=current_user, worker_id=int(worker_id), target_obra_id=target_obra_id,
             date_list=fechas_a_procesar, mode=overwrite_mode
         )
-        
+        if result.get('success') and str(worker_id) != 'GENERICO':
+            from app.utils import register_log
+            obra_log = Obra.query.get(target_obra_id)
+            for f in fechas_a_procesar:
+                register_log(
+                    user_id=current_user.id, category='planificacion', action="Planificación Añadida",
+                    detail=f"Añadido al cuadrante de la obra: {obra_log.codigo if obra_log else target_obra_id}",
+                    target_user_id=int(worker_id), target_date=f
+                )
+                
         if sol_baja_creada:
             base_msg = result.get('message', '')
             result['message'] = f"{msg_baja} {base_msg}"

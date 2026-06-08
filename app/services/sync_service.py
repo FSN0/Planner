@@ -446,6 +446,15 @@ class OdooSyncService:
                 asig_fantasma = Asignacion.query.filter_by(user_id=u_local.id, fecha=fecha_obj, obra_id=o_real.id).first()
                 if asig_fantasma:
                     db.session.delete(asig_fantasma)
+                    from app.utils import register_log
+                    register_log(
+                        user_id=1, # O el ID del sistema
+                        category='fichajes',
+                        action="Fichaje Anulado por Odoo",
+                        detail=f"Borrada asignación en {o_real.nombre} por falta de registro en Odoo.",
+                        target_user_id=u_local.id,
+                        target_date=fecha_obj
+                    )
 
                 # 2. Buscar datos de la NUEVA obra (si lo han movido)
                 o_nueva_id = ""
