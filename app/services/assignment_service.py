@@ -3,12 +3,17 @@
 from datetime import datetime, date
 from app import db
 from app.models import Asignacion, Solicitud, Obra, User, ROLE_ADMIN, ROLE_JEFE, ConfiguracionGlobal
-from app.services.solicitud_service import update_solicitudes_for_assignment
+from app.services.solicitud_service import (
+    update_solicitudes_for_assignment,
+    build_comentarios_config,
+    merge_comentarios_dates,
+    merge_notas,
+)
 from app.services.email_service import send_email, notificar_nueva_solicitud, notificar_traslado_interno
 from app.services.core_assignment_service import CoreAssignmentService
 from app.utils.timezone_utils import today_local
 
-def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, mode='check', overwrite=None, solicitud_id=None):
+def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, mode='check', overwrite=None, solicitud_id=None, notas=None):
     if overwrite is True:
         mode = 'overwrite'
     elif overwrite is False:
@@ -188,7 +193,7 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
                 notificar_traslado_interno(actor_user.name, worker, target_obra, dias_auto, list(obras_origen_traslado))
 
             if dias_solicitud and mode in ['assign_and_request', 'overwrite']:
-                sol, sol_status = _create_solicitud_concreta_obj(actor_user, worker, target_obra, dias_solicitud)
+                sol, sol_status = _create_solicitud_concreta_obj(actor_user, worker, target_obra, dias_solicitud, notas=notas)
                 
                 if sol_status == "new":
                     notificar_nueva_solicitud(sol, actor_user.name)
@@ -205,10 +210,11 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
     return {'success': False, 'error': 'Rol no autorizado o acción no contemplada'}
 
 
-def _create_solicitud_concreta_obj(jefe, worker, obra, dates):
+def _create_solicitud_concreta_obj(jefe, worker, obra, dates, notas=None):
     from datetime import timedelta
     start_date = min(dates)
     end_date = max(dates)
+    dates_str = [d.strftime('%Y-%m-%d') if isinstance(d, date) else d for d in dates]
 
     open_solicitudes = Solicitud.query.filter_by(
         tipo='CONCRETA',
@@ -224,13 +230,15 @@ def _create_solicitud_concreta_obj(jefe, worker, obra, dates):
 
         if (existing.fecha_inicio - timedelta(days=1)) <= end_date and (existing.fecha_fin + timedelta(days=1)) >= start_date:
             if existing.fecha_inicio <= start_date and existing.fecha_fin >= end_date:
+                if notas:
+                    existing.notas = merge_notas(existing.notas, notas)
+                    db.session.commit()
                 return existing, "duplicate"
             else:
                 existing.fecha_inicio = min(existing.fecha_inicio, start_date)
                 existing.fecha_fin = max(existing.fecha_fin, end_date)
-                comentarios_previos = existing.comentarios or ""
-                if "Rango ampliado" not in comentarios_previos:
-                    existing.comentarios = f"{comentarios_previos} | Rango ampliado automáticamente."
+                existing.comentarios = merge_comentarios_dates(existing.comentarios, dates_str)
+                existing.notas = merge_notas(existing.notas, notas)
                 db.session.commit()
                 return existing, "merged"
 
@@ -246,7 +254,8 @@ def _create_solicitud_concreta_obj(jefe, worker, obra, dates):
         cantidad_solicitada=1,
         cantidad_cubierta=0,
         estado='PENDIENTE',
-        comentarios=f"Petición automática (Extensión sin custodia o Conflicto)"
+        comentarios=build_comentarios_config(dates_str),
+        notas=(notas or '').strip() or None,
     )
     db.session.add(solicitud)
     db.session.commit()

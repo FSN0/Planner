@@ -394,7 +394,10 @@ class Solicitud(db.Model):
     # True si el sistema la marcó como CUMPLIDA automáticamente al detectar asignaciones
     auto_fulfilled = db.Column(db.Boolean, nullable=False, default=False)
 
+    # JSON técnico: fechas pendientes, modo de baja, etc.
     comentarios = db.Column(db.Text, nullable=True)
+    # Notas del solicitante para RRHH (solo texto humano)
+    notas = db.Column(db.Text, nullable=True)
 
     created_at = db.Column(db.DateTime, default=_utc_now)
     updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)

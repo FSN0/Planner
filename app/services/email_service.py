@@ -74,8 +74,14 @@ def notificar_nueva_solicitud(solicitud, solicitante_name):
     else:
         texto += f"Perfil Solicitado: {solicitud.perfil_categoria} (Cant: {solicitud.cantidad_solicitada})\n"
         
-    texto += f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n\n"
-    texto += "Por favor, entra en la plataforma para revisarla y gestionarla."
+    texto += f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n"
+
+    from app.services.solicitud_service import get_solicitud_notas
+    notas = get_solicitud_notas(solicitud)
+    if notas:
+        texto += f"\nNotas del solicitante:\n{notas}\n"
+
+    texto += "\nPor favor, entra en la plataforma para revisarla y gestionarla."
     
     send_email(asunto, destinatarios, texto)
 

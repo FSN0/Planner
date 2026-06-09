@@ -1,10 +1,89 @@
 # app/services/solicitud_service.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
 from app import db
 from app.utils.timezone_utils import utc_now, today_local
 from app.models import Solicitud, Asignacion, User, Festivo
 from app.services.email_service import notificar_nueva_solicitud
+
+_AUTO_COMENTARIO_MARKERS = (
+    'Petición automática',
+    'Creado desde Planificador',
+    'Rango ampliado',
+)
+
+
+def _dates_to_str(dates):
+    result = []
+    for d in dates:
+        if isinstance(d, str):
+            result.append(d)
+        elif isinstance(d, date):
+            result.append(d.strftime('%Y-%m-%d'))
+    return sorted(set(result))
+
+
+def build_comentarios_config(dates, mode='selected'):
+    dates_str = _dates_to_str(dates)
+    return json.dumps({
+        'mode': mode,
+        'dates': dates_str,
+        'original_dates': dates_str,
+    })
+
+
+def merge_comentarios_dates(existing_comentarios, new_dates, mode='selected'):
+    dates_str = _dates_to_str(new_dates)
+    try:
+        if existing_comentarios and existing_comentarios.strip().startswith('{'):
+            config = json.loads(existing_comentarios)
+        else:
+            config = {}
+    except Exception:
+        config = {}
+
+    merged = sorted(set(config.get('dates', []) + dates_str))
+    config['mode'] = config.get('mode', mode)
+    config['dates'] = merged
+    if not config.get('original_dates'):
+        config['original_dates'] = merged
+    return json.dumps(config)
+
+
+def merge_notas(existing_notas, new_notas):
+    new_notas = (new_notas or '').strip()
+    if not new_notas:
+        return existing_notas
+    existing = (existing_notas or '').strip()
+    if not existing:
+        return new_notas
+    if new_notas in existing:
+        return existing
+    return f"{existing}\n---\n{new_notas}"
+
+
+def get_solicitud_notas(solicitud):
+    if getattr(solicitud, 'notas', None):
+        text = solicitud.notas.strip()
+        if text:
+            return text
+
+    comentarios = solicitud.comentarios
+    if not comentarios:
+        return None
+
+    if comentarios.strip().startswith('{'):
+        try:
+            data = json.loads(comentarios)
+            legacy = (data.get('mensaje_original') or '').strip()
+            return legacy or None
+        except Exception:
+            return None
+
+    if any(marker in comentarios for marker in _AUTO_COMENTARIO_MARKERS):
+        return None
+    text = comentarios.strip()
+    return text or None
 
 def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=None):
     from datetime import date
@@ -100,7 +179,10 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
         dias_incompletos = [d.strftime("%Y-%m-%d") for d, c in counts_by_day.items() if c < requested]
         try:
             if not solicitud.comentarios or not solicitud.comentarios.strip().startswith('{'):
-                config = {'mensaje_original': solicitud.comentarios}
+                config = {}
+                plain = (solicitud.comentarios or '').strip()
+                if plain and not any(marker in plain for marker in _AUTO_COMENTARIO_MARKERS):
+                    config['mensaje_original'] = plain
             else:
                 config = json.loads(solicitud.comentarios)
                 
@@ -168,8 +250,9 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
 
 class SolicitudService:
     @staticmethod
-    def create_solicitud_generica(solicitante_id, obra_id, fecha_inicio, fecha_fin, cantidad, perfil, comentarios):
+    def create_solicitud_generica(solicitante_id, obra_id, fecha_inicio, fecha_fin, cantidad, perfil, notas=None, fechas_explicitas=None):
         solicitante = User.query.get(solicitante_id)
+        fechas = fechas_explicitas or [fecha_inicio + timedelta(days=i) for i in range((fecha_fin - fecha_inicio).days + 1)]
         nueva_solicitud = Solicitud(
             requested_by_id=solicitante_id,
             obra_id=obra_id,
@@ -178,7 +261,8 @@ class SolicitudService:
             fecha_fin=fecha_fin,
             cantidad_solicitada=cantidad,
             perfil_categoria=perfil,
-            comentarios=comentarios,
+            comentarios=build_comentarios_config(fechas),
+            notas=(notas or '').strip() or None,
             estado="PENDIENTE"
         )
         db.session.add(nueva_solicitud)
@@ -187,7 +271,7 @@ class SolicitudService:
         return nueva_solicitud
 
     @staticmethod
-    def create_or_merge_solicitud_baja(jefe_id, obra_id, empleado_id, date_objs):
+    def create_or_merge_solicitud_baja(jefe_id, obra_id, empleado_id, date_objs, notas=None):
         if not date_objs: return None, "none"
         start_date = min(date_objs)
         end_date = max(date_objs)
@@ -201,23 +285,18 @@ class SolicitudService:
             if (baja.fecha_inicio - timedelta(days=1)) <= end_date and (baja.fecha_fin + timedelta(days=1)) >= start_date:
                 baja.fecha_inicio = min(baja.fecha_inicio, start_date)
                 baja.fecha_fin = max(baja.fecha_fin, end_date)
-                try:
-                    comentarios_json = json.loads(baja.comentarios or '{}')
-                    existing_dates = comentarios_json.get('dates', [])
-                    merged_dates = sorted(list(set(existing_dates + dates_str)))
-                    comentarios_json['dates'] = merged_dates
-                    baja.comentarios = json.dumps(comentarios_json)
-                except Exception:
-                    pass
+                baja.comentarios = merge_comentarios_dates(baja.comentarios, dates_str)
+                baja.notas = merge_notas(baja.notas, notas)
                 db.session.commit()
                 return baja, "merged"
 
-        comentarios_json = json.dumps({'mode': 'selected', 'dates': dates_str})
         sol_baja = Solicitud(
             tipo='CONCRETA', accion='DESASIGNAR', obra_id=obra_id,
             requested_by_id=jefe_id, empleado_id=empleado_id,
             fecha_inicio=start_date, fecha_fin=end_date,
-            cantidad_solicitada=1, estado='PENDIENTE', comentarios=comentarios_json
+            cantidad_solicitada=1, estado='PENDIENTE',
+            comentarios=build_comentarios_config(dates_str),
+            notas=(notas or '').strip() or None,
         )
         db.session.add(sol_baja)
         db.session.commit()

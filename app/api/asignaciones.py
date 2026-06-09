@@ -9,7 +9,13 @@ from app.models import User, Obra, Asignacion, Solicitud, Festivo, ROLE_ADMIN, R
 from app.decorators import roles_required
 
 from app.services.assignment_service import process_assignment_action, process_unassign_action
-from app.services.solicitud_service import update_solicitudes_for_assignment, SolicitudService
+from app.services.solicitud_service import (
+    update_solicitudes_for_assignment,
+    SolicitudService,
+    merge_comentarios_dates,
+    merge_notas,
+    build_comentarios_config,
+)
 from app.services.core_assignment_service import CoreAssignmentService
 from app.services.email_service import (
     notificar_resolucion_solicitud, 
@@ -224,7 +230,8 @@ def api_planificador_action():
     original_start_str = data.get('original_start')
     original_end_str = data.get('original_end')
     include_weekends = data.get('include_weekends', False)
-    overwrite_mode = data.get('overwrite_mode', 'check') 
+    overwrite_mode = data.get('overwrite_mode', 'check')
+    notas = (data.get('notas') or '').strip() or None
     
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
@@ -299,23 +306,19 @@ def api_planificador_action():
                     if existing_baja:
                         existing_baja.fecha_inicio = min(existing_baja.fecha_inicio, min(fechas_a_borrar))
                         existing_baja.fecha_fin = max(existing_baja.fecha_fin, max(fechas_a_borrar))
-                        try:
-                            comentarios_json = json.loads(existing_baja.comentarios or '{}')
-                            merged_dates = sorted(list(set(comentarios_json.get('dates', []) + dates_str)))
-                            comentarios_json['dates'] = merged_dates
-                            existing_baja.comentarios = json.dumps(comentarios_json)
-                        except Exception: pass
-                        
+                        existing_baja.comentarios = merge_comentarios_dates(existing_baja.comentarios, dates_str)
+                        existing_baja.notas = merge_notas(existing_baja.notas, notas)
                         db.session.commit()
                         sol_baja_creada = True
                         msg_baja = "La solicitud de baja existente ha sido ampliada."
                     else:
-                        comentarios_json = json.dumps({'mode': 'selected', 'dates': dates_str})
                         sol_baja = Solicitud(
                             tipo='CONCRETA', accion='DESASIGNAR', obra_id=old_obra_id,
                             requested_by_id=current_user.id, empleado_id=worker_id,
                             fecha_inicio=min(fechas_a_borrar), fecha_fin=max(fechas_a_borrar),
-                            cantidad_solicitada=1, estado='PENDIENTE', comentarios=comentarios_json
+                            cantidad_solicitada=1, estado='PENDIENTE',
+                            comentarios=build_comentarios_config(dates_str),
+                            notas=notas,
                         )
                         db.session.add(sol_baja)
                         db.session.commit()
@@ -350,13 +353,13 @@ def api_planificador_action():
                 solicitante_id=current_user.id, obra_id=target_obra_id,
                 fecha_inicio=fechas_a_procesar[0], fecha_fin=fechas_a_procesar[-1],
                 cantidad=cantidad_pedida,
-                perfil=detalles, comentarios=f"Creado desde Planificador: {detalles}"
+                perfil=detalles, notas=notas, fechas_explicitas=fechas_a_procesar,
             )
             return jsonify({"success": True, "action": "requested_generic", "message": "Solicitud genérica enviada."})
 
         result = process_assignment_action(
             actor_user=current_user, worker_id=int(worker_id), target_obra_id=target_obra_id,
-            date_list=fechas_a_procesar, mode=overwrite_mode
+            date_list=fechas_a_procesar, mode=overwrite_mode, notas=notas,
         )
         if sol_baja_creada:
             base_msg = result.get('message', '')

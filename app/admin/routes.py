@@ -18,7 +18,7 @@ from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, date
 
 
-from app.services.solicitud_service import update_solicitudes_for_assignment
+from app.services.solicitud_service import update_solicitudes_for_assignment, get_solicitud_notas
 from app.services.assignment_service import process_assignment_action
 from app.services.core_assignment_service import CoreAssignmentService
 from app.document_utils import download_documents_zip, download_document_file
@@ -337,6 +337,7 @@ def solicitud_detail(solicitud_id):
     return render_template(
         'admin_solicitud_detail.html',
         solicitud=solicitud,
+        solicitud_notas=get_solicitud_notas(solicitud),
         cobertura_texto=cobertura_texto,
         es_admin=es_admin,
         fecha_inicio=fecha_inicio,

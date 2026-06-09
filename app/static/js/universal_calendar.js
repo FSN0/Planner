@@ -117,6 +117,13 @@ class UniversalCalendarManager {
                             <input type="number" id="${this.panelId}-quantity" class="form-control form-control-sm font-weight-bold text-center" value="1" min="1" max="50">
                         </div>
                     </div>
+
+                    <div class="row mt-2" id="${this.panelId}-notas-row" style="display: none;">
+                        <div class="col-md-12">
+                            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-sticky-note mr-1"></i> Notas para RRHH <span class="text-muted font-weight-normal">(opcional, solo en solicitudes)</span></label>
+                            <textarea id="${this.panelId}-notas" class="form-control form-control-sm" rows="2" maxlength="1000" placeholder="Ej: Necesito oficial de encofrado para planta baja..."></textarea>
+                        </div>
+                    </div>
                     
                     <div class="row mt-2">
                         <div class="col-md-12 text-right">
@@ -487,6 +494,11 @@ class UniversalCalendarManager {
                 titleEl.innerHTML = '<i class="fas fa-plus-circle mr-2 text-success"></i>Nueva Asignación';
                 extraBtns.style.display = 'none';
 
+                let notasRow = document.getElementById(`${this.panelId}-notas-row`);
+                let notasInput = document.getElementById(`${this.panelId}-notas`);
+                if (notasRow) notasRow.style.display = 'block';
+                if (notasInput) notasInput.value = '';
+
                 let selectLabel = this.context === 'obra' ? 'Trabajador a asignar' : 'Obra destino';
                 
                 container.innerHTML = `
@@ -532,6 +544,9 @@ class UniversalCalendarManager {
             } else {
                 titleEl.innerHTML = '<i class="fas fa-edit mr-2 text-info"></i>Editar Asignación';
                 extraBtns.style.display = 'block';
+
+                let notasRow = document.getElementById(`${this.panelId}-notas-row`);
+                if (notasRow) notasRow.style.display = 'none';
                 
                 container.innerHTML = `
                     <label class="small font-weight-bold mb-1 text-secondary">Elemento Asignado</label>
@@ -610,11 +625,14 @@ class UniversalCalendarManager {
 
                 let qtyEl = document.getElementById(`${this.panelId}-quantity`);
                 let qty = qtyEl ? parseInt(qtyEl.value) || 1 : 1;
+                let notasEl = document.getElementById(`${this.panelId}-notas`);
+                let notasVal = notasEl ? notasEl.value.trim() : '';
 
                 let payload = {
                     start_date: startVal, end_date: endVal, original_start: null, original_end: null,
                     overwrite_mode: 'check', include_weekends: includeWeekends, cantidad: selVal === 'GENERICO' ? qty : 1
                 };
+                if (notasVal) payload.notas = notasVal;
 
                 if (this.context === 'obra') {
                     payload.worker_id = selVal; payload.target_obra_id = this.entityId; payload.old_obra_id = this.entityId;
@@ -757,6 +775,10 @@ class UniversalCalendarManager {
         if (genericRow) genericRow.style.display = 'none';
         let qtyInput = document.getElementById(`${this.panelId}-quantity`);
         if (qtyInput) qtyInput.value = 1;
+        let notasRow = document.getElementById(`${this.panelId}-notas-row`);
+        if (notasRow) notasRow.style.display = 'none';
+        let notasInput = document.getElementById(`${this.panelId}-notas`);
+        if (notasInput) notasInput.value = '';
     }
 
     createGhostEvent(dateStr) {
