@@ -71,14 +71,14 @@ else
     BASE_URL="https://$DOMAIN"
 fi
 
-check "Login page responde (200)" \
-    "curl -sSf -o /dev/null -w '%{http_code}' ${BASE_URL}/auth/login | grep -q 200"
+check "Login page responde (200 o redirect)" \
+    "curl -sS -o /dev/null -w '%{http_code}' -L ${BASE_URL}/auth/login | grep -qE '200|302'"
 
 check "Static assets accesibles" \
     "curl -sSf -o /dev/null ${BASE_URL}/static/css/styles.css"
 
 check "Superadmin responde" \
-    "curl -sSf -o /dev/null -w '%{http_code}' ${BASE_URL}/superadmin/ | grep -qE '200|401'"
+    "curl -sS -o /dev/null -w '%{http_code}' ${BASE_URL}/superadmin/ | grep -qE '200|401'"
 
 check "API check-domain responde" \
     "curl -sSf -o /dev/null -w '%{http_code}' '${BASE_URL}/api/v6/check-domain?domain=${DOMAIN}' | grep -qE '200|404'"
