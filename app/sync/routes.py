@@ -405,6 +405,67 @@ def auditoria_fichajes():
                            historial=historial,
                            correcciones=correcciones) # Pasamos la nueva variable
 
+ACCION_RESOLUCION_TITULOS = {
+    'ignorar': 'Ignorar',
+    'mover': 'Mover',
+    'anadir': 'Añadir',
+    'borrar_planificacion': 'Borrar Planificación',
+    'confirmar_ausencia': 'Confirmar Ausencia',
+}
+
+
+def _obra_label_resolucion(obra_id):
+    if not obra_id:
+        return None
+    return CoreAssignmentService.format_obra_label(Obra.query.get(obra_id))
+
+
+def _detalle_resolucion_fichaje(registro, accion, estado_anterior=None):
+    obra_real = _obra_label_resolucion(registro.obra_real_id)
+    obra_plan = _obra_label_resolucion(registro.obra_planificada_id)
+
+    if accion == 'ignorar':
+        if obra_real and obra_plan and obra_real != obra_plan:
+            return (
+                f"Se ignora el fichaje en '{obra_real}' "
+                f"(estaba planificado en '{obra_plan}')."
+            )
+        if obra_real:
+            return f"Se ignora el fichaje en '{obra_real}'."
+        if obra_plan:
+            return f"Se ignora la incidencia en '{obra_plan}'."
+        return "Incidencia ignorada."
+
+    if accion == 'mover':
+        if obra_plan and obra_real:
+            return f"Cuadrante actualizado: de '{obra_plan}' a '{obra_real}'."
+        if obra_real:
+            return f"Reasignado a '{obra_real}'."
+        return "Reasignado a la obra real."
+
+    if accion == 'anadir':
+        if estado_anterior == 'Paracaidista' and obra_real:
+            return f"Se acepta el fichaje sin planificar en '{obra_real}'."
+        if obra_real:
+            return f"Añadida asignación en '{obra_real}' (pluriempleo)."
+        return "Añadida multi-asignación (pluriempleo)."
+
+    if accion == 'borrar_planificacion':
+        if obra_plan:
+            return (
+                f"Se elimina la planificación en '{obra_plan}' "
+                f"(el operario no fichó en esa obra)."
+            )
+        return "Planificación eliminada."
+
+    if accion == 'confirmar_ausencia':
+        if obra_plan:
+            return f"Ausencia confirmada: no acudió a '{obra_plan}'."
+        return "Ausencia confirmada manualmente."
+
+    return "Ajuste manual del cuadrante/fichaje."
+
+
 @sync_bp.route('/auditoria/resolver', methods=['POST'])
 @login_required
 def resolver_fichaje():
@@ -436,10 +497,11 @@ def resolver_fichaje():
         from app.utils.timezone_utils import utc_now
         registro.fecha_auditoria = utc_now()
         
+        estado_anterior = None
+
         if accion == 'ignorar':
             registro.estado = 'Resuelto_Ignorado'
-            registro.notas_resolucion = "Ignorado"
-            
+
         elif accion == 'mover':
             # 1. Borrar de la obra donde estaba planificado y NO fue
             asignaciones_viejas = Asignacion.query.filter_by(
@@ -467,11 +529,10 @@ def resolver_fichaje():
                     )
                 
             registro.estado = 'Resuelto_Movido'
-            registro.notas_resolucion = "Reasignado a la obra real"
-            
+
         elif accion == 'anadir':
-            estado_anterior = registro.estado 
-            
+            estado_anterior = registro.estado
+
             if registro.obra_real_id:
                 existe = Asignacion.query.filter_by(
                     user_id=registro.user_id, 
@@ -481,20 +542,14 @@ def resolver_fichaje():
                 if not existe:
                     CoreAssignmentService.asignar(
                         registro.user_id, registro.obra_real_id, registro.fecha,
-                        current_user.id, "Actualización de Cuadrante (Auto)"
+                        None, "Actualización de Cuadrante (Auto)"
                     )
             
             if estado_anterior == 'Paracaidista':
                 registro.estado = 'Resuelto_Asignado'
-                # Sacamos el nombre de la obra para que el texto sea perfecto
-                obra_real = Obra.query.get(registro.obra_real_id)
-                nombre_obra = obra_real.nombre if obra_real else "la obra"
-                registro.notas_resolucion = f"Se acepta el fichaje SIN PLANIFICAR en '{nombre_obra}'."
             else:
                 registro.estado = 'Resuelto_Dividido'
-                registro.notas_resolucion = "Añadida multi-asignación (Pluriempleo)."
 
-        # >>> OPCIÓN 1: ERROR AL PLANIFICAR (Borra la planificación)
         elif accion == 'borrar_planificacion':
             asignaciones_viejas = Asignacion.query.filter_by(
                 user_id=registro.user_id, 
@@ -504,28 +559,28 @@ def resolver_fichaje():
             for asig in asignaciones_viejas:
                 CoreAssignmentService.desasignar(
                     asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                    "Resolución de Fichaje: Error al Planificar"
+                    "Borrar Planificación",
                 )
-                
-            registro.estado = 'Resuelto_Falta'
-            registro.notas_resolucion = "Planificación eliminada (Error al planificar)."
 
-        # >>> OPCIÓN 2: AUSENCIA REAL (Mantiene la planificación)
+            registro.estado = 'Resuelto_Falta'
+
         elif accion == 'confirmar_ausencia':
             registro.estado = 'Resuelto_Ausencia'
-            registro.notas_resolucion = "Ausencia confirmada manualmente."
-        
+
+        registro.notas_resolucion = _detalle_resolucion_fichaje(
+            registro, accion, estado_anterior=estado_anterior
+        )
+
         from app.utils import register_log
-        operario = User.query.get(registro.user_id)
-        nombre_op = f"{operario.name} {operario.lastname}" if operario else f"ID {registro.user_id}"
-        accion_limpia = accion.replace('_', ' ').title()
-        
-        # Ojo, ahora pasamos las dos variables extra para alimentar la Caja Negra
+        accion_titulo = ACCION_RESOLUCION_TITULOS.get(
+            accion, accion.replace('_', ' ').title()
+        )
+
         register_log(
             user_id=current_user.id,
             category='fichajes',
-            action=f"Resolución de Fichaje: {accion_limpia}",
-            detail=registro.notas_resolucion or "Ajuste manual del cuadrante/fichaje.",
+            action=f"Resolución de Fichaje: {accion_titulo}",
+            detail=registro.notas_resolucion,
             target_user_id=registro.user_id,
             target_date=registro.fecha
         )
@@ -578,68 +633,13 @@ def sync_fichajes_manual():
 @sync_bp.route('/timeline_dia/<int:user_id>/<string:fecha_str>', methods=['GET'])
 @login_required
 def get_timeline_dia(user_id, fecha_str):
-    from app.models import User, SystemLog
-    from datetime import datetime
-    from app.utils.timezone_utils import format_datetime
+    """Compatibilidad con auditoría de fichajes. Delega en el servicio compartido."""
+    from app.services.person_day_timeline_service import build_person_day_timeline
 
-    user = User.query.get_or_404(user_id)
-    fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
-    hitos = []
+    if current_user.role not in ['admin', 'jefe_obra']:
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
 
-    # 1. LEER EXCLUSIVAMENTE LA CAJA NEGRA (SYSTEMLOG)
-    logs_del_dia = SystemLog.query.filter_by(target_user_id=user_id, target_date=fecha_obj).order_by(SystemLog.timestamp.asc()).all()
-    
-    for log in logs_del_dia:
-        icono = "⚙️"
-        # Por defecto, el autor es quien disparó la acción, o el Sistema si no hay autor
-        autor = log.user.name if log.user else "Sistema"
-        prioridad = 2 
-        
-        if log.category == 'planificacion': 
-            icono = "📅" if log.detail.startswith("Asignado") else "🗑️"
-            prioridad = 2
-            
-            # >>> NUEVO: Si la acción es automática, la firma la máquina, no el usuario
-            if "(Auto)" in log.action:
-                autor = "Sistema Automático"
-                
-        elif log.category == 'fichajes': 
-            icono = "⚖️"
-            prioridad = 1
-            
-        elif log.category == 'fichaje_app':
-            icono = "📍"
-            prioridad = 0
-            
-            # >>> NUEVO: El actor es el propio trabajador que ha fichado
-            autor = f"{user.name} {user.lastname} (Fichaje en App)"
-
-        local_ts = format_datetime(log.timestamp, '%Y-%m-%d %H:%M:%S')
-        hitos.append({
-            "sort_time": local_ts,
-            "prioridad": prioridad,
-            "fecha": format_datetime(log.timestamp, '%d/%m %H:%M'),
-            "icono": icono,
-            "titulo": log.action,
-            "autor": autor,
-            "descripcion": log.detail
-        })
-
-    # 2. ORDENAR Y DEVOLVER
-    # MAGIA AQUÍ: Ordenamos primero por el texto de la hora, y si hay un empate 
-    # en el mismo segundo, se desempatará poniendo el número de prioridad más bajo primero.
-    hitos.sort(key=lambda x: (x["sort_time"], x["prioridad"]))
-
-    if not hitos:
-        hitos.append({
-            "sort_time": "0000-00-00 00:00:00", "fecha": "--/-- --:--", "icono": "👻", "titulo": "Sin actividad",
-            "autor": "-", "descripcion": "No hay ningún evento histórico registrado en el sistema para este día."
-        })
-
-    return jsonify({
-        "success": True,
-        "empleado": f"{user.name} {user.lastname}",
-        "fecha": fecha_obj.strftime('%d/%m/%Y'),
-        "estado_actual": "Registro Histórico Puro",
-        "hitos": hitos
-    })
+    data = build_person_day_timeline(user_id, fecha_str)
+    if not data:
+        return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+    return jsonify(data)

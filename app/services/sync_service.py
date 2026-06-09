@@ -521,7 +521,7 @@ class OdooSyncService:
             if not local_user or not local_obra:
                 continue
 
-            from app.utils.timezone_utils import parse_odoo_datetime, utc_now
+            from app.utils.timezone_utils import parse_odoo_datetime, utc_now, format_time
             check_in_dt = parse_odoo_datetime(f.get('check_in'))
             check_out_dt = parse_odoo_datetime(f.get('check_out'))
 
@@ -580,7 +580,10 @@ class OdooSyncService:
                 # Si el sistema ya le había clavado 'Ausencia', es que llegó tarde
                 if registro_vacio_exacto.estado == 'Ausencia':
                     registro_vacio_exacto.estado = 'Retraso'
-                    registro_vacio_exacto.notas_resolucion = f"Fichaje recibido después del corte horario. Hora detectada: {check_in_dt.strftime('%H:%M') if check_in_dt else 'N/A'}"
+                    registro_vacio_exacto.notas_resolucion = (
+                        f"Fichaje recibido después del corte horario. "
+                        f"Hora detectada: {format_time(check_in_dt) if check_in_dt else 'N/A'}"
+                    )
                 else:
                     registro_vacio_exacto.estado = nuevo_estado
                     
@@ -602,11 +605,17 @@ class OdooSyncService:
                     
                     # 2. LA CAJA NEGRA: Grabar en piedra el log físico
                     from app.models import SystemLog
+                    from app.services.core_assignment_service import CoreAssignmentService
+                    obra_label = CoreAssignmentService.format_obra_label(local_obra)
                     db.session.add(SystemLog(
                         timestamp=check_in_dt or utc_now(),
                         category='fichaje_app',
-                        action=f"📍 Fichaje Físico [{nuevo_estado.replace('_', ' ')}]",
-                        detail=f"El operario fichó en {local_obra.codigo}. Entrada: {check_in_dt.strftime('%H:%M') if check_in_dt else '-'} / Salida: {check_out_dt.strftime('%H:%M') if check_out_dt else '-'}",
+                        action=f"Fichaje físico [{nuevo_estado.replace('_', ' ')}]",
+                        detail=(
+                            f"El operario fichó en {obra_label}. "
+                            f"Entrada: {format_time(check_in_dt) if check_in_dt else '-'} / "
+                            f"Salida: {format_time(check_out_dt) if check_out_dt else '-'}"
+                        ),
                         target_user_id=local_user.id,
                         target_date=fecha_obj
                     ))
@@ -622,7 +631,7 @@ class OdooSyncService:
                 if not existe_asig:
                     from app.services.core_assignment_service import CoreAssignmentService
                     CoreAssignmentService.asignar(
-                        local_user.id, local_obra.id, fecha_obj, 1,
+                        local_user.id, local_obra.id, fecha_obj, None,
                         "Auto-asignación por Fichaje Físico"
                     )
 

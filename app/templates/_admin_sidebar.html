@@ -109,14 +109,13 @@
   <div class="sidebar-section-title">Control y Sistema</div>
   <ul class="sidebar-nav">
     <li>
-      <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if 'auditoria' in request.endpoint %}is-active{% endif %}">
+      <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_fichajes' %}is-active{% endif %}">
         <i class="fas fa-user-clock fa-fw"></i> <span>Auditoría Fichajes</span>
       </a>
     </li>
-    
     {% if current_user.role == 'admin' %}
     <li>
-        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if 'sync' in request.endpoint and 'auditoria' not in request.endpoint %}is-active{% endif %}">
+        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if request.endpoint == 'sync.panel' %}is-active{% endif %}">
             <i class="fas fa-sync-alt fa-fw"></i> <span>Sincronizar Odoo</span>
         </a>
     </li> 

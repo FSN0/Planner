@@ -12,6 +12,26 @@ from app.models import Asignacion, SystemLog, Obra, User
 class CoreAssignmentService:
 
     @staticmethod
+    def format_obra_label(obra):
+        if not obra:
+            return "Obra desconocida"
+        codigo = (obra.codigo or "").strip()
+        nombre = (obra.nombre or "").strip()
+        if codigo and nombre:
+            return f"{codigo} — {nombre}"
+        return codigo or nombre or f"Obra #{obra.id}"
+
+    @staticmethod
+    def _is_system_action(contexto_origen):
+        return (
+            contexto_origen in (
+                "Auto-asignación por Fichaje Físico",
+                "Actualización de Cuadrante (Auto)",
+            )
+            or "(Auto)" in (contexto_origen or "")
+        )
+
+    @staticmethod
     def asignar(user_id, obra_id, fecha, autor_id, contexto_origen,
                 detalle_extra=None, *, company_id=None, solicitud_id=None):
         """
@@ -75,16 +95,18 @@ class CoreAssignmentService:
 
         obra = Obra.query.get(obra_id)
         user = User.query.get(user_id)
-        obra_nombre = obra.nombre if obra else f"Obra ID {obra_id}"
+        obra_label = CoreAssignmentService.format_obra_label(obra)
         user_nombre = f"{user.name} {user.lastname}" if user else f"ID {user_id}"
 
-        detail = f"{verbo} {user_nombre} → '{obra_nombre}' ({fecha.strftime('%d/%m/%Y')})."
+        detail = f"{verbo} {user_nombre} → '{obra_label}' ({fecha.strftime('%d/%m/%Y')})."
         if detalle_extra:
             detail = f"{detail} {detalle_extra}"
 
+        log_user_id = None if CoreAssignmentService._is_system_action(contexto_origen) else autor_id
+
         db.session.add(SystemLog(
             timestamp=utc_now(),
-            user_id=autor_id,
+            user_id=log_user_id,
             category='planificacion',
             action=contexto_origen,
             detail=detail,

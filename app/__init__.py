@@ -89,11 +89,16 @@ def create_app():
                     ).count()
                 # --------------------------------------------
 
-            # 2. JEFE DE OBRA: Solo contamos cuántas de SUS solicitudes tienen feedback
+            # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
             elif current_user.role == ROLE_JEFE:
-                pending_count = Solicitud.query.filter(
-                    Solicitud.requested_by_id == current_user.id,
-                    Solicitud.estado.in_(['CUMPLIDA', 'DENEGADA', 'CERRADA_PARCIAL'])
+                from sqlalchemy import or_
+                from app.models import Obra
+                pending_count = Solicitud.query.join(Obra).filter(
+                    or_(
+                        Solicitud.requested_by_id == current_user.id,
+                        Obra.jefe_obra_id == current_user.id,
+                    ),
+                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
                 ).count()
 
         tz_ctx = {}

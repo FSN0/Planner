@@ -1,0 +1,240 @@
+/* Person-day timeline — diseño compacto y legible */
+
+.person-day-timeline-container {
+    position: relative;
+    padding: 0.25rem 0 0.5rem;
+}
+
+.person-day-timeline-item {
+    position: relative;
+    margin-left: 0.75rem;
+    padding-left: 1.5rem;
+    padding-bottom: 1.25rem;
+    border-left: 2px solid #e2e8f0;
+}
+
+.person-day-timeline-item:last-child {
+    border-left-color: transparent;
+    padding-bottom: 0;
+}
+
+.person-day-timeline-marker {
+    position: absolute;
+    left: -0.55rem;
+    top: 0.15rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.45rem;
+    z-index: 2;
+}
+
+.person-day-timeline-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 0.65rem 0.85rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.person-day-timeline-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.person-day-timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.35rem;
+}
+
+.person-day-timeline-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #334155;
+    letter-spacing: 0.01em;
+    line-height: 1.35;
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+}
+
+.person-day-timeline-time {
+    font-size: 0.68rem;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.person-day-timeline-desc {
+    font-size: 0.8rem;
+    color: #475569;
+    line-height: 1.45;
+    margin: 0 0 0.45rem;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.person-day-timeline-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.person-day-timeline-actor {
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.25rem;
+    letter-spacing: 0.02em;
+}
+
+.person-day-timeline-actor--system {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.person-day-timeline-actor--user {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+/* Enlaces */
+.pdt-link {
+    color: #2563eb;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+}
+
+.pdt-link:hover {
+    color: #1d4ed8;
+    border-bottom-color: #93c5fd;
+    text-decoration: none;
+}
+
+.pdt-link-obra {
+    font-weight: 500;
+}
+
+.pdt-link-user {
+    font-weight: 600;
+}
+
+.pdt-actor-link {
+    color: inherit;
+    border-bottom: none;
+}
+
+.pdt-actor-link:hover {
+    color: #2563eb;
+}
+
+/* Meta bar */
+.person-day-timeline-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding: 0.65rem 0.85rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    font-size: 0.82rem;
+    color: #475569;
+}
+
+.person-day-timeline-meta strong {
+    font-weight: 600;
+    color: #64748b;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 0.25rem;
+}
+
+.person-day-timeline-meta-item {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.person-day-timeline-estado.badge-success { background-color: #334155; }
+.person-day-timeline-estado.badge-warning { background-color: #b45309; color: #fff; }
+.person-day-timeline-estado.badge-danger { background-color: #b91c1c; }
+.person-day-timeline-estado.badge-info { background-color: #1d4ed8; }
+
+.person-day-timeline-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+/* Modal — mismo tono que sidebar (anula el verde global de .modal-header) */
+.person-day-timeline-modal .person-day-timeline-modal-header {
+    background: radial-gradient(circle at top left, #1e293b, #020617) !important;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    padding: 0.75rem 1.25rem;
+}
+
+.person-day-timeline-modal .modal-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.person-day-timeline-modal .modal-body {
+    background: #f8fafc;
+    padding: 1rem 1.25rem;
+}
+
+.person-day-timeline-modal .modal-title .pdt-link {
+    color: #93c5fd;
+    font-weight: 600;
+}
+
+.person-day-timeline-modal .modal-title .pdt-link:hover {
+    color: #bfdbfe;
+    border-bottom-color: #93c5fd;
+}
+
+.person-day-timeline-modal-footer {
+    background: #f8fafc;
+    padding: 0.5rem 1.25rem 1rem;
+}
+
+.person-day-timeline-btn-close {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+    font-weight: 500;
+    padding: 0.35rem 1rem;
+    border-radius: 0.375rem;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.person-day-timeline-btn-close:hover {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #f8fafc;
+}

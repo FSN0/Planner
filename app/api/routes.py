@@ -556,3 +556,17 @@ def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color
             'tooltipContent': tooltip_html
         }
     }
+
+
+@api_bp.route('/person-day-timeline/<int:user_id>/<string:fecha_str>', methods=['GET'])
+@login_required
+def person_day_timeline(user_id, fecha_str):
+    from app.services.person_day_timeline_service import build_person_day_timeline
+
+    if current_user.role != ROLE_ADMIN:
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+
+    data = build_person_day_timeline(user_id, fecha_str)
+    if not data:
+        return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+    return jsonify(data)

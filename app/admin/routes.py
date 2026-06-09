@@ -1957,22 +1957,27 @@ def system_logs():
     from datetime import datetime
     
     category = request.args.get('category', 'accesos')
-    
-    # 1. Traer los logs de la categoría seleccionada
-    logs = SystemLog.query.filter_by(category=category).order_by(SystemLog.timestamp.desc()).limit(300).all()
-    
-    # 2. Resetear el contador de notificaciones para esta pestaña al entrar
-    pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
-    if pref and pref.is_active:
-        from app.utils.timezone_utils import utc_now
-        pref.last_read_at = utc_now()
-        db.session.commit()
-        
-    # 3. Traer qué preferencias tiene activas para marcar los checkboxes
+    from app.utils.timezone_utils import utc_now, today_local
+
+    logs = []
+    if category != 'persona_obra':
+        logs = SystemLog.query.filter_by(category=category).order_by(SystemLog.timestamp.desc()).limit(300).all()
+
+        pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
+        if pref and pref.is_active:
+            pref.last_read_at = utc_now()
+            db.session.commit()
+
     all_prefs = LogPreference.query.filter_by(user_id=current_user.id).all()
     active_prefs = [p.category for p in all_prefs if p.is_active]
-    
-    return render_template("admin_logs.html", logs=logs, current_category=category, active_prefs=active_prefs)
+
+    return render_template(
+        "admin_logs.html",
+        logs=logs,
+        current_category=category,
+        active_prefs=active_prefs,
+        default_date=today_local().strftime('%Y-%m-%d'),
+    )
 
 @admin_bp.route("/logs/preferencias", methods=["POST"])
 @login_required
