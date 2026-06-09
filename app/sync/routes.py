@@ -172,6 +172,8 @@ def commit_obras():
     ahora = utc_now()
     
     try:
+        from app.utils import register_log
+
         # 1. Procesar Nuevas
         for obj in data.get('nuevas', []):
             fecha = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
@@ -188,7 +190,6 @@ def commit_obras():
                 fecha_importacion=ahora  # <--- GUARDAMOS LA FECHA AQUÍ
             )
             db.session.add(nueva_obra)
-            from app.utils import register_log
             register_log(
                 user_id=current_user.id,
                 category='obras',
@@ -206,23 +207,30 @@ def commit_obras():
                 obra.codigo = obj['codigo']
                 obra.nombre = obj['nombre']
                 obra.descripcion = obj.get('cliente', '')
-                obra.fecha_importacion = ahora  # <--- ACTUALIZAMOS LA FECHA AQUÍ
+                obra.fecha_importacion = ahora
                 if obj.get('fecha_inicio'):
                     obra.fecha_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date()
                 if obj.get('jefe_obra_id'):
                     obra.jefe_obra_id = obj['jefe_obra_id']
                 if obj.get('encargado_id'):
                     obra.encargado_id = obj['encargado_id']
-                    
+                db.session.add(obra)
+
         # 3. Procesar Finalizadas automáticamente
         for obj in data.get('finalizadas', []):
             obra = Obra.query.get(obj['local_id'])
             if obra:
                 obra.estado = 'Finalizada'
-                obra.fecha_fin = ahora.date() 
-                obra.fecha_importacion = ahora  # <--- ACTUALIZAMOS LA FECHA AQUÍ
-                
-        # --- AÑADIR REGISTRO DE HISTORIAL ---
+                obra.fecha_fin = ahora.date()
+                obra.fecha_importacion = ahora
+                db.session.add(obra)
+                register_log(
+                    user_id=current_user.id,
+                    category='obras',
+                    action='Finalizar Obra (Sincronización)',
+                    detail=f"Obra marcada como Finalizada automáticamente por Odoo: '{obra.nombre}'",
+                )
+
         db.session.add(SyncLog(
             fecha=ahora,
             tipo='Obras',
@@ -231,17 +239,9 @@ def commit_obras():
             actualizados=len(data.get('actualizadas', [])),
             finalizados=len(data.get('finalizadas', [])),
             errores=data.get('errores', 0),
-            detalles="Sincronización manual de obras completada."
+            detalles="Sincronización manual de obras completada.",
         ))
-        # ------------------------------------
-        from app.utils import register_log
-        register_log(
-            user_id=current_user.id,
-            category='obras',
-            action='Finalizar Obra (Sincronización)',
-            detail=f"Obra marcada como Finalizada automáticamente por Odoo: '{obra.nombre}'"
-        )
-                
+
         db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
