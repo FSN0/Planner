@@ -104,6 +104,13 @@ def configurar_modulos_tenant(id_tenant):
         
     tenant.modulos_activos = estado_modulos
     db.session.commit()
+
+    db.session.execute(text(f"SET search_path TO {tenant.schema_name}"))
+    if estado_modulos.get('odoo') and odoo_adapter:
+        set_tenant_config('motor_sincronizacion', odoo_adapter)
+    else:
+        set_tenant_config('motor_sincronizacion', 'fichajes_locales')
+    db.session.execute(text("SET search_path TO public"))
     
     flash(f"Módulos actualizados correctamente para {tenant.nombre}.", "success")
     return redirect(url_for('superadmin.dashboard'))

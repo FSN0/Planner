@@ -59,6 +59,10 @@ def odoo_save_config():
         set_tenant_config('odoo_user', request.form.get('user', '').strip())
         # OJO: La contraseña se encripta
         set_tenant_config('odoo_password', request.form.get('password', '').strip(), encriptar=True)
+
+        modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
+        motor = modulos.get('odoo_adapter') or 'odoo_soltec'
+        set_tenant_config('motor_sincronizacion', motor)
         
         flash("Credenciales de Odoo guardadas de forma segura.", "success")
         return redirect(url_for('sync.odoo_panel'))

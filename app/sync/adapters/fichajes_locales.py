@@ -40,3 +40,9 @@ class Adapter(BaseSyncAdapter):
         Los fichajes se registran manualmente en la app, no vienen de un ERP.
         """
         return []
+
+    def get_diff_subcontratas(self) -> dict:
+        return {
+            'empresas': {'nuevas': [], 'actualizadas': []},
+            'empleados': {'nuevos': [], 'actualizados': []},
+        }

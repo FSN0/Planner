@@ -6,6 +6,20 @@ from app.sync.adapters.base import BaseSyncAdapter
 
 logger = logging.getLogger(__name__)
 
+
+def resolve_sync_motor_name() -> str:
+    """Resuelve qué adaptador usar para el tenant activo."""
+    motor_nombre = get_tenant_config('motor_sincronizacion', default=None)
+    if motor_nombre:
+        return motor_nombre
+
+    modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
+    if modulos.get('odoo'):
+        return modulos.get('odoo_adapter') or 'odoo_soltec'
+
+    return 'fichajes_locales'
+
+
 def get_sync_adapter() -> BaseSyncAdapter:
     """
     Lee la configuración del inquilino, busca el archivo Python correspondiente
@@ -14,9 +28,12 @@ def get_sync_adapter() -> BaseSyncAdapter:
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
         raise Exception("No hay un inquilino activo en el contexto.")
 
-    # 1. Miramos qué motor tiene configurado este cliente (ej: 'odoo_cliente_a')
-    # Si no tiene ninguno, podemos devolver un adaptador por defecto (ej: 'fichajes_locales') o None.
-    motor_nombre = get_tenant_config('motor_sincronizacion', default='fichajes_locales')
+    motor_nombre = resolve_sync_motor_name()
+    logger.info(
+        "Cargando adaptador de sync '%s' para tenant %s",
+        motor_nombre,
+        g.current_tenant.subdominio,
+    )
 
     # 2. Construimos la ruta del módulo Python (ej: 'app.sync.adapters.odoo_cliente_a')
     module_path = f"app.sync.adapters.{motor_nombre}"
