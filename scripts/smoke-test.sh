@@ -72,7 +72,7 @@ else
 fi
 
 check "Login page responde (200 o redirect)" \
-    "curl -sS -o /dev/null -w '%{http_code}' -L ${BASE_URL}/auth/login | grep -qE '200|302'"
+    "curl -sS -o /dev/null -w '%{http_code}' ${BASE_URL}/auth/login | grep -qE '200|302'"
 
 check "Static assets accesibles" \
     "curl -sSf -o /dev/null ${BASE_URL}/static/css/styles.css"

@@ -28,10 +28,40 @@ def _cleanup_db_session():
 
 
 def _set_search_path(schema='public'):
-    """Aísla el search_path por tarea para evitar colisiones entre workers."""
+    """Cambia el search_path sin cerrar la sesión ORM."""
     from sqlalchemy import text
-    _cleanup_db_session()
+    db.session.rollback()
     db.session.execute(text(f'SET search_path TO {schema}'))
+
+
+def _load_active_tenants():
+    """Carga tenants como datos planos para no desacoplar instancias ORM."""
+    from app.models import Tenant
+
+    _set_search_path('public')
+    return [
+        {
+            'id': tenant.id,
+            'schema_name': tenant.schema_name,
+            'subdominio': tenant.subdominio,
+            'nombre': tenant.nombre,
+        }
+        for tenant in Tenant.query.filter_by(is_active=True).all()
+    ]
+
+
+def _bind_tenant_context(tenant_data):
+    from flask import g
+    from app.models import Tenant
+
+    tenant = Tenant(
+        id=tenant_data['id'],
+        schema_name=tenant_data['schema_name'],
+        subdominio=tenant_data['subdominio'],
+        nombre=tenant_data.get('nombre', ''),
+    )
+    g.current_tenant = tenant
+    return tenant
 
 
 # --- CONFIGURACIÓN DE TAREAS PROGRAMADAS AUTOMÁTICAS ---
@@ -74,17 +104,16 @@ def send_async_email(subject, recipients, body, html):
 @celery.task
 def verificar_hora_corte():
     with app.app_context():
-        from app.models import Tenant, ConfiguracionGlobal
+        from app.models import ConfiguracionGlobal
         from datetime import datetime, timedelta
         from app.services.email_service import enviar_super_reporte_diario
 
         try:
-            _set_search_path('public')
-            tenants = Tenant.query.filter_by(is_active=True).all()
-
-            for tenant in tenants:
+            for tenant_data in _load_active_tenants():
+                subdominio = tenant_data['subdominio']
                 try:
-                    _set_search_path(tenant.schema_name)
+                    _set_search_path(tenant_data['schema_name'])
+                    _bind_tenant_context(tenant_data)
 
                     conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
                     hora_str = conf_hora.valor if conf_hora else "08:30"
@@ -96,10 +125,7 @@ def verificar_hora_corte():
                         conf_ultimo = ConfiguracionGlobal.query.filter_by(clave='ultimo_reporte_enviado').first()
 
                         if not conf_ultimo or conf_ultimo.valor != hoy_str:
-                            app.logger.info(f">>> HORA DE CORTE ALCANZADA PARA {tenant.subdominio.upper()}")
-
-                            from flask import g
-                            g.current_tenant = tenant
+                            app.logger.info(f">>> HORA DE CORTE ALCANZADA PARA {subdominio.upper()}")
 
                             from app.services.sync_service import procesar_fichajes_diarios
                             procesar_fichajes_diarios()
@@ -112,54 +138,46 @@ def verificar_hora_corte():
                             db.session.commit()
                 except Exception as e:
                     db.session.rollback()
-                    app.logger.error(f"!!! Error en hora de corte para inquilino {tenant.subdominio}: {e}")
+                    app.logger.error(f"!!! Error en hora de corte para inquilino {subdominio}: {e}")
         finally:
             _cleanup_db_session()
 
 @celery.task
 def fichajes_en_vivo():
     with app.app_context():
-        from app.models import Tenant
-
         try:
-            _set_search_path('public')
-            tenants = Tenant.query.filter_by(is_active=True).all()
+            from app.sync.dispatcher import get_sync_adapter
 
-            for tenant in tenants:
+            for tenant_data in _load_active_tenants():
+                subdominio = tenant_data['subdominio']
                 try:
-                    _set_search_path(tenant.schema_name)
-                    app.logger.info(f">>> SYNC FICHAJES EN VIVO -> {tenant.subdominio.upper()}")
-
-                    from flask import g
-                    from app.sync.dispatcher import get_sync_adapter
-                    g.current_tenant = tenant
+                    _set_search_path(tenant_data['schema_name'])
+                    _bind_tenant_context(tenant_data)
+                    app.logger.info(f">>> SYNC FICHAJES EN VIVO -> {subdominio.upper()}")
 
                     service = get_sync_adapter()
                     service.get_fichajes_diarios()
                     db.session.commit()
                 except Exception as e:
                     db.session.rollback()
-                    app.logger.error(f"!!! Error sync vivo inquilino {tenant.subdominio}: {e}")
+                    app.logger.error(f"!!! Error sync vivo inquilino {subdominio}: {e}")
         finally:
             _cleanup_db_session()
 
 @celery.task
 def auto_sync_odoo():
     with app.app_context():
-        from app.models import Tenant, Obra, User, Company, SyncLog
+        from app.models import Obra, User, Company, SyncLog
 
         try:
-            _set_search_path('public')
-            tenants = Tenant.query.filter_by(is_active=True).all()
+            from app.sync.dispatcher import get_sync_adapter
 
-            for tenant in tenants:
+            for tenant_data in _load_active_tenants():
+                subdominio = tenant_data['subdominio']
                 try:
-                    _set_search_path(tenant.schema_name)
-                    app.logger.info(f">>> SYNC NOCTURNA TOTAL -> {tenant.subdominio.upper()}")
-
-                    from flask import g
-                    from app.sync.dispatcher import get_sync_adapter
-                    g.current_tenant = tenant
+                    _set_search_path(tenant_data['schema_name'])
+                    _bind_tenant_context(tenant_data)
+                    app.logger.info(f">>> SYNC NOCTURNA TOTAL -> {subdominio.upper()}")
 
                     service = get_sync_adapter()
                     ahora = datetime.now()
@@ -242,10 +260,10 @@ def auto_sync_odoo():
                         detalles="Sync completada para este inquilino."
                     ))
                     db.session.commit()
-                    app.logger.info(f"    └─ Sincronización finalizada: {tenant.subdominio}")
+                    app.logger.info(f"    └─ Sincronización finalizada: {subdominio}")
                 except Exception as e:
                     db.session.rollback()
-                    app.logger.error(f"!!! Error crítico en sync nocturna para {tenant.subdominio}: {e}")
+                    app.logger.error(f"!!! Error crítico en sync nocturna para {subdominio}: {e}")
         finally:
             _cleanup_db_session()
    

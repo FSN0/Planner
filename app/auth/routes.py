@@ -43,6 +43,7 @@ def login():
             if not user.is_active:
                 flash("Tu cuenta aún no está activa. Espera la aprobación de RRHH.", "warning")
                 return render_template('login.html', tenant_name=g.current_tenant.nombre)
+            user_role = user.role
             login_user(user, remember=remember)
             session['tenant_id'] = g.current_tenant.id
             from app.utils import register_log
@@ -53,14 +54,12 @@ def login():
                 detail=f"Login exitoso desde IP: {request.remote_addr or 'Desconocida'}"
             )
             flash("Inicio de sesión exitoso", "success")
-            
-            # Redirección inteligente según rol
-            if user.role == 'admin':
+
+            if user_role == 'admin':
                 return redirect(url_for('admin.panel'))
-            elif user.role == 'jefe_obra':
-                # CAMBIO AQUÍ TAMBIÉN
+            elif user_role == 'jefe_obra':
                 return redirect(url_for('jefe.obras_detailed', selected_date=date.today()))
-            elif user.role == 'rrhh':
+            elif user_role == 'rrhh':
                 return redirect(url_for('rrhh.panel'))
             else:
                 return redirect(url_for('operarios.panel'))
