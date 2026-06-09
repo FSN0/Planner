@@ -129,6 +129,16 @@
                         </div>
 
                         <div class="form-group mb-4 border-top pt-3">
+                            <label class="font-weight-bold text-dark mb-1">Zona horaria del sistema</label>
+                            <p class="text-muted small mb-2">Define la zona horaria de la empresa para cortes de ausencias, fichajes, sincronización con Odoo y tareas programadas. Los usuarios pueden elegir otra zona solo para visualizar fechas.</p>
+                            <select name="zona_horaria" class="form-control form-control-sm border shadow-sm" style="max-width: 320px;">
+                                {% for tz_code, tz_label in timezone_options %}
+                                <option value="{{ tz_code }}" {% if configs.get('zona_horaria', 'Europe/Madrid') == tz_code %}selected{% endif %}>{{ tz_label }} ({{ tz_code }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-4 border-top pt-3">
                             <label class="font-weight-bold text-dark mb-1">Hora límite de entrada (Corte de Ausencias)</label>
                             <p class="text-muted small mb-2">A esta hora el sistema marcará las ausencias de hoy en el panel y enviará el resumen diario por correo.</p>
                             <div class="d-flex align-items-center">

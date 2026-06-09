@@ -1,0 +1,86 @@
+<link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<div class="trace-panel border rounded">
+  <div class="trace-filters p-3 bg-light border-bottom">
+    <div class="row align-items-end">
+      <div class="col-md-6 mb-2 mb-md-0">
+        <label class="small font-weight-bold text-secondary mb-1">Operario</label>
+        <select id="traceWorkerSelect" class="form-control form-control-sm" style="width: 100%;">
+          <option value=""></option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="small font-weight-bold text-secondary mb-1">Día</label>
+        <input type="date" id="traceDateInput" class="form-control form-control-sm font-weight-bold" value="{{ default_date }}">
+      </div>
+      <div class="col-md-3">
+        <button type="button" id="btnTraceSearch" class="btn btn-primary btn-sm btn-block font-weight-bold">
+          <i class="fas fa-search mr-1"></i> Consultar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="p-4" id="personDayTimelinePanel" data-person-day-timeline-root>
+    <div data-timeline-meta class="person-day-timeline-meta">
+      <div class="person-day-timeline-meta-item">
+        <strong>Operario</strong>
+        <span data-timeline-empleado>—</span>
+      </div>
+      <div class="person-day-timeline-meta-item">
+        <strong>Fecha</strong> <span data-timeline-fecha>—</span>
+      </div>
+      <div class="person-day-timeline-meta-item">
+        <strong>Estado</strong>
+        <span data-timeline-estado class="badge badge-secondary person-day-timeline-estado">—</span>
+      </div>
+    </div>
+    <div data-timeline-content>
+      <div class="person-day-timeline-empty">
+        <i class="fas fa-user-clock fa-2x mb-2 text-muted"></i>
+        <p class="mb-0">Selecciona un operario y un día para ver su historial.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const panel = document.getElementById('personDayTimelinePanel');
+    const workerSelect = $('#traceWorkerSelect');
+    const dateInput = document.getElementById('traceDateInput');
+    const btnSearch = document.getElementById('btnTraceSearch');
+    if (!panel || !workerSelect.length) return;
+
+    workerSelect.select2({
+        width: '100%',
+        placeholder: 'Buscar operario por nombre...',
+        allowClear: true,
+        ajax: {
+            url: '{{ url_for("admin.search_workers") }}',
+            dataType: 'json',
+            delay: 250,
+            data: params => ({ q: params.term || '' }),
+            processResults: data => ({
+                results: (data.results || []).filter(item => item.id !== 'GENERICO')
+            })
+        }
+    });
+
+    function runSearch() {
+        const userId = workerSelect.val();
+        const fecha = dateInput.value;
+        if (!userId) { alert('Selecciona un operario.'); return; }
+        if (!fecha) { alert('Selecciona un día.'); return; }
+        PersonDayTimeline.load(panel, userId, fecha, {
+            loadingMessage: 'Recopilando el día completo del operario...'
+        });
+    }
+
+    btnSearch.addEventListener('click', runSearch);
+    dateInput.addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(); });
+});
+</script>

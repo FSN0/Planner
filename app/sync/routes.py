@@ -4,8 +4,9 @@ from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from datetime import datetime
 from app import db
-from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje
-from app.sync.dispatcher import get_sync_adapter
+from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje # <--- AÑADE TAMBIÉN Asignacion y RegistroFichaje AQUÍ
+from app.services.sync_service import OdooSyncService
+from app.services.core_assignment_service import CoreAssignmentService
 from sqlalchemy import or_
 import xmlrpc.client
 from app.services.config_service import set_tenant_config, get_tenant_config
@@ -163,7 +164,8 @@ def preview_obras():
 @login_required
 def commit_obras():
     data = request.json
-    ahora = datetime.now() # Capturamos la hora de la importación
+    from app.utils.timezone_utils import utc_now
+    ahora = utc_now()
     
     try:
         # 1. Procesar Nuevas
@@ -269,7 +271,8 @@ def preview_subcontratas():
 @login_required
 def commit_subcontratas():
     data = request.json
-    ahora = datetime.now()
+    from app.utils.timezone_utils import utc_now
+    ahora = utc_now()
     
     try:
         mapa_empresas = {} 
@@ -381,7 +384,7 @@ def commit_subcontratas():
 @login_required
 def commit_empleados():
     data = request.json
-    ahora = datetime.now() 
+    ahora = datetime.now() # Añadimos esto para el historial
     try:
         # --- 1. SOLUCIÓN EMPRESAS: Buscar explícitamente la empresa INTERNA ---
         default_company = Company.query.filter_by(is_internal=True).first()
@@ -418,6 +421,14 @@ def commit_empleados():
 
                 dnis_en_transaccion.add(user.dni)
                 emails_en_transaccion.add(user.email)
+                from app.utils import register_log
+                register_log(
+                    user_id=current_user.id,
+                    category='rrhh_sync',
+                    action="Empleado Actualizado desde Odoo",
+                    detail=f"Datos modificados para: {user.name} {user.lastname}",
+                    target_user_id=user.id
+                )
 
         # Procesar Nuevos 
         for obj in data.get('nuevos', []):
@@ -501,6 +512,67 @@ def auditoria_fichajes():
                            historial=historial,
                            correcciones=correcciones) # Pasamos la nueva variable
 
+ACCION_RESOLUCION_TITULOS = {
+    'ignorar': 'Ignorar',
+    'mover': 'Mover',
+    'anadir': 'Añadir',
+    'borrar_planificacion': 'Borrar Planificación',
+    'confirmar_ausencia': 'Confirmar Ausencia',
+}
+
+
+def _obra_label_resolucion(obra_id):
+    if not obra_id:
+        return None
+    return CoreAssignmentService.format_obra_label(Obra.query.get(obra_id))
+
+
+def _detalle_resolucion_fichaje(registro, accion, estado_anterior=None):
+    obra_real = _obra_label_resolucion(registro.obra_real_id)
+    obra_plan = _obra_label_resolucion(registro.obra_planificada_id)
+
+    if accion == 'ignorar':
+        if obra_real and obra_plan and obra_real != obra_plan:
+            return (
+                f"Se ignora el fichaje en '{obra_real}' "
+                f"(estaba planificado en '{obra_plan}')."
+            )
+        if obra_real:
+            return f"Se ignora el fichaje en '{obra_real}'."
+        if obra_plan:
+            return f"Se ignora la incidencia en '{obra_plan}'."
+        return "Incidencia ignorada."
+
+    if accion == 'mover':
+        if obra_plan and obra_real:
+            return f"Cuadrante actualizado: de '{obra_plan}' a '{obra_real}'."
+        if obra_real:
+            return f"Reasignado a '{obra_real}'."
+        return "Reasignado a la obra real."
+
+    if accion == 'anadir':
+        if estado_anterior == 'Paracaidista' and obra_real:
+            return f"Se acepta el fichaje sin planificar en '{obra_real}'."
+        if obra_real:
+            return f"Añadida asignación en '{obra_real}' (pluriempleo)."
+        return "Añadida multi-asignación (pluriempleo)."
+
+    if accion == 'borrar_planificacion':
+        if obra_plan:
+            return (
+                f"Se elimina la planificación en '{obra_plan}' "
+                f"(el operario no fichó en esa obra)."
+            )
+        return "Planificación eliminada."
+
+    if accion == 'confirmar_ausencia':
+        if obra_plan:
+            return f"Ausencia confirmada: no acudió a '{obra_plan}'."
+        return "Ausencia confirmada manualmente."
+
+    return "Ajuste manual del cuadrante/fichaje."
+
+
 @sync_bp.route('/auditoria/resolver', methods=['POST'])
 @login_required
 def resolver_fichaje():
@@ -529,12 +601,14 @@ def resolver_fichaje():
 
     try:
         registro.resuelto_por_id = current_user.id
-        registro.fecha_auditoria = datetime.utcnow()
+        from app.utils.timezone_utils import utc_now
+        registro.fecha_auditoria = utc_now()
         
+        estado_anterior = None
+
         if accion == 'ignorar':
             registro.estado = 'Resuelto_Ignorado'
-            registro.notas_resolucion = "Ignorado"
-            
+
         elif accion == 'mover':
             # 1. Borrar de la obra donde estaba planificado y NO fue
             asignaciones_viejas = Asignacion.query.filter_by(
@@ -543,7 +617,10 @@ def resolver_fichaje():
                 obra_id=registro.obra_planificada_id
             ).all()
             for asig in asignaciones_viejas:
-                db.session.delete(asig)
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Resolución de Fichaje: Mover"
+                )
             
             # 2. Añadir a la obra donde SÍ ha ido (si no existe ya)
             if registro.obra_real_id:
@@ -553,18 +630,16 @@ def resolver_fichaje():
                     obra_id=registro.obra_real_id
                 ).first()
                 if not existe:
-                    db.session.add(Asignacion(
-                        obra_id=registro.obra_real_id, 
-                        user_id=registro.user_id, 
-                        fecha=registro.fecha
-                    ))
+                    CoreAssignmentService.asignar(
+                        registro.user_id, registro.obra_real_id, registro.fecha,
+                        current_user.id, "Resolución de Fichaje: Mover"
+                    )
                 
             registro.estado = 'Resuelto_Movido'
-            registro.notas_resolucion = "Reasignado a la obra real"
-            
+
         elif accion == 'anadir':
-            estado_anterior = registro.estado 
-            
+            estado_anterior = registro.estado
+
             if registro.obra_real_id:
                 existe = Asignacion.query.filter_by(
                     user_id=registro.user_id, 
@@ -572,20 +647,16 @@ def resolver_fichaje():
                     obra_id=registro.obra_real_id
                 ).first()
                 if not existe:
-                    db.session.add(Asignacion(
-                        obra_id=registro.obra_real_id, 
-                        user_id=registro.user_id, 
-                        fecha=registro.fecha
-                    ))
+                    CoreAssignmentService.asignar(
+                        registro.user_id, registro.obra_real_id, registro.fecha,
+                        None, "Actualización de Cuadrante (Auto)"
+                    )
             
             if estado_anterior == 'Paracaidista':
                 registro.estado = 'Resuelto_Asignado'
-                registro.notas_resolucion = "Asignado oficialmente a la obra (No tenía plan)."
             else:
                 registro.estado = 'Resuelto_Dividido'
-                registro.notas_resolucion = "Añadida multi-asignación (Pluriempleo)."
 
-        # >>> OPCIÓN 1: ERROR AL PLANIFICAR (Borra la planificación)
         elif accion == 'borrar_planificacion':
             asignaciones_viejas = Asignacion.query.filter_by(
                 user_id=registro.user_id, 
@@ -593,25 +664,32 @@ def resolver_fichaje():
                 obra_id=registro.obra_planificada_id
             ).all()
             for asig in asignaciones_viejas:
-                db.session.delete(asig)
-                
-            registro.estado = 'Resuelto_Falta'
-            registro.notas_resolucion = "Planificación eliminada (Error al planificar)."
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Borrar Planificación",
+                )
 
-        # >>> OPCIÓN 2: AUSENCIA REAL (Mantiene la planificación)
+            registro.estado = 'Resuelto_Falta'
+
         elif accion == 'confirmar_ausencia':
             registro.estado = 'Resuelto_Ausencia'
-            registro.notas_resolucion = "Ausencia confirmada manualmente."
-        
+
+        registro.notas_resolucion = _detalle_resolucion_fichaje(
+            registro, accion, estado_anterior=estado_anterior
+        )
+
         from app.utils import register_log
-        operario = User.query.get(registro.user_id)
-        nombre_op = f"{operario.name} {operario.lastname}" if operario else f"ID {registro.user_id}"
-        accion_limpia = accion.replace('_', ' ').title()
+        accion_titulo = ACCION_RESOLUCION_TITULOS.get(
+            accion, accion.replace('_', ' ').title()
+        )
+
         register_log(
             user_id=current_user.id,
             category='fichajes',
-            action=f"Resolución de Fichaje",
-            detail=f"Ha resuelto un conflicto de {nombre_op} del {registro.fecha.strftime('%d/%m/%Y')}. Acción tomada: {accion_limpia}"
+            action=f"Resolución de Fichaje: {accion_titulo}",
+            detail=registro.notas_resolucion,
+            target_user_id=registro.user_id,
+            target_date=registro.fecha
         )
         # Al no reventar aquí, el commit funcionará y dejará el histórico
         db.session.commit()
@@ -629,22 +707,22 @@ def sync_fichajes_manual():
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
         
     try:
-        from datetime import date, timedelta
+        from datetime import timedelta
+        from app.utils.timezone_utils import today_local
         
-        # Capturamos los días que el usuario ha seleccionado en el desplegable (por defecto 7)
         data = request.get_json() or {}
         dias_atras = int(data.get('dias', 7))
         
         from app.services.sync_service import procesar_fichajes_diarios
         
-        # BUCLE: Sincroniza hoy y retrocede "dias_atras"
         for i in range(dias_atras + 1):
-            fecha_revision = (date.today() - timedelta(days=i)).strftime('%Y-%m-%d')
+            fecha_revision = (today_local() - timedelta(days=i)).strftime('%Y-%m-%d')
             procesar_fichajes_diarios(fecha_str=fecha_revision)
         
         # Guardamos en el log cuántos días hemos revisado
         texto_log = f"Sincronización manual de fichajes (Revisión de Hoy + últimos {dias_atras} días)."
-        ahora = datetime.utcnow()
+        from app.utils.timezone_utils import utc_now
+        ahora = utc_now()
         db.session.add(SyncLog(
             fecha=ahora, tipo='Fichajes (Auditoría)', modo='Manual',
             nuevos=0, actualizados=0, finalizados=0, errores=0, 
@@ -656,3 +734,19 @@ def sync_fichajes_manual():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+    
+    
+    
+@sync_bp.route('/timeline_dia/<int:user_id>/<string:fecha_str>', methods=['GET'])
+@login_required
+def get_timeline_dia(user_id, fecha_str):
+    """Compatibilidad con auditoría de fichajes. Delega en el servicio compartido."""
+    from app.services.person_day_timeline_service import build_person_day_timeline
+
+    if current_user.role not in ['admin', 'jefe_obra']:
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+
+    data = build_person_day_timeline(user_id, fecha_str)
+    if not data:
+        return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+    return jsonify(data)

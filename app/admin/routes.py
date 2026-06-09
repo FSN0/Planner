@@ -18,9 +18,9 @@ from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, date
 
 
-from app.services.solicitud_service import update_solicitudes_for_assignment
+from app.services.solicitud_service import update_solicitudes_for_assignment, get_solicitud_notas
 from app.services.assignment_service import process_assignment_action
-
+from app.services.core_assignment_service import CoreAssignmentService
 from app.decorators import roles_required
 from itsdangerous import URLSafeTimedSerializer
 import os
@@ -336,6 +336,7 @@ def solicitud_detail(solicitud_id):
     return render_template(
         'admin_solicitud_detail.html',
         solicitud=solicitud,
+        solicitud_notas=get_solicitud_notas(solicitud),
         cobertura_texto=cobertura_texto,
         es_admin=es_admin,
         fecha_inicio=fecha_inicio,
@@ -1101,15 +1102,24 @@ def edit_obra(obra_id):
         enc_id = request.form.get("encargado_id")
         obra.encargado_id = int(enc_id) if enc_id and enc_id.strip() else None
 
-        # Lógica de impacto (Pausar/Finalizar)
         today = date.today()
         if new_estado == 'Pendiente' and old_estado != 'Pendiente':
-            deleted_count = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-            if deleted_count > 0: flash(f"Obra pausada. {deleted_count} asignaciones eliminadas.", "warning")
+            futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+            for asig in futuras:
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Pausa de Obra", f"Obra '{obra.nombre}' pausada."
+                )
+            if futuras: flash(f"Obra pausada. {len(futuras)} asignaciones eliminadas.", "warning")
         elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
             obra.fecha_fin = today
-            deleted_count = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-            flash(f"Obra finalizada. {deleted_count} asignaciones eliminadas.", "success")
+            futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+            for asig in futuras:
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Finalización de Obra", f"Obra '{obra.nombre}' finalizada."
+                )
+            flash(f"Obra finalizada. {len(futuras)} asignaciones eliminadas.", "success")
 
         try:
             db.session.commit()
@@ -1185,8 +1195,8 @@ def delete_company(company_id):
                 
         elif action_option == "delete":
             for worker in associated_workers:
-                worker.soft_delete()
-                worker.company_id = None # <--- IMPORTANTE: Desvincular para poder borrar
+                worker.soft_delete(actor_id=current_user.id)
+                worker.company_id = None
 
     # --- NUEVO: LIMPIEZA DE INTEGRIDAD REFERENCIAL ---
     from app.models import Asignacion
@@ -1227,7 +1237,7 @@ def reset_password(user_id):
 def delete_user(user_id):
     user = User.query.get(user_id)
     if user:
-        user.soft_delete()
+        user.soft_delete(actor_id=current_user.id)
         db.session.commit()
         flash(
             "Usuario eliminado y archivado. Se han removido asignaciones futuras.",
@@ -1319,8 +1329,10 @@ def delete_obra(obra_id):
 
     future_asignaciones = [a for a in obra.asignaciones if a.fecha >= today]
     for asign in future_asignaciones:
-        db.session.delete(asign)
-
+        CoreAssignmentService.desasignar(
+            asign.user_id, asign.obra_id, asign.fecha, current_user.id,
+            "Eliminación de Obra", f"Obra '{obra.nombre}' eliminada."
+        )
 
     db.session.commit()
 
@@ -1866,14 +1878,23 @@ def batch_update_obras_status():
             old_estado = obra.estado
             obra.estado = new_estado
 
-            # Si se pausa o finaliza, borramos las asignaciones del futuro para liberar a la gente
             if new_estado == 'Pendiente' and old_estado != 'Pendiente':
-                deleted = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-                total_deleted += deleted
+                futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+                for asig in futuras:
+                    CoreAssignmentService.desasignar(
+                        asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                        "Pausa de Obra (Masiva)", f"Obra '{obra.nombre}' pausada."
+                    )
+                total_deleted += len(futuras)
             elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
                 obra.fecha_fin = today
-                deleted = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-                total_deleted += deleted
+                futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+                for asig in futuras:
+                    CoreAssignmentService.desasignar(
+                        asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                        "Finalización de Obra (Masiva)", f"Obra '{obra.nombre}' finalizada."
+                    )
+                total_deleted += len(futuras)
 
         db.session.commit()
         
@@ -1916,9 +1937,11 @@ def sso_odoo_contactos():
     u_last = current_user.lastname if current_user.lastname and str(current_user.lastname).lower() != 'none' else ""
     full_name = f"{u_name} {u_last}".strip() or current_user.username
 
+    from app.utils.timezone_utils import utc_now
     serializer = URLSafeTimedSerializer(sso_secret)
     payload = {
         'user_id': current_user.id,
+        'odoo_id': current_user.odoo_id,
         'odoo_id': current_user.odoo_id,
         'name': full_name,
         'iat': datetime.datetime.utcnow().timestamp()
@@ -1936,21 +1959,27 @@ def system_logs():
     from datetime import datetime
     
     category = request.args.get('category', 'accesos')
-    
-    # 1. Traer los logs de la categoría seleccionada
-    logs = SystemLog.query.filter_by(category=category).order_by(SystemLog.timestamp.desc()).limit(300).all()
-    
-    # 2. Resetear el contador de notificaciones para esta pestaña al entrar
-    pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
-    if pref and pref.is_active:
-        pref.last_read_at = datetime.utcnow()
-        db.session.commit()
-        
-    # 3. Traer qué preferencias tiene activas para marcar los checkboxes
+    from app.utils.timezone_utils import utc_now, today_local
+
+    logs = []
+    if category != 'persona_obra':
+        logs = SystemLog.query.filter_by(category=category).order_by(SystemLog.timestamp.desc()).limit(300).all()
+
+        pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
+        if pref and pref.is_active:
+            pref.last_read_at = utc_now()
+            db.session.commit()
+
     all_prefs = LogPreference.query.filter_by(user_id=current_user.id).all()
     active_prefs = [p.category for p in all_prefs if p.is_active]
-    
-    return render_template("admin_logs.html", logs=logs, current_category=category, active_prefs=active_prefs)
+
+    return render_template(
+        "admin_logs.html",
+        logs=logs,
+        current_category=category,
+        active_prefs=active_prefs,
+        default_date=today_local().strftime('%Y-%m-%d'),
+    )
 
 @admin_bp.route("/logs/preferencias", methods=["POST"])
 @login_required

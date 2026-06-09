@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 <style>
     /* --- ESTILOS ENTERPRISE --- */
@@ -27,8 +28,8 @@
     .flow-arrow { color: #9ca3af; font-size: 0.8rem; margin: 0 0.5rem; }
     
     /* Efecto clic en cabeceras de acordeón */
-    .card-header[data-toggle="collapse"] { cursor: pointer; transition: background 0.2s; user-select: none; }
-    .card-header[data-toggle="collapse"]:hover { background-color: #f8fafc !important; }
+    .card-header[data-target] { cursor: pointer; transition: background 0.2s; user-select: none; }
+    .card-header[data-target]:hover { background-color: #f8fafc !important; }
     .chevron-icon { transition: transform 0.3s ease; }
     .collapsed .chevron-icon { transform: rotate(-90deg); }
     
@@ -48,6 +49,7 @@
         z-index: 10000; display: flex; align-items: center; gap: 12px; pointer-events: none;
     }
     #customToast.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
+
 </style>
 {% endblock %}
 
@@ -94,13 +96,13 @@
     <div class="accordion" id="accordionPendientes">
 
         <div class="card card-modern" style="overflow: hidden;">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center {% if not var_conflictos %}collapsed{% endif %}" data-toggle="collapse" data-target="#collapseConflictos">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
                 <h6 class="font-weight-bold text-danger mb-0" style="font-size: 0.9rem; text-transform: uppercase;">
                     <i class="fas fa-random mr-2"></i> Desviaciones de Plan <span class="badge badge-danger ml-2">{{ var_conflictos|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
-            <div id="collapseConflictos" class="collapse {% if var_conflictos %}show{% endif %}" data-parent="#accordionPendientes">
+            <div id="collapseConflictos" class="collapse {% if var_conflictos %}show{% endif %}">
                 {% if var_conflictos %}
                 <div class="table-responsive">
                     <table class="table table-pro" style="table-layout: fixed; width: 100%;">
@@ -117,7 +119,7 @@
                         </thead>
                         <tbody>
                             {% for reg in var_conflictos %}
-                            <tr id="row-{{ reg.id }}">
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td>
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
@@ -138,10 +140,10 @@
                                     </div>
                                 </td>
                                 <td class="text-center font-weight-bold text-success" style="font-size: 0.85rem;">
-                                    {{ reg.check_in.strftime('%H:%M') if reg.check_in else '-' }}
+                                    {{ reg.check_in|format_time if reg.check_in else '-' }}
                                 </td>
                                 <td class="text-center font-weight-bold text-danger" style="font-size: 0.85rem;">
-                                    {{ reg.check_out.strftime('%H:%M') if reg.check_out else '-' }}
+                                    {{ reg.check_out|format_time if reg.check_out else '-' }}
                                 </td>
                                 <td class="text-right">
                                     <button class="btn btn-outline-danger btn-datatable mr-1" onclick="resolver({{ reg.id }}, 'mover')">Mover</button>
@@ -160,13 +162,13 @@
         </div>
 
         <div class="card card-modern" style="overflow: hidden;">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center collapsed" data-toggle="collapse" data-target="#collapseParacaidistas">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false">
                 <h6 class="font-weight-bold text-info mb-0" style="font-size: 0.9rem; text-transform: uppercase;">
                     <i class="fas fa-parachute-box mr-2"></i> Fichajes Sin Planificar <span class="badge badge-info text-white ml-2">{{ var_paracaidistas|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
-            <div id="collapseParacaidistas" class="collapse" data-parent="#accordionPendientes">
+            <div id="collapseParacaidistas" class="collapse">
                 {% if var_paracaidistas %}
                 <div class="table-responsive">
                     <table class="table table-pro" style="table-layout: fixed; width: 100%;">
@@ -183,7 +185,7 @@
                         </thead>
                         <tbody>
                             {% for reg in var_paracaidistas %}
-                            <tr id="row-{{ reg.id }}">
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td>
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
@@ -197,10 +199,10 @@
                                     </div>
                                 </td>
                                 <td class="text-center font-weight-bold text-success" style="font-size: 0.85rem;">
-                                    {{ reg.check_in.strftime('%H:%M') if reg.check_in else '-' }}
+                                    {{ reg.check_in|format_time if reg.check_in else '-' }}
                                 </td>
                                 <td class="text-center font-weight-bold text-danger" style="font-size: 0.85rem;">
-                                    {{ reg.check_out.strftime('%H:%M') if reg.check_out else '-' }}
+                                    {{ reg.check_out|format_time if reg.check_out else '-' }}
                                 </td>
                                 <td class="text-right">
                                     <button class="btn btn-outline-primary btn-datatable mr-1" onclick="resolver({{ reg.id }}, 'anadir')" title="Asignar oficialmente a esta obra">Aceptar</button>
@@ -218,13 +220,13 @@
         </div>
 
         <div class="card card-modern" style="overflow: hidden;">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center collapsed" data-toggle="collapse" data-target="#collapseAusencias">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false">
                 <h6 class="font-weight-bold text-warning mb-0" style="color: #d97706 !important; font-size: 0.9rem; text-transform: uppercase;">
                     <i class="fas fa-user-ninja mr-2"></i> Ausencias <span class="badge badge-warning text-dark ml-2">{{ var_ausencias|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
-            <div id="collapseAusencias" class="collapse" data-parent="#accordionPendientes">
+            <div id="collapseAusencias" class="collapse">
                 {% if var_ausencias %}
                 <div class="table-responsive">
                     <table class="table table-pro" style="table-layout: fixed; width: 100%;">
@@ -239,7 +241,7 @@
                         </thead>
                         <tbody>
                             {% for reg in var_ausencias %}
-                            <tr id="row-{{ reg.id }}">
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td>
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
@@ -291,7 +293,7 @@
                     {% for reg in correcciones %}
                     {% set datos = reg.notas_resolucion.split('||') if reg.notas_resolucion else [] %}
                     
-                    <tr>
+                    <tr class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
                         <td data-sort="{{ reg.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark align-middle">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                         
                         <td class="align-middle">
@@ -360,7 +362,7 @@
                 </thead>
                 <tbody>
                     {% for reg in historial %}
-                    <tr>
+                    <tr class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
                         <td data-sort="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                         <td>
                             <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
@@ -419,10 +421,10 @@
                             </div>
                         </td>
                         <td class="text-center font-weight-bold text-success" style="font-size: 0.8rem;">
-                            {{ reg.check_in.strftime('%H:%M') if reg.check_in else '-' }}
+                            {{ reg.check_in|format_time if reg.check_in else '-' }}
                         </td>
                         <td class="text-center font-weight-bold text-danger" style="font-size: 0.8rem;">
-                            {{ reg.check_out.strftime('%H:%M') if reg.check_out else '-' }}
+                            {{ reg.check_out|format_time if reg.check_out else '-' }}
                         </td>
                         <td>
                             {% if reg.resuelto_por %}
@@ -445,15 +447,40 @@
 
   </main>
 </div>
+
+{% with modal_id='modalTimelineFichaje', modal_title='Historial del Fichaje' %}
+  {% include 'components/_person_day_timeline_modal.html' %}
+{% endwith %}
+
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}"></script>
 
 <script>
 $(document).ready(function() {
+    // Acordeón manual (evita doble toggle por jQuery/Bootstrap duplicados en base.html)
+    $('#accordionPendientes').on('click', '.card-header[data-target]', function () {
+        const $header = $(this);
+        const $target = $($header.data('target'));
+        const isOpen = $target.hasClass('show');
+
+        if (isOpen) {
+            $target.collapse('hide');
+        } else {
+            $('#accordionPendientes .collapse.show').collapse('hide');
+            $target.collapse('show');
+        }
+    });
+    $('#accordionPendientes').on('hidden.bs.collapse shown.bs.collapse', '.collapse', function () {
+        const $header = $(this).prev('.card-header');
+        const isOpen = $(this).hasClass('show');
+        $header.toggleClass('collapsed', !isOpen);
+        $header.attr('aria-expanded', isOpen ? 'true' : 'false');
+    });
+
     // --- NUEVA TABLA: Correcciones RRHH ---
     $('#correccionesTable').DataTable({
         "order": [[ 0, "desc" ]], // Ordenar por fecha por defecto
@@ -546,6 +573,7 @@ function resolver(id, accion) {
         }
     });
 }
+
 function forzarSyncFichajes() {
     // Leemos qué opción has elegido en el desplegable
     const diasSeleccionados = document.getElementById('diasSync').value;
@@ -577,5 +605,13 @@ function forzarSyncFichajes() {
         document.getElementById('customToast').classList.remove('show');
     });
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
+        modalId: 'modalTimelineFichaje',
+        apiBase: '/sync/timeline_dia',
+        loadingMessage: 'Recopilando el día completo del operario...',
+    });
+});
 </script>
 {% endblock %}

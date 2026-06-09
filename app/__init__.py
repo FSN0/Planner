@@ -105,8 +105,14 @@ def create_app():
     # Registro de utilidades de Jinja
     # ---------------------------------------------------------
     from app.utils.date_utils import get_weekday_initial
+    from app.utils.timezone_utils import (
+        format_datetime, format_time, format_date, today_local,
+        get_user_timezone, get_app_timezone, COMMON_TIMEZONES, timezone_label,
+    )
     app.jinja_env.globals.update(get_weekday_initial=get_weekday_initial)
-
+    app.jinja_env.filters['format_dt'] = format_datetime
+    app.jinja_env.filters['format_time'] = format_time
+    app.jinja_env.filters['format_date'] = format_date
 
 
     # Importación local de constantes para evitar referencias circulares
@@ -135,14 +141,31 @@ def create_app():
                     ).count()
                 # --------------------------------------------
 
-            # 2. JEFE DE OBRA: Solo contamos cuántas de SUS solicitudes tienen feedback
+            # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
             elif current_user.role == ROLE_JEFE:
-                pending_count = Solicitud.query.filter(
-                    Solicitud.requested_by_id == current_user.id,
-                    Solicitud.estado.in_(['CUMPLIDA', 'DENEGADA', 'CERRADA_PARCIAL'])
+                from sqlalchemy import or_
+                from app.models import Obra
+                pending_count = Solicitud.query.join(Obra).filter(
+                    or_(
+                        Solicitud.requested_by_id == current_user.id,
+                        Obra.jefe_obra_id == current_user.id,
+                    ),
+                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
                 ).count()
 
-        return dict(pending_notifications=pending_count, unread_logs_count=unread_logs_count)
+        tz_ctx = {}
+        if current_user.is_authenticated:
+            tz_ctx = dict(
+                user_timezone=get_user_timezone(current_user),
+                app_timezone=get_app_timezone(),
+                today_local=today_local(),
+                timezone_options=COMMON_TIMEZONES,
+            )
+        return dict(
+            pending_notifications=pending_count,
+            unread_logs_count=unread_logs_count,
+            **tz_ctx,
+        )
 
     # ---------------------------------------------------------
     # Redirecciones y Seguridad

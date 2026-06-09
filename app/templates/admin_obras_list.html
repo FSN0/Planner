@@ -207,8 +207,8 @@
                   {% set sort_value = obra.fecha_importacion.strftime('%Y%m%d%H%M%S') if obra.fecha_importacion else '00000000000000' %}
                   <td class="text-center" data-sort-value="{{ sort_value }}">
                       {% if obra.fecha_importacion %}
-                          <span class="badge badge-info shadow-sm" style="font-size: 0.65rem;" title="Importada a las {{ obra.fecha_importacion.strftime('%H:%M') }}">
-                              <i class="fas fa-cloud-download-alt mr-1"></i> {{ obra.fecha_importacion.strftime('%d/%m/%y') }}
+                          <span class="badge badge-info shadow-sm" style="font-size: 0.65rem;" title="Importada a las {{ obra.fecha_importacion|format_time }}">
+                              <i class="fas fa-cloud-download-alt mr-1"></i> {{ obra.fecha_importacion|format_dt('%d/%m/%y') }}
                           </span>
                       {% else %}
                           <span class="badge badge-light border text-muted" style="font-size: 0.65rem;">

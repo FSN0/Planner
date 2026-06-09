@@ -13,8 +13,21 @@ app = create_app()
 celery = Celery(app.import_name, broker=app.config['CELERY_BROKER_URL'])
 celery.conf.update(app.config)
 
+with app.app_context():
+    from app.utils.timezone_utils import get_app_timezone
+    celery.conf.timezone = get_app_timezone()
+
+
+def _cleanup_db_session():
+    """Devuelve la conexión al pool limpia tras cada tarea Celery."""
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    db.session.remove()
+
+
 # --- CONFIGURACIÓN DE TAREAS PROGRAMADAS AUTOMÁTICAS ---
-celery.conf.timezone = 'Europe/Madrid'
 celery.conf.beat_schedule = {
     'sync-odoo-nocturno': {
         'task': 'app.celery_worker.auto_sync_odoo',
@@ -44,6 +57,8 @@ def send_async_email(subject, recipients, body, html):
             app.logger.info("Correo enviado correctamente.")
         except Exception as e:
             app.logger.error("Error enviando correo: %s", e)
+        finally:
+            _cleanup_db_session()
 
 # >>> NUEVA TAREA QUE EJECUTA EL CORTE Y EL REPORTE
 # ====================================================================

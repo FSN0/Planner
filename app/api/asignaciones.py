@@ -9,7 +9,14 @@ from app.models import User, Obra, Asignacion, Solicitud, Festivo, ROLE_ADMIN, R
 from app.decorators import roles_required
 
 from app.services.assignment_service import process_assignment_action, process_unassign_action
-from app.services.solicitud_service import update_solicitudes_for_assignment, SolicitudService
+from app.services.solicitud_service import (
+    update_solicitudes_for_assignment,
+    SolicitudService,
+    merge_comentarios_dates,
+    merge_notas,
+    build_comentarios_config,
+)
+from app.services.core_assignment_service import CoreAssignmentService
 from app.services.email_service import (
     notificar_resolucion_solicitud, 
     notificar_movimiento_admin_a_jo, 
@@ -71,6 +78,7 @@ def api_unassign_worker():
             date_list=dates,
             mode=mode
         )
+        
         status_code = 200 if result.get('success') else 400
         return jsonify(result), status_code
     except Exception as e:
@@ -101,14 +109,14 @@ def api_solicitud_asignar_parcial(solicitud_id):
         for d_str in selected_dates:
             try:
                 d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-                asig = Asignacion.query.filter_by(user_id=int(worker_id), obra_id=solicitud.obra_id, fecha=d_obj).first()
-                if asig:
-                    db.session.delete(asig)
+                borrado = CoreAssignmentService.desasignar(
+                    int(worker_id), solicitud.obra_id, d_obj, current_user.id,
+                    "Resolución de Solicitud de Baja"
+                )
+                if borrado:
                     count_processed += 1
             except ValueError: 
                 continue
-                
-        db.session.flush()
         
         # Mandamos recalcular al motor puro de coberturas
         for d_str in selected_dates:
@@ -191,7 +199,8 @@ def api_solicitud_asignar_parcial(solicitud_id):
 
         if len(remaining_dates) == 0:
             solicitud.estado = 'CUMPLIDA'
-            solicitud.resolved_at = datetime.utcnow()
+            from app.utils.timezone_utils import utc_now
+            solicitud.resolved_at = utc_now()
             solicitud.resolved_by_id = current_user.id
             msg = f"Acción completada ({count_processed} días). Solicitud cerrada."
             notificar_resolucion_solicitud(solicitud, current_user.name)
@@ -221,12 +230,14 @@ def api_planificador_action():
     original_start_str = data.get('original_start')
     original_end_str = data.get('original_end')
     include_weekends = data.get('include_weekends', False)
-    overwrite_mode = data.get('overwrite_mode', 'check') 
+    overwrite_mode = data.get('overwrite_mode', 'check')
+    notas = (data.get('notas') or '').strip() or None
     
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        hoy = datetime.today().date()
+        from app.utils.timezone_utils import today_local
+        hoy = today_local()
 
         if str(worker_id) == 'GENERICO' and start_date < hoy:
             return jsonify({"success": False, "error": "No puedes solicitar personal en fechas pasadas."})
@@ -269,11 +280,11 @@ def api_planificador_action():
 
             if fechas_a_borrar:
                 if current_user.role == ROLE_ADMIN:
-                    Asignacion.query.filter(
-                        Asignacion.user_id == worker_id,
-                        Asignacion.obra_id == old_obra_id,
-                        Asignacion.fecha.in_(fechas_a_borrar)
-                    ).delete(synchronize_session=False)
+                    for d_borrar in fechas_a_borrar:
+                        CoreAssignmentService.desasignar(
+                            int(worker_id), old_obra_id, d_borrar, current_user.id,
+                            "Planificación Manual", "Recorte de rango desde planificador."
+                        )
                     db.session.commit()
                     
                     for d_borrada in fechas_a_borrar:
@@ -295,23 +306,19 @@ def api_planificador_action():
                     if existing_baja:
                         existing_baja.fecha_inicio = min(existing_baja.fecha_inicio, min(fechas_a_borrar))
                         existing_baja.fecha_fin = max(existing_baja.fecha_fin, max(fechas_a_borrar))
-                        try:
-                            comentarios_json = json.loads(existing_baja.comentarios or '{}')
-                            merged_dates = sorted(list(set(comentarios_json.get('dates', []) + dates_str)))
-                            comentarios_json['dates'] = merged_dates
-                            existing_baja.comentarios = json.dumps(comentarios_json)
-                        except Exception: pass
-                        
+                        existing_baja.comentarios = merge_comentarios_dates(existing_baja.comentarios, dates_str)
+                        existing_baja.notas = merge_notas(existing_baja.notas, notas)
                         db.session.commit()
                         sol_baja_creada = True
                         msg_baja = "La solicitud de baja existente ha sido ampliada."
                     else:
-                        comentarios_json = json.dumps({'mode': 'selected', 'dates': dates_str})
                         sol_baja = Solicitud(
                             tipo='CONCRETA', accion='DESASIGNAR', obra_id=old_obra_id,
                             requested_by_id=current_user.id, empleado_id=worker_id,
                             fecha_inicio=min(fechas_a_borrar), fecha_fin=max(fechas_a_borrar),
-                            cantidad_solicitada=1, estado='PENDIENTE', comentarios=comentarios_json
+                            cantidad_solicitada=1, estado='PENDIENTE',
+                            comentarios=build_comentarios_config(dates_str),
+                            notas=notas,
                         )
                         db.session.add(sol_baja)
                         db.session.commit()
@@ -346,15 +353,14 @@ def api_planificador_action():
                 solicitante_id=current_user.id, obra_id=target_obra_id,
                 fecha_inicio=fechas_a_procesar[0], fecha_fin=fechas_a_procesar[-1],
                 cantidad=cantidad_pedida,
-                perfil=detalles, comentarios=f"Creado desde Planificador: {detalles}"
+                perfil=detalles, notas=notas, fechas_explicitas=fechas_a_procesar,
             )
             return jsonify({"success": True, "action": "requested_generic", "message": "Solicitud genérica enviada."})
 
         result = process_assignment_action(
             actor_user=current_user, worker_id=int(worker_id), target_obra_id=target_obra_id,
-            date_list=fechas_a_procesar, mode=overwrite_mode
+            date_list=fechas_a_procesar, mode=overwrite_mode, notas=notas,
         )
-        
         if sol_baja_creada:
             base_msg = result.get('message', '')
             result['message'] = f"{msg_baja} {base_msg}"
@@ -422,9 +428,11 @@ def api_solicitud_asignar_candidatos(solicitud_id):
                 
                 if asignaciones_a_borrar:
                     for a in asignaciones_a_borrar:
-                        db.session.delete(a)
+                        CoreAssignmentService.desasignar(
+                            a.user_id, a.obra_id, a.fecha, current_user.id,
+                            "Resolución de Solicitud de Baja"
+                        )
                     count_exito += 1
-                    db.session.flush()
                     
                 continue # Saltamos a la siguiente iteración del for, no validamos nada más
             # =========================================================================
@@ -525,9 +533,10 @@ def api_solicitud_desasignar_candidato(solicitud_id):
     fechas_eliminadas = [a.fecha for a in asignaciones] 
     
     for a in asignaciones:
-        db.session.delete(a)
-    
-    db.session.flush()
+        CoreAssignmentService.desasignar(
+            a.user_id, a.obra_id, a.fecha, current_user.id,
+            "Desasignación de Candidato"
+        )
     
     for d_obj in fechas_eliminadas:
         update_solicitudes_for_assignment(solicitud.obra_id, worker_id, d_obj, resolved_by_id=current_user.id)

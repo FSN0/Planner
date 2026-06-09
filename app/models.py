@@ -1,9 +1,15 @@
 # app/models.py
 from . import db, login_manager
 from flask_login import UserMixin
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 import random
 from sqlalchemy.dialects.postgresql import JSONB
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 
 # --- CONSTANTES DE ROLES ---
 ROLE_OPERARIO = 'operario'
@@ -105,6 +111,7 @@ class User(UserMixin, db.Model):
     
     # Configuración
     receive_emails = db.Column(db.Boolean, default=True)
+    timezone = db.Column(db.String(64), nullable=True)
     especialidad = db.Column(db.String(100), nullable=True) # Electricista, Fontanero, Albañil...
     
     # Programación de estados (Activación/Desactivación futura)
@@ -156,13 +163,13 @@ class User(UserMixin, db.Model):
             return 'INTERNO'
         return 'EXTERNO'
 
-    def soft_delete(self):
+    def soft_delete(self, actor_id=None):
         """
         Marca al usuario como eliminado, libera su DNI (añadiendo sufijo)
         y elimina asignaciones futuras para liberar planificación.
         """
-        today = date.today()
-        # Modificar DNI para permitir re-registro si fuera necesario en el futuro
+        from app.utils.timezone_utils import today_local
+        today = today_local()
         new_dni = f"{self.dni}-del-{self.id}"
         self.dni = new_dni[:20]
         
@@ -171,15 +178,18 @@ class User(UserMixin, db.Model):
         self.scheduled_activation_date = None
         self.scheduled_deactivation_date = None
 
-        # Limpiar asignaciones futuras
         if self.role == ROLE_OPERARIO:
             from app.models import Asignacion
+            from app.services.core_assignment_service import CoreAssignmentService
             future_assignments = Asignacion.query.filter(
                 Asignacion.user_id == self.id,
                 Asignacion.fecha > today
             ).all()
             for assignment in future_assignments:
-                db.session.delete(assignment)
+                CoreAssignmentService.desasignar(
+                    assignment.user_id, assignment.obra_id, assignment.fecha,
+                    actor_id or 1, "Baja de Empleado"
+                )
 
         # Si es jefe, quitarle la jefatura de obras activas
         elif self.role in [ROLE_JEFE, ROLE_ADMIN]:
@@ -236,14 +246,19 @@ class UserObraConfig(db.Model):
 class SystemLog(db.Model):
     __tablename__ = 'system_logs'
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    # --- AQUÍ ESTABA EL ERROR: Cambiado 'user.id' por 'users.id' ---
+    timestamp = db.Column(db.DateTime, default=_utc_now)
+    
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
     category = db.Column(db.String(50), nullable=False) 
     action = db.Column(db.String(150), nullable=False) 
     detail = db.Column(db.Text, nullable=True) 
 
+    # --- NUEVOS CAMPOS PARA AUDITORÍA (LA CAJA NEGRA) ---
+    target_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True) 
+    target_date = db.Column(db.Date, nullable=True)
+
     user = db.relationship('User', foreign_keys=[user_id])
+    target_user = db.relationship('User', foreign_keys=[target_user_id])
 
 class LogPreference(db.Model):
     __tablename__ = 'log_preferences'
@@ -252,7 +267,7 @@ class LogPreference(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     category = db.Column(db.String(50), nullable=False)
     is_active = db.Column(db.Boolean, default=False) 
-    last_read_at = db.Column(db.DateTime, default=datetime.utcnow) 
+    last_read_at = db.Column(db.DateTime, default=_utc_now) 
 
     user = db.relationship('User', backref=db.backref('log_preferences', lazy='dynamic'))
     
@@ -318,7 +333,7 @@ class Asignacion(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
     company = db.relationship('Company')
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utc_now)
     solicitud_id = db.Column(db.Integer, db.ForeignKey('solicitudes.id', ondelete="SET NULL"), nullable=True)
     solicitud = db.relationship('Solicitud', backref='asignaciones_vinculadas')
     __table_args__ = (
@@ -336,7 +351,7 @@ class HistorialAsignacion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     asignacion_id = db.Column(db.Integer, db.ForeignKey('asignaciones.id', ondelete="SET NULL"), nullable=True)
     accion = db.Column(db.String(100))  # Creada, Borrada, Modificada
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=_utc_now)
     realizado_por = db.Column(db.Integer, db.ForeignKey('users.id'))
 
     def __repr__(self):
@@ -345,7 +360,7 @@ class HistorialAsignacion(db.Model):
 class SyncLog(db.Model):
     __tablename__ = 'sync_logs'
     id = db.Column(db.Integer, primary_key=True)
-    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha = db.Column(db.DateTime, default=_utc_now)
     tipo = db.Column(db.String(50)) # 'Obras' o 'Empleados'
     modo = db.Column(db.String(50)) # 'Manual' o 'Automático'
     nuevos = db.Column(db.Integer, default=0)
@@ -373,7 +388,7 @@ class RegistroFichaje(db.Model):
     # Estados: 'Correcto', 'Conflicto', 'Ausencia', 'Resuelto_Movido', 'Resuelto_Dividido', 'Resuelto_Ignorado'
     estado = db.Column(db.String(50), default='Pendiente') 
     notas_resolucion = db.Column(db.Text, nullable=True)
-    fecha_auditoria = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_auditoria = db.Column(db.DateTime, default=_utc_now)
 
     # Trazabilidad: Quién resolvió el conflicto
     resuelto_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -422,10 +437,13 @@ class Solicitud(db.Model):
     # True si el sistema la marcó como CUMPLIDA automáticamente al detectar asignaciones
     auto_fulfilled = db.Column(db.Boolean, nullable=False, default=False)
 
+    # JSON técnico: fechas pendientes, modo de baja, etc.
     comentarios = db.Column(db.Text, nullable=True)
+    # Notas del solicitante para RRHH (solo texto humano)
+    notas = db.Column(db.Text, nullable=True)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+    updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
     
     resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     resolved_at = db.Column(db.DateTime, nullable=True)
@@ -450,7 +468,7 @@ class Rating(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     score = db.Column(db.Integer, nullable=False)
     reason = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utc_now)
     
     # >>> NUEVO: Para poder resetear la suma sin borrar el dato
     is_active = db.Column(db.Boolean, default=True, nullable=False) 
@@ -491,6 +509,7 @@ nota_user = db.Table('nota_user',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
 )
 
+
 class Nota(db.Model):
     __tablename__ = 'notas'
     
@@ -501,7 +520,7 @@ class Nota(db.Model):
     es_privada = db.Column(db.Boolean, default=False, nullable=False)
     
     autor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utc_now)
     
     # Relaciones
     autor = db.relationship('User', foreign_keys=[autor_id])

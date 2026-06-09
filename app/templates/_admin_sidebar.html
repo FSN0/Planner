@@ -135,11 +135,10 @@
   <div class="sidebar-section-title">Control y Sistema</div>
   <ul class="sidebar-nav">
     <li>
-      <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if 'auditoria' in request.endpoint %}is-active{% endif %}">
+      <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_fichajes' %}is-active{% endif %}">
         <i class="fas fa-user-clock fa-fw"></i> <span>Auditoría Fichajes</span>
       </a>
     </li>
-    
     {% if current_user.role == 'admin' %}
     <li>
         <a href="{{ url_for('admin.configuracion_global') }}" class="sidebar-link {% if 'configuracion' in request.endpoint %}is-active{% endif %}">
@@ -161,6 +160,16 @@
   <div class="sidebar-spacer"></div>
 
   <ul class="sidebar-nav mt-3">
+    <li class="px-3 py-2">
+        <form action="{{ url_for('main.update_user_timezone') }}" method="POST" class="mb-0">
+            <label class="small text-muted mb-1 d-block"><i class="fas fa-globe-europe mr-1"></i> Mi zona horaria</label>
+            <select name="timezone" class="form-control form-control-sm" onchange="this.form.submit()" title="Cambiar zona horaria de visualización">
+                {% for tz_code, tz_label in timezone_options %}
+                <option value="{{ tz_code }}" {% if user_timezone == tz_code %}selected{% endif %}>{{ tz_label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </li>
     <li>
         <a href="{{ url_for('auth.logout') }}" class="sidebar-link" style="color: #ef4444; font-weight: 500;">
             <i class="fas fa-sign-out-alt fa-fw"></i>

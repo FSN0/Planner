@@ -1,9 +1,7 @@
 import logging
 from datetime import date, datetime, timedelta
 from app import db
-from app.models import RegistroFichaje, Asignacion, User, Obra, Festivo, ConfiguracionGlobal
-from app.sync.dispatcher import get_sync_adapter
-from zoneinfo import ZoneInfo
+from app.models import Obra, User, Company
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +18,28 @@ def procesar_fichajes_diarios(fecha_str=None):
     if es_festivo:
         return
 
+        lock_id = 424242
+        if not db.session.execute(text("SELECT pg_try_advisory_lock(:id)"), {'id': lock_id}).scalar():
+            logger.warning("Sync fichajes omitido: otra instancia ya está en ejecución.")
+            return
+
+        try:
+            self._sync_fichajes_diarios_impl(fecha_obj, fecha_str)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        finally:
+            try:
+                db.session.execute(text("SELECT pg_advisory_unlock(:id)"), {'id': lock_id})
+            except Exception:
+                pass
+
+    def _sync_fichajes_diarios_impl(self, fecha_obj, fecha_str):
+        from app.models import RegistroFichaje, Asignacion, User, Obra
+        from datetime import datetime
+        from app import db
+
     try:
         adapter = get_sync_adapter()
         datos_crudos = adapter.get_fichajes_diarios(fecha_str)
@@ -27,18 +47,33 @@ def procesar_fichajes_diarios(fecha_str=None):
         logger.error(f"Error obteniendo fichajes del adaptador: {e}")
         return
 
-    fichajes_crudos = []
-    for d in datos_crudos:
+            for a in att_int:
+                if a.get('employee_id'):
+                    # Extraemos la obra de forma segura por si Odoo manda False (Obra quitada por RRHH)
+                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
+                    modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
+                    fichajes_crudos.append({'odoo_user': a['employee_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
+        except Exception as e:
+            logger.error(f"🚨 [Odoo Sync] CRITICO: Fallo conexion hr.attendance: {str(e)}")
+            return # ABORTA LA FUNCION SI FALLA LA CONEXION
+
         try:
-            fichajes_crudos.append({
-                'odoo_user': str(d['empleado_external_id']), 
-                'odoo_obra': str(d['obra_external_id']),
-                'autor': d.get('autor', 'Sistema'),
-                'check_in': d.get('check_in'),
-                'check_out': d.get('check_out')
-            })
-        except (ValueError, TypeError):
-            continue
+            att_ext = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'partner.attendance', 'search_read', [domain], {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out']})
+            if not isinstance(att_ext, list):
+                logger.error(f"🚨 [Odoo Sync] Error: partner.attendance devolvio no-lista. Abortando.")
+                return
+
+            for a in att_ext:
+                if a.get('partner_id'):
+                    # Extraemos la obra de forma segura por si Odoo manda False
+                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
+                    modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
+                    fichajes_crudos.append({'odoo_user': a['partner_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
+        
+        
+        except Exception as e:
+            logger.error(f"🚨 [Odoo Sync] CRITICO: Fallo conexion partner.attendance: {str(e)}")
+            return # ABORTA LA FUNCION SI FALLA LA CONEXION
 
     fichajes_unicos = {}
     for f in fichajes_crudos:
@@ -83,11 +118,17 @@ def procesar_fichajes_diarios(fecha_str=None):
 
         obras_odoo_del_usuario = obras_por_usuario_odoo.get(odoo_user_id, [])
 
-        if odoo_obra_id not in obras_odoo_del_usuario:
-            if reg_local.estado in ['Correcto_Automatico', 'Paracaidista', 'Resuelto_Asignado', 'Resuelto_Dividido', 'Resuelto_Movido']:
+            if o_real.odoo_id not in obras_odoo_del_usuario:
+                # 1. Borrar asignaciones mágicas
+                
                 asig_fantasma = Asignacion.query.filter_by(user_id=u_local.id, fecha=fecha_obj, obra_id=o_real.id).first()
                 if asig_fantasma:
-                    db.session.delete(asig_fantasma)
+                    from app.services.core_assignment_service import CoreAssignmentService
+                    CoreAssignmentService.desasignar(
+                        u_local.id, o_real.id, fecha_obj, 1,
+                        "Fichaje Anulado por Odoo",
+                        f"Borrada asignación en {o_real.nombre} por falta de registro en Odoo."
+                    )
 
             o_nueva_id = ""
             o_nueva_cod = ""
@@ -124,6 +165,9 @@ def procesar_fichajes_diarios(fecha_str=None):
         if not local_user or not local_obra:
             continue
 
+            from app.utils.timezone_utils import parse_odoo_datetime, utc_now, format_time
+            check_in_dt = parse_odoo_datetime(f.get('check_in'))
+            check_out_dt = parse_odoo_datetime(f.get('check_out'))
         check_in_dt = None
         if f.get('check_in'):
             try:
@@ -210,6 +254,55 @@ def procesar_fichajes_diarios(fecha_str=None):
                     registro_existente.obra_planificada_id = nuevo_plan_id
                 registro_existente.check_in = check_in_dt
                 registro_existente.check_out = check_out_dt
+            if registro_vacio_exacto:
+                # Si el sistema ya le había clavado 'Ausencia', es que llegó tarde
+                if registro_vacio_exacto.estado == 'Ausencia':
+                    registro_vacio_exacto.estado = 'Retraso'
+                    registro_vacio_exacto.notas_resolucion = (
+                        f"Fichaje recibido después del corte horario. "
+                        f"Hora detectada: {format_time(check_in_dt) if check_in_dt else 'N/A'}"
+                    )
+                else:
+                    registro_vacio_exacto.estado = nuevo_estado
+                    
+                registro_vacio_exacto.obra_real_id = local_obra.id
+                registro_vacio_exacto.check_in = check_in_dt
+                registro_vacio_exacto.check_out = check_out_dt
+            else:
+                registro_existente = RegistroFichaje.query.filter_by(
+                    user_id=local_user.id, fecha=fecha_obj, obra_real_id=local_obra.id
+                ).first()
+                
+                if not registro_existente:
+                    # 1. El sistema guarda el fichaje para el cuadrante
+                    db.session.add(RegistroFichaje(
+                        user_id=local_user.id, fecha=fecha_obj,
+                        obra_planificada_id=nuevo_plan_id, obra_real_id=local_obra.id, estado=nuevo_estado,
+                        check_in=check_in_dt, check_out=check_out_dt 
+                    ))
+                    
+                    # 2. LA CAJA NEGRA: Grabar en piedra el log físico
+                    from app.models import SystemLog
+                    from app.services.core_assignment_service import CoreAssignmentService
+                    obra_label = CoreAssignmentService.format_obra_label(local_obra)
+                    db.session.add(SystemLog(
+                        timestamp=check_in_dt or utc_now(),
+                        category='fichaje_app',
+                        action=f"Fichaje físico [{nuevo_estado.replace('_', ' ')}]",
+                        detail=(
+                            f"El operario fichó en {obra_label}. "
+                            f"Entrada: {format_time(check_in_dt) if check_in_dt else '-'} / "
+                            f"Salida: {format_time(check_out_dt) if check_out_dt else '-'}"
+                        ),
+                        target_user_id=local_user.id,
+                        target_date=fecha_obj
+                    ))
+                else:
+                    if not registro_existente.estado.startswith('Resuelto'):
+                        registro_existente.estado = nuevo_estado
+                        registro_existente.obra_planificada_id = nuevo_plan_id
+                    registro_existente.check_in = check_in_dt
+                    registro_existente.check_out = check_out_dt
 
         if crear_asignacion_magica:
             existe_asig = Asignacion.query.filter_by(user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id).first()
@@ -217,6 +310,14 @@ def procesar_fichajes_diarios(fecha_str=None):
                 db.session.add(Asignacion(user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id))
         
         db.session.flush()
+            if crear_asignacion_magica:
+                existe_asig = Asignacion.query.filter_by(user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id).first()
+                if not existe_asig:
+                    from app.services.core_assignment_service import CoreAssignmentService
+                    CoreAssignmentService.asignar(
+                        local_user.id, local_obra.id, fecha_obj, None,
+                        "Auto-asignación por Fichaje Físico"
+                    )
 
     if fecha_obj == date.today():
         conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
@@ -243,3 +344,36 @@ def procesar_fichajes_diarios(fecha_str=None):
                     reg.notas_resolucion = None
 
     db.session.commit()
+       # =========================================================================
+        # >>> NUEVO: AUTO-EVALUAR AUSENCIAS TRAS SINCRONIZAR <<<
+        # =========================================================================
+        from app.utils.timezone_utils import now_local, today_local
+        if fecha_obj == today_local():
+            from app.models import ConfiguracionGlobal
+            
+            conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
+            hora_str = conf_hora.valor if conf_hora else "08:30"
+            
+            try:
+                hora_corte = datetime.strptime(hora_str, "%H:%M").time()
+            except ValueError:
+                hora_corte = datetime.strptime("08:30", "%H:%M").time()
+            
+            ahora_local = now_local()
+            
+            if ahora_local.time() >= hora_corte:
+                sin_registros = RegistroFichaje.query.filter_by(fecha=fecha_obj, estado='Sin_Registro').all()
+                for reg in sin_registros:
+                    reg.estado = 'Ausencia'
+                    reg.notas_resolucion = 'Generada automáticamente tras superar la hora de corte.'
+            
+            # >>> NUEVO: Si la hora se ha retrasado y AÚN NO es la hora de corte...
+            else:
+                ausencias_tempranas = RegistroFichaje.query.filter_by(fecha=fecha_obj, estado='Ausencia').all()
+                for reg in ausencias_tempranas:
+                    # Si no tiene check_in real, significa que fue generada por el sistema. La devolvemos.
+                    if not reg.check_in:
+                        reg.estado = 'Sin_Registro'
+                        reg.notas_resolucion = None
+
+    

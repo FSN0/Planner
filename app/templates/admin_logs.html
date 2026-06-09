@@ -144,8 +144,12 @@
             <a class="logs-custom-tab {% if current_category == 'planificacion' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='planificacion') }}">📅 Planificación</a>
             <a class="logs-custom-tab {% if current_category == 'obras' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='obras') }}">🏗️ Obras</a>
             <a class="logs-custom-tab {% if current_category == 'fichajes' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='fichajes') }}">⏱️ Fichajes</a>
+            <a class="logs-custom-tab {% if current_category == 'persona_obra' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='persona_obra') }}">👷 Persona-Obra</a>
         </div>
 
+        {% if current_category == 'persona_obra' %}
+        {% include 'components/_person_day_timeline_panel.html' %}
+        {% else %}
         <div class="table-responsive">
             <table class="table table-compact w-100" id="logsTable">
                 <thead>
@@ -172,7 +176,7 @@
                     {% for log in logs %}
                     <tr class="log-row">
                         <td class="text-nowrap" style="color: #64748b; font-family: monospace;">
-                            <i class="far fa-clock text-muted me-1"></i> {{ log.timestamp.strftime('%d/%m/%Y %H:%M') }}
+                            <i class="far fa-clock text-muted me-1"></i> {{ log.timestamp|format_dt }}
                         </td>
                         <td>
                             {% if log.user %}
@@ -202,6 +206,7 @@
                 </tbody>
             </table>
         </div>
+        {% endif %}
     </div>
   </main>
 </div>
@@ -215,9 +220,9 @@
         document.getElementById('formPrefs').style.display = 'none';
     });
 
-    // Lógica de filtrado infalible (Buscador por columnas)
     document.addEventListener('DOMContentLoaded', function() {
         const filterInputs = document.querySelectorAll('.filter-input');
+        if (!filterInputs.length) return;
         const rows = document.querySelectorAll('.log-row');
         const emptySearchRow = document.getElementById('emptySearchRow');
 
