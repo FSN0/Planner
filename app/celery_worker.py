@@ -28,25 +28,31 @@ def _cleanup_db_session():
 
 
 def _set_search_path(schema='public'):
-    """Cambia el search_path sin cerrar la sesión ORM."""
+    """Cambia el search_path de la sesión actual del worker."""
     from sqlalchemy import text
-    db.session.rollback()
     db.session.execute(text(f'SET search_path TO {schema}'))
 
 
 def _load_active_tenants():
-    """Carga tenants como datos planos para no desacoplar instancias ORM."""
-    from app.models import Tenant
+    """Lee tenants desde public con conexión aislada (seguro entre workers)."""
+    from sqlalchemy import text
 
-    _set_search_path('public')
+    with db.engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                'SELECT id, schema_name, subdominio, nombre '
+                'FROM public.tenants WHERE is_active = true'
+            )
+        ).fetchall()
+
     return [
         {
-            'id': tenant.id,
-            'schema_name': tenant.schema_name,
-            'subdominio': tenant.subdominio,
-            'nombre': tenant.nombre,
+            'id': row[0],
+            'schema_name': row[1],
+            'subdominio': row[2],
+            'nombre': row[3],
         }
-        for tenant in Tenant.query.filter_by(is_active=True).all()
+        for row in rows
     ]
 
 
@@ -109,6 +115,7 @@ def verificar_hora_corte():
         from app.services.email_service import enviar_super_reporte_diario
 
         try:
+            _cleanup_db_session()
             for tenant_data in _load_active_tenants():
                 subdominio = tenant_data['subdominio']
                 try:
@@ -148,6 +155,7 @@ def fichajes_en_vivo():
         try:
             from app.sync.dispatcher import get_sync_adapter
 
+            _cleanup_db_session()
             for tenant_data in _load_active_tenants():
                 subdominio = tenant_data['subdominio']
                 try:
@@ -172,6 +180,7 @@ def auto_sync_odoo():
         try:
             from app.sync.dispatcher import get_sync_adapter
 
+            _cleanup_db_session()
             for tenant_data in _load_active_tenants():
                 subdominio = tenant_data['subdominio']
                 try:
