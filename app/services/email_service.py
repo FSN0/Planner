@@ -178,7 +178,8 @@ def enviar_super_reporte_diario():
     Sustituye a 'notificar_auditoria_diaria_0830'.
     Manda correos agrupados a JO y Admins sobre ausencias de HOY y paracaidistas/conflictos de AYER.
     """
-    hoy = date.today()
+    from app.utils.timezone_utils import today_local
+    hoy = today_local()
     ayer = hoy - timedelta(days=1)
     
     # 1. Ausencias tempranas de HOY

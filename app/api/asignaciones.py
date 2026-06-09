@@ -10,6 +10,7 @@ from app.decorators import roles_required
 
 from app.services.assignment_service import process_assignment_action, process_unassign_action
 from app.services.solicitud_service import update_solicitudes_for_assignment, SolicitudService
+from app.services.core_assignment_service import CoreAssignmentService
 from app.services.email_service import (
     notificar_resolucion_solicitud, 
     notificar_movimiento_admin_a_jo, 
@@ -72,18 +73,6 @@ def api_unassign_worker():
             mode=mode
         )
         
-        if result.get('success'):
-            from app.utils import register_log
-            from datetime import datetime
-            obra_log = Obra.query.get(obra_id)
-            for d_str in dates:
-                f_date = datetime.strptime(d_str, '%Y-%m-%d').date()
-                register_log(
-                    user_id=current_user.id, category='planificacion', action="Planificación Eliminada",
-                    detail=f"Eliminado del cuadrante de la obra: {obra_log.codigo if obra_log else obra_id}",
-                    target_user_id=int(worker_id), target_date=f_date
-                )
-                
         status_code = 200 if result.get('success') else 400
         return jsonify(result), status_code
     except Exception as e:
@@ -114,14 +103,14 @@ def api_solicitud_asignar_parcial(solicitud_id):
         for d_str in selected_dates:
             try:
                 d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-                asig = Asignacion.query.filter_by(user_id=int(worker_id), obra_id=solicitud.obra_id, fecha=d_obj).first()
-                if asig:
-                    db.session.delete(asig)
+                borrado = CoreAssignmentService.desasignar(
+                    int(worker_id), solicitud.obra_id, d_obj, current_user.id,
+                    "Resolución de Solicitud de Baja"
+                )
+                if borrado:
                     count_processed += 1
             except ValueError: 
                 continue
-                
-        db.session.flush()
         
         # Mandamos recalcular al motor puro de coberturas
         for d_str in selected_dates:
@@ -204,7 +193,8 @@ def api_solicitud_asignar_parcial(solicitud_id):
 
         if len(remaining_dates) == 0:
             solicitud.estado = 'CUMPLIDA'
-            solicitud.resolved_at = datetime.utcnow()
+            from app.utils.timezone_utils import utc_now
+            solicitud.resolved_at = utc_now()
             solicitud.resolved_by_id = current_user.id
             msg = f"Acción completada ({count_processed} días). Solicitud cerrada."
             notificar_resolucion_solicitud(solicitud, current_user.name)
@@ -239,7 +229,8 @@ def api_planificador_action():
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        hoy = datetime.today().date()
+        from app.utils.timezone_utils import today_local
+        hoy = today_local()
 
         if str(worker_id) == 'GENERICO' and start_date < hoy:
             return jsonify({"success": False, "error": "No puedes solicitar personal en fechas pasadas."})
@@ -282,11 +273,11 @@ def api_planificador_action():
 
             if fechas_a_borrar:
                 if current_user.role == ROLE_ADMIN:
-                    Asignacion.query.filter(
-                        Asignacion.user_id == worker_id,
-                        Asignacion.obra_id == old_obra_id,
-                        Asignacion.fecha.in_(fechas_a_borrar)
-                    ).delete(synchronize_session=False)
+                    for d_borrar in fechas_a_borrar:
+                        CoreAssignmentService.desasignar(
+                            int(worker_id), old_obra_id, d_borrar, current_user.id,
+                            "Planificación Manual", "Recorte de rango desde planificador."
+                        )
                     db.session.commit()
                     
                     for d_borrada in fechas_a_borrar:
@@ -367,16 +358,6 @@ def api_planificador_action():
             actor_user=current_user, worker_id=int(worker_id), target_obra_id=target_obra_id,
             date_list=fechas_a_procesar, mode=overwrite_mode
         )
-        if result.get('success') and str(worker_id) != 'GENERICO':
-            from app.utils import register_log
-            obra_log = Obra.query.get(target_obra_id)
-            for f in fechas_a_procesar:
-                register_log(
-                    user_id=current_user.id, category='planificacion', action="Planificación Añadida",
-                    detail=f"Añadido al cuadrante de la obra: {obra_log.codigo if obra_log else target_obra_id}",
-                    target_user_id=int(worker_id), target_date=f
-                )
-                
         if sol_baja_creada:
             base_msg = result.get('message', '')
             result['message'] = f"{msg_baja} {base_msg}"
@@ -444,9 +425,11 @@ def api_solicitud_asignar_candidatos(solicitud_id):
                 
                 if asignaciones_a_borrar:
                     for a in asignaciones_a_borrar:
-                        db.session.delete(a)
+                        CoreAssignmentService.desasignar(
+                            a.user_id, a.obra_id, a.fecha, current_user.id,
+                            "Resolución de Solicitud de Baja"
+                        )
                     count_exito += 1
-                    db.session.flush()
                     
                 continue # Saltamos a la siguiente iteración del for, no validamos nada más
             # =========================================================================
@@ -547,9 +530,10 @@ def api_solicitud_desasignar_candidato(solicitud_id):
     fechas_eliminadas = [a.fecha for a in asignaciones] 
     
     for a in asignaciones:
-        db.session.delete(a)
-    
-    db.session.flush()
+        CoreAssignmentService.desasignar(
+            a.user_id, a.obra_id, a.fecha, current_user.id,
+            "Desasignación de Candidato"
+        )
     
     for d_obj in fechas_eliminadas:
         update_solicitudes_for_assignment(solicitud.obra_id, worker_id, d_obj, resolved_by_id=current_user.id)

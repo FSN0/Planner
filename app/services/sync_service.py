@@ -3,7 +3,6 @@ import os
 import re
 from app import db
 from app.models import Obra, User, Company
-from zoneinfo import ZoneInfo
 
 class OdooSyncService:
     def __init__(self):
@@ -344,15 +343,41 @@ class OdooSyncService:
         from app.models import RegistroFichaje, Asignacion, User, Obra, Festivo
         from datetime import date, datetime
         from app import db # Asegúrate de que db está importado
+        from sqlalchemy import text
+        import logging
+        logger = logging.getLogger(__name__)
 
+        from app.utils.timezone_utils import today_local
         if not fecha_str:
-            fecha_str = date.today().strftime('%Y-%m-%d')
+            fecha_str = today_local().strftime('%Y-%m-%d')
         fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
         
         es_festivo = Festivo.query.filter_by(fecha=fecha_obj).first()
         if es_festivo:
             # Si es festivo, salimos de la función sin generar ausencias ni conflictos.
             return
+
+        lock_id = 424242
+        if not db.session.execute(text("SELECT pg_try_advisory_lock(:id)"), {'id': lock_id}).scalar():
+            logger.warning("Sync fichajes omitido: otra instancia ya está en ejecución.")
+            return
+
+        try:
+            self._sync_fichajes_diarios_impl(fecha_obj, fecha_str)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        finally:
+            try:
+                db.session.execute(text("SELECT pg_advisory_unlock(:id)"), {'id': lock_id})
+            except Exception:
+                pass
+
+    def _sync_fichajes_diarios_impl(self, fecha_obj, fecha_str):
+        from app.models import RegistroFichaje, Asignacion, User, Obra
+        from datetime import datetime
+        from app import db
 
         domain = [('check_in', 'ilike', f'{fecha_str}%')]
         fichajes_crudos = []
@@ -445,15 +470,11 @@ class OdooSyncService:
                 
                 asig_fantasma = Asignacion.query.filter_by(user_id=u_local.id, fecha=fecha_obj, obra_id=o_real.id).first()
                 if asig_fantasma:
-                    db.session.delete(asig_fantasma)
-                    from app.utils import register_log
-                    register_log(
-                        user_id=1, # O el ID del sistema
-                        category='fichajes',
-                        action="Fichaje Anulado por Odoo",
-                        detail=f"Borrada asignación en {o_real.nombre} por falta de registro en Odoo.",
-                        target_user_id=u_local.id,
-                        target_date=fecha_obj
+                    from app.services.core_assignment_service import CoreAssignmentService
+                    CoreAssignmentService.desasignar(
+                        u_local.id, o_real.id, fecha_obj, 1,
+                        "Fichaje Anulado por Odoo",
+                        f"Borrada asignación en {o_real.nombre} por falta de registro en Odoo."
                     )
 
                 # 2. Buscar datos de la NUEVA obra (si lo han movido)
@@ -500,22 +521,9 @@ class OdooSyncService:
             if not local_user or not local_obra:
                 continue
 
-            # --- CONVERSIÓN DE HORAS ODOO A PYTHON (AJUSTE UTC -> ESPAÑA) ---
-            from datetime import timedelta
-            check_in_dt = None
-            if f.get('check_in'):
-                try:
-                    dt_utc = datetime.strptime(f['check_in'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("UTC"))
-                    check_in_dt = dt_utc.astimezone(ZoneInfo("Europe/Madrid")).replace(tzinfo=None)
-                except ValueError:
-                    pass
-            check_out_dt = None
-            if f.get('check_out'):
-                try:
-                    check_out_dt = datetime.strptime(f['check_out'], '%Y-%m-%d %H:%M:%S') + timedelta(hours=2)
-                except ValueError:
-                    pass
-            # ----------------------------------------------------------------
+            from app.utils.timezone_utils import parse_odoo_datetime, utc_now
+            check_in_dt = parse_odoo_datetime(f.get('check_in'))
+            check_out_dt = parse_odoo_datetime(f.get('check_out'))
 
             plan_exacto = Asignacion.query.filter_by(user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id).first()
             
@@ -585,10 +593,22 @@ class OdooSyncService:
                 ).first()
                 
                 if not registro_existente:
+                    # 1. El sistema guarda el fichaje para el cuadrante
                     db.session.add(RegistroFichaje(
                         user_id=local_user.id, fecha=fecha_obj,
                         obra_planificada_id=nuevo_plan_id, obra_real_id=local_obra.id, estado=nuevo_estado,
                         check_in=check_in_dt, check_out=check_out_dt 
+                    ))
+                    
+                    # 2. LA CAJA NEGRA: Grabar en piedra el log físico
+                    from app.models import SystemLog
+                    db.session.add(SystemLog(
+                        timestamp=check_in_dt or utc_now(),
+                        category='fichaje_app',
+                        action=f"📍 Fichaje Físico [{nuevo_estado.replace('_', ' ')}]",
+                        detail=f"El operario fichó en {local_obra.codigo}. Entrada: {check_in_dt.strftime('%H:%M') if check_in_dt else '-'} / Salida: {check_out_dt.strftime('%H:%M') if check_out_dt else '-'}",
+                        target_user_id=local_user.id,
+                        target_date=fecha_obj
                     ))
                 else:
                     if not registro_existente.estado.startswith('Resuelto'):
@@ -600,16 +620,18 @@ class OdooSyncService:
             if crear_asignacion_magica:
                 existe_asig = Asignacion.query.filter_by(user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id).first()
                 if not existe_asig:
-                    db.session.add(Asignacion(user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id))
-            
-            db.session.flush()
+                    from app.services.core_assignment_service import CoreAssignmentService
+                    CoreAssignmentService.asignar(
+                        local_user.id, local_obra.id, fecha_obj, 1,
+                        "Auto-asignación por Fichaje Físico"
+                    )
 
        # =========================================================================
         # >>> NUEVO: AUTO-EVALUAR AUSENCIAS TRAS SINCRONIZAR <<<
         # =========================================================================
-        if fecha_obj == date.today():
+        from app.utils.timezone_utils import now_local, today_local
+        if fecha_obj == today_local():
             from app.models import ConfiguracionGlobal
-            from datetime import timedelta
             
             conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
             hora_str = conf_hora.valor if conf_hora else "08:30"
@@ -619,10 +641,9 @@ class OdooSyncService:
             except ValueError:
                 hora_corte = datetime.strptime("08:30", "%H:%M").time()
             
-            ahora_espana = datetime.utcnow() + timedelta(hours=2)
+            ahora_local = now_local()
             
-            # Si ya hemos superado la hora límite...
-            if ahora_espana.time() >= hora_corte:
+            if ahora_local.time() >= hora_corte:
                 sin_registros = RegistroFichaje.query.filter_by(fecha=fecha_obj, estado='Sin_Registro').all()
                 for reg in sin_registros:
                     reg.estado = 'Ausencia'
@@ -637,6 +658,4 @@ class OdooSyncService:
                         reg.estado = 'Sin_Registro'
                         reg.notas_resolucion = None
 
-        db.session.commit()
-        
-   
+    

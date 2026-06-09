@@ -43,7 +43,14 @@ def create_app():
     # Registro de Blueprints y utilidades de Jinja
     # ---------------------------------------------------------
     from app.utils.date_utils import get_weekday_initial
+    from app.utils.timezone_utils import (
+        format_datetime, format_time, format_date, today_local,
+        get_user_timezone, get_app_timezone, COMMON_TIMEZONES, timezone_label,
+    )
     app.jinja_env.globals.update(get_weekday_initial=get_weekday_initial)
+    app.jinja_env.filters['format_dt'] = format_datetime
+    app.jinja_env.filters['format_time'] = format_time
+    app.jinja_env.filters['format_date'] = format_date
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -89,8 +96,19 @@ def create_app():
                     Solicitud.estado.in_(['CUMPLIDA', 'DENEGADA', 'CERRADA_PARCIAL'])
                 ).count()
 
-        # Ya no enviamos 'notifications' vacío, solo el conteo
-        return dict(pending_notifications=pending_count, unread_logs_count=unread_logs_count)
+        tz_ctx = {}
+        if current_user.is_authenticated:
+            tz_ctx = dict(
+                user_timezone=get_user_timezone(current_user),
+                app_timezone=get_app_timezone(),
+                today_local=today_local(),
+                timezone_options=COMMON_TIMEZONES,
+            )
+        return dict(
+            pending_notifications=pending_count,
+            unread_logs_count=unread_logs_count,
+            **tz_ctx,
+        )
 
     # ---------------------------------------------------------
     # Función auxiliar para unificar las redirecciones

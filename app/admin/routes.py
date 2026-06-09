@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, date
 
 from app.services.solicitud_service import update_solicitudes_for_assignment
 from app.services.assignment_service import process_assignment_action
+from app.services.core_assignment_service import CoreAssignmentService
 from app.document_utils import download_documents_zip, download_document_file
 from app.decorators import roles_required
 from itsdangerous import URLSafeTimedSerializer
@@ -1101,15 +1102,24 @@ def edit_obra(obra_id):
         enc_id = request.form.get("encargado_id")
         obra.encargado_id = int(enc_id) if enc_id and enc_id.strip() else None
 
-        # Lógica de impacto (Pausar/Finalizar)
         today = date.today()
         if new_estado == 'Pendiente' and old_estado != 'Pendiente':
-            deleted_count = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-            if deleted_count > 0: flash(f"Obra pausada. {deleted_count} asignaciones eliminadas.", "warning")
+            futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+            for asig in futuras:
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Pausa de Obra", f"Obra '{obra.nombre}' pausada."
+                )
+            if futuras: flash(f"Obra pausada. {len(futuras)} asignaciones eliminadas.", "warning")
         elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
             obra.fecha_fin = today
-            deleted_count = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-            flash(f"Obra finalizada. {deleted_count} asignaciones eliminadas.", "success")
+            futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+            for asig in futuras:
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Finalización de Obra", f"Obra '{obra.nombre}' finalizada."
+                )
+            flash(f"Obra finalizada. {len(futuras)} asignaciones eliminadas.", "success")
 
         try:
             db.session.commit()
@@ -1185,8 +1195,8 @@ def delete_company(company_id):
                 
         elif action_option == "delete":
             for worker in associated_workers:
-                worker.soft_delete()
-                worker.company_id = None # <--- IMPORTANTE: Desvincular para poder borrar
+                worker.soft_delete(actor_id=current_user.id)
+                worker.company_id = None
 
     # --- NUEVO: LIMPIEZA DE INTEGRIDAD REFERENCIAL ---
     from app.models import Asignacion
@@ -1227,7 +1237,7 @@ def reset_password(user_id):
 def delete_user(user_id):
     user = User.query.get(user_id)
     if user:
-        user.soft_delete()
+        user.soft_delete(actor_id=current_user.id)
         db.session.commit()
         flash(
             "Usuario eliminado y archivado. Se han removido asignaciones futuras.",
@@ -1330,8 +1340,10 @@ def delete_obra(obra_id):
 
     future_asignaciones = [a for a in obra.asignaciones if a.fecha >= today]
     for asign in future_asignaciones:
-        db.session.delete(asign)
-
+        CoreAssignmentService.desasignar(
+            asign.user_id, asign.obra_id, asign.fecha, current_user.id,
+            "Eliminación de Obra", f"Obra '{obra.nombre}' eliminada."
+        )
 
     db.session.commit()
 
@@ -1788,7 +1800,17 @@ def update_config():
         db.session.add(ConfiguracionGlobal(clave='aceptar_primer_fichaje', valor=primer_fichaje_val))
     else:
         conf_primer.valor = primer_fichaje_val
-        # --------------------------
+
+    from app.utils.timezone_utils import is_valid_timezone, invalidate_app_timezone_cache, DEFAULT_TIMEZONE
+    zona_horaria = request.form.get('zona_horaria', DEFAULT_TIMEZONE).strip()
+    if not is_valid_timezone(zona_horaria):
+        zona_horaria = DEFAULT_TIMEZONE
+    conf_tz = ConfiguracionGlobal.query.filter_by(clave='zona_horaria').first()
+    if not conf_tz:
+        db.session.add(ConfiguracionGlobal(clave='zona_horaria', valor=zona_horaria))
+    else:
+        conf_tz.valor = zona_horaria
+    invalidate_app_timezone_cache()
 
     try:
             db.session.commit()
@@ -1868,14 +1890,23 @@ def batch_update_obras_status():
             old_estado = obra.estado
             obra.estado = new_estado
 
-            # Si se pausa o finaliza, borramos las asignaciones del futuro para liberar a la gente
             if new_estado == 'Pendiente' and old_estado != 'Pendiente':
-                deleted = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-                total_deleted += deleted
+                futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+                for asig in futuras:
+                    CoreAssignmentService.desasignar(
+                        asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                        "Pausa de Obra (Masiva)", f"Obra '{obra.nombre}' pausada."
+                    )
+                total_deleted += len(futuras)
             elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
                 obra.fecha_fin = today
-                deleted = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).delete(synchronize_session=False)
-                total_deleted += deleted
+                futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
+                for asig in futuras:
+                    CoreAssignmentService.desasignar(
+                        asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                        "Finalización de Obra (Masiva)", f"Obra '{obra.nombre}' finalizada."
+                    )
+                total_deleted += len(futuras)
 
         db.session.commit()
         
@@ -1904,12 +1935,13 @@ def sso_odoo_contactos():
     u_last = current_user.lastname if current_user.lastname and str(current_user.lastname).lower() != 'none' else ""
     full_name = f"{u_name} {u_last}".strip() or current_user.username
 
+    from app.utils.timezone_utils import utc_now
     serializer = URLSafeTimedSerializer(sso_secret)
     payload = {
         'user_id': current_user.id,
-        'odoo_id': current_user.odoo_id, # IMPORTANTE: Enviamos el ID de Odoo
+        'odoo_id': current_user.odoo_id,
         'name': full_name,
-        'iat': datetime.utcnow().timestamp()
+        'iat': utc_now().timestamp()
     }
     token = serializer.dumps(payload)
     
@@ -1931,7 +1963,8 @@ def system_logs():
     # 2. Resetear el contador de notificaciones para esta pestaña al entrar
     pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
     if pref and pref.is_active:
-        pref.last_read_at = datetime.utcnow()
+        from app.utils.timezone_utils import utc_now
+        pref.last_read_at = utc_now()
         db.session.commit()
         
     # 3. Traer qué preferencias tiene activas para marcar los checkboxes

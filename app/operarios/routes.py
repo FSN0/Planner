@@ -19,5 +19,6 @@ def panel():
 @login_required
 def calendar():
     # El HTML ya se encarga de llamar por JS a la API Universal
-    selected_date = request.args.get('selected_date', datetime.today().strftime('%Y-%m-%d'))
+    from app.utils.timezone_utils import today_local
+    selected_date = request.args.get('selected_date', today_local().strftime('%Y-%m-%d'))
     return render_template('operario_calendar.html', worker=current_user, selected_date=selected_date)

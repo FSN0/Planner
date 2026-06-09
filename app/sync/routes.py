@@ -3,8 +3,9 @@ from flask_login import login_required, current_user # <--- OJO: AÑADE current_
 from werkzeug.security import generate_password_hash
 from datetime import datetime
 from app import db
-from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje # <--- AÑADE TAMBIÉN Asignacion y RegistroFichaje AQUÍ
+from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje
 from app.services.sync_service import OdooSyncService
+from app.services.core_assignment_service import CoreAssignmentService
 from sqlalchemy import or_
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
@@ -81,7 +82,8 @@ def preview_obras():
 @login_required
 def commit_obras():
     data = request.json
-    ahora = datetime.now() # Capturamos la hora de la importación
+    from app.utils.timezone_utils import utc_now
+    ahora = utc_now()
     
     try:
         # 1. Procesar Nuevas
@@ -185,7 +187,8 @@ def preview_subcontratas():
 @login_required
 def commit_subcontratas():
     data = request.json
-    ahora = datetime.now()
+    from app.utils.timezone_utils import utc_now
+    ahora = utc_now()
     
     try:
         mapa_empresas = {} 
@@ -293,7 +296,8 @@ def commit_subcontratas():
 @login_required
 def commit_empleados():
     data = request.json
-    ahora = datetime.now() # Añadimos esto para el historial
+    from app.utils.timezone_utils import utc_now
+    ahora = utc_now()
     try:
         # Buscamos la primera empresa local para asignarla y que no sean "fantasmas"
         default_company = Company.query.first()
@@ -429,7 +433,8 @@ def resolver_fichaje():
 
     try:
         registro.resuelto_por_id = current_user.id
-        registro.fecha_auditoria = datetime.utcnow()
+        from app.utils.timezone_utils import utc_now
+        registro.fecha_auditoria = utc_now()
         
         if accion == 'ignorar':
             registro.estado = 'Resuelto_Ignorado'
@@ -443,7 +448,10 @@ def resolver_fichaje():
                 obra_id=registro.obra_planificada_id
             ).all()
             for asig in asignaciones_viejas:
-                db.session.delete(asig)
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Resolución de Fichaje: Mover"
+                )
             
             # 2. Añadir a la obra donde SÍ ha ido (si no existe ya)
             if registro.obra_real_id:
@@ -453,11 +461,10 @@ def resolver_fichaje():
                     obra_id=registro.obra_real_id
                 ).first()
                 if not existe:
-                    db.session.add(Asignacion(
-                        obra_id=registro.obra_real_id, 
-                        user_id=registro.user_id, 
-                        fecha=registro.fecha
-                    ))
+                    CoreAssignmentService.asignar(
+                        registro.user_id, registro.obra_real_id, registro.fecha,
+                        current_user.id, "Resolución de Fichaje: Mover"
+                    )
                 
             registro.estado = 'Resuelto_Movido'
             registro.notas_resolucion = "Reasignado a la obra real"
@@ -472,15 +479,17 @@ def resolver_fichaje():
                     obra_id=registro.obra_real_id
                 ).first()
                 if not existe:
-                    db.session.add(Asignacion(
-                        obra_id=registro.obra_real_id, 
-                        user_id=registro.user_id, 
-                        fecha=registro.fecha
-                    ))
+                    CoreAssignmentService.asignar(
+                        registro.user_id, registro.obra_real_id, registro.fecha,
+                        current_user.id, "Actualización de Cuadrante (Auto)"
+                    )
             
             if estado_anterior == 'Paracaidista':
                 registro.estado = 'Resuelto_Asignado'
-                registro.notas_resolucion = "Asignado oficialmente a la obra (No tenía plan)."
+                # Sacamos el nombre de la obra para que el texto sea perfecto
+                obra_real = Obra.query.get(registro.obra_real_id)
+                nombre_obra = obra_real.nombre if obra_real else "la obra"
+                registro.notas_resolucion = f"Se acepta el fichaje SIN PLANIFICAR en '{nombre_obra}'."
             else:
                 registro.estado = 'Resuelto_Dividido'
                 registro.notas_resolucion = "Añadida multi-asignación (Pluriempleo)."
@@ -493,7 +502,10 @@ def resolver_fichaje():
                 obra_id=registro.obra_planificada_id
             ).all()
             for asig in asignaciones_viejas:
-                db.session.delete(asig)
+                CoreAssignmentService.desasignar(
+                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                    "Resolución de Fichaje: Error al Planificar"
+                )
                 
             registro.estado = 'Resuelto_Falta'
             registro.notas_resolucion = "Planificación eliminada (Error al planificar)."
@@ -533,22 +545,22 @@ def sync_fichajes_manual():
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
         
     try:
-        from datetime import date, timedelta
+        from datetime import timedelta
+        from app.utils.timezone_utils import today_local
         
-        # Capturamos los días que el usuario ha seleccionado en el desplegable (por defecto 7)
         data = request.get_json() or {}
         dias_atras = int(data.get('dias', 7))
         
         service = OdooSyncService()
         
-        # BUCLE: Sincroniza hoy y retrocede "dias_atras"
         for i in range(dias_atras + 1):
-            fecha_revision = (date.today() - timedelta(days=i)).strftime('%Y-%m-%d')
+            fecha_revision = (today_local() - timedelta(days=i)).strftime('%Y-%m-%d')
             service.sync_fichajes_diarios(fecha_str=fecha_revision)
         
         # Guardamos en el log cuántos días hemos revisado
         texto_log = f"Sincronización manual de fichajes (Revisión de Hoy + últimos {dias_atras} días)."
-        ahora = datetime.utcnow()
+        from app.utils.timezone_utils import utc_now
+        ahora = utc_now()
         db.session.add(SyncLog(
             fecha=ahora, tipo='Fichajes (Auditoría)', modo='Manual',
             nuevos=0, actualizados=0, finalizados=0, errores=0, 
@@ -563,66 +575,71 @@ def sync_fichajes_manual():
     
     
     
-
-# ==============================================================================
-# ENDPOINT: VISTA DE AUDITORÍA BASADA PURAMENTE EN LOGS DEL SISTEMA
-# ==============================================================================
 @sync_bp.route('/timeline_dia/<int:user_id>/<string:fecha_str>', methods=['GET'])
 @login_required
 def get_timeline_dia(user_id, fecha_str):
-    from app.models import User, SystemLog, RegistroFichaje
+    from app.models import User, SystemLog
     from datetime import datetime
+    from app.utils.timezone_utils import format_datetime
 
     user = User.query.get_or_404(user_id)
     fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
     hitos = []
 
-    # 1. Leemos los logs del sistema vinculados a este trabajador en este día
+    # 1. LEER EXCLUSIVAMENTE LA CAJA NEGRA (SYSTEMLOG)
     logs_del_dia = SystemLog.query.filter_by(target_user_id=user_id, target_date=fecha_obj).order_by(SystemLog.timestamp.asc()).all()
     
     for log in logs_del_dia:
         icono = "⚙️"
-        if log.category == 'planificacion': icono = "📅" if "Añadida" in log.action else "🗑️"
-        elif log.category == 'fichajes': icono = "⚖️"
+        # Por defecto, el autor es quien disparó la acción, o el Sistema si no hay autor
+        autor = log.user.name if log.user else "Sistema"
+        prioridad = 2 
         
+        if log.category == 'planificacion': 
+            icono = "📅" if log.detail.startswith("Asignado") else "🗑️"
+            prioridad = 2
+            
+            # >>> NUEVO: Si la acción es automática, la firma la máquina, no el usuario
+            if "(Auto)" in log.action:
+                autor = "Sistema Automático"
+                
+        elif log.category == 'fichajes': 
+            icono = "⚖️"
+            prioridad = 1
+            
+        elif log.category == 'fichaje_app':
+            icono = "📍"
+            prioridad = 0
+            
+            # >>> NUEVO: El actor es el propio trabajador que ha fichado
+            autor = f"{user.name} {user.lastname} (Fichaje en App)"
+
+        local_ts = format_datetime(log.timestamp, '%Y-%m-%d %H:%M:%S')
         hitos.append({
-            "sort_time": log.timestamp.strftime('%H:%M:%S'),
-            "fecha": log.timestamp.strftime('%H:%M'), 
+            "sort_time": local_ts,
+            "prioridad": prioridad,
+            "fecha": format_datetime(log.timestamp, '%d/%m %H:%M'),
             "icono": icono,
             "titulo": log.action,
-            "autor": log.user.name if log.user else "Sistema",
+            "autor": autor,
             "descripcion": log.detail
         })
 
-    # 2. Leemos los fichajes físicos que hizo desde su móvil (Solo para el check-in)
-    registros = RegistroFichaje.query.filter_by(user_id=user_id, fecha=fecha_obj).all()
-    for reg in registros:
-        if reg.check_in:
-            hora_in = reg.check_in.strftime('%H:%M')
-            hora_out = reg.check_out.strftime('%H:%M') if reg.check_out else "No registrado"
-            obra_nom = reg.obra_real.codigo if reg.obra_real else "Desconocida"
-            hitos.append({
-                "sort_time": hora_in + ":00",
-                "fecha": hora_in,
-                "icono": "📍",
-                "titulo": f"Fichaje físico en obra: {obra_nom}",
-                "autor": "Operario (App)",
-                "descripcion": f"Fichó entrada a las {hora_in} y salida a las {hora_out}."
-            })
-
-    # 3. Ordenamos cronológicamente y devolvemos
-    hitos.sort(key=lambda x: x["sort_time"])
+    # 2. ORDENAR Y DEVOLVER
+    # MAGIA AQUÍ: Ordenamos primero por el texto de la hora, y si hay un empate 
+    # en el mismo segundo, se desempatará poniendo el número de prioridad más bajo primero.
+    hitos.sort(key=lambda x: (x["sort_time"], x["prioridad"]))
 
     if not hitos:
         hitos.append({
-            "sort_time": "00:00:00", "fecha": "--:--", "icono": "👻", "titulo": "Sin actividad",
-            "autor": "-", "descripcion": "No hay ningún evento histórico en el sistema para este día."
+            "sort_time": "0000-00-00 00:00:00", "fecha": "--/-- --:--", "icono": "👻", "titulo": "Sin actividad",
+            "autor": "-", "descripcion": "No hay ningún evento histórico registrado en el sistema para este día."
         })
 
     return jsonify({
         "success": True,
         "empleado": f"{user.name} {user.lastname}",
         "fecha": fecha_obj.strftime('%d/%m/%Y'),
-        "estado_actual": "Registro Histórico (Logs)",
+        "estado_actual": "Registro Histórico Puro",
         "hitos": hitos
     })

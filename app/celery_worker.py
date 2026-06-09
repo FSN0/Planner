@@ -12,8 +12,21 @@ app = create_app()
 celery = Celery(app.import_name, broker=app.config['CELERY_BROKER_URL'])
 celery.conf.update(app.config)
 
+with app.app_context():
+    from app.utils.timezone_utils import get_app_timezone
+    celery.conf.timezone = get_app_timezone()
+
+
+def _cleanup_db_session():
+    """Devuelve la conexión al pool limpia tras cada tarea Celery."""
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    db.session.remove()
+
+
 # --- CONFIGURACIÓN DE TAREAS PROGRAMADAS AUTOMÁTICAS ---
-celery.conf.timezone = 'Europe/Madrid'
 celery.conf.beat_schedule = {
     'sync-odoo-nocturno': {
         'task': 'app.celery_worker.auto_sync_odoo',
@@ -43,50 +56,52 @@ def send_async_email(subject, recipients, body, html):
             app.logger.info("Correo enviado correctamente.")
         except Exception as e:
             app.logger.error("Error enviando correo: %s", e)
+        finally:
+            _cleanup_db_session()
 
 # >>> NUEVA TAREA QUE EJECUTA EL CORTE Y EL REPORTE
 @celery.task
 def verificar_hora_corte():
     with app.app_context():
         from app.models import ConfiguracionGlobal
-        from datetime import datetime, timedelta
+        from datetime import datetime
+        from app.utils.timezone_utils import now_local, today_local
         
-        # 1. Leer a qué hora hemos configurado el corte
         conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
         hora_str = conf_hora.valor if conf_hora else "08:30"
         hora_corte = datetime.strptime(hora_str, "%H:%M").time()
         
-        # Ajuste de hora española
-        ahora_espana = datetime.utcnow() + timedelta(hours=2)
+        ahora_local = now_local()
         
-        # 2. Si ya es la hora (o ha pasado)...
-        if ahora_espana.time() >= hora_corte:
-            # === AQUÍ ESTABA EL ERROR, AHORA USA 'ahora_espana' ===
-            hoy_str = ahora_espana.strftime('%Y-%m-%d')
-            
-            # 3. Comprobar si ya hemos pasado el reporte hoy
-            conf_ultimo = ConfiguracionGlobal.query.filter_by(clave='ultimo_reporte_enviado').first()
-            
-            if not conf_ultimo or conf_ultimo.valor != hoy_str:
-                app.logger.info(f">>> HORA DE CORTE ALCANZADA ({hora_str}). MARCANDO AUSENCIAS Y ENVIANDO REPORTE.")
+        try:
+            if ahora_local.time() >= hora_corte:
+                hoy_str = today_local().strftime('%Y-%m-%d')
                 
-                from app.services.sync_service import OdooSyncService
-                from app.services.email_service import enviar_super_reporte_diario
+                # 3. Comprobar si ya hemos pasado el reporte hoy
+                conf_ultimo = ConfiguracionGlobal.query.filter_by(clave='ultimo_reporte_enviado').first()
                 
-                service = OdooSyncService()
-                
-                # A) Bajamos últimos fichajes. (Esta función ya hace la auto-evaluación y marca ausencias)
-                service.sync_fichajes_diarios()
-                
-                # B) Enviamos el correo combinado
-                enviar_super_reporte_diario()
-                
-                # Registramos que ya se envió hoy
-                if not conf_ultimo:
-                    db.session.add(ConfiguracionGlobal(clave='ultimo_reporte_enviado', valor=hoy_str))
-                else:
-                    conf_ultimo.valor = hoy_str
-                db.session.commit()
+                if not conf_ultimo or conf_ultimo.valor != hoy_str:
+                    app.logger.info(f">>> HORA DE CORTE ALCANZADA ({hora_str}). MARCANDO AUSENCIAS Y ENVIANDO REPORTE.")
+                    
+                    from app.services.sync_service import OdooSyncService
+                    from app.services.email_service import enviar_super_reporte_diario
+                    
+                    service = OdooSyncService()
+                    
+                    # A) Bajamos últimos fichajes. (Esta función ya hace la auto-evaluación y marca ausencias)
+                    service.sync_fichajes_diarios()
+                    
+                    # B) Enviamos el correo combinado
+                    enviar_super_reporte_diario()
+                    
+                    # Registramos que ya se envió hoy
+                    if not conf_ultimo:
+                        db.session.add(ConfiguracionGlobal(clave='ultimo_reporte_enviado', valor=hoy_str))
+                    else:
+                        conf_ultimo.valor = hoy_str
+                    db.session.commit()
+        finally:
+            _cleanup_db_session()
 
 @celery.task
 def fichajes_en_vivo():
@@ -99,6 +114,8 @@ def fichajes_en_vivo():
             app.logger.info(">>> Sincronización en vivo cruzada correctamente.")
         except Exception as e:
             app.logger.error(f"!!! Error cruzando fichajes en vivo: {e}")
+        finally:
+            _cleanup_db_session()
 
 
             
@@ -109,7 +126,8 @@ def auto_sync_odoo():
         app.logger.info(">>> INICIANDO SYNC NOCTURNA DE OBRAS Y EMPLEADOS (AUTOMÁTICO)")
         try:
             service = OdooSyncService()
-            ahora = datetime.now()
+            from app.utils.timezone_utils import utc_now
+            ahora = utc_now()
             
             # 1. PROCESAR OBRAS
             diff_obras = service.get_diff_obras()
@@ -260,5 +278,6 @@ def auto_sync_odoo():
             db.session.commit()
             app.logger.info(">>> Sincronización nocturna finalizada con éxito.")
         except Exception as e:
-            db.session.rollback()
             app.logger.error(f"!!! Error crítico en sync nocturna: {e}")
+        finally:
+            _cleanup_db_session()

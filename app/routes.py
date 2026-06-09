@@ -1,9 +1,8 @@
 # app/routes.py
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
-from flask import render_template, redirect, url_for
-from flask import Blueprint, request, jsonify, current_app
 from app import db
+from app.utils.timezone_utils import is_valid_timezone, get_app_timezone, timezone_label
 
 main_bp = Blueprint('main', __name__)
 
@@ -22,4 +21,18 @@ def dashboard():
         return render_template('rrhh_panel.html')
     else:
         return render_template('login.html')
+
+
+@main_bp.route('/preferencias/zona-horaria', methods=['POST'])
+@login_required
+def update_user_timezone():
+    tz = (request.form.get('timezone') or '').strip()
+    if not tz or not is_valid_timezone(tz):
+        flash('Zona horaria no válida.', 'danger')
+        return redirect(request.referrer or url_for('main.dashboard'))
+
+    current_user.timezone = tz
+    db.session.commit()
+    flash(f'Zona horaria actualizada: {timezone_label(tz)}', 'success')
+    return redirect(request.referrer or url_for('main.dashboard'))
 

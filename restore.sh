@@ -65,7 +65,7 @@ echo "✅ Ficheros restaurados."
 # 6. Restaurar Base de Datos
 echo "3. Restaurando Base de Datos..."
 
-# Truco PRO: Borramos el esquema 'public' y lo recreamos. 
+# Truco PRO: Borramos el esquema 'public' y lo recreamos.
 # Es más rápido y limpio que borrar toda la base de datos o ir tabla por tabla.
 echo "   - Limpiando base de datos actual..."
 docker compose exec -T db psql -U postgres gestion_obra_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" > /dev/null 2>&1
@@ -85,3 +85,4 @@ echo "4. Arrancando servicios..."
 docker compose start web celery_worker
 
 echo -e "${GREEN}✨ RESTAURACIÓN COMPLETADA CON ÉXITO ✨${NC}"
+

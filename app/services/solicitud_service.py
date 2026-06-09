@@ -2,12 +2,13 @@
 from datetime import datetime, timedelta
 import json
 from app import db
+from app.utils.timezone_utils import utc_now, today_local
 from app.models import Solicitud, Asignacion, User, Festivo
 from app.services.email_service import notificar_nueva_solicitud
 
 def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=None):
     from datetime import date
-    if fecha < date.today():
+    if fecha < today_local():
         return
     
     worker_id = int(worker_id)
@@ -117,7 +118,7 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
 
         if min_coverage >= requested:
             solicitud.estado = "CUMPLIDA"
-            solicitud.resolved_at = datetime.utcnow()
+            solicitud.resolved_at = utc_now()
             if resolved_by_id: solicitud.resolved_by_id = resolved_by_id
         elif total_assignments_count > 0:
             solicitud.estado = "EN_PROCESO"
@@ -154,7 +155,7 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
         if is_fulfilled:
             solicitud.estado = "CUMPLIDA"
             solicitud.cantidad_cubierta = solicitud.cantidad_solicitada
-            solicitud.resolved_at = datetime.utcnow()
+            solicitud.resolved_at = utc_now()
             if resolved_by_id: resolved_by_id = resolved_by_id
         elif is_in_process:
             solicitud.estado = "EN_PROCESO"
@@ -246,26 +247,31 @@ def resolver_solicitud_admin(solicitud, accion, user_actor):
                     dates_to_remove = config.get('dates', [])
                 except Exception: pass
 
+            from app.services.core_assignment_service import CoreAssignmentService
             count = 0
             if mode == 'all_obra':
-                start_del = solicitud.fecha_inicio if solicitud.fecha_inicio else date.today()
+                start_del = solicitud.fecha_inicio if solicitud.fecha_inicio else today_local()
                 asigs = Asignacion.query.filter(
                     Asignacion.user_id == solicitud.empleado_id, 
                     Asignacion.obra_id == solicitud.obra_id, 
                     Asignacion.fecha >= start_del
                 ).all()
                 count = len(asigs)
-                for a in asigs: db.session.delete(a)
+                for a in asigs:
+                    CoreAssignmentService.desasignar(
+                        a.user_id, a.obra_id, a.fecha, user_actor.id,
+                        "Aprobación de Solicitud de Baja"
+                    )
                 
             elif mode == 'selected' and dates_to_remove:
                 for d_str in dates_to_remove:
                     try:
                         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-                        asig = Asignacion.query.filter_by(
-                            user_id=solicitud.empleado_id, obra_id=solicitud.obra_id, fecha=d_obj
-                        ).first()
-                        if asig:
-                            db.session.delete(asig)
+                        borrado = CoreAssignmentService.desasignar(
+                            solicitud.empleado_id, solicitud.obra_id, d_obj, user_actor.id,
+                            "Aprobación de Solicitud de Baja"
+                        )
+                        if borrado:
                             count += 1
                     except ValueError: continue
                     
@@ -277,7 +283,11 @@ def resolver_solicitud_admin(solicitud, accion, user_actor):
                     Asignacion.fecha <= solicitud.fecha_fin
                 ).all()
                 count = len(asigs)
-                for a in asigs: db.session.delete(a)
+                for a in asigs:
+                    CoreAssignmentService.desasignar(
+                        a.user_id, a.obra_id, a.fecha, user_actor.id,
+                        "Aprobación de Solicitud de Baja"
+                    )
             
             mensaje = f"Devolución aprobada. Se han eliminado {count} asignaciones."
 
@@ -300,7 +310,7 @@ def resolver_solicitud_admin(solicitud, accion, user_actor):
 
         solicitud.estado = 'CUMPLIDA'
         solicitud.cantidad_cubierta = solicitud.cantidad_solicitada 
-        solicitud.resolved_at = datetime.utcnow()
+        solicitud.resolved_at = utc_now()
         solicitud.resolved_by_id = user_actor.id
         db.session.commit()
         notificar_resolucion_solicitud(solicitud, user_actor.name)
@@ -308,7 +318,7 @@ def resolver_solicitud_admin(solicitud, accion, user_actor):
 
     elif accion == 'denegar':
         solicitud.estado = 'DENEGADA'
-        solicitud.resolved_at = datetime.utcnow()
+        solicitud.resolved_at = utc_now()
         solicitud.resolved_by_id = user_actor.id
         db.session.commit()
         notificar_resolucion_solicitud(solicitud, user_actor.name)

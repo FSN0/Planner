@@ -20,7 +20,7 @@
 
         {# Centro/Derecha: Hoy y Selector Rápido #}
         <div class="d-flex align-items-center">
-            <a href="{{ url_for(request.endpoint, selected_date=datetime.now().strftime('%Y-%m-%d')) }}" 
+            <a href="{{ url_for(request.endpoint, selected_date=today_local.strftime('%Y-%m-%d')) }}" 
                class="btn btn-xs btn-outline-primary mr-2">
                 Hoy
             </a>

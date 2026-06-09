@@ -5,6 +5,8 @@ from app import db
 from app.models import Asignacion, Solicitud, Obra, User, ROLE_ADMIN, ROLE_JEFE, ConfiguracionGlobal
 from app.services.solicitud_service import update_solicitudes_for_assignment
 from app.services.email_service import send_email, notificar_nueva_solicitud, notificar_traslado_interno
+from app.services.core_assignment_service import CoreAssignmentService
+from app.utils.timezone_utils import today_local
 
 def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, mode='check', overwrite=None, solicitud_id=None):
     if overwrite is True:
@@ -266,20 +268,17 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
             existing_others = Asignacion.query.filter_by(user_id=worker.id, fecha=d).all()
             for exist in existing_others:
                 deleted_info.append((exist.obra_id, exist.user_id, d))
-                db.session.delete(exist)
+                CoreAssignmentService.desasignar(
+                    exist.user_id, exist.obra_id, exist.fecha, actor.id,
+                    "Planificación Manual", "Sobreescritura de asignación previa."
+                )
 
-        new_asig = Asignacion(
-            obra_id=obra.id,
-            user_id=worker.id,
-            fecha=d,
-            company_id=worker.company_id,
-            solicitud_id=solicitud_id, 
+        CoreAssignmentService.asignar(
+            worker.id, obra.id, d, actor.id, "Planificación Manual",
+            company_id=worker.company_id, solicitud_id=solicitud_id,
         )
-        db.session.add(new_asig)
         count += 1
 
-    db.session.flush()
-    
     for o_id, w_id, d_del in deleted_info:
         update_solicitudes_for_assignment(o_id, w_id, d_del, resolved_by_id=actor.id)
         
@@ -287,15 +286,6 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
         update_solicitudes_for_assignment(obra.id, worker.id, d, resolved_by_id=actor.id)
 
     db.session.commit()
-    
-    from app.utils import register_log
-    worker_name = f"{worker.name} {worker.lastname}" if worker else f"ID {worker.id}"
-    register_log(
-        user_id=actor.id,
-        category='planificacion',
-        action='Asignación Realizada',
-        detail=f"Ha asignado a {worker_name} a la obra '{obra.nombre}' durante {count} días."
-    )
 
     return {'success': True, 'action': 'assigned', 'message': f'Asignación realizada ({count} días).'}
 
@@ -315,13 +305,13 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
 
     date_objs = []
     if mode == 'all_obra':
-        asignaciones = query.filter(Asignacion.fecha >= date.today()).all()
+        asignaciones = query.filter(Asignacion.fecha >= today_local()).all()
         if not asignaciones:
             return {'success': False, 'message': 'No hay asignaciones futuras para borrar.'}
         date_objs = [a.fecha for a in asignaciones]
     else:
         raw_dates = sorted([datetime.strptime(d, '%Y-%m-%d').date() if isinstance(d, str) else d for d in date_list])
-        date_objs = [d for d in raw_dates if d >= date.today()]
+        date_objs = [d for d in raw_dates if d >= today_local()]
         asignaciones = query.filter(Asignacion.fecha.in_(date_objs)).all()
 
     if not date_objs:
@@ -342,9 +332,10 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
     fechas_borradas = [a.fecha.strftime('%d/%m/%Y') for a in asignaciones]
     
     for a in asignaciones:
-        db.session.delete(a)
-        
-    db.session.flush()
+        CoreAssignmentService.desasignar(
+            a.user_id, a.obra_id, a.fecha, actor_user.id,
+            "Planificación Manual"
+        )
     
     for d_obj in date_objs:
         try:
@@ -357,16 +348,6 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
     if target_obra_id and count > 0:
         worker = User.query.get(worker_id)
         worker_name = f"{worker.name} {worker.lastname}" if worker else f"ID {worker_id}"
-        
-        from app.utils import register_log
-        obra = Obra.query.get(target_obra_id)
-        obra_nombre = obra.nombre if obra else f"ID {target_obra_id}"
-        register_log(
-            user_id=actor_user.id,
-            category='planificacion',
-            action='Desasignación',
-            detail=f"Ha desasignado a {worker_name} de la obra '{obra_nombre}' ({count} días borrados)."
-        )
         
         if len(fechas_borradas) > 10:
             fechas_str = ", ".join(fechas_borradas[:10]) + f" ... y {len(fechas_borradas)-10} días más."

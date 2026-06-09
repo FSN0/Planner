@@ -70,7 +70,7 @@
                     <tr class="{{ 'text-muted bg-light' if not rating.is_active else '' }}">
                         
                         <td class="text-nowrap text-muted small">
-                            {{ rating.created_at.strftime('%d/%m/%Y %H:%M') }}
+                            {{ rating.created_at|format_dt }}
                         </td>
                         
                         <td class="text-center">

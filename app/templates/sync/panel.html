@@ -91,7 +91,7 @@
             <tbody style="font-size: 0.85rem;">
                 {% for log in logs %}
                 <tr>
-                    <td class="align-middle p-2"><strong>{{ log.fecha.strftime('%d/%m/%Y %H:%M') }}</strong></td>
+                    <td class="align-middle p-2"><strong>{{ log.fecha|format_dt }}</strong></td>
                     <td class="align-middle p-2">
                         {% if log.tipo == 'Obras' %} <span class="badge badge-primary"><i class="fas fa-building"></i> Obras</span>
                         {% elif log.tipo == 'Empleados' %} <span class="badge badge-info text-white"><i class="fas fa-users"></i> Internos</span>
