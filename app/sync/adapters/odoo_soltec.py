@@ -55,15 +55,16 @@ class Adapter(BaseSyncAdapter):
                 raise ConnectionError("Respuesta inválida de Odoo para fichajes internos.")
 
             for a in att_int:
-                if a.get('employee_id') and a.get('project_id'):
+                if a.get('employee_id'):
+                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
                     fichajes_estandarizados.append({
                         'empleado_external_id': str(a['employee_id'][0]),
-                        'obra_external_id': str(a['project_id'][0]),
+                        'obra_external_id': str(obra_id) if obra_id else None,
                         'fecha': fecha_str,
                         'check_in': a.get('check_in'),
                         'check_out': a.get('check_out'),
-                        'autor': modificado_por  
+                        'autor': modificado_por,
                     })
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en hr.attendance. Error: {str(e)}")
@@ -83,15 +84,16 @@ class Adapter(BaseSyncAdapter):
                 raise ConnectionError("Respuesta inválida de Odoo para fichajes de subcontratas.")
 
             for a in att_ext:
-                if a.get('partner_id') and a.get('project_id'):
+                if a.get('partner_id'):
+                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
                     fichajes_estandarizados.append({
                         'empleado_external_id': str(a['partner_id'][0]),
-                        'obra_external_id': str(a['project_id'][0]),
+                        'obra_external_id': str(obra_id) if obra_id else None,
                         'fecha': fecha_str,
                         'check_in': a.get('check_in'),
                         'check_out': a.get('check_out'),
-                        'autor': modificado_por
+                        'autor': modificado_por,
                     })
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en partner.attendance. Error: {str(e)}")

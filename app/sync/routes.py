@@ -5,8 +5,8 @@ from werkzeug.security import generate_password_hash
 from datetime import datetime
 from app import db
 from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje # <--- AÑADE TAMBIÉN Asignacion y RegistroFichaje AQUÍ
-from app.services.sync_service import OdooSyncService
 from app.services.core_assignment_service import CoreAssignmentService
+from app.sync.dispatcher import get_sync_adapter
 from sqlalchemy import or_
 import xmlrpc.client
 from app.services.config_service import set_tenant_config, get_tenant_config
