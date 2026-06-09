@@ -1,4 +1,5 @@
 # app/celery_worker.py
+import os
 import secrets
 from celery import Celery
 from celery.schedules import crontab
@@ -12,6 +13,10 @@ from werkzeug.security import generate_password_hash
 app = create_app()
 celery = Celery(app.import_name, broker=app.config['CELERY_BROKER_URL'])
 celery.conf.update(app.config)
+# /app puede ser solo lectura (bind mount en dev); Beat necesita escribir su estado.
+celery.conf.beat_schedule_filename = os.environ.get(
+    'CELERY_BEAT_SCHEDULE_FILE', '/tmp/celerybeat-schedule'
+)
 
 with app.app_context():
     from app.utils.timezone_utils import get_app_timezone

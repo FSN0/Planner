@@ -99,7 +99,7 @@ services:
   celery_beat:
     build: .
     restart: unless-stopped
-    command: celery -A app.celery_worker.celery beat --loglevel=info
+    command: celery -A app.celery_worker.celery beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     volumes:
       - .:/app
     environment:
