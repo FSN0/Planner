@@ -4,6 +4,41 @@ import re
 from app import db
 from app.models import Obra, User, Company
 
+
+def _clean_odoo_note(note):
+    if note is False or note is None:
+        return None
+    stripped = str(note).strip()
+    return stripped or None
+
+
+def _merge_fichaje_notes(existing, new):
+    new_clean = _clean_odoo_note(new)
+    if not new_clean:
+        return _clean_odoo_note(existing)
+    existing_clean = _clean_odoo_note(existing)
+    if not existing_clean:
+        return new_clean
+    parts = [p.strip() for p in existing_clean.split(' | ') if p.strip()]
+    if new_clean not in parts:
+        parts.append(new_clean)
+    return ' | '.join(parts)
+
+
+def _format_fichaje_log_detail(obra_label, check_in_dt, check_out_dt, note=None):
+    from app.utils.timezone_utils import format_time
+
+    detail = (
+        f"El operario fichó en {obra_label}. "
+        f"Entrada: {format_time(check_in_dt) if check_in_dt else '-'} / "
+        f"Salida: {format_time(check_out_dt) if check_out_dt else '-'}"
+    )
+    note_clean = _clean_odoo_note(note)
+    if note_clean:
+        detail += f" Notas: {note_clean}"
+    return detail
+
+
 class OdooSyncService:
     def __init__(self):
         self.url = os.environ.get('ODOO_URL', '').strip()
@@ -387,7 +422,7 @@ class OdooSyncService:
         logger = logging.getLogger(__name__)
 
         try:
-            att_int = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.attendance', 'search_read', [domain], {'fields': ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out']})
+            att_int = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.attendance', 'search_read', [domain], {'fields': ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']})
             if not isinstance(att_int, list):
                 logger.error(f"🚨 [Odoo Sync] Error: hr.attendance devolvio no-lista. Abortando.")
                 return
@@ -397,13 +432,13 @@ class OdooSyncService:
                     # Extraemos la obra de forma segura por si Odoo manda False (Obra quitada por RRHH)
                     obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
-                    fichajes_crudos.append({'odoo_user': a['employee_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
+                    fichajes_crudos.append({'odoo_user': a['employee_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out'), 'note': _clean_odoo_note(a.get('note'))})
         except Exception as e:
             logger.error(f"🚨 [Odoo Sync] CRITICO: Fallo conexion hr.attendance: {str(e)}")
             return # ABORTA LA FUNCION SI FALLA LA CONEXION
 
         try:
-            att_ext = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'partner.attendance', 'search_read', [domain], {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out']})
+            att_ext = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'partner.attendance', 'search_read', [domain], {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']})
             if not isinstance(att_ext, list):
                 logger.error(f"🚨 [Odoo Sync] Error: partner.attendance devolvio no-lista. Abortando.")
                 return
@@ -413,7 +448,7 @@ class OdooSyncService:
                     # Extraemos la obra de forma segura por si Odoo manda False
                     obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
-                    fichajes_crudos.append({'odoo_user': a['partner_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out')})
+                    fichajes_crudos.append({'odoo_user': a['partner_id'][0], 'odoo_obra': obra_id, 'autor': modificado_por, 'check_in': a.get('check_in'), 'check_out': a.get('check_out'), 'note': _clean_odoo_note(a.get('note'))})
         
         
         except Exception as e:
@@ -431,6 +466,7 @@ class OdooSyncService:
                     fichajes_unicos[key]['check_in'] = f['check_in']
                 if f['check_out'] and (not fichajes_unicos[key]['check_out'] or f['check_out'] > fichajes_unicos[key]['check_out']):
                     fichajes_unicos[key]['check_out'] = f['check_out']
+                fichajes_unicos[key]['note'] = _merge_fichaje_notes(fichajes_unicos[key].get('note'), f.get('note'))
 
         # --- PRE-EVALUACIÓN: RELLENAR CON SIN REGISTRO ---
         todas_asig = Asignacion.query.filter_by(fecha=fecha_obj).all()
@@ -590,6 +626,7 @@ class OdooSyncService:
                 registro_vacio_exacto.obra_real_id = local_obra.id
                 registro_vacio_exacto.check_in = check_in_dt
                 registro_vacio_exacto.check_out = check_out_dt
+                registro_vacio_exacto.nota_odoo = f.get('note')
             else:
                 registro_existente = RegistroFichaje.query.filter_by(
                     user_id=local_user.id, fecha=fecha_obj, obra_real_id=local_obra.id
@@ -600,7 +637,8 @@ class OdooSyncService:
                     db.session.add(RegistroFichaje(
                         user_id=local_user.id, fecha=fecha_obj,
                         obra_planificada_id=nuevo_plan_id, obra_real_id=local_obra.id, estado=nuevo_estado,
-                        check_in=check_in_dt, check_out=check_out_dt 
+                        check_in=check_in_dt, check_out=check_out_dt,
+                        nota_odoo=f.get('note'),
                     ))
                     
                     # 2. LA CAJA NEGRA: Grabar en piedra el log físico
@@ -611,11 +649,7 @@ class OdooSyncService:
                         timestamp=check_in_dt or utc_now(),
                         category='fichaje_app',
                         action=f"Fichaje físico [{nuevo_estado.replace('_', ' ')}]",
-                        detail=(
-                            f"El operario fichó en {obra_label}. "
-                            f"Entrada: {format_time(check_in_dt) if check_in_dt else '-'} / "
-                            f"Salida: {format_time(check_out_dt) if check_out_dt else '-'}"
-                        ),
+                        detail=_format_fichaje_log_detail(obra_label, check_in_dt, check_out_dt, f.get('note')),
                         target_user_id=local_user.id,
                         target_date=fecha_obj
                     ))
@@ -625,6 +659,7 @@ class OdooSyncService:
                         registro_existente.obra_planificada_id = nuevo_plan_id
                     registro_existente.check_in = check_in_dt
                     registro_existente.check_out = check_out_dt
+                    registro_existente.nota_odoo = f.get('note')
 
             if crear_asignacion_magica:
                 existe_asig = Asignacion.query.filter_by(user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id).first()

@@ -336,6 +336,7 @@ class RegistroFichaje(db.Model):
     
     check_in = db.Column(db.DateTime, nullable=True)
     check_out = db.Column(db.DateTime, nullable=True)
+    nota_odoo = db.Column(db.Text, nullable=True)
     
     # Lo que decía tu aplicación
     obra_planificada_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
