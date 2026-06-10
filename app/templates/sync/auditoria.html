@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Auditoría de Fichajes{% endblock %}
-{% block body_class %}layout-admin bg-light{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% macro audit_sort_th(col, label, width='', align='', sort_type='') %}
+<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ label }}</span><i class="fas fa-sort sort-icon"></i></th>
+{% endmacro %}
 
 {% macro celda_notas(reg) %}
-<td class="align-middle">
+<td class="align-middle" data-sort-value="{{ (reg.nota_odoo or '')|lower }}">
     {% if reg.nota_odoo %}
         <span class="d-block text-muted nota-fichaje-bloque" title="{{ reg.nota_odoo }}">
             <i class="fas fa-sticky-note text-warning mr-1"></i>{{ reg.nota_odoo }}
@@ -18,162 +22,118 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
-<style>
-    /* --- ESTILOS ENTERPRISE --- */
-    .table-pro { font-size: 0.8125rem; color: #374151; margin-bottom: 0; }
-    .table-pro th { background-color: #f9fafb; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.6rem 1rem; border-top: none; border-bottom: 1px solid #e5e7eb; }
-    .table-pro td { padding: 0.5rem 1rem; vertical-align: middle !important; border-bottom: 1px solid #f3f4f6; }
-    .table-pro tbody tr:hover { background-color: #f3f4f6; }
-    
-    .link-user { color: #111827; font-weight: 600; text-decoration: none; transition: color 0.15s ease; }
-    .link-user:hover { color: #2563eb; text-decoration: underline; }
-    .link-obra { color: #111827; font-weight: 700; text-decoration: none; border-bottom: 1px dashed #d1d5db; padding-bottom: 1px; }
-    .link-obra:hover { color: #2563eb; border-color: #2563eb; text-decoration: none; }
-    
-    .badge-status { padding: 0.25rem 0.5rem; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; border-radius: 4px; }
-    .status-danger { background-color: #fee2e2; color: #991b1b; }
-    .status-warning { background-color: #fef3c7; color: #92400e; }
-    .status-info { background-color: #e0f2fe; color: #075985; }
-    
-    .btn-datatable { font-size: 0.75rem; padding: 0.2rem 0.5rem; font-weight: 600; border-radius: 4px; transition: all 0.2s; }
-    .card-modern { border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 1.5rem; }
-    .flow-arrow { color: #9ca3af; font-size: 0.8rem; margin: 0 0.5rem; }
-    
-    /* Efecto clic en cabeceras de acordeón */
-    .card-header[data-target] { cursor: pointer; transition: background 0.2s; user-select: none; }
-    .card-header[data-target]:hover { background-color: #f8fafc !important; }
-    .chevron-icon { transition: transform 0.3s ease; }
-    .collapsed .chevron-icon { transform: rotate(-90deg); }
-    
-    /* Pelotitas de Estado para el DataTables */
-    .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
-    .dot-success { background-color: #10b981; box-shadow: 0 0 5px rgba(16, 185, 129, 0.4); } 
-    .dot-auto { background-color: #34d399; } 
-    .dot-warning { background-color: #f59e0b; } 
-    .dot-info { background-color: #3b82f6; } 
-    .dot-secondary { background-color: #94a3b8; } 
-
-    /* Notificación Toast */
-    #customToast {
-        position: fixed; bottom: 20px; right: 20px; min-width: 250px; background: #111827; color: white;
-        padding: 12px 20px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-        transform: translateY(100px); opacity: 0; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        z-index: 10000; display: flex; align-items: center; gap: 12px; pointer-events: none;
-    }
-    #customToast.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
-
-    .nota-fichaje-bloque {
-        font-size: 0.75rem;
-        font-style: italic;
-        line-height: 1.35;
-        max-width: 100%;
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-    }
-
-</style>
 {% endblock %}
 
 {% block wrapper %}
-<div id="customToast">
-    <i class="fas fa-spinner fa-spin text-info" id="toastIcon"></i>
-    <span id="toastMsg" class="font-weight-bold" style="font-size: 0.9rem;">Procesando...</span>
-</div>
-
-<div class="admin-shell">
+<div class="admin-shell auditoria-page">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main p-4">
-    
-    <div class="d-flex justify-content-between align-items-end mb-4 border-bottom pb-3">
-        <div>
-            <h2 class="font-weight-bolder text-dark mb-1" style="font-size: 1.5rem; letter-spacing: -0.5px;">Auditoría de Fichajes</h2>
-            <p class="text-muted small mb-0">Gestión y trazabilidad de discrepancias operativas (Odoo vs Planificación).</p>
-        </div>
-        <div class="d-flex align-items-center">
-            
-            <select id="diasSync" class="form-control form-control-sm mr-2 border shadow-sm text-secondary font-weight-bold" style="width: auto; cursor: pointer;">
-                <option value="0">Solo Hoy</option>
-                <option value="7" selected>Últimos 7 días</option>
-                <option value="15">Últimos 15 días</option>
-                <option value="30">Último mes (30 días)</option>
-                <option value="60">Dos meses (60 días)</option>
-            </select>
+  <main class="admin-main admin-main--compact">
 
-            <button onclick="forzarSyncFichajes()" class="btn btn-sm btn-primary border shadow-sm font-weight-bold mr-2">
-                <i class="fas fa-sync-alt mr-1"></i> Sincronizar y Revisar
-            </button>
-            <a href="{{ url_for('sync.panel') }}" class="btn btn-sm btn-white border shadow-sm font-weight-bold text-muted">
-                <i class="fas fa-arrow-left mr-1"></i> Volver a Sync
-            </a>
-        </div>
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">Auditoría de fichajes</h1>
+        <span class="page-toolbar-count">Odoo vs planificación</span>
+      </div>
+      <div class="page-toolbar-actions">
+        <select id="diasSync" class="form-control custom-select mr-2">
+          <option value="0">Solo hoy</option>
+          <option value="7" selected>Últimos 7 días</option>
+          <option value="15">Últimos 15 días</option>
+          <option value="30">Último mes</option>
+          <option value="60">Dos meses</option>
+        </select>
+        <button onclick="forzarSyncFichajes()" class="btn-admin btn-admin-primary">
+          <i class="fas fa-sync-alt"></i> Sincronizar
+        </button>
+        <a href="{{ url_for('sync.panel') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-arrow-left"></i> Sync
+        </a>
+      </div>
     </div>
 
     {% set var_conflictos = pendientes | selectattr('estado', 'equalto', 'Conflicto') | list %}
     {% set var_paracaidistas = pendientes | selectattr('estado', 'equalto', 'Paracaidista') | list %}
     {% set var_ausencias = pendientes | selectattr('estado', 'equalto', 'Ausencia') | list %}
 
-    <h5 class="font-weight-bold mb-3 text-dark"><i class="fas fa-inbox text-primary mr-2"></i>Bandeja de Entrada (Acción Requerida)</h5>
-    
-    <div class="accordion" id="accordionPendientes">
+    <div class="auditoria-stats">
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseConflictos" title="Ir a desviaciones">
+        <i class="fas fa-random"></i> {{ var_conflictos|length }} desviaciones
+      </span>
+      <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseParacaidistas" title="Ir a sin planificar">
+        <i class="fas fa-parachute-box"></i> {{ var_paracaidistas|length }} sin planificar
+      </span>
+      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseAusencias" title="Ir a ausencias">
+        <i class="fas fa-user-slash"></i> {{ var_ausencias|length }} ausencias
+      </span>
+      {% if correcciones %}
+      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseCorrecciones" title="Ir a modificaciones Odoo">
+        <i class="fas fa-pen"></i> {{ correcciones|length }} cambios Odoo
+      </span>
+      {% endif %}
+      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseHistorial" title="Ir al histórico">
+        <i class="fas fa-archive"></i> {{ historial|length }} en histórico
+      </span>
+    </div>
 
-        <div class="card card-modern" style="overflow: hidden;">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
-                <h6 class="font-weight-bold text-danger mb-0" style="font-size: 0.9rem; text-transform: uppercase;">
-                    <i class="fas fa-random mr-2"></i> Desviaciones de Plan <span class="badge badge-danger ml-2">{{ var_conflictos|length }}</span>
+    <div class="accordion auditoria-accordion" id="accordionAuditoria">
+
+        <div class="auditoria-section card-modern card" style="overflow: hidden;">
+            <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
+                <h6 class="auditoria-section-title text-danger mb-0">
+                    <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-random"></i></span>
+                    Desviaciones de plan
+                    <span class="badge-count badge-count-danger">{{ var_conflictos|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
             <div id="collapseConflictos" class="collapse {% if var_conflictos %}show{% endif %}">
                 {% if var_conflictos %}
-                <div class="table-responsive">
-                    <table class="table table-pro" style="table-layout: fixed; width: 100%;">
+                <div class="audit-table-wrap">
+                    <table id="auditConflictosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
                         <thead>
                             <tr>
-                                <th style="width: 7%;">Día</th>
-                                <th style="width: 13%;">Operario</th>
-                                <th style="width: 18%;">Asignación Original</th>
-                                <th style="width: 18%;">Fichaje Odoo (Realidad)</th>
-                                <th style="width: 7%; text-align: center;">Entrada</th>
-                                <th style="width: 7%; text-align: center;">Salida</th>
-                                <th style="width: 15%;">Notas</th>
-                                <th style="width: 15%; text-align: right;">Resolución Rápida</th>
+                                {{ audit_sort_th(0, 'Día', '7%', '', 'date') }}
+                                {{ audit_sort_th(1, 'Operario', '13%') }}
+                                {{ audit_sort_th(2, 'Asignación original', '18%') }}
+                                {{ audit_sort_th(3, 'Fichaje Odoo', '18%') }}
+                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
+                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
+                                {{ audit_sort_th(6, 'Notas', '15%') }}
+                                {{ audit_sort_th(7, 'Resolución', '15%', 'right') }}
                             </tr>
                         </thead>
                         <tbody>
                             {% for reg in var_conflictos %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                <td>
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
-                                    <div class="text-muted" style="font-size: 0.7rem;">{{ reg.user.categoria_profesional or 'Ext.' }}</div>
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                                <td data-sort-value="{{ reg.user.lastname|lower }}">
+                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or 'Externo' }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
                                 </td>
-                                <td>
+                                <td data-sort-value="{{ reg.obra_planificada.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
                                         <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
                                     </div>
                                 </td>
-                                <td>
+                                <td data-sort-value="{{ reg.obra_real.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
                                         <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_real.nombre }}">{{ reg.obra_real.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
                                     </div>
                                 </td>
-                                <td class="text-center font-weight-bold text-success" style="font-size: 0.85rem;">
-                                    {{ reg.check_in|format_time if reg.check_in else '-' }}
+                                <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
+                                    {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
-                                <td class="text-center font-weight-bold text-danger" style="font-size: 0.85rem;">
-                                    {{ reg.check_out|format_time if reg.check_out else '-' }}
+                                <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
+                                    {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
                                 {{ celda_notas(reg) }}
-                                <td class="text-right">
-                                    <button class="btn btn-outline-danger btn-datatable mr-1" onclick="resolver({{ reg.id }}, 'mover')">Mover</button>
-                                   <button class="btn btn-outline-primary btn-datatable mr-1" onclick="resolver({{ reg.id }}, 'anadir')">+ Añadir</button>
-                                    <button class="btn btn-light border btn-datatable text-muted" onclick="resolver({{ reg.id }}, 'ignorar')">Ignorar</button>
+                                <td class="text-right no-row-nav" data-sort-value="">
+                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')">Mover</button>
+                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')">+ Añadir</button>
+                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')">Ignorar</button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -181,59 +141,61 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="p-4 text-center text-muted bg-white border-top">No hay desviaciones pendientes.</div>
+                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> No hay desviaciones pendientes</div>
                 {% endif %}
             </div>
         </div>
 
-        <div class="card card-modern" style="overflow: hidden;">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false">
-                <h6 class="font-weight-bold text-info mb-0" style="font-size: 0.9rem; text-transform: uppercase;">
-                    <i class="fas fa-parachute-box mr-2"></i> Fichajes Sin Planificar <span class="badge badge-info text-white ml-2">{{ var_paracaidistas|length }}</span>
+        <div class="auditoria-section card-modern card" style="overflow: hidden;">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false">
+                <h6 class="auditoria-section-title text-info mb-0">
+                    <span class="section-icon-wrap section-icon-wrap--info"><i class="fas fa-parachute-box"></i></span>
+                    Fichajes sin planificar
+                    <span class="badge-count badge-count-info">{{ var_paracaidistas|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
             <div id="collapseParacaidistas" class="collapse">
                 {% if var_paracaidistas %}
-                <div class="table-responsive">
-                    <table class="table table-pro" style="table-layout: fixed; width: 100%;">
+                <div class="audit-table-wrap">
+                    <table id="auditParacaidistasTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
                         <thead>
                             <tr>
-                                <th style="width: 7%;">Día</th>
-                                <th style="width: 13%;">Operario</th>
-                                <th style="width: 11%;">Estado Anterior</th>
-                                <th style="width: 20%;">Fichaje Odoo (Realidad)</th>
-                                <th style="width: 7%; text-align: center;">Entrada</th>
-                                <th style="width: 7%; text-align: center;">Salida</th>
-                                <th style="width: 15%;">Notas</th>
-                                <th style="width: 20%; text-align: right;">Resolución Rápida</th>
+                                {{ audit_sort_th(0, 'Día', '7%', '', 'date') }}
+                                {{ audit_sort_th(1, 'Operario', '13%') }}
+                                {{ audit_sort_th(2, 'Estado anterior', '11%') }}
+                                {{ audit_sort_th(3, 'Fichaje Odoo', '20%') }}
+                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
+                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
+                                {{ audit_sort_th(6, 'Notas', '15%') }}
+                                {{ audit_sort_th(7, 'Resolución', '20%', 'right') }}
                             </tr>
                         </thead>
                         <tbody>
                             {% for reg in var_paracaidistas %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                <td>
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                                <td data-sort-value="{{ reg.user.lastname|lower }}">
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
                                 </td>
-                                <td><span class="text-muted font-italic" style="font-size: 0.75rem;">Libre / Inercia</span></td>
-                                <td>
+                                <td data-sort-value="libre"><span class="text-muted font-italic" style="font-size: 0.75rem;">Libre / Inercia</span></td>
+                                <td data-sort-value="{{ reg.obra_real.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
                                         <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_real.nombre }}">{{ reg.obra_real.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
                                     </div>
                                 </td>
-                                <td class="text-center font-weight-bold text-success" style="font-size: 0.85rem;">
-                                    {{ reg.check_in|format_time if reg.check_in else '-' }}
+                                <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
+                                    {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
-                                <td class="text-center font-weight-bold text-danger" style="font-size: 0.85rem;">
-                                    {{ reg.check_out|format_time if reg.check_out else '-' }}
+                                <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
+                                    {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
                                 {{ celda_notas(reg) }}
-                                <td class="text-right">
-                                    <button class="btn btn-outline-primary btn-datatable mr-1" onclick="resolver({{ reg.id }}, 'anadir')" title="Asignar oficialmente a esta obra">Aceptar</button>
-                                    <button class="btn btn-light border btn-datatable text-muted" onclick="resolver({{ reg.id }}, 'ignorar')" title="Ocultar esta alerta">Ignorar</button>
+                                <td class="text-right no-row-nav" data-sort-value="">
+                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="Asignar oficialmente a esta obra">Aceptar</button>
+                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="Ocultar esta alerta">Ignorar</button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -241,53 +203,54 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="p-4 text-center text-muted bg-white border-top">No hay fichajes sin planificar.</div>
+                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> No hay fichajes sin planificar</div>
                 {% endif %}
             </div>
         </div>
 
-        <div class="card card-modern" style="overflow: hidden;">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false">
-                <h6 class="font-weight-bold text-warning mb-0" style="color: #d97706 !important; font-size: 0.9rem; text-transform: uppercase;">
-                    <i class="fas fa-user-ninja mr-2"></i> Ausencias <span class="badge badge-warning text-dark ml-2">{{ var_ausencias|length }}</span>
+        <div class="auditoria-section card-modern card" style="overflow: hidden;">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false">
+                <h6 class="auditoria-section-title mb-0" style="color: #d97706;">
+                    <span class="section-icon-wrap section-icon-wrap--warning"><i class="fas fa-user-slash"></i></span>
+                    Ausencias
+                    <span class="badge-count badge-count-warning">{{ var_ausencias|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
             <div id="collapseAusencias" class="collapse">
                 {% if var_ausencias %}
-                <div class="table-responsive">
-                    <table class="table table-pro" style="table-layout: fixed; width: 100%;">
+                <div class="audit-table-wrap">
+                    <table id="auditAusenciasTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
                         <thead>
                             <tr>
-                                <th style="width: 7%;">Día</th>
-                                <th style="width: 15%;">Operario</th>
-                                <th style="width: 28%;">Asignación Original</th>
-                                <th style="width: 12%;">Problema</th>
-                                <th style="width: 15%;">Notas</th>
-                                <th style="width: 23%; text-align: right;">Resolución Rápida</th>
+                                {{ audit_sort_th(0, 'Día', '7%', '', 'date') }}
+                                {{ audit_sort_th(1, 'Operario', '15%') }}
+                                {{ audit_sort_th(2, 'Asignación original', '28%') }}
+                                {{ audit_sort_th(3, 'Problema', '12%') }}
+                                {{ audit_sort_th(4, 'Notas', '15%') }}
+                                {{ audit_sort_th(5, 'Resolución', '23%', 'right') }}
                             </tr>
                         </thead>
                         <tbody>
                             {% for reg in var_ausencias %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                <td>
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                                <td data-sort-value="{{ reg.user.lastname|lower }}">
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
                                 </td>
-                                <td>
+                                <td data-sort-value="{{ reg.obra_planificada.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
                                         <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
                                     </div>
                                 </td>
-                                <td><span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> Sin registro Odoo</span></td>
+                                <td data-sort-value="ausencia"><span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> Sin registro Odoo</span></td>
                                 {{ celda_notas(reg) }}
-                                <td class="text-right">
-
-                                    <button class="btn btn-outline-danger btn-datatable mr-1" onclick="resolver({{ reg.id }}, 'confirmar_ausencia')" title="Falta real (Mantiene la planificación)">Ausencia</button>
-                                    <button class="btn btn-outline-warning btn-datatable text-dark mr-1" onclick="resolver({{ reg.id }}, 'borrar_planificacion')" title="Elimina la planificación asignada para este día">Falta</button>
-                                    <button class="btn btn-light border btn-datatable text-muted" onclick="resolver({{ reg.id }}, 'ignorar')" title="Oculta esta alerta sin realizar cambios">Ignorar</button>
+                                <td class="text-right no-row-nav" data-sort-value="">
+                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'confirmar_ausencia')" title="Falta real (Mantiene la planificación)">Ausencia</button>
+                                    <button class="btn btn-outline-warning btn-audit text-dark mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'borrar_planificacion')" title="Elimina la planificación asignada para este día">Falta</button>
+                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="Oculta esta alerta sin realizar cambios">Ignorar</button>
 
                                 </td>
                             </tr>
@@ -296,105 +259,109 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="p-4 text-center text-muted bg-white border-top">No hay ausencias registradas.</div>
+                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> No hay ausencias registradas</div>
                 {% endif %}
             </div>
         </div>
 
-    </div>
-
-    {% if correcciones %}
-    <h5 class="font-weight-bold mb-3 mt-4 text-dark"><i class="fas fa-exclamation-triangle text-warning mr-2"></i>Modificaciones Odoo (RRHH)</h5>
-    <div class="card card-modern mb-4 border-warning" style="border-left: 4px solid #f59e0b;">
-        <div class="table-responsive">
-            <table id="correccionesTable" class="table table-pro w-100 mb-0 table-hover">
-                <thead style="background-color: #fffbeb;">
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Operario</th>
-                        <th>Acción Odoo</th>
-                        <th>Antes (Fichaje Original)</th>
-                        <th>Después (Modificación)</th>
-                        <th>Estado Previo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for reg in correcciones %}
-                    {% set datos = reg.notas_resolucion.split('||') if reg.notas_resolucion else [] %}
-                    
-                    <tr class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
-                        <td data-sort="{{ reg.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark align-middle">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                        
-                        <td class="align-middle">
-                            <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user font-weight-bold text-primary">
-                                {{ reg.user.name }} {{ reg.user.lastname }}
-                            </a>
-                        </td>
-                        
-                        {% if datos|length >= 8 %}
-                            
-                            <td class="align-middle">
-                                {% if datos[6] == 'Borrado en Odoo' %}
-                                    <span class="badge badge-danger">{{ datos[6] }}</span>
-                                {% else %}
-                                    <span class="badge badge-warning text-dark">{{ datos[6] }}</span>
-                                {% endif %}
-                            </td>
-
-                            <td class="align-middle">
-                                <a href="{{ url_for('admin.obra_panel', obra_id=datos[0]) }}" class="text-secondary" style="text-decoration: line-through;">
-                                    <strong>{{ datos[1] }}</strong> - {{ datos[2] }}
-                                </a>
-                            </td>
-
-                            <td class="align-middle">
-                                {% if datos[3] != "" %}
-                                    <a href="{{ url_for('admin.obra_panel', obra_id=datos[3]) }}" class="font-weight-bold text-success">
-                                        <strong>{{ datos[4] }}</strong> - {{ datos[5] }}
+        {% if correcciones %}
+        <div class="auditoria-section card-modern card" style="overflow: hidden;">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseCorrecciones" role="button" aria-expanded="false">
+                <h6 class="auditoria-section-title mb-0" style="color: #c2410c;">
+                    <span class="section-icon-wrap section-icon-wrap--odoo"><i class="fas fa-pen-fancy"></i></span>
+                    Modificaciones Odoo (RRHH)
+                    <span class="badge-count badge-count-odoo">{{ correcciones|length }}</span>
+                </h6>
+                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+            </div>
+            <div id="collapseCorrecciones" class="collapse">
+                <div class="audit-table-wrap">
+                    <table id="correccionesTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+                        <thead>
+                            <tr>
+                                {{ audit_sort_th(0, 'Fecha', '', '', 'date') }}
+                                {{ audit_sort_th(1, 'Operario') }}
+                                {{ audit_sort_th(2, 'Acción Odoo') }}
+                                {{ audit_sort_th(3, 'Antes') }}
+                                {{ audit_sort_th(4, 'Después') }}
+                                {{ audit_sort_th(5, 'Estado previo') }}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reg in correcciones %}
+                            {% set datos = reg.notas_resolucion.split('||') if reg.notas_resolucion else [] %}
+                            <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                                <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark align-middle">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                                <td class="align-middle" data-sort-value="{{ reg.user.lastname|lower }}">
+                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
+                                        <i class="fas fa-user text-muted mr-1" style="font-size:0.65rem;"></i>{{ reg.user.name }} {{ reg.user.lastname }}
                                     </a>
+                                </td>
+                                {% if datos|length >= 8 %}
+                                <td class="align-middle">
+                                    {% if datos[6] == 'Borrado en Odoo' %}
+                                        <span class="badge-soft badge-soft-red"><i class="fas fa-trash-alt mr-1"></i>{{ datos[6] }}</span>
+                                    {% else %}
+                                        <span class="badge-soft badge-soft-amber"><i class="fas fa-edit mr-1"></i>{{ datos[6] }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="align-middle">
+                                    <a href="{{ url_for('admin.obra_panel', obra_id=datos[0]) }}" class="link-obra text-muted" style="text-decoration: line-through;">
+                                        {{ datos[1] }} — {{ datos[2] }}
+                                    </a>
+                                </td>
+                                <td class="align-middle">
+                                    {% if datos[3] != "" %}
+                                        <a href="{{ url_for('admin.obra_panel', obra_id=datos[3]) }}" class="link-obra">
+                                            {{ datos[4] }} — {{ datos[5] }}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-danger font-weight-bold"><i class="fas fa-times mr-1"></i>Sin obra</span>
+                                    {% endif %}
+                                </td>
+                                <td class="align-middle text-muted small font-weight-bold">{{ datos[7] }}</td>
                                 {% else %}
-                                    <span class="text-danger font-weight-bold"><i class="fas fa-times mr-1"></i>Ninguna (Ausencia)</span>
+                                <td colspan="4" class="align-middle text-muted">{{ reg.notas_resolucion }}</td>
                                 {% endif %}
-                            </td>
-
-                            <td class="align-middle text-muted small font-weight-bold">
-                                {{ datos[7] }}
-                            </td>
-
-                        {% else %}
-                            <td colspan="4" class="align-middle text-muted">{{ reg.notas_resolucion }}</td>
-                        {% endif %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-    </div>
-    {% endif %}
+        {% endif %}
 
-    <h5 class="font-weight-bold mb-3 mt-5 text-secondary"><i class="fas fa-database text-secondary mr-2"></i>Histórico Global de Decisiones</h5>
-
-    <div class="card card-modern p-4 mb-5">
-        <div class="table-responsive">
-            <table id="historialTable" class="table table-pro table-hover w-100" style="table-layout: fixed; width: 100%;">
+        <div class="auditoria-section card-modern card mb-4" style="overflow: hidden;">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseHistorial" role="button" aria-expanded="false">
+                <h6 class="auditoria-section-title mb-0 text-secondary">
+                    <span class="section-icon-wrap section-icon-wrap--archive"><i class="fas fa-history"></i></span>
+                    Histórico global
+                    <span class="badge-count badge-count-muted">{{ historial|length }}</span>
+                </h6>
+                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+            </div>
+            <div id="collapseHistorial" class="collapse">
+                <div class="audit-table-wrap">
+            <table id="historialTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
                 <thead>
                     <tr>
-                        <th style="width: 6%;">Fecha</th>
-                        <th style="width: 13%;">Operario</th>
-                        <th style="width: 11%;">Estado Final</th>
-                        <th style="width: 26%; text-align: center;">Trazabilidad de Movimiento</th>
-                        <th style="width: 6%; text-align: center;">Entrada</th>
-                        <th style="width: 6%; text-align: center;">Salida</th>
-                        <th style="width: 14%;">Notas</th>
-                        <th style="width: 9%;">Auditado Por</th>
-                        <th style="width: 9%;">Hora Reg.</th>
+                        {{ audit_sort_th(0, 'Fecha', '6%', '', 'date') }}
+                        {{ audit_sort_th(1, 'Operario', '13%') }}
+                        {{ audit_sort_th(2, 'Estado final', '11%') }}
+                        {{ audit_sort_th(3, 'Trazabilidad', '26%', 'center') }}
+                        {{ audit_sort_th(4, 'Entrada', '6%', 'center', 'time') }}
+                        {{ audit_sort_th(5, 'Salida', '6%', 'center', 'time') }}
+                        {{ audit_sort_th(6, 'Notas', '14%') }}
+                        {{ audit_sort_th(7, 'Auditado por', '9%') }}
+                        {{ audit_sort_th(8, 'Hora reg.', '9%', '', 'date') }}
                     </tr>
                 </thead>
                 <tbody>
                     {% for reg in historial %}
-                    <tr class="fila-fichaje-auditoria" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
-                        <td data-sort="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                        <td>
+                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                        <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                        <td data-sort-value="{{ reg.user.lastname|lower }}">
                             <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
                                 {{ reg.user.name }} {{ reg.user.lastname }}
                             </a>
@@ -450,11 +417,11 @@
                                 </div>
                             </div>
                         </td>
-                        <td class="text-center font-weight-bold text-success" style="font-size: 0.8rem;">
-                            {{ reg.check_in|format_time if reg.check_in else '-' }}
+                        <td class="text-center">
+                            {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                         </td>
-                        <td class="text-center font-weight-bold text-danger" style="font-size: 0.8rem;">
-                            {{ reg.check_out|format_time if reg.check_out else '-' }}
+                        <td class="text-center">
+                            {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                         </td>
                         {{ celda_notas(reg) }}
                         <td>
@@ -466,14 +433,22 @@
                                 <span class="text-muted font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-robot text-primary mr-1"></i>Sistema</span>
                             {% endif %}
                         </td>
-                        <td class="text-muted" style="font-size: 0.75rem;">
-                            {{ reg.fecha_auditoria.strftime('%d/%m/%y %H:%M') }}
+                        <td class="text-muted" data-order="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '0' }}" data-sort-value="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '' }}">
+                            {{ reg.fecha_auditoria.strftime('%d/%m/%y %H:%M') if reg.fecha_auditoria else '—' }}
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+                </div>
+            </div>
         </div>
+
+    </div>{# /accordionAuditoria #}
+
+    <div id="customToast">
+        <i class="fas fa-spinner fa-spin text-info" id="toastIcon"></i>
+        <span id="toastMsg" class="font-weight-bold" style="font-size: 0.85rem;">Procesando…</span>
     </div>
 
   </main>
@@ -491,43 +466,81 @@
 <script src="{{ url_for('static', filename='js/person_day_timeline.js') }}"></script>
 
 <script>
-$(document).ready(function() {
-    // Acordeón manual (evita doble toggle por jQuery/Bootstrap duplicados en base.html)
-    $('#accordionPendientes').on('click', '.card-header[data-target]', function () {
-        const $header = $(this);
-        const $target = $($header.data('target'));
-        const isOpen = $target.hasClass('show');
+var dtCorrecciones = null;
+var dtHistorial = null;
 
-        if (isOpen) {
-            $target.collapse('hide');
-        } else {
-            $('#accordionPendientes .collapse.show').collapse('hide');
-            $target.collapse('show');
+function initAuditDataTable(tableId, options) {
+    var $el = $('#' + tableId);
+    if (!$el.length || $.fn.DataTable.isDataTable($el)) return;
+    $el.find('thead th[onclick]').removeAttr('onclick');
+    var defaults = {
+        order: [[0, 'desc']],
+        ordering: true,
+        columnDefs: [{ targets: 0, type: 'num' }],
+        language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json' }
+    };
+    if (tableId === 'historialTable') {
+        defaults.columnDefs.push({ targets: 8, type: 'num' });
+    }
+    return $el.DataTable($.extend(true, {}, defaults, options || {}));
+}
+
+function openAuditoriaSection(collapseSelector) {
+    var $collapse = $(collapseSelector);
+    if (!$collapse.length) return;
+    var $section = $collapse.closest('.auditoria-section');
+    var alreadyOpen = $collapse.hasClass('show');
+    if (!alreadyOpen) $collapse.collapse('show');
+    setTimeout(function() {
+        if ($section.length) {
+            $section[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, alreadyOpen ? 0 : 400);
+}
+
+$(document).ready(function() {
+    ['auditConflictosTable', 'auditParacaidistasTable', 'auditAusenciasTable'].forEach(function(id) {
+        if (document.getElementById(id)) applyDefaultDateSort(id, 0);
+    });
+
+    $('.auditoria-stat-link').on('click', function() {
+        openAuditoriaSection($(this).data('audit-target'));
+    }).on('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openAuditoriaSection($(this).data('audit-target'));
         }
     });
-    $('#accordionPendientes').on('hidden.bs.collapse shown.bs.collapse', '.collapse', function () {
-        const $header = $(this).prev('.card-header');
+
+    // Acordeón: cada sección se abre/cierra de forma independiente
+    $('#accordionAuditoria').on('click', '.auditoria-section-header[data-target]', function (e) {
+        e.preventDefault();
+        const $header = $(this);
+        const $target = $($header.data('target'));
+        $target.collapse('toggle');
+    });
+    $('#accordionAuditoria').on('hidden.bs.collapse shown.bs.collapse', '.collapse', function () {
+        const $header = $(this).prev('.auditoria-section-header');
         const isOpen = $(this).hasClass('show');
         $header.toggleClass('collapsed', !isOpen);
         $header.attr('aria-expanded', isOpen ? 'true' : 'false');
     });
 
-    // --- NUEVA TABLA: Correcciones RRHH ---
-    $('#correccionesTable').DataTable({
-        "order": [[ 0, "desc" ]], // Ordenar por fecha por defecto
-        "language": {
-            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json" // Traducido al español
-        },
-        "pageLength": 10, // Mostrar 10 registros por defecto
-        "lengthMenu": [[5, 10, 25, 50, -1], [5, 10, 25, 50, "Todos"]] // Opciones del desplegable
+    $('#collapseCorrecciones').on('shown.bs.collapse', function() {
+        if (!dtCorrecciones) {
+            dtCorrecciones = initAuditDataTable('correccionesTable', {
+                pageLength: 10,
+                lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, 'Todos']]
+            });
+        }
     });
-    $('#historialTable').DataTable({
-        "order": [[ 0, "desc" ]],
-        "language": {
-            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
-        },
-        "pageLength": 50,
-        "lengthMenu": [[25, 50, 100, 250, -1], [25, 50, 100, 250, "Todos"]]
+    $('#collapseHistorial').on('shown.bs.collapse', function() {
+        if (!dtHistorial) {
+            dtHistorial = initAuditDataTable('historialTable', {
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Todos']]
+            });
+        }
     });
 });
 
@@ -566,9 +579,9 @@ function resolver(id, accion) {
             setTimeout(() => {
                 if(row) {
                     // --- MAGIA PARA BAJAR EL CONTADOR ---
-                    let card = row.closest('.card-modern'); // Buscamos la caja del acordeón
+                    let card = row.closest('.card-modern');
                     if(card) {
-                        let badge = card.querySelector('.badge'); // Buscamos la burbujita con el número
+                        let badge = card.querySelector('.badge-count, .badge');
                         if(badge) {
                             let count = parseInt(badge.innerText);
                             if(!isNaN(count) && count > 0) {

@@ -13,6 +13,7 @@ class UniversalCalendarManager {
         this.showFichajes = config.showFichajes || false;
         this.readonly = config.readonly || false;
         this.partialSelectionMode = config.partialSelectionMode || false;
+        this.compact = config.compact || false;
 
         this.calendar = null;
         this.ghostEventId = 'ghost_block';
@@ -152,8 +153,8 @@ class UniversalCalendarManager {
             locale: 'es',
             editable: !this.readonly, 
             selectable: !this.readonly, 
-            height: 'auto', 
-            
+            height: 'auto',
+            dayMaxEventRows: _this.compact ? 2 : true,
             eventOrder: '-isGhost,start,title',
             events: `/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}` + (this.showFichajes ? '&show_fichajes=1' : ''),
             
@@ -184,8 +185,12 @@ class UniversalCalendarManager {
             },
 
             eventContent: function(arg) {
+                const evFont = _this.compact ? '0.58rem' : '0.85rem';
+                const evPad = _this.compact ? '0 2px' : '4px';
+                const evLine = _this.compact ? '1.05' : '1.2';
+                const dotSize = _this.compact ? 5 : 10;
                 if (arg.event.id === _this.ghostEventId) {
-                    return { html: `<div class="p-1 text-center shadow-sm rounded" style="font-size:0.85rem; line-height:1.2; font-weight:bold; width:100%; color:#111827; background:#e2e8f0; border:2px dashed #94a3b8;"><i class="fas fa-plus mr-1"></i>${arg.event.title}</div>` };
+                    return { html: `<div class="text-center shadow-sm rounded" style="font-size:${evFont}; line-height:${evLine}; font-weight:bold; width:100%; padding:${evPad}; color:#111827; background:#e2e8f0; border:1px dashed #94a3b8;"><i class="fas fa-plus mr-1"></i>${arg.event.title}</div>` };
                 }
 
                 let innerHtml = '';
@@ -197,10 +202,10 @@ class UniversalCalendarManager {
                     else if (estado === 'Resuelto_Ausencia' || estado === 'Conflicto' || estado === 'Paracaidista') { dotClass = '#ef4444'; titleMsg = 'Conflicto/Desviación'; }
                     else if (estado.startsWith('Resuelto')) { dotClass = '#3b82f6'; titleMsg = 'Resuelto Manual'; }
 
-                    innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:${dotClass}; margin-right:5px; flex-shrink:0;"></span>`;
+                    innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background-color:${dotClass}; margin-right:3px; flex-shrink:0;"></span>`;
                 }
                 innerHtml += `<span class="text-truncate">${arg.event.title}</span>`;
-                return { html: `<div class="p-1 d-flex align-items-center" style="font-size:0.85rem; line-height:1.2; overflow:hidden; width:100%; color:${arg.event.textColor || 'inherit'};">${innerHtml}</div>` };
+                return { html: `<div class="d-flex align-items-center" style="font-size:${evFont}; line-height:${evLine}; overflow:hidden; width:100%; padding:${evPad}; color:${arg.event.textColor || 'inherit'};">${innerHtml}</div>` };
             },
 
             eventDidMount: function(info) {

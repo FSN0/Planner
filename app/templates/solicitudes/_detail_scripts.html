@@ -23,12 +23,12 @@
  A. FUNCIONES GLOBALES DE VISIBILIDAD DE TABLA
  ========================================== */
 function refreshTableFilters() {
-  var table = document.querySelector('.filterable-table');
+  var table = document.getElementById('candidatesTable') || document.getElementById('candidatesReadTable');
   if (!table) return;
 
   var btnBusy = document.getElementById('btnToggleBusy');
   var btnPartial = document.getElementById('btnTogglePartial');
-  var showBusy = btnBusy ? (btnBusy.getAttribute('data-state') === 'visible') : false;
+  var showBusy = btnBusy ? (btnBusy.getAttribute('data-state') === 'visible') : true;
   var showPartial = btnPartial ? (btnPartial.getAttribute('data-state') === 'visible') : true;
 
   var inputs = table.querySelectorAll('.table-filter-input');
@@ -39,8 +39,9 @@ function refreshTableFilters() {
       if (val) activeFilters[col] = val;
   });
 
-  var rows = table.querySelectorAll('tbody tr');
+  var rows = table.querySelectorAll('tbody tr.candidate-row');
   rows.forEach(function (row) {
+      if (row.classList.contains('oculto-por-filtro')) return;
       var visible = true;
       Object.keys(activeFilters).forEach(function (colIdx) {
           var cell = row.cells[parseInt(colIdx, 10)];
@@ -62,25 +63,19 @@ function toggleRowVisibility(type) {
   btn.setAttribute('data-state', newState);
 
   if (type === 'busy') {
-      if (newState === 'visible') {
-          btn.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar Ocupados';
-          btn.classList.replace('btn-outline-secondary', 'btn-secondary');
-      } else {
-          btn.innerHTML = '<i class="fas fa-eye"></i> Ver Ocupados';
-          btn.classList.replace('btn-secondary', 'btn-outline-secondary');
-      }
+      btn.innerHTML = newState === 'visible'
+          ? '<i class="fas fa-eye-slash"></i> Ocupados'
+          : '<i class="fas fa-eye"></i> Ocupados';
   } else if (type === 'partial') {
-      if (newState === 'visible') {
-          btn.innerHTML = '<i class="fas fa-eye-slash"></i> Ocultar Parciales';
-          btn.classList.replace('btn-outline-warning', 'btn-warning');
-          btn.classList.remove('text-dark');
-      } else {
-          btn.innerHTML = '<i class="fas fa-eye"></i> Ver Parciales';
-          btn.classList.replace('btn-warning', 'btn-outline-warning');
-          btn.classList.add('text-dark');
-      }
+      btn.innerHTML = newState === 'visible'
+          ? '<i class="fas fa-eye-slash"></i> Parciales'
+          : '<i class="fas fa-eye"></i> Parciales';
   }
-  refreshTableFilters();
+  if (typeof window.aplicarFiltrosCandidatos === 'function') {
+      window.aplicarFiltrosCandidatos();
+  } else {
+      refreshTableFilters();
+  }
 }
 
 var selectAll = document.getElementById('selectAll');
@@ -313,7 +308,8 @@ document.addEventListener('DOMContentLoaded', function() {
       updatePartialButtonBadge();
 
       window.resumenCalendar = new UniversalCalendarManager('solicitud-obra-calendar', {
-          context: context, id: id, mode: mode, readonly: true, partialSelectionMode: isSolicitudActiva, 
+          context: context, id: id, mode: mode, readonly: true, compact: true,
+          partialSelectionMode: isSolicitudActiva,
           callbacks: { onDateToggle: function(dateStr) { togglePartialDate(dateStr); } }
       });
 
@@ -346,8 +342,13 @@ document.addEventListener('DOMContentLoaded', function() {
   window.switchCalendarView = function(newContext, newId, newMode) {
       let btnObra = document.getElementById('btn-view-obra'); let btnWorker = document.getElementById('btn-view-worker');
       if (btnObra && btnWorker) {
-          if (newContext === 'obra') { btnObra.className = "btn btn-primary active btn-sm"; btnWorker.className = "btn btn-outline-secondary btn-sm"; } 
-          else { btnWorker.className = "btn btn-primary active btn-sm"; btnObra.className = "btn btn-outline-secondary btn-sm"; }
+          if (newContext === 'obra') {
+              btnObra.className = "btn-admin btn-admin-primary active";
+              btnWorker.className = "btn-admin btn-admin-ghost";
+          } else {
+              btnWorker.className = "btn-admin btn-admin-primary active";
+              btnObra.className = "btn-admin btn-admin-ghost";
+          }
       }
       setTimeout(function() { initSummaryCalendar(newContext, newId, newMode); }, 50);
   };

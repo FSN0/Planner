@@ -4,421 +4,367 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    /* Ajustes para pestañas y tabla compacta */
-    .nav-tabs { border-bottom: 1px solid #e5e7eb; margin-bottom: 1rem; }
-    .nav-tabs .nav-link { color: #6b7280 !important; border: none; font-size: 0.9rem; background: transparent !important; }
-    .nav-tabs .nav-link.active { color: #111827 !important; border-bottom: 2px solid #22c55e !important; font-weight: 700 !important; }
-    
-    .table-compact th, .table-compact td { padding: 0.25rem 0.5rem !important; font-size: 0.8rem; vertical-align: middle !important; }
-    .filter-input { width: 100%; font-size: 0.7rem; padding: 2px 4px; border: 1px solid #d1d5db; border-radius: 3px; background-color: #f9fafb; }
-
-    /* Estilos para cabeceras ordenables */
-    .th-sortable { cursor: pointer; transition: background 0.2s; white-space: nowrap; }
-    .th-sortable:hover { background-color: #e5e7eb !important; }
-    .sort-icon { font-size: 0.75rem; vertical-align: middle; }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    <header class="admin-header mb-3">
-        <div class="d-flex justify-content-between align-items-end">
-            <div>
-                <h1 class="admin-header-title h5 mb-0">Personal</h1>
-                <p class="admin-header-subtitle mb-0 small text-muted">Directorio de empleados internos y externos.</p>
-            </div>
-            <div>
-                <a href="{{ url_for('admin.create_user', tab='internos') }}" class="btn btn-xs btn-primary"><i class="fas fa-plus"></i> Nuevo</a>
-                <a href="{{ url_for('admin.import_users') }}" class="btn btn-xs btn-outline-secondary ml-1"><i class="fas fa-file-excel"></i> Importar</a>
-            </div>
-        </div>
-    </header>
+  <main class="admin-main admin-main--compact">
 
-    <section class="admin-panel p-0">
-        <div class="admin-panel-body pt-2">
-            <ul class="nav nav-tabs" id="personalTab" role="tablist">
-                <li class="nav-item"><a class="nav-link active" id="internos-tab" data-toggle="tab" href="#internos">Internos</a></li>
-                <li class="nav-item"><a class="nav-link" id="operarios-tab" data-toggle="tab" href="#operarios">Externos</a></li>
-            </ul>
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">Personal</h1>
+        <span class="page-toolbar-count">{{ internos|length }} int. · {{ (operarios_activos|length) + (operarios_pendientes|length) }} ext.</span>
+      </div>
+      <div class="page-toolbar-actions">
+        <a href="{{ url_for('admin.create_user', tab='internos') }}" class="btn-admin btn-admin-primary">
+          <i class="fas fa-plus"></i> Nuevo
+        </a>
+        <a href="{{ url_for('admin.import_users') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-file-import"></i> Importar
+        </a>
+      </div>
+    </div>
 
-            <div class="tab-content px-0 pb-0">
-                {# ========================================================= #}
-                {# TAB INTERNOS #}
-                {# ========================================================= #}
-                <div class="tab-pane fade show active" id="internos">
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-hover table-compact mb-0" id="tableInternos">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th class="th-sortable" onclick="sortTable('tableInternos', 0)">Nombre <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableInternos', 1)">Email <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableInternos', 2)">Rol <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableInternos', 3)">Categoría <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableInternos', 4)">Valoración <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableInternos', 5)">Estado <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="text-right">Acción</th>
-                                </tr>
-                                <tr class="bg-white">
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 0, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 1, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 2, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 3, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 4, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableInternos', 5, this.value)" placeholder="Filtro..."></th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for user in internos %}
-                                <tr>
-                                    <td><a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="text-dark font-weight-bold">{{ user.name }} {{ user.lastname }}</a></td>
-                                    <td>{{ user.email }}</td>
-                                    <td><span class="badge badge-light border">{{ user.role|upper }}</span></td>
-                                    
-                                    <td>
-                                        {% if user.categoria_profesional %}
-                                            <span class="d-block font-weight-bold text-dark">{{ user.categoria_profesional }}</span>
-                                        {% endif %}
-                                        {% if user.especialidad %}
-                                            <span class="d-block text-muted" style="font-size: 0.7rem;">{{ user.especialidad }}</span>
-                                        {% endif %}
-                                        {% if not user.categoria_profesional and not user.especialidad %}
-                                            <span class="text-muted small">-</span>
-                                        {% endif %}
-                                    </td>
+    <div id="bulk-internos" class="bulk-toolbar d-none">
+      <span class="bulk-toolbar-count"><span id="count-internos">0</span> seleccionados</span>
+      <div class="bulk-toolbar-actions">
+        <button type="button" class="btn-bulk btn-bulk-danger" onclick="bulkDeleteUsers('tableInternos', 'interno-checkbox')">
+          <i class="fas fa-trash"></i> Eliminar
+        </button>
+      </div>
+    </div>
 
-                                    {# CELDA VALORACIÓN INTERNOS CON DATA-SORT (CORREGIDO EL URL_FOR) #}
-                                    {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
-                                    {% set r_count = active_ratings|length %}
-                                    <td data-sort="{{ user.reputation_score if r_count > 0 else 0 }}">
-                                        <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" style="text-decoration: none; display: block;" title="Ver historial de valoraciones">
-                                            {% if r_count > 0 %}
-                                                <span class="font-weight-bold text-dark">
-                                                    <i class="fas fa-star text-warning mr-1"></i>{{ user.reputation_score }}
-                                                </span> 
-                                                <span class="text-muted small">({{ r_count }})</span>
-                                            {% else %}
-                                                <span class="text-muted small text-dark">- (0)</span>
-                                            {% endif %}
-                                        </a>
-                                    </td>
+    <div id="bulk-externos" class="bulk-toolbar d-none">
+      <span class="bulk-toolbar-count"><span id="count-externos">0</span> seleccionados</span>
+      <div class="bulk-toolbar-actions">
+        {% if view_mode == 'admin' %}
+        <button type="button" class="btn-bulk btn-bulk-warning" onclick="bulkDeactivateUsers('tableExternos', 'externo-checkbox')">
+          <i class="fas fa-ban"></i> Desactivar
+        </button>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <button type="button" class="btn-bulk btn-bulk-danger" onclick="bulkDeleteUsers('tableExternos', 'externo-checkbox')">
+          <i class="fas fa-trash"></i> Eliminar
+        </button>
+        {% endif %}
+      </div>
+    </div>
 
-                                    <td><span class="badge badge-{{ 'success' if user.active else 'secondary' }}">{{ 'Activo' if user.active else 'Inactivo' }}</span></td>
-                                    <td class="text-right">
-                                        <button type="button" class="btn btn-xs btn-outline-secondary reset-pwd-btn" 
-                                                data-userid="{{ user.id }}" 
-                                                data-username="{{ user.name }}"
-                                                title="Cambiar Contraseña">
-                                            <i class="fas fa-key"></i>
-                                        </button>
+    <section class="admin-panel admin-panel-flush admin-panel--no-header">
+      <ul class="nav admin-tabs-compact" id="personalTab" role="tablist">
+        <li class="nav-item">
+          <a class="nav-link active" id="internos-tab" data-toggle="tab" href="#internos" role="tab">
+            Internos <span class="tab-count">{{ internos|length }}</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" id="operarios-tab" data-toggle="tab" href="#operarios" role="tab">
+            Externos <span class="tab-count">{{ (operarios_activos|length) + (operarios_pendientes|length) }}</span>
+          </a>
+        </li>
+      </ul>
 
-                                        <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary" title="Editar">
-                                            <i class="fas fa-pencil-alt"></i>
-                                        </a>
-                                        
-                                        <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar usuario?');">
-                                            <button type="submit" class="btn btn-xs btn-outline-danger" title="Eliminar">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </form>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+      <div class="tab-content">
+        <div class="tab-pane fade show active" id="internos">
+          <div class="admin-table-scroll">
+            <table class="filterable-table admin-data-table mb-0" id="tableInternos">
+              <colgroup>
+                <col style="width: 3%">
+                <col style="width: 21%">
+                <col style="width: 22%">
+                <col style="width: 9%">
+                <col style="width: 17%">
+                <col style="width: 9%">
+                <col style="width: 9%">
+                <col class="col-actions-fixed">
+              </colgroup>
+              <thead>
+                <tr class="header-row">
+                  <th class="col-check"><input type="checkbox" id="selectAllInternos" title="Seleccionar todos"></th>
+                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Nombre</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Email</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Rol</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Categoría</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">Valor.</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="col-actions"></th>
+                </tr>
+                <tr class="filter-row">
+                  <th></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 1, this.value)" placeholder="…" title="Filtrar nombre"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 2, this.value)" placeholder="…" title="Filtrar email"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 3, this.value)" placeholder="…" title="Filtrar rol"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 4, this.value)" placeholder="…" title="Filtrar categoría"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 5, this.value)" placeholder="…" title="Filtrar valoración"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 6, this.value)" placeholder="…" title="Filtrar estado"></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for user in internos %}
+                <tr class="data-row">
+                  <td class="col-check text-center"><input type="checkbox" class="interno-checkbox" value="{{ user.id }}"></td>
+                  <td data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
+                    <a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="table-link-primary" title="{{ user.name }} {{ user.lastname }}">{{ user.name }} {{ user.lastname }}</a>
+                  </td>
+                  <td data-sort-value="{{ user.email|lower }}">{{ user.email }}</td>
+                  <td data-sort-value="{{ user.role|lower }}"><span class="badge-soft badge-soft-slate">{{ user.role|upper }}</span></td>
+                  <td data-sort-value="{{ (user.categoria_profesional or '')|lower }} {{ (user.especialidad or '')|lower }}">
+                    {% if user.categoria_profesional %}<span class="font-weight-bold">{{ user.categoria_profesional }}</span>{% endif %}
+                    {% if user.especialidad %}<span class="text-muted d-block" style="font-size:0.68rem;">{{ user.especialidad }}</span>{% endif %}
+                    {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
+                  </td>
+                  {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
+                  {% set r_count = active_ratings|length %}
+                  <td data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
+                    <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary" title="Ver valoraciones">
+                      {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ user.reputation_score }} <span class="text-muted">({{ r_count }})</span>{% else %}—{% endif %}
+                    </a>
+                  </td>
+                  <td data-sort-value="{{ 'activo' if user.active else 'inactivo' }}">
+                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> Activo</span>
+                    {% else %}<span class="badge-soft badge-soft-slate"><span class="status-dot gray"></span> Inactivo</span>{% endif %}
+                  </td>
+                  <td class="col-actions">
+                    <div class="table-actions">
+                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="Contraseña"><i class="fas fa-key"></i></button>
+                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="Editar"><i class="fas fa-pencil-alt"></i></a>
+                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar usuario?');">
+                        <button type="submit" class="btn-table-action btn-table-action--danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                      </form>
                     </div>
-                </div>
-
-                {# ========================================================= #}
-                {# TAB EXTERNOS #}
-                {# ========================================================= #}
-                <div class="tab-pane fade" id="operarios">
-                    <div class="table-responsive">
-                        <table class="table table-bordered table-hover table-compact mb-0" id="tableExternos">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th class="th-sortable" onclick="sortTable('tableExternos', 0)">Nombre <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableExternos', 1)">Empresa <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableExternos', 2)">DNI <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableExternos', 3)">Categoría <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableExternos', 4)">Valoración <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="th-sortable" onclick="sortTable('tableExternos', 5)">Estado <i class="fas fa-sort sort-icon ml-1 text-muted"></i></th>
-                                    <th class="text-right">Acción</th>
-                                </tr>
-                                <tr class="bg-white">
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 0, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 1, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 2, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 3, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 4, this.value)" placeholder="Filtro..."></th>
-                                    <th><input type="text" class="filter-input" onkeyup="filterTable('tableExternos', 5, this.value)" placeholder="Filtro..."></th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for user in operarios_activos + operarios_pendientes %}
-                                <tr>
-                                    <td><a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="text-dark font-weight-bold">{{ user.name }} {{ user.lastname }}</a></td>
-                                    <td>
-                                        {% if user.company_rel %}
-                                            {{ user.company_rel.nombre }}
-                                        {% else %}
-                                            <span class="text-danger">Sin Asignar</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ user.dni }}</td>
-                                    
-                                    <td>
-                                        {% if user.categoria_profesional %}
-                                            <span class="d-block font-weight-bold text-dark">{{ user.categoria_profesional }}</span>
-                                        {% endif %}
-                                        {% if user.especialidad %}
-                                            <span class="d-block text-muted" style="font-size: 0.7rem;">{{ user.especialidad }}</span>
-                                        {% endif %}
-                                        {% if not user.categoria_profesional and not user.especialidad %}
-                                            <span class="text-muted small">-</span>
-                                        {% endif %}
-                                    </td>
-
-                                    {# CELDA VALORACIÓN EXTERNOS CON DATA-SORT (CORREGIDO EL URL_FOR) #}
-                                    {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
-                                    {% set r_count = active_ratings|length %}
-                                    <td data-sort="{{ user.reputation_score if r_count > 0 else 0 }}">
-                                        <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" style="text-decoration: none; display: block;" title="Ver historial de valoraciones">
-                                            {% if r_count > 0 %}
-                                                <span class="font-weight-bold text-dark">
-                                                    <i class="fas fa-star text-warning mr-1"></i>{{ user.reputation_score }}
-                                                </span> 
-                                                <span class="text-muted small">({{ r_count }})</span>
-                                            {% else %}
-                                                <span class="text-muted small text-dark">- (0)</span>
-                                            {% endif %}
-                                        </a>
-                                    </td>
-
-                                    <td><span class="badge badge-{{ 'success' if user.active else 'warning' }}">{{ 'Activo' if user.active else 'Pendiente' }}</span></td>
-                                    <td class="text-right">
-                                        <button type="button" class="btn btn-xs btn-outline-secondary reset-pwd-btn" 
-                                                data-userid="{{ user.id }}" 
-                                                data-username="{{ user.name }}"
-                                                title="Cambiar Contraseña">
-                                            <i class="fas fa-key"></i>
-                                        </button>
-
-                                        <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i></a>
-                                        
-                                        {% if view_mode == 'admin' %}
-                                            <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
-                                                <button type="submit" class="btn btn-xs btn-warning" title="Desactivar"><i class="fas fa-ban"></i></button>
-                                            </form>
-                                        {% endif %}
-                                        
-                                        <button class="btn btn-xs btn-info schedule-btn" data-user-id="{{ user.id }}" data-action="deactivate" title="Programar baja">
-                                            <i class="far fa-clock"></i>
-                                        </button>
-                                        {% if current_user.role == 'admin' %}
-                                        <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar definitivamente a este trabajador?');">
-                                            <button type="submit" class="btn btn-xs btn-outline-danger ml-1" title="Eliminar">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </form>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="table-empty-state"><i class="fas fa-users"></i>Sin registros internos.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
+
+        <div class="tab-pane fade" id="operarios">
+          <div class="admin-table-scroll">
+            <table class="filterable-table admin-data-table admin-data-table--wide-actions mb-0" id="tableExternos">
+              <colgroup>
+                <col style="width: 3%">
+                <col style="width: 18%">
+                <col style="width: 17%">
+                <col style="width: 10%">
+                <col style="width: 16%">
+                <col style="width: 9%">
+                <col style="width: 9%">
+                <col class="col-actions-fixed">
+              </colgroup>
+              <thead>
+                <tr class="header-row">
+                  <th class="col-check"><input type="checkbox" id="selectAllExternos" title="Seleccionar todos"></th>
+                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Nombre</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Empresa</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">DNI</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Categoría</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">Valor.</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="col-actions"></th>
+                </tr>
+                <tr class="filter-row">
+                  <th></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 1, this.value)" placeholder="…"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 2, this.value)" placeholder="…"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 3, this.value)" placeholder="…"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 4, this.value)" placeholder="…"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 5, this.value)" placeholder="…"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 6, this.value)" placeholder="…"></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for user in operarios_activos + operarios_pendientes %}
+                <tr class="data-row">
+                  <td class="col-check text-center"><input type="checkbox" class="externo-checkbox" value="{{ user.id }}"></td>
+                  <td data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
+                    <a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="table-link-primary">{{ user.name }} {{ user.lastname }}</a>
+                  </td>
+                  <td data-sort-value="{{ (user.company_rel.nombre if user.company_rel else 'sin asignar')|lower }}">
+                    {% if user.company_rel %}{{ user.company_rel.nombre }}{% else %}<span class="text-danger">Sin asignar</span>{% endif %}
+                  </td>
+                  <td data-sort-value="{{ user.dni or '' }}">{{ user.dni or '—' }}</td>
+                  <td data-sort-value="{{ (user.categoria_profesional or '')|lower }}">
+                    {% if user.categoria_profesional %}{{ user.categoria_profesional }}{% endif %}
+                    {% if user.especialidad %}<span class="text-muted d-block" style="font-size:0.68rem;">{{ user.especialidad }}</span>{% endif %}
+                    {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
+                  </td>
+                  {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
+                  {% set r_count = active_ratings|length %}
+                  <td data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
+                    <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary">
+                      {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ user.reputation_score }} ({{ r_count }}){% else %}—{% endif %}
+                    </a>
+                  </td>
+                  <td data-sort-value="{{ 'activo' if user.active else 'pendiente' }}">
+                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> Activo</span>
+                    {% else %}<span class="badge-soft badge-soft-amber"><span class="status-dot" style="background:#f59e0b;"></span> Pendiente</span>{% endif %}
+                  </td>
+                  <td class="col-actions">
+                    <div class="table-actions">
+                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="Contraseña"><i class="fas fa-key"></i></button>
+                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="Editar"><i class="fas fa-pencil-alt"></i></a>
+                      {% if view_mode == 'admin' %}
+                      <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
+                        <button type="submit" class="btn-table-action btn-table-action--warn" title="Desactivar"><i class="fas fa-ban"></i></button>
+                      </form>
+                      {% endif %}
+                      <button type="button" class="btn-table-action btn-table-action--info schedule-btn" data-user-id="{{ user.id }}" data-action="deactivate" title="Programar baja"><i class="far fa-clock"></i></button>
+                      {% if current_user.role == 'admin' %}
+                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar definitivamente?');">
+                        <button type="submit" class="btn-table-action btn-table-action--danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                      </form>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="table-empty-state"><i class="fas fa-hard-hat"></i>Sin operarios externos.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 </div>
 
-{# --- MODAL: CAMBIO DE CONTRASEÑA --- #}
+{# modals unchanged structure #}
 <div class="modal fade" id="resetPasswordModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <form id="resetPasswordForm" method="POST" action="">
       <div class="modal-content">
-        <div class="modal-header bg-white text-dark border-bottom">
-           <h5 class="modal-title">Restablecer Contraseña</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
-            <span aria-hidden="true">&times;</span>
-          </button>
+        <div class="modal-header">
+          <h5 class="modal-title">Restablecer contraseña</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
         </div>
         <div class="modal-body">
-          <p>Estás cambiando la contraseña para: <strong id="resetUsernameDisplay"></strong></p>
-          <div class="form-group">
-            <label>Nueva Contraseña</label>
-            <input type="password" name="new_password" class="form-control" required placeholder="Escribe la nueva clave...">
-          </div>
+          <p class="small mb-2">Usuario: <strong id="resetUsernameDisplay"></strong></p>
+          <label class="admin-form-label">Nueva contraseña</label>
+          <input type="password" name="new_password" class="form-control" required placeholder="Nueva clave…">
         </div>
-        <div class="modal-footer bg-light">
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar Nueva Contraseña</button>
+        <div class="modal-footer">
+          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn-admin btn-admin-primary">Guardar</button>
         </div>
       </div>
-    </form>    
+    </form>
   </div>
 </div>
 
-{# --- MODAL: PROGRAMAR ESTADO --- #}
 <div class="modal fade" id="scheduleModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <form id="scheduleForm" autocomplete="off">
       <div class="modal-content">
         <div class="modal-header">
-           <h5 class="modal-title" id="scheduleModalLabel">Programar</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
-            <span aria-hidden="true">&times;</span>
-          </button>
+          <h5 class="modal-title" id="scheduleModalLabel">Programar</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
         </div>
         <div class="modal-body">
-          <label>Selecciona la fecha:</label>
+          <label class="admin-form-label">Fecha</label>
           <input type="date" id="scheduledDate" name="scheduledDate" class="form-control" required>
           <input type="hidden" id="scheduleUserId" name="userId">
           <input type="hidden" id="scheduleAction" name="action">
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn-admin btn-admin-primary">Guardar</button>
         </div>
       </div>
-    </form>    
+    </form>
   </div>
 </div>
-{% endblock %} 
+{% endblock %}
 
 {% block extra_js %}
-{# CARGAMOS EL JS COMÚN PARA EL FILTRO #}
 <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-// --- MOTOR DINÁMICO DE ORDENACIÓN DE TABLAS ---
-function sortTable(tableId, colIndex) {
-    var table = document.getElementById(tableId);
-    var switching = true;
-    var dir = "asc";
-    var switchcount = 0;
-    var i, shouldSwitch, rows;
-
-    // Resetea visualmente todos los iconos a neutro antes de ordenar
-    $(table).find('th .sort-icon').removeClass('fa-sort-up fa-sort-down text-primary').addClass('fa-sort text-muted');
-
-    while (switching) {
-        switching = false;
-        rows = table.rows;
-
-        // i = 2 porque nos saltamos la fila 0 (Cabeceras) y fila 1 (Inputs de filtro)
-        for (i = 2; i < (rows.length - 1); i++) {
-            shouldSwitch = false;
-            var x = rows[i].getElementsByTagName("TD")[colIndex];
-            var y = rows[i + 1].getElementsByTagName("TD")[colIndex];
-            
-            if (!x || !y) continue;
-
-            // Lógica con DATA-SORT: Ahora sí prioriza el valor numérico oculto
-            var xStr = x.hasAttribute('data-sort') ? x.getAttribute('data-sort') : (x.innerText || x.textContent).trim();
-            var yStr = y.hasAttribute('data-sort') ? y.getAttribute('data-sort') : (y.innerText || y.textContent).trim();
-
-            var xVal = isNaN(parseFloat(xStr)) ? xStr.toLowerCase() : parseFloat(xStr);
-            var yVal = isNaN(parseFloat(yStr)) ? yStr.toLowerCase() : parseFloat(yStr);
-
-            if (dir === "asc") {
-                if (xVal > yVal) { shouldSwitch = true; break; }
-            } else if (dir === "desc") {
-                if (xVal < yVal) { shouldSwitch = true; break; }
-            }
-        }
-        
-        if (shouldSwitch) {
-            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-            switching = true;
-            switchcount++;
-        } else {
-            if (switchcount === 0 && dir === "asc") {
-                dir = "desc";
-                switching = true;
-            }
-        }
-    }
-    
-    // Ilumina la flecha de la cabecera actual mostrando la dirección del orden
-    var icon = table.rows[0].getElementsByTagName("TH")[colIndex].querySelector('.sort-icon');
-    if (icon) {
-        icon.className = `fas sort-icon ml-1 text-primary ${dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down'}`;
-    }
-}
-
-// JS para Modal de Contraseña
 document.addEventListener("DOMContentLoaded", function() {
+    captureAdminTableOrder('tableInternos');
+    captureAdminTableOrder('tableExternos');
+
+    initBulkSelection({ tableId: 'tableInternos', checkboxClass: '.interno-checkbox', selectAllId: 'selectAllInternos', toolbarId: 'bulk-internos', countId: 'count-internos' });
+    initBulkSelection({ tableId: 'tableExternos', checkboxClass: '.externo-checkbox', selectAllId: 'selectAllExternos', toolbarId: 'bulk-externos', countId: 'count-externos' });
+
     $(document).on('click', '.reset-pwd-btn', function() {
-        var userId = $(this).data('userid');
-        var username = $(this).data('username');
-        $('#resetUsernameDisplay').text(username);
-        var actionUrl = "/admin/reset_password/" + userId;
-        $('#resetPasswordForm').attr('action', actionUrl);
+        $('#resetUsernameDisplay').text($(this).data('username'));
+        $('#resetPasswordForm').attr('action', '/admin/reset_password/' + $(this).data('userid'));
         $('#resetPasswordModal').modal('show');
     });
+
+    var hash = window.location.hash;
+    if (hash) {
+        var targetTab = document.querySelector('.admin-tabs-compact a[href="' + hash + '"]');
+        if (targetTab) $(targetTab).tab('show');
+    }
 });
 
-// JS para Programación 
+function bulkDeleteUsers(tableId, checkboxClass) {
+    var ids = getCheckedIds(tableId, '.' + checkboxClass);
+    if (!ids.length) return;
+    Swal.fire({
+        title: '¿Eliminar seleccionados?',
+        text: 'Se eliminarán ' + ids.length + ' usuario(s).',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Sí, eliminar'
+    }).then(function(r) {
+        if (!r.isConfirmed) return;
+        Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); }});
+        bulkJsonPost('/admin/api/users/batch_delete', { user_ids: ids }).then(function(data) {
+            if (data.success) Swal.fire('Hecho', data.message, 'success').then(function() { location.reload(); });
+            else Swal.fire('Error', data.message, 'error');
+        });
+    });
+}
+
+function bulkDeactivateUsers(tableId, checkboxClass) {
+    var ids = getCheckedIds(tableId, '.' + checkboxClass);
+    if (!ids.length) return;
+    Swal.fire({
+        title: '¿Desactivar seleccionados?',
+        text: 'Se desactivarán ' + ids.length + ' operario(s).',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d97706',
+        confirmButtonText: 'Sí, desactivar'
+    }).then(function(r) {
+        if (!r.isConfirmed) return;
+        bulkJsonPost('/admin/api/users/batch_deactivate', { user_ids: ids }).then(function(data) {
+            if (data.success) Swal.fire('Hecho', data.message, 'success').then(function() { location.reload(); });
+            else Swal.fire('Error', data.message, 'error');
+        });
+    });
+}
+
 $(document).on('click', '.schedule-btn', function(){
-    var userId = $(this).data('user-id');
-    var action = $(this).data('action');
-    $('#scheduleUserId').val(userId);
-    $('#scheduleAction').val(action);
-    if(action === 'deactivate'){
-        $('#scheduleModalLabel').text('Programar desactivación');
-    } else {
-        $('#scheduleModalLabel').text('Programar aprobación');
-    }
+    $('#scheduleUserId').val($(this).data('user-id'));
+    $('#scheduleAction').val($(this).data('action'));
+    $('#scheduleModalLabel').text($(this).data('action') === 'deactivate' ? 'Programar desactivación' : 'Programar aprobación');
     $('#scheduleModal').modal('show');
 });
 
 $('#scheduleForm').submit(function(e){
     e.preventDefault();
-    var userId = $('#scheduleUserId').val();
-    var action = $('#scheduleAction').val();
-    var dateVal = $('#scheduledDate').val();
     $.ajax({
-        url: '/admin/schedule_status/' + userId,
+        url: '/admin/schedule_status/' + $('#scheduleUserId').val(),
         type: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({ action: action, date: dateVal }),
-        success: function(response){
-            if(response.success){
-                alert(response.message);
-                location.reload();
-            } else {
-                alert('Error: ' + response.error);
-            }
-        },
-        error: function(){
-            alert('Error al programar el cambio de estado.');
-        }
+        data: JSON.stringify({ action: $('#scheduleAction').val(), date: $('#scheduledDate').val() }),
+        success: function(r){ if(r.success){ alert(r.message); location.reload(); } else alert('Error: ' + r.error); },
+        error: function(){ alert('Error al programar.'); }
     });
-});
-
-// AÑADIR ESTE SCRIPT AL FINAL DEL ARCHIVO
-document.addEventListener("DOMContentLoaded", function() {
-    let hash = window.location.hash;
-    if (hash) {
-        let targetTab = document.querySelector('.nav-tabs a[href="' + hash + '"]');
-        if (targetTab) {
-            // Activa la pestaña correspondiente de Bootstrap
-            if (typeof $ !== 'undefined' && $.fn.tab) {
-                $(targetTab).tab('show'); // Bootstrap 4
-            } else {
-                let tab = new bootstrap.Tab(targetTab); // Bootstrap 5
-                tab.show();
-            }
-        }
-    }
 });
 </script>
 {% endblock %}

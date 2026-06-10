@@ -1,256 +1,224 @@
 {% extends "base.html" %}
 {% block title %}Configuración Global{% endblock %}
-{% block body_class %}layout-admin bg-light{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    .card-modern { border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    .config-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
-    
-    /* Estilos personalizados para el switch (toggle) */
-    .custom-switch .custom-control-input:checked ~ .custom-control-label::before {
-        background-color: #10b981;
-        border-color: #10b981;
-    }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  
-  <main class="admin-main p-4">
-    <div class="d-flex justify-content-between align-items-end mb-4 border-bottom pb-3">
-        <div>
-            <h2 class="font-weight-bolder text-dark mb-1" style="font-size: 1.5rem; letter-spacing: -0.5px;">Configuración Global</h2>
-            <p class="text-muted small mb-0">Gestión centralizada de parámetros, calendarios y ajustes del sistema.</p>
-        </div>
+
+  <main class="admin-main admin-main--compact config-page">
+
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">Configuración global</h1>
+        <span class="page-toolbar-count">Sistema · planificación · avisos</span>
+      </div>
     </div>
 
-    <div class="row">
-        
-        <div class="col-lg-6 mb-4">
-            <div class="card card-modern h-100">
-                <div class="card-header bg-white border-bottom py-3 d-flex align-items-center">
-                    <div class="config-icon bg-danger-light text-danger mr-3" style="background-color: #fee2e2;">
-                        <i class="fas fa-calendar-times"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-0 font-weight-bold text-dark">Días Festivos / Inhábiles</h5>
-                        <p class="text-muted small mb-0" style="line-height: 1.2;">Estos días serán completamente ignorados por el motor de auditoría y no generarán ausencias.</p>
-                    </div>
-                </div>
-                
-                <div class="card-body">
-                    <form action="{{ url_for('admin.add_festivo') }}" method="POST" class="mb-4 bg-light p-3 rounded border">
-                        <div class="row form-row align-items-center">
-                            <div class="col-4">
-                                <label class="small font-weight-bold text-muted mb-1">Fecha</label>
-                                <input type="date" name="fecha" class="form-control form-control-sm border shadow-sm" required>
-                            </div>
-                            <div class="col-6">
-                                <label class="small font-weight-bold text-muted mb-1">Motivo / Descripción</label>
-                                <input type="text" name="descripcion" class="form-control form-control-sm border shadow-sm" placeholder="Ej: Año Nuevo, Festivo Local...">
-                            </div>
-                            <div class="col-2 mt-auto">
-                                <button type="submit" class="btn btn-sm btn-primary btn-block font-weight-bold shadow-sm" title="Añadir">
-                                    <i class="fas fa-plus"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+    <div class="config-layout">
 
-                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                        <table class="table table-sm table-hover mb-0" style="font-size: 0.85rem;">
-                            <thead class="thead-light sticky-top">
-                                <tr>
-                                    <th style="width: 30%;">Día</th>
-                                    <th style="width: 55%;">Descripción</th>
-                                    <th style="width: 15%; text-align: right;">Quitar</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for f in festivos %}
-                                <tr>
-                                    <td class="align-middle font-weight-bold text-dark">
-                                        <i class="far fa-calendar text-muted mr-1"></i> {{ f.fecha.strftime('%d/%m/%Y') }}
-                                    </td>
-                                    <td class="align-middle">{{ f.descripcion }}</td>
-                                    <td class="align-middle text-right">
-                                        <a href="{{ url_for('admin.delete_festivo', id=f.id) }}" class="btn btn-sm btn-light border text-danger py-0 px-2" title="Eliminar" onclick="return confirm('¿Seguro que quieres borrar este festivo?');">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="3" class="text-center text-muted py-4">
-                                        <i class="fas fa-info-circle mb-2 d-block text-secondary" style="font-size: 1.5rem;"></i>
-                                        No hay días festivos configurados.
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+      {# —— Operación diaria —— #}
+      <section class="config-block">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--blue"><i class="fas fa-clock"></i></div>
+          <div>
+            <h2>Operación diaria</h2>
+            <p>Zona horaria, cortes de ausencias y reglas de asignación</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <div class="config-fields-grid">
+              <div class="config-field">
+                <label for="zona_horaria">Zona horaria</label>
+                <select id="zona_horaria" name="zona_horaria" class="form-control form-control-sm custom-select">
+                  {% for tz_code, tz_label in timezone_options %}
+                  <option value="{{ tz_code }}" {% if configs.get('zona_horaria', 'Europe/Madrid') == tz_code %}selected{% endif %}>{{ tz_label }}</option>
+                  {% endfor %}
+                </select>
+                <p class="config-field-hint">Fichajes, Odoo y tareas programadas</p>
+              </div>
+              <div class="config-field">
+                <label for="hora_limite_entrada">Hora límite de entrada</label>
+                <input type="time" id="hora_limite_entrada" name="hora_limite_entrada" class="form-control form-control-sm font-weight-bold" value="{{ configs.get('hora_limite_entrada', '08:30') }}" required>
+                <p class="config-field-hint">Corte de ausencias y resumen diario</p>
+              </div>
+              <div class="config-field">
+                <label for="limite_custodia">Custodia jefe de obra</label>
+                <div class="d-flex align-items-center" style="gap:0.35rem;">
+                  <input type="number" id="limite_custodia" name="limite_custodia" class="form-control form-control-sm text-center font-weight-bold" value="{{ limite_custodia }}" min="0" required style="max-width:5rem;">
+                  <span class="text-muted small">días</span>
                 </div>
+                <p class="config-field-hint">Derecho sobre operario tras su último día en obra</p>
+              </div>
             </div>
-        </div>
 
-        <div class="col-lg-6 mb-4">
-            <div class="card card-modern h-100">
-                <div class="card-header bg-white border-bottom py-3 d-flex align-items-center">
-                    <div class="config-icon bg-warning-light text-warning mr-3" style="background-color: #fef3c7;">
-                        <i class="fas fa-link"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-0 font-weight-bold text-dark">Reglas de Planificación</h5>
-                        <p class="text-muted small mb-0" style="line-height: 1.2;">Ajustes del motor inteligente de asignación y validación.</p>
-                    </div>
-                </div>
-                
-                <div class="card-body">
-                    <form action="{{ url_for('admin.update_config') }}" method="POST">
-                        <div class="form-group mb-4">
-                            <label class="font-weight-bold text-dark mb-1">Límite de Custodia de Jefes de Obra (Días)</label>
-                            <p class="text-muted small mb-3">Tiempo máximo que un Jefe de Obra mantiene el "derecho" sobre un operario después de su último día trabajado en su obra. Si intenta volver a asignarlo dentro de este límite y el operario está libre, no requerirá solicitud a RRHH.</p>
-                            
-                            <div class="d-flex align-items-center">
-                                <div class="input-group input-group-sm mr-3" style="width: 150px;">
-                                    <input type="number" name="limite_custodia" class="form-control text-center font-weight-bold text-dark border shadow-sm" value="{{ limite_custodia }}" min="0" required>
-                                    <div class="input-group-append">
-                                        <span class="input-group-text bg-light text-muted">días</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="form-group mb-4 border-top pt-3">
-                            <label class="font-weight-bold text-dark mb-1">Zona horaria del sistema</label>
-                            <p class="text-muted small mb-2">Define la zona horaria de la empresa para cortes de ausencias, fichajes, sincronización con Odoo y tareas programadas. Los usuarios pueden elegir otra zona solo para visualizar fechas.</p>
-                            <select name="zona_horaria" class="form-control form-control-sm border shadow-sm" style="max-width: 320px;">
-                                {% for tz_code, tz_label in timezone_options %}
-                                <option value="{{ tz_code }}" {% if configs.get('zona_horaria', 'Europe/Madrid') == tz_code %}selected{% endif %}>{{ tz_label }} ({{ tz_code }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="form-group mb-4 border-top pt-3">
-                            <label class="font-weight-bold text-dark mb-1">Hora límite de entrada (Corte de Ausencias)</label>
-                            <p class="text-muted small mb-2">A esta hora el sistema marcará las ausencias de hoy en el panel y enviará el resumen diario por correo.</p>
-                            <div class="d-flex align-items-center">
-                                <input type="time" name="hora_limite_entrada" class="form-control text-center font-weight-bold text-dark border shadow-sm mr-3" style="width: 150px;" value="{{ configs.get('hora_limite_entrada', '08:30') }}" required>
-                            </div>
-                        </div>
-
-                        <!-- NUEVO BLOQUE: CONFIGURACIÓN PRIMER FICHAJE -->
-                        <div class="form-group mb-4 border-top pt-3">
-                            <label class="font-weight-bold text-dark mb-1">Gestión de Usuarios Nuevos (Inercia)</label>
-                            <div class="custom-control custom-switch mt-2">
-                                <input type="checkbox" class="custom-control-input" id="aceptar_primer_fichaje" name="aceptar_primer_fichaje" 
-                                       {% if configs.get('aceptar_primer_fichaje', 'True') == 'True' %}checked{% endif %}>
-                                <label class="custom-control-label font-weight-bold text-dark" style="cursor: pointer;" for="aceptar_primer_fichaje">
-                                    Aceptar automáticamente el primer fichaje
-                                </label>
-                            </div>
-                            <small class="form-text text-muted mt-2">
-                                Si está activado, cuando un operario nuevo fiche por primera vez en cualquier obra sin estar planificado, el sistema lo dará por válido y le creará su historial automáticamente. 
-                                <br>
-                                Si lo <strong>desactivas</strong>, los operarios nuevos que no hayan sido planificados saltarán como una alerta ("Paracaidista") hasta que se resuelva la incidencia.
-                            </small>
-                        </div>
-                        <!-- FIN NUEVO BLOQUE -->
-
-                        <div class="p-3 bg-light text-right border-top rounded-bottom mt-2" style="margin: -1.25rem; margin-top: 1rem;">
-                            <button type="submit" class="btn btn-primary font-weight-bold shadow-sm px-4">
-                                <i class="fas fa-save mr-2"></i> Guardar Reglas
-                            </button>
-                        </div>
-                    </form>
-                </div>
+            <div class="config-switch-box">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="aceptar_primer_fichaje" name="aceptar_primer_fichaje"
+                       {% if configs.get('aceptar_primer_fichaje', 'True') == 'True' %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">Aceptar automáticamente el primer fichaje</p>
+                <p class="admin-form-switch-hint mb-0">Desactivado → operarios nuevos sin planificar saltan como paracaidistas.</p>
+              </div>
             </div>
-        </div>
-        
-        <div class="col-12 mb-4">
-            <div class="card card-modern">
-                <div class="card-header bg-white border-bottom py-3 d-flex align-items-center">
-                    <div class="config-icon bg-success-light text-success mr-3" style="background-color: #d1fae5;">
-                        <i class="fas fa-envelope-open-text"></i>
-                    </div>
-                    <div>
-                        <h5 class="mb-0 font-weight-bold text-dark">Matriz de Notificaciones por Email</h5>
-                        <p class="text-muted small mb-0" style="line-height: 1.2;">Selecciona quién debe recibir un correo electrónico automático cuando ocurran estos eventos en el sistema. (Sin filtros ocultos, si está marcado, se enviará siempre).</p>
-                    </div>
-                </div>
-                
-                <div class="card-body p-0">
-                    <form action="{{ url_for('admin.update_config') }}" method="POST">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0 text-center">
-                                <thead class="thead-light">
-                                    <tr>
-                                        <th class="text-left align-middle" style="width: 40%;">Evento en el Sistema</th>
-                                        <th class="align-middle"><i class="fas fa-user-shield text-danger mr-1"></i> Administradores</th>
-                                        <th class="align-middle"><i class="fas fa-hard-hat text-warning mr-1"></i> Jefe de Obra (Afectado)</th>
-                                        <th class="align-middle"><i class="fas fa-user text-primary mr-1"></i> Trabajador (Afectado)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% set eventos = [
-                                        ('email_sol_generica', 'Nueva Solicitud Genérica (Cupos)'),
-                                        ('email_sol_concreta', 'Nueva Solicitud Concreta (Trabajador específico)'),
-                                        ('email_sol_resuelta', 'Resolución de Solicitud (Aprobada / Denegada)'),
-                                        ('email_asignacion', 'Nueva Asignación en Planificador / Ficha'),
-                                        ('email_desasignacion', 'Baja / Desasignación en Planificador'),
-                                        ('email_traslado', 'Traslado Interno (Mismo Jefe de Obra)')
-                                    ] %}
-                                    
-                                    {% for clave, nombre in eventos %}
-                                    <tr>
-                                        <td class="text-left align-middle font-weight-bold text-dark">{{ nombre }}</td>
-                                        
-                                        <td class="align-middle">
-                                            <div class="custom-control custom-checkbox">
-                                                <input type="checkbox" class="custom-control-input" id="{{ clave }}_admin" name="{{ clave }}" value="admin" {% if configs.get(clave) and 'admin' in configs[clave] %}checked{% endif %}>
-                                                <label class="custom-control-label" for="{{ clave }}_admin"></label>
-                                            </div>
-                                        </td>
-                                        
-                                        <td class="align-middle">
-                                            <div class="custom-control custom-checkbox">
-                                                <input type="checkbox" class="custom-control-input" id="{{ clave }}_jefe" name="{{ clave }}" value="jefe" {% if configs.get(clave) and 'jefe' in configs[clave] %}checked{% endif %}>
-                                                <label class="custom-control-label" for="{{ clave }}_jefe"></label>
-                                            </div>
-                                        </td>
-                                        
-                                        <td class="align-middle">
-                                            {% if clave == 'email_sol_generica' %}
-                                                <span class="text-muted small">N/A</span>
-                                            {% else %}
-                                                <div class="custom-control custom-checkbox">
-                                                    <input type="checkbox" class="custom-control-input" id="{{ clave }}_trabajador" name="{{ clave }}" value="trabajador" {% if configs.get(clave) and 'trabajador' in configs[clave] %}checked{% endif %}>
-                                                    <label class="custom-control-label" for="{{ clave }}_trabajador"></label>
-                                                </div>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="p-3 border-top bg-light text-right">
-                            <button type="submit" class="btn btn-primary font-weight-bold shadow-sm px-4">
-                                <i class="fas fa-save mr-2"></i> Guardar Configuración de Correos
-                            </button>
-                        </div>
-                    </form>
-                </div>
+
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar operación</button>
             </div>
+          </form>
         </div>
-        
+      </section>
+
+      {# —— Festivos —— #}
+      <section class="config-block">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--red"><i class="fas fa-calendar-times"></i></div>
+          <div>
+            <h2>Calendario laboral</h2>
+            <p>Días inhábiles excluidos de la auditoría de ausencias</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.add_festivo') }}" method="POST" class="config-festivo-form">
+            <div class="config-field">
+              <label for="festivo-fecha">Fecha</label>
+              <input type="date" id="festivo-fecha" name="fecha" class="form-control form-control-sm" required>
+            </div>
+            <div class="config-field">
+              <label for="festivo-desc">Descripción</label>
+              <input type="text" id="festivo-desc" name="descripcion" class="form-control form-control-sm" placeholder="Ej. Festivo local">
+            </div>
+            <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-plus"></i> Añadir</button>
+          </form>
+
+          <div class="config-festivos-table-wrap">
+            <table class="filterable-table admin-data-table mb-0">
+              <thead>
+                <tr class="header-row">
+                  <th style="width:28%;">Día</th>
+                  <th>Descripción</th>
+                  <th class="text-right" style="width:3.5rem;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for f in festivos %}
+                <tr>
+                  <td class="font-weight-bold">{{ f.fecha.strftime('%d/%m/%Y') }}</td>
+                  <td>{{ f.descripcion }}</td>
+                  <td class="text-right">
+                    <a href="{{ url_for('admin.delete_festivo', id=f.id) }}" class="btn-table-action btn-table-action--danger"
+                       onclick="return confirm('¿Eliminar este festivo?');" title="Eliminar">
+                      <i class="fas fa-trash-alt"></i>
+                    </a>
+                  </td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="3" class="table-empty-state" style="padding:1.25rem;">
+                    <i class="fas fa-calendar-day"></i>
+                    Sin festivos configurados
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {# —— Emails —— #}
+      <section class="config-block">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--green"><i class="fas fa-envelope-open-text"></i></div>
+          <div>
+            <h2>Notificaciones por correo</h2>
+            <p>Quién recibe cada aviso automático del sistema</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <div class="config-email-groups">
+
+              <div>
+                <p class="config-email-group-title">Solicitudes de personal</p>
+                <div class="config-email-table">
+                  <table class="filterable-table admin-data-table mb-0">
+                    <thead>
+                      <tr class="header-row">
+                        <th style="width:42%;">Evento</th>
+                        <th>Admin</th>
+                        <th>Jefe obra</th>
+                        <th>Trabajador</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for clave, nombre in [
+                        ('email_sol_generica', 'Nueva solicitud genérica'),
+                        ('email_sol_concreta', 'Nueva solicitud concreta'),
+                        ('email_sol_resuelta', 'Solicitud resuelta')
+                      ] %}
+                      <tr>
+                        <td class="font-weight-bold">{{ nombre }}</td>
+                        <td><input type="checkbox" id="{{ clave }}_admin" name="{{ clave }}" value="admin" {% if configs.get(clave) and 'admin' in configs[clave] %}checked{% endif %}></td>
+                        <td><input type="checkbox" id="{{ clave }}_jefe" name="{{ clave }}" value="jefe" {% if configs.get(clave) and 'jefe' in configs[clave] %}checked{% endif %}></td>
+                        <td>
+                          {% if clave == 'email_sol_generica' %}<span class="text-muted">—</span>
+                          {% else %}<input type="checkbox" id="{{ clave }}_trabajador" name="{{ clave }}" value="trabajador" {% if configs.get(clave) and 'trabajador' in configs[clave] %}checked{% endif %}>{% endif %}
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div>
+                <p class="config-email-group-title">Planificación y movimientos</p>
+                <div class="config-email-table">
+                  <table class="filterable-table admin-data-table mb-0">
+                    <thead>
+                      <tr class="header-row">
+                        <th style="width:42%;">Evento</th>
+                        <th>Admin</th>
+                        <th>Jefe obra</th>
+                        <th>Trabajador</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for clave, nombre in [
+                        ('email_asignacion', 'Nueva asignación'),
+                        ('email_desasignacion', 'Desasignación'),
+                        ('email_traslado', 'Traslado interno')
+                      ] %}
+                      <tr>
+                        <td class="font-weight-bold">{{ nombre }}</td>
+                        <td><input type="checkbox" id="{{ clave }}_admin" name="{{ clave }}" value="admin" {% if configs.get(clave) and 'admin' in configs[clave] %}checked{% endif %}></td>
+                        <td><input type="checkbox" id="{{ clave }}_jefe" name="{{ clave }}" value="jefe" {% if configs.get(clave) and 'jefe' in configs[clave] %}checked{% endif %}></td>
+                        <td><input type="checkbox" id="{{ clave }}_trabajador" name="{{ clave }}" value="trabajador" {% if configs.get(clave) and 'trabajador' in configs[clave] %}checked{% endif %}></td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar correos</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
     </div>
-
   </main>
 </div>
 {% endblock %}

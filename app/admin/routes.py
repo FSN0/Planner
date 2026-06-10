@@ -296,21 +296,40 @@ def solicitud_detail(solicitud_id):
                 query = query.filter(User.company_id == solicitud.perfil_empresa_id)
             
         profile_candidates = query.order_by(User.name).all()
+        candidate_ids = {u.id for u in profile_candidates}
 
         # Calcular duración total de la solicitud (en días)
         total_days_req = (fecha_fin - fecha_inicio).days + 1
 
-        # Buscar TODAS las asignaciones en este rango para los candidatos
-        # (Incluimos la propia obra para que salgan como ocupados si ya están asignados aquí)
+        # Asignaciones en el periodo (cualquier obra) — incluye gente visible en calendario
         all_assignments = Asignacion.query.filter(
             Asignacion.fecha >= fecha_inicio,
             Asignacion.fecha <= fecha_fin,
-            Asignacion.user_id.in_([u.id for u in profile_candidates])
         ).all()
+
+        # Operarios con asignación en el rango que el filtro de empresa excluyó
+        extra_user_ids = {a.user_id for a in all_assignments} - candidate_ids
+        if extra_user_ids:
+            extras = User.query.filter(
+                User.id.in_(extra_user_ids),
+                User.role == ROLE_OPERARIO,
+                User.active.is_(True),
+                User.is_deleted.is_(False),
+            ).order_by(User.name).all()
+            profile_candidates.extend(extras)
+            profile_candidates.sort(key=lambda u: (u.name or '', u.lastname or ''))
+            candidate_ids.update(u.id for u in extras)
+
+        if solicitud.empleado_id and solicitud.empleado and solicitud.empleado.id not in candidate_ids:
+            profile_candidates.append(solicitud.empleado)
+            profile_candidates.sort(key=lambda u: (u.name or '', u.lastname or ''))
+            candidate_ids.add(solicitud.empleado.id)
         
         # Agrupar asignaciones por usuario para contar días ocupados
-        busy_counts = {} # {user_id: set(fechas_ocupadas)}
+        busy_counts = {}
         for a in all_assignments:
+            if a.user_id not in candidate_ids:
+                continue
             if a.user_id not in busy_counts:
                 busy_counts[a.user_id] = set()
             busy_counts[a.user_id].add(a.fecha)
@@ -904,61 +923,8 @@ def edit_operario(user_id):
 @login_required
 @roles_required(ROLE_ADMIN)
 def panel():
-    # --- Estadísticas Generales ---
-    total_operarios = User.query.filter_by(role=ROLE_OPERARIO, is_deleted=False).count()
-    total_obras = Obra.query.filter(Obra.is_deleted != True).count()
-    
-    total_jefes = User.query.filter(
-        User.role == ROLE_JEFE, 
-        User.is_deleted == False
-    ).count()
-    
-    total_rrhh = User.query.filter_by(role=ROLE_RRHH, is_deleted=False).count()
-
-    recent_obras = (
-        Obra.query.filter(Obra.is_deleted != True)
-        .order_by(Obra.id.desc())
-        .limit(5)
-        .all()
-    )
-
-    # --- CORRECCIÓN CRÍTICA: Usar relación SQL en lugar de company_code ---
-    
-    # 1. Internos: Operarios asociados a una empresa con flag is_internal=True
-    total_internos = (
-        User.query
-        .join(Company) # Hacemos Join con la tabla de empresas
-        .filter(
-            User.role == ROLE_OPERARIO,
-            User.is_deleted == False,
-            Company.is_internal == True # Filtramos por la propiedad de la empresa
-        ).count()
-    )
-
-    # 2. Externos: Operarios asociados a una empresa con flag is_internal=False
-    total_externos = (
-        User.query
-        .join(Company)
-        .filter(
-            User.role == ROLE_OPERARIO,
-            User.is_deleted == False,
-            Company.is_internal == False
-        ).count()
-    )
-
-    total_companies = Company.query.count()
-
-    return render_template(
-        "admin_panel.html",
-        total_operarios=total_operarios,
-        total_obras=total_obras,
-        total_jefes=total_jefes,
-        total_rrhh=total_rrhh,
-        total_internos=total_internos,
-        total_externos=total_externos,
-        total_companies=total_companies,
-        recent_obras=recent_obras,
-    )
+    from app.services.panel_service import get_admin_panel_context
+    return render_template("admin_panel.html", **get_admin_panel_context())
 
 @admin_bp.route("/create_obra", methods=["GET", "POST"])
 @login_required
@@ -1920,8 +1886,79 @@ def batch_update_obras_status():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
-    
-    
+
+
+@admin_bp.route("/api/users/batch_delete", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_RRHH)
+def batch_delete_users():
+    data = request.get_json() or {}
+    user_ids = data.get("user_ids", [])
+    if not user_ids:
+        return jsonify({"success": False, "message": "No se seleccionaron usuarios."}), 400
+
+    deleted = 0
+    for uid in user_ids:
+        user = User.query.get(int(uid))
+        if user and not user.is_deleted:
+            user.soft_delete(actor_id=current_user.id)
+            deleted += 1
+    db.session.commit()
+    return jsonify({"success": True, "message": f"{deleted} usuario(s) eliminado(s)."})
+
+
+@admin_bp.route("/api/users/batch_deactivate", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_RRHH)
+def batch_deactivate_users():
+    data = request.get_json() or {}
+    user_ids = data.get("user_ids", [])
+    if not user_ids:
+        return jsonify({"success": False, "message": "No se seleccionaron usuarios."}), 400
+
+    updated = 0
+    for uid in user_ids:
+        user = User.query.get(int(uid))
+        if user and user.role == ROLE_OPERARIO and user.active:
+            user.active = False
+            updated += 1
+    db.session.commit()
+    return jsonify({"success": True, "message": f"{updated} operario(s) desactivado(s)."})
+
+
+@admin_bp.route("/api/companies/batch_delete", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def batch_delete_companies():
+    from app.models import Asignacion
+
+    data = request.get_json() or {}
+    company_ids = data.get("company_ids", [])
+    if not company_ids:
+        return jsonify({"success": False, "message": "No se seleccionaron empresas."}), 400
+
+    deleted = 0
+    for cid in company_ids:
+        company = Company.query.get(int(cid))
+        if not company:
+            continue
+
+        associated_workers = User.query.filter_by(
+            role=ROLE_OPERARIO, company_id=company.id
+        ).all()
+        for worker in associated_workers:
+            worker.soft_delete(actor_id=current_user.id)
+            worker.company_id = None
+
+        Asignacion.query.filter_by(company_id=company.id).update({"company_id": None})
+        User.query.filter_by(company_id=company.id).update({"company_id": None})
+        db.session.delete(company)
+        deleted += 1
+
+    db.session.commit()
+    return jsonify({"success": True, "message": f"{deleted} empresa(s) eliminada(s)."})
+
+
 @admin_bp.route("/sso/odoo_contactos")
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)

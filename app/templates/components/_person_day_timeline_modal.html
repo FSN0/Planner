@@ -1,59 +1,32 @@
-<style>
-  /* Anula el verde global de styles.css (.modal-header / .btn-secondary) */
-  .person-day-timeline-modal .modal-header,
-  .person-day-timeline-modal .person-day-timeline-modal-header {
-    background: radial-gradient(circle at top left, #1e293b, #020617) !important;
-    background-color: #1e293b !important;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.25) !important;
-    color: #f8fafc !important;
-  }
-  .person-day-timeline-modal .modal-header .close {
-    color: #f8fafc !important;
-    opacity: 0.85;
-  }
-  .person-day-timeline-modal .person-day-timeline-modal-footer {
-    background: #f8fafc !important;
-    border-top: none !important;
-    padding: 0.5rem 1.25rem 1rem !important;
-  }
-  .person-day-timeline-modal .person-day-timeline-btn-close {
-    background: #fff !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #475569 !important;
-    font-weight: 500;
-    padding: 0.35rem 1rem;
-    border-radius: 0.375rem;
-    box-shadow: none !important;
-    transform: none !important;
-  }
-  .person-day-timeline-modal .person-day-timeline-btn-close:hover {
-    background: #1e293b !important;
-    border-color: #1e293b !important;
-    color: #f8fafc !important;
-  }
-</style>
-
 <div class="modal fade person-day-timeline-modal" id="{{ modal_id or 'modalPersonDayTimeline' }}" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content border-0 shadow">
-      <div class="modal-header person-day-timeline-modal-header text-white">
-        <h5 class="modal-title mb-0">
-          <i class="fas fa-stream mr-2 opacity-75"></i>{{ modal_title or 'Trazabilidad del día' }} ·
-          <span data-timeline-empleado>—</span>
-        </h5>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content person-day-timeline-modal-content">
+      <div class="modal-header person-day-timeline-modal-header">
+        <div class="person-day-timeline-modal-heading">
+          <span class="person-day-timeline-modal-kicker"><i class="fas fa-stream"></i> {{ modal_title or 'Trazabilidad del día' }}</span>
+          <h5 class="modal-title mb-0">
+            <span data-timeline-empleado>—</span>
+          </h5>
+        </div>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
-      <div class="modal-body bg-light" data-person-day-timeline-root>
+      <div class="modal-body" data-person-day-timeline-root>
         <div data-timeline-meta class="person-day-timeline-meta">
-          <div class="person-day-timeline-meta-item"><strong>Fecha</strong> <span data-timeline-fecha></span></div>
-          <div class="person-day-timeline-meta-item"><strong>Estado</strong> <span data-timeline-estado class="badge badge-secondary person-day-timeline-estado"></span></div>
+          <div class="person-day-timeline-meta-item">
+            <span class="person-day-timeline-meta-label">Fecha</span>
+            <span data-timeline-fecha class="person-day-timeline-meta-value">—</span>
+          </div>
+          <div class="person-day-timeline-meta-item">
+            <span class="person-day-timeline-meta-label">Estado</span>
+            <span data-timeline-estado class="badge-soft badge-soft-gray person-day-timeline-estado">—</span>
+          </div>
         </div>
         <div data-timeline-content></div>
       </div>
-      <div class="modal-footer person-day-timeline-modal-footer border-0">
-        <button type="button" class="btn btn-sm person-day-timeline-btn-close" data-dismiss="modal">Cerrar</button>
+      <div class="modal-footer person-day-timeline-modal-footer">
+        <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cerrar</button>
       </div>
     </div>
   </div>

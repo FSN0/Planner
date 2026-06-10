@@ -5,150 +5,138 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<style>
-    .select2-container .select2-selection--single { height: 38px; border: 1px solid #ced4da; }
-    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 36px; }
-    .select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px; }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    <div class="row justify-content-center">
-      <div class="col-lg-8 col-xl-7">
-        
-        <div class="d-flex align-items-center mb-4">
-            <a href="{{ url_for('admin.obras_detailed', selected_date=obra.fecha_inicio.strftime('%Y-%m-%d')) }}" class="btn btn-sm btn-link text-muted pl-0">
-                <i class="fas fa-arrow-left"></i> Volver al tablero
-            </a>
-        </div>
+  <main class="admin-main admin-main--compact admin-form-page">
 
-       
-
-        <div class="admin-panel">
-            <div class="admin-panel-header border-bottom pb-3 mb-4">
-                <h2 class="admin-panel-title">Editar Obra</h2>
-                <p class="admin-panel-subtitle mb-0">{{ obra.nombre }}</p>
-            </div>
-
-            <form method="POST" id="editObraForm">
-                
-                <div class="form-row">
-                    <div class="form-group col-md-3">
-                        <label class="small font-weight-bold text-dark">Código Obra</label>
-                        <input type="text" name="codigo" class="form-control" value="{{ form_data.get('codigo', obra.codigo or '') }}" required>
-                    </div>
-                    <div class="form-group col-md-9">
-                        <label class="small font-weight-bold text-dark">Nombre de la Obra</label>
-                        <input type="text" name="nombre" class="form-control" value="{{ form_data.get('nombre', obra.nombre) }}" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Descripción</label>
-                        <textarea name="descripcion" class="form-control" rows="1" required>{{ form_data.get('descripcion', obra.descripcion) }}</textarea>
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Ubicación</label>
-                        <input type="text" name="ubicacion" class="form-control" value="{{ form_data.get('ubicacion', obra.ubicacion) }}">
-                    </div>
-                </div> 
-                
-                <div class="form-group">
-                        <label class="small font-weight-bold text-dark">
-                            <i class="fas fa-hard-hat text-warning mr-1"></i> Plataforma PRL
-                        </label>
-                        <input type="url" name="url_prl" class="form-control" value="{{ form_data.get('url_prl', obra.url_prl or '') }}" placeholder="https://...">
-                </div>
-
-                <hr class="my-4">
-
-                <h6 class="text-uppercase text-muted small font-weight-bold mb-3">Planificación</h6>
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Fecha Inicio</label>
-                        <input type="date" name="fecha_inicio" class="form-control" value="{{ form_data.get('fecha_inicio', obra.fecha_inicio) }}">
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Fecha Fin</label>
-                        <input type="date" name="fecha_fin" class="form-control" value="{{ form_data.get('fecha_fin', obra.fecha_fin) }}">
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group col-md-4">
-                        <label class="small font-weight-bold text-dark">Estado</label>
-                        <select name="estado" id="estadoSelect" class="form-control custom-select">
-                            {% set current_est = form_data.get('estado', obra.estado) %}
-                            <option value="Pendiente" {% if current_est == 'Pendiente' %}selected{% endif %}>Pendiente</option>
-                            <option value="En Curso" {% if current_est == 'En Curso' %}selected{% endif %}>En Curso</option>
-                            <option value="Finalizada" {% if current_est == 'Finalizada' %}selected{% endif %}>Finalizada</option>
-                        </select>
-                    </div>
-                    <div class="form-group col-md-4">
-                        <label class="small font-weight-bold text-dark">Límite</label>
-                        <input type="number" name="limite_trabajadores" class="form-control" value="{{ form_data.get('limite_trabajadores', obra.limite_trabajadores) }}" required>
-                    </div>
-                    <div class="form-group col-md-4">
-                        <label class="small font-weight-bold text-dark">Color</label>
-                        <input type="color" name="color" class="form-control form-control-color" value="{{ form_data.get('color', obra.color) }}">
-                    </div>
-                </div>
-
-                <hr class="my-4">
-
-                <div class="form-group col-md-6">
-                    <label class="small font-weight-bold text-dark">Jefe de Obra</label>
-                    <select name="jefe_obra_id" id="jefe_select" class="form-control">
-                        <option value="">-- Seleccione --</option>
-                        {% for jefe in jefes %}
-                            {% set sel_id = form_data.get('jefe_obra_id', obra.jefe_obra_id)|string %}
-                            <option value="{{ jefe.id }}" {% if sel_id == jefe.id|string %}selected{% endif %}>
-                                {{ jefe.name }} {{ jefe.lastname }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-group col-md-6">
-                    <label class="small font-weight-bold text-dark">Encargado</label>
-                    <select name="encargado_id" id="encargado_select" class="form-control">
-                        <option value="">-- Sin encargado --</option>
-                        {% for enc in encargados %}
-                            {% set sel_enc_id = form_data.get('encargado_id', obra.encargado_id)|string %}
-                            <option value="{{ enc.id }}" {% if sel_enc_id == enc.id|string %}selected{% endif %}>
-                                {{ enc.name }} {{ enc.lastname }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="mt-4 d-flex justify-content-between align-items-center">
-                    {% if current_user.role == 'admin' %}
-                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="if(confirm('¿Seguro que quieres eliminar esta obra?')){ document.getElementById('deleteForm').submit(); }">
-                            Eliminar Obra
-                        </button>
-                    {% else %}
-                        <div></div>
-                    {% endif %}
-                    
-                    <div>
-                        <a href="{{ url_for('admin.obras_detailed') }}" class="btn btn-link text-muted mr-2">Cancelar</a>
-                        <button type="submit" class="btn btn-primary px-4">Guardar Cambios</button>
-                    </div>
-                </div>
-            </form>
-
-            {% if current_user.role == 'admin' %}
-                <form id="deleteForm" method="POST" action="{{ url_for('admin.delete_obra', obra_id=obra.id) }}" style="display:none;"></form>
-            {% endif %}
-        </div>
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <a href="{{ url_for('admin.obras_list') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
+          <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="page-toolbar-title">Editar obra</h1>
       </div>
     </div>
+
+    <section class="admin-panel admin-form-panel">
+      <div class="admin-panel-header">
+        <h2 class="admin-panel-title">{{ obra.nombre }}</h2>
+        <span class="admin-panel-subtitle">{{ obra.codigo or obra.id }}</span>
+      </div>
+
+      <form method="POST" id="editObraForm">
+        <div class="form-row">
+          <div class="form-group col-md-3">
+            <label class="admin-form-label">Código</label>
+            <input type="text" name="codigo" class="form-control" value="{{ form_data.get('codigo', obra.codigo or '') }}" required>
+          </div>
+          <div class="form-group col-md-9">
+            <label class="admin-form-label">Nombre</label>
+            <input type="text" name="nombre" class="form-control" value="{{ form_data.get('nombre', obra.nombre) }}" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Descripción</label>
+            <textarea name="descripcion" class="form-control" rows="2" required>{{ form_data.get('descripcion', obra.descripcion) }}</textarea>
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Ubicación</label>
+            <input type="text" name="ubicacion" class="form-control" value="{{ form_data.get('ubicacion', obra.ubicacion) }}">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="admin-form-label"><i class="fas fa-hard-hat text-warning mr-1"></i> Plataforma PRL</label>
+          <input type="url" name="url_prl" class="form-control" value="{{ form_data.get('url_prl', obra.url_prl or '') }}" placeholder="https://…">
+        </div>
+
+        <div class="admin-form-section">Planificación</div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Fecha inicio</label>
+            <input type="date" name="fecha_inicio" class="form-control" value="{{ form_data.get('fecha_inicio', obra.fecha_inicio) }}">
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Fecha fin</label>
+            <input type="date" name="fecha_fin" class="form-control" value="{{ form_data.get('fecha_fin', obra.fecha_fin) }}">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">Estado</label>
+            <select name="estado" id="estadoSelect" class="form-control custom-select">
+              {% set current_est = form_data.get('estado', obra.estado) %}
+              <option value="Pendiente" {% if current_est == 'Pendiente' %}selected{% endif %}>Pendiente</option>
+              <option value="En Curso" {% if current_est == 'En Curso' %}selected{% endif %}>En Curso</option>
+              <option value="Finalizada" {% if current_est == 'Finalizada' %}selected{% endif %}>Finalizada</option>
+            </select>
+          </div>
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">Límite trabajadores</label>
+            <input type="number" name="limite_trabajadores" class="form-control" value="{{ form_data.get('limite_trabajadores', obra.limite_trabajadores) }}" required>
+          </div>
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">Color</label>
+            <input type="color" name="color" class="form-control form-control-color w-100" style="height: 32px; padding: 2px;" value="{{ form_data.get('color', obra.color) }}">
+          </div>
+        </div>
+
+        <div class="admin-form-section">Responsables</div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Jefe de obra</label>
+            <select name="jefe_obra_id" id="jefe_select" class="form-control">
+              <option value="">— Sin asignar —</option>
+              {% for jefe in jefes %}
+                {% set sel_id = form_data.get('jefe_obra_id', obra.jefe_obra_id)|string %}
+                <option value="{{ jefe.id }}" {% if sel_id == jefe.id|string %}selected{% endif %}>
+                  {{ jefe.name }} {{ jefe.lastname }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Encargado</label>
+            <select name="encargado_id" id="encargado_select" class="form-control">
+              <option value="">— Sin encargado —</option>
+              {% for enc in encargados %}
+                {% set sel_enc_id = form_data.get('encargado_id', obra.encargado_id)|string %}
+                <option value="{{ enc.id }}" {% if sel_enc_id == enc.id|string %}selected{% endif %}>
+                  {{ enc.name }} {{ enc.lastname }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="admin-form-actions">
+          {% if current_user.role == 'admin' %}
+            <button type="button" class="btn-admin-danger" onclick="if(confirm('¿Seguro que quieres eliminar esta obra?')){ document.getElementById('deleteForm').submit(); }">
+              <i class="fas fa-trash-alt"></i> Eliminar
+            </button>
+          {% else %}
+            <div></div>
+          {% endif %}
+          <div class="admin-form-actions-right">
+            <a href="{{ url_for('admin.obras_list') }}" class="btn-admin-link">Cancelar</a>
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-save"></i> Guardar
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {% if current_user.role == 'admin' %}
+        <form id="deleteForm" method="POST" action="{{ url_for('admin.delete_obra', obra_id=obra.id) }}" style="display:none;"></form>
+      {% endif %}
+    </section>
   </main>
 </div>
 {% endblock %}
@@ -161,14 +149,13 @@
       $('#encargado_select').select2({ width: '100%', placeholder: "Seleccione un encargado", allowClear: true });
   });
 
-  // Lógica de aviso PENDIENTE
   document.addEventListener("DOMContentLoaded", function() {
     const form = document.getElementById("editObraForm");
     const estadoSelect = document.getElementById("estadoSelect");
-    const originalEstado = "{{ obra.estado }}"; 
+    const originalEstado = "{{ obra.estado }}";
     const obraId = {{ obra.id }};
 
-    if(form) {
+    if (form) {
         form.addEventListener("submit", function(e) {
             const newEstado = estadoSelect.value;
             if (newEstado === "Pendiente" && originalEstado !== "Pendiente") {
@@ -181,11 +168,11 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.total_days > 0) {
-                        const msg = `⚠️ ATENCIÓN: Al poner la obra en PENDIENTE:\n\n- Se desasignarán ${data.unique_workers} operarios.\n- Se eliminarán ${data.total_days} días.\n\n¿Continuar?`;
-                        if (confirm(msg)) { form.submit(); }
+                        const msg = `Al poner la obra en PENDIENTE se desasignarán ${data.unique_workers} operarios y se eliminarán ${data.total_days} días.\n\n¿Continuar?`;
+                        if (confirm(msg)) form.submit();
                     } else { form.submit(); }
                 })
-                .catch(err => { console.error(err); form.submit(); });
+                .catch(() => form.submit());
             }
         });
     }

@@ -13,7 +13,7 @@ def dashboard():
     if current_user.role == 'operario':
         return render_template('operario_dashboard.html')
     elif current_user.role == 'jefe_obra':
-        return redirect(url_for('jefe.obras_detailed', selected_date=""))
+        return redirect(url_for('jefe.panel'))
     elif current_user.role == 'admin':
         # Redirige a la ruta que calcula y envía los conteos correctos
         return redirect(url_for('admin.panel'))
