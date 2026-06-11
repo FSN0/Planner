@@ -158,17 +158,14 @@ BEGIN
 
     EXECUTE format($q$
         INSERT INTO %1$I.configuracion_global (id, clave, valor)
-        SELECT id, clave, valor
+        SELECT
+            id,
+            clave,
+            CASE WHEN clave = 'motor_sincronizacion' THEN 'odoo_soltec' ELSE valor END
         FROM dblink(%2$L, 'SELECT id, clave, valor FROM public.configuracion_global ORDER BY id') AS r(
             id int, clave varchar, valor varchar
         )
     $q$, v_schema, v_conn);
-
-    EXECUTE format($q$
-        INSERT INTO %1$I.configuracion_global (clave, valor)
-        VALUES ('motor_sincronizacion', 'odoo_soltec')
-        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
-    $q$, v_schema);
 
     EXECUTE format($q$
         INSERT INTO %1$I.log_preferences (id, user_id, category, is_active, last_read_at)
@@ -386,6 +383,13 @@ BEGIN
             v_schema || '.' || t_name, v_schema, t_name
         );
     END LOOP;
+
+    -- Tras copiar filas con id explicito la secuencia queda desfasada; el upsert va despues del setval.
+    EXECUTE format($q$
+        INSERT INTO %1$I.configuracion_global (clave, valor)
+        VALUES ('motor_sincronizacion', 'odoo_soltec')
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
+    $q$, v_schema);
 
     RAISE NOTICE 'Migracion completada: schema=% subdominio=% alembic=%', v_schema, v_sub, v_head;
 END;

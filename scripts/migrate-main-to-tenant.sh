@@ -111,7 +111,15 @@ verify_counts() {
             continue
         fi
         tenant_cnt="$(table_count "${SAAS_DB}" "${schema}" "${t}")"
-        if [[ "${import_cnt}" != "${tenant_cnt}" ]]; then
+        if [[ "${t}" == "configuracion_global" ]]; then
+            # El tenant puede tener +1 fila (motor_sincronizacion) si no existia en el MAIN.
+            if [[ "${tenant_cnt}" == "${import_cnt}" || "${tenant_cnt}" == "$((import_cnt + 1))" ]]; then
+                ok "  ${t}: ${tenant_cnt} (import=${import_cnt})"
+            else
+                err "  MISMATCH ${t}: import=${import_cnt} tenant=${tenant_cnt}"
+                mismatches=$((mismatches + 1))
+            fi
+        elif [[ "${import_cnt}" != "${tenant_cnt}" ]]; then
             err "  MISMATCH ${t}: import=${import_cnt} tenant=${tenant_cnt}"
             mismatches=$((mismatches + 1))
         else
