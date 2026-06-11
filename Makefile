@@ -33,7 +33,7 @@ help: ## Muestra esta ayuda
 # DESARROLLO
 # ─────────────────────────────────────────────────────────────────────────────
 dev: ## Levanta entorno de desarrollo
-	docker compose -f $(DEV_COMPOSE) up -d
+	docker compose -f $(DEV_COMPOSE) up -d --build
 	@echo ""
 	@echo "✓ Entorno de desarrollo listo"
 	@echo "  http://localhost       (esquema public)"

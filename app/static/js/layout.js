@@ -20,6 +20,16 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
+    document.querySelectorAll("[data-sidebar-subtoggle]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            var group = btn.closest(".sidebar-nav-group");
+            if (!group) return;
+            var willOpen = !group.classList.contains("is-open");
+            group.classList.toggle("is-open", willOpen);
+            btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+        });
+    });
+
     // 3. Auto-disparar modal de notificaciones si viene en la URL
     // (Esto reemplaza el script inline del final de tu base.html)
     const urlParams = new URLSearchParams(window.location.search);

@@ -63,15 +63,12 @@
           <i class="fas fa-users fa-fw"></i><span>Trabajadores</span>
         </a>
       </li>
-      {% endif %}
-      {% if current_user.role == 'admin' %}
       <li>
         <a href="{{ url_for('admin.companies') }}" class="sidebar-link {% if 'companies' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-industry fa-fw"></i><span>Subcontratas</span>
         </a>
       </li>
       {% endif %}
-      {% if current_user.role in ['admin', 'jefe_obra'] %}
       <li>
         <a href="{{ url_for('admin.solicitudes_list') }}" class="sidebar-link {% if 'solicitud' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-user-plus fa-fw"></i>
@@ -81,20 +78,12 @@
           {% endif %}
         </a>
       </li>
-      {% if tenant_has_odoo_alta %}
-      <li>
-        <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="sidebar-link" target="_blank" rel="noopener" title="Panel de altas en Odoo">
-          <i class="fas fa-address-book fa-fw"></i>
-          <span>Alta Odoo</span>
-          <i class="fas fa-external-link-alt sidebar-link-ext" aria-hidden="true"></i>
-        </a>
-      </li>
-      {% endif %}
-      {% endif %}
     </ul>
     {% endif %}
 
     {% if current_user.role in ['admin', 'jefe_obra'] %}
+    {% set show_integrations_nav = (current_user.role == 'admin' and tenant_has_integrations) or (current_user.role == 'jefe_obra' and tenant_has_odoo_alta) %}
+    {% set integrations_nav_open = request.endpoint in ('sync.panel', 'sync.odoo_panel') or request.endpoint == 'admin.sso_odoo_contactos' %}
     <div class="sidebar-section-title">Control</div>
     <ul class="sidebar-nav">
       <li>
@@ -102,19 +91,43 @@
           <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
         </a>
       </li>
-      {% if current_user.role == 'admin' and tenant_has_odoo %}
-      <li>
-        <a href="{{ url_for('sync.odoo_panel') }}" class="sidebar-link {% if request.endpoint == 'sync.odoo_panel' %}is-active{% endif %}">
-          <i class="fas fa-sync fa-fw"></i><span>Sync Odoo</span>
-        </a>
+
+      {% if show_integrations_nav %}
+      <li class="sidebar-nav-group{% if integrations_nav_open %} is-open{% endif %}">
+        <button type="button" class="sidebar-link sidebar-link--parent{% if integrations_nav_open %} is-active{% endif %}" data-sidebar-subtoggle aria-expanded="{{ 'true' if integrations_nav_open else 'false' }}">
+          <i class="fas fa-plug fa-fw"></i>
+          <span>Integraciones</span>
+          <i class="fas fa-chevron-down sidebar-sub-chevron" aria-hidden="true"></i>
+        </button>
+        <ul class="sidebar-subnav">
+          {% if current_user.role == 'admin' and tenant_has_odoo %}
+          <li>
+            <a href="{{ url_for('sync.odoo_panel') }}" class="sidebar-link sidebar-link--sub {% if request.endpoint == 'sync.odoo_panel' %}is-active{% endif %}">
+              <i class="fas fa-sync fa-fw"></i><span>Sync Odoo</span>
+            </a>
+          </li>
+          {% endif %}
+          {% if tenant_has_odoo_alta %}
+          <li>
+            <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="sidebar-link sidebar-link--sub" target="_blank" rel="noopener" title="Panel de altas en Odoo">
+              <i class="fas fa-address-book fa-fw"></i>
+              <span>Alta Odoo</span>
+              <i class="fas fa-external-link-alt sidebar-link-ext" aria-hidden="true"></i>
+            </a>
+          </li>
+          {% endif %}
+          {% if current_user.role == 'admin' and tenant_has_integrations %}
+          <li>
+            <a href="{{ url_for('sync.panel') }}" class="sidebar-link sidebar-link--sub {% if request.endpoint == 'sync.panel' %}is-active{% endif %}">
+              <i class="fas fa-th-large fa-fw"></i><span>Ver todas</span>
+            </a>
+          </li>
+          {% endif %}
+        </ul>
       </li>
       {% endif %}
-      {% if current_user.role == 'admin' and tenant_has_integrations %}
-      <li>
-        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if request.endpoint == 'sync.panel' %}is-active{% endif %}">
-          <i class="fas fa-plug fa-fw"></i><span>Integraciones</span>
-        </a>
-      </li>
+
+      {% if current_user.role == 'admin' %}
       <li>
         <a href="{{ url_for('admin.configuracion_global') }}" class="sidebar-link {% if 'configuracion' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-sliders-h fa-fw"></i><span>Configuración</span>

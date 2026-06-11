@@ -12,7 +12,7 @@ from sqlalchemy import text
 # ==========================================
 MODULOS_DISPONIBLES = {
     'odoo': 'Integración Odoo (ERP / Sincronización)',
-    'odoo_alta': 'Alta Odoo (SSO Contactos)',
+    'odoo_alta': 'Alta Odoo (Fichajes Soltec / SSO)',
     'chat': 'Chat de Comunicación (Próximamente)'
 }
 

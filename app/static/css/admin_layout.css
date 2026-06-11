@@ -1806,6 +1806,53 @@ html.sidebar-collapsed .sidebar-link i.fa-fw {
   color: #4ade80;
 }
 
+.sidebar-nav-group {
+  margin-bottom: 1px;
+}
+
+.sidebar-link--parent {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.sidebar-sub-chevron {
+  margin-left: auto;
+  font-size: 0.55rem !important;
+  opacity: 0.55;
+  transition: transform 0.15s ease;
+}
+
+.sidebar-nav-group.is-open .sidebar-sub-chevron {
+  transform: rotate(180deg);
+}
+
+.sidebar-subnav {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.15rem 0.85rem;
+  display: none;
+  border-left: 1px solid rgba(148, 163, 184, 0.14);
+  margin-left: 0.65rem;
+}
+
+.sidebar-nav-group.is-open .sidebar-subnav {
+  display: block;
+}
+
+.sidebar-link--sub {
+  font-size: 0.74rem;
+  padding: 0.3rem 0.45rem;
+}
+
+html.sidebar-collapsed .sidebar-subnav,
+html.sidebar-collapsed .sidebar-sub-chevron {
+  display: none !important;
+}
+
 .sidebar-link--logout {
   color: #f87171 !important;
   margin-top: 0.25rem;

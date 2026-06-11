@@ -160,7 +160,7 @@ def create_app():
                 modulos_activos = getattr(tenant, 'modulos_activos', {}) or {}
                 tenant_has_odoo = bool(modulos_activos.get('odoo'))
                 tenant_has_odoo_alta = bool(modulos_activos.get('odoo_alta'))
-                tenant_has_integrations = tenant_has_odoo
+                tenant_has_integrations = tenant_has_odoo or tenant_has_odoo_alta
 
         return dict(
             pending_notifications=pending_count,
@@ -215,17 +215,18 @@ def create_app():
             db.session.execute(text("SET search_path TO public"))
             return
 
-        # Separamos la URL por puntos para sacar la empresa
-       # Separamos la URL por puntos para sacar la empresa
         parts = host.split('.')
-        
-        # Si acceden al dominio raíz (ej: signaplan.com), parts tendrá solo 2 elementos.
-        # Lo enviamos directamente al esquema público.
-        if len(parts) == 2:
+        subdomain = None
+
+        # Desarrollo local: empresa.localhost (2 partes, subdominio + localhost)
+        if len(parts) == 2 and parts[1] == 'localhost' and parts[0] not in ('localhost', 'www'):
+            subdomain = parts[0]
+        # Producción: dominio raíz (ej: signaplan.com) → esquema público
+        elif len(parts) == 2:
             db.session.execute(text("SET search_path TO public"))
             return
-
-        subdomain = parts[0]
+        else:
+            subdomain = parts[0]
 
         # Añadimos tu dominio base 'signaplan' a la lista por seguridad adicional
         if subdomain not in ['www', 'admin', 'superadmin', 'signaplan']:

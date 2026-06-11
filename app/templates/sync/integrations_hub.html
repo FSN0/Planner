@@ -1,32 +1,62 @@
 {% extends "base.html" %}
 {% block title %}Integraciones{% endblock %}
-{% block content %}
-<div class="container mt-4">
-    <h2><i class="fas fa-plug text-primary"></i> Hub de integraciones</h2>
-    <p class="text-muted">Módulos adicionales contratados para tu entorno.</p>
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact">
+    <header class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title"><i class="fas fa-plug text-primary mr-2"></i> Integraciones</h1>
+        <span class="page-toolbar-count">Módulos contratados para tu entorno</span>
+      </div>
+    </header>
 
     {% if not tenant_has_integrations %}
-    <div class="alert alert-light border mt-4">
-        <i class="fas fa-info-circle text-muted mr-2"></i>
-        Tu empresa no tiene módulos de integración activos. Contacta con soporte si necesitas conectar un ERP.
+    <div class="alert alert-light border mt-2">
+      <i class="fas fa-info-circle text-muted mr-2"></i>
+      Tu empresa no tiene módulos de integración activos. Contacta con soporte si necesitas conectar un ERP u otras herramientas.
     </div>
     {% else %}
-    <div class="row mt-4">
-        {% if modulos_activos.get('odoo') %}
-        <div class="col-md-4 mb-3">
-            <div class="card h-100 shadow-sm">
-                <div class="card-body text-center">
-                    <h3 style="color: #714B67;"><i class="fas fa-database"></i> Odoo ERP</h3>
-                    <p class="mt-3 text-muted small">
-                        Sincronización de obras, empleados, subcontratas y fichajes con Odoo.
-                    </p>
-                    <div class="badge badge-success mb-3">Módulo activo</div><br>
-                    <a href="{{ url_for('sync.odoo_panel') }}" class="btn btn-primary w-100">Abrir centro Odoo</a>
-                </div>
-            </div>
+    <div class="row mt-3">
+      {% if modulos_activos.get('odoo') %}
+      <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-0">
+          <div class="card-body">
+            <h3 class="h5 mb-2" style="color: #714B67;"><i class="fas fa-sync"></i> Sync Odoo</h3>
+            <p class="text-muted small mb-3">
+              Sincronización de obras, empleados, subcontratas y fichajes con Odoo ERP.
+            </p>
+            <span class="badge badge-success mb-3">Módulo activo</span>
+            <a href="{{ url_for('sync.odoo_panel') }}" class="btn btn-primary btn-block">Abrir centro de sincronización</a>
+          </div>
         </div>
-        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if modulos_activos.get('odoo_alta') %}
+      <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-0">
+          <div class="card-body">
+            <h3 class="h5 mb-2" style="color: #0369a1;"><i class="fas fa-address-book"></i> Alta Odoo</h3>
+            <p class="text-muted small mb-3">
+              Acceso SSO al panel de altas y contactos en Odoo (módulo Fichajes Soltec).
+            </p>
+            <span class="badge badge-success mb-3">Módulo activo</span>
+            <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="btn btn-outline-primary btn-block" target="_blank" rel="noopener">
+              Abrir alta en Odoo <i class="fas fa-external-link-alt ml-1"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endif %}
     </div>
     {% endif %}
+  </main>
 </div>
 {% endblock %}

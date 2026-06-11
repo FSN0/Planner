@@ -33,7 +33,7 @@ def login():
 
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
         flash('Por favor, accede desde la URL específica de tu empresa.', 'warning')
-        return redirect('/superadmin/')
+        return redirect('http://localhost/superadmin/')
 
     if request.method == 'POST':
         email = request.form.get('email')
@@ -109,7 +109,7 @@ def logout():
 def register():
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
         flash('Accede desde la URL de tu empresa para registrarte.', 'warning')
-        return redirect('http://localhost:5000/superadmin/')
+        return redirect('http://localhost/superadmin/')
 
     if request.method == 'POST':
         name = request.form.get('name')

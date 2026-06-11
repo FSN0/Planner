@@ -32,7 +32,7 @@ def _tenant_modulos():
 def _tenant_has_integrations():
     """True si el tenant tiene al menos un módulo de integración contratado."""
     modulos = _tenant_modulos()
-    return bool(modulos.get('odoo'))
+    return bool(modulos.get('odoo') or modulos.get('odoo_alta'))
 
 
 def _require_odoo_module():
