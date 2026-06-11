@@ -81,6 +81,7 @@
           {% endif %}
         </a>
       </li>
+      {% if tenant_has_odoo_alta %}
       <li>
         <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="sidebar-link" target="_blank" rel="noopener" title="Panel de altas en Odoo">
           <i class="fas fa-address-book fa-fw"></i>
@@ -88,6 +89,7 @@
           <i class="fas fa-external-link-alt sidebar-link-ext" aria-hidden="true"></i>
         </a>
       </li>
+      {% endif %}
       {% endif %}
     </ul>
     {% endif %}
@@ -100,9 +102,16 @@
           <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
         </a>
       </li>
+      {% if current_user.role == 'admin' and tenant_has_odoo %}
+      <li>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sidebar-link {% if request.endpoint == 'sync.odoo_panel' %}is-active{% endif %}">
+          <i class="fas fa-sync fa-fw"></i><span>Sync Odoo</span>
+        </a>
+      </li>
+      {% endif %}
       {% if current_user.role == 'admin' and tenant_has_integrations %}
       <li>
-        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if request.endpoint in ('sync.panel', 'sync.odoo_panel') %}is-active{% endif %}">
+        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if request.endpoint == 'sync.panel' %}is-active{% endif %}">
           <i class="fas fa-plug fa-fw"></i><span>Integraciones</span>
         </a>
       </li>

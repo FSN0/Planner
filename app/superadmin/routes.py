@@ -11,7 +11,8 @@ from sqlalchemy import text
 # CATÁLOGO DE MÓDULOS Y ADAPTADORES
 # ==========================================
 MODULOS_DISPONIBLES = {
-    'odoo': 'Integración Odoo (ERP)',
+    'odoo': 'Integración Odoo (ERP / Sincronización)',
+    'odoo_alta': 'Alta Odoo (SSO Contactos)',
     'chat': 'Chat de Comunicación (Próximamente)'
 }
 

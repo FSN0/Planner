@@ -34,6 +34,7 @@ DECLARE
     v_conn text := current_setting('migration.import_conn');
     v_head text := current_setting('migration.alembic_head');
     v_has_solicitud_notas boolean;
+    v_has_nota_odoo boolean;
     truncate_tables text;
     t_name text;
 BEGIN
@@ -51,7 +52,7 @@ BEGIN
         v_sub,
         v_schema,
         true,
-        '{"odoo": true, "odoo_adapter": "odoo_soltec", "chat": false}'::json
+        '{"odoo": true, "odoo_alta": true, "odoo_adapter": "odoo_soltec", "chat": false}'::json
     )
     ON CONFLICT (subdominio) DO UPDATE SET
         nombre = EXCLUDED.nombre,
@@ -97,6 +98,15 @@ BEGIN
               WHERE table_schema = 'public' AND table_name = 'solicitudes' AND column_name = 'notas'$$
         ) AS t(c int)
     ) INTO v_has_solicitud_notas;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM dblink(
+            v_conn,
+            $$SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'registros_fichajes' AND column_name = 'nota_odoo'$$
+        ) AS t(c int)
+    ) INTO v_has_nota_odoo;
 
     -- 4) Copia con transformaciones (orden FK)
     EXECUTE format($q$
@@ -297,24 +307,57 @@ BEGIN
         )
     $q$, v_schema, v_conn);
 
-    EXECUTE format($q$
-        INSERT INTO %1$I.registros_fichajes (
-            id, user_id, fecha, check_in, check_out, nota_odoo,
-            obra_planificada_id, obra_real_id, estado, notas_resolucion, fecha_auditoria, resuelto_por_id
-        )
-        SELECT
-            id, user_id, fecha, check_in, check_out, NULL::text,
-            obra_planificada_id, obra_real_id, estado, notas_resolucion, fecha_auditoria, resuelto_por_id
-        FROM dblink(%2$L,
-            'SELECT id, user_id, fecha, check_in, check_out,
-                    obra_planificada_id, obra_real_id, estado, notas_resolucion, fecha_auditoria, resuelto_por_id
-             FROM public.registros_fichajes ORDER BY id'
-        ) AS r(
-            id int, user_id int, fecha date, check_in timestamp, check_out timestamp,
-            obra_planificada_id int, obra_real_id int, estado varchar, notas_resolucion text,
-            fecha_auditoria timestamp, resuelto_por_id int
-        )
-    $q$, v_schema, v_conn);
+    IF v_has_nota_odoo THEN
+        EXECUTE format($q$
+            INSERT INTO %1$I.registros_fichajes (
+                id, user_id, fecha, check_in, check_out, nota_odoo,
+                obra_planificada_id, obra_real_id, estado, notas_resolucion, fecha_auditoria, resuelto_por_id
+            )
+            SELECT
+                id, user_id, fecha, check_in, check_out, nota_odoo,
+                obra_planificada_id, obra_real_id,
+                CASE
+                    WHEN estado = 'Sin_Registro' AND (check_in IS NOT NULL OR check_out IS NOT NULL)
+                    THEN 'Correcto_Automatico'
+                    ELSE estado
+                END,
+                notas_resolucion, fecha_auditoria, resuelto_por_id
+            FROM dblink(%2$L,
+                'SELECT id, user_id, fecha, check_in, check_out, nota_odoo,
+                        obra_planificada_id, obra_real_id, estado, notas_resolucion, fecha_auditoria, resuelto_por_id
+                 FROM public.registros_fichajes ORDER BY id'
+            ) AS r(
+                id int, user_id int, fecha date, check_in timestamp, check_out timestamp, nota_odoo text,
+                obra_planificada_id int, obra_real_id int, estado varchar, notas_resolucion text,
+                fecha_auditoria timestamp, resuelto_por_id int
+            )
+        $q$, v_schema, v_conn);
+    ELSE
+        EXECUTE format($q$
+            INSERT INTO %1$I.registros_fichajes (
+                id, user_id, fecha, check_in, check_out, nota_odoo,
+                obra_planificada_id, obra_real_id, estado, notas_resolucion, fecha_auditoria, resuelto_por_id
+            )
+            SELECT
+                id, user_id, fecha, check_in, check_out, NULL::text,
+                obra_planificada_id, obra_real_id,
+                CASE
+                    WHEN estado = 'Sin_Registro' AND (check_in IS NOT NULL OR check_out IS NOT NULL)
+                    THEN 'Correcto_Automatico'
+                    ELSE estado
+                END,
+                notas_resolucion, fecha_auditoria, resuelto_por_id
+            FROM dblink(%2$L,
+                'SELECT id, user_id, fecha, check_in, check_out,
+                        obra_planificada_id, obra_real_id, estado, notas_resolucion, fecha_auditoria, resuelto_por_id
+                 FROM public.registros_fichajes ORDER BY id'
+            ) AS r(
+                id int, user_id int, fecha date, check_in timestamp, check_out timestamp,
+                obra_planificada_id int, obra_real_id int, estado varchar, notas_resolucion text,
+                fecha_auditoria timestamp, resuelto_por_id int
+            )
+        $q$, v_schema, v_conn);
+    END IF;
 
     EXECUTE format($q$
         INSERT INTO %1$I.ratings (id, user_id, created_by_id, score, reason, created_at, is_active)

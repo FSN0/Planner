@@ -1,5 +1,5 @@
 # app/admin/routes.py
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, g
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_
 from app.models import (
@@ -2045,6 +2045,11 @@ def sso_odoo_contactos():
     from app.models import ConfiguracionGlobal
     from itsdangerous import URLSafeTimedSerializer
     import datetime
+
+    modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
+    if not modulos.get('odoo_alta'):
+        flash('Tu empresa no tiene habilitado el módulo de Alta Odoo.', 'warning')
+        return redirect(url_for('admin.panel'))
 
     sso_secret = current_app.config.get('SSO_SECRET_KEY')
     if not sso_secret:
