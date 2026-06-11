@@ -43,12 +43,23 @@
       </form>
 
       <nav class="admin-logs-tabs" aria-label="Categorías de logs">
-        <a class="{% if current_category == 'accesos' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='accesos') }}"><i class="fas fa-sign-in-alt"></i> Accesos</a>
-        <a class="{% if current_category == 'valoraciones' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='valoraciones') }}"><i class="fas fa-star"></i> Valoraciones</a>
-        <a class="{% if current_category == 'planificacion' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='planificacion') }}"><i class="fas fa-calendar-alt"></i> Planificación</a>
-        <a class="{% if current_category == 'obras' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='obras') }}"><i class="fas fa-building"></i> Obras</a>
-        <a class="{% if current_category == 'fichajes' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='fichajes') }}"><i class="fas fa-user-clock"></i> Fichajes</a>
-        <a class="{% if current_category == 'persona_obra' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='persona_obra') }}"><i class="fas fa-route"></i> Persona-Obra</a>
+        {% set log_tabs = [
+          ('accesos', 'fa-sign-in-alt', 'Accesos'),
+          ('valoraciones', 'fa-star', 'Valoraciones'),
+          ('planificacion', 'fa-calendar-alt', 'Planificación'),
+          ('obras', 'fa-building', 'Obras'),
+          ('fichajes', 'fa-user-clock', 'Fichajes'),
+          ('persona_obra', 'fa-route', 'Persona-Obra'),
+        ] %}
+        {% for cat_key, cat_icon, cat_label in log_tabs %}
+        <a class="{% if current_category == cat_key %}is-active{% endif %}"
+           href="{{ url_for('admin.system_logs', category=cat_key) }}">
+          <i class="fas {{ cat_icon }}"></i> {{ cat_label }}
+          {% if log_unread_by_category.get(cat_key) %}
+          <span class="logs-tab-badge" title="{{ log_unread_by_category[cat_key] }} sin leer">{{ log_unread_by_category[cat_key] }}</span>
+          {% endif %}
+        </a>
+        {% endfor %}
       </nav>
 
       {% if current_category == 'persona_obra' %}

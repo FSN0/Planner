@@ -1,20 +1,448 @@
-.planificador-container {
+/* ==========================================================================
+   PLANIFICADOR — página y toolbar
+   ========================================================================== */
+.planificador-page {
+    gap: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    padding-bottom: 2rem;
+}
+/* Toolbar: NO sticky — capa por encima del timeline para desplegables */
+.planificador-page > .planificador-toolbar {
+    position: relative;
+    z-index: 200;
+    background: transparent;
+    padding: 0.35rem 0 0.65rem;
+    margin-bottom: 0.5rem;
+    flex-shrink: 0;
+}
+.planificador-page > .planificador-toolbar.page-toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    row-gap: 0.5rem;
+}
+.planificador-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.68rem;
+    color: var(--color-text-muted, #64748b);
+    background: var(--color-bg-main, #f8fafc);
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: 999px;
+    padding: 0.18rem 0.55rem;
+    white-space: nowrap;
+}
+.planificador-hint-sep { opacity: 0.45; }
+.planificador-filters {
+    position: relative;
+    z-index: 201;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+/* Controles de filtro — pastilla redondeada */
+.planificador-filter-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.1rem;
+    padding: 0 0.65rem;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: 999px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    overflow: hidden;
+}
+.planificador-filter-control--dropdown {
+    padding: 0;
+    overflow: visible;
+}
+.planificador-filter-control:hover {
+    border-color: #cbd5e1;
+}
+.planificador-filter-control:focus-within {
+    border-color: #22c55e;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12);
+}
+.planificador-filter-control-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted, #94a3b8);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.planificador-filter-btn {
+    min-height: 2.1rem;
+    font-size: 0.72rem !important;
+    max-width: 11rem;
+    background: var(--color-surface, #fff) !important;
+    border: 1px solid var(--color-border-strong, #e2e8f0) !important;
+    border-radius: 999px !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+}
+.planificador-filter-btn:hover {
+    border-color: #cbd5e1 !important;
+    background: #f8fafc !important;
+}
+.planificador-empresas-btn {
+    justify-content: space-between;
+    gap: 0.4rem;
+    min-width: 11.5rem;
+}
+.planificador-chevron {
+    font-size: 0.55rem;
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+.planificador-filter-divider {
+    width: 1px;
+    height: 1.4rem;
+    background: var(--color-border-strong, #e2e8f0);
+    flex-shrink: 0;
+}
+.planificador-empresas-dropdown {
+    min-width: 12rem;
+    padding: 0 !important;
+}
+.planificador-empresas-dropdown .planificador-empresas-btn {
+    width: 100%;
+    min-height: 2rem;
+    padding: 0 0.55rem;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: none;
+}
+.planificador-empresas-dropdown .planificador-empresas-btn:hover {
+    background: transparent !important;
+}
+#empresas-btn-text {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #334155;
+}
+#dropdownEmpresas {
+    width: 100%;
+    text-align: left;
+}
+.planificador-empresas-menu {
+    min-width: 18rem;
+    max-height: 22rem;
+    overflow-y: auto;
+    font-size: 0.74rem;
+    z-index: 10050 !important;
+    border: 1px solid var(--color-border-strong, #e2e8f0) !important;
+    border-radius: 14px !important;
+    padding: 0 !important;
+    margin-top: 0.35rem;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18) !important;
+    background: #fff !important;
+}
+.planificador-empresas-menu.show {
+    display: block;
+}
+.planificador-empresas-menu-head {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    border-bottom: 1px solid #f1f5f9;
+    border-radius: 14px 14px 0 0;
+}
+.planificador-empresas-menu-body {
+    padding: 0.55rem 0.65rem 0.65rem;
+}
+.planificador-empresas-menu .custom-control {
+    min-height: 1.35rem;
+    padding-left: 1.35rem;
+}
+.planificador-empresas-menu .custom-control-input:checked ~ .custom-control-label::before {
+    background-color: #22c55e;
+    border-color: #16a34a;
+}
+.planificador-empresas-menu .custom-control-label {
+    cursor: pointer;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    padding-top: 0.08rem;
+}
+.planificador-empresas-menu .custom-control-label::before {
+    border-radius: 5px !important;
+    border: 1.5px solid #cbd5e1 !important;
+    width: 0.95rem !important;
+    height: 0.95rem !important;
+    top: 0.12rem !important;
+}
+.planificador-empresas-menu .custom-control-label::after {
+    width: 0.95rem !important;
+    height: 0.95rem !important;
+    top: 0.12rem !important;
+}
+.planificador-empresa-interna {
+    color: var(--color-primary, #16a34a);
+    font-weight: 600;
+}
+.planificador-jefe-filter.planificador-filter-control {
+    padding-right: 0.65rem;
+    min-width: 18rem;
+    max-width: 26rem;
+    flex: 1 1 18rem;
+}
+.planificador-jefe-filter .select2-container {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.78rem;
+}
+.planificador-jefe-filter .select2-container--default .select2-selection--single {
+    border: none !important;
+    background: transparent !important;
+    height: 2.15rem !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+.planificador-jefe-filter .select2-container--default .select2-selection--single .select2-selection__rendered {
+    padding-left: 0.2rem;
+    padding-right: 1.75rem;
+    font-size: 0.78rem;
+    line-height: 2.15rem !important;
+    color: var(--color-text, #1e293b);
+    font-weight: 600;
+}
+.planificador-jefe-filter .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 2.15rem !important;
+    right: 0.1rem;
+}
+.planificador-jefe-filter .select2-container--default .select2-selection--single .select2-selection__arrow b {
+    border-color: #94a3b8 transparent transparent transparent;
+    border-width: 5px 4px 0 4px;
+}
+.planificador-jefe-filter .select2-container--default .select2-selection--single .select2-selection__clear {
+    margin-right: 1.1rem;
+    font-size: 0.95rem;
+    color: #94a3b8;
+    transition: color 0.15s, transform 0.15s;
+}
+.planificador-jefe-filter .select2-container--default .select2-selection--single .select2-selection__clear:hover {
+    color: #dc2626;
+    transform: scale(1.15);
+}
+.planificador-filter-icon {
+    font-size: 0.72rem;
+    color: #22c55e;
+    flex-shrink: 0;
+}
+.planificador-select {
+    border: none;
+    background: transparent;
+    font-size: 0.72rem;
+    height: 1.9rem;
+    min-width: 9rem;
+    max-width: 12rem;
+    cursor: pointer;
+    outline: none;
+    color: var(--color-text, #1e293b);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2394a3b8' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.15rem center;
+    padding-right: 1rem;
+}
+.planificador-filter-or {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--color-text-muted, #94a3b8);
+    text-transform: uppercase;
+    padding: 0 0.15rem;
+}
+.planificador-obras-filter {
+    min-width: 15rem;
+    max-width: 20rem;
+    padding-left: 0.7rem !important;
+    padding-right: 0.55rem !important;
+}
+.planificador-obras-filter .select2-container {
+    width: 100% !important;
+    font-size: 0.72rem;
+    flex: 1;
+    min-width: 0;
+}
+.planificador-obras-filter .select2-container--default .select2-selection--multiple {
+    min-height: 1.9rem;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0.12rem 0 0.12rem 0.15rem;
+}
+.planificador-obras-filter .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+    padding: 0 0 0 0.2rem;
     display: flex;
-    flex-direction: column;
-    border-radius: 8px;
-    background: #fff;
-    margin-bottom: 50px; 
-    position: relative; 
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+}
+.select2-dropdown.planificador-jefe-dropdown {
+    min-width: 18rem !important;
+    width: max-content !important;
+    max-width: min(28rem, 92vw) !important;
+}
+.select2-dropdown.planificador-jefe-dropdown .select2-results__option {
+    white-space: nowrap;
+    font-size: 0.78rem;
+    padding: 0.45rem 0.75rem;
+}
+
+.planificador-obras-filter .select2-container--default .select2-selection--multiple .select2-selection__choice {
+    display: inline-flex !important;
+    flex-direction: row-reverse !important;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.62rem;
+    padding: 0.2rem 0.5rem 0.2rem 0.65rem !important;
+    margin: 0 !important;
+    border-radius: 999px !important;
+    background: #f0fdf4 !important;
+    border: 1px solid #bbf7d0 !important;
+    color: #166534 !important;
+    font-weight: 600;
+    max-width: 100%;
+    line-height: 1.25;
+    transition: opacity 0.2s ease, transform 0.2s ease, max-width 0.25s ease;
+}
+.planificador-obras-filter .select2-container--default .select2-selection--multiple .select2-selection__choice.select2-chip-removing {
+    opacity: 0 !important;
+    transform: scale(0.72);
+    pointer-events: none;
+}
+.planificador-obras-filter .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    position: static !important;
+    transform: none !important;
+    flex-shrink: 0;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 50%;
+    color: #16a34a !important;
+    font-weight: 700;
+    border: none !important;
+    line-height: 1;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.planificador-obras-filter .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+    color: #dc2626 !important;
+    background: #fecaca !important;
+    transform: scale(1.08);
+}
+.planificador-obras-filter .select2-container--default .select2-search--inline .select2-search__field {
+    font-size: 0.72rem;
+    margin: 0 0 0 0.35rem !important;
+    padding-left: 0.15rem;
+    height: 1.5rem;
+    min-width: 5rem;
+}
+.planificador-page .select2-container--open {
+    z-index: 10050 !important;
+}
+.select2-dropdown.planificador-select2-dropdown {
+    z-index: 10051 !important;
+    border: 1px solid var(--color-border-strong, #e2e8f0) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18) !important;
+    font-size: 0.72rem;
+    overflow: hidden;
+    padding: 0.25rem;
+}
+.planificador-page .select2-dropdown {
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+    font-size: 0.72rem;
+    overflow: hidden;
+}
+.planificador-page .select2-search--dropdown .select2-search__field {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    padding: 0.3rem 0.45rem;
+}
+.planificador-page .select2-results__option {
+    padding: 0.35rem 0.55rem;
+}
+.planificador-page .select2-results__option--highlighted[aria-selected] {
+    background: #f0fdf4 !important;
+    color: #166534 !important;
+}
+.planificador-page .select2-results__option[aria-selected=true] {
+    background: #dcfce7 !important;
+    color: #14532d !important;
+}
+
+.vis-panel.vis-left, .vis-labelset, .vis-label {
+    width: 250px !important;
+    min-width: 250px !important;
+    max-width: 250px !important;
+}
+
+.planificador-container {
+    display: block;
+    border-radius: var(--radius-lg, 10px);
+    background: var(--color-surface, #fff);
+    margin-bottom: 1.5rem;
+    position: relative;
+    z-index: 1;
+    overflow: visible;
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.05));
+    padding: 0;
+    flex-shrink: 0;
+    width: 100%;
 }
 
 #planificador-calendar {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 120px;
+    height: auto !important;
+    overflow: visible;
 }
 
-.vis-timeline { 
-    border: 1px solid #e2e8f0; 
-    border-radius: 8px; 
-    border: none; 
+/* El timeline crece con cada fila de obra (scroll de página, no interno) */
+#planificador-calendar .vis-timeline {
+    overflow: visible !important;
+}
+
+.vis-timeline {
+    border: none;
+    border-radius: 0 0 var(--radius-lg, 10px) var(--radius-lg, 10px);
+    font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+}
+.vis-panel.vis-left {
+    background: #f8fafc !important;
+    border-right: 1px solid #e2e8f0 !important;
+}
+.vis-labelset .vis-label {
+    border-bottom: 1px solid #f1f5f9;
+}
+.vis-labelset .vis-label.vis-even,
+.vis-labelset .vis-label.vis-odd {
+    background: transparent;
 }
 
 /* =========================================================
@@ -29,8 +457,12 @@
 
 .vis-panel.vis-top {
     transform: translateY(var(--sticky-top, 0px));
-    z-index: 100 !important;
+    z-index: 95 !important;
     background-color: #ffffff !important;
+    box-shadow: 0 1px 0 #e2e8f0;
+}
+.planificador-page.is-date-header-pinned .vis-panel.vis-top {
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
 /* 2. Hacemos que TODO el panel superior (incluidos los textos) sea traspasable */
@@ -102,6 +534,38 @@
     display: flex; align-items: center; color: white !important;
     font-size: 9px !important; font-weight: 600 !important;
     white-space: nowrap !important; height: 100% !important;
+    cursor: pointer;
+}
+/* Tooltip flotante al pasar sobre un operario */
+.planificador-item-tooltip {
+    position: fixed;
+    z-index: 10060;
+    pointer-events: none;
+    padding: 0.4rem 0.6rem;
+    background: rgba(15, 23, 42, 0.94);
+    color: #f8fafc;
+    font-size: 0.72rem;
+    line-height: 1.25;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-width: 16rem;
+    backdrop-filter: blur(4px);
+}
+.planificador-item-tooltip strong {
+    display: block;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.1rem;
+}
+.planificador-item-tooltip span {
+    display: block;
+    font-size: 0.65rem;
+    color: #94a3b8;
+}
+.planificador-item-tooltip .planificador-tt-empresa {
+    color: #86efac;
+    font-weight: 600;
 }
 .operario-micro i {
     font-size: 8px !important; margin-right: 4px !important;
@@ -142,10 +606,117 @@
     z-index: 0 !important; pointer-events: none !important; 
 }
 
-/* POPOVER FIJADO EN PANTALLA */
-#worker-popover {
-    position: fixed; z-index: 9999; border: 1px solid #cbd5e1; width: 280px; transition: opacity 0.2s;
+/* POPOVER del operario seleccionado */
+#worker-popover,
+.planificador-worker-popover {
+    position: fixed;
+    z-index: 9999;
+    width: 18.5rem;
+    min-width: 260px;
+    transition: opacity 0.15s, transform 0.15s;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+    padding: 0;
+    overflow: hidden;
 }
+.planificador-popover-close {
+    position: absolute;
+    right: 0.45rem;
+    top: 0.4rem;
+    z-index: 2;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    outline: none;
+    color: #fff;
+    opacity: 0.85;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+}
+.planificador-popover-close:hover { opacity: 1; background: rgba(255,255,255,0.15); }
+.planificador-popover-banner {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    padding: 0.65rem 0.75rem 0.7rem;
+    color: #fff;
+}
+.planificador-popover-head {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding-right: 1.5rem;
+}
+.planificador-popover-avatar {
+    min-width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 700;
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+}
+.planificador-popover-name {
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.15;
+    color: #fff;
+}
+.planificador-popover-name a { color: #fff; text-decoration: none; }
+.planificador-popover-name a:hover { color: #bbf7d0; }
+.planificador-popover-body {
+    padding: 0.65rem 0.75rem 0.75rem;
+}
+.planificador-popover-meta {
+    font-size: 0.74rem;
+    color: var(--color-text-secondary, #475569);
+}
+.planificador-popover-meta p {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.planificador-popover-meta i {
+    width: 0.9rem;
+    text-align: center;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+.planificador-popover-meta a {
+    color: var(--color-primary, #16a34a);
+    font-weight: 600;
+    text-decoration: none;
+}
+.planificador-popover-actions {
+    margin-top: 0.55rem;
+    padding: 0.55rem;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-md, 8px);
+}
+.planificador-popover-actions-title {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #b91c1c;
+    margin-bottom: 0.4rem;
+}
+.planificador-popover-actions .btn {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    font-weight: 600;
+}
+.planificador-popover-actions .btn:last-child { margin-bottom: 0 !important; }
 
 /* =========================================================
    DESTRUCCIÓN DE CAPAS FANTASMA QUE ROBAN CLICS
@@ -163,4 +734,23 @@
 .vis-label { 
     touch-action: none !important; 
     pointer-events: auto !important; 
+}
+
+/* Modales */
+body.layout-admin #modalConflicto .modal-content {
+    border-radius: var(--radius-lg, 10px);
+    overflow: hidden;
+    border: 1px solid #fecaca;
+}
+body.layout-admin #quickCalendarModal .modal-header {
+    background: linear-gradient(135deg, #1e293b, #334155);
+    color: #fff;
+}
+body.layout-admin #quickCalendarModal .modal-header .close { color: #fff; opacity: 0.85; }
+
+@media (max-width: 991.98px) {
+    .planificador-hint { display: none; }
+    .planificador-filters { width: 100%; justify-content: flex-start; }
+    .planificador-obras-filter { width: 100%; }
+    .planificador-obras-filter .select2-container { width: 100% !important; min-width: 0; }
 }

@@ -4,26 +4,23 @@
    0. AJUSTES GLOBALES Y DESBLOQUEO DE SCROLL
    ========================================================================== */
 
-/* Ocultar la barra superior antigua */
 nav.navbar, .navbar { display: none !important; }
 
-/* 1. CAMBIO: Permitimos scroll vertical en la página, pero ocultamos horizontal del body */
 html, body {
     width: 100%;
     margin: 0;
     padding: 0;
-    overflow-y: auto !important; /* <--- PERMITE BAJAR EN LA WEB */
+    overflow-y: auto !important;
     overflow-x: hidden;
-    background-color: #f1f5f9;
-    min-height: 100vh; /* Asegura fondo completo */
+    background-color: var(--color-bg-main, #f1f5f9);
+    min-height: 100vh;
 }
 
-/* 2. CAMBIO: El shell crece con el contenido (min-height) en vez de bloquearse */
 .admin-shell {
     display: flex;
-    min-height: 100vh; /* <--- CAMBIO */
+    min-height: 100vh;
     width: 100vw;
-    overflow: visible; /* <--- DEJA QUE EL CONTENIDO SE VEA AL BAJAR */
+    overflow: visible;
     padding-top: 0 !important;
     margin-top: 0 !important;
     position: relative;
@@ -37,51 +34,304 @@ html, body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 100vh; /* <--- SE ADAPTA */
+    min-height: 100vh;
     min-width: 0;
-    background-color: #f1f5f9;
+    background-color: var(--color-bg-main, #f1f5f9);
     padding: 0 !important;
-    overflow: visible; /* <--- CRÍTICO */
+    overflow: visible;
     position: relative;
 }
 
-/* --- Cabecera de Tiempo (Timeline Header) --- */
-.timeline-header-wrapper {
+/* --- Cabecera sticky unificada (calendario + filtros) --- */
+.kanban-sticky-header {
     flex-shrink: 0;
-    z-index: 20;
-    background: #fff;
-    position: sticky; /* <--- MEJORA: SE QUEDA FIJA AL BAJAR */
+    position: sticky;
     top: 0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    z-index: 30;
+    background: var(--color-surface, #fff);
+    border-bottom: 1px solid var(--color-border-strong, #e2e8f0);
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.04));
 }
 
-/* Cápsula de día (INTACTO) */
+/* --- Cabecera de tiempo --- */
+.timeline-header-wrapper {
+    flex-shrink: 0;
+    background: var(--color-surface, #fff);
+    position: static;
+    border-bottom: none;
+    box-shadow: none;
+}
+.timeline-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    background: linear-gradient(180deg, #fff 0%, #fafbfc 100%);
+}
+.timeline-header-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.timeline-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--radius-md, 8px);
+    color: var(--color-text-muted, #64748b);
+    text-decoration: none !important;
+    transition: background 0.15s, color 0.15s;
+}
+.timeline-nav-btn:hover {
+    background: #f1f5f9;
+    color: var(--color-text, #1e293b);
+}
+.timeline-month-title {
+    margin: 0;
+    min-width: 9rem;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-text, #1e293b);
+}
+.timeline-header-date {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.timeline-today-btn {
+    font-size: 0.68rem !important;
+    padding: 0.22rem 0.55rem !important;
+}
+.timeline-today-btn.is-current {
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+    background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%) !important;
+}
+.timeline-date-form {
+    display: inline-flex;
+    align-items: center;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+    margin: 0;
+}
+.timeline-date-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.45rem;
+    margin: 0;
+    color: var(--color-text-muted, #94a3b8);
+    font-size: 0.75rem;
+    border-right: 1px solid #f1f5f9;
+}
+.timeline-date-input {
+    border: none;
+    outline: none;
+    font-size: 0.72rem;
+    padding: 0.28rem 0.45rem;
+    color: var(--color-text, #334155);
+    background: transparent;
+    max-width: 8.5rem;
+}
+.timeline-days-container {
+    display: flex;
+    align-items: center;
+    padding: 0.4rem 1rem 0.25rem;
+    overflow-x: auto;
+    white-space: nowrap;
+    gap: 0.45rem;
+    background: var(--color-surface, #fff);
+    scrollbar-width: thin;
+}
+
 .day-capsule {
     display: inline-flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 50px;
-    height: 60px;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
+    width: 2.9rem;
+    height: 3.45rem;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid var(--color-border-strong, #e2e8f0);
     background-color: #fff;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.18s ease;
     position: relative;
     text-decoration: none !important;
-    color: #475569;
+    color: #64748b;
     flex-shrink: 0;
 }
-.day-capsule:hover { border-color: #94a3b8; transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); color: #1e293b; }
-.day-capsule.active { background-color: #eff6ff; border-color: #3b82f6; color: #1e40af; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
-.day-name { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; margin-bottom: 2px; }
-.day-number { font-size: 1.1rem; font-weight: 800; line-height: 1; }
-.day-indicators { display: flex; gap: 2px; margin-top: 4px; height: 4px; }
+.day-capsule:hover {
+    border-color: #94a3b8;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.06);
+    color: #1e293b;
+}
+.day-capsule.is-selected {
+    background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    border-color: #3b82f6;
+    color: #1d4ed8;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+}
+.day-capsule.is-today:not(.is-selected) {
+    background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%);
+    border-color: #22c55e;
+    color: #15803d;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+}
+.day-capsule.is-today.is-selected {
+    background: linear-gradient(180deg, #dbeafe 0%, #bbf7d0 100%);
+    border-color: #2563eb;
+    color: #1e40af;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+.day-capsule.is-today .day-number::after {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #22c55e;
+    margin: 2px auto 0;
+}
+.day-capsule.is-selected .day-number::after {
+    display: none;
+}
+.timeline-date-input.is-today-selected {
+    font-weight: 700;
+    color: #15803d;
+}
+.timeline-date-form:has(.timeline-date-input:focus),
+.timeline-date-form:has(.timeline-date-input) {
+    border-color: #cbd5e1;
+}
+.timeline-date-input:not(.is-today-selected) {
+    font-weight: 600;
+    color: #1d4ed8;
+}
+.day-name {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 1px;
+    letter-spacing: 0.03em;
+}
+.day-number { font-size: 1rem; font-weight: 800; line-height: 1; }
+.day-indicators { display: flex; gap: 2px; margin-top: 3px; height: 4px; }
 .indicator-dot { width: 4px; height: 4px; border-radius: 50%; }
-.dot-free { background-color: #22c55e; } 
-.dot-in { background-color: #3b82f6; } 
+.dot-free { background-color: #22c55e; }
+.dot-in { background-color: #3b82f6; }
 .dot-out { background-color: #ef4444; }
+
+/* --- Barra de filtros --- */
+.kanban-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    padding: 0.3rem 1rem 0.45rem;
+    background: var(--color-surface, #fff);
+    border-bottom: none;
+    position: static;
+    top: auto;
+    z-index: auto;
+}
+.kanban-filter-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted, #64748b);
+    flex-shrink: 0;
+}
+.active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+.filter-tag {
+    background: #f0fdf4;
+    color: #166534;
+    padding: 0.12rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #bbf7d0;
+}
+.filter-tag .remove-tag {
+    margin-left: 0.35rem;
+    cursor: pointer;
+    font-weight: 700;
+    opacity: 0.55;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+.filter-tag .remove-tag:hover { opacity: 1; color: #b91c1c; }
+.kanban-filter-input-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 10rem;
+    max-width: 22rem;
+}
+.kanban-filter-search-icon {
+    position: absolute;
+    left: 0.55rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.68rem;
+    color: #94a3b8;
+    pointer-events: none;
+}
+#kanbanFilterInput {
+    width: 100%;
+    padding: 0.32rem 0.65rem 0.32rem 1.65rem;
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: 999px;
+    font-size: 0.72rem;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    background: #f8fafc;
+    color: var(--color-text, #334155);
+}
+#kanbanFilterInput:focus {
+    border-color: #22c55e;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12);
+    background: #fff;
+}
+.kanban-filter-clear {
+    font-size: 0.65rem !important;
+    padding: 0.2rem 0.45rem !important;
+}
+
+/* Pelotitas estado fichaje */
+.status-dot-kanban {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 5px;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.8);
+}
+.dot-success { background-color: #10b981; }
+.dot-auto { background-color: #34d399; }
+.dot-danger { background-color: #ef4444; }
+.dot-warning { background-color: #f59e0b; }
+.dot-info { background-color: #3b82f6; }
+.dot-secondary { background-color: #94a3b8; }
 
 
 /* ==========================================================================
@@ -91,16 +341,14 @@ html, body {
 .kanban-container {
     flex: 1;
     display: flex;
-    padding: 20px;
-    
-    /* SCROLL HORIZONTAL ACTIVO, VERTICAL VISIBLE */
-    overflow-x: auto; 
-    overflow-y: visible; /* <--- DEJA SALIR EL CONTENIDO HACIA ABAJO */
-    
+    padding: 0.85rem 1rem 1.25rem;
+    overflow-x: auto;
+    overflow-y: visible;
     align-items: flex-start;
-    background-color: #f1f5f9;
+    background-color: var(--color-bg-main, #f1f5f9);
     width: 100%;
     box-sizing: border-box;
+    gap: 0.75rem;
 }
 
 /* --- Columnas Generales --- */
@@ -122,21 +370,84 @@ html, body {
    AQUÍ ESTÁ LA CLAVE: LA COLUMNA LIBRES SE PROTEGE
    --------------------------------------------------------
 */
+.kanban-libres-panel,
 .col-libres {
-    width: 260px;
-    background: #ffffff;
-    border: 1px solid #cbd5e1;
-    margin-right: 20px;
-    box-shadow: 4px 0 15px rgba(0,0,0,0.03);
-    
-    /* ESTO MANTIENE EL COMPORTAMIENTO DE "CAJÓN" CON SCROLL INTERNO */
-    height: calc(100vh - 100px) !important; 
-    max-height: 850px;
-    position: sticky; /* Se queda quieta mientras bajas */
-    top: 90px; 
-    overflow: hidden; /* Mantiene su estructura, el scroll va dentro */
+    width: 17rem;
+    min-width: 17rem;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+    height: calc(100vh - 8rem) !important;
+    max-height: 52rem;
+    position: sticky;
+    top: 8rem;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+    flex-shrink: 0;
+}
+.kanban-libres-head {
+    padding: 0.65rem 0.7rem 0.55rem;
+    border-bottom: 1px solid #f1f5f9;
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+    flex-shrink: 0;
+    z-index: 2;
+}
+.kanban-libres-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text, #334155);
+    margin-bottom: 0.45rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.kanban-libres-title i { color: #22c55e; font-size: 0.75rem; }
+.kanban-libres-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.kanban-libres-search-wrap > i {
+    position: absolute;
+    left: 0.5rem;
+    font-size: 0.65rem;
+    color: #94a3b8;
+    pointer-events: none;
+}
+.kanban-libres-search {
+    width: 100%;
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: var(--radius-md, 8px);
+    background: #f8fafc;
+    font-size: 0.72rem;
+    padding: 0.35rem 0.5rem 0.35rem 1.55rem;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.kanban-libres-search:focus {
+    border-color: #22c55e;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.1);
+    background: #fff;
+}
+.kanban-libres-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.45rem;
+    font-size: 0.65rem;
+    color: var(--color-text-muted, #64748b);
+}
+.kanban-libres-stat strong { color: #166534; }
+.kanban-libres-stat--free strong { font-size: 0.78rem; }
+.kanban-libres-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.45rem;
+    scrollbar-width: thin;
 }
 
 /* Wrapper de Obras */
@@ -152,27 +463,80 @@ html, body {
    --------------------------------------------------------
 */
 .obra-card {
-    width: 280px;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    
-    /* Height auto = crece según los tíos que haya */
-    height: auto !important; 
+    width: 17.5rem;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border-strong, #e2e8f0);
+    border-radius: var(--radius-lg, 12px);
+    height: auto !important;
     display: flex;
     flex-direction: column;
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,0.04));
+    overflow: hidden;
+    transition: box-shadow 0.15s, transform 0.15s;
 }
-
-/* Cabeceras de Columna (INTACTO) */
+.obra-card:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,0.07);
+}
+.obra-card.is-pinned {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
 .col-header {
-    padding: 12px 16px;
+    padding: 0.7rem 0.75rem 0.65rem;
     border-bottom: 1px solid rgba(0,0,0,0.05);
-    border-radius: 12px 12px 0 0;
     background-color: #fff;
     position: relative;
     flex-shrink: 0;
+    cursor: grab;
 }
-.col-header .header-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #1e293b; }
-.col-header .header-subtitle { font-size: 0.75rem; opacity: 0.8; display: flex; justify-content: space-between; align-items: center; color: #334155; }
+.col-header:active {
+    cursor: grabbing;
+}
+.col-header .header-title-link {
+    color: inherit;
+    text-decoration: none;
+    display: block;
+}
+.col-header .header-title-link:hover {
+    color: #2563eb;
+    text-decoration: underline;
+}
+.col-header .header-title {
+    font-weight: 700;
+    font-size: 0.78rem;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #1e293b;
+}
+.col-header .header-subtitle {
+    font-size: 0.68rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #64748b;
+}
+.col-header .btn-xs,
+.col-header .btn-request-worker {
+    border-radius: 6px;
+    padding: 0.12rem 0.35rem;
+    font-size: 0.68rem;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+.col-header .btn-pin-obra {
+    cursor: pointer;
+    transition: transform 0.15s, color 0.15s;
+}
+.col-header .btn-pin-obra:hover { transform: scale(1.1); }
+.col-header .text-muted-light { color: #cbd5e1 !important; }
+.col-header .staff-row .editable-staff {
+    font-size: 0.68rem;
+    border-bottom: 1px dashed #cbd5e1;
+    transition: color 0.15s;
+}
+.col-header .staff-row .editable-staff:hover { color: #16a34a !important; }
 
 /* Cuerpo de la lista GENERAL (Base) */
 .worker-list-body {
@@ -197,18 +561,39 @@ html, body {
 .worker-chip {
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 8px 10px;
-    margin-bottom: 6px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+    margin-bottom: 0.35rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
     cursor: grab;
-    transition: all 0.15s;
+    transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
     border-left: 4px solid transparent;
     position: relative;
 }
-.worker-chip:hover { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transform: translateY(-1px); border-color: #cbd5e1; }
-.worker-name { font-weight: 600; font-size: 0.8rem; color: #334155; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.worker-meta { font-size: 0.65rem; color: #64748b; margin-top: 2px; display: flex; justify-content: space-between; }
+.worker-chip:hover {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+    border-color: #cbd5e1;
+}
+.worker-name {
+    font-weight: 600;
+    font-size: 0.74rem;
+    color: #334155;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.worker-meta {
+    font-size: 0.62rem;
+    color: #64748b;
+    margin-top: 2px;
+    display: flex;
+    justify-content: space-between;
+}
+.kanban-libres-body .filterable-worker {
+    border-left-width: 4px !important;
+}
 
 /* Drag & Drop (INTACTO) */
 .ui-sortable-helper { transform: rotate(2deg); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2) !important; cursor: grabbing; opacity: 0.95; z-index: 9999; }
@@ -228,3 +613,15 @@ html, body {
 .flatpickr-calendar.inline { margin: 0 auto !important; box-shadow: none !important; border: 1px solid #e2e8f0; position: relative !important; top: 0 !important; }
 .flatpickr-day.has-work { font-weight: bold; position: relative; }
 .flatpickr-day.has-work::after { content: ''; position: absolute; bottom: 2px; left: 15%; width: 70%; height: 3px; background-color: #cbd5e1; border-radius: 2px; }
+
+@media (max-width: 991.98px) {
+    .kanban-libres-panel,
+    .col-libres {
+        width: 14.5rem;
+        min-width: 14.5rem;
+        top: 7.5rem;
+        height: calc(100vh - 7.5rem) !important;
+    }
+    .obra-card { width: 15.5rem; }
+    .timeline-header-top { flex-wrap: wrap; justify-content: center; }
+}

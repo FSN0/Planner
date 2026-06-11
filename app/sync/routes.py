@@ -1,20 +1,78 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
-from flask_login import login_required, current_user # <--- OJO: AÑADE current_user AQUÍ
+from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from datetime import datetime
 from app import db
-from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje
+from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje, ROLE_ADMIN
 from app.services.sync_service import OdooSyncService
 from app.services.core_assignment_service import CoreAssignmentService
+from app.services.sync_dashboard_service import get_sync_panel_context, test_odoo_connection
+from app.services.sync_config_service import SyncConfigService
+from app.decorators import roles_required
 from sqlalchemy import or_
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
 
 @sync_bp.route('/')
 @login_required
+@roles_required(ROLE_ADMIN)
 def panel():
-    logs = SyncLog.query.order_by(SyncLog.fecha.desc()).limit(15).all()
-    return render_template('sync/panel.html', logs=logs)
+    ctx = get_sync_panel_context()
+    return render_template('sync/panel.html', **ctx)
+
+
+@sync_bp.route('/api/test-connection', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_test_connection():
+    return jsonify(test_odoo_connection())
+
+
+@sync_bp.route('/api/config', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_save_config():
+    data = request.get_json() or {}
+    try:
+        SyncConfigService.save_config(data)
+        return jsonify({'success': True, 'message': 'Configuración guardada.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 400
+
+
+@sync_bp.route('/api/run/<task_name>', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_run_sync(task_name):
+    labels = {
+        'obras': 'obras',
+        'empleados': 'empleados internos',
+        'subcontratas': 'subcontratas',
+        'fichajes': 'fichajes del día',
+        'fichajes-retro': 'fichajes retrospectivos',
+    }
+    if task_name not in labels:
+        return jsonify({'success': False, 'message': 'Módulo desconocido'}), 400
+    try:
+        from app.celery_worker import (
+            auto_sync_obras, auto_sync_empleados, auto_sync_subcontratas,
+            fichajes_en_vivo, fichajes_retroactivos,
+        )
+        tasks = {
+            'obras': auto_sync_obras,
+            'empleados': auto_sync_empleados,
+            'subcontratas': auto_sync_subcontratas,
+            'fichajes': fichajes_en_vivo,
+            'fichajes-retro': fichajes_retroactivos,
+        }
+        tasks[task_name].delay()
+        return jsonify({
+            'success': True,
+            'message': f'Sincronización automática de {labels[task_name]} lanzada en segundo plano.',
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @sync_bp.route('/resolve_conflict_empleado', methods=['POST'])
 @login_required
@@ -67,13 +125,20 @@ def resolve_conflict_empleado():
     
 @sync_bp.route('/preview_obras', methods=['GET'])
 @login_required
+@roles_required(ROLE_ADMIN)
 def preview_obras():
     try:
+        from app.services.sync_preview_service import analyze_obras_preview
         service = OdooSyncService()
         diff = service.get_diff_obras()
+        preview = analyze_obras_preview(diff)
         jefes_locales = User.query.filter(User.role.in_(['jefe_obra', 'admin'])).all()
         encargados_locales = User.query.filter_by(active=True).all()
-        return render_template('sync/preview_obras.html', diff=diff, jefes=jefes_locales, encargados=encargados_locales)
+        return render_template(
+            'sync/preview_obras.html',
+            diff=diff, preview=preview,
+            jefes=jefes_locales, encargados=encargados_locales,
+        )
     except Exception as e:
         flash(f"Error Odoo: {str(e)}", "danger")
         return redirect(url_for('sync.panel'))
@@ -162,23 +227,28 @@ def commit_obras():
 
 @sync_bp.route('/preview_empleados', methods=['GET'])
 @login_required
+@roles_required(ROLE_ADMIN)
 def preview_empleados():
     try:
+        from app.services.sync_preview_service import analyze_empleados_preview
         service = OdooSyncService()
         diff = service.get_diff_empleados()
-        return render_template('sync/preview_empleados.html', diff=diff)
+        preview = analyze_empleados_preview(diff)
+        return render_template('sync/preview_empleados.html', diff=diff, preview=preview)
     except Exception as e:
         flash(f"Error Odoo: {str(e)}", "danger")
         return redirect(url_for('sync.panel'))
 
 @sync_bp.route('/preview_subcontratas', methods=['GET'])
 @login_required
+@roles_required(ROLE_ADMIN)
 def preview_subcontratas():
     try:
+        from app.services.sync_preview_service import analyze_subcontratas_preview
         service = OdooSyncService()
         diff = service.get_diff_subcontratas()
-        # Puedes crear un HTML similar al de preview_empleados.html adaptado
-        return render_template('sync/preview_subcontratas.html', diff=diff)
+        preview = analyze_subcontratas_preview(diff)
+        return render_template('sync/preview_subcontratas.html', diff=diff, preview=preview)
     except Exception as e:
         flash(f"Error Odoo: {str(e)}", "danger")
         return redirect(url_for('sync.panel'))
@@ -600,29 +670,13 @@ def sync_fichajes_manual():
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
         
     try:
-        from datetime import timedelta
-        from app.utils.timezone_utils import today_local
-        
         data = request.get_json() or {}
         dias_atras = int(data.get('dias', 7))
-        
-        service = OdooSyncService()
-        
-        for i in range(dias_atras + 1):
-            fecha_revision = (today_local() - timedelta(days=i)).strftime('%Y-%m-%d')
-            service.sync_fichajes_diarios(fecha_str=fecha_revision)
-        
-        # Guardamos en el log cuántos días hemos revisado
-        texto_log = f"Sincronización manual de fichajes (Revisión de Hoy + últimos {dias_atras} días)."
-        from app.utils.timezone_utils import utc_now
-        ahora = utc_now()
-        db.session.add(SyncLog(
-            fecha=ahora, tipo='Fichajes (Auditoría)', modo='Manual',
-            nuevos=0, actualizados=0, finalizados=0, errores=0, 
-            detalles=texto_log
-        ))
-        db.session.commit()
-        
+        dias_atras = max(0, min(365, dias_atras))
+
+        from app.services.sync_runner_service import run_fichajes_retro_sync
+        run_fichajes_retro_sync(days=dias_atras, modo='Manual')
+
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()

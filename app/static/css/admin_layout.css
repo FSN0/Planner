@@ -1,6 +1,9 @@
 /* ==========================================================================
    ADMIN LAYOUT — Sistema visual profesional
    ========================================================================== */
+@import url('universal_calendar.css');
+@import url('entity_panel.css');
+@import url('admin_features.css');
 
 /* --- Animaciones globales admin --- */
 @keyframes adminFadeUp {
@@ -1284,18 +1287,144 @@ col.col-actions-fixed { width: 7.5rem; }
   cursor: pointer;
 }
 
-/* --- Select2 admin --- */
-body.layout-admin .select2-container .select2-selection--single {
-  height: 30px !important;
+/* --- Select2 admin (global) --- */
+body.layout-admin .select2-container .select2-selection--single,
+body.layout-admin .select2-container .select2-selection--multiple {
+  border-color: var(--color-border-strong, #e2e8f0) !important;
+  border-radius: 10px !important;
   font-size: 0.8rem;
-  border-color: var(--color-border-strong) !important;
-  border-radius: var(--radius-md) !important;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+body.layout-admin .select2-container--default.select2-container--focus .select2-selection--single,
+body.layout-admin .select2-container--default.select2-container--focus .select2-selection--multiple,
+body.layout-admin .select2-container--default.select2-container--open .select2-selection--single,
+body.layout-admin .select2-container--default.select2-container--open .select2-selection--multiple {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12) !important;
+}
+body.layout-admin .select2-container .select2-selection--single {
+  height: 32px !important;
 }
 body.layout-admin .select2-container--default .select2-selection--single .select2-selection__rendered {
-  line-height: 28px !important;
+  line-height: 30px !important;
+  color: var(--color-text, #1e293b);
+  padding-left: 0.55rem;
 }
 body.layout-admin .select2-container--default .select2-selection--single .select2-selection__arrow {
-  height: 28px !important;
+  height: 30px !important;
+  right: 0.35rem;
+}
+body.layout-admin .select2-container--default .select2-selection--single .select2-selection__clear {
+  margin-right: 1.4rem;
+  font-size: 1rem;
+  color: #94a3b8;
+  transition: color 0.15s, transform 0.15s;
+}
+body.layout-admin .select2-container--default .select2-selection--single .select2-selection__clear:hover {
+  color: #dc2626;
+  transform: scale(1.1);
+}
+body.layout-admin .select2-container .select2-selection--multiple {
+  min-height: 32px !important;
+  padding: 0.15rem 0.35rem;
+}
+body.layout-admin .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+body.layout-admin .select2-container--default .select2-selection--multiple .select2-selection__choice {
+  display: inline-flex !important;
+  flex-direction: row-reverse !important;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  padding: 0.18rem 0.5rem 0.18rem 0.6rem !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+  color: #166534 !important;
+  font-weight: 600;
+  transition: opacity 0.2s ease, transform 0.2s ease, max-width 0.25s ease;
+}
+body.layout-admin .select2-container--default .select2-selection--multiple .select2-selection__choice.select2-chip-removing {
+  opacity: 0 !important;
+  transform: scale(0.75);
+  pointer-events: none;
+}
+body.layout-admin .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+  position: static !important;
+  transform: none !important;
+  flex-shrink: 0;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 50%;
+  color: #16a34a !important;
+  font-weight: 700;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+body.layout-admin .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+  background: #fecaca !important;
+  color: #dc2626 !important;
+  transform: scale(1.08);
+}
+body.layout-admin .select2-dropdown,
+.select2-dropdown.admin-select2-dropdown {
+  border: 1px solid var(--color-border-strong, #e2e8f0) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14) !important;
+  font-size: 0.8rem;
+  overflow: hidden;
+  padding: 0.25rem;
+  z-index: 10600 !important;
+}
+body.layout-admin .select2-search--dropdown .select2-search__field,
+.select2-dropdown.admin-select2-dropdown .select2-search__field {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+}
+body.layout-admin .select2-results__option,
+.select2-dropdown.admin-select2-dropdown .select2-results__option {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  margin: 1px 0;
+}
+body.layout-admin .select2-results__option--highlighted[aria-selected],
+.select2-dropdown.admin-select2-dropdown .select2-results__option--highlighted[aria-selected] {
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+}
+body.layout-admin .select2-results__option[aria-selected=true],
+.select2-dropdown.admin-select2-dropdown .select2-results__option[aria-selected=true] {
+  background: #dcfce7 !important;
+  color: #14532d !important;
+}
+
+/* --- Campos fecha admin --- */
+body.layout-admin input[type="date"].form-control,
+body.layout-admin input[type="date"].admin-date-input {
+  border-radius: 10px;
+  border-color: var(--color-border-strong, #e2e8f0);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+  padding: 0.35rem 0.55rem;
+  min-height: 32px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+body.layout-admin input[type="date"].form-control:focus,
+body.layout-admin input[type="date"].admin-date-input:focus {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12);
 }
 
 /* --- Empty state --- */
@@ -2107,6 +2236,20 @@ html.sidebar-collapsed .admin-main {
   border-bottom-color: var(--color-primary);
   background: var(--color-primary-light);
 }
+.logs-page .logs-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.28rem;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+}
 .logs-page .logs-prefs-panel {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--color-border-strong);
@@ -2725,7 +2868,57 @@ body.layout-auth .navbar { display: none !important; }
    FIX CALENDARIOS FLOTANTES (FLATPICKR)
    ============================================================ */
 .flatpickr-calendar {
-    z-index: 1060 !important; /* Por encima de los modales de Bootstrap (que son 1050) */
+    z-index: 1060 !important;
+    border-radius: 14px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16) !important;
+    font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+    overflow: hidden;
+}
+.flatpickr-months {
+    background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+    border-bottom: 1px solid #f1f5f9;
+}
+.flatpickr-months .flatpickr-month,
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year {
+    font-weight: 700;
+    color: #1e293b;
+}
+.flatpickr-weekdays {
+    background: #f8fafc;
+}
+span.flatpickr-weekday {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+}
+.flatpickr-day {
+    border-radius: 8px !important;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #475569;
+}
+.flatpickr-day:hover,
+.flatpickr-day:focus {
+    background: #f0fdf4 !important;
+    border-color: #bbf7d0 !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+    background: #22c55e !important;
+    border-color: #16a34a !important;
+    color: #fff !important;
+}
+.flatpickr-day.today {
+    border-color: #22c55e !important;
+}
+.flatpickr-day.today:not(.selected) {
+    color: #16a34a !important;
+    font-weight: 700;
 }
 
 .editable-date-trigger {
@@ -2738,4 +2931,136 @@ body.layout-auth .navbar { display: none !important; }
 .editable-date-trigger:hover {
     background-color: #e2e6ea;
     border-color: #adb5bd !important;
+}
+
+/* --- SweetAlert2 admin --- */
+.swal2-popup.admin-swal-popup,
+body.layout-admin .swal2-popup:not(.swal2-toast) {
+  border-radius: 16px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18) !important;
+  padding: 1.35rem 1.5rem 1.25rem !important;
+  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+}
+body.layout-admin .swal2-popup .swal2-title,
+.swal2-popup.admin-swal-popup .swal2-title,
+.admin-swal-title {
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+body.layout-admin .swal2-popup .swal2-html-container,
+.swal2-popup.admin-swal-popup .swal2-html-container,
+.admin-swal-html {
+  font-size: 0.85rem !important;
+  color: #475569 !important;
+  line-height: 1.5 !important;
+}
+.admin-swal-conflict-box {
+  text-align: left;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.65rem 0.85rem;
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 0.75rem 0 1rem;
+}
+.admin-swal-conflict-box ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+.admin-swal-conflict-box li { margin-bottom: 0.25rem; }
+.admin-swal-conflict-box li b { color: #334155; }
+.admin-swal-actions { gap: 0.5rem !important; flex-wrap: wrap; }
+.admin-swal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  margin: 0.25rem 0 0 !important;
+  width: 100%;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+.admin-swal-btn:hover { filter: brightness(0.95); }
+.admin-swal-btn:active { transform: scale(0.98); }
+.admin-swal-btn-primary { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; }
+.admin-swal-btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; }
+.admin-swal-btn-warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; }
+.admin-swal-btn-info { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; }
+.admin-swal-btn-secondary { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+.admin-swal-btn-ghost { background: #fff; color: #64748b; border: 1px solid #e2e8f0; }
+body.layout-admin .swal2-icon { border-width: 3px; transform: scale(0.9); }
+body.layout-admin .swal2-toast { border-radius: 12px !important; }
+
+/* Filas clicables en listados */
+.table-row-clickable {
+  cursor: pointer;
+}
+.table-row-clickable:hover td {
+  background: #f0fdf4;
+}
+.table-row-clickable:focus {
+  outline: 2px solid rgba(34, 197, 94, 0.35);
+  outline-offset: -2px;
+}
+
+/* Panel sync — vinculación entidades */
+.sync-panel-page .sync-entity-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+.sync-panel-page .sync-entity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--color-border-strong, #e2e8f0);
+  border-radius: var(--radius-md, 8px);
+  background: #fff;
+  font-size: 0.74rem;
+  color: var(--color-text-secondary, #64748b);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sync-panel-page .sync-entity-chip:hover {
+  border-color: #86efac;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.12);
+}
+.sync-panel-page .sync-entity-chip--warn {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+.sync-panel-page .sync-entity-chip strong {
+  color: var(--color-text, #1e293b);
+}
+.sync-panel-page .sync-entity-gap {
+  margin-left: 0.15rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+.sync-linkage-table-wrap {
+  max-height: 24rem;
+  overflow: auto;
+}
+.sync-linkage-row {
+  cursor: pointer;
+}
+.sync-linkage-row:hover td {
+  background: #f8fafc;
 }

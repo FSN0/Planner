@@ -318,13 +318,16 @@ class SyncLog(db.Model):
     __tablename__ = 'sync_logs'
     id = db.Column(db.Integer, primary_key=True)
     fecha = db.Column(db.DateTime, default=_utc_now)
-    tipo = db.Column(db.String(50)) # 'Obras' o 'Empleados'
+    tipo = db.Column(db.String(50)) # 'Obras', 'Empleados', 'Subcontratas', 'Fichajes'
     modo = db.Column(db.String(50)) # 'Manual' o 'Automático'
     nuevos = db.Column(db.Integer, default=0)
     actualizados = db.Column(db.Integer, default=0)
     finalizados = db.Column(db.Integer, default=0)
-    errores = db.Column(db.Integer, default=0) # Los que dejamos pendientes
-    detalles = db.Column(db.Text, nullable=True) # Para notas extra
+    errores = db.Column(db.Integer, default=0) # Registros omitidos o con conflicto
+    detalles = db.Column(db.Text, nullable=True)
+    estado = db.Column(db.String(20), default='ok')  # ok | parcial | error
+    duracion_ms = db.Column(db.Integer, nullable=True)
+    mensaje_error = db.Column(db.Text, nullable=True)
     
     
 class RegistroFichaje(db.Model):

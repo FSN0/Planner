@@ -21,12 +21,21 @@ document.addEventListener('DOMContentLoaded', function() {
         window.renderItems();
     };
 
+    function refreshPlanificadorLayout() {
+        if (window.AppTimeline) {
+            window.AppTimeline.redraw();
+        }
+        updateStickyHeader();
+        updateResizerPosition();
+    }
+
     window.renderItems = function() {
         let visible = window.allEventsMaster.filter(ev => !window.hiddenGroups.has(String(ev.group)));
         if (window.AppItems) {
             window.AppItems.clear();
             window.AppItems.add(visible);
         }
+        setTimeout(refreshPlanificadorLayout, 50);
     };
 
     document.body.addEventListener('click', function(e) {
@@ -43,18 +52,6 @@ document.addEventListener('DOMContentLoaded', function() {
             e.stopPropagation(); 
         }
     }, true);
-
-    window.setSidebarWidth = function(width) {
-        window.currentSidebarWidth = width;
-        let style = document.getElementById('dynamic-sidebar-style');
-        style.innerHTML = `
-            .vis-panel.vis-left, .vis-labelset, .vis-label {
-                width: ${width}px !important;
-                min-width: ${width}px !important;
-                max-width: ${width}px !important;
-            }
-        `;
-    };
 
     let resizer = document.getElementById('col-resizer');
     let ghost = document.getElementById('col-resizer-ghost');
@@ -73,15 +70,16 @@ document.addEventListener('DOMContentLoaded', function() {
     window.setSidebarWidth = function(width) {
         window.currentSidebarWidth = width;
         let style = document.getElementById('dynamic-sidebar-style');
-        style.innerHTML = `
-            .vis-panel.vis-left, .vis-labelset, .vis-label {
-                width: ${width}px !important;
-                min-width: ${width}px !important;
-                max-width: ${width}px !important;
-            }
-        `;
-        // Actualizamos la posición aquí de forma eficiente
-        updateResizerPosition(); 
+        if (style) {
+            style.innerHTML = `
+                .vis-panel.vis-left, .vis-labelset, .vis-label {
+                    width: ${width}px !important;
+                    min-width: ${width}px !important;
+                    max-width: ${width}px !important;
+                }
+            `;
+        }
+        updateResizerPosition();
     };
     resizer.addEventListener('mousedown', function(e) {
         isResizing = true;
@@ -120,29 +118,65 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // =========================================================
-    // CABECERA FLOTANTE OPTIMIZADA (Sin bucles pesados)
+    // CABECERA FLOTANTE + SCROLL DE PÁGINA (columna obras / Ctrl+rueda)
     // =========================================================
+    const planificadorScrollRoot = document.querySelector('.planificador-page')
+        || document.querySelector('.admin-main');
+
     function updateStickyHeader() {
-        let timelineEl = document.querySelector('.vis-timeline');
+        const pageEl = document.querySelector('.planificador-page');
+        const timelineEl = document.querySelector('.vis-timeline');
+        const topPanel = document.querySelector('.vis-panel.vis-top');
         if (!timelineEl) return;
-        
-        let rect = timelineEl.getBoundingClientRect();
-        
-        // Si la parte superior del calendario ha salido de la pantalla por arriba
-        // pero el final del calendario todavía sigue visible en la vista
-        if (rect.top < 0 && Math.abs(rect.top) < rect.height) {
-            let offset = Math.abs(rect.top);
-            document.documentElement.style.setProperty('--sticky-top', offset + 'px');
+
+        const rect = timelineEl.getBoundingClientRect();
+        const headerH = topPanel ? topPanel.getBoundingClientRect().height : 36;
+        const pinned = rect.top < 0 && rect.bottom > headerH + 8;
+
+        if (pinned) {
+            document.documentElement.style.setProperty('--sticky-top', Math.abs(rect.top) + 'px');
         } else {
             document.documentElement.style.setProperty('--sticky-top', '0px');
         }
+        if (pageEl) {
+            pageEl.classList.toggle('is-date-header-pinned', pinned);
+        }
     }
 
-    // EL TRUCO CLAVE: Usamos 'capture: true' para interceptar scrolls de divs internos
-    // y 'passive: true' para que el navegador no ralentice el renderizado de la página
-    window.addEventListener('scroll', updateStickyHeader, { capture: true, passive: true });
-    
-    // Forzar una ejecución inicial por si se recarga la página a mitad de scroll
+    function bindStickyHeaderScroll() {
+        updateStickyHeader();
+        if (planificadorScrollRoot) {
+            planificadorScrollRoot.addEventListener('scroll', updateStickyHeader, { passive: true });
+        }
+        window.addEventListener('scroll', updateStickyHeader, { passive: true });
+    }
+
+    function scrollPlanificadorPage(deltaY) {
+        if (!planificadorScrollRoot || !deltaY) return;
+        planificadorScrollRoot.scrollTop += deltaY;
+        updateStickyHeader();
+    }
+
+    function setupPlanificadorWheelScroll() {
+        const calendarRoot = document.getElementById('planificador-calendar');
+        if (!calendarRoot) return;
+
+        calendarRoot.addEventListener('wheel', function(event) {
+            const onLeftColumn = !!event.target.closest('.vis-panel.vis-left, .vis-labelset, .vis-label');
+            const wantsPageScroll = onLeftColumn || event.ctrlKey || event.metaKey;
+
+            if (!wantsPageScroll) return;
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+
+            scrollPlanificadorPage(event.deltaY);
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        }, { passive: false, capture: true });
+    }
+
+    bindStickyHeaderScroll();
+    setupPlanificadorWheelScroll();
     setTimeout(updateStickyHeader, 300);
     
     // Solo lo ejecutamos cuando el usuario hace scroll, usando un listener "passive" muy ligero
@@ -152,14 +186,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var options = {
         orientation: 'top',
-        groupHeightMode: 'auto', 
-        stack: true, 
-        groupEditable: true, 
+        groupHeightMode: 'auto',
+        verticalScroll: false,
+        stack: true,
+        groupEditable: true,
         groupOrder: 'orden',
-        margin: { item: 2, axis: 5 }, 
+        margin: { item: 2, axis: 5 },
         throttleRedraw: 15,
+        showTooltips: false,
         editable: { add: false, updateTime: true, updateGroup: true, remove: false },
-        zoomMin: 1000 * 60 * 60 * 24 * 7, zoomMax: 1000 * 60 * 60 * 24 * 365, locale: 'es',
+        zoomMin: 1000 * 60 * 60 * 24 * 7,
+        zoomMax: 1000 * 60 * 60 * 24 * 365,
+        locale: 'es',
 
         order: function(a, b) {
             let empA = a.empresa_nombre || "ZZ_Sin_Empresa";
@@ -305,8 +343,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>`;
             }
             
-            // Estilo para Operarios normales
-            return `<div class="operario-micro"><i class="fas fa-user"></i>${item.title}</div>`;
+            // Estilo para Operarios normales (tooltip vía itemover)
+            const emp = formatEmpresaLabel(item.empresa_nombre);
+            return `<div class="operario-micro" data-empresa="${emp.replace(/"/g, '&quot;')}"><i class="fas fa-user"></i>${item.title}</div>`;
         },
         onUpdate: function (item, callback) {
             if (item.worker_id === 'NEW') {
@@ -337,7 +376,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             context: 'obra',
                             id: obraId,
                             entityName: obraNombre,
-                            mode: 'empresas'
+                            mode: 'empresas',
+                            embedded: true,
                         });
                         
                         window.quickCalendar.createGhostEventRange(startStr, endStr);
@@ -428,8 +468,61 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    function formatEmpresaLabel(nombre) {
+        if (!nombre || nombre === 'ZZ_Sin_Empresa') return 'Sin empresa';
+        return nombre;
+    }
+
+    function setupPlanificadorItemTooltip() {
+        const tooltipEl = document.getElementById('planificador-item-tooltip');
+        if (!tooltipEl || !window.AppTimeline) return;
+
+        function hideTooltip() {
+            tooltipEl.classList.add('d-none');
+            tooltipEl.setAttribute('aria-hidden', 'true');
+        }
+
+        function showTooltip(item, clientX, clientY) {
+            if (!item || !item.title) return;
+            if (['NEW', 'SYSTEM', 'REQUEST'].includes(String(item.worker_id))) return;
+            const emp = formatEmpresaLabel(item.empresa_nombre);
+            tooltipEl.innerHTML =
+                '<strong>' + item.title + '</strong>' +
+                '<span class="planificador-tt-empresa"><i class="fas fa-building"></i> ' + emp + '</span>';
+            tooltipEl.classList.remove('d-none');
+            tooltipEl.setAttribute('aria-hidden', 'false');
+            let x = clientX + 14;
+            let y = clientY + 14;
+            if (x + 200 > window.innerWidth) x -= 220;
+            if (y + 60 > window.innerHeight) y -= 70;
+            tooltipEl.style.left = x + 'px';
+            tooltipEl.style.top = y + 'px';
+        }
+
+        window.AppTimeline.on('itemover', function(props) {
+            if (!props.item || !props.event) return;
+            const item = window.AppItems.get(props.item);
+            showTooltip(item, props.event.clientX, props.event.clientY);
+        });
+
+        window.AppTimeline.on('itemout', hideTooltip);
+
+        calendarDiv.addEventListener('mousemove', function(e) {
+            if (tooltipEl.classList.contains('d-none')) return;
+            let x = e.clientX + 14;
+            let y = e.clientY + 14;
+            if (x + 200 > window.innerWidth) x -= 220;
+            if (y + 60 > window.innerHeight) y -= 70;
+            tooltipEl.style.left = x + 'px';
+            tooltipEl.style.top = y + 'px';
+        });
+
+        planificadorScrollRoot && planificadorScrollRoot.addEventListener('scroll', hideTooltip, { passive: true });
+    }
+
     window.AppTimeline = new vis.Timeline(calendarDiv, window.AppItems, window.AppGroups, options);
     window.AppTimeline.setWindow(moment().subtract(1, 'weeks').toDate(), moment().add(3, 'months').toDate());
+    setupPlanificadorItemTooltip();
 
     window.AppTimeline.on('click', function(props) {
         let popover = document.getElementById('worker-popover');
@@ -549,22 +642,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         e.preventDefault();
                         
                         document.getElementById('worker-popover').classList.add('d-none');
-                        
-                        let modalTitle = document.querySelector('#quickCalendarModal .modal-title');
-                        if (modalTitle && window.currentSelectedItem) {
-                            modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2"></i> Calendario de <span style="color: #fbbf24;">${window.currentSelectedItem.title}</span>`;
-                        }
 
                         $('#quickCalendarModal').modal('show');
                         
                         setTimeout(() => {
                             if (window.quickCalendar) window.quickCalendar.destroy(); 
                             
-                            // CERO LÓGICA DE NEGOCIO AQUÍ. Solo lo instanciamos como 'worker'
                             window.quickCalendar = new UniversalCalendarManager('modal-calendar-container', {
                                 context: 'worker',
                                 id: window.currentSelectedItem.worker_id,
-                                entityName: window.currentSelectedItem.title
+                                entityName: window.currentSelectedItem.title,
+                                embedded: true,
                             });
                         }, 200);
                     });
@@ -715,11 +803,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
+  function setupSelect2ChipRemoveAnimation($select) {
+    $select.on('select2:unselecting', function (e) {
+      const text = e.params.args.data.text;
+      const $chip = $select.next('.select2-container').find('.select2-selection__choice').filter(function () {
+        return $(this).attr('title') === text;
+      });
+      if ($chip.length) $chip.addClass('select2-chip-removing');
+    });
+  }
+
     if ($('#obrasSelect').length) {
         let $obrasSelect = $('#obrasSelect');
         let $jefeSelect = $('#jefeSelect');
         
-        $obrasSelect.select2({ placeholder: "Obras sueltas...", allowClear: true });
+        $obrasSelect.select2({
+            placeholder: 'Buscar obras…',
+            allowClear: true,
+            width: '100%',
+            dropdownParent: $(document.body),
+            dropdownCssClass: 'planificador-select2-dropdown admin-select2-dropdown',
+        });
+        setupSelect2ChipRemoveAnimation($obrasSelect);
+
+        if ($jefeSelect.is(':visible') && $jefeSelect.find('option').length > 1) {
+            $jefeSelect.select2({
+                placeholder: 'Todos los jefes',
+                allowClear: true,
+                width: '100%',
+                minimumResultsForSearch: 6,
+                dropdownParent: $(document.body),
+                dropdownCssClass: 'planificador-select2-dropdown admin-select2-dropdown planificador-jefe-dropdown',
+            });
+        }
 
         let isUpdating = false;
 
@@ -734,7 +850,9 @@ document.addEventListener('DOMContentLoaded', function() {
         $obrasSelect.on('change', function () {
             if (isUpdating) return;
             isUpdating = true;
-            if ($(this).val() && $(this).val().length > 0) $jefeSelect.val(""); 
+            if ($(this).val() && $(this).val().length > 0) {
+                $jefeSelect.val(null).trigger('change.select2');
+            }
             loadTimelineData();
             isUpdating = false;
         });
@@ -745,21 +863,64 @@ document.addEventListener('DOMContentLoaded', function() {
         // ==========================================
         
         // 1. Abrir y cerrar el menú manualmente al hacer clic en el botón
-        $('#dropdownEmpresas').on('click', function(e) {
+        const $empresasBtn = $('#dropdownEmpresas');
+        const $empresasMenu = $empresasBtn.next('.dropdown-menu');
+        let empresasMenuHome = null;
+
+        function positionEmpresasMenu() {
+            if (!$empresasMenu.hasClass('show')) return;
+            const rect = $empresasBtn[0].getBoundingClientRect();
+            $empresasMenu.css({
+                position: 'fixed',
+                top: (rect.bottom + 6) + 'px',
+                left: rect.left + 'px',
+                minWidth: Math.max(rect.width, 288) + 'px',
+                zIndex: 10050,
+            });
+        }
+
+        $empresasBtn.on('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            $(this).next('.dropdown-menu').toggleClass('show');
-        });
-
-        // 2. Cerrar el menú si hacemos clic en cualquier otro lado de la pantalla
-        $(document).on('click', function(e) {
-            if (!$(e.target).closest('.dropdown').length) {
-                $('.dropdown-menu').removeClass('show');
+            const willOpen = !$empresasMenu.hasClass('show');
+            $('.dropdown-menu').removeClass('show');
+            if (willOpen) {
+                if (!empresasMenuHome) {
+                    empresasMenuHome = $empresasMenu.parent();
+                }
+                $('body').append($empresasMenu);
+                $empresasMenu.addClass('show');
+                positionEmpresasMenu();
+            } else {
+                $empresasMenu.removeClass('show');
+                if (empresasMenuHome) empresasMenuHome.append($empresasMenu);
             }
         });
 
-        // 3. Evitar que se cierre al hacer clic dentro de los checkboxes
-        $('.dropdown-menu').on('click', function(e) {
+        $(window).on('resize', function() {
+            if ($empresasMenu.hasClass('show')) positionEmpresasMenu();
+        });
+        if (planificadorScrollRoot) {
+            planificadorScrollRoot.addEventListener('scroll', function() {
+                if ($empresasMenu.hasClass('show')) positionEmpresasMenu();
+            }, { passive: true });
+        }
+
+        // 2. Cerrar el menú si hacemos clic en cualquier otro lado de la pantalla
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('#dropdownEmpresas').length && !$(e.target).closest('.planificador-empresas-menu').length) {
+                if ($empresasMenu.hasClass('show')) {
+                    $empresasMenu.removeClass('show');
+                    if (empresasMenuHome) empresasMenuHome.append($empresasMenu);
+                }
+            }
+            if (!$(e.target).closest('.dropdown').length) {
+                $('.dropdown-menu').not('.planificador-empresas-menu').removeClass('show');
+            }
+        });
+
+        // 3. Evitar que se cierre al hacer clic dentro del menú de empresas
+        $empresasMenu.on('click', function(e) {
             e.stopPropagation();
         });
 

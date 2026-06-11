@@ -24,13 +24,6 @@
           <i class="fas fa-home fa-fw"></i><span>Inicio</span>
         </a>
       </li>
-      {% if current_user.role == 'operario' %}
-      <li>
-        <a href="{{ url_for('operarios.calendar') }}" class="sidebar-link {% if 'calendar' in request.endpoint %}is-active{% endif %}">
-          <i class="far fa-calendar-alt fa-fw"></i><span>Mi calendario</span>
-        </a>
-      </li>
-      {% endif %}
     </ul>
 
     {% if current_user.role in ['admin', 'jefe_obra'] %}
@@ -61,10 +54,10 @@
     </ul>
     {% endif %}
 
-    {% if current_user.role in ['admin', 'rrhh', 'jefe_obra'] %}
+    {% if current_user.role in ['admin', 'jefe_obra'] %}
     <div class="sidebar-section-title">Personal</div>
     <ul class="sidebar-nav">
-      {% if current_user.role in ['admin', 'rrhh'] %}
+      {% if current_user.role == 'admin' %}
       <li>
         <a href="{{ url_for('admin.personal') }}" class="sidebar-link {% if 'personal' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-users fa-fw"></i><span>Trabajadores</span>

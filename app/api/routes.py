@@ -59,9 +59,11 @@ def reorder_pinned_obras():
     if not ordered_ids: return jsonify({'success': False})
     for idx, obra_id in enumerate(ordered_ids):
         conf = UserObraConfig.query.filter_by(user_id=current_user.id, obra_id=obra_id).first()
-        if conf:
+        if not conf:
+            conf = UserObraConfig(user_id=current_user.id, obra_id=obra_id, is_pinned=False, position=idx)
+            db.session.add(conf)
+        else:
             conf.position = idx
-            conf.is_pinned = True 
             db.session.add(conf)
     db.session.commit()
     return jsonify({'success': True})

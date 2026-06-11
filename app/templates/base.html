@@ -15,8 +15,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='timeline.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/universal_calendar.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_features.css') }}">
     <style>
-        .select2-container .select2-selection--multiple { border-color: #e5e7eb; border-radius: 6px; min-height: 38px; }
+        .select2-container .select2-selection--multiple { border-color: #e2e8f0; border-radius: 10px; min-height: 38px; }
+        .select2-container .select2-selection--single { border-color: #e2e8f0; border-radius: 10px; }
         /* Estilos para el botón de notas al colapsar */
   .sidebar-collapsed .texto-nueva-nota { display: none !important; }
   .sidebar-collapsed .nota-btn-container { padding: 0 10px !important; }
@@ -70,11 +73,11 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
     {% if current_user.is_authenticated and current_user.role in ['admin', 'jefe_obra'] %}
-    <div class="modal fade" id="modalNuevaNota" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal fade admin-note-modal" id="modalNuevaNota" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
-                <div class="modal-header bg-light">
-                    <h5 class="modal-title font-weight-bold text-dark"><i class="fas fa-pen-alt text-primary mr-2"></i>Redactar Nota / Reunión</h5>
+                <div class="modal-header">
+                    <h5 class="modal-title mb-0" id="modalNuevaNotaTitle"><i class="fas fa-pen-alt mr-2"></i>Redactar nota / reunión</h5>
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
                 <div class="modal-body">
@@ -82,44 +85,45 @@
                         <input type="hidden" name="nota_id" id="notaGlobalId" value="">
                         <div class="row">
                             <div class="col-md-8 form-group">
-                                <label class="font-weight-bold text-muted small">Título de la Reunión/Nota</label>
-                                <input type="text" class="form-control" name="titulo" required placeholder="Ej. Visita obra Edificio Sur...">
+                                <label class="form-label-sm" for="notaGlobalTitulo">Título</label>
+                                <input type="text" class="form-control" id="notaGlobalTitulo" name="titulo" required placeholder="Ej. Visita obra Edificio Sur…">
                             </div>
                             <div class="col-md-4 form-group">
-                                <label class="font-weight-bold text-muted small">Fecha</label>
+                                <label class="form-label-sm" for="notaGlobalFecha">Fecha</label>
                                 <input type="date" class="form-control" name="fecha" id="notaGlobalFecha" required>
                             </div>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 form-group">
-                                <label class="font-weight-bold text-muted small"><i class="fas fa-hard-hat mr-1"></i> Obras Implicadas</label>
-                                <select class="form-control select2-modal" name="obras_ids[]" multiple="multiple" id="globalSelectObras" style="width: 100%;">
-                                    </select>
+                                <label class="form-label-sm" for="globalSelectObras"><i class="fas fa-hard-hat mr-1"></i> Obras implicadas</label>
+                                <select class="form-control select2-modal" name="obras_ids[]" multiple="multiple" id="globalSelectObras" style="width: 100%;"></select>
                             </div>
                             <div class="col-md-6 form-group">
-                                <label class="font-weight-bold text-muted small"><i class="fas fa-users mr-1"></i> Personas Implicadas</label>
-                                <select class="form-control select2-modal" name="users_ids[]" multiple="multiple" id="globalSelectUsers" style="width: 100%;">
-                                </select>
+                                <label class="form-label-sm" for="globalSelectUsers"><i class="fas fa-users mr-1"></i> Personas implicadas</label>
+                                <select class="form-control select2-modal" name="users_ids[]" multiple="multiple" id="globalSelectUsers" style="width: 100%;"></select>
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label class="font-weight-bold text-muted small">Contenido</label>
-                            <textarea class="form-control" name="contenido" rows="5" required placeholder="Escribe aquí los detalles..."></textarea>
+                        <div class="form-group mb-0">
+                            <label class="form-label-sm" for="notaGlobalContenido">Contenido</label>
+                            <textarea class="form-control note-content-area" id="notaGlobalContenido" name="contenido" rows="5" required placeholder="Escribe aquí los detalles…" style="min-height:140px;"></textarea>
                         </div>
 
                         <div class="custom-control custom-switch mt-3">
                             <input type="checkbox" class="custom-control-input" id="esPrivadaSwitch" name="es_privada" value="true">
-                            <label class="custom-control-label text-dark font-weight-bold" for="esPrivadaSwitch">
-                                <i class="fas fa-lock text-warning mr-1"></i> Nota Privada <span class="text-muted font-weight-normal small">(Solo tú podrás verla)</span>
+                            <label class="custom-control-label privacy-switch-label" for="esPrivadaSwitch">
+                                <i class="fas fa-lock text-warning mr-1"></i> Nota privada
+                                <span class="text-muted font-weight-normal small">(solo tú podrás verla)</span>
                             </label>
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-white border" data-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="guardarNotaGlobal()">Guardar Nota</button>
+                <div class="modal-footer">
+                    <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn-admin btn-admin-primary" onclick="guardarNotaGlobal()">
+                        <i class="fas fa-save mr-1"></i> Guardar nota
+                    </button>
                 </div>
             </div>
         </div>
@@ -132,8 +136,8 @@
             if(dateInput) dateInput.valueAsDate = new Date();
             
             // Inicializar Select2 en el modal
-            $('#globalSelectObras').select2({ placeholder: "Buscar obras...", allowClear: true, dropdownParent: $('#modalNuevaNota') });
-            $('#globalSelectUsers').select2({ placeholder: "Buscar operarios/jefes...", allowClear: true, dropdownParent: $('#modalNuevaNota') });
+            $('#globalSelectObras').select2({ placeholder: "Buscar obras...", allowClear: true, dropdownParent: $('#modalNuevaNota'), dropdownCssClass: 'admin-select2-dropdown' });
+            $('#globalSelectUsers').select2({ placeholder: "Buscar operarios/jefes...", allowClear: true, dropdownParent: $('#modalNuevaNota'), dropdownCssClass: 'admin-select2-dropdown' });
 
             // Cargar datos reales de Obras y Personas SIEMPRE
             fetch("{{ url_for('api_v6.recursos_activos') }}")
@@ -180,9 +184,9 @@
                 if(!data.success) return alert("Error: " + data.message);
                 
                 document.getElementById('notaGlobalId').value = data.id;
-                document.getElementsByName('titulo')[0].value = data.titulo;
+                document.getElementById('notaGlobalTitulo').value = data.titulo;
                 document.getElementById('notaGlobalFecha').value = data.fecha;
-                document.getElementsByName('contenido')[0].value = data.contenido;
+                document.getElementById('notaGlobalContenido').value = data.contenido;
                 document.getElementById('esPrivadaSwitch').checked = data.es_privada;
                 
                 // Setear selects
@@ -190,7 +194,7 @@
                 $('#globalSelectUsers').val(data.users_ids).trigger('change');
                 
                 // Cambiar títulos para que quede claro que estamos editando
-                $('.modal-title').html('<i class="fas fa-edit text-warning mr-2"></i>Editar Nota');
+                document.getElementById('modalNuevaNotaTitle').innerHTML = '<i class="fas fa-edit mr-2"></i>Editar nota';
                 
                 $('#modalNuevaNota').modal('show');
             });
@@ -203,7 +207,7 @@
             document.getElementById('notaGlobalFecha').valueAsDate = new Date();
             $('#globalSelectObras').val(null).trigger('change');
             $('#globalSelectUsers').val(null).trigger('change');
-            $('.modal-title').html('<i class="fas fa-pen-alt text-primary mr-2"></i>Redactar Nota / Reunión');
+            document.getElementById('modalNuevaNotaTitle').innerHTML = '<i class="fas fa-pen-alt mr-2"></i>Redactar nota / reunión';
         });
     </script>
     {% endif %}

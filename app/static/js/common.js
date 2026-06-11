@@ -313,64 +313,76 @@ function getCheckedIds(tableId, checkboxClass) {
 
 document.addEventListener('DOMContentLoaded', captureAllAdminTables);
 
-/**
- * Hace clicables las filas de una tabla; data-href en <tr>.
- * Los enlaces/botones dentro de la fila siguen funcionando con stopPropagation.
- */
-function initClickableTableRows(tableId) {
-    var table = document.getElementById(tableId);
-    if (!table) return;
-    var tbody = table.querySelector('tbody');
-    if (!tbody) return;
-    tbody.addEventListener('click', function(e) {
-        if (e.target.closest('a, button, input, select, label, .no-row-nav')) return;
-        var row = e.target.closest('tr.row-clickable');
-        if (!row || !row.dataset.href) return;
-        window.location.href = row.dataset.href;
-    });
-}
+// =========================================================================
+// SweetAlert2 — estética admin compartida
+// =========================================================================
+window.adminSwalDefaults = function(overrides = {}) {
+    const base = {
+        customClass: {
+            popup: 'admin-swal-popup',
+            title: 'admin-swal-title',
+            htmlContainer: 'admin-swal-html',
+            confirmButton: 'admin-swal-btn admin-swal-btn-primary',
+            denyButton: 'admin-swal-btn admin-swal-btn-warning',
+            cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+            actions: 'admin-swal-actions',
+        },
+        buttonsStyling: false,
+    };
+    if (overrides.customClass) {
+        base.customClass = Object.assign({}, base.customClass, overrides.customClass);
+        const rest = Object.assign({}, overrides);
+        delete rest.customClass;
+        return Object.assign(base, rest);
+    }
+    return Object.assign(base, overrides);
+};
 
 // =========================================================================
 // GESTIÓN GLOBAL DE CONFLICTOS DE ASIGNACIÓN
 // =========================================================================
 window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, onCancelCallback) {
-    let detailsHtml = '<ul class="text-left small text-muted mt-2 mb-0" style="padding-left: 20px; list-style-type: disc;">';
+    let detailsHtml = '<ul>';
     if (data.conflict_details) {
         for (const [obraName, days] of Object.entries(data.conflict_details)) {
             let daysText = days.length > 6 ? `${days.slice(0, 6).join(', ')}... (+${days.length - 6})` : days.join(', ');
-            detailsHtml += `<li class="mb-1"><b>${obraName}</b>: ${daysText}</li>`;
+            detailsHtml += `<li><b>${obraName}</b>: ${daysText}</li>`;
         }
     }
     detailsHtml += '</ul>';
 
-    let config = {
+    let config = window.adminSwalDefaults({
         title: data.conflict_type === 'custody_partial' ? 'Custodia Parcial Detectada' : 'Conflicto de Asignación',
-        icon: 'warning', width: '34em', showConfirmButton: false, showCancelButton: false, showDenyButton: false,
+        icon: 'warning',
+        width: '34em',
+        showConfirmButton: false,
+        showCancelButton: false,
+        showDenyButton: false,
         html: `
-            <p class="text-muted text-sm mb-3">${data.message}</p>
-            <div class="text-left bg-light p-2 rounded border shadow-sm mb-3" style="max-height: 180px; overflow-y: auto;">
-                <p class="mb-1 text-dark small font-weight-bold">Detalle de los días en conflicto:</p>
+            <p class="mb-2">${data.message}</p>
+            <div class="admin-swal-conflict-box">
+                <p class="mb-1 font-weight-bold" style="font-size:0.78rem;color:#334155;">Detalle de los días en conflicto</p>
                 ${detailsHtml}
             </div>
-            <p class="small font-weight-bold mb-2">¿Cómo deseas proceder?</p>
-            <div id="swal-custom-buttons-global" class="d-flex flex-column gap-2 pb-2"></div>
+            <p class="font-weight-bold mb-1" style="font-size:0.78rem;color:#334155;">¿Cómo deseas proceder?</p>
+            <div id="swal-custom-buttons-global" class="d-flex flex-column w-100"></div>
         `,
         didOpen: () => {
             const container = Swal.getPopup().querySelector('#swal-custom-buttons-global');
             if (data.conflict_type === 'custody_partial') {
                 container.innerHTML = `
-                    <button class="swal2-confirm swal2-styled w-100 m-0" style="background-color: #3b82f6;" id="btn-todo"><i class="fas fa-paper-plane mr-1"></i> Todo (Asignar + Solicitar)</button>
-                    <button class="swal2-deny swal2-styled w-100 m-0 mt-2" style="background-color: #10b981;" id="btn-solo"><i class="fas fa-shield-alt mr-1"></i> Solo mis días (Ignorar conflicto)</button>
-                    <button class="swal2-cancel swal2-styled w-100 m-0 mt-2" id="btn-cancel">Cancelar Acción</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-info" id="btn-todo"><i class="fas fa-paper-plane"></i> Todo (Asignar + Solicitar)</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-solo"><i class="fas fa-shield-alt"></i> Solo mis días (Ignorar conflicto)</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">Cancelar acción</button>
                 `;
                 container.querySelector('#btn-todo').onclick = () => { Swal.close(); payload.overwrite_mode = 'assign_and_request'; onRetryCallback(payload); };
                 container.querySelector('#btn-solo').onclick = () => { Swal.close(); payload.overwrite_mode = 'only_custody'; onRetryCallback(payload); };
             } else {
                 container.innerHTML = `
-                    <button class="swal2-confirm swal2-styled w-100 m-0" style="background-color: #ef4444;" id="btn-over"><i class="fas fa-eraser mr-1"></i> Sobrescribir (Quitar de otras obras)</button>
-                    <button class="swal2-deny swal2-styled w-100 m-0 mt-2" style="background-color: #f59e0b;" id="btn-pluri"><i class="fas fa-layer-group mr-1"></i> Pluriempleo (Mantener en ambas)</button>
-                    <button class="swal2-confirm swal2-styled w-100 m-0 mt-2" style="background-color: #10b981;" id="btn-free"><i class="fas fa-calendar-check mr-1"></i> Asignar solo días libres</button>
-                    <button class="swal2-cancel swal2-styled w-100 m-0 mt-2" id="btn-cancel">Cancelar Acción</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-danger" id="btn-over"><i class="fas fa-eraser"></i> Sobrescribir (Quitar de otras obras)</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-warning" id="btn-pluri"><i class="fas fa-layer-group"></i> Pluriempleo (Mantener en ambas)</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-free"><i class="fas fa-calendar-check"></i> Asignar solo días libres</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">Cancelar acción</button>
                 `;
                 container.querySelector('#btn-over').onclick = () => { Swal.close(); payload.overwrite_mode = 'overwrite'; onRetryCallback(payload); };
                 container.querySelector('#btn-pluri').onclick = () => { Swal.close(); payload.overwrite_mode = 'keep_both'; onRetryCallback(payload); };
@@ -378,6 +390,36 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
             }
             container.querySelector('#btn-cancel').onclick = () => { Swal.close(); if(onCancelCallback) onCancelCallback(); };
         }
-    };
+    });
     Swal.fire(config);
 };
+
+/**
+ * Filas de tabla clicables (navegan a data-row-href o data-href en <tr>).
+ * Ignora clics en enlaces, botones, inputs y columna de checkbox.
+ */
+function initClickableTableRows(tableId) {
+    var table = document.getElementById(tableId);
+    if (!table) return;
+    table.querySelectorAll('tbody tr[data-row-href], tbody tr[data-href]').forEach(function(row) {
+        row.classList.add('table-row-clickable');
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('role', 'link');
+        function go() {
+            var href = row.getAttribute('data-row-href') || row.getAttribute('data-href');
+            if (href) window.location.href = href;
+        }
+        row.addEventListener('click', function(e) {
+            if (e.target.closest('a, button, input, select, textarea, label, .btn-table-action, .col-check, .table-actions, .jefe-trigger, .no-row-nav')) {
+                return;
+            }
+            go();
+        });
+        row.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                go();
+            }
+        });
+    });
+}

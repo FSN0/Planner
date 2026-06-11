@@ -73,12 +73,12 @@
           </thead>
           <tbody>
             {% for c in companies %}
-            <tr class="data-row">
+            <tr class="data-row" data-row-href="{{ url_for('admin.company_panel', company_id=c.id) }}">
               <td class="col-check text-center"><input type="checkbox" class="company-checkbox" value="{{ c.id }}"></td>
               <td data-sort-value="{{ c.code }}"><span class="cell-code">{{ c.code }}</span></td>
               <td data-sort-value="{{ c.nombre|lower }}">
                 <span class="status-dot" style="background-color: {{ c.color }};"></span>
-                <a href="{{ url_for('admin.company_panel', company_id=c.id) }}" class="table-link-primary" title="{{ c.nombre }}">{{ c.nombre }}</a>
+                <span class="font-weight-bold">{{ c.nombre }}</span>
               </td>
               <td data-sort-value="{{ c.nif or '' }}">{{ c.nif or '—' }}</td>
               <td data-sort-value="{{ (c.gremio or '')|lower }}">{{ c.gremio or '—' }}</td>
@@ -124,6 +124,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     captureAdminTableOrder('companiesTable');
+    initClickableTableRows('companiesTable');
     initBulkSelection({
         tableId: 'companiesTable',
         checkboxClass: 'company-checkbox',

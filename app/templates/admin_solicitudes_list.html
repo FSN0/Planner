@@ -113,9 +113,9 @@
             {% for s in solicitudes %}
               {% set stat = stats[s.id] %}
               {% set detail_url = url_for('admin.solicitud_detail', solicitud_id=s.id) %}
-              <tr class="data-row row-clickable" data-href="{{ detail_url }}">
+              <tr class="data-row" data-row-href="{{ detail_url }}">
                 <td data-sort-value="{{ s.id }}">
-                  <a href="{{ detail_url }}" class="table-link-primary">#{{ s.id }}</a>
+                  <span class="cell-code">#{{ s.id }}</span>
                 </td>
                 <td data-sort-value="{% if s.accion == 'DESASIGNAR' %}salida{% elif s.tipo == 'GENERICA' %}generica{% else %}concreta{% endif %}">
                   {% if s.accion == 'DESASIGNAR' %}

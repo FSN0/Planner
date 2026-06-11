@@ -104,10 +104,10 @@
               </thead>
               <tbody>
                 {% for user in internos %}
-                <tr class="data-row">
+                <tr class="data-row" data-row-href="{{ url_for('admin.worker_panel', user_id=user.id) }}">
                   <td class="col-check text-center"><input type="checkbox" class="interno-checkbox" value="{{ user.id }}"></td>
                   <td data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
-                    <a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="table-link-primary" title="{{ user.name }} {{ user.lastname }}">{{ user.name }} {{ user.lastname }}</a>
+                    <span class="font-weight-bold">{{ user.name }} {{ user.lastname }}</span>
                   </td>
                   <td data-sort-value="{{ user.email|lower }}">{{ user.email }}</td>
                   <td data-sort-value="{{ user.role|lower }}"><span class="badge-soft badge-soft-slate">{{ user.role|upper }}</span></td>
@@ -182,10 +182,10 @@
               </thead>
               <tbody>
                 {% for user in operarios_activos + operarios_pendientes %}
-                <tr class="data-row">
+                <tr class="data-row" data-row-href="{{ url_for('admin.worker_panel', user_id=user.id) }}">
                   <td class="col-check text-center"><input type="checkbox" class="externo-checkbox" value="{{ user.id }}"></td>
                   <td data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
-                    <a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="table-link-primary">{{ user.name }} {{ user.lastname }}</a>
+                    <span class="font-weight-bold">{{ user.name }} {{ user.lastname }}</span>
                   </td>
                   <td data-sort-value="{{ (user.company_rel.nombre if user.company_rel else 'sin asignar')|lower }}">
                     {% if user.company_rel %}{{ user.company_rel.nombre }}{% else %}<span class="text-danger">Sin asignar</span>{% endif %}
@@ -291,6 +291,8 @@
 document.addEventListener("DOMContentLoaded", function() {
     captureAdminTableOrder('tableInternos');
     captureAdminTableOrder('tableExternos');
+    initClickableTableRows('tableInternos');
+    initClickableTableRows('tableExternos');
 
     initBulkSelection({ tableId: 'tableInternos', checkboxClass: '.interno-checkbox', selectAllId: 'selectAllInternos', toolbarId: 'bulk-internos', countId: 'count-internos' });
     initBulkSelection({ tableId: 'tableExternos', checkboxClass: '.externo-checkbox', selectAllId: 'selectAllExternos', toolbarId: 'bulk-externos', countId: 'count-externos' });

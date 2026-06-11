@@ -156,7 +156,7 @@ class OdooSyncService:
         fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id']
         odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
         
-        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': []}
+        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'omitidos': []}
         
         # LISTA EXACTA DE DEPARTAMENTOS EXTRAÍDA DE TU ODOO
         departamentos_permitidos = [
@@ -176,14 +176,26 @@ class OdooSyncService:
         
         for emp in odoo_emps:
             dni = emp.get('identification_id')
-            if not dni: continue
+            emp_name = emp.get('name', f"ID {emp['id']}")
+            if not dni:
+                diff['omitidos'].append({
+                    'odoo_id': emp['id'],
+                    'nombre': emp_name,
+                    'motivo': 'Sin DNI / identification_id en Odoo',
+                    'departamento': emp.get('department_id')[1] if emp.get('department_id') else '—',
+                })
+                continue
 
             dep_raw = emp.get('department_id')
             department = dep_raw[1] if dep_raw else ''
             
-            # Comprobamos si alguna de las palabras clave permitidas está en el nombre del departamento
-            # (Lo hacemos con 'in' por si Odoo devuelve "Producción clima / Encargados/Of.1ª")
             if not any(d in department for d in departamentos_permitidos):
+                diff['omitidos'].append({
+                    'odoo_id': emp['id'],
+                    'nombre': emp_name,
+                    'motivo': f'Departamento no incluido en la whitelist de importación',
+                    'departamento': department or '—',
+                })
                 continue
 
             job_raw = emp.get('job_id')

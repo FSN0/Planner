@@ -8,7 +8,6 @@ from app.models import (
     Asignacion,
     ROLE_ADMIN,
     ROLE_JEFE,
-    ROLE_RRHH,
     ROLE_OPERARIO,
     Company,
     Solicitud,
@@ -31,6 +30,11 @@ from app.models import Rating
 
 
 from app.services.dashboard_service import get_dashboard_data, parse_date
+from app.services.entity_panel_service import (
+    get_obra_panel_stats,
+    get_worker_panel_stats,
+    get_company_panel_stats,
+)
 
 from app.services.email_service import notificar_resolucion_solicitud, notificar_movimiento_admin_a_jo
 # Definición del blueprint de admin
@@ -182,14 +186,21 @@ def solicitudes_list():
     
 @admin_bp.route("/worker_panel/<int:user_id>", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_RRHH)
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def worker_panel(user_id):
     """
     Ficha del trabajador con calendario de sus asignaciones Y SOLICITUDES.
     (El calendario carga por API V6)
     """
     worker = User.query.get_or_404(user_id)
-    return render_template("admin_worker_panel.html", worker=worker)
+    panel_stats = get_worker_panel_stats(worker)
+    return render_template(
+        "admin_worker_panel.html",
+        worker=worker,
+        stats=panel_stats["stats"],
+        chart_14d=panel_stats["chart_14d"],
+        chart_14d_max=panel_stats["chart_14d_max"],
+    )
 
 
 @admin_bp.route("/api/check_obra_status_impact", methods=["POST"])
@@ -233,8 +244,17 @@ def company_panel(company_id):
     (Los datos del calendario ahora se cargan dinámicamente vía API).
     """
     company = Company.query.get_or_404(company_id)
-    
-    return render_template("admin_company_panel.html", company=company)
+    panel_stats = get_company_panel_stats(company)
+
+    return render_template(
+        "admin_company_panel.html",
+        company=company,
+        stats=panel_stats["stats"],
+        chart_14d=panel_stats["chart_14d"],
+        chart_14d_max=panel_stats["chart_14d_max"],
+        avg_rating=panel_stats["avg_rating"],
+        ratings_count=panel_stats["ratings_count"],
+    )
 
    
     
@@ -407,7 +427,7 @@ def api_update_obra_staff():
 
 @admin_bp.route("/schedule_status/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def schedule_status(user_id):
     data = request.get_json()
     action = data.get("action")  # "activate" o "deactivate"
@@ -505,12 +525,18 @@ def obra_panel(obra_id):
         return redirect(url_for("jefe.panel"))
 
     jefes = User.query.filter(User.role.in_([ROLE_JEFE, ROLE_ADMIN])).all()
-    
+    panel_stats = get_obra_panel_stats(obra)
+
     return render_template(
         "admin_obra_panel.html",
         obra=obra,
         jefes=jefes,
-        today=date.today()
+        today=date.today(),
+        stats=panel_stats["stats"],
+        chart_14d=panel_stats["chart_14d"],
+        chart_14d_max=panel_stats["chart_14d_max"],
+        operarios_hoy=panel_stats["operarios_hoy"],
+        ocupacion_pct=panel_stats["ocupacion_pct"],
     )
     
 @admin_bp.route("/companies", methods=["GET"])
@@ -665,6 +691,72 @@ def rate_worker():
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
 
+
+def _can_manage_rating(rating):
+    from app.models import ROLE_ADMIN
+    return current_user.role == ROLE_ADMIN or rating.created_by_id == current_user.id
+
+
+@admin_bp.route("/api/rating/<int:rating_id>", methods=["PUT"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
+def update_rating(rating_id):
+    rating = Rating.query.get_or_404(rating_id)
+    if not _can_manage_rating(rating):
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    if not rating.is_active:
+        return jsonify({'success': False, 'message': 'Esta valoración ya está archivada'}), 400
+
+    data = request.get_json() or {}
+    score = data.get('score')
+    reason = data.get('reason')
+    if score is None:
+        return jsonify({'success': False, 'message': 'Falta la puntuación'}), 400
+
+    try:
+        rating.score = int(score)
+        rating.reason = reason
+        db.session.commit()
+        from app.utils import register_log
+        register_log(
+            user_id=current_user.id,
+            category='valoraciones',
+            action='Editar Valoración',
+            detail=f"Editada valoración #{rating.id} → {rating.score}. Motivo: {reason or '—'}",
+            target_user_id=rating.user_id,
+        )
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@admin_bp.route("/api/rating/<int:rating_id>", methods=["DELETE"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
+def delete_rating(rating_id):
+    rating = Rating.query.get_or_404(rating_id)
+    if not _can_manage_rating(rating):
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    if not rating.is_active:
+        return jsonify({'success': False, 'message': 'Ya estaba eliminada'}), 400
+
+    try:
+        rating.is_active = False
+        db.session.commit()
+        from app.utils import register_log
+        register_log(
+            user_id=current_user.id,
+            category='valoraciones',
+            action='Eliminar Valoración',
+            detail=f"Eliminada valoración #{rating.id} ({rating.score} pts).",
+            target_user_id=rating.user_id,
+        )
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @admin_bp.route("/worker/<int:user_id>/reset_ratings", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN) # Solo Admin puede resetear
@@ -689,7 +781,7 @@ def reset_worker_ratings(user_id):
 
 @admin_bp.route("/worker/<int:user_id>/ratings_history")
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def worker_ratings_history(user_id):
     worker = User.query.get_or_404(user_id)
     # Mostramos TODOS (activos e inactivos) ordenados por fecha
@@ -776,7 +868,7 @@ def obras_detailed():
 
 @admin_bp.route("/personal", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def personal():
     # 1. Usuarios INTERNOS (No operarios, O operarios de empresa interna)
     internos = User.query.join(Company, User.company_id == Company.id, isouter=True).filter(
@@ -819,7 +911,7 @@ def personal():
 
 @admin_bp.route("/deactivate_operario/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def deactivate_operario(user_id):
     user = User.query.get(user_id)
     if user and user.role == ROLE_OPERARIO:
@@ -833,7 +925,7 @@ def deactivate_operario(user_id):
 
 @admin_bp.route("/edit_operario/<int:user_id>", methods=["GET", "POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def edit_operario(user_id):
     user = User.query.get_or_404(user_id)
     companies = Company.query.all()
@@ -1185,7 +1277,7 @@ def delete_company(company_id):
 
 @admin_bp.route("/reset_password/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def reset_password(user_id):
     new_password = request.form.get("new_password")
     user = User.query.get(user_id)
@@ -1200,7 +1292,7 @@ def reset_password(user_id):
 
 @admin_bp.route("/delete_user/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def delete_user(user_id):
     user = User.query.get(user_id)
     if user:
@@ -1217,7 +1309,7 @@ def delete_user(user_id):
 
 @admin_bp.route("/create_user", methods=["GET", "POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def create_user():
     if request.method == "POST":
         # ... (Mantén toda tu lógica POST igual) ...
@@ -1267,7 +1359,7 @@ def create_user():
 
 @admin_bp.route("/approve_operario/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def approve_operario(user_id):
     user = User.query.get_or_404(user_id)
     if user.role == ROLE_OPERARIO:
@@ -1323,7 +1415,7 @@ def delete_obra(obra_id):
 
 @admin_bp.route("/import_users", methods=["GET", "POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def import_users():
     if request.method == "POST":
         file = request.files.get("file")
@@ -1890,7 +1982,7 @@ def batch_update_obras_status():
 
 @admin_bp.route("/api/users/batch_delete", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def batch_delete_users():
     data = request.get_json() or {}
     user_ids = data.get("user_ids", [])
@@ -1909,7 +2001,7 @@ def batch_delete_users():
 
 @admin_bp.route("/api/users/batch_deactivate", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def batch_deactivate_users():
     data = request.get_json() or {}
     user_ids = data.get("user_ids", [])
@@ -1991,6 +2083,7 @@ def sso_odoo_contactos():
 @roles_required(ROLE_ADMIN)
 def system_logs():
     from app.models import SystemLog, LogPreference
+    from app.services.log_notification_service import get_unread_logs_by_category
     from datetime import datetime
     
     category = request.args.get('category', 'accesos')
@@ -2013,6 +2106,7 @@ def system_logs():
         logs=logs,
         current_category=category,
         active_prefs=active_prefs,
+        log_unread_by_category=get_unread_logs_by_category(current_user.id, active_only=True),
         default_date=today_local().strftime('%Y-%m-%d'),
     )
 

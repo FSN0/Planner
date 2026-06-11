@@ -4,131 +4,169 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    .worker-card { background: white; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1.5rem; display: flex; gap: 2rem; align-items: center; }
-    .worker-avatar { width: 80px; height: 80px; background: #f3f4f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: #9ca3af; position: relative; }
-    
-    /* Estilo Puntuación */
-    .reputation-badge {
-        position: absolute; bottom: -5px; right: -5px;
-        background: white; border: 2px solid white;
-        border-radius: 50%; width: 32px; height: 32px;
-        display: flex; align-items: center; justify-content: center;
-        font-weight: bold; font-size: 0.9rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .rep-pos { color: #10b981; border-color: #10b981; }
-    .rep-neg { color: #ef4444; border-color: #ef4444; }
-    .rep-neu { color: #6b7280; border-color: #e5e7eb; }
-
-    #worker-calendar { font-family: system-ui; font-size: 0.85rem; }
-    .rating-btn.active { box-shadow: inset 0 3px 5px rgba(0,0,0,0.125); }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main">
-    <div class="d-flex justify-content-between mb-3 align-items-center">
-        <a href="{{ url_for('admin.personal') }}" class="text-muted small"><i class="fas fa-arrow-left"></i> Volver</a>
-        <div>
-             {% if current_user.role == 'admin' %}
-            <a href="{{ url_for('admin.edit_operario', user_id=worker.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i> Editar</a>
-            {% endif %}
-        </div>
-    </div>
+  <main class="admin-main entity-panel-page entity-panel-page--worker">
 
-    <div class="worker-card mb-4">
-        <div class="worker-avatar">
-            <i class="fas fa-user"></i>
-            {% set score = worker.reputation_score %}
-            <div class="reputation-badge {{ 'rep-pos' if score > 0 else 'rep-neg' if score < 0 else 'rep-neu' }}" 
-                 title="Reputación Actual">
-                {{ score }}
-            </div>
+    {% set score = worker.reputation_score %}
+
+    <article class="entity-panel-card">
+      <header class="entity-panel-card-top">
+        <div class="entity-panel-toolbar-start">
+          <a href="{{ url_for('admin.personal') }}" class="entity-panel-back">
+            <i class="fas fa-arrow-left"></i> Personal
+          </a>
+          <span class="entity-type-marker"><i class="fas fa-hard-hat"></i> Empleado</span>
         </div>
-        
-        <div class="flex-grow-1">
-            <h1 class="h4 mb-0 font-weight-bold text-dark">{{ worker.name }} {{ worker.lastname }}</h1>
-            <p class="text-muted mb-2">
+        <div class="entity-panel-actions">
+          {% if current_user.role == 'admin' %}
+          <a href="{{ url_for('admin.edit_operario', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-pencil-alt"></i> Editar
+          </a>
+          {% endif %}
+        </div>
+      </header>
+
+      <div class="entity-hero-accent" aria-hidden="true"></div>
+      <div class="entity-hero-body entity-hero-body--full">
+        <div class="entity-hero-main">
+          <div class="entity-hero-title-row">
+            <div class="entity-hero-icon-wrap">
+              <div class="entity-hero-icon entity-hero-icon--avatar">
+                <i class="fas fa-user"></i>
+                <div class="entity-rep-badge {{ 'entity-rep-badge--pos' if score > 0 else 'entity-rep-badge--neg' if score < 0 else 'entity-rep-badge--neu' }}"
+                     title="Reputación actual">{{ score }}</div>
+              </div>
+            </div>
+            <div class="entity-hero-title-text">
+              <h1 class="entity-hero-name">{{ worker.name }} {{ worker.lastname }}</h1>
+              <p class="entity-hero-subtitle">
                 {% if worker.company_rel %}
-                    <span class="badge badge-light border" style="border-left: 3px solid {{ worker.company_rel.color }} !important;">
-                        {{ worker.company_rel.nombre }}
-                    </span>
+                  <span class="entity-company-chip" style="--chip-color: {{ worker.company_rel.color }};">
+                    {{ worker.company_rel.nombre }}
+                  </span>
                 {% else %}
-                    Ext
+                  <span class="entity-code-badge">Externo</span>
                 {% endif %}
-                | {{ worker.dni }} | <span class="text-primary">{{ worker.categoria_profesional or 'Sin categoría' }}</span>
-            </p>
-            
-            <div class="d-flex align-items-center gap-2">
-                {% if current_user.role in ['admin', 'jefe_obra'] %}
-                    <button class="btn btn-sm btn-outline-primary" onclick="openRatingModal()">
-                        <i class="far fa-star mr-1"></i> Puntuar
-                    </button>
+                {% if worker.dni %}
+                  <span>{{ worker.dni }}</span>
                 {% endif %}
-
-                {% if current_user.role == 'admin' %}
-                    <a href="{{ url_for('admin.worker_ratings_history', user_id=worker.id) }}" class="btn btn-sm btn-link text-muted">
-                        Ver Historial
-                    </a>
-                    {% if score != 0 %}
-                    <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline ml-2" onsubmit="return confirm('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.');">
-                        <button type="submit" class="btn btn-xs btn-light text-muted border" title="Resetear contador (Archivar actual)">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    </form>
-                    {% endif %}
+                {% if worker.categoria_profesional %}
+                  <span>{{ worker.categoria_profesional }}</span>
                 {% endif %}
+              </p>
             </div>
-        </div>
+          </div>
 
-        <div class="text-right">
-            <div class="small text-muted text-uppercase">Estado</div>
-            <span class="badge badge-{{ 'success' if worker.active else 'danger' }}">{{ 'ACTIVO' if worker.active else 'INACTIVO' }}</span>
-            <div class="mt-2 h5 font-weight-bold text-gray-800">{{ events|length }} <small class="text-muted" style="font-size:0.6em;">días asig.</small></div>
-        </div>
-    </div>
+          <div class="entity-meta-grid">
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Empresa</span>
+              <span class="entity-meta-item-value">
+                {% if worker.company_rel %}
+                  {{ worker.company_rel.nombre }}
+                {% else %}
+                  <span class="entity-meta-item-value--muted">Sin empresa</span>
+                {% endif %}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Categoría</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not worker.categoria_profesional }}">
+                {{ worker.categoria_profesional or 'Sin categoría' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Especialidad</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not worker.especialidad }}">
+                {{ worker.especialidad or '—' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Estado</span>
+              <span class="entity-meta-item-value">
+                {% if worker.active %}
+                  <span class="entity-status-badge entity-status-badge--active">Activo</span>
+                {% else %}
+                  <span class="entity-status-badge entity-status-badge--inactive">Inactivo</span>
+                {% endif %}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Rol</span>
+              <span class="entity-meta-item-value">{{ worker.role|replace('_', ' ')|title if worker.role else '—' }}</span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Reputación</span>
+              <span class="entity-meta-item-value">{% if score > 0 %}+{% endif %}{{ score }}</span>
+            </div>
+          </div>
 
-    <section class="admin-panel">
-        <div class="admin-panel-header border-bottom pb-2 mb-2">
-            <h2 class="admin-panel-title">Calendario de Asignaciones</h2>
+          <div class="entity-hero-actions">
+            {% if current_user.role in ['admin', 'jefe_obra'] %}
+            <button type="button" class="btn-admin btn-admin-ghost" onclick="openRatingModal()">
+              <i class="far fa-star"></i> Puntuar
+            </button>
+            <a href="{{ url_for('admin.worker_ratings_history', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
+              <i class="fas fa-history"></i> Historial
+            </a>
+            {% endif %}
+            {% if current_user.role == 'admin' and score != 0 %}
+            <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline"
+                  onsubmit="return confirm('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.');">
+              <button type="submit" class="btn-admin btn-admin-ghost" title="Resetear contador">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+            </form>
+            {% endif %}
+          </div>
         </div>
-        <div class="admin-panel-body">
-            <div id="worker-calendar" style="min-height: 500px;"></div>
-        </div>
+      </div>
+
+      {% include "components/_entity_stats.html" %}
+    </article>
+
+    <section class="entity-calendar-zone">
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Planificación</h2>
+      <div id="worker-calendar" class="univ-calendar-root" style="min-height: 500px;"></div>
     </section>
 
   </main>
 </div>
 
-<div class="modal fade" id="ratingModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header bg-dark text-white py-2">
-                <h5 class="modal-title h6">Valorar a {{ worker.name }}</h5>
-                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
-            </div>
-            <div class="modal-body text-center">
-                <p class="text-muted small mb-3">Selecciona puntuación (-3 a +3)</p>
-                <div class="d-flex justify-content-center mb-3">
-                    <div class="btn-group mr-2">
-                        <button type="button" class="btn btn-outline-danger rating-btn" data-score="-3">-3</button>
-                        <button type="button" class="btn btn-outline-danger rating-btn" data-score="-2">-2</button>
-                        <button type="button" class="btn btn-outline-danger rating-btn" data-score="-1">-1</button>
-                    </div>
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-outline-success rating-btn" data-score="1">+1</button>
-                        <button type="button" class="btn btn-outline-success rating-btn" data-score="2">+2</button>
-                        <button type="button" class="btn btn-outline-success rating-btn" data-score="3">+3</button>
-                    </div>
-                </div>
-                <textarea id="ratingReason" class="form-control form-control-sm mb-3" rows="3" placeholder="Motivo (Opcional)..."></textarea>
-                <button type="button" class="btn btn-primary btn-block" onclick="submitRating()">Guardar Valoración</button>
-            </div>
+<div class="modal fade entity-rating-modal" id="ratingModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title mb-0">
+          <i class="fas fa-star mr-1"></i> Valorar a {{ worker.name }}
+        </h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p class="rating-intro text-center mb-0">Selecciona una puntuación entre -3 y +3</p>
+        <div class="entity-rating-score-grid">
+          <div class="entity-rating-score-group">
+            <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-3">-3</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-2">-2</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-1">-1</button>
+          </div>
+          <div class="entity-rating-score-group">
+            <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="1">+1</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="2">+2</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="3">+3</button>
+          </div>
         </div>
+        <label class="form-label-sm" for="ratingReason">Motivo (opcional)</label>
+        <textarea id="ratingReason" class="form-control mb-3" rows="3" placeholder="Describe brevemente el motivo de la valoración…"></textarea>
+        <button type="button" class="btn-admin btn-admin-primary btn-block" onclick="submitRating()">
+          <i class="fas fa-save mr-1"></i> Guardar valoración
+        </button>
+      </div>
     </div>
+  </div>
 </div>
 
 {% endblock %}
@@ -137,55 +175,67 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
-
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var workerId = {{ worker.id }};
-    
-   window.workerCalendar = new UniversalCalendarManager('worker-calendar', {
+
+    window.workerCalendar = new UniversalCalendarManager('worker-calendar', {
         context: 'worker',
         id: workerId,
         mode: 'obras',
-        entityName: '{{ worker.name }} {{ worker.lastname }}',
-        showFichajes: true
+        entityName: {{ (worker.name ~ ' ' ~ worker.lastname)|tojson }},
+        showFichajes: true,
+        hideTitle: true
     });
 
-
-    // Puente Global de Conflictos
     window.enviarAccionPerfil = function(payload, revertFunc) {
-        payload.check_conflicts = true; 
+        payload.check_conflicts = true;
         if (!payload.overwrite_mode) payload.overwrite_mode = 'check';
 
         $.ajax({
-            url: "/api/v6/planificador/action", type: "POST", contentType: "application/json",
+            url: "/api/v6/planificador/action",
+            type: "POST",
+            contentType: "application/json",
             data: JSON.stringify(payload),
             success: function(res) {
                 if (res.success) {
                     Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
-                    setTimeout(() => location.reload(), 500); 
+                    setTimeout(() => location.reload(), 500);
                 } else if (res.conflict) {
                     window.resolverConflictoAsignacion(res, payload, (nuevoPayload) => { enviarAccionPerfil(nuevoPayload, revertFunc); }, revertFunc);
                 } else {
-                    Swal.fire('Error', res.error || res.message, 'error'); if (revertFunc) revertFunc();
+                    Swal.fire('Error', res.error || res.message, 'error');
+                    if (revertFunc) revertFunc();
                 }
             },
-            error: function() { Swal.fire('Error', 'Fallo de conexión', 'error'); if (revertFunc) revertFunc(); }
+            error: function() {
+                Swal.fire('Error', 'Fallo de conexión', 'error');
+                if (revertFunc) revertFunc();
+            }
         });
     };
 });
 
-// Lógica de Puntuación intacta
 var selectedScore = null;
-function openRatingModal() { $('#ratingModal').modal('show'); selectedScore = null; $('.rating-btn').removeClass('active font-weight-bold'); }
-$(document).on('click', '.rating-btn', function() { $('.rating-btn').removeClass('active font-weight-bold'); $(this).addClass('active font-weight-bold'); selectedScore = $(this).data('score'); });
+function openRatingModal() {
+    $('#ratingModal').modal('show');
+    selectedScore = null;
+    $('.rating-btn').removeClass('active');
+}
+$(document).on('click', '.rating-btn', function() {
+    $('.rating-btn').removeClass('active');
+    $(this).addClass('active');
+    selectedScore = $(this).data('score');
+});
 function submitRating() {
     if (!selectedScore) { alert("Selecciona una puntuación."); return; }
     var reason = $('#ratingReason').val();
     $.ajax({
-        url: "/admin/api/rate_worker", type: "POST", contentType: "application/json",
-        data: JSON.stringify({ worker_id: {{ worker.id }},entityName: '{{ worker.name }} {{ worker.lastname }}', score: selectedScore, reason: reason }),
+        url: "/admin/api/rate_worker",
+        type: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ worker_id: {{ worker.id }}, score: selectedScore, reason: reason }),
         success: function() { window.location.reload(); },
         error: function(xhr) { alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.message : "Error")); }
     });
