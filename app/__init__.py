@@ -91,8 +91,6 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(admin_bp, url_prefix='/admin')
     app.register_blueprint(jefe_bp, url_prefix='/jefe')
-    app.register_blueprint(rrhh_bp, url_prefix='/rrhh')
-    app.register_blueprint(operarios_bp, url_prefix='/operarios')
     app.register_blueprint(notas_bp, url_prefix='/notas')
     app.register_blueprint(api_bp, url_prefix='/api/v6')
     app.register_blueprint(sync_bp, url_prefix='/sync')
