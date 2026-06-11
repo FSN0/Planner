@@ -14,7 +14,7 @@
 
     <header class="sync-preview-header">
       <div>
-        <a href="{{ url_for('sync.panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
         <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
         <p class="sync-preview-sub">Empleados internos desde hr.employee · conflictos, omitidos y listos.</p>
       </div>
@@ -148,7 +148,7 @@ function confirmSyncEmpleados() {
         body: JSON.stringify({ nuevos: payload.nuevos, actualizados: cleanUpdates, errores: conflictsCount })
     }).then(r => r.json()).then(data => {
         if (data.success) {
-            if (conflictsCount === 0) window.location.href = "{{ url_for('sync.panel') }}";
+            if (conflictsCount === 0) window.location.href = "{{ url_for('sync.odoo_panel') }}";
             else location.reload();
         } else alert('Error: ' + data.error);
     });

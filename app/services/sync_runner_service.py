@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import Obra, User, Company, SyncLog
-from app.services.sync_service import OdooSyncService
+from app.sync.dispatcher import get_sync_adapter
 from app.utils.timezone_utils import utc_now
 
 
@@ -18,10 +18,23 @@ def _log_estado(errores, had_exception=False):
     return 'ok'
 
 
+def _company_by_odoo_id(odoo_c_id):
+    if not odoo_c_id:
+        return None
+    return Company.query.filter(Company.external_ids['odoo'].astext == str(odoo_c_id)).first()
+
+
+def _set_odoo_external_id(entity, odoo_id):
+    ext_ids = dict(entity.external_ids or {})
+    ext_ids['odoo'] = str(odoo_id)
+    entity.external_ids = ext_ids
+    db.session.add(entity)
+
+
 def run_auto_sync_obras():
     t0 = time.time()
     ahora = utc_now()
-    service = OdooSyncService()
+    service = get_sync_adapter()
     diff = service.get_diff_obras()
     nuevas_limpias = [o for o in diff['nuevas'] if not o.get('warn_jefe') and not o.get('warn_encargado')]
     act_limpias = [o for o in diff['actualizadas'] if not o.get('warn_jefe') and not o.get('warn_encargado')]
@@ -30,7 +43,8 @@ def run_auto_sync_obras():
     for obj in nuevas_limpias:
         f_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
         db.session.add(Obra(
-            odoo_id=obj['odoo_id'], codigo=obj['codigo'], nombre=obj['nombre'],
+            external_ids={'odoo': str(obj['odoo_id'])},
+            codigo=obj['codigo'], nombre=obj['nombre'],
             descripcion=obj.get('cliente', ''), fecha_inicio=f_inicio, estado='Pendiente',
             jefe_obra_id=obj.get('jefe_obra_id'), encargado_id=obj.get('encargado_id'),
             fecha_importacion=ahora,
@@ -39,7 +53,7 @@ def run_auto_sync_obras():
     for obj in act_limpias:
         obra = Obra.query.get(obj['local_id'])
         if obra:
-            obra.odoo_id = obj['odoo_id']
+            _set_odoo_external_id(obra, obj['odoo_id'])
             obra.codigo = obj['codigo']
             obra.nombre = obj['nombre']
             obra.descripcion = obj.get('cliente', '')
@@ -73,7 +87,7 @@ def run_auto_sync_obras():
 def run_auto_sync_empleados():
     t0 = time.time()
     ahora = utc_now()
-    service = OdooSyncService()
+    service = get_sync_adapter()
     diff = service.get_diff_empleados()
     emp_nuevos = diff['nuevos']
     emp_act = [e for e in diff['actualizados'] if not e.get('conflicto')]
@@ -83,7 +97,8 @@ def run_auto_sync_empleados():
 
     for obj in emp_nuevos:
         db.session.add(User(
-            odoo_id=obj['odoo_id'], name=obj['name'], lastname=obj['lastname'],
+            external_ids={'odoo': str(obj['odoo_id'])},
+            name=obj['name'], lastname=obj['lastname'],
             dni=obj['dni'], email=obj['email'], role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
             company_id=default_company_id, active=True,
@@ -93,7 +108,7 @@ def run_auto_sync_empleados():
     for obj in emp_act:
         user = User.query.get(obj['local_id'])
         if user:
-            user.odoo_id = obj['odoo_id']
+            _set_odoo_external_id(user, obj['odoo_id'])
             user.name = obj['name']
             user.lastname = obj['lastname']
             user.role = obj['role']
@@ -114,19 +129,19 @@ def run_auto_sync_empleados():
 def run_auto_sync_subcontratas():
     t0 = time.time()
     ahora = utc_now()
-    service = OdooSyncService()
+    service = get_sync_adapter()
     diff = service.get_diff_subcontratas()
     mapa_empresas = {}
 
     for obj in diff['empresas']['actualizadas']:
         comp = Company.query.get(obj['local_id'])
         if comp:
-            comp.odoo_id = obj['odoo_id']
+            _set_odoo_external_id(comp, obj['odoo_id'])
             comp.nombre = obj['nombre']
             mapa_empresas[obj['odoo_id']] = comp.id
 
     for obj in diff['empresas']['nuevas']:
-        nueva = Company(odoo_id=obj['odoo_id'], nombre=obj['nombre'])
+        nueva = Company(external_ids={'odoo': str(obj['odoo_id'])}, nombre=obj['nombre'])
         db.session.add(nueva)
         db.session.flush()
         mapa_empresas[obj['odoo_id']] = nueva.id
@@ -134,7 +149,7 @@ def run_auto_sync_subcontratas():
     for obj in diff['empleados']['actualizados']:
         user = User.query.get(obj['local_id'])
         if user:
-            user.odoo_id = obj['odoo_id']
+            _set_odoo_external_id(user, obj['odoo_id'])
             user.name = obj['name']
             user.lastname = obj['lastname']
             if obj['dni'] and 'SINDNI' not in obj['dni']:
@@ -143,7 +158,7 @@ def run_auto_sync_subcontratas():
             odoo_c_id = obj.get('odoo_company_id')
             if odoo_c_id:
                 if odoo_c_id not in mapa_empresas:
-                    comp = Company.query.filter_by(odoo_id=odoo_c_id).first()
+                    comp = _company_by_odoo_id(odoo_c_id)
                     if comp:
                         mapa_empresas[odoo_c_id] = comp.id
                 if odoo_c_id in mapa_empresas:
@@ -154,7 +169,7 @@ def run_auto_sync_subcontratas():
         odoo_c_id = obj.get('odoo_company_id')
         local_comp_id = mapa_empresas.get(odoo_c_id)
         if not local_comp_id and odoo_c_id:
-            comp = Company.query.filter_by(odoo_id=odoo_c_id).first()
+            comp = _company_by_odoo_id(odoo_c_id)
             if comp:
                 local_comp_id = comp.id
                 mapa_empresas[odoo_c_id] = local_comp_id
@@ -163,7 +178,8 @@ def run_auto_sync_subcontratas():
             dni = f"{dni}-EXT{obj['odoo_id']}"
         dnis_en_tx.add(dni)
         db.session.add(User(
-            odoo_id=obj['odoo_id'], name=obj['name'], lastname=obj['lastname'],
+            external_ids={'odoo': str(obj['odoo_id'])},
+            name=obj['name'], lastname=obj['lastname'],
             dni=dni, email=obj['email'], role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional'),
             company_id=local_comp_id, active=True,
@@ -187,6 +203,7 @@ def run_fichajes_retro_sync(days=None, modo='Automático'):
     from datetime import timedelta
 
     from app.services.sync_config_service import SyncConfigService
+    from app.services.sync_service import procesar_fichajes_diarios
     from app.utils.timezone_utils import today_local
 
     cfg = SyncConfigService.get_config()
@@ -194,14 +211,13 @@ def run_fichajes_retro_sync(days=None, modo='Automático'):
     dias = max(1, min(365, dias))
 
     t0 = time.time()
-    service = OdooSyncService()
     had_error = False
     err_msg = None
 
     try:
         for i in range(dias + 1):
             fecha_revision = (today_local() - timedelta(days=i)).strftime('%Y-%m-%d')
-            service.sync_fichajes_diarios(fecha_str=fecha_revision)
+            procesar_fichajes_diarios(fecha_str=fecha_revision)
     except Exception as e:
         had_error = True
         err_msg = str(e)

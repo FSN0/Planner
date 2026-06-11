@@ -30,9 +30,11 @@
           <i class="fas fa-user-clock"></i> Auditoría
           {% if audit_pendientes_total %}<span class="badge-soft badge-soft-red ml-1">{{ audit_pendientes_total }}</span>{% endif %}
         </a>
+        {% if tenant_has_integrations %}
         <a href="{{ url_for('sync.panel') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-sync-alt"></i> Sync
+          <i class="fas fa-plug"></i> Integraciones
         </a>
+        {% endif %}
       </div>
     </div>
 

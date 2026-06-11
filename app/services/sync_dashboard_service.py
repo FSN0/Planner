@@ -42,13 +42,13 @@ def _stats_for_period(days=7):
 
 def test_odoo_connection():
     try:
-        from app.services.sync_service import OdooSyncService
-        svc = OdooSyncService()
+        from app.sync.dispatcher import get_sync_adapter
+        adapter = get_sync_adapter()
         return {
             'connected': True,
-            'url': os.environ.get('ODOO_URL', ''),
-            'db': os.environ.get('ODOO_DB', ''),
-            'uid': svc.uid,
+            'url': getattr(adapter, 'url', '') or os.environ.get('ODOO_URL', ''),
+            'db': getattr(adapter, 'db_name', '') or os.environ.get('ODOO_DB', ''),
+            'uid': getattr(adapter, 'uid', None),
             'message': 'Conexión XML-RPC establecida correctamente.',
         }
     except Exception as e:

@@ -1,0 +1,570 @@
+{% extends "base.html" %}
+{% block title %}Sincronización Odoo{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+{% endblock %}
+
+{% block wrapper %}
+<div id="sync-loading-overlay" class="sync-loading-overlay d-none">
+  <div class="spinner-border text-success mb-3" role="status"></div>
+  <h3 class="text-dark font-weight-bold">Conectando con Odoo…</h3>
+  <p id="sync-loading-text" class="text-muted text-center small"></p>
+</div>
+
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact sync-panel-page">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show mb-3">
+          {{ message }}
+          <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+        </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <header class="sync-panel-header">
+      <div>
+        <h1 class="sync-panel-title"><i class="fas fa-sync-alt"></i> Centro de sincronización Odoo</h1>
+        <p class="sync-panel-sub">Importaciones automáticas, estadísticas, errores y configuración de intervalos.</p>
+      </div>
+      <div class="sync-panel-header-actions">
+        <a href="{{ url_for('sync.panel') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-arrow-left"></i> Integraciones
+        </a>
+        <button type="button" class="btn-admin btn-admin-ghost" data-toggle="modal" data-target="#odooCredentialsModal">
+          <i class="fas fa-key"></i> Credenciales
+        </button>
+        <button type="button" class="btn-admin btn-admin-ghost" onclick="testOdooConnection()">
+          <i class="fas fa-plug"></i> Probar conexión
+        </button>
+        <button type="button" class="btn-admin btn-admin-primary" data-toggle="modal" data-target="#syncConfigModal">
+          <i class="fas fa-cog"></i> Configurar
+        </button>
+      </div>
+    </header>
+
+    <div class="sync-conn-banner {{ 'sync-conn-banner--ok' if connection.connected else 'sync-conn-banner--err' }}" id="syncConnBanner">
+      <div class="sync-conn-banner-icon">
+        <i class="fas {{ 'fa-check-circle' if connection.connected else 'fa-exclamation-triangle' }}"></i>
+      </div>
+      <div class="sync-conn-banner-body">
+        <strong>{{ 'Conectado a Odoo' if connection.connected else 'Sin conexión con Odoo' }}</strong>
+        <span class="sync-conn-meta">{{ connection.url or 'ODOO_URL no configurada' }} · BD: {{ connection.db or '—' }}</span>
+        <span class="sync-conn-msg" id="syncConnMsg">{{ connection.message }}</span>
+      </div>
+      {% if connection.connected and connection.uid %}
+      <span class="sync-conn-uid badge-soft">UID {{ connection.uid }}</span>
+      {% endif %}
+    </div>
+
+    <div class="sync-kpi-grid">
+      <div class="sync-kpi-card">
+        <span class="sync-kpi-label">Ejecuciones (7 días)</span>
+        <span class="sync-kpi-value">{{ stats_7d.total_runs }}</span>
+        <span class="sync-kpi-sub"><span class="text-success">{{ stats_7d.ok }} ok</span> · {{ stats_7d.partial }} parciales · {{ stats_7d.errors }} errores</span>
+      </div>
+      <div class="sync-kpi-card">
+        <span class="sync-kpi-label">Registros importados (7 d)</span>
+        <span class="sync-kpi-value">{{ stats_7d.nuevos + stats_7d.actualizados }}</span>
+        <span class="sync-kpi-sub">+{{ stats_7d.nuevos }} nuevos · ~{{ stats_7d.actualizados }} actualizados</span>
+      </div>
+      <div class="sync-kpi-card">
+        <span class="sync-kpi-label">Omitidos / conflictos (7 d)</span>
+        <span class="sync-kpi-value sync-kpi-value--warn">{{ stats_7d.skipped_records }}</span>
+        <span class="sync-kpi-sub">Requieren revisión manual en preview</span>
+      </div>
+      <div class="sync-kpi-card">
+        <span class="sync-kpi-label">Incidencias fichaje pendientes</span>
+        <span class="sync-kpi-value {{ 'sync-kpi-value--danger' if incidencias_pendientes else '' }}">{{ incidencias_pendientes }}</span>
+        <span class="sync-kpi-sub">{{ fichajes_hoy }} fichajes procesados hoy</span>
+      </div>
+    </div>
+
+    <div class="sync-entity-row">
+      {% set obras_gap = entity_counts.obras_total - entity_counts.obras_vinculadas %}
+      {% set emp_gap = entity_counts.empleados_total - entity_counts.empleados_vinculados %}
+      {% set comp_gap = entity_counts.empresas_total - entity_counts.empresas_vinculadas %}
+      <button type="button" class="sync-entity-chip{% if obras_gap %} sync-entity-chip--warn{% endif %}" onclick="showEntityLinkage('obras')">
+        <i class="fas fa-building"></i> Obras
+        <strong>{{ entity_counts.obras_vinculadas }}</strong>/{{ entity_counts.obras_total }} vinculadas
+        {% if obras_gap %}<span class="sync-entity-gap">{{ obras_gap }} sin Odoo</span>{% endif %}
+      </button>
+      <button type="button" class="sync-entity-chip{% if emp_gap %} sync-entity-chip--warn{% endif %}" onclick="showEntityLinkage('empleados')">
+        <i class="fas fa-users"></i> Empleados
+        <strong>{{ entity_counts.empleados_vinculados }}</strong>/{{ entity_counts.empleados_total }}
+        {% if emp_gap %}<span class="sync-entity-gap">{{ emp_gap }} sin Odoo</span>{% endif %}
+      </button>
+      <button type="button" class="sync-entity-chip{% if comp_gap %} sync-entity-chip--warn{% endif %}" onclick="showEntityLinkage('empresas')">
+        <i class="fas fa-hard-hat"></i> Empresas
+        <strong>{{ entity_counts.empresas_vinculadas }}</strong>/{{ entity_counts.empresas_total }}
+        {% if comp_gap %}<span class="sync-entity-gap">{{ comp_gap }} sin Odoo</span>{% endif %}
+      </button>
+    </div>
+
+    <h2 class="sync-section-title">Módulos de importación</h2>
+    <div class="sync-modules-grid">
+      {% for mod in modules %}
+      <article class="sync-module-card sync-module-card--{{ mod.color }}">
+        <div class="sync-module-card-head">
+          <div class="sync-module-icon"><i class="fas {{ mod.icon }}"></i></div>
+          <div>
+            <h3 class="sync-module-name">{{ mod.label }}</h3>
+            <span class="sync-module-status {{ 'is-on' if mod.enabled else 'is-off' }}">
+              {{ 'Activo' if mod.enabled else 'Desactivado' }}
+            </span>
+          </div>
+        </div>
+        <p class="sync-module-desc">{{ mod.description }}</p>
+        <dl class="sync-module-meta">
+          <div><dt>Programación</dt><dd>{{ mod.schedule }}</dd></div>
+          <div><dt>Próxima en vivo</dt><dd>{{ mod.next_run.strftime('%d/%m/%Y %H:%M') if mod.next_run else '—' }}</dd></div>
+          {% if mod.retro_next_run %}
+          <div><dt>Próxima retrospectiva</dt><dd>{{ mod.retro_next_run.strftime('%d/%m/%Y %H:%M') }}</dd></div>
+          {% endif %}
+          <div><dt>Última ejecución</dt>
+            <dd>
+              {% if mod.last_log %}
+                {{ mod.last_log.fecha|format_dt }}
+                <span class="sync-log-estado sync-log-estado--{{ mod.last_log.estado or 'ok' }}">{{ mod.last_log.estado or 'ok' }}</span>
+              {% else %}
+                <span class="text-muted">Sin registros</span>
+              {% endif %}
+            </dd>
+          </div>
+          {% if mod.last_log %}
+          <div><dt>Resultado</dt>
+            <dd class="sync-module-result">
+              +{{ mod.last_log.nuevos }} · ~{{ mod.last_log.actualizados }}
+              {% if mod.last_log.errores %}<span class="text-danger">· {{ mod.last_log.errores }} omitidos</span>{% endif %}
+            </dd>
+          </div>
+          {% endif %}
+        </dl>
+        <div class="sync-module-actions">
+          {% if mod.key == 'obras' %}
+          <a href="{{ url_for('sync.preview_obras') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader('Obras')">
+            <i class="fas fa-search"></i> Preview manual
+          </a>
+          <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('obras')">
+            <i class="fas fa-robot"></i> Auto ahora
+          </button>
+          {% elif mod.key == 'empleados' %}
+          <a href="{{ url_for('sync.preview_empleados') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader('Empleados')">
+            <i class="fas fa-search"></i> Preview manual
+          </a>
+          <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('empleados')">
+            <i class="fas fa-robot"></i> Auto ahora
+          </button>
+          {% elif mod.key == 'subcontratas' %}
+          <a href="{{ url_for('sync.preview_subcontratas') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader('Subcontratas')">
+            <i class="fas fa-search"></i> Preview manual
+          </a>
+          <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('subcontratas')">
+            <i class="fas fa-robot"></i> Auto ahora
+          </button>
+          {% elif mod.key == 'fichajes' %}
+          <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost btn-sm">
+            <i class="fas fa-gavel"></i> Auditoría
+          </a>
+          <button type="button" class="btn-admin btn-admin-ghost btn-sm" onclick="runSyncNow('fichajes-retro')">
+            <i class="fas fa-history"></i> Retro ahora
+          </button>
+          <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('fichajes')">
+            <i class="fas fa-robot"></i> En vivo ahora
+          </button>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div class="sync-bottom-grid">
+      <section class="sync-card">
+        <h2 class="sync-section-title mb-3"><i class="fas fa-exclamation-circle text-danger"></i> Alertas</h2>
+        {% if critical_errors or partial_summaries %}
+        <ul class="sync-error-list">
+          {% for err in critical_errors %}
+          <li class="sync-error-item sync-error-item--critical">
+            <div class="sync-error-item-head">
+              <span class="sync-error-tipo"><i class="fas fa-times-circle mr-1"></i>{{ err.tipo }}</span>
+              <span class="sync-error-fecha">{{ err.fecha|format_dt }}</span>
+            </div>
+            <p class="sync-error-detail mb-0">{{ err.mensaje_error or err.detalles }}</p>
+          </li>
+          {% endfor %}
+          {% for log in partial_summaries %}
+          <li class="sync-error-item sync-error-item--partial">
+            <div class="sync-error-item-head">
+              <span class="sync-error-tipo"><i class="fas fa-exclamation-triangle mr-1"></i>{{ log.tipo }}</span>
+              <span class="sync-error-fecha">Último: {{ log.fecha|format_dt }}</span>
+            </div>
+            <p class="sync-error-detail mb-0">
+              {{ log.errores }} registro(s) omitidos en la última sync.
+              {% if log.tipo == 'Obras' %}
+              <a href="{{ url_for('sync.preview_obras') }}">Revisar en preview →</a>
+              {% elif log.tipo == 'Empleados' %}
+              <a href="{{ url_for('sync.preview_empleados') }}">Revisar en preview →</a>
+              {% endif %}
+            </p>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted small mb-0"><i class="fas fa-check text-success mr-1"></i> Sin alertas pendientes.</p>
+        {% endif %}
+      </section>
+
+      <section class="sync-card sync-card--wide">
+        <h2 class="sync-section-title mb-3"><i class="fas fa-history"></i> Historial de sincronizaciones</h2>
+        <div class="sync-log-table-wrap">
+          <table class="sync-log-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Módulo</th>
+                <th>Modo</th>
+                <th>Estado</th>
+                <th class="text-center">+</th>
+                <th class="text-center">~</th>
+                <th class="text-center">−</th>
+                <th class="text-center">Omit.</th>
+                <th>Duración</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in logs %}
+              <tr>
+                <td class="text-nowrap small">{{ log.fecha|format_dt }}</td>
+                <td><span class="badge-soft">{{ log.tipo }}</span></td>
+                <td class="small">{{ log.modo }}</td>
+                <td><span class="sync-log-estado sync-log-estado--{{ log.estado or 'ok' }}">{{ log.estado or 'ok' }}</span></td>
+                <td class="text-center text-success font-weight-bold">{{ log.nuevos }}</td>
+                <td class="text-center text-warning font-weight-bold">{{ log.actualizados }}</td>
+                <td class="text-center text-muted">{{ log.finalizados }}</td>
+                <td class="text-center">{{ log.errores or 0 }}</td>
+                <td class="small text-muted">{% if log.duracion_ms %}{{ (log.duracion_ms / 1000)|round(1) }}s{% else %}—{% endif %}</td>
+                <td class="sync-log-detail small" title="{{ log.mensaje_error or log.detalles or '' }}">
+                  {{ log.mensaje_error or log.detalles or '—' }}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="10" class="text-center text-muted py-4">No hay registros.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+  </main>
+</div>
+
+<div class="modal fade admin-note-modal" id="entityLinkageModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title mb-0" id="entityLinkageTitle">Entidades sin vínculo Odoo</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body p-0">
+        <p class="sync-linkage-intro px-3 pt-3 mb-2 small text-muted" id="entityLinkageIntro"></p>
+        <div class="sync-linkage-table-wrap">
+          <table class="admin-data-table mb-0" id="entityLinkageTable">
+            <thead id="entityLinkageHead"></thead>
+            <tbody id="entityLinkageBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade admin-note-modal" id="odooCredentialsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title mb-0"><i class="fas fa-key mr-2"></i> Credenciales Odoo</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <form action="{{ url_for('sync.odoo_save_config') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label-sm">URL servidor</label>
+            <input type="url" class="form-control" name="url" value="{{ odoo_credentials.url }}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label-sm">Base de datos</label>
+            <input type="text" class="form-control" name="db" value="{{ odoo_credentials.db }}" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label-sm">Usuario API</label>
+            <input type="text" class="form-control" name="user" value="{{ odoo_credentials.user }}" required>
+          </div>
+          <div class="form-group mb-0">
+            <label class="form-label-sm">Contraseña</label>
+            <input type="password" class="form-control" name="password" value="{{ odoo_credentials.password }}" required>
+            <small class="text-muted">Se guarda cifrada en la configuración del tenant.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade admin-note-modal" id="syncConfigModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title mb-0"><i class="fas fa-cog mr-2"></i> Configuración de sincronización</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Los cambios se aplican de inmediato. El scheduler revisa cada 5 minutos qué tareas ejecutar.</p>
+        <form id="syncConfigForm">
+          <h6 class="sync-config-group-title">Master data (obras, empleados, subcontratas)</h6>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <label class="form-label-sm">Hora diaria</label>
+              <input type="number" class="form-control" name="sync_master_hour" min="0" max="23" value="{{ config.master_hour }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label-sm">Minuto</label>
+              <input type="number" class="form-control" name="sync_master_minute" min="0" max="59" value="{{ config.master_minute }}">
+            </div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="cfgObras" name="sync_obras_enabled" {% if config.obras_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgObras">Obras</label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="cfgEmp" name="sync_empleados_enabled" {% if config.empleados_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgEmp">Empleados</label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="cfgSub" name="sync_subcontratas_enabled" {% if config.subcontratas_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgSub">Subcontratas</label>
+              </div>
+            </div>
+          </div>
+
+          <h6 class="sync-config-group-title">Fichajes en vivo</h6>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <div class="custom-control custom-switch mb-2">
+                <input type="checkbox" class="custom-control-input" id="cfgFich" name="sync_fichajes_enabled" {% if config.fichajes_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgFich">Fichajes activos</label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label-sm">Intervalo (min)</label>
+              <input type="number" class="form-control" name="sync_fichajes_interval" min="5" max="120" value="{{ config.fichajes_interval }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Desde h</label>
+              <input type="number" class="form-control" name="sync_fichajes_hour_start" min="0" max="23" value="{{ config.fichajes_hour_start }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Hasta h</label>
+              <input type="number" class="form-control" name="sync_fichajes_hour_end" min="0" max="23" value="{{ config.fichajes_hour_end }}">
+            </div>
+          </div>
+
+          <h6 class="sync-config-group-title">Fichajes retrospectivos</h6>
+          <p class="text-muted small mb-2">Revisa días anteriores por si RRHH modifica fichajes antiguos en Odoo.</p>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <div class="custom-control custom-switch mb-2">
+                <input type="checkbox" class="custom-control-input" id="cfgFichRetro" name="sync_fichajes_retro_enabled" {% if config.fichajes_retro_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgFichRetro">Revisión retrospectiva activa</label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label-sm">Días hacia atrás</label>
+              <input type="number" class="form-control" name="sync_fichajes_retro_days" min="1" max="365" value="{{ config.fichajes_retro_days }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Hora</label>
+              <input type="number" class="form-control" name="sync_fichajes_retro_hour" min="0" max="23" value="{{ config.fichajes_retro_hour }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Minuto</label>
+              <input type="number" class="form-control" name="sync_fichajes_retro_minute" min="0" max="59" value="{{ config.fichajes_retro_minute }}">
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn-admin btn-admin-primary" onclick="saveSyncConfig()">
+          <i class="fas fa-save mr-1"></i> Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script id="entity-linkage-data" type="application/json">{{ entity_linkage|tojson }}</script>
+<script>
+const ENTITY_LINKAGE = JSON.parse(document.getElementById('entity-linkage-data').textContent);
+const ENTITY_LINKAGE_LABELS = {
+  obras: 'Obras sin vínculo Odoo',
+  empleados: 'Usuarios sin vínculo Odoo',
+  empresas: 'Empresas sin vínculo Odoo',
+};
+
+function showEntityLinkage(type) {
+  const block = ENTITY_LINKAGE[type];
+  if (!block) return;
+  const items = block.sin_vincular || [];
+  const linkedKey = type === 'empleados' ? 'vinculados' : 'vinculadas';
+  document.getElementById('entityLinkageTitle').textContent = ENTITY_LINKAGE_LABELS[type];
+  document.getElementById('entityLinkageIntro').textContent =
+    block[linkedKey] + ' de ' + block.total + ' vinculados con Odoo. ' +
+    (items.length ? 'Registros sin external_ids.odoo.' : 'Todo vinculado.');
+  const head = document.getElementById('entityLinkageHead');
+  const body = document.getElementById('entityLinkageBody');
+  head.innerHTML = '';
+  body.innerHTML = '';
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="4" class="table-empty-state py-4"><i class="fas fa-check-circle text-success"></i> Todo vinculado</td></tr>';
+    $('#entityLinkageModal').modal('show');
+    return;
+  }
+  if (type === 'obras') {
+    head.innerHTML = '<tr><th>Obra</th><th>Código</th><th>Estado</th><th>Motivo</th></tr>';
+    items.forEach(function(item) {
+      body.insertAdjacentHTML('beforeend',
+        '<tr class="sync-linkage-row" data-href="' + item.url + '">' +
+        '<td><a href="' + item.url + '" class="table-link-primary">' + escapeHtml(item.label) + '</a></td>' +
+        '<td>' + escapeHtml(item.codigo) + '</td><td>' + escapeHtml(item.estado) + '</td>' +
+        '<td class="small text-muted">' + escapeHtml(item.hint) + '</td></tr>');
+    });
+  } else if (type === 'empleados') {
+    head.innerHTML = '<tr><th>Usuario</th><th>Rol</th><th>Email</th><th>Motivo</th></tr>';
+    items.forEach(function(item) {
+      body.insertAdjacentHTML('beforeend',
+        '<tr class="sync-linkage-row" data-href="' + item.url + '">' +
+        '<td><a href="' + item.url + '" class="table-link-primary">' + escapeHtml(item.label) + '</a></td>' +
+        '<td><span class="badge-soft badge-soft-slate">' + escapeHtml(item.role) + '</span></td>' +
+        '<td class="small">' + escapeHtml(item.email) + '</td>' +
+        '<td class="small text-muted">' + escapeHtml(item.hint) + '</td></tr>');
+    });
+  } else {
+    head.innerHTML = '<tr><th>Empresa</th><th>Código</th><th>Tipo</th><th>Motivo</th></tr>';
+    items.forEach(function(item) {
+      body.insertAdjacentHTML('beforeend',
+        '<tr class="sync-linkage-row" data-href="' + item.url + '">' +
+        '<td><a href="' + item.url + '" class="table-link-primary">' + escapeHtml(item.label) + '</a></td>' +
+        '<td>' + escapeHtml(item.codigo) + '</td><td>' + escapeHtml(item.tipo) + '</td>' +
+        '<td class="small text-muted">' + escapeHtml(item.hint) + '</td></tr>');
+    });
+  }
+  body.querySelectorAll('.sync-linkage-row').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+      if (e.target.closest('a')) return;
+      window.location.href = row.getAttribute('data-href');
+    });
+  });
+  $('#entityLinkageModal').modal('show');
+}
+
+function escapeHtml(text) {
+  return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function showSyncLoader(tipo) {
+  document.getElementById('sync-loading-overlay').classList.remove('d-none');
+  document.getElementById('sync-loading-text').innerHTML = 'Analizando <b>' + tipo + '</b> en Odoo…';
+}
+
+function testOdooConnection() {
+  fetch('{{ url_for("sync.api_test_connection") }}', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    .then(r => r.json())
+    .then(data => {
+      const banner = document.getElementById('syncConnBanner');
+      document.getElementById('syncConnMsg').textContent = data.message;
+      banner.classList.toggle('sync-conn-banner--ok', data.connected);
+      banner.classList.toggle('sync-conn-banner--err', !data.connected);
+      Swal.fire({
+        icon: data.connected ? 'success' : 'error',
+        title: data.connected ? 'Conexión OK' : 'Error de conexión',
+        text: data.message,
+        timer: data.connected ? 2000 : undefined,
+        showConfirmButton: !data.connected
+      });
+    });
+}
+
+function saveSyncConfig() {
+  const form = document.getElementById('syncConfigForm');
+  const data = {};
+  form.querySelectorAll('input[name]').forEach(inp => {
+    if (inp.type === 'checkbox') data[inp.name] = inp.checked;
+    else data[inp.name] = inp.value;
+  });
+  fetch('{{ url_for("sync.api_save_config") }}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(r => r.json())
+  .then(res => {
+    if (res.success) {
+      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: res.message, showConfirmButton: false, timer: 1500 });
+      setTimeout(() => location.reload(), 800);
+    } else {
+      Swal.fire('Error', res.message, 'error');
+    }
+  });
+}
+
+function runSyncNow(moduleKey) {
+  const labels = {
+    obras: 'obras',
+    empleados: 'empleados internos',
+    subcontratas: 'subcontratas',
+    fichajes: 'fichajes del día (en vivo)',
+    'fichajes-retro': 'fichajes retrospectivos (últimos ' + {{ config.fichajes_retro_days }} + ' días)',
+  };
+  const label = labels[moduleKey] || moduleKey;
+  Swal.fire({
+    title: '¿Ejecutar sync automática?',
+    text: 'Se sincronizará únicamente: ' + label + '.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sí, ejecutar',
+    cancelButtonText: 'Cancelar'
+  }).then(result => {
+    if (result.isConfirmed) {
+      fetch('/sync/api/run/' + moduleKey, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+        .then(r => r.json())
+        .then(res => Swal.fire(res.success ? 'Lanzado' : 'Error', res.message, res.success ? 'success' : 'error'));
+    }
+  });
+}
+</script>
+{% endblock %}

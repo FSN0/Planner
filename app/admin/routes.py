@@ -2070,8 +2070,7 @@ def sso_odoo_contactos():
     serializer = URLSafeTimedSerializer(sso_secret)
     payload = {
         'user_id': current_user.id,
-        'odoo_id': current_user.odoo_id,
-        'odoo_id': current_user.odoo_id,
+        'odoo_id': (current_user.external_ids or {}).get('odoo'),
         'name': full_name,
         'iat': datetime.datetime.utcnow().timestamp()
     }

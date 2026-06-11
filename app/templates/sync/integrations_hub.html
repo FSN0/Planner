@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Integraciones{% endblock %}
+{% block content %}
+<div class="container mt-4">
+    <h2><i class="fas fa-plug text-primary"></i> Hub de integraciones</h2>
+    <p class="text-muted">Módulos adicionales contratados para tu entorno.</p>
+
+    {% if not tenant_has_integrations %}
+    <div class="alert alert-light border mt-4">
+        <i class="fas fa-info-circle text-muted mr-2"></i>
+        Tu empresa no tiene módulos de integración activos. Contacta con soporte si necesitas conectar un ERP.
+    </div>
+    {% else %}
+    <div class="row mt-4">
+        {% if modulos_activos.get('odoo') %}
+        <div class="col-md-4 mb-3">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body text-center">
+                    <h3 style="color: #714B67;"><i class="fas fa-database"></i> Odoo ERP</h3>
+                    <p class="mt-3 text-muted small">
+                        Sincronización de obras, empleados, subcontratas y fichajes con Odoo.
+                    </p>
+                    <div class="badge badge-success mb-3">Módulo activo</div><br>
+                    <a href="{{ url_for('sync.odoo_panel') }}" class="btn btn-primary w-100">Abrir centro Odoo</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

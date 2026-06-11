@@ -14,7 +14,7 @@
 
     <header class="sync-preview-header">
       <div>
-        <a href="{{ url_for('sync.panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
         <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
         <p class="sync-preview-sub">Empresas subcontrata y contactos externos desde res.partner.</p>
       </div>
@@ -82,7 +82,7 @@ document.getElementById('btnCommit').addEventListener('click', function() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: document.getElementById('diffData').textContent
     }).then(r => r.json()).then(res => {
-        if (res.success) window.location.href = "{{ url_for('sync.panel') }}";
+        if (res.success) window.location.href = "{{ url_for('sync.odoo_panel') }}";
         else { alert('Error: ' + res.error); this.disabled = false; }
     });
 });

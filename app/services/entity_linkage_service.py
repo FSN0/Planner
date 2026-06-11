@@ -1,7 +1,16 @@
 """Detalle de entidades locales sin vínculo Odoo."""
 from flask import url_for
+from sqlalchemy import or_
 
 from app.models import Obra, User, Company
+
+
+def _has_odoo_link(column):
+    return column.has_key('odoo') & column['odoo'].astext.isnot(None)
+
+
+def _sin_odoo_link(column):
+    return or_(~column.has_key('odoo'), column['odoo'].astext.is_(None), column['odoo'].astext == '')
 
 
 def _user_linkage_hint(user):
@@ -11,41 +20,41 @@ def _user_linkage_hint(user):
         return 'Usuario inactivo o pendiente de alta'
     if user.company_rel and user.company_rel.is_internal:
         return 'Operario de empresa interna — puede no tener registro en Odoo HR'
-    return 'Sin odoo_id — creado manualmente o pendiente de sincronizar'
+    return 'Sin vínculo Odoo — creado manualmente o pendiente de sincronizar'
 
 
 def _company_linkage_hint(company):
     if company.is_internal:
         return 'Empresa interna — no se importa como subcontrata Odoo'
-    return 'Sin odoo_id — creada manualmente o pendiente de sincronizar'
+    return 'Sin vínculo Odoo — creada manualmente o pendiente de sincronizar'
 
 
 def _obra_linkage_hint(obra):
     if obra.estado == 'Finalizada':
         return 'Obra finalizada sin vínculo Odoo'
-    return 'Creada manualmente o importada sin odoo_id'
+    return 'Creada manualmente o importada sin vínculo Odoo'
 
 
 def get_entity_linkage_summary():
     obras_sin = (
-        Obra.query.filter(Obra.is_deleted.is_(False), Obra.odoo_id.is_(None))
+        Obra.query.filter(Obra.is_deleted.is_(False), _sin_odoo_link(Obra.external_ids))
         .order_by(Obra.nombre)
         .all()
     )
     users_sin = (
-        User.query.filter(User.is_deleted.is_(False), User.odoo_id.is_(None))
+        User.query.filter(User.is_deleted.is_(False), _sin_odoo_link(User.external_ids))
         .order_by(User.name, User.lastname)
         .all()
     )
     companies_sin = (
-        Company.query.filter(Company.odoo_id.is_(None))
+        Company.query.filter(_sin_odoo_link(Company.external_ids))
         .order_by(Company.nombre)
         .all()
     )
 
     return {
         'obras': {
-            'vinculadas': Obra.query.filter(Obra.is_deleted.is_(False), Obra.odoo_id.isnot(None)).count(),
+            'vinculadas': Obra.query.filter(Obra.is_deleted.is_(False), _has_odoo_link(Obra.external_ids)).count(),
             'total': Obra.query.filter(Obra.is_deleted.is_(False)).count(),
             'sin_vincular': [
                 {
@@ -60,7 +69,7 @@ def get_entity_linkage_summary():
             ],
         },
         'empleados': {
-            'vinculados': User.query.filter(User.is_deleted.is_(False), User.odoo_id.isnot(None)).count(),
+            'vinculados': User.query.filter(User.is_deleted.is_(False), _has_odoo_link(User.external_ids)).count(),
             'total': User.query.filter(User.is_deleted.is_(False)).count(),
             'sin_vincular': [
                 {
@@ -75,7 +84,7 @@ def get_entity_linkage_summary():
             ],
         },
         'empresas': {
-            'vinculadas': Company.query.filter(Company.odoo_id.isnot(None)).count(),
+            'vinculadas': Company.query.filter(_has_odoo_link(Company.external_ids)).count(),
             'total': Company.query.count(),
             'sin_vincular': [
                 {

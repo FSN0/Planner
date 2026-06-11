@@ -152,9 +152,22 @@ def create_app():
                 today_local=today_local(),
                 timezone_options=COMMON_TIMEZONES,
             )
+        modulos_activos = {}
+        tenant_has_odoo = False
+        tenant_has_integrations = False
+        if current_user.is_authenticated:
+            tenant = getattr(g, 'current_tenant', None)
+            if tenant:
+                modulos_activos = getattr(tenant, 'modulos_activos', {}) or {}
+                tenant_has_odoo = bool(modulos_activos.get('odoo'))
+                tenant_has_integrations = tenant_has_odoo
+
         return dict(
             pending_notifications=pending_count,
             unread_logs_count=unread_logs_count,
+            modulos_activos=modulos_activos,
+            tenant_has_odoo=tenant_has_odoo,
+            tenant_has_integrations=tenant_has_integrations,
             **tz_ctx,
         )
 

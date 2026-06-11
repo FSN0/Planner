@@ -100,10 +100,10 @@
           <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
         </a>
       </li>
-      {% if current_user.role == 'admin' %}
+      {% if current_user.role == 'admin' and tenant_has_integrations %}
       <li>
-        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if request.endpoint == 'sync.panel' %}is-active{% endif %}">
-          <i class="fas fa-sync-alt fa-fw"></i><span>Sincronizar Odoo</span>
+        <a href="{{ url_for('sync.panel') }}" class="sidebar-link {% if request.endpoint in ('sync.panel', 'sync.odoo_panel') %}is-active{% endif %}">
+          <i class="fas fa-plug fa-fw"></i><span>Integraciones</span>
         </a>
       </li>
       <li>

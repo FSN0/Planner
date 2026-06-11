@@ -15,7 +15,7 @@
 
     <header class="sync-preview-header">
       <div>
-        <a href="{{ url_for('sync.panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
         <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
         <p class="sync-preview-sub">Análisis en vivo desde Odoo · qué se importará, qué se omitirá y por qué.</p>
       </div>
@@ -170,7 +170,7 @@ function confirmSync(mode) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalPayload)
     }).then(r => r.json()).then(data => {
-        if (data.success) { alert('Guardado correctamente.'); window.location.href = "{{ url_for('sync.panel') }}"; }
+        if (data.success) { alert('Guardado correctamente.'); window.location.href = "{{ url_for('sync.odoo_panel') }}"; }
         else alert('Error: ' + data.error);
     });
 }
