@@ -72,11 +72,13 @@ def odoo_panel():
     if not _require_odoo_module():
         return redirect(url_for('admin.panel'))
     ctx = get_sync_panel_context()
+    has_password = bool(get_tenant_config('odoo_password', default=''))
     ctx['odoo_credentials'] = {
         'url': get_tenant_config('odoo_url', default=''),
         'db': get_tenant_config('odoo_db', default=''),
         'user': get_tenant_config('odoo_user', default=''),
-        'password': get_tenant_config('odoo_password', desencriptar=True, default=''),
+        'password': '',
+        'has_password': has_password,
     }
     return render_template('sync/odoo_dashboard.html', **ctx)
 
@@ -91,7 +93,9 @@ def odoo_save_config():
         set_tenant_config('odoo_url', request.form.get('url', '').strip())
         set_tenant_config('odoo_db', request.form.get('db', '').strip())
         set_tenant_config('odoo_user', request.form.get('user', '').strip())
-        set_tenant_config('odoo_password', request.form.get('password', '').strip(), encriptar=True)
+        password = request.form.get('password', '').strip()
+        if password:
+            set_tenant_config('odoo_password', password, encriptar=True)
 
         modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
         motor = modulos.get('odoo_adapter') or 'odoo_soltec'

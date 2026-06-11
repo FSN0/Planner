@@ -35,6 +35,7 @@ DECLARE
     v_head text := current_setting('migration.alembic_head');
     v_has_solicitud_notas boolean;
     v_has_nota_odoo boolean;
+    v_has_system_log_targets boolean;
     truncate_tables text;
     t_name text;
 BEGIN
@@ -107,6 +108,15 @@ BEGIN
               WHERE table_schema = 'public' AND table_name = 'registros_fichajes' AND column_name = 'nota_odoo'$$
         ) AS t(c int)
     ) INTO v_has_nota_odoo;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM dblink(
+            v_conn,
+            $$SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'system_logs' AND column_name = 'target_user_id'$$
+        ) AS t(c int)
+    ) INTO v_has_system_log_targets;
 
     -- 4) Copia con transformaciones (orden FK)
     EXECUTE format($q$
@@ -393,17 +403,68 @@ BEGIN
         FROM dblink(%2$L, 'SELECT nota_id, user_id FROM public.nota_user') AS r(nota_id int, user_id int)
     $q$, v_schema, v_conn);
 
-    EXECUTE format($q$
-        INSERT INTO %1$I.system_logs (
-            id, timestamp, user_id, category, action, detail, target_user_id, target_date
-        )
-        SELECT id, timestamp, user_id, category, action, detail, NULL::integer, NULL::date
-        FROM dblink(%2$L,
-            'SELECT id, timestamp, user_id, category, action, detail FROM public.system_logs ORDER BY id'
-        ) AS r(
-            id int, timestamp timestamp, user_id int, category varchar, action varchar, detail text
-        )
-    $q$, v_schema, v_conn);
+    IF v_has_system_log_targets THEN
+        EXECUTE format($q$
+            INSERT INTO %1$I.system_logs (
+                id, timestamp, user_id, category, action, detail, target_user_id, target_date
+            )
+            SELECT id, timestamp, user_id, category, action, detail, target_user_id, target_date
+            FROM dblink(%2$L,
+                'SELECT id, timestamp, user_id, category, action, detail, target_user_id, target_date
+                 FROM public.system_logs ORDER BY id'
+            ) AS r(
+                id int, timestamp timestamp, user_id int, category varchar, action varchar, detail text,
+                target_user_id int, target_date date
+            )
+        $q$, v_schema, v_conn);
+    ELSE
+        EXECUTE format($q$
+            INSERT INTO %1$I.system_logs (
+                id, timestamp, user_id, category, action, detail, target_user_id, target_date
+            )
+            SELECT id, timestamp, user_id, category, action, detail, NULL::integer, NULL::date
+            FROM dblink(%2$L,
+                'SELECT id, timestamp, user_id, category, action, detail FROM public.system_logs ORDER BY id'
+            ) AS r(
+                id int, timestamp timestamp, user_id int, category varchar, action varchar, detail text
+            )
+        $q$, v_schema, v_conn);
+
+        -- Monolitos sin columnas de auditoria: reconstruir target para timeline persona/dia.
+        EXECUTE format($q$
+            UPDATE %1$I.system_logs sl
+            SET
+                target_user_id = rf.user_id,
+                target_date = rf.fecha
+            FROM %1$I.registros_fichajes rf
+            WHERE sl.target_user_id IS NULL
+              AND sl.category IN ('fichaje_app', 'fichajes')
+              AND rf.user_id IS NOT NULL
+              AND rf.fecha IS NOT NULL
+              AND sl.timestamp::date = rf.fecha
+              AND (
+                  sl.detail ILIKE '%%' || rf.user_id::text || '%%'
+                  OR EXISTS (
+                      SELECT 1 FROM %1$I.users u
+                      WHERE u.id = rf.user_id
+                        AND (
+                            sl.detail ILIKE '%%' || u.name || '%%'
+                            OR sl.detail ILIKE '%%' || u.lastname || '%%'
+                        )
+                  )
+              )
+        $q$, v_schema);
+
+        EXECUTE format($q$
+            UPDATE %1$I.system_logs sl
+            SET
+                target_user_id = COALESCE(sl.target_user_id, sl.user_id),
+                target_date = COALESCE(sl.target_date, sl.timestamp::date)
+            WHERE sl.target_user_id IS NULL
+              AND sl.category = 'planificacion'
+              AND sl.user_id IS NOT NULL
+        $q$, v_schema);
+    END IF;
 
     EXECUTE format($q$
         INSERT INTO %1$I.alembic_version (version_num) VALUES (%2$L)

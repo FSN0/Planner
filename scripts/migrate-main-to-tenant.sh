@@ -95,6 +95,14 @@ table_count() {
         "SELECT COUNT(*) FROM ${schema}.${table};" 2>/dev/null | tr -d "[:space:]" || echo "missing"
 }
 
+timeline_logs_count() {
+    local db="$1"
+    local schema="$2"
+    docker compose -f "${COMPOSE_FILE}" exec -T db psql -U postgres -d "${db}" -tAc \
+        "SELECT COUNT(*) FROM ${schema}.system_logs WHERE target_user_id IS NOT NULL AND target_date IS NOT NULL;" \
+        2>/dev/null | tr -d "[:space:]" || echo "missing"
+}
+
 verify_counts() {
     local schema="$1"
     local tables=(
@@ -126,6 +134,19 @@ verify_counts() {
             ok "  ${t}: ${tenant_cnt}"
         fi
     done
+    local import_timeline tenant_timeline
+    import_timeline="$(timeline_logs_count "${IMPORT_DB}" "public")"
+    tenant_timeline="$(timeline_logs_count "${SAAS_DB}" "${schema}")"
+    if [[ "${import_timeline}" != "missing" ]]; then
+        if [[ "${tenant_timeline}" == "${import_timeline}" ]]; then
+            ok "  system_logs timeline: ${tenant_timeline}"
+        else
+            err "  MISMATCH system_logs timeline: import=${import_timeline} tenant=${tenant_timeline}"
+            warn "  Ejecuta: ./scripts/repair-timeline-logs.sh (tras git pull y restaurar ${IMPORT_DB})"
+            mismatches=$((mismatches + 1))
+        fi
+    fi
+
     if [[ "${mismatches}" -gt 0 ]]; then
         err "Verificacion con ${mismatches} diferencia(s). Revisa logs."
         exit 1

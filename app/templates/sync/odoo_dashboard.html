@@ -37,12 +37,6 @@
         <a href="{{ url_for('sync.panel') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-arrow-left"></i> Integraciones
         </a>
-        <button type="button" class="btn-admin btn-admin-ghost" data-toggle="modal" data-target="#odooCredentialsModal">
-          <i class="fas fa-key"></i> Credenciales
-        </button>
-        <button type="button" class="btn-admin btn-admin-ghost" onclick="testOdooConnection()">
-          <i class="fas fa-plug"></i> Probar conexión
-        </button>
         <button type="button" class="btn-admin btn-admin-primary" data-toggle="modal" data-target="#syncConfigModal">
           <i class="fas fa-cog"></i> Configurar
         </button>
@@ -62,6 +56,55 @@
       <span class="sync-conn-uid badge-soft">UID {{ connection.uid }}</span>
       {% endif %}
     </div>
+
+    <section class="sync-credentials-card card-modern card mb-4">
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-start justify-content-between mb-3" style="gap:0.75rem;">
+          <div>
+            <h2 class="sync-section-title mb-1" style="margin:0;"><i class="fas fa-key text-primary mr-1"></i> Conexión con Odoo</h2>
+            <p class="text-muted small mb-0">Credenciales XML-RPC del tenant. Se guardan cifradas en la configuración del cliente.</p>
+          </div>
+          <button type="button" class="btn-admin btn-admin-ghost" onclick="testOdooConnection()">
+            <i class="fas fa-plug"></i> Probar conexión
+          </button>
+        </div>
+        <form action="{{ url_for('sync.odoo_save_config') }}" method="POST" class="sync-credentials-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="row">
+            <div class="col-md-6 col-lg-3 form-group">
+              <label class="form-label-sm">URL servidor</label>
+              <input type="url" class="form-control form-control-sm" name="url"
+                     value="{{ odoo_credentials.url }}" placeholder="https://odoo.empresa.com" required>
+            </div>
+            <div class="col-md-6 col-lg-3 form-group">
+              <label class="form-label-sm">Base de datos</label>
+              <input type="text" class="form-control form-control-sm" name="db"
+                     value="{{ odoo_credentials.db }}" placeholder="nombre_bd" required>
+            </div>
+            <div class="col-md-6 col-lg-3 form-group">
+              <label class="form-label-sm">Usuario API</label>
+              <input type="text" class="form-control form-control-sm" name="user"
+                     value="{{ odoo_credentials.user }}" placeholder="admin@empresa.com" required>
+            </div>
+            <div class="col-md-6 col-lg-3 form-group">
+              <label class="form-label-sm">Contraseña</label>
+              <input type="password" class="form-control form-control-sm" name="password"
+                     placeholder="{% if odoo_credentials.has_password %}•••••••• (dejar vacío para mantener){% else %}Contraseña API{% endif %}">
+            </div>
+          </div>
+          <div class="d-flex flex-wrap align-items-center" style="gap:0.5rem;">
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-save"></i> Guardar credenciales
+            </button>
+            {% if odoo_credentials.has_password %}
+            <span class="text-muted small"><i class="fas fa-lock"></i> Contraseña configurada</span>
+            {% else %}
+            <span class="text-warning small"><i class="fas fa-exclamation-circle"></i> Falta configurar la contraseña</span>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </section>
 
     <div class="sync-kpi-grid">
       <div class="sync-kpi-card">
@@ -313,7 +356,8 @@
           </div>
           <div class="form-group mb-0">
             <label class="form-label-sm">Contraseña</label>
-            <input type="password" class="form-control" name="password" value="{{ odoo_credentials.password }}" required>
+            <input type="password" class="form-control" name="password"
+                   placeholder="{% if odoo_credentials.has_password %}Dejar vacío para mantener la actual{% else %}Contraseña API{% endif %}">
             <small class="text-muted">Se guarda cifrada en la configuración del tenant.</small>
           </div>
         </div>
