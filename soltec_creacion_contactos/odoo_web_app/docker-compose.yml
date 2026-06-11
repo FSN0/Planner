@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: odoo_alta_personal
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Opcional: misma red que SignaPlan para usar SIGNAPLAN_AUTH_URL=http://web:5000/...
+    # networks:
+    #   - signaplan
+
+# networks:
+#   signaplan:
+#     external: true
+#     name: project_default

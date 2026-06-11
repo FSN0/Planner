@@ -1,0 +1,605 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --color-bg-main: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-border: #e2e8f0;
+  --color-primary: #16a34a;
+  --color-primary-hover: #15803d;
+  --color-orange: #ea580c;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px -8px rgba(15, 23, 42, 0.12);
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body.alta-app {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-bg-main);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}
+
+/* ── Topbar ── */
+.alta-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.85rem 1.5rem;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.25);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.alta-topbar-brand { font-size: 1.05rem; font-weight: 700; margin: 0; }
+.alta-topbar-brand i { color: #22c55e; margin-right: 0.4rem; }
+.alta-topbar-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.alta-topbar-user { font-size: 0.85rem; color: #cbd5e1; }
+.alta-topbar-user b { color: #fff; }
+
+/* ── Layout ── */
+.alta-main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2.5rem;
+}
+.alta-main--wide { max-width: 1040px; }
+
+.alta-page-header { margin-bottom: 1.25rem; }
+.alta-page-title { font-size: 1.4rem; font-weight: 700; margin: 0 0 0.25rem; letter-spacing: -0.02em; }
+.alta-page-sub { font-size: 0.875rem; color: var(--color-text-muted); margin: 0; }
+
+/* ── KPI cards ── */
+.alta-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.alta-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow-card);
+}
+.alta-kpi-card--hint { grid-column: 1 / -1; }
+@media (min-width: 768px) {
+  .alta-kpi-card--hint { grid-column: auto; }
+}
+.alta-kpi-icon { font-size: 1.5rem; color: var(--color-primary); opacity: 0.85; }
+.alta-kpi-value { display: block; font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+.alta-kpi-label { font-size: 0.75rem; color: var(--color-text-muted); font-weight: 500; }
+
+/* ── Panels ── */
+.alta-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.35rem 1.5rem;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 1rem;
+}
+.alta-panel--flush { padding: 0; overflow: hidden; }
+.alta-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+.alta-panel-title { font-size: 1.05rem; font-weight: 600; margin: 0 0 0.2rem; }
+.alta-panel-sub { font-size: 0.8rem; color: var(--color-text-muted); margin: 0; }
+.alta-step-badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+}
+.alta-step-badge--orange { background: #ffedd5; color: #c2410c; }
+
+/* ── Buttons ── */
+.btn-admin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s;
+}
+.btn-admin-primary {
+  background: linear-gradient(135deg, var(--color-primary), #22c55e);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+}
+.btn-admin-primary:hover {
+  transform: translateY(-1px);
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
+}
+.btn-admin-ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.btn-admin-ghost:hover { background: rgba(255, 255, 255, 0.15); color: #fff; text-decoration: none; }
+.btn-admin-danger { background: #ef4444; color: #fff; }
+.btn-admin-danger:hover { color: #fff; text-decoration: none; filter: brightness(1.05); }
+.btn-admin-outline {
+  background: #fff;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+.btn-admin-outline:hover { border-color: #94a3b8; color: var(--color-text); text-decoration: none; background: #f8fafc; }
+.btn-admin-block { width: 100%; }
+
+/* ── Forms ── */
+.alta-form-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.4rem;
+}
+.alta-form-label i { color: #94a3b8; margin-right: 0.15rem; }
+.alta-form-hint { font-size: 0.75rem; color: var(--color-text-muted); margin-top: 0.35rem; }
+.alta-form-section {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin: 1.35rem 0 0.85rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e2e8f0;
+}
+.alta-field-group { margin-bottom: 1rem; }
+.alta-field-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: flex-start; }
+.alta-field-grow { flex: 1; min-width: 220px; }
+
+.alta-form .form-control {
+  border-radius: var(--radius-md);
+  border-color: #cbd5e1;
+  font-size: 0.9rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.alta-form .form-control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+
+.alta-input-euro {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.alta-input-euro .form-control { flex: 1; }
+.alta-input-euro > span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* ── Tabs ── */
+.alta-tabs {
+  display: inline-flex;
+  background: #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 0.25rem;
+  margin-bottom: 1.15rem;
+  gap: 0.15rem;
+}
+.alta-tab {
+  border: none;
+  background: transparent;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.15s;
+}
+.alta-tab:hover { color: #334155; }
+.alta-tab.is-active {
+  background: #fff;
+  color: var(--color-primary);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+/* ── Nueva empresa ── */
+.alta-nueva-empresa {
+  display: none;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.alta-nueva-empresa.is-visible { display: block; }
+
+/* ── Fechas ── */
+.alta-date-presets .btn { margin-right: 0.35rem; margin-bottom: 0.25rem; border-radius: 999px; font-size: 0.78rem; }
+.alta-date-input.flatpickr-input { background: #fff; }
+.flatpickr-input[readonly] { cursor: pointer; background: #fff !important; }
+.flatpickr-calendar { border-radius: var(--radius-md) !important; box-shadow: var(--shadow-card) !important; font-family: var(--font-sans); }
+
+/* ── Operarios table ── */
+.alta-operarios-box {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+.alta-operarios-table thead th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  border-top: none;
+  font-weight: 700;
+}
+.alta-operarios-empty td {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  padding: 1.25rem !important;
+}
+.alta-operarios-empty i { margin-right: 0.35rem; }
+
+/* ── Select2 ── */
+.select2-container--default .select2-selection--single {
+  height: calc(1.5em + 0.85rem + 2px);
+  border-color: #cbd5e1;
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.select2-container--default.select2-container--open .select2-selection--single,
+.select2-container--default.select2-container--focus .select2-selection--single {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+  line-height: calc(1.5em + 0.85rem);
+  padding-left: 0.75rem;
+  color: var(--color-text);
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow { height: 100%; }
+.select2-dropdown {
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.select2-results__option--highlighted[aria-selected] {
+  background: var(--color-primary) !important;
+}
+.alta-badge-vat {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
+  margin-left: 0.35rem;
+}
+
+/* ── Auth ── */
+.alta-auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(160deg, #f1f5f9 0%, #e2e8f0 50%, #dcfce7 100%);
+}
+.alta-auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: var(--radius-lg);
+  border-top: 4px solid var(--color-primary);
+  box-shadow: 0 20px 50px -20px rgba(15, 23, 42, 0.2);
+  padding: 2.25rem 2rem;
+}
+.alta-auth-logo { text-align: center; font-size: 2.75rem; color: var(--color-primary); margin-bottom: 0.75rem; }
+.alta-auth-title { text-align: center; font-size: 1.4rem; font-weight: 700; margin: 0 0 0.35rem; }
+.alta-auth-sub { text-align: center; font-size: 0.85rem; color: var(--color-text-muted); margin: 0 0 1.5rem; }
+
+/* ── Logs ── */
+.alta-log-filters { padding: 1.1rem 1.25rem; border-bottom: 1px solid #f1f5f9; background: #fafbfc; }
+.alta-table-wrap { max-height: 70vh; overflow: auto; }
+.alta-data-table { font-size: 0.85rem; }
+.alta-data-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  border-top: none;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 700;
+  z-index: 1;
+}
+.alta-data-table tbody tr:hover { background: #f8fafc; }
+.alta-td-nowrap { white-space: nowrap; }
+.alta-td-details { max-width: 360px; line-height: 1.45; color: #475569; }
+.alta-user-chip {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.alta-badge-method {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #64748b;
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+.alta-badge-action {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.alta-badge-action--login { background: #dbeafe; color: #1d4ed8; }
+.alta-badge-action--logout { background: #f1f5f9; color: #64748b; }
+.alta-badge-action--alta { background: #dcfce7; color: #166534; }
+.alta-badge-action--login_failed { background: #fee2e2; color: #b91c1c; }
+.alta-badge-action--login_signaplan { background: #dbeafe; color: #1d4ed8; }
+
+.tab-pane-hidden { display: none !important; }
+.alta-flash { border-radius: var(--radius-md); }
+
+.btn-admin-lg {
+  padding: 0.75rem 1.15rem;
+  font-size: 1rem;
+  min-height: 48px;
+}
+.alta-touch-input {
+  font-size: 16px !important; /* evita zoom automático en iOS */
+  min-height: 48px;
+}
+
+/* ── Mobile footer sticky (acciones principales) ── */
+.alta-mobile-footer {
+  margin-top: 1.25rem;
+  padding-top: 0.5rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MÓVIL — layout táctil y usable en pantallas pequeñas
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .alta-topbar {
+    padding: 0.65rem 0.85rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .alta-topbar-brand {
+    font-size: 0.95rem;
+    text-align: center;
+  }
+  .alta-topbar-actions {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .alta-topbar-user {
+    width: 100%;
+    text-align: center;
+    order: -1;
+    font-size: 0.8rem;
+  }
+
+  .alta-main,
+  .alta-main--wide {
+    padding: 1rem 0.75rem 5.5rem;
+    max-width: 100%;
+  }
+
+  .alta-page-title { font-size: 1.2rem; }
+  .alta-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .alta-kpi-card {
+    padding: 0.75rem;
+    flex-direction: column;
+    text-align: center;
+    gap: 0.35rem;
+  }
+  .alta-kpi-card--hint {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    text-align: left;
+  }
+  .alta-kpi-icon { font-size: 1.2rem; }
+  .alta-kpi-value { font-size: 1.25rem; }
+
+  .alta-tabs {
+    display: flex;
+    width: 100%;
+  }
+  .alta-tab {
+    flex: 1;
+    justify-content: center;
+    padding: 0.65rem 0.5rem;
+    font-size: 0.78rem;
+  }
+  .alta-tab i { display: none; }
+
+  .alta-panel {
+    padding: 1rem 0.85rem;
+    border-radius: var(--radius-md);
+  }
+  .alta-panel-head {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .alta-step-badge { align-self: flex-start; }
+
+  .alta-field-row {
+    flex-direction: column;
+  }
+  .alta-field-grow { min-width: 100%; }
+  #btnToggleEmpresa {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .alta-form .form-row > [class*="col-"] {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+
+  .alta-date-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .alta-date-presets .btn {
+    flex: 1 1 auto;
+    min-width: calc(33% - 0.35rem);
+    min-height: 40px;
+  }
+
+  .alta-operarios-table thead { display: none; }
+  .alta-operarios-table tr.alta-operario-row,
+  .alta-operarios-table tr.alta-operarios-empty {
+    display: block;
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.5rem;
+    padding: 0.5rem;
+  }
+  .alta-operarios-table tr.alta-operarios-empty td {
+    display: block;
+    border: none;
+    padding: 0.75rem !important;
+  }
+  .alta-operarios-table tr.alta-operario-row td {
+    display: block;
+    border: none;
+    padding: 0.25rem 0 !important;
+    width: 100% !important;
+  }
+  .alta-operarios-table tr.alta-operario-row td:last-child {
+    text-align: right;
+    padding-top: 0.5rem !important;
+  }
+  .alta-operarios-table .remove-line {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .alta-mobile-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    margin: 0;
+    padding: 0.65rem 0.75rem;
+    padding-bottom: calc(0.65rem + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(241, 245, 249, 0) 0%, rgba(241, 245, 249, 0.92) 24%, #f1f5f9 100%);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.1);
+  }
+
+  .select2-container--default .select2-selection--single {
+    min-height: 48px;
+    height: auto !important;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 48px;
+    padding-top: 0;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 48px;
+  }
+  .select2-dropdown { font-size: 16px; }
+
+  .flatpickr-calendar {
+    max-width: calc(100vw - 1.5rem);
+    margin: 0 auto;
+  }
+
+  .alta-auth-page { padding: 0.75rem; align-items: flex-start; padding-top: 2rem; }
+  .alta-auth-card {
+    max-width: 100%;
+    padding: 1.5rem 1.25rem;
+    border-radius: var(--radius-md);
+  }
+
+  .alta-log-filters .form-row > [class*="col-"] {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+  .alta-table-wrap { max-height: none; }
+  .alta-data-table thead { display: none; }
+  .alta-data-table tbody tr {
+    display: block;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.65rem;
+    padding: 0.65rem;
+    background: #fff;
+  }
+  .alta-data-table tbody td {
+    display: block;
+    border: none;
+    padding: 0.2rem 0 !important;
+  }
+  .alta-data-table tbody td::before {
+    content: attr(data-label);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #94a3b8;
+    display: block;
+    margin-bottom: 0.1rem;
+  }
+  .alta-td-details { max-width: none; }
+}
+
+@media (max-width: 380px) {
+  .alta-kpi-grid { grid-template-columns: 1fr; }
+}

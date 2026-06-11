@@ -597,3 +597,7 @@ def check_domain():
 
     # Si llega aquí, es un dominio inventado o inactivo -> Denegamos el SSL
     return "Not Found", 404
+
+
+from app.api.odoo_alta_auth import register_odoo_alta_auth_routes  # noqa: E402
+register_odoo_alta_auth_routes(api_bp)

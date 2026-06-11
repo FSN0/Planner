@@ -40,6 +40,9 @@ class Config:
     CELERY_TASK_ALWAYS_EAGER = _env_bool('CELERY_TASK_ALWAYS_EAGER', default=False)
 
     SSO_SECRET_KEY = os.environ.get('SSO_SECRET_KEY')
+    # URL base de la app externa Alta Odoo (puerto 5002 en dev). Ej: https://alta.tu-dominio.com
+    ODOO_ALTA_APP_URL = (os.environ.get('ODOO_ALTA_APP_URL') or '').strip().rstrip('/') or None
+    ODOO_ALTA_TENANT_SLUG = (os.environ.get('ODOO_ALTA_TENANT_SLUG') or '').strip() or None
 
     # --- Endurecimiento de cookies de sesión ---
     # SESSION_COOKIE_SECURE solo en producción (requiere HTTPS); en debug se desactiva.

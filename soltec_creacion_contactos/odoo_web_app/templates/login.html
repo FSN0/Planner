@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Acceso{% endblock %}
+{% block body_class %}alta-auth-page{% endblock %}
+
+{% block body %}
+<div class="alta-auth-card">
+  <div class="alta-auth-logo"><i class="fas fa-hard-hat"></i></div>
+  <h1 class="alta-auth-title">Alta Odoo</h1>
+  <p class="alta-auth-sub">
+    {% if tenant_name %}Panel {{ tenant_name }} · {% endif %}
+    Mismas credenciales que SignaPlan
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'error' else category }} py-2 small">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" class="alta-form" autocomplete="on">
+    <div class="form-group">
+      <label class="alta-form-label" for="email"><i class="fas fa-envelope fa-fw"></i> Correo electrónico</label>
+      <input type="email" name="email" id="email" class="form-control form-control-lg alta-touch-input"
+             required autocomplete="username" inputmode="email" placeholder="nombre@empresa.com">
+    </div>
+    <div class="form-group">
+      <label class="alta-form-label" for="password"><i class="fas fa-lock fa-fw"></i> Contraseña</label>
+      <input type="password" name="password" id="password" class="form-control form-control-lg alta-touch-input"
+             required autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button type="submit" class="btn-admin btn-admin-primary btn-admin-block btn-admin-lg mt-2">
+      <i class="fas fa-sign-in-alt"></i> Iniciar sesión
+    </button>
+  </form>
+
+  <p class="text-center text-muted small mt-3 mb-0">
+    Desde el ordenador también puedes entrar vía SignaPlan → Integraciones → Alta Odoo.
+  </p>
+</div>
+{% endblock %}

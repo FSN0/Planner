@@ -42,12 +42,25 @@ fi
 
 source .env
 
-for var in SECRET_KEY POSTGRES_PASSWORD ENCRYPTION_KEY; do
+for var in SECRET_KEY POSTGRES_PASSWORD ENCRYPTION_KEY SSO_SECRET_KEY; do
     if [ -z "${!var:-}" ]; then
         echo -e "${RED}ERROR: $var no está definida en .env${NC}"
         exit 1
     fi
 done
+
+ODOO_ALTA_BUILD_CONTEXT="${ODOO_ALTA_BUILD_CONTEXT:-../soltec_creacion_contactos/odoo_web_app}"
+if [ ! -f "$ODOO_ALTA_BUILD_CONTEXT/Dockerfile" ]; then
+    echo -e "${YELLOW}AVISO: No se encuentra la app Alta Odoo en: $ODOO_ALTA_BUILD_CONTEXT${NC}"
+    echo "  Clona/copia soltec_creacion_contactos junto a project/ o define ODOO_ALTA_BUILD_CONTEXT en .env"
+fi
+
+if [ -z "${ODOO_ALTA_FLASK_SECRET_KEY:-}" ]; then
+    echo -e "${YELLOW}AVISO: ODOO_ALTA_FLASK_SECRET_KEY no definida (recomendado en producción)${NC}"
+fi
+if [ -z "${ODOO_ALTA_APP_URL:-}" ]; then
+    echo -e "${YELLOW}AVISO: ODOO_ALTA_APP_URL no definida — el SSO a Alta Odoo no funcionará${NC}"
+fi
 
 # --- Pull de cambios (si es un repo git) ---
 if [ -d .git ]; then

@@ -124,14 +124,29 @@ def sync_scheduler():
     """Despachador configurable: master data nocturno + fichajes en vivo."""
     with app.app_context():
         from app.services.sync_config_service import SyncConfigService
-        try:
+
+        master_needed = False
+        fichajes_needed = False
+        retro_needed = False
+
+        def _check_tenant_schedule(_tenant_data):
+            nonlocal master_needed, fichajes_needed, retro_needed
             if SyncConfigService.should_run_master_sync():
+                master_needed = True
+            if SyncConfigService.should_run_fichajes_sync():
+                fichajes_needed = True
+            if SyncConfigService.should_run_fichajes_retro_sync():
+                retro_needed = True
+
+        try:
+            _for_each_tenant(_check_tenant_schedule)
+            if master_needed:
                 app.logger.info(">>> Scheduler: lanzando sync nocturna de master data")
                 auto_sync_odoo.delay()
-            if SyncConfigService.should_run_fichajes_sync():
+            if fichajes_needed:
                 app.logger.info(">>> Scheduler: lanzando sync de fichajes en vivo")
                 fichajes_en_vivo.delay()
-            if SyncConfigService.should_run_fichajes_retro_sync():
+            if retro_needed:
                 app.logger.info(">>> Scheduler: lanzando sync retrospectiva de fichajes")
                 fichajes_retroactivos.delay()
         finally:

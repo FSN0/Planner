@@ -6,6 +6,21 @@
     }
 }
 
+# App externa Alta Odoo (Soltec) — cubierta por *.signaplan.com si existe wildcard DNS
+{$ODOO_ALTA_DOMAIN:alta-odoo.signaplan.com} {
+    reverse_proxy odoo_alta:5002
+    encode gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-XSS-Protection "1; mode=block"
+        -Server
+    }
+}
+
 # Dominios base (generan el certificado normal)
 signaplan.com, www.signaplan.com {
     reverse_proxy web:5000

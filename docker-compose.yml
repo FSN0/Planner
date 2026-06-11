@@ -33,6 +33,8 @@ services:
       - ODOO_USER=${ODOO_USER:-}
       - ODOO_PASSWORD=${ODOO_PASSWORD:-}
       - SSO_SECRET_KEY=${SSO_SECRET_KEY:-dev-sso-key}
+      - ODOO_ALTA_APP_URL=${ODOO_ALTA_APP_URL:-}
+      - ODOO_ALTA_TENANT_SLUG=${ODOO_ALTA_TENANT_SLUG:-soltec}
       - DOMAIN=${DOMAIN:-localhost}
     depends_on:
       db:

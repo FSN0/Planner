@@ -2042,46 +2042,39 @@ def batch_delete_companies():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def sso_odoo_contactos():
-    from app.models import ConfiguracionGlobal
+    """SSO hacia la app externa de Alta Odoo (web aparte, p. ej. :5002)."""
+    from flask import current_app
     from itsdangerous import URLSafeTimedSerializer
-    import datetime
-
-    modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
-    if not modulos.get('odoo_alta'):
-        flash('Tu empresa no tiene habilitado el módulo de Alta Odoo.', 'warning')
-        return redirect(url_for('admin.panel'))
+    from app.utils.timezone_utils import utc_now
 
     sso_secret = current_app.config.get('SSO_SECRET_KEY')
     if not sso_secret:
-        flash('SSO no configurado. Contacte al administrador.', 'danger')
+        flash('SSO no configurado (SSO_SECRET_KEY).', 'danger')
         return redirect(url_for('admin.panel'))
-    
-    # 1. Buscar si el cliente tiene una instancia de Odoo configurada
-    conf_odoo = ConfiguracionGlobal.query.filter_by(clave='odoo_url').first()
-    
-    if conf_odoo and conf_odoo.valor:
-        odoo_url = conf_odoo.valor.rstrip('/') # Quitamos barra final para evitar errores
-    else:
-        # Fallback por defecto (puerto 5002) si no ha configurado nada
+
+    alta_url = current_app.config.get('ODOO_ALTA_APP_URL')
+    if not alta_url:
         dominio_base = request.host.split(':')[0]
-        odoo_url = f"{request.scheme}://{dominio_base}:5002"
+        alta_url = f"{request.scheme}://{dominio_base}:5002"
 
-    # Limpieza de nombre
-    u_name = current_user.name if current_user.name and str(current_user.name).lower() != 'none' else ""
-    u_last = current_user.lastname if current_user.lastname and str(current_user.lastname).lower() != 'none' else ""
-    full_name = f"{u_name} {u_last}".strip() or current_user.username
+    u_name = current_user.name if current_user.name and str(current_user.name).lower() != 'none' else ''
+    u_last = current_user.lastname if current_user.lastname and str(current_user.lastname).lower() != 'none' else ''
+    full_name = f'{u_name} {u_last}'.strip() or current_user.email
 
-    from app.utils.timezone_utils import utc_now
+    external_ids = getattr(current_user, 'external_ids', None) or {}
+    odoo_id = external_ids.get('odoo') if isinstance(external_ids, dict) else None
+
     serializer = URLSafeTimedSerializer(sso_secret)
     payload = {
         'user_id': current_user.id,
-        'odoo_id': (current_user.external_ids or {}).get('odoo'),
+        'odoo_id': odoo_id,
         'name': full_name,
-        'iat': datetime.datetime.utcnow().timestamp()
+        'email': current_user.email,
+        'role': current_user.role,
+        'iat': utc_now().timestamp(),
     }
     token = serializer.dumps(payload)
-    
-    return redirect(f"{odoo_url}/sso_login?token={token}")
+    return redirect(f'{alta_url}/sso_login?token={token}')
 
 # --- NUEVO MÓDULO DE LOGS Y AUDITORÍA ---
 @admin_bp.route("/logs", methods=["GET"])

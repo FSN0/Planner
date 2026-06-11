@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Panel de altas{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/material_green.css">
+{% endblock %}
+
+{% block body %}
+<header class="alta-topbar">
+  <h1 class="alta-topbar-brand"><i class="fas fa-hard-hat"></i> Alta Odoo · Subcontratas</h1>
+  <div class="alta-topbar-actions">
+    {% if is_admin %}
+    <a href="{{ url_for('admin_logs') }}" class="btn-admin btn-admin-ghost btn-sm" title="Solo administradores">
+      <i class="fas fa-clipboard-list"></i> Registro
+    </a>
+    {% endif %}
+    <span class="alta-topbar-user">Hola, <b>{{ usuario }}</b></span>
+    <a href="{{ url_for('logout') }}" class="btn-admin btn-admin-ghost btn-sm">
+      <i class="fas fa-sign-out-alt"></i> Salir
+    </a>
+  </div>
+</header>
+
+<main class="alta-main alta-main--wide">
+  <div class="alta-page-header">
+    <h2 class="alta-page-title">Gestión de altas</h2>
+    <p class="alta-page-sub">Trabajadores y contratos de asistencia en Odoo</p>
+  </div>
+
+  <div class="alta-kpi-grid">
+    <div class="alta-kpi-card">
+      <i class="fas fa-building alta-kpi-icon"></i>
+      <div>
+        <span class="alta-kpi-value">{{ num_empresas }}</span>
+        <span class="alta-kpi-label">Empresas</span>
+      </div>
+    </div>
+    <div class="alta-kpi-card">
+      <i class="fas fa-hard-hat alta-kpi-icon"></i>
+      <div>
+        <span class="alta-kpi-value">{{ num_obras }}</span>
+        <span class="alta-kpi-label">Obras activas</span>
+      </div>
+    </div>
+    <div class="alta-kpi-card alta-kpi-card--hint">
+      <i class="fas fa-info-circle alta-kpi-icon"></i>
+      <div>
+        <span class="alta-kpi-label">Usa las pestañas para alternar entre alta de trabajador y contrato de asistencia.</span>
+      </div>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+      <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show alta-flash">
+        {{ message }}
+        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+      </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="alta-tabs" role="tablist">
+    <button type="button" class="alta-tab is-active" id="tabTrabajador">
+      <i class="fas fa-user-plus"></i> Alta trabajador
+    </button>
+    <button type="button" class="alta-tab" id="tabContrato">
+      <i class="fas fa-file-contract"></i> Contrato asistencia
+    </button>
+  </div>
+
+  <div id="panelTrabajador" class="alta-panel">
+    <div class="alta-panel-head">
+      <div>
+        <h3 class="alta-panel-title">Nuevo trabajador</h3>
+        <p class="alta-panel-sub">Empresa existente o nueva (etiqueta SUBCONTRATA)</p>
+      </div>
+      <span class="alta-step-badge">Paso 1</span>
+    </div>
+    <form method="POST" class="alta-form">
+      <input type="hidden" name="action" value="alta_trabajador">
+
+      <div class="alta-field-group">
+        <label class="alta-form-label"><i class="fas fa-building fa-fw"></i> Empresa subcontrata</label>
+        <div class="alta-field-row">
+          <div class="alta-field-grow">
+            <select name="empresa_id" id="empresa_id_select" class="form-control alta-select" required>
+              <option value="" disabled selected>— Selecciona subcontrata —</option>
+              {% for emp in empresas %}
+              <option value="{{ emp.id }}">{{ emp.name }}{% if emp.vat %} ({{ emp.vat }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="button" id="btnToggleEmpresa" class="btn-admin btn-admin-outline">
+            <i class="fas fa-plus"></i> Nueva empresa
+          </button>
+        </div>
+      </div>
+
+      <div id="campos_nueva_empresa" class="alta-nueva-empresa">
+        <div class="form-row">
+          <div class="form-group col-md-8">
+            <label class="alta-form-label">Nombre nueva empresa</label>
+            <input type="text" name="nueva_empresa_nombre" id="nombre_empresa_input" class="form-control" placeholder="RAZÓN SOCIAL S.L.">
+          </div>
+          <div class="form-group col-md-4">
+            <label class="alta-form-label">CIF / NIF</label>
+            <input type="text" name="cif_empresa" id="cif_empresa_input" class="form-control text-uppercase" placeholder="B12345678">
+          </div>
+        </div>
+      </div>
+
+      <div class="alta-form-section">Datos del trabajador</div>
+      <div class="form-row">
+        <div class="form-group col-md-8">
+          <label class="alta-form-label"><i class="fas fa-user fa-fw"></i> Nombre y apellidos</label>
+          <input type="text" name="nombre_trabajador" required class="form-control text-uppercase" placeholder="PACO PÉREZ LÓPEZ">
+        </div>
+        <div class="form-group col-md-4">
+          <label class="alta-form-label"><i class="fas fa-id-card fa-fw"></i> DNI / NIE</label>
+          <input type="text" name="dni" required class="form-control text-uppercase" placeholder="12345678Z">
+        </div>
+      </div>
+
+      <div class="alta-mobile-footer">
+        <button type="submit" class="btn-admin btn-admin-primary btn-admin-block btn-admin-lg">
+          <i class="fas fa-save"></i> Crear trabajador en Odoo
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <div id="panelContrato" class="alta-panel tab-pane-hidden">
+    <div class="alta-panel-head">
+      <div>
+        <h3 class="alta-panel-title">Nuevo contrato de asistencia</h3>
+        <p class="alta-panel-sub">Vincula subcontrata, obra, vigencia y tarifas</p>
+      </div>
+      <span class="alta-step-badge alta-step-badge--orange">Paso 2</span>
+    </div>
+    <form method="POST" class="alta-form">
+      <input type="hidden" name="action" value="alta_contrato">
+
+      <div class="form-row">
+        <div class="form-group col-md-6">
+          <label class="alta-form-label"><i class="fas fa-building fa-fw"></i> Empresa subcontrata</label>
+          <select name="empresa_contrato_id" id="empresa_contrato_id" class="form-control alta-select" required>
+            <option value="" disabled selected>— Seleccionar —</option>
+            {% for emp in empresas %}
+            <option value="{{ emp.id }}">{{ emp.name }}{% if emp.vat %} ({{ emp.vat }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group col-md-6">
+          <label class="alta-form-label"><i class="fas fa-hard-hat fa-fw"></i> Obra (proyecto)</label>
+          <select name="obra_id" id="obra_id_select" class="form-control alta-select" required>
+            <option value="" disabled selected>— Seleccionar obra —</option>
+            {% for obra in obras %}
+            <option value="{{ obra.id }}">{{ obra.name }}{% if obra.nombre %} — {{ obra.nombre }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="alta-form-section">Vigencia del contrato</div>
+      <div class="alta-date-presets mb-2">
+        <span class="alta-form-label d-block mb-1">Atajos de duración</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-date-preset="6">6 meses</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-date-preset="12">1 año</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-date-preset="24">2 años</button>
+      </div>
+      <div class="form-row">
+        <div class="form-group col-md-4">
+          <label class="alta-form-label"><i class="fas fa-calendar-alt fa-fw"></i> Fecha inicio</label>
+          <input type="text" name="fecha_inicio" id="fecha_inicio" required class="form-control alta-date-input" placeholder="dd/mm/aaaa">
+        </div>
+        <div class="form-group col-md-4">
+          <label class="alta-form-label"><i class="fas fa-calendar-check fa-fw"></i> Fecha fin</label>
+          <input type="text" name="fecha_fin" id="fecha_fin" required class="form-control alta-date-input" placeholder="dd/mm/aaaa">
+        </div>
+        <div class="form-group col-md-4">
+          <label class="alta-form-label"><i class="fas fa-euro-sign fa-fw"></i> Coste hora base</label>
+          <div class="alta-input-euro">
+            <input type="number" step="0.01" name="coste_hora" id="coste_hora" required class="form-control" placeholder="15.50">
+            <span>€/h</span>
+          </div>
+          <p class="alta-form-hint" id="precio_hint">Selecciona una empresa para sugerir tarifa media.</p>
+        </div>
+      </div>
+
+      <div class="alta-form-section">Tarifas por operario (opcional)</div>
+      <div class="alta-operarios-box">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="alta-form-hint mb-0">Líneas con tarifa individual. Deja vacío para contrato solo a nivel empresa.</span>
+          <button type="button" id="btnAddLine" class="btn-admin btn-admin-outline btn-sm">
+            <i class="fas fa-plus"></i> Añadir operario
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm alta-operarios-table mb-0">
+            <thead>
+              <tr>
+                <th>Operario</th>
+                <th style="width:140px">Tarifa</th>
+                <th style="width:48px"></th>
+              </tr>
+            </thead>
+            <tbody id="lines_container"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="alta-mobile-footer">
+        <button type="submit" class="btn-admin btn-admin-primary btn-admin-block btn-admin-lg">
+          <i class="fas fa-file-signature"></i> Generar y activar contrato
+        </button>
+      </div>
+    </form>
+  </div>
+</main>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

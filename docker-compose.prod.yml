@@ -30,6 +30,8 @@ services:
       - ODOO_USER=${ODOO_USER}
       - ODOO_PASSWORD=${ODOO_PASSWORD}
       - SSO_SECRET_KEY=${SSO_SECRET_KEY}
+      - ODOO_ALTA_APP_URL=${ODOO_ALTA_APP_URL}
+      - ODOO_ALTA_TENANT_SLUG=${ODOO_ALTA_TENANT_SLUG}
       - DOMAIN=${DOMAIN}
     depends_on:
       db:
@@ -133,18 +135,58 @@ services:
         limits:
           memory: 128M
 
+  odoo_alta:
+    build:
+      context: ${ODOO_ALTA_BUILD_CONTEXT:-../soltec_creacion_contactos/odoo_web_app}
+      dockerfile: Dockerfile
+    container_name: odoo_alta
+    restart: always
+    expose:
+      - "5002"
+    environment:
+      - FLASK_SECRET_KEY=${ODOO_ALTA_FLASK_SECRET_KEY}
+      - SSO_SECRET_KEY=${SSO_SECRET_KEY}
+      - SESSION_COOKIE_SECURE=true
+      - SIGNAPLAN_AUTH_URL=http://web:5000/api/v6/odoo-alta/login
+      - SIGNAPLAN_TENANT=${ODOO_ALTA_TENANT_SLUG:-soltec}
+      - SIGNAPLAN_TENANT_HOST=${ODOO_ALTA_TENANT_HOST:-soltec.signaplan.com}
+      - SIGNAPLAN_TENANT_NAME=${ODOO_ALTA_TENANT_NAME:-Soltec}
+      - ODOO_URL=${ODOO_URL}
+      - ODOO_DB=${ODOO_DB}
+      - ODOO_USER=${ODOO_USER}
+      - ODOO_PASSWORD=${ODOO_PASSWORD}
+    volumes:
+      - odoo_alta_data:/app/data
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 25s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   caddy:
     image: caddy:2-alpine
     restart: always
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - ODOO_ALTA_DOMAIN=${ODOO_ALTA_DOMAIN:-alta-odoo.signaplan.com}
     volumes:
       - ./Caddyfile.prod:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       web:
+        condition: service_healthy
+      odoo_alta:
         condition: service_healthy
     deploy:
       resources:
@@ -156,3 +198,4 @@ volumes:
   caddy_data:
   caddy_config:
   uploads_data:
+  odoo_alta_data:

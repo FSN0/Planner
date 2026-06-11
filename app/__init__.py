@@ -83,7 +83,7 @@ def create_app():
     from app.api.routes import api_bp 
     from app.sync.routes import sync_bp
     from app.api.asignaciones import asignaciones_api
-    from app.superadmin import superadmin_bp 
+    from app.superadmin import superadmin_bp
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
     # Forzamos el 'url_prefix' para que ninguna ruta se vuelva a quedar en blanco
@@ -207,11 +207,16 @@ def create_app():
         if request.endpoint == 'static':
             return
 
+        # API de login para la app externa Alta Odoo (tenant va en el JSON, no en el Host)
+        if request.path.startswith('/api/v6/odoo-alta'):
+            db.session.execute(text('SET search_path TO public'))
+            return
+
         # Limpiamos el puerto por si el host viene como "demo.localhost:5000"
         host = request.host.split(':')[0]
 
-        # Si acceden desde localhost o IP pura, van al esquema principal
-        if host in ['localhost', 'web'] or host.replace('.', '').isnumeric():
+        # Si acceden desde localhost, red interna Docker o IP pura → esquema public
+        if host in ('localhost', 'web', 'host.docker.internal') or host.replace('.', '').isnumeric():
             db.session.execute(text("SET search_path TO public"))
             return
 

@@ -83,7 +83,7 @@
 
     {% if current_user.role in ['admin', 'jefe_obra'] %}
     {% set show_integrations_nav = (current_user.role == 'admin' and tenant_has_integrations) or (current_user.role == 'jefe_obra' and tenant_has_odoo_alta) %}
-    {% set integrations_nav_open = request.endpoint in ('sync.panel', 'sync.odoo_panel') or request.endpoint == 'admin.sso_odoo_contactos' %}
+    {% set integrations_nav_open = request.endpoint in ('sync.panel', 'sync.odoo_panel') %}
     <div class="sidebar-section-title">Control</div>
     <ul class="sidebar-nav">
       <li>
@@ -109,10 +109,9 @@
           {% endif %}
           {% if tenant_has_odoo_alta %}
           <li>
-            <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="sidebar-link sidebar-link--sub" target="_blank" rel="noopener" title="Panel de altas en Odoo">
+            <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="sidebar-link sidebar-link--sub" target="_blank" rel="noopener" title="Panel de altas Odoo (app externa)">
               <i class="fas fa-address-book fa-fw"></i>
               <span>Alta Odoo</span>
-              <i class="fas fa-external-link-alt sidebar-link-ext" aria-hidden="true"></i>
             </a>
           </li>
           {% endif %}
