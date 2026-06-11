@@ -13,6 +13,13 @@ class UniversalCalendarManager {
         this.showFichajes = config.showFichajes || false;
         this.readonly = config.readonly || false;
         this.partialSelectionMode = config.partialSelectionMode || false;
+        this.compact = config.compact || false;
+        this.embedded = config.embedded || false;
+        this.hideTitle = config.hideTitle || false;
+        this.kanbanSourceObraId = config.kanbanSourceObraId;
+        this.kanbanPrefill = null;
+        this._pendingPrefill = null;
+        this._embeddedModal = null;
 
         this.calendar = null;
         this.ghostEventId = 'ghost_block';
@@ -33,7 +40,9 @@ class UniversalCalendarManager {
         let oldTitle = document.getElementById(this.titleId);
         if (oldTitle) oldTitle.remove();
 
-        this.element.innerHTML = ''; 
+        this.element.innerHTML = '';
+        this.element.classList.add('univ-calendar-root');
+        if (this.compact) this.element.classList.add('univ-calendar-compact');
 
         if (!this.readonly) {
             let icon = 'fa-calendar-alt';
@@ -57,9 +66,9 @@ class UniversalCalendarManager {
             let titleText = `Calendario ${prep} ${typeName}`;
             if (this.entityName) {
                 if (headerUrl) {
-                    titleText += ` <a href="${headerUrl}" target="_blank" class="text-primary ml-2 font-weight-bold border-bottom-dashed" title="Ir a la ficha de este elemento" style="text-decoration: none; border-bottom: 1px dashed #3b82f6;">${this.entityName} <i class="fas fa-external-link-alt small ml-1" style="font-size:0.75rem;"></i></a>`;
+                    titleText += ` <a href="${headerUrl}" target="_blank" class="univ-calendar-entity-link" title="Ir a la ficha de este elemento">${this.entityName} <i class="fas fa-external-link-alt small ml-1"></i></a>`;
                 } else {
-                    titleText += ` <span class="text-primary ml-2">${this.entityName}</span>`;
+                    titleText += ` <span class="univ-calendar-entity-name">${this.entityName}</span>`;
                 }
             }
 
@@ -75,28 +84,60 @@ class UniversalCalendarManager {
                 `;
             }
 
-            let titleHTML = `
-            <div id="${this.titleId}" class="mb-3 p-2 bg-white rounded shadow-sm d-flex align-items-center justify-content-between border" style="border-left: 4px solid #3b82f6 !important;">
-                <div class="d-flex align-items-center">
-                    <i class="fas ${icon} text-primary mr-2 ml-2" style="font-size: 1.25rem;"></i>
-                    <h5 class="m-0 font-weight-bold text-dark" style="font-size: 1.05rem;">${titleText}</h5>
-                </div>
+            let titleHTML = '';
+            if (!this.hideTitle || switcherHTML) {
+                let headingBlock = '';
+                if (!this.hideTitle) {
+                    headingBlock = `
+                <div class="univ-calendar-title-heading">
+                    <i class="fas ${icon}"></i>
+                    <span>${titleText}</span>
+                </div>`;
+                }
+                titleHTML = `
+            <div id="${this.titleId}" class="univ-calendar-title${this.hideTitle ? ' univ-calendar-title--toolbar-only' : ''}">
+                ${headingBlock}
                 ${switcherHTML}
             </div>`;
-            
-            this.element.insertAdjacentHTML('beforebegin', titleHTML);
+                this.element.insertAdjacentHTML('beforebegin', titleHTML);
+            }
+
+            if (this.hideTitle) {
+                this.element.classList.add('univ-calendar-root--no-title');
+            }
+
+            if (this.embedded) {
+                this._embeddedModal = this.element.closest('.modal');
+                if (this._embeddedModal) {
+                    this._embeddedModal.classList.add('univ-calendar-embedded');
+                    const modalBody = this.element.closest('.modal-body');
+                    if (modalBody && !modalBody.querySelector('.univ-calendar-modal-close')) {
+                        const closeBtn = document.createElement('button');
+                        closeBtn.type = 'button';
+                        closeBtn.className = 'close univ-calendar-modal-close';
+                        closeBtn.setAttribute('aria-label', 'Cerrar');
+                        closeBtn.innerHTML = '<span aria-hidden="true">&times;</span>';
+                        closeBtn.addEventListener('click', () => {
+                            if (typeof $ !== 'undefined' && this._embeddedModal) {
+                                $(this._embeddedModal).modal('hide');
+                            }
+                        });
+                        modalBody.prepend(closeBtn);
+                    }
+                }
+            }
 
             let panelHTML = `
-            <div id="${this.panelId}" class="mt-3 border rounded shadow-sm bg-white" style="display: none; border-left: 4px solid #3b82f6 !important; transition: all 0.2s ease-in-out;">
-                <div class="bg-light px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 font-weight-bold text-dark" id="${this.panelId}-title">
-                        <i class="fas fa-info-circle mr-2 text-primary"></i>Detalles del Evento
+            <div id="${this.panelId}" class="univ-calendar-panel" style="display: none;">
+                <div class="univ-calendar-panel-head">
+                    <h6 id="${this.panelId}-title">
+                        <i class="fas fa-info-circle mr-2 univ-calendar-icon"></i>Detalles del Evento
                     </h6>
                     <button type="button" class="close text-muted" aria-label="Close" onclick="document.getElementById('${this.panelId}').style.display='none'">
-                        <span aria-hidden="true" style="font-size: 1.2rem;">&times;</span>
+                        <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="p-3">
+                <div class="univ-calendar-panel-body">
                     <div class="row align-items-end">
                         <div class="col-md-5" id="${this.panelId}-selector-container"></div>
                         <div class="col-md-3">
@@ -145,6 +186,7 @@ class UniversalCalendarManager {
             `;
             this.element.insertAdjacentHTML('afterend', panelHTML);
             this.bindPanelEvents();
+            this.bindPanelIsolation();
         }
 
         let calendarConfig = {
@@ -152,8 +194,8 @@ class UniversalCalendarManager {
             locale: 'es',
             editable: !this.readonly, 
             selectable: !this.readonly, 
-            height: 'auto', 
-            
+            height: 'auto',
+            dayMaxEventRows: _this.compact ? 2 : true,
             eventOrder: '-isGhost,start,title',
             events: `/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}` + (this.showFichajes ? '&show_fichajes=1' : ''),
             
@@ -184,8 +226,12 @@ class UniversalCalendarManager {
             },
 
             eventContent: function(arg) {
+                const evFont = _this.compact ? '0.58rem' : '0.85rem';
+                const evPad = _this.compact ? '0 2px' : '4px';
+                const evLine = _this.compact ? '1.05' : '1.2';
+                const dotSize = _this.compact ? 5 : 10;
                 if (arg.event.id === _this.ghostEventId) {
-                    return { html: `<div class="p-1 text-center shadow-sm rounded" style="font-size:0.85rem; line-height:1.2; font-weight:bold; width:100%; color:#111827; background:#e2e8f0; border:2px dashed #94a3b8;"><i class="fas fa-plus mr-1"></i>${arg.event.title}</div>` };
+                    return { html: `<div class="text-center shadow-sm rounded" style="font-size:${evFont}; line-height:${evLine}; font-weight:bold; width:100%; padding:${evPad}; color:#111827; background:#e2e8f0; border:1px dashed #94a3b8;"><i class="fas fa-plus mr-1"></i>${arg.event.title}</div>` };
                 }
 
                 let innerHtml = '';
@@ -197,10 +243,10 @@ class UniversalCalendarManager {
                     else if (estado === 'Resuelto_Ausencia' || estado === 'Conflicto' || estado === 'Paracaidista') { dotClass = '#ef4444'; titleMsg = 'Conflicto/Desviación'; }
                     else if (estado.startsWith('Resuelto')) { dotClass = '#3b82f6'; titleMsg = 'Resuelto Manual'; }
 
-                    innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:${dotClass}; margin-right:5px; flex-shrink:0;"></span>`;
+                    innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background-color:${dotClass}; margin-right:3px; flex-shrink:0;"></span>`;
                 }
                 innerHtml += `<span class="text-truncate">${arg.event.title}</span>`;
-                return { html: `<div class="p-1 d-flex align-items-center" style="font-size:0.85rem; line-height:1.2; overflow:hidden; width:100%; color:${arg.event.textColor || 'inherit'};">${innerHtml}</div>` };
+                return { html: `<div class="d-flex align-items-center" style="font-size:${evFont}; line-height:${evLine}; overflow:hidden; width:100%; padding:${evPad}; color:${arg.event.textColor || 'inherit'};">${innerHtml}</div>` };
             },
 
             eventDidMount: function(info) {
@@ -361,21 +407,29 @@ class UniversalCalendarManager {
                 if (!isEditable) {
                     if (typeof Swal !== 'undefined') {
                         if (targetUrl) {
-                            Swal.fire({
+                            const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
+                            Swal.fire(swalBase({
                                 title: isPast ? 'Bloque Histórico' : 'Acción no permitida',
                                 text: reasonText,
                                 icon: 'info',
                                 showDenyButton: true,
                                 showCancelButton: false,
                                 confirmButtonText: 'Cerrar',
-                                denyButtonText: `<i class="fas fa-external-link-alt mr-1"></i> ${targetName}`,
-                                confirmButtonColor: '#64748b',
-                                denyButtonColor: '#3b82f6'
-                            }).then((result) => {
+                                denyButtonText: `${targetName}`,
+                                customClass: {
+                                    popup: 'admin-swal-popup',
+                                    title: 'admin-swal-title',
+                                    htmlContainer: 'admin-swal-html',
+                                    confirmButton: 'admin-swal-btn admin-swal-btn-ghost',
+                                    denyButton: 'admin-swal-btn admin-swal-btn-info',
+                                    actions: 'admin-swal-actions',
+                                },
+                            })).then((result) => {
                                 if (result.isDenied) window.open(targetUrl, '_blank'); 
                             });
                         } else {
-                            Swal.fire('Acción no permitida', reasonText, 'warning');
+                            const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
+                            Swal.fire(swalBase({ title: 'Acción no permitida', text: reasonText, icon: 'warning', confirmButtonText: 'Entendido' }));
                         }
                     } else {
                         alert(reasonText);
@@ -491,7 +545,7 @@ class UniversalCalendarManager {
                     return;
                 }
 
-                titleEl.innerHTML = '<i class="fas fa-plus-circle mr-2 text-success"></i>Nueva Asignación';
+                titleEl.innerHTML = '<i class="fas fa-plus-circle mr-2 univ-calendar-icon"></i>Nueva Asignación';
                 extraBtns.style.display = 'none';
 
                 let notasRow = document.getElementById(`${this.panelId}-notas-row`);
@@ -500,6 +554,11 @@ class UniversalCalendarManager {
                 if (notasInput) notasInput.value = '';
 
                 let selectLabel = this.context === 'obra' ? 'Trabajador a asignar' : 'Obra destino';
+
+                const existingSelect = $(`#${this.panelId}-select`);
+                if (existingSelect.length && existingSelect.data('select2')) {
+                    existingSelect.select2('destroy');
+                }
                 
                 container.innerHTML = `
                     <label class="small font-weight-bold mb-1 text-secondary">${selectLabel}</label>
@@ -512,8 +571,7 @@ class UniversalCalendarManager {
                     let $select = $(`#${this.panelId}-select`);
                     if (this.context === 'obra') {
                         if (typeof $ !== 'undefined' && $.fn.select2) {
-                            $select.select2({
-                                dropdownParent: $(`#${this.panelId}`).parent(),
+                            this.initPanelSelect2($select, {
                                 placeholder: "Escribe o elige 'CUALQUIERA'...",
                                 allowClear: true,
                                 ajax: {
@@ -526,23 +584,24 @@ class UniversalCalendarManager {
                                 let gRow = document.getElementById(`${this.panelId}-generic-options`);
                                 if(gRow) { e.target.value === 'GENERICO' ? $(gRow).slideDown(150) : $(gRow).slideUp(150); }
                             });
+                            this._applyPendingPrefillToSelect($select);
                         }
                     } else if (this.context === 'worker') {
                         fetch('/api/v6/recursos_activos').then(r=>r.json()).then(data => {
                             if (typeof $ !== 'undefined' && $.fn.select2) {
-                                $select.select2({
-                                    dropdownParent: $(`#${this.panelId}`).parent(),
+                                this.initPanelSelect2($select, {
                                     placeholder: "Selecciona una obra...",
                                     allowClear: true,
-                                    data: data.obras 
+                                    data: data.obras
                                 });
+                                this._applyPendingPrefillToSelect($select);
                             }
                         });
                     }
                 }, 150);
 
             } else {
-                titleEl.innerHTML = '<i class="fas fa-edit mr-2 text-info"></i>Editar Asignación';
+                titleEl.innerHTML = '<i class="fas fa-edit mr-2 univ-calendar-icon"></i>Editar Asignación';
                 extraBtns.style.display = 'block';
 
                 let notasRow = document.getElementById(`${this.panelId}-notas-row`);
@@ -578,6 +637,31 @@ class UniversalCalendarManager {
         
         if (startInput) startInput.value = moment(event.start).format('YYYY-MM-DD');
         if (endInput) endInput.value = event.end ? moment(event.end).subtract(1, 'days').format('YYYY-MM-DD') : startInput.value;
+    }
+
+    bindPanelIsolation() {
+        const panel = document.getElementById(this.panelId);
+        if (!panel || panel.dataset.isolationBound) return;
+        panel.dataset.isolationBound = '1';
+        panel.addEventListener('mousedown', (e) => e.stopPropagation());
+        panel.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    initPanelSelect2($select, extraOpts = {}) {
+        if (!$select || !$select.length || typeof $ === 'undefined' || !$.fn.select2) return $select;
+        if ($select.data('select2')) {
+            $select.select2('destroy');
+        }
+        const panel = document.getElementById(this.panelId);
+        const modal = panel ? panel.closest('.modal.show, .modal') : null;
+        const dropdownParent = modal ? $(modal) : (panel ? $(panel) : $(document.body));
+        const opts = Object.assign({
+            dropdownParent: dropdownParent,
+            dropdownCssClass: 'admin-select2-dropdown univ-calendar-select2-dropdown',
+            width: '100%',
+        }, extraOpts);
+        $select.select2(opts);
+        return $select;
     }
 
     bindPanelEvents() {
@@ -635,9 +719,15 @@ class UniversalCalendarManager {
                 if (notasVal) payload.notas = notasVal;
 
                 if (this.context === 'obra') {
-                    payload.worker_id = selVal; payload.target_obra_id = this.entityId; payload.old_obra_id = this.entityId;
+                    payload.worker_id = selVal;
+                    payload.target_obra_id = this.entityId;
+                    payload.old_obra_id = (this.kanbanSourceObraId !== undefined && this.kanbanSourceObraId !== null)
+                        ? this.kanbanSourceObraId : this.entityId;
                 } else if (this.context === 'worker') {
-                    payload.worker_id = this.entityId; payload.target_obra_id = selVal; payload.old_obra_id = selVal;
+                    payload.worker_id = this.entityId;
+                    payload.target_obra_id = selVal;
+                    payload.old_obra_id = (this.kanbanSourceObraId !== undefined && this.kanbanSourceObraId !== null)
+                        ? this.kanbanSourceObraId : selVal;
                 }
 
                 this.executeSave(payload, () => {
@@ -715,10 +805,23 @@ class UniversalCalendarManager {
                     ? `Se conservará el histórico pasado, pero se vaciarán <b class="text-danger">${daysCount} día(s)</b> desde hoy en adelante.` 
                     : `Se vaciarán <b class="text-danger">${daysCount} día(s)</b>.`;
 
-                Swal.fire({
-                    title: '¿Desasignar bloque?', html: msg, icon: 'warning', showCancelButton: true,
-                    confirmButtonColor: '#d33', cancelButtonColor: '#64748b', confirmButtonText: 'Sí, borrar', cancelButtonText: 'Cancelar'
-                }).then((res) => {
+                const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
+                Swal.fire(swalBase({
+                    title: '¿Desasignar bloque?',
+                    html: msg,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, borrar',
+                    cancelButtonText: 'Cancelar',
+                    customClass: {
+                        popup: 'admin-swal-popup',
+                        title: 'admin-swal-title',
+                        htmlContainer: 'admin-swal-html',
+                        confirmButton: 'admin-swal-btn admin-swal-btn-danger',
+                        cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+                        actions: 'admin-swal-actions',
+                    },
+                })).then((res) => {
                     if (res.isConfirmed) {
                         if (this.callbacks.onDeleteAssignment) {
                             this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today));
@@ -781,6 +884,32 @@ class UniversalCalendarManager {
         if (notasInput) notasInput.value = '';
     }
 
+    _applyPendingPrefillToSelect($select) {
+        if (!this._pendingPrefill || !$select || !$select.length) return;
+        const pf = this._pendingPrefill;
+        if (this.context === 'obra' && pf.workerId) {
+            const val = String(pf.workerId);
+            if (!$select.find(`option[value="${val}"]`).length) {
+                $select.append(new Option(pf.workerName || 'Operario', val, true, true));
+            }
+            $select.val(val).trigger('change');
+        } else if (this.context === 'worker' && pf.obraId) {
+            const val = String(pf.obraId);
+            if (!$select.find(`option[value="${val}"]`).length) {
+                $select.append(new Option(pf.obraName || 'Obra', val, true, true));
+            }
+            $select.val(val).trigger('change');
+        }
+    }
+
+    prefillKanbanAssignment({ dateStr, workerId, workerName, obraId, obraName }) {
+        this.kanbanPrefill = { dateStr, workerId, workerName, obraId, obraName };
+        this._pendingPrefill = { workerId, workerName, obraId, obraName };
+        if (!this.calendar) return;
+        this.calendar.gotoDate(dateStr);
+        setTimeout(() => this.createGhostEvent(dateStr), 200);
+    }
+
     createGhostEvent(dateStr) {
         let existingGhost = this.calendar.getEventById(this.ghostEventId);
         if (existingGhost) existingGhost.remove();
@@ -832,6 +961,15 @@ class UniversalCalendarManager {
         if (panel) panel.remove();
         let title = document.getElementById(this.titleId);
         if (title) title.remove();
+        if (this._embeddedModal) {
+            const modalBody = this._embeddedModal.querySelector('.modal-body');
+            if (modalBody) {
+                const closeBtn = modalBody.querySelector('.univ-calendar-modal-close');
+                if (closeBtn) closeBtn.remove();
+            }
+            this._embeddedModal.classList.remove('univ-calendar-embedded');
+            this._embeddedModal = null;
+        }
         if (this.element) this.element.innerHTML = ''; 
     }
 
@@ -849,6 +987,7 @@ class UniversalCalendarManager {
                     if(typeof Swal !== 'undefined') Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
                     this.calendar.refetchEvents();
                     this.hidePanel();
+                    if (this.callbacks.onAfterSave) this.callbacks.onAfterSave(res);
                     if(revertFunc) revertFunc();
                     
                 } else if (res.conflict || res.action === 'confirm_overwrite') {
@@ -875,35 +1014,13 @@ class UniversalCalendarManager {
 }
 
 window.addEventListener('scroll', function(e) {
-    if (e.target && e.target.nodeType === 1 && e.target.classList.contains('select2-results__options')) { return; }
+    const t = e.target;
+    if (t && t.nodeType === 1 && typeof t.closest === 'function') {
+        if (t.classList.contains('select2-results__options')) return;
+        if (t.closest('.select2-dropdown, .select2-container, .univ-calendar-panel, .modal')) return;
+    }
     if (typeof $ !== 'undefined' && $.fn.select2) { $('.select2-hidden-accessible').select2('close'); }
     if (typeof $ !== 'undefined') { $('.tooltip.show').remove(); }
     document.querySelectorAll('[data-tippy-root]').forEach(el => { if (el._tippy) el._tippy.hide(); });
     if (document.activeElement && document.activeElement.type === 'date') { document.activeElement.blur(); }
 }, { capture: true, passive: true });
-
-document.addEventListener('DOMContentLoaded', () => {
-    if (typeof $ !== 'undefined' && $.fn.select2) {
-        const fixSelect2Scroll = ($select) => {
-            if ($select.closest('[id$="-bottom-panel"]').length > 0) {
-                setTimeout(() => {
-                    $select.select2({ width: '100%', dropdownParent: $select.parent() });
-                }, 50);
-            }
-        };
-
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.target.nodeName === 'SELECT') { fixSelect2Scroll($(mutation.target)); }
-                mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === 1) { 
-                        if (node.nodeName === 'SELECT') { fixSelect2Scroll($(node)); } 
-                        else { $(node).find('select').each(function() { fixSelect2Scroll($(this)); }); }
-                    }
-                });
-            });
-        });
-
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
-});

@@ -4,142 +4,132 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    .obra-header-card {
-        background: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 0.75rem;
-        padding: 1.25rem;
-        margin-bottom: 1.5rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    }
-    .obra-stat {
-        text-align: center;
-        padding: 0 1.5rem;
-        border-right: 1px solid #e5e7eb;
-    }
-    .obra-stat:last-child { border-right: none; }
-    .obra-stat-val { font-size: 1.1rem; font-weight: 700; color: #111827; }
-    .obra-stat-label { font-size: 0.7rem; text-transform: uppercase; color: #6b7280; letter-spacing: 0.05em; margin-top: 2px; }
-
-    /* Ajustes FC v6 */
-    .fc .fc-toolbar-title { font-size: 1rem !important; text-transform: capitalize; }
-    .fc .fc-button { font-size: 0.8rem !important; padding: 0.2rem 0.5rem !important; }
-    .fc-theme-standard th { border-color: #f3f4f6 !important; }
-    .fc-daygrid-day-number { font-size: 0.75rem; color: #9ca3af; }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <div>
-            <a href="{{ url_for('admin.obras_list') }}" class="text-muted small mb-1 d-inline-block">
-                <i class="fas fa-arrow-left"></i> Volver al listado
-            </a>
-            <div class="d-flex align-items-baseline">
-                <h1 class="admin-page-title mb-0 mr-3">{{ obra.nombre }}</h1>
-                <span class="badge badge-light border">{{ obra.codigo or 'S/C' }}</span>
-            </div>
+  <main class="admin-main entity-panel-page entity-panel-page--obra">
+
+    <article class="entity-panel-card">
+      <header class="entity-panel-card-top">
+        <div class="entity-panel-toolbar-start">
+          <a href="{{ url_for('admin.obras_list') }}" class="entity-panel-back">
+            <i class="fas fa-arrow-left"></i> Obras
+          </a>
+          <span class="entity-type-marker"><i class="fas fa-building"></i> Obra</span>
         </div>
-        <div>
-            <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-pencil-alt mr-1"></i> Editar
-            </a>
-            <a href="{{ url_for('admin.obras_detailed', selected_date=obra.fecha_inicio.strftime('%Y-%m-%d')) }}" 
-               class="btn btn-primary btn-sm ml-2">
-                <i class="fas fa-th mr-1"></i> Tablero
-            </a>
+        <div class="entity-panel-actions">
+          <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-pencil-alt"></i> Editar
+          </a>
+          <a href="{{ url_for('admin.obras_detailed', selected_date=obra.fecha_inicio.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-primary">
+            <i class="fas fa-th"></i> Tablero
+          </a>
         </div>
-    </div>
+      </header>
 
-    <div class="obra-header-card">
-        <div class="d-flex flex-column" style="flex: 1;">
-            
-            {# --- FILA 1: CLIENTE --- #}
-            <div class="mb-3">
-                <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Cliente</span>
-                <span class="font-weight-bold text-dark h6 mb-0">{{ obra.cliente or 'No especificado' }}</span>
+      <div class="entity-hero-accent" aria-hidden="true"></div>
+      <div class="entity-hero-body entity-hero-body--full">
+        <div class="entity-hero-main">
+          <div class="entity-hero-title-row">
+            <div class="entity-hero-icon-wrap">
+              <div class="entity-hero-icon"><i class="fas fa-building"></i></div>
+            </div>
+            <div class="entity-hero-title-text">
+              <h1 class="entity-hero-name">{{ obra.nombre }}</h1>
+              <p class="entity-hero-subtitle">
+                <span class="entity-code-badge">{{ obra.codigo or 'S/C' }}</span>
+                {% if obra.cliente %}
+                <span>{{ obra.cliente }}</span>
+                {% endif %}
+              </p>
+            </div>
+          </div>
+
+          <div class="entity-meta-grid">
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Cliente</span>
+              <span class="entity-meta-item-value">{{ obra.cliente or 'No especificado' }}</span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Ubicación</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not obra.ubicacion }}">
+                {{ obra.ubicacion or 'No especificada' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Plataforma PRL</span>
+              <span class="entity-meta-item-value">
+                {% if obra.url_prl %}
+                  <a href="{{ obra.url_prl }}" target="_blank" rel="noopener">Enlace externo <i class="fas fa-external-link-alt small"></i></a>
+                {% else %}
+                  <span class="entity-meta-item-value--muted">Sin asignar</span>
+                {% endif %}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Estado</span>
+              <span class="entity-meta-item-value">
+                {% set estado_lower = (obra.estado or '')|lower %}
+                {% if 'activ' in estado_lower %}
+                  <span class="entity-status-badge entity-status-badge--obra-activa">{{ obra.estado }}</span>
+                {% elif 'paus' in estado_lower %}
+                  <span class="entity-status-badge entity-status-badge--obra-pausada">{{ obra.estado }}</span>
+                {% elif 'pend' in estado_lower %}
+                  <span class="entity-status-badge entity-status-badge--obra-pendiente">{{ obra.estado }}</span>
+                {% elif 'final' in estado_lower or 'cerr' in estado_lower %}
+                  <span class="entity-status-badge entity-status-badge--obra-finalizada">{{ obra.estado }}</span>
+                {% else %}
+                  {{ obra.estado or '—' }}
+                {% endif %}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Inicio / Fin</span>
+              <span class="entity-meta-item-value">
+                {{ obra.fecha_inicio.strftime('%d/%m/%Y') if obra.fecha_inicio else '—' }}
+                → {% if obra.fecha_fin %}{{ obra.fecha_fin.strftime('%d/%m/%Y') }}{% else %}En curso{% endif %}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Cupo máximo</span>
+              <span class="entity-meta-item-value">{{ obra.limite_trabajadores or 'Sin límite' }}</span>
             </div>
 
-            {# --- FILA 2: UBICACIÓN Y PRL --- #}
-            <div class="d-flex">
-                <div class="mr-5">
-                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Ubicación</span>
-                    <span class="text-dark">{{ obra.ubicacion or 'No especificada' }}</span>
-                </div>
-                <div>
-                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Plataforma PRL</span>
-                    {% if obra.url_prl %}
-                        <a href="{{ obra.url_prl }}" target="_blank" class="text-primary font-weight-bold" title="{{ obra.url_prl }}">
-                            Enlace Externo <i class="fas fa-external-link-alt ml-1 small"></i>
-                        </a>
-                    {% else %}
-                        <span class="text-muted small font-italic">Sin asignar</span>
-                    {% endif %}
-                </div>
-            </div>
+            <div class="entity-meta-divider"></div>
 
-            {# --- FILA 3: RESPONSABLES --- #}
-            <div class="d-flex mt-3 pt-3 border-top">
-                <div class="mr-5">
-                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Jefe de Obra</span>
-                    <span class="text-dark font-weight-bold">
-                        {% if obra.jefe_obra %}
-                            {{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}
-                        {% else %}
-                            <span class="text-muted font-italic">Sin asignar</span>
-                        {% endif %}
-                    </span>
-                </div>
-                <div>
-                    <span class="text-muted small d-block text-uppercase" style="letter-spacing:0.5px;">Encargado</span>
-                    <span class="text-dark font-weight-bold">
-                        {% if obra.encargado %}
-                            <i class="fas fa-hard-hat text-warning mr-1"></i> {{ obra.encargado.name }} {{ obra.encargado.lastname }}
-                        {% else %}
-                            <span class="text-muted font-italic">Sin asignar</span>
-                        {% endif %}
-                    </span>
-                </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Jefe de obra</span>
+              <span class="entity-meta-item-value">
+                {% if obra.jefe_obra %}
+                  {{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}
+                {% else %}
+                  <span class="entity-meta-item-value--muted">Sin asignar</span>
+                {% endif %}
+              </span>
             </div>
-
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Encargado</span>
+              <span class="entity-meta-item-value">
+                {% if obra.encargado %}
+                  <i class="fas fa-hard-hat text-warning small mr-1"></i>{{ obra.encargado.name }} {{ obra.encargado.lastname }}
+                {% else %}
+                  <span class="entity-meta-item-value--muted">Sin asignar</span>
+                {% endif %}
+              </span>
+            </div>
+          </div>
         </div>
+      </div>
 
-        {# --- COLUMNA DERECHA: ESTADÍSTICAS --- #}
-        <div class="d-flex border-left pl-4">
-            <div class="obra-stat">
-                <div class="obra-stat-val text-primary">{{ obra.estado }}</div>
-                <div class="obra-stat-label">Estado</div>
-            </div>
-            <div class="obra-stat">
-                <div class="obra-stat-val">{{ obra.fecha_inicio.strftime('%d/%m/%Y') }}</div>
-                <div class="obra-stat-label">Inicio</div>
-            </div>
-            <div class="obra-stat">
-                <div class="obra-stat-val">
-                    {% if obra.fecha_fin %}
-                        {{ obra.fecha_fin.strftime('%d/%m/%Y') }}
-                    {% else %}
-                        En curso
-                    {% endif %}
-                </div>
-                <div class="obra-stat-label">Fin</div>
-            </div>
-        </div>
-    </div>
+      {% include "components/_entity_stats.html" %}
+    </article>
 
-    <section class="admin-panel shadow-sm border-0 bg-transparent">
-        <div class="admin-panel-body p-0">
-            <div id="obra-panel-calendar" style="background: white; padding: 10px; border-radius: 8px;"></div>
-        </div>
+    <section class="entity-calendar-zone">
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Planificación</h2>
+      <div id="obra-panel-calendar" class="univ-calendar-root"></div>
     </section>
 
   </main>
@@ -148,30 +138,31 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
-
 <script>
 let obraCalendarInstance = null;
-const CURRENT_OBRA_ID = {{ obra.id }}; 
+const CURRENT_OBRA_ID = {{ obra.id }};
 
 document.addEventListener('DOMContentLoaded', function() {
-    
     var today = new Date().toISOString().split('T')[0];
     var startDate = "{{ obra.fecha_inicio.strftime('%Y-%m-%d') if obra.fecha_inicio else '' }}";
     var endDate = "{{ obra.fecha_fin.strftime('%Y-%m-%d') if obra.fecha_fin else '' }}";
     var initialDate = today;
-    if (startDate && today < startDate) initialDate = startDate; 
-    else if (endDate && today > endDate) initialDate = endDate;  
+    if (startDate && today < startDate) initialDate = startDate;
+    else if (endDate && today > endDate) initialDate = endDate;
 
     obraCalendarInstance = new UniversalCalendarManager('obra-panel-calendar', {
         context: 'obra',
         id: CURRENT_OBRA_ID,
-        entityName: '{{ obra.nombre }}',
-        mode: 'empresas'
+        entityName: {{ obra.nombre|tojson }},
+        mode: 'empresas',
+        hideTitle: true
     });
-    
-    setTimeout(() => { if (obraCalendarInstance.calendar && initialDate !== today) obraCalendarInstance.calendar.gotoDate(initialDate); }, 100);
+
+    setTimeout(() => {
+        if (obraCalendarInstance.calendar && initialDate !== today) {
+            obraCalendarInstance.calendar.gotoDate(initialDate);
+        }
+    }, 100);
 });
-
-
 </script>
 {% endblock %}

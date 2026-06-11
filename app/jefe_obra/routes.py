@@ -41,8 +41,8 @@ def panel():
         flash("Acceso no autorizado", "danger")
         return redirect(url_for('main.dashboard'))
 
-    obras = Obra.query.filter_by(jefe_obra_id=current_user.id).all()
-    return render_template('jefe_panel.html', obras=obras)
+    from app.services.panel_service import get_jefe_panel_context
+    return render_template('jefe_panel.html', **get_jefe_panel_context(current_user))
 
 
 @jefe_bp.route('/obras_detailed', methods=['GET'], endpoint="obras_detailed")

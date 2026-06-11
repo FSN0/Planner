@@ -4,118 +4,201 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    /* Estilos específicos para esta tabla compacta */
-    .table-ratings th {
-        background-color: #f8f9fa;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.05em;
-        color: #6c757d;
-        border-bottom: 2px solid #e9ecef;
-        vertical-align: middle;
-    }
-    .table-ratings td {
-        vertical-align: middle;
-        font-size: 0.85rem;
-    }
-    /* Columna Motivo: Texto normal, no centrado */
-    .col-reason {
-        white-space: normal; /* Asegura que el texto largo baje de línea */
-        line-height: 1.4;
-    }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main">
-    
-    <div class="d-flex align-items-center mb-4">
-        <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" class="btn btn-sm btn-link text-muted pl-0">
-            <i class="fas fa-arrow-left"></i> Volver a la ficha
-        </a>
-    </div>
+  <main class="admin-main admin-main--compact ratings-history-page">
 
-    <div class="admin-panel">
-        <div class="admin-panel-header border-bottom pb-3 mb-0 d-flex justify-content-between align-items-center">
-            <div>
-                <h2 class="admin-panel-title">Historial de Reputación</h2>
-                <p class="admin-panel-subtitle mb-0">{{ worker.name }} {{ worker.lastname }}</p>
-            </div>
-            <div class="text-right">
-                <span class="small text-muted d-block">Puntuación Actual</span>
-                <span class="h3 mb-0 font-weight-bold {{ 'text-success' if worker.reputation_score > 0 else 'text-danger' if worker.reputation_score < 0 else 'text-muted' }}">
-                    {{ '+' if worker.reputation_score > 0 }}{{ worker.reputation_score }}
-                </span>
-            </div>
-        </div>
+    <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" class="ratings-history-back">
+      <i class="fas fa-arrow-left"></i> Volver a la ficha
+    </a>
 
-        <div class="table-responsive">
-            <table class="table table-hover table-sm table-ratings mb-0">
-                <thead>
-                    <tr>
-                        <th style="width: 140px;">Fecha</th>
-                        <th style="width: 80px;" class="text-center">Puntos</th>
-                        <th style="width: 90px;" class="text-center">Estado</th>
-                        
-                        <th>Motivo</th>
-                        
-                        <th style="width: 200px;">Evaluador</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for rating in ratings %}
-                    <tr class="{{ 'text-muted bg-light' if not rating.is_active else '' }}">
-                        
-                        <td class="text-nowrap text-muted small">
-                            {{ rating.created_at|format_dt }}
-                        </td>
-                        
-                        <td class="text-center">
-                            {% if rating.score > 0 %}
-                                <span class="badge badge-success" style="min-width: 30px;">+{{ rating.score }}</span>
-                            {% else %}
-                                <span class="badge badge-danger" style="min-width: 30px;">{{ rating.score }}</span>
-                            {% endif %}
-                        </td>
-                        
-                        <td class="text-center">
-                            {% if rating.is_active %}
-                                <span class="badge badge-light border text-dark">Activo</span>
-                            {% else %}
-                                <span class="badge badge-secondary">Archivado</span>
-                            {% endif %}
-                        </td>
-                        
-                        <td class="col-reason text-dark">
-                            {% if rating.reason %}
-                                {{ rating.reason }}
-                            {% else %}
-                                <span class="text-muted font-italic small">Sin motivo especificado</span>
-                            {% endif %}
-                        </td>
-                        
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <div class="font-weight-bold text-dark mr-1">{{ rating.created_by.name }}</div>
-                                <small class="text-muted">({{ rating.created_by.role }})</small>
-                            </div>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="5" class="text-center py-5 text-muted">
-                            <i class="far fa-folder-open fa-2x mb-3 d-block opacity-50"></i>
-                            Aún no hay valoraciones registradas para este trabajador.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <article class="ratings-history-card">
+      <header class="ratings-history-hero">
+        <div>
+          <h1 class="ratings-history-hero-title">Historial de valoraciones</h1>
+          <p class="ratings-history-hero-sub">{{ worker.name }} {{ worker.lastname }}</p>
         </div>
-    </div>
+        <div class="ratings-history-score">
+          <span class="ratings-history-score-label">Reputación actual</span>
+          <span class="ratings-history-score-value {% if worker.reputation_score > 0 %}ratings-history-score-value--pos{% elif worker.reputation_score < 0 %}ratings-history-score-value--neg{% else %}ratings-history-score-value--zero{% endif %}">
+            {{ '+' if worker.reputation_score > 0 }}{{ worker.reputation_score }}
+          </span>
+        </div>
+      </header>
+
+      <div class="ratings-table-wrap">
+        <table class="ratings-table">
+          <thead>
+            <tr>
+              <th style="width: 140px;">Fecha</th>
+              <th style="width: 80px;" class="text-center">Puntos</th>
+              <th style="width: 90px;" class="text-center">Estado</th>
+              <th>Motivo</th>
+              <th style="width: 180px;">Evaluador</th>
+              <th style="width: 90px;" class="text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rating in ratings %}
+            {% set can_manage = (current_user.role == 'admin') or (rating.created_by_id == current_user.id) %}
+            <tr class="{% if not rating.is_active %}is-archived{% endif %}" data-rating-id="{{ rating.id }}">
+              <td class="text-muted small text-nowrap">
+                {{ rating.created_at|format_dt }}
+              </td>
+              <td class="text-center">
+                {% if rating.score > 0 %}
+                  <span class="rating-score-pill rating-score-pill--pos">+{{ rating.score }}</span>
+                {% else %}
+                  <span class="rating-score-pill rating-score-pill--neg">{{ rating.score }}</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if rating.is_active %}
+                  <span class="badge-soft">Activo</span>
+                {% else %}
+                  <span class="badge-soft" style="opacity:0.7;">Archivado</span>
+                {% endif %}
+              </td>
+              <td class="col-reason rating-reason-cell">
+                {% if rating.reason %}
+                  {{ rating.reason }}
+                {% else %}
+                  <span class="text-muted font-italic small">Sin motivo especificado</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="font-weight-bold text-dark">{{ rating.created_by.name }}</span>
+                <small class="text-muted">({{ rating.created_by.role }})</small>
+              </td>
+              <td class="text-right">
+                {% if rating.is_active and can_manage %}
+                <div class="ratings-row-actions">
+                  <button type="button" class="btn btn-light border btn-sm btn-icon"
+                          onclick="openEditRating({{ rating.id }}, {{ rating.score }}, {{ rating.reason|tojson }})"
+                          title="Editar">
+                    <i class="fas fa-edit text-primary"></i>
+                  </button>
+                  <button type="button" class="btn btn-light border btn-sm btn-icon"
+                          onclick="deleteRating({{ rating.id }})" title="Eliminar">
+                    <i class="fas fa-trash-alt text-danger"></i>
+                  </button>
+                </div>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6">
+                <div class="ratings-empty">
+                  <i class="far fa-folder-open d-block"></i>
+                  Aún no hay valoraciones registradas para este trabajador.
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </article>
+
   </main>
 </div>
+
+<div class="modal fade entity-rating-modal" id="editRatingModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title mb-0"><i class="fas fa-edit mr-1"></i> Editar valoración</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editRatingId">
+        <p class="rating-intro text-center mb-0">Modifica la puntuación (-3 a +3)</p>
+        <div class="entity-rating-score-grid">
+          <div class="entity-rating-score-group">
+            <button type="button" class="entity-rating-btn entity-rating-btn--neg edit-rating-btn" data-score="-3">-3</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--neg edit-rating-btn" data-score="-2">-2</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--neg edit-rating-btn" data-score="-1">-1</button>
+          </div>
+          <div class="entity-rating-score-group">
+            <button type="button" class="entity-rating-btn entity-rating-btn--pos edit-rating-btn" data-score="1">+1</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--pos edit-rating-btn" data-score="2">+2</button>
+            <button type="button" class="entity-rating-btn entity-rating-btn--pos edit-rating-btn" data-score="3">+3</button>
+          </div>
+        </div>
+        <label class="form-label-sm" for="editRatingReason">Motivo</label>
+        <textarea id="editRatingReason" class="form-control mb-3" rows="3" placeholder="Motivo…"></textarea>
+        <button type="button" class="btn-admin btn-admin-primary btn-block" onclick="saveEditRating()">
+          <i class="fas fa-save mr-1"></i> Guardar cambios
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+var editSelectedScore = null;
+
+function openEditRating(id, score, reason) {
+  editSelectedScore = score;
+  $('#editRatingId').val(id);
+  $('#editRatingReason').val(reason || '');
+  $('.edit-rating-btn').removeClass('active');
+  $('.edit-rating-btn[data-score="' + score + '"]').addClass('active');
+  $('#editRatingModal').modal('show');
+}
+
+$(document).on('click', '.edit-rating-btn', function() {
+  $('.edit-rating-btn').removeClass('active');
+  $(this).addClass('active');
+  editSelectedScore = $(this).data('score');
+});
+
+function saveEditRating() {
+  if (!editSelectedScore) { alert('Selecciona una puntuación.'); return; }
+  var id = $('#editRatingId').val();
+  $.ajax({
+    url: '/admin/api/rating/' + id,
+    type: 'PUT',
+    contentType: 'application/json',
+    data: JSON.stringify({ score: editSelectedScore, reason: $('#editRatingReason').val() }),
+    success: function() { window.location.reload(); },
+    error: function(xhr) {
+      alert('Error: ' + (xhr.responseJSON ? xhr.responseJSON.message : 'Error'));
+    }
+  });
+}
+
+function deleteRating(id) {
+  Swal.fire({
+    title: '¿Eliminar valoración?',
+    text: 'Se archivará y dejará de contar para la reputación.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc2626',
+    cancelButtonColor: '#64748b',
+    confirmButtonText: 'Sí, eliminar',
+    cancelButtonText: 'Cancelar'
+  }).then(function(result) {
+    if (result.isConfirmed) {
+      $.ajax({
+        url: '/admin/api/rating/' + id,
+        type: 'DELETE',
+        success: function() { window.location.reload(); },
+        error: function(xhr) {
+          Swal.fire('Error', xhr.responseJSON ? xhr.responseJSON.message : 'Error', 'error');
+        }
+      });
+    }
+  });
+}
+</script>
 {% endblock %}

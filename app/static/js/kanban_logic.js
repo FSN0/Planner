@@ -9,8 +9,15 @@ $(document).ready(function() {
     let libresCalendarInstance = null;
 
     // =========================================================================
-    // 1. EVENTOS: APERTURA DE MODALES (DRAG & DROP)
+    // 1. EVENTOS: DRAG & DROP — abre calendario con datos preseleccionados
     // =========================================================================
+
+    function getKanbanSelectedDate() {
+        const input = document.getElementById('timeline-selected-date');
+        if (input && input.value) return input.value;
+        if (typeof moment !== 'undefined') return moment().format('YYYY-MM-DD');
+        return new Date().toISOString().slice(0, 10);
+    }
 
     $(".worker-chip").draggable({
         revert: "invalid", helper: "clone", appendTo: "body", zIndex: 9999, scroll: false,
@@ -31,11 +38,9 @@ $(document).ready(function() {
             if (sourceObraId == targetObraId) return;
 
             if (targetObraId == 0) {
-                // CASO A: MOVER A LIBRES
                 openUnassignModalWithCalendar(workerId, workerName, sourceObraId, $source.data('obra-name'));
             } else {
-                // CASO B: MOVER A OBRA
-                openConcreteModal(workerId, workerName, targetObraId, targetObraName, sourceObraId); 
+                openConcreteModal(workerId, workerName, targetObraId, targetObraName, sourceObraId);
             }
         }
     });
@@ -46,20 +51,39 @@ $(document).ready(function() {
     
     function renderAssignmentCalendar(viewType, workerId, workerName, targetObraId, obraName, sourceObraId) {
         if (modalCalendarInstance) modalCalendarInstance.destroy();
-        
-        let context = viewType; // 'obra' o 'worker'
+
+        const prefillDate = getKanbanSelectedDate();
+        let context = viewType;
         let entityId = (viewType === 'obra') ? targetObraId : workerId;
-        
-        // CORRECCIÓN DEL BUG: Usamos el nombre que toca según la vista
         let eName = (viewType === 'obra') ? obraName : workerName;
-        let mode = (viewType === 'obra') ? 'empresas' : 'obras';
+        let mode = (viewType === 'obra') ? 'empleados' : 'obras';
 
         modalCalendarInstance = new UniversalCalendarManager('modal-calendar-container', {
             context: context,
             id: entityId,
             mode: mode,
-            entityName: eName
+            entityName: eName,
+            embedded: true,
+            kanbanSourceObraId: sourceObraId || 0,
+            callbacks: {
+                onAfterSave: function() {
+                    $('#assignmentModal').modal('hide');
+                    setTimeout(function() { location.reload(); }, 400);
+                }
+            }
         });
+
+        setTimeout(function() {
+            if (modalCalendarInstance && modalCalendarInstance.prefillKanbanAssignment) {
+                modalCalendarInstance.prefillKanbanAssignment({
+                    dateStr: prefillDate,
+                    workerId: workerId,
+                    workerName: workerName,
+                    obraId: targetObraId,
+                    obraName: obraName
+                });
+            }
+        }, 400);
     }
 
     window.openConcreteModal = function(workerId, workerName, targetObraId, obraName, sourceObraId) {
@@ -67,18 +91,17 @@ $(document).ready(function() {
         $('#modalTargetObraId').val(targetObraId);
         $('#modalWorkerDisplay').text(workerName);
         $('#modalObraDisplay').text(obraName);
-        
-        // Reset visual de los botones
+        $('#modalWorkerSummary').text(workerName);
+        $('#modalObraSummary').text(obraName);
+
         $('#btnViewObra').addClass('active btn-primary').removeClass('btn-outline-primary');
         $('#btnViewWorker').removeClass('active btn-primary').addClass('btn-outline-primary');
 
         $('#assignmentModal').modal('show');
-        
-        setTimeout(() => {
-            // Renderiza por defecto el destino
+
+        setTimeout(function() {
             renderAssignmentCalendar('obra', workerId, workerName, targetObraId, obraName, sourceObraId);
-            
-            // Listeners para los botones de cambio de vista
+
             $('#btnViewObra').off('click').on('click', function() {
                 $(this).addClass('active btn-primary').removeClass('btn-outline-primary');
                 $('#btnViewWorker').removeClass('active btn-primary').addClass('btn-outline-primary');
@@ -90,7 +113,6 @@ $(document).ready(function() {
                 $('#btnViewObra').removeClass('active btn-primary').addClass('btn-outline-primary');
                 renderAssignmentCalendar('worker', workerId, workerName, targetObraId, obraName, sourceObraId);
             });
-
         }, 300);
     };
 
@@ -110,15 +132,16 @@ $(document).ready(function() {
                 if (data.success) {
                     Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
                     $('#assignmentModal').modal('hide');
-                    
-                    // --- MAGIA SPA: MOVER EL CHIP SIN RECARGAR LA PÁGINA ---
+
                     let chip = $(`.worker-chip[data-worker-id="${payload.worker_id}"]`);
                     let targetCol = $(`.worker-list-body[data-obra-id="${payload.target_obra_id}"]`);
-                    
+
                     if (chip.length && targetCol.length) {
-                        chip.detach().appendTo(targetCol); // Mueve la ficha de columna
+                        chip.detach().appendTo(targetCol);
                         chip.css({'transition': 'background-color 0.5s', 'background-color': '#d4edda'});
                         setTimeout(() => chip.css('background-color', ''), 1000);
+                    } else {
+                        setTimeout(() => location.reload(), 600);
                     }
                 } 
                 else if (data.conflict) {
@@ -168,6 +191,7 @@ $(document).ready(function() {
                 id: workerId,
                 entityName: workerName,
                 mode: 'obras',
+                embedded: true,
             });
         }, 300);
     };
@@ -325,23 +349,24 @@ $(document).ready(function() {
 
     if ($("#kanbanWorksWrapper").length > 0) {
         $("#kanbanWorksWrapper").sortable({
-            items: ".kanban-col-wrapper.is-pinned", 
+            items: ".kanban-col-wrapper",
             handle: ".col-header",
+            cancel: "a, button, input, select, textarea, .btn-pin-obra, .editable-staff",
             placeholder: "ui-state-highlight",
             tolerance: "pointer",
             axis: "x",
             containment: "parent",
             cursor: "grabbing",
             forcePlaceholderSize: true,
-            
+
             start: function(e, ui) {
                 ui.placeholder.height(ui.item.outerHeight());
                 ui.placeholder.width(ui.item.outerWidth());
             },
-            
+
             stop: function(e, ui) {
                 var orderedIds = [];
-                $("#kanbanWorksWrapper .kanban-col-wrapper.is-pinned").each(function() {
+                $("#kanbanWorksWrapper .kanban-col-wrapper").each(function() {
                     orderedIds.push($(this).data('id'));
                 });
 

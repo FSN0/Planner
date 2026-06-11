@@ -9,6 +9,7 @@ from flask import url_for
 from app import db
 # IMPORTANTE: Añadido RegistroFichaje a los imports
 from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN, UserObraConfig, RegistroFichaje
+from app.utils.timezone_utils import today_local
 
 def parse_date(date_str):
     """Utilidad interna para parsear fechas de forma segura"""
@@ -93,38 +94,28 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     user_configs = UserObraConfig.query.filter_by(user_id=user.id).all()
     config_map = {c.obra_id: c for c in user_configs}
 
-    pinned_obras = []
-    unpinned_obras = []
+    custom_order_obras = []
+    default_obras = []
 
     for obra in obras:
         conf = config_map.get(obra.id)
-        # Inyectamos propiedad virtual para el template
         obra.is_pinned = conf.is_pinned if conf else False
-        
-        # Guardamos conteo para ordenar
         obra.personnel_count = len(mapa_asig.get(obra.id, []))
 
-        if obra.is_pinned:
-            # Si está pineada, usamos su posición manual (o 0)
-            obra._temp_position = conf.position if conf else 0
-            pinned_obras.append(obra)
+        if conf is not None:
+            custom_order_obras.append((conf.position, obra))
         else:
-            unpinned_obras.append(obra)
+            default_obras.append(obra)
 
-    # ORDENAR GRUPOS
-    # A) Pineadas: Por posición manual (Ascendente)
-    pinned_obras.sort(key=lambda o: o._temp_position)
-    
-    # B) No Pineadas: Por cantidad de trabajadores (Descendente)
-    unpinned_obras.sort(key=lambda o: o.personnel_count, reverse=True)
-
-    # Fusionar lista final
-    obras = pinned_obras + unpinned_obras
+    custom_order_obras.sort(key=lambda item: item[0])
+    default_obras.sort(key=lambda o: o.personnel_count, reverse=True)
+    obras = [obra for _, obra in custom_order_obras] + default_obras
     # ---------------------------------------------------------
 
     # 4. Datos de Cabecera
     _, num_days = calendar.monthrange(year, month)
     header_days = []
+    today = today_local()
     
     all_operarios_count = User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).count()
     
@@ -145,9 +136,12 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
         header_days.append({
             'date': current,
             'date_str': current.strftime('%Y-%m-%d'),
+            'date_human': current.strftime('%d/%m/%Y'),
             'day_num': day,
             'weekday': current.strftime('%a'),
             'is_weekend': current.weekday() >= 5,
+            'is_selected': current == selected_date,
+            'is_today': current == today,
             'free_count': libres,
             'ins': 0,
             'outs': 0

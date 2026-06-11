@@ -6,110 +6,13 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 <style>
-    /* Estilos específicos locales */
-    .table-compact th, 
-    .table-compact td {
-        padding: 0.2rem 0.4rem !important;
-        font-size: 0.75rem !important;
-        vertical-align: middle !important;
-    }
-    .candidates-scroll-box {
-        max-height: 400px;
-        overflow-y: auto;
-        border: 1px solid #e5e7eb;
-        border-radius: 4px;
-        background: white;
-    }
-    
-    /* Colores de estado y conflicto */
-    .table-warning { background-color: #fff3cd !important; }
-    .table-warning td { border-top-color: #ffeeba !important; }
-    .row-busy { color: #856404; }
-    .row-busy .font-weight-bold { color: #856404; }
-    
-    /* Checkbox alineado */
-    .table-compact input[type="checkbox"] { margin-top: 2px; cursor: pointer; }
-
-    /* Botón desasignar */
-    .assigned-row .btn-unassign {
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
-        color: #dc3545;
-        cursor: pointer;
-        background: none;
-        border: none;
-        padding: 0 5px;
-    }
-    .assigned-row:hover .btn-unassign { opacity: 1; }
-    .assigned-row:hover { background-color: #fff5f5 !important; }
-
-    /* ============================================================
-       CALENDARIO MINI (RESUMEN) - ESTILOS AISLADOS
-       ============================================================ */
-    
-    #solicitud-obra-calendar {
-        font-size: 0.75rem;
-        max-width: 100%;
-    }
-
-    #solicitud-obra-calendar .fc-toolbar {
-        margin-bottom: 0.2rem !important;
-    }
-    #solicitud-obra-calendar .fc-toolbar-title {
-        font-size: 0.85rem !important;
-        text-transform: uppercase;
-        font-weight: 700;
-    }
-    #solicitud-obra-calendar .fc-button {
-        padding: 0px 0.3rem !important;
-        font-size: 0.7rem !important;
-        height: 22px !important;
-        line-height: 1 !important;
-    }
-
-    #solicitud-obra-calendar .fc-daygrid-day-frame {
-        min-height: 45px !important; 
-    }
-    
-    #solicitud-obra-calendar .fc-daygrid-day-top {
-        flex-direction: row;
-    }
-    #solicitud-obra-calendar .fc-daygrid-day-number {
-        font-size: 0.65rem !important;
-        padding: 1px 3px !important;
-        color: #9ca3af;
-    }
-
-    /* Eventos compactos */
-    #solicitud-obra-calendar .fc-event-custom-summary {
-        font-size: 0.65rem !important;
-        padding: 0px 3px !important;
-        line-height: 1.2 !important;
-        margin-bottom: 1px !important;
-        border-radius: 2px;
-    }
-
-    /* Quitar bordes azules solo en el mini */
-    #solicitud-obra-calendar .fc-v-event { border: none; background: transparent; }
-    
-    /* Contenedor */
-    .admin-panel-body.solicitud-calendar-card {
-        padding: 0 !important;
-    }
-    /* --- NUEVO: ESTILOS PARA DESTACAR SOLICITUD --- */
     .evento-actual-destacado {
         border: 2px solid #333 !important;
-        filter: brightness(0.9) saturate(1.2); /* Más oscuro e intenso */
-        box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+        filter: brightness(0.9) saturate(1.2);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         z-index: 50 !important;
-        transform: scale(1.02);
-        font-weight: bold;
     }
-    
-    .evento-otro {
-        opacity: 0.6; /* Los demás se ven un poco apagados */
-    }
-    .oculto-por-filtro { display: none !important; }
+    .evento-otro { opacity: 0.65; }
 </style>
 {% endblock %}
 
@@ -117,21 +20,45 @@
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    
-    {# --- CABECERA ELIMINADA (Para ganar espacio) --- #}
-    <div class="pt-3"></div> 
+  <main class="admin-main admin-main--compact solicitud-detail-page">
 
-    {# 1. SECCIÓN DE DATOS Y CALENDARIO (Resumen) #}
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
+          <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="page-toolbar-title">Solicitud #{{ solicitud.id }}</h1>
+        {% if solicitud.accion == 'DESASIGNAR' %}
+          <span class="badge-soft badge-soft-red">Salida</span>
+        {% elif solicitud.tipo|lower == 'generica' %}
+          <span class="badge-soft badge-soft-gray">Genérica</span>
+        {% else %}
+          <span class="badge-soft badge-soft-blue">Concreta</span>
+        {% endif %}
+        {% set est = solicitud.estado %}
+        {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
+        {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
+        {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
+        {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
+        {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+        {% endif %}
+      </div>
+      {% if solicitud.fecha_inicio %}
+      <div class="page-toolbar-actions">
+        <a href="{{ url_for('admin.obras_detailed', selected_date=solicitud.fecha_inicio.strftime('%Y-%m-%d')) }}"
+           class="btn-admin btn-admin-ghost" target="_blank">
+          <i class="fas fa-th-large"></i> Tablero
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
     {% include "solicitudes/_detail_resumen.html" %}
 
-    {# 2. SECCIÓN DE TABLAS (SOLO SI NO ES DESASIGNACIÓN) #}
     {% if solicitud.accion != 'DESASIGNAR' %}
-        {# Solo mostramos candidatos y personal actual si estamos ASIGNANDO (Entrada) #}
         {% include "solicitudes/_detail_tablas.html" %}
     {% endif %}
 
-    {# 3. BARRA DE ACCIONES INFERIOR #}
     {% if es_admin %}
         {% include "solicitudes/_detail_acciones.html" %}
     {% endif %}
@@ -144,56 +71,54 @@
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
-
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Seleccionamos las 3 cajitas de búsqueda de las columnas
-    const inputsFiltro = document.querySelectorAll('.table-filter-input');
-    
-    if (inputsFiltro.length > 0) {
-        // Le decimos a cada cajita que reaccione al momento de teclear ('input')
-        inputsFiltro.forEach(input => {
-            input.addEventListener('input', filtrarTabla);
-        });
+    const searchInput = document.getElementById('candidateSearch');
+    const inputsFiltro = document.querySelectorAll('#candidatesTable .table-filter-input');
+    inputsFiltro.forEach(input => input.addEventListener('input', aplicarFiltrosCandidatos));
+    if (searchInput) searchInput.addEventListener('input', aplicarFiltrosCandidatos);
+
+    function nombreCandidatoFila(fila) {
+        const link = fila.querySelector('td a.table-link-primary');
+        return (link ? link.textContent : fila.querySelector('td')?.textContent || '').toLowerCase().trim();
     }
 
-    function filtrarTabla() {
-        // Capturamos lo que has escrito en las 3 columnas y lo pasamos a minúsculas
-        const filtroTrabajador = document.querySelector('input[data-col="1"]').value.toLowerCase().trim();
-        const filtroEspecialidad = document.querySelector('input[data-col="2"]').value.toLowerCase().trim();
-        const filtroEmpresa = document.querySelector('input[data-col="3"]').value.toLowerCase().trim();
-
-        // Seleccionamos a todos los trabajadores de la tabla
-        const filas = document.querySelectorAll('.candidate-row');
-
-        filas.forEach(fila => {
+    function aplicarFiltrosCandidatos() {
+        const q = (searchInput?.value || '').toLowerCase().trim();
+        const filtroTrabajador = document.querySelector('#candidatesTable input[data-col="1"]')?.value.toLowerCase().trim() || '';
+        const filtroEspecialidad = document.querySelector('#candidatesTable input[data-col="2"]')?.value.toLowerCase().trim() || '';
+        const filtroEmpresa = document.querySelector('#candidatesTable input[data-col="3"]')?.value.toLowerCase().trim() || '';
+        const btnBusy = document.getElementById('btnToggleBusy');
+        const btnPartial = document.getElementById('btnTogglePartial');
+        const showBusy = btnBusy ? (btnBusy.getAttribute('data-state') === 'visible') : true;
+        const showPartial = btnPartial ? (btnPartial.getAttribute('data-state') === 'visible') : true;
+        let visibles = 0;
+        document.querySelectorAll('.candidate-row').forEach(fila => {
             const celdas = fila.querySelectorAll('td');
-            
-            // Verificamos que sea una fila con datos (tiene 4 o más columnas)
-            if (celdas.length >= 4) {
-                // Sacamos el texto exacto que hay en cada celda
-                // [1] es Trabajador, [2] es Especialidad, [3] es Empresa (la [0] es el checkbox)
-                const textoTrabajador = celdas[1].textContent.toLowerCase();
-                const textoEspecialidad = celdas[2].textContent.toLowerCase();
-                const textoEmpresa = celdas[3].textContent.toLowerCase();
-
-                // Comprobamos si lo que has escrito coincide
-                const cumpleTrabajador = textoTrabajador.includes(filtroTrabajador);
-                const cumpleEspecialidad = textoEspecialidad.includes(filtroEspecialidad);
-                const cumpleEmpresa = textoEmpresa.includes(filtroEmpresa);
-
-                // Si cumple con los 3 filtros a la vez, quitamos la clase, si no, lo ocultamos
-                if (cumpleTrabajador && cumpleEspecialidad && cumpleEmpresa) {
-                    fila.classList.remove('oculto-por-filtro');
-                } else {
-                    fila.classList.add('oculto-por-filtro');
-                }
+            const nombre = nombreCandidatoFila(fila);
+            const okBusqueda = !q || nombre.includes(q);
+            let okColumnas = true;
+            if (celdas.length >= 4 && fila.closest('#candidatesTable')) {
+                okColumnas = celdas[1].textContent.toLowerCase().includes(filtroTrabajador)
+                    && celdas[2].textContent.toLowerCase().includes(filtroEspecialidad)
+                    && celdas[3].textContent.toLowerCase().includes(filtroEmpresa);
             }
+            const okTipo = (!fila.classList.contains('row-busy') || showBusy)
+                && (!fila.classList.contains('row-partial') || showPartial);
+            const visible = okBusqueda && okColumnas && okTipo;
+            fila.classList.toggle('oculto-por-filtro', !(okBusqueda && okColumnas));
+            fila.style.display = visible ? '' : 'none';
+            if (visible) visibles++;
         });
+        const badge = document.getElementById('candidateCountBadge');
+        if (badge && searchInput) {
+            const total = document.querySelectorAll('.candidate-row').length;
+            badge.textContent = q ? (visibles + ' / ' + total) : total;
+        }
     }
+    window.aplicarFiltrosCandidatos = aplicarFiltrosCandidatos;
 });
 </script>
-
 {% include "solicitudes/_detail_scripts.html" %}
 {% endblock %}

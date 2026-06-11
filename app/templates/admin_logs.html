@@ -4,264 +4,165 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    /* CSS para Alta Densidad de Datos */
-    .logs-container {
-        background-color: #ffffff;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        padding: 1.5rem;
-        margin-top: 1rem;
-        border: 1px solid #e5e7eb;
-    }
-    
-    /* --- PESTAÑAS BLINDADAS ANTI-CONFLICTOS --- */
-    .logs-tabs-wrapper {
-        display: flex;
-        gap: 0.25rem;
-        margin-bottom: 1.5rem;
-        border-bottom: 2px solid #e2e8f0;
-        padding-bottom: 0;
-    }
-    .logs-custom-tab {
-        padding: 0.75rem 1.25rem;
-        text-decoration: none !important; /* Fuerza a quitar tachados o subrayados */
-        color: #64748b !important; /* Gris profesional */
-        font-size: 0.9rem;
-        font-weight: 600;
-        border-bottom: 3px solid transparent;
-        margin-bottom: -2px; /* Solapa con el borde inferior */
-        transition: all 0.2s ease;
-        border-top-left-radius: 6px;
-        border-top-right-radius: 6px;
-    }
-    .logs-custom-tab:hover {
-        color: #334155 !important;
-        background-color: #f8fafc;
-        border-bottom-color: #cbd5e1;
-    }
-    .logs-custom-tab.is-active {
-        color: #0ea5e9 !important; /* Azul moderno en lugar de verde */
-        border-bottom-color: #0ea5e9 !important;
-        background-color: #f0f9ff;
-    }
-    /* ------------------------------------------- */
-
-    .table-compact {
-        font-size: 0.85rem; 
-    }
-    .table-compact th {
-        padding: 0.6rem 0.5rem;
-        background-color: #f8fafc;
-        color: #475569;
-        font-weight: 700;
-        border-bottom: 2px solid #e2e8f0;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-size: 0.75rem;
-    }
-    .table-compact td {
-        padding: 0.5rem 0.5rem;
-        vertical-align: middle;
-        border-bottom: 1px solid #f1f5f9;
-        color: #334155;
-    }
-    .table-compact tr:hover td {
-        background-color: #f8fafc;
-    }
-    .log-detail-text {
-        font-size: 0.8rem;
-        color: #475569;
-        margin: 0;
-        line-height: 1.4;
-    }
-    .badge-micro {
-        font-size: 0.65rem;
-        padding: 0.2em 0.4em;
-        border-radius: 4px;
-        letter-spacing: 0.5px;
-    }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    
-    <header class="admin-header d-flex justify-content-between align-items-center">
-      <div>
-        <div class="admin-header-title">Logs y Auditoría</div>
-        <p class="admin-header-subtitle">
-          Registro detallado de acciones, movimientos y accesos del sistema.
-        </p>
+  <main class="admin-main admin-main--compact logs-page">
+
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">Logs del sistema</h1>
+        <span class="page-toolbar-count">Auditoría y trazabilidad</span>
       </div>
-      <div>
-        <button class="btn btn-outline-primary btn-sm fw-bold shadow-sm" id="btnEditNotifs">
-            <i class="fas fa-bell"></i> Configurar Avisos
+      <div class="page-toolbar-actions">
+        <button type="button" class="btn-admin btn-admin-ghost" id="btnEditNotifs">
+          <i class="fas fa-bell"></i> Avisos
         </button>
       </div>
-    </header>
+    </div>
 
-    <form action="{{ url_for('admin.save_log_preferences') }}" method="POST" id="formPrefs" style="display: none;" class="card p-4 mb-3 shadow-sm border-primary">
+    <section class="admin-panel admin-panel-flush admin-panel--no-header">
+
+      <form action="{{ url_for('admin.save_log_preferences') }}" method="POST" id="formPrefs" style="display: none;" class="logs-prefs-panel">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="current_category" value="{{ current_category }}">
-        <h6 class="mb-3 text-primary fw-bold"><i class="fas fa-cog"></i> ¿De qué eventos quieres recibir notificaciones visuales?</h6>
-        <div class="d-flex flex-wrap gap-4 mt-2">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="pref_accesos" id="pref_accesos" {% if 'accesos' in active_prefs %}checked{% endif %}>
-                <label class="form-check-label fw-bold text-dark" for="pref_accesos">🔐 Accesos</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="pref_valoraciones" id="pref_valoraciones" {% if 'valoraciones' in active_prefs %}checked{% endif %}>
-                <label class="form-check-label fw-bold text-dark" for="pref_valoraciones">⭐ Valoraciones</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="pref_planificacion" id="pref_planificacion" {% if 'planificacion' in active_prefs %}checked{% endif %}>
-                <label class="form-check-label fw-bold text-dark" for="pref_planificacion">📅 Planificador</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="pref_obras" id="pref_obras" {% if 'obras' in active_prefs %}checked{% endif %}>
-                <label class="form-check-label fw-bold text-dark" for="pref_obras">🏗️ Obras</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="pref_fichajes" id="pref_fichajes" {% if 'fichajes' in active_prefs %}checked{% endif %}>
-                <label class="form-check-label fw-bold text-dark" for="pref_fichajes">⏱️ Fichajes</label>
-            </div>
+        <h3><i class="fas fa-bell text-primary mr-1"></i> Notificaciones visuales en sidebar</h3>
+        <div class="logs-prefs-checks">
+          <label><input type="checkbox" name="pref_accesos" {% if 'accesos' in active_prefs %}checked{% endif %}> Accesos</label>
+          <label><input type="checkbox" name="pref_valoraciones" {% if 'valoraciones' in active_prefs %}checked{% endif %}> Valoraciones</label>
+          <label><input type="checkbox" name="pref_planificacion" {% if 'planificacion' in active_prefs %}checked{% endif %}> Planificación</label>
+          <label><input type="checkbox" name="pref_obras" {% if 'obras' in active_prefs %}checked{% endif %}> Obras</label>
+          <label><input type="checkbox" name="pref_fichajes" {% if 'fichajes' in active_prefs %}checked{% endif %}> Fichajes</label>
         </div>
-        <div class="mt-4 text-end">
-            <button type="button" class="btn btn-secondary btn-sm me-2" id="btnCancelNotifs">Cancelar</button>
-            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i> Guardar Preferencias</button>
+        <div class="d-flex justify-content-end mt-2" style="gap:0.4rem;">
+          <button type="button" class="btn-admin btn-admin-ghost" id="btnCancelNotifs">Cancelar</button>
+          <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar</button>
         </div>
-    </form>
+      </form>
 
-    <div class="logs-container">
-        
-        <div class="logs-tabs-wrapper">
-            <a class="logs-custom-tab {% if current_category == 'accesos' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='accesos') }}">🔐 Accesos</a>
-            <a class="logs-custom-tab {% if current_category == 'valoraciones' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='valoraciones') }}">⭐ Valoraciones</a>
-            <a class="logs-custom-tab {% if current_category == 'planificacion' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='planificacion') }}">📅 Planificación</a>
-            <a class="logs-custom-tab {% if current_category == 'obras' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='obras') }}">🏗️ Obras</a>
-            <a class="logs-custom-tab {% if current_category == 'fichajes' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='fichajes') }}">⏱️ Fichajes</a>
-            <a class="logs-custom-tab {% if current_category == 'persona_obra' %}is-active{% endif %}" href="{{ url_for('admin.system_logs', category='persona_obra') }}">👷 Persona-Obra</a>
-        </div>
+      <nav class="admin-logs-tabs" aria-label="Categorías de logs">
+        {% set log_tabs = [
+          ('accesos', 'fa-sign-in-alt', 'Accesos'),
+          ('valoraciones', 'fa-star', 'Valoraciones'),
+          ('planificacion', 'fa-calendar-alt', 'Planificación'),
+          ('obras', 'fa-building', 'Obras'),
+          ('fichajes', 'fa-user-clock', 'Fichajes'),
+          ('persona_obra', 'fa-route', 'Persona-Obra'),
+        ] %}
+        {% for cat_key, cat_icon, cat_label in log_tabs %}
+        <a class="{% if current_category == cat_key %}is-active{% endif %}"
+           href="{{ url_for('admin.system_logs', category=cat_key) }}">
+          <i class="fas {{ cat_icon }}"></i> {{ cat_label }}
+          {% if log_unread_by_category.get(cat_key) %}
+          <span class="logs-tab-badge" title="{{ log_unread_by_category[cat_key] }} sin leer">{{ log_unread_by_category[cat_key] }}</span>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </nav>
 
-        {% if current_category == 'persona_obra' %}
-        {% include 'components/_person_day_timeline_panel.html' %}
-        {% else %}
-        <div class="table-responsive">
-            <table class="table table-compact w-100" id="logsTable">
-                <thead>
-                    <tr>
-                        <th style="width: 15%">
-                            FECHA / HORA <br>
-                            <input type="text" class="filter-input mt-1" style="width: 100%; padding: 3px 6px; font-weight: normal; border: 1px solid #cbd5e1; border-radius: 4px;" placeholder="Filtrar fecha...">
-                        </th>
-                        <th style="width: 20%">
-                            AUTOR <br>
-                            <input type="text" class="filter-input mt-1" style="width: 100%; padding: 3px 6px; font-weight: normal; border: 1px solid #cbd5e1; border-radius: 4px;" placeholder="Filtrar autor...">
-                        </th>
-                        <th style="width: 20%">
-                            ACCIÓN <br>
-                            <input type="text" class="filter-input mt-1" style="width: 100%; padding: 3px 6px; font-weight: normal; border: 1px solid #cbd5e1; border-radius: 4px;" placeholder="Filtrar acción...">
-                        </th>
-                        <th style="width: 45%">
-                            DETALLE <br>
-                            <input type="text" class="filter-input mt-1" style="width: 100%; padding: 3px 6px; font-weight: normal; border: 1px solid #cbd5e1; border-radius: 4px;" placeholder="Filtrar detalle...">
-                        </th>
-                    </tr>
-                </thead>
-                <tbody id="logsTableBody">
-                    {% for log in logs %}
-                    <tr class="log-row">
-                        <td class="text-nowrap" style="color: #64748b; font-family: monospace;">
-                            <i class="far fa-clock text-muted me-1"></i> {{ log.timestamp|format_dt }}
-                        </td>
-                        <td>
-                            {% if log.user %}
-                                <div style="font-weight: 600; color: #1e293b;">{{ log.user.name }} {{ log.user.lastname }}</div>
-                                <span class="badge bg-light text-secondary border border-secondary badge-micro mt-1">{{ log.user.role|upper }}</span>
-                            {% else %}
-                                <span class="badge bg-dark badge-micro">SISTEMA AUTOMÁTICO</span>
-                            {% endif %}
-                        </td>
-                        <td style="font-weight: 600; color: #0284c7;">{{ log.action }}</td>
-                        <td><p class="log-detail-text">{{ log.detail }}</p></td>
-                    </tr>
-                    {% else %}
-                    <tr id="emptyStateRow">
-                        <td colspan="4" class="text-center py-5 text-muted" style="font-size: 0.95rem;">
-                            <i class="fas fa-folder-open mb-3" style="font-size: 2rem; color: #cbd5e1;"></i><br>
-                            No hay registros almacenados en esta categoría.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    <tr id="emptySearchRow" style="display: none;">
-                        <td colspan="4" class="text-center py-5 text-muted" style="font-size: 0.95rem;">
-                            <i class="fas fa-search mb-3" style="font-size: 2rem; color: #cbd5e1;"></i><br>
-                            No se encontraron resultados para tu búsqueda.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+      {% if current_category == 'persona_obra' %}
+        <div class="p-2">
+          {% include 'components/_person_day_timeline_panel.html' %}
         </div>
-        {% endif %}
-    </div>
+      {% else %}
+        <div class="admin-table-scroll">
+          <table class="filterable-table admin-data-table mb-0" id="logsTable">
+            <thead>
+              <tr class="header-row">
+                <th style="width:15%;">Fecha / hora</th>
+                <th style="width:20%;">Autor</th>
+                <th style="width:18%;">Acción</th>
+                <th style="width:47%;">Detalle</th>
+              </tr>
+              <tr class="filter-row">
+                <th><input class="table-filter-input filter-input" data-col="0" placeholder="Filtrar…"></th>
+                <th><input class="table-filter-input filter-input" data-col="1" placeholder="Filtrar…"></th>
+                <th><input class="table-filter-input filter-input" data-col="2" placeholder="Filtrar…"></th>
+                <th><input class="table-filter-input filter-input" data-col="3" placeholder="Filtrar…"></th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              {% for log in logs %}
+              <tr class="log-row data-row">
+                <td data-sort-value="{{ log.timestamp.strftime('%Y%m%d%H%M%S') if log.timestamp else '' }}" class="text-muted" style="font-family:var(--font-mono); font-size:0.72rem;">
+                  {{ log.timestamp|format_dt }}
+                </td>
+                <td data-sort-value="{{ (log.user.lastname|lower) if log.user else 'sistema' }}">
+                  {% if log.user %}
+                    <span class="log-author-inline">
+                      <span class="table-link-primary" style="font-weight:600;">{{ log.user.name }} {{ log.user.lastname }}</span>
+                      <span class="badge-soft badge-soft-gray">{{ log.user.role|upper }}</span>
+                    </span>
+                  {% else %}
+                    <span class="badge-soft badge-soft-slate">Sistema</span>
+                  {% endif %}
+                </td>
+                <td data-sort-value="{{ log.action|lower }}" style="font-weight:600; color:#0369a1;">{{ log.action }}</td>
+                <td data-sort-value="{{ (log.detail or '')|lower }}"><span style="font-size:0.76rem; color:var(--color-text-secondary);">{{ log.detail }}</span></td>
+              </tr>
+              {% else %}
+              <tr id="emptyStateRow">
+                <td colspan="4" class="table-empty-state">
+                  <i class="fas fa-folder-open"></i>
+                  No hay registros en esta categoría.
+                </td>
+              </tr>
+              {% endfor %}
+              <tr id="emptySearchRow" style="display: none;">
+                <td colspan="4" class="table-empty-state">
+                  <i class="fas fa-search"></i>
+                  No hay resultados para tu búsqueda.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </section>
   </main>
 </div>
 
 <script>
-    // Mostrar/Ocultar el panel de preferencias
-    document.getElementById('btnEditNotifs').addEventListener('click', function() {
-        document.getElementById('formPrefs').style.display = 'block';
+document.getElementById('btnEditNotifs').addEventListener('click', function() {
+    document.getElementById('formPrefs').style.display = 'block';
+});
+document.getElementById('btnCancelNotifs').addEventListener('click', function() {
+    document.getElementById('formPrefs').style.display = 'none';
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    const filterInputs = document.querySelectorAll('#logsTable .filter-input');
+    if (!filterInputs.length) return;
+    const rows = document.querySelectorAll('.log-row');
+    const emptySearchRow = document.getElementById('emptySearchRow');
+    const emptyStateRow = document.getElementById('emptyStateRow');
+
+    filterInputs.forEach(function(input) {
+        input.addEventListener('input', filtrarLogs);
     });
-    document.getElementById('btnCancelNotifs').addEventListener('click', function() {
-        document.getElementById('formPrefs').style.display = 'none';
-    });
 
-    document.addEventListener('DOMContentLoaded', function() {
-        const filterInputs = document.querySelectorAll('.filter-input');
-        if (!filterInputs.length) return;
-        const rows = document.querySelectorAll('.log-row');
-        const emptySearchRow = document.getElementById('emptySearchRow');
-
-        filterInputs.forEach((input, index) => {
-            input.addEventListener('keyup', function() {
-                // Obtenemos qué ha escrito el usuario en cada caja
-                const filters = Array.from(filterInputs).map(inp => inp.value.toLowerCase().trim());
-                let visibleCount = 0;
-
-                rows.forEach(row => {
-                    const cells = row.querySelectorAll('td');
-                    let showRow = true;
-
-                    // Comprobamos columna por columna
-                    filters.forEach((filterText, colIndex) => {
-                        if (filterText !== '') {
-                            const cellText = cells[colIndex].textContent || cells[colIndex].innerText;
-                            if (!cellText.toLowerCase().includes(filterText)) {
-                                showRow = false; // Si no contiene el texto, escondemos la fila entera
-                            }
-                        }
-                    });
-
-                    if (showRow) {
-                        row.style.display = '';
-                        visibleCount++;
-                    } else {
-                        row.style.display = 'none';
-                    }
-                });
-
-                // Si ninguna fila sobrevive a la búsqueda, enseñamos el mensaje de error
-                if (visibleCount === 0 && rows.length > 0) {
-                    emptySearchRow.style.display = '';
-                } else {
-                    emptySearchRow.style.display = 'none';
+    function filtrarLogs() {
+        const filters = Array.from(filterInputs).map(function(inp) { return inp.value.toLowerCase().trim(); });
+        let visibleCount = 0;
+        rows.forEach(function(row) {
+            const cells = row.querySelectorAll('td');
+            let showRow = true;
+            filters.forEach(function(filterText, colIndex) {
+                if (filterText && !(cells[colIndex].textContent || '').toLowerCase().includes(filterText)) {
+                    showRow = false;
                 }
             });
+            row.style.display = showRow ? '' : 'none';
+            if (showRow) visibleCount++;
         });
-    });
+        if (emptyStateRow) emptyStateRow.style.display = 'none';
+        if (emptySearchRow) {
+            emptySearchRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+        }
+    }
+});
 </script>
 {% endblock %}

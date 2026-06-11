@@ -1,0 +1,54 @@
+{# Tabla de incidencias de fichaje con fila clicable (timeline) y acciones al hover #}
+{% if auditoria_alertas %}
+<table class="filterable-table admin-data-table mb-0 dashboard-table dashboard-incidencias-table">
+  <thead>
+    <tr class="header-row">
+      <th>Fecha</th>
+      <th>Operario</th>
+      <th>Estado</th>
+      <th>Detalle</th>
+      <th class="text-right" style="width:9rem;">Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for reg in auditoria_alertas %}
+    <tr id="row-{{ reg.id }}"
+        class="fila-fichaje-auditoria dashboard-incidencia-row"
+        data-user-id="{{ reg.user_id }}"
+        data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}">
+      <td class="text-nowrap" style="font-size:0.72rem;">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+      <td style="font-size:0.74rem;">
+        {% if reg.user %}{{ reg.user.name }} {{ reg.user.lastname }}{% else %}—{% endif %}
+      </td>
+      <td>
+        {% if reg.estado == 'Conflicto' %}<span class="badge-soft badge-soft-red">Desviación</span>
+        {% elif reg.estado == 'Paracaidista' %}<span class="badge-soft badge-soft-blue">Sin planificar</span>
+        {% elif reg.estado == 'Ausencia' %}<span class="badge-soft badge-soft-amber">Ausencia</span>
+        {% else %}<span class="badge-soft badge-soft-gray">{{ reg.estado }}</span>{% endif %}
+      </td>
+      <td class="text-muted" style="font-size:0.68rem;">
+        {% if reg.obra_planificada %}{{ reg.obra_planificada.codigo }}{% else %}Sin plan{% endif %}
+        →
+        {% if reg.obra_real %}{{ reg.obra_real.codigo }}{% else %}—{% endif %}
+      </td>
+      <td class="text-right dashboard-incidencia-actions">
+        <div class="dashboard-row-actions no-row-nav">
+          {% if reg.estado == 'Conflicto' %}
+          <button type="button" class="btn btn-outline-danger btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'mover')">Mover</button>
+          <button type="button" class="btn btn-outline-primary btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'anadir')">+ Añadir</button>
+          {% elif reg.estado == 'Paracaidista' %}
+          <button type="button" class="btn btn-outline-primary btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'anadir')">Aceptar</button>
+          <button type="button" class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'ignorar')">Ignorar</button>
+          {% elif reg.estado == 'Ausencia' %}
+          <button type="button" class="btn btn-outline-danger btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'confirmar_ausencia')">Ausencia</button>
+          <button type="button" class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'ignorar')">Ignorar</button>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="table-empty-state text-success"><i class="fas fa-check-circle"></i>Sin incidencias pendientes</p>
+{% endif %}

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Sincronizar Subcontratas{% endblock %}
+{% from "sync/_preview_macros.html" import stat_chip, razon_list %}
+{% block title %}Preview: Subcontratas{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 {% endblock %}
@@ -8,49 +10,64 @@
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+  <main class="admin-main admin-main--compact sync-preview-page">
+
+    <header class="sync-preview-header">
       <div>
-        <h1 class="h4 font-weight-bold mb-0">Previsualización: Subcontratas y Externos</h1>
-        <p class="text-muted small mb-0">Revisa los datos antes de guardarlos en tu base de datos.</p>
+        <a href="{{ url_for('sync.panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
+        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
+        <p class="sync-preview-sub">Empresas subcontrata y contactos externos desde res.partner.</p>
       </div>
-      <div>
-        <a href="{{ url_for('sync.panel') }}" class="btn btn-outline-secondary mr-2">Cancelar</a>
-        <button id="btnCommit" class="btn btn-warning font-weight-bold text-dark"><i class="fas fa-save mr-1"></i> Guardar Todo</button>
-      </div>
+      <button class="btn-admin btn-admin-primary" id="btnCommit"><i class="fas fa-save"></i> Guardar todo</button>
+    </header>
+
+    <div class="sync-preview-stats">
+      {{ stat_chip('Empresas nuevas', preview.stats.empresas_nuevas, 'ok') }}
+      {{ stat_chip('Empresas act.', preview.stats.empresas_act, 'ok') }}
+      {{ stat_chip('Externos nuevos', preview.stats.externos_nuevos, 'ok') }}
+      {{ stat_chip('Externos act.', preview.stats.externos_act, 'ok') }}
+      {{ stat_chip('Avisos DNI', preview.incidencias_empleados|length, 'warn') }}
     </div>
 
-    <div class="row">
-        <div class="col-md-6">
-            <h5 class="font-weight-bold text-success border-bottom pb-2">Empresas Nuevas ({{ diff.empresas.nuevas|length }})</h5>
-            {% for emp in diff.empresas.nuevas %}
-            <div class="card shadow-sm mb-2 border-success"><div class="card-body py-2"><strong>{{ emp.nombre }}</strong> <span class="text-muted small">({{ emp.cif }})</span></div></div>
-            {% else %} <p class="text-muted small">No hay empresas nuevas.</p> {% endfor %}
+    {% if preview.incidencias_empleados %}
+    <section class="sync-preview-section sync-preview-section--warn">
+      <h2 class="sync-preview-section-title"><i class="fas fa-exclamation-circle"></i> Avisos al importar ({{ preview.incidencias_empleados|length }})</h2>
+      <p class="sync-preview-section-desc">Se importarán pero con ajustes automáticos de DNI.</p>
+      {% for emp in preview.incidencias_empleados %}
+      <article class="sync-preview-card">
+        <strong>{{ emp.name }} {{ emp.lastname }}</strong> — DNI {{ emp.dni }}
+        {{ razon_list(emp.razones) }}
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <div class="sync-preview-two-col">
+      <section class="sync-preview-section sync-preview-section--ok">
+        <h2 class="sync-preview-section-title">Empresas listas ({{ preview.listos_empresas|length }})</h2>
+        {% for emp in preview.listos_empresas %}
+        <div class="sync-preview-card">
+          <span class="sync-preview-badge sync-preview-badge--{{ emp.accion }}">{{ emp.accion|replace('_',' ')|upper }}</span>
+          <strong>{{ emp.nombre }}</strong>
+          {% if emp.cif %}<span class="text-muted small">({{ emp.cif }})</span>{% endif %}
+          {% if emp.cambios %}<div class="small mt-1">{% for k,v in emp.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}</div>{% endif %}
         </div>
-        <div class="col-md-6">
-            <h5 class="font-weight-bold text-warning border-bottom pb-2">Empresas Actualizadas ({{ diff.empresas.actualizadas|length }})</h5>
-            {% for emp in diff.empresas.actualizadas %}
-            <div class="card shadow-sm mb-2 border-warning"><div class="card-body py-2"><strong>{{ emp.nombre }}</strong> <span class="text-muted small">({{ emp.cif }})</span></div></div>
-            {% else %} <p class="text-muted small">No hay empresas actualizadas.</p> {% endfor %}
+        {% else %}<p class="text-muted small">Ninguna.</p>{% endfor %}
+      </section>
+
+      <section class="sync-preview-section sync-preview-section--ok">
+        <h2 class="sync-preview-section-title">Externos listos ({{ preview.listos_empleados|length }})</h2>
+        {% for emp in preview.listos_empleados %}
+        <div class="sync-preview-card">
+          <span class="sync-preview-badge sync-preview-badge--{{ emp.accion }}">{{ emp.accion|replace('_',' ')|upper }}</span>
+          <strong>{{ emp.name }} {{ emp.lastname }}</strong>
+          <div class="small text-muted">{{ emp.dni }} · {{ emp.categoria_profesional or 'Externo' }}</div>
+          {% if emp.cambios %}<div class="small mt-1">{% for k,v in emp.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}</div>{% endif %}
         </div>
+        {% else %}<p class="text-muted small">Ninguno.</p>{% endfor %}
+      </section>
     </div>
 
-    <hr class="my-4">
-
-    <div class="row">
-        <div class="col-md-6">
-            <h5 class="font-weight-bold text-success border-bottom pb-2">Empleados Externos Nuevos ({{ diff.empleados.nuevos|length }})</h5>
-            {% for emp in diff.empleados.nuevos %}
-            <div class="card shadow-sm mb-2 border-success"><div class="card-body py-2"><strong>{{ emp.name }} {{ emp.lastname }}</strong> - <span class="text-muted small">{{ emp.categoria_profesional }}</span><br><span class="small text-muted">{{ emp.dni }} | {{ emp.email }}</span></div></div>
-            {% else %} <p class="text-muted small">No hay externos nuevos.</p> {% endfor %}
-        </div>
-        <div class="col-md-6">
-            <h5 class="font-weight-bold text-warning border-bottom pb-2">Empleados Externos Actualizados ({{ diff.empleados.actualizados|length }})</h5>
-            {% for emp in diff.empleados.actualizados %}
-            <div class="card shadow-sm mb-2 border-warning"><div class="card-body py-2"><strong>{{ emp.name }} {{ emp.lastname }}</strong><br><span class="small text-muted">{% for k,v in emp.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}</span></div></div>
-            {% else %} <p class="text-muted small">No hay externos actualizados.</p> {% endfor %}
-        </div>
-    </div>
   </main>
 </div>
 {% endblock %}
@@ -59,18 +76,14 @@
 <script id="diffData" type="application/json">{{ diff|tojson|safe }}</script>
 <script>
 document.getElementById('btnCommit').addEventListener('click', function() {
-    this.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Guardando...';
     this.disabled = true;
-    
-    const data = JSON.parse(document.getElementById('diffData').textContent);
-
+    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando…';
     fetch("{{ url_for('sync.commit_subcontratas') }}", {
-        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(res => {
-        if(res.success) { window.location.href = "{{ url_for('sync.panel') }}"; }
-        else { alert("Error: " + res.error); document.getElementById('btnCommit').disabled = false; }
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: document.getElementById('diffData').textContent
+    }).then(r => r.json()).then(res => {
+        if (res.success) window.location.href = "{{ url_for('sync.panel') }}";
+        else { alert('Error: ' + res.error); this.disabled = false; }
     });
 });
 </script>

@@ -8,7 +8,6 @@ from app.models import (
     Asignacion,
     ROLE_ADMIN,
     ROLE_JEFE,
-    ROLE_RRHH,
     ROLE_OPERARIO,
     Company,
     Solicitud,
@@ -30,6 +29,11 @@ from app.models import Rating
 
 
 from app.services.dashboard_service import get_dashboard_data, parse_date
+from app.services.entity_panel_service import (
+    get_obra_panel_stats,
+    get_worker_panel_stats,
+    get_company_panel_stats,
+)
 
 from app.services.email_service import notificar_resolucion_solicitud, notificar_movimiento_admin_a_jo
 # Definición del blueprint de admin
@@ -181,14 +185,21 @@ def solicitudes_list():
     
 @admin_bp.route("/worker_panel/<int:user_id>", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_RRHH)
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def worker_panel(user_id):
     """
     Ficha del trabajador con calendario de sus asignaciones Y SOLICITUDES.
     (El calendario carga por API V6)
     """
     worker = User.query.get_or_404(user_id)
-    return render_template("admin_worker_panel.html", worker=worker)
+    panel_stats = get_worker_panel_stats(worker)
+    return render_template(
+        "admin_worker_panel.html",
+        worker=worker,
+        stats=panel_stats["stats"],
+        chart_14d=panel_stats["chart_14d"],
+        chart_14d_max=panel_stats["chart_14d_max"],
+    )
 
 
 @admin_bp.route("/api/check_obra_status_impact", methods=["POST"])
@@ -232,8 +243,17 @@ def company_panel(company_id):
     (Los datos del calendario ahora se cargan dinámicamente vía API).
     """
     company = Company.query.get_or_404(company_id)
-    
-    return render_template("admin_company_panel.html", company=company)
+    panel_stats = get_company_panel_stats(company)
+
+    return render_template(
+        "admin_company_panel.html",
+        company=company,
+        stats=panel_stats["stats"],
+        chart_14d=panel_stats["chart_14d"],
+        chart_14d_max=panel_stats["chart_14d_max"],
+        avg_rating=panel_stats["avg_rating"],
+        ratings_count=panel_stats["ratings_count"],
+    )
 
    
     
@@ -295,21 +315,40 @@ def solicitud_detail(solicitud_id):
                 query = query.filter(User.company_id == solicitud.perfil_empresa_id)
             
         profile_candidates = query.order_by(User.name).all()
+        candidate_ids = {u.id for u in profile_candidates}
 
         # Calcular duración total de la solicitud (en días)
         total_days_req = (fecha_fin - fecha_inicio).days + 1
 
-        # Buscar TODAS las asignaciones en este rango para los candidatos
-        # (Incluimos la propia obra para que salgan como ocupados si ya están asignados aquí)
+        # Asignaciones en el periodo (cualquier obra) — incluye gente visible en calendario
         all_assignments = Asignacion.query.filter(
             Asignacion.fecha >= fecha_inicio,
             Asignacion.fecha <= fecha_fin,
-            Asignacion.user_id.in_([u.id for u in profile_candidates])
         ).all()
+
+        # Operarios con asignación en el rango que el filtro de empresa excluyó
+        extra_user_ids = {a.user_id for a in all_assignments} - candidate_ids
+        if extra_user_ids:
+            extras = User.query.filter(
+                User.id.in_(extra_user_ids),
+                User.role == ROLE_OPERARIO,
+                User.active.is_(True),
+                User.is_deleted.is_(False),
+            ).order_by(User.name).all()
+            profile_candidates.extend(extras)
+            profile_candidates.sort(key=lambda u: (u.name or '', u.lastname or ''))
+            candidate_ids.update(u.id for u in extras)
+
+        if solicitud.empleado_id and solicitud.empleado and solicitud.empleado.id not in candidate_ids:
+            profile_candidates.append(solicitud.empleado)
+            profile_candidates.sort(key=lambda u: (u.name or '', u.lastname or ''))
+            candidate_ids.add(solicitud.empleado.id)
         
         # Agrupar asignaciones por usuario para contar días ocupados
-        busy_counts = {} # {user_id: set(fechas_ocupadas)}
+        busy_counts = {}
         for a in all_assignments:
+            if a.user_id not in candidate_ids:
+                continue
             if a.user_id not in busy_counts:
                 busy_counts[a.user_id] = set()
             busy_counts[a.user_id].add(a.fecha)
@@ -387,7 +426,7 @@ def api_update_obra_staff():
 
 @admin_bp.route("/schedule_status/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def schedule_status(user_id):
     data = request.get_json()
     action = data.get("action")  # "activate" o "deactivate"
@@ -485,12 +524,18 @@ def obra_panel(obra_id):
         return redirect(url_for("jefe.panel"))
 
     jefes = User.query.filter(User.role.in_([ROLE_JEFE, ROLE_ADMIN])).all()
-    
+    panel_stats = get_obra_panel_stats(obra)
+
     return render_template(
         "admin_obra_panel.html",
         obra=obra,
         jefes=jefes,
-        today=date.today()
+        today=date.today(),
+        stats=panel_stats["stats"],
+        chart_14d=panel_stats["chart_14d"],
+        chart_14d_max=panel_stats["chart_14d_max"],
+        operarios_hoy=panel_stats["operarios_hoy"],
+        ocupacion_pct=panel_stats["ocupacion_pct"],
     )
     
 @admin_bp.route("/companies", methods=["GET"])
@@ -645,6 +690,72 @@ def rate_worker():
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
 
+
+def _can_manage_rating(rating):
+    from app.models import ROLE_ADMIN
+    return current_user.role == ROLE_ADMIN or rating.created_by_id == current_user.id
+
+
+@admin_bp.route("/api/rating/<int:rating_id>", methods=["PUT"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
+def update_rating(rating_id):
+    rating = Rating.query.get_or_404(rating_id)
+    if not _can_manage_rating(rating):
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    if not rating.is_active:
+        return jsonify({'success': False, 'message': 'Esta valoración ya está archivada'}), 400
+
+    data = request.get_json() or {}
+    score = data.get('score')
+    reason = data.get('reason')
+    if score is None:
+        return jsonify({'success': False, 'message': 'Falta la puntuación'}), 400
+
+    try:
+        rating.score = int(score)
+        rating.reason = reason
+        db.session.commit()
+        from app.utils import register_log
+        register_log(
+            user_id=current_user.id,
+            category='valoraciones',
+            action='Editar Valoración',
+            detail=f"Editada valoración #{rating.id} → {rating.score}. Motivo: {reason or '—'}",
+            target_user_id=rating.user_id,
+        )
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@admin_bp.route("/api/rating/<int:rating_id>", methods=["DELETE"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
+def delete_rating(rating_id):
+    rating = Rating.query.get_or_404(rating_id)
+    if not _can_manage_rating(rating):
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    if not rating.is_active:
+        return jsonify({'success': False, 'message': 'Ya estaba eliminada'}), 400
+
+    try:
+        rating.is_active = False
+        db.session.commit()
+        from app.utils import register_log
+        register_log(
+            user_id=current_user.id,
+            category='valoraciones',
+            action='Eliminar Valoración',
+            detail=f"Eliminada valoración #{rating.id} ({rating.score} pts).",
+            target_user_id=rating.user_id,
+        )
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @admin_bp.route("/worker/<int:user_id>/reset_ratings", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN) # Solo Admin puede resetear
@@ -669,7 +780,7 @@ def reset_worker_ratings(user_id):
 
 @admin_bp.route("/worker/<int:user_id>/ratings_history")
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def worker_ratings_history(user_id):
     worker = User.query.get_or_404(user_id)
     # Mostramos TODOS (activos e inactivos) ordenados por fecha
@@ -756,7 +867,7 @@ def obras_detailed():
 
 @admin_bp.route("/personal", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def personal():
     # 1. Usuarios INTERNOS (No operarios, O operarios de empresa interna)
     internos = User.query.join(Company, User.company_id == Company.id, isouter=True).filter(
@@ -799,7 +910,7 @@ def personal():
 
 @admin_bp.route("/deactivate_operario/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def deactivate_operario(user_id):
     user = User.query.get(user_id)
     if user and user.role == ROLE_OPERARIO:
@@ -813,7 +924,7 @@ def deactivate_operario(user_id):
 
 @admin_bp.route("/edit_operario/<int:user_id>", methods=["GET", "POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def edit_operario(user_id):
     user = User.query.get_or_404(user_id)
     companies = Company.query.all()
@@ -903,61 +1014,8 @@ def edit_operario(user_id):
 @login_required
 @roles_required(ROLE_ADMIN)
 def panel():
-    # --- Estadísticas Generales ---
-    total_operarios = User.query.filter_by(role=ROLE_OPERARIO, is_deleted=False).count()
-    total_obras = Obra.query.filter(Obra.is_deleted != True).count()
-    
-    total_jefes = User.query.filter(
-        User.role == ROLE_JEFE, 
-        User.is_deleted == False
-    ).count()
-    
-    total_rrhh = User.query.filter_by(role=ROLE_RRHH, is_deleted=False).count()
-
-    recent_obras = (
-        Obra.query.filter(Obra.is_deleted != True)
-        .order_by(Obra.id.desc())
-        .limit(5)
-        .all()
-    )
-
-    # --- CORRECCIÓN CRÍTICA: Usar relación SQL en lugar de company_code ---
-    
-    # 1. Internos: Operarios asociados a una empresa con flag is_internal=True
-    total_internos = (
-        User.query
-        .join(Company) # Hacemos Join con la tabla de empresas
-        .filter(
-            User.role == ROLE_OPERARIO,
-            User.is_deleted == False,
-            Company.is_internal == True # Filtramos por la propiedad de la empresa
-        ).count()
-    )
-
-    # 2. Externos: Operarios asociados a una empresa con flag is_internal=False
-    total_externos = (
-        User.query
-        .join(Company)
-        .filter(
-            User.role == ROLE_OPERARIO,
-            User.is_deleted == False,
-            Company.is_internal == False
-        ).count()
-    )
-
-    total_companies = Company.query.count()
-
-    return render_template(
-        "admin_panel.html",
-        total_operarios=total_operarios,
-        total_obras=total_obras,
-        total_jefes=total_jefes,
-        total_rrhh=total_rrhh,
-        total_internos=total_internos,
-        total_externos=total_externos,
-        total_companies=total_companies,
-        recent_obras=recent_obras,
-    )
+    from app.services.panel_service import get_admin_panel_context
+    return render_template("admin_panel.html", **get_admin_panel_context())
 
 @admin_bp.route("/create_obra", methods=["GET", "POST"])
 @login_required
@@ -1218,7 +1276,7 @@ def delete_company(company_id):
 
 @admin_bp.route("/reset_password/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def reset_password(user_id):
     new_password = request.form.get("new_password")
     user = User.query.get(user_id)
@@ -1233,7 +1291,7 @@ def reset_password(user_id):
 
 @admin_bp.route("/delete_user/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def delete_user(user_id):
     user = User.query.get(user_id)
     if user:
@@ -1250,7 +1308,7 @@ def delete_user(user_id):
 
 @admin_bp.route("/create_user", methods=["GET", "POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def create_user():
     if request.method == "POST":
         # ... (Mantén toda tu lógica POST igual) ...
@@ -1300,7 +1358,7 @@ def create_user():
 
 @admin_bp.route("/approve_operario/<int:user_id>", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def approve_operario(user_id):
     user = User.query.get_or_404(user_id)
     if user.role == ROLE_OPERARIO:
@@ -1345,7 +1403,7 @@ def delete_obra(obra_id):
 
 @admin_bp.route("/import_users", methods=["GET", "POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_RRHH)
+@roles_required(ROLE_ADMIN)
 def import_users():
     if request.method == "POST":
         file = request.files.get("file")
@@ -1907,8 +1965,79 @@ def batch_update_obras_status():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
-    
-    
+
+
+@admin_bp.route("/api/users/batch_delete", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def batch_delete_users():
+    data = request.get_json() or {}
+    user_ids = data.get("user_ids", [])
+    if not user_ids:
+        return jsonify({"success": False, "message": "No se seleccionaron usuarios."}), 400
+
+    deleted = 0
+    for uid in user_ids:
+        user = User.query.get(int(uid))
+        if user and not user.is_deleted:
+            user.soft_delete(actor_id=current_user.id)
+            deleted += 1
+    db.session.commit()
+    return jsonify({"success": True, "message": f"{deleted} usuario(s) eliminado(s)."})
+
+
+@admin_bp.route("/api/users/batch_deactivate", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def batch_deactivate_users():
+    data = request.get_json() or {}
+    user_ids = data.get("user_ids", [])
+    if not user_ids:
+        return jsonify({"success": False, "message": "No se seleccionaron usuarios."}), 400
+
+    updated = 0
+    for uid in user_ids:
+        user = User.query.get(int(uid))
+        if user and user.role == ROLE_OPERARIO and user.active:
+            user.active = False
+            updated += 1
+    db.session.commit()
+    return jsonify({"success": True, "message": f"{updated} operario(s) desactivado(s)."})
+
+
+@admin_bp.route("/api/companies/batch_delete", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def batch_delete_companies():
+    from app.models import Asignacion
+
+    data = request.get_json() or {}
+    company_ids = data.get("company_ids", [])
+    if not company_ids:
+        return jsonify({"success": False, "message": "No se seleccionaron empresas."}), 400
+
+    deleted = 0
+    for cid in company_ids:
+        company = Company.query.get(int(cid))
+        if not company:
+            continue
+
+        associated_workers = User.query.filter_by(
+            role=ROLE_OPERARIO, company_id=company.id
+        ).all()
+        for worker in associated_workers:
+            worker.soft_delete(actor_id=current_user.id)
+            worker.company_id = None
+
+        Asignacion.query.filter_by(company_id=company.id).update({"company_id": None})
+        User.query.filter_by(company_id=company.id).update({"company_id": None})
+        db.session.delete(company)
+        deleted += 1
+
+    db.session.commit()
+    return jsonify({"success": True, "message": f"{deleted} empresa(s) eliminada(s)."})
+
+
 @admin_bp.route("/sso/odoo_contactos")
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
@@ -1956,6 +2085,7 @@ def sso_odoo_contactos():
 @roles_required(ROLE_ADMIN)
 def system_logs():
     from app.models import SystemLog, LogPreference
+    from app.services.log_notification_service import get_unread_logs_by_category
     from datetime import datetime
     
     category = request.args.get('category', 'accesos')
@@ -1978,6 +2108,7 @@ def system_logs():
         logs=logs,
         current_category=category,
         active_prefs=active_prefs,
+        log_unread_by_category=get_unread_logs_by_category(current_user.id, active_only=True),
         default_date=today_local().strftime('%Y-%m-%d'),
     )
 

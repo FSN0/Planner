@@ -22,11 +22,11 @@
       
       <div class="modal-body bg-light p-4">
         <div class="alert alert-info py-2 small mb-3 shadow-sm border-0" style="border-left: 4px solid #3b82f6;">
-            Vas a asignar a este trabajador a la obra: <strong id="modalObraDisplay" class="text-dark"></strong>.
-            <br>Haz clic en los días vacíos para añadirlo o estira los bloques existentes.
+            Asignación para el día seleccionado en el tablero. Revisa el bloque «NUEVA ASIGNACIÓN», ajusta fechas si hace falta y confirma con <i class="fas fa-check"></i>.
+            <br><strong id="modalWorkerSummary" class="text-dark"></strong> → <strong id="modalObraSummary" class="text-dark"></strong>
         </div>
 
-        <div id="modal-calendar-container" style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: 480px;"></div>
+        <div id="modal-calendar-container" class="univ-calendar-root" style="min-height: 480px;"></div>
         
         <input type="hidden" id="modalWorkerId">
         <input type="hidden" id="modalTargetObraId">

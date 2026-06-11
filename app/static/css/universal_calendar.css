@@ -1,0 +1,329 @@
+/* ==========================================================================
+   Calendario universal (FullCalendar) + panel de asignación
+   Select2 dropdown (también en modales globales de base.html)
+   ========================================================================== */
+
+.select2-dropdown.admin-select2-dropdown {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14) !important;
+  font-size: 0.8rem;
+  overflow: hidden;
+  padding: 0.25rem;
+  z-index: 10600 !important;
+}
+.select2-dropdown.admin-select2-dropdown .select2-search__field {
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+}
+.select2-dropdown.admin-select2-dropdown .select2-results__option {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  margin: 1px 0;
+}
+.select2-dropdown.admin-select2-dropdown .select2-results__option--highlighted[aria-selected] {
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+}
+.select2-dropdown.admin-select2-dropdown .select2-results__option[aria-selected=true] {
+  background: #dcfce7 !important;
+  color: #14532d !important;
+}
+.select2-dropdown.univ-calendar-select2-dropdown {
+  min-width: 320px !important;
+  width: max-content !important;
+  max-width: min(480px, 92vw) !important;
+}
+.select2-dropdown.univ-calendar-select2-dropdown .select2-results__option {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  padding: 0.45rem 0.75rem;
+}
+
+.univ-calendar-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border-strong, #e2e8f0);
+  border-left: 4px solid #22c55e;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.univ-calendar-title-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text, #1e293b);
+}
+.univ-calendar-title-heading i {
+  color: #16a34a;
+  font-size: 1.05rem;
+}
+.univ-calendar-entity-link,
+.univ-calendar-entity-name {
+  margin-left: 0.35rem;
+  font-weight: 700;
+  color: #15803d !important;
+}
+.univ-calendar-entity-link {
+  text-decoration: none;
+  border-bottom: 1px dashed #86efac;
+  transition: color 0.15s, border-color 0.15s;
+}
+.univ-calendar-entity-link:hover {
+  color: #166534 !important;
+  border-bottom-color: #22c55e;
+  text-decoration: none;
+}
+.univ-calendar-icon {
+  color: #16a34a !important;
+}
+.univ-calendar-title .btn-outline-primary {
+  color: #16a34a !important;
+  border-color: #bbf7d0 !important;
+  background: #fff !important;
+}
+.univ-calendar-title .btn-outline-primary:hover {
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+  border-color: #86efac !important;
+}
+.univ-calendar-title .btn-group .btn {
+  border-radius: 999px !important;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+}
+.univ-calendar-title .btn-outline-primary.active,
+.univ-calendar-title .btn-outline-primary:active {
+  background: #22c55e !important;
+  border-color: #16a34a !important;
+  color: #fff !important;
+}
+
+.univ-calendar-panel {
+  margin-top: 0.75rem;
+  border: 1px solid var(--color-border-strong, #e2e8f0);
+  border-left: 4px solid #22c55e;
+  border-radius: 12px;
+  background: var(--color-surface, #fff);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.univ-calendar-panel-head h6 .univ-calendar-icon,
+.univ-calendar-panel-head h6 i {
+  color: #16a34a !important;
+}
+.univ-calendar-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.75rem;
+  background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+  border-bottom: 1px solid #f1f5f9;
+}
+.univ-calendar-panel-head h6 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #334155;
+}
+.univ-calendar-panel-body {
+  padding: 0.75rem;
+}
+.univ-calendar-panel label.small {
+  font-size: 0.62rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8 !important;
+}
+.univ-calendar-panel .form-control,
+.univ-calendar-panel .form-control-sm {
+  border-radius: 10px !important;
+  border-color: #e2e8f0 !important;
+  font-size: 0.78rem !important;
+  min-height: 2rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.univ-calendar-panel .form-control:focus {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12) !important;
+}
+.univ-calendar-panel input[type="date"].form-control {
+  padding: 0.28rem 0.5rem;
+  color: #334155;
+  font-weight: 600;
+}
+.univ-calendar-panel .btn-primary {
+  border-radius: 10px;
+  background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+  border: none !important;
+  min-height: 2rem;
+  box-shadow: none !important;
+}
+.univ-calendar-panel .btn-primary:hover,
+.univ-calendar-panel .btn-primary:focus {
+  background: linear-gradient(135deg, #16a34a, #15803d) !important;
+  border: none !important;
+}
+.univ-calendar-panel .btn-outline-secondary {
+  border-radius: 10px;
+  font-size: 0.72rem;
+  border-color: #e2e8f0;
+  color: #475569;
+}
+.univ-calendar-panel .btn-outline-secondary:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+.univ-calendar-panel .btn-danger {
+  border-radius: 10px;
+  font-size: 0.72rem;
+}
+.univ-calendar-panel .custom-control-label {
+  font-size: 0.72rem;
+}
+
+/* FullCalendar — aspecto admin */
+.layout-admin .fc,
+.univ-calendar-root .fc {
+  --fc-border-color: #e2e8f0;
+  --fc-button-bg-color: #22c55e;
+  --fc-button-border-color: #16a34a;
+  --fc-button-hover-bg-color: #16a34a;
+  --fc-button-hover-border-color: #15803d;
+  --fc-button-active-bg-color: #15803d;
+  --fc-today-bg-color: rgba(34, 197, 94, 0.08);
+  --fc-event-border-color: transparent;
+  font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
+  font-size: 0.78rem;
+}
+.layout-admin .fc .fc-toolbar-title,
+.univ-calendar-root .fc .fc-toolbar-title {
+  font-size: 0.95rem !important;
+  font-weight: 700;
+  color: #1e293b;
+}
+.layout-admin .fc .fc-button,
+.univ-calendar-root .fc .fc-button {
+  border-radius: 8px !important;
+  font-size: 0.72rem !important;
+  font-weight: 600;
+  padding: 0.25rem 0.55rem !important;
+  box-shadow: none !important;
+}
+.layout-admin .fc .fc-col-header-cell,
+.univ-calendar-root .fc .fc-col-header-cell {
+  background: #f8fafc;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+  padding: 0.35rem 0;
+}
+.layout-admin .fc .fc-daygrid-day-number,
+.univ-calendar-root .fc .fc-daygrid-day-number {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+  padding: 0.25rem 0.4rem;
+}
+.layout-admin .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number,
+.univ-calendar-root .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  background: #22c55e;
+  color: #fff;
+  border-radius: 8px;
+}
+.layout-admin .fc .fc-daygrid-event,
+.univ-calendar-root .fc .fc-daygrid-event {
+  border-radius: 6px !important;
+  margin: 1px 2px !important;
+  font-size: 0.68rem;
+}
+.layout-admin .fc .fc-daygrid-day-frame,
+.univ-calendar-root .fc .fc-daygrid-day-frame {
+  min-height: 4.5rem;
+}
+.layout-admin .fc .fc-scrollgrid,
+.univ-calendar-root .fc .fc-scrollgrid {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* Modal calendario planificador */
+.person-day-timeline-modal .modal-content,
+#quickCalendarModal .modal-content {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+#quickCalendarModal .modal-body {
+  background: #f8fafc;
+  padding: 1rem !important;
+}
+#modal-calendar-container,
+#libres-calendar-container,
+.univ-calendar-root {
+  background: #fff;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.univ-calendar-compact .fc .fc-daygrid-day-frame {
+  min-height: 3.25rem;
+}
+.univ-calendar-compact .fc .fc-toolbar-title {
+  font-size: 0.82rem !important;
+}
+.univ-calendar-title a.text-primary {
+  color: #15803d !important;
+  border-bottom: 1px dashed #86efac;
+  text-decoration: none;
+}
+.univ-calendar-title a.text-primary:hover {
+  color: #166534 !important;
+}
+
+/* Modales con calendario embebido: ocultar cabecera duplicada */
+.univ-calendar-embedded .modal-header {
+  display: none !important;
+}
+.univ-calendar-embedded .modal-body {
+  padding-top: 1rem !important;
+  position: relative;
+}
+.univ-calendar-embedded .modal-body .univ-calendar-title {
+  margin-top: 0;
+}
+.univ-calendar-embedded .modal-content {
+  border-radius: 14px;
+  overflow: hidden;
+}
+.univ-calendar-embedded .modal-body .close.univ-calendar-modal-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  z-index: 5;
+  opacity: 0.55;
+  font-size: 1.35rem;
+  text-shadow: none;
+  color: #64748b !important;
+}
+.univ-calendar-embedded .modal-body .close.univ-calendar-modal-close:hover {
+  opacity: 1;
+}

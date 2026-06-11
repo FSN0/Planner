@@ -1,125 +1,54 @@
-<div class="timeline-header-wrapper bg-white border-bottom">
-    
-    {# 1. BARRA DE TÍTULO Y NAVEGACIÓN DE MES #}
-    <div class="d-flex justify-content-between align-items-center px-4 py-2 border-bottom bg-light">
-        
-        {# Izquierda: Selector de Mes #}
-        <div class="d-flex align-items-center">
-            <a href="{{ prev_month_url }}" class="btn btn-sm btn-link text-muted" title="Mes anterior">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-            
-            <h5 class="mb-0 font-weight-bold text-dark mx-3 text-uppercase" style="min-width: 150px; text-align: center;">
-                {{ calendar_info.month_name if calendar_info else month_name }} {{ year }}
-            </h5>
-            
-            <a href="{{ next_month_url }}" class="btn btn-sm btn-link text-muted" title="Mes siguiente">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </div>
+<div class="timeline-header-wrapper">
 
-        {# Centro/Derecha: Hoy y Selector Rápido #}
-        <div class="d-flex align-items-center">
-            <a href="{{ url_for(request.endpoint, selected_date=today_local.strftime('%Y-%m-%d')) }}" 
-               class="btn btn-xs btn-outline-primary mr-2">
-                Hoy
-            </a>
-            
-            <form action="{{ url_for(request.endpoint) }}" method="GET" class="form-inline">
-                <div class="input-group input-group-sm">
-                    <div class="input-group-prepend">
-                        <span class="input-group-text bg-white border-right-0"><i class="far fa-calendar-alt"></i></span>
-                    </div>
-                    <input type="date" name="selected_date" class="form-control border-left-0" 
-                           value="{{ selected_date.strftime('%Y-%m-%d') }}" 
-                           onchange="this.form.submit()" 
-                           style="max-width: 130px;">
-                </div>
-            </form>
-        </div>
+  <div class="timeline-header-top">
+    <div class="timeline-header-nav">
+      <a href="{{ prev_month_url }}" class="timeline-nav-btn" title="Mes anterior">
+        <i class="fas fa-chevron-left"></i>
+      </a>
+      <h2 class="timeline-month-title">
+        {{ calendar_info.month_name if calendar_info else month_name }} {{ year }}
+      </h2>
+      <a href="{{ next_month_url }}" class="timeline-nav-btn" title="Mes siguiente">
+        <i class="fas fa-chevron-right"></i>
+      </a>
     </div>
 
-    {# 2. BARRA DE DÍAS (SCROLL HORIZONTAL) #}
-    <div class="timeline-days-container">
-        {% for day_info in header_days %}
-            <a href="{{ url_for(request.endpoint, selected_date=day_info.date_str, **request.view_args) }}" 
-               class="day-capsule {% if day_info.is_selected %}active{% endif %}"
-               title="{{ day_info.date_human }}">
-                
-                <span class="day-name">{{ day_info.weekday }}</span>
-                <span class="day-number">{{ day_info.day_num }}</span>
-                
-                <div class="day-indicators">
-                    {% if day_info.free_count > 0 %}
-                        <div class="indicator-dot dot-free" title="{{ day_info.free_count }} Libres"></div>
-                    {% endif %}
-                    {% if day_info.ins > 0 %}
-                        <div class="indicator-dot dot-in" title="{{ day_info.ins }} Entradas"></div>
-                    {% endif %}
-                    {% if day_info.outs > 0 %}
-                        <div class="indicator-dot dot-out" title="{{ day_info.outs }} Salidas"></div>
-                    {% endif %}
-                </div>
-            </a>
-        {% endfor %}
+    <div class="timeline-header-date">
+      <a href="{{ url_for(request.endpoint, selected_date=today_local.strftime('%Y-%m-%d')) }}"
+         class="btn-admin btn-admin-primary timeline-today-btn{% if selected_date == today_local %} is-current{% endif %}">
+        <i class="fas fa-calendar-day"></i> Hoy
+      </a>
+      <form action="{{ url_for(request.endpoint) }}" method="GET" class="timeline-date-form">
+        <label class="timeline-date-label" for="timeline-selected-date">
+          <i class="far fa-calendar-alt"></i>
+        </label>
+        <input type="date" id="timeline-selected-date" name="selected_date"
+               class="timeline-date-input{% if selected_date == today_local %} is-today-selected{% endif %}"
+               value="{{ selected_date.strftime('%Y-%m-%d') }}"
+               onchange="this.form.submit()">
+      </form>
     </div>
+  </div>
+
+  <div class="timeline-days-container">
+    {% for day_info in header_days %}
+    <a href="{{ url_for(request.endpoint, selected_date=day_info.date_str, **request.view_args) }}"
+       class="day-capsule{% if day_info.is_selected %} is-selected{% endif %}{% if day_info.is_today %} is-today{% endif %}"
+       title="{{ day_info.date_human }}">
+      <span class="day-name">{{ day_info.weekday }}</span>
+      <span class="day-number">{{ day_info.day_num }}</span>
+      <div class="day-indicators">
+        {% if day_info.free_count > 0 %}
+        <div class="indicator-dot dot-free" title="{{ day_info.free_count }} libres"></div>
+        {% endif %}
+        {% if day_info.ins > 0 %}
+        <div class="indicator-dot dot-in" title="{{ day_info.ins }} entradas"></div>
+        {% endif %}
+        {% if day_info.outs > 0 %}
+        <div class="indicator-dot dot-out" title="{{ day_info.outs }} salidas"></div>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
 </div>
-
-<style>
-    /* Ajustes específicos para este header mejorado */
-    .timeline-header-wrapper {
-        position: sticky;
-        top: 0;
-        z-index: 20; /* Por encima de las columnas del kanban */
-    }
-    
-    .timeline-days-container {
-        display: flex;
-        align-items: center;
-        padding: 10px 20px;
-        overflow-x: auto;
-        white-space: nowrap;
-        gap: 8px;
-        background-color: #ffffff;
-        scrollbar-width: thin;
-    }
-    
-    /* Cápsula de día (Reutilizando tus estilos base pero asegurando display) */
-    .day-capsule {
-        display: inline-flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        width: 50px;
-        height: 60px;
-        border-radius: 8px;
-        border: 1px solid #e2e8f0;
-        background-color: #fff;
-        color: #64748b;
-        text-decoration: none !important;
-        transition: all 0.2s;
-        flex-shrink: 0; /* Evita que se aplasten */
-    }
-    
-    .day-capsule:hover {
-        background-color: #f8fafc;
-        border-color: #cbd5e1;
-        transform: translateY(-1px);
-    }
-    
-    .day-capsule.active {
-        background-color: #eff6ff;
-        border-color: #3b82f6;
-        color: #1d4ed8;
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.15);
-    }
-    
-    .day-name { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; }
-    .day-number { font-size: 1.1rem; font-weight: 800; line-height: 1.1; }
-    
-    .day-indicators { display: flex; gap: 2px; margin-top: 4px; height: 4px; }
-    .indicator-dot { width: 4px; height: 4px; border-radius: 50%; }
-    .dot-free { background-color: #22c55e; }
-    .dot-in { background-color: #3b82f6; }
-    .dot-out { background-color: #ef4444; }
-</style>

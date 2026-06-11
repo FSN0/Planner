@@ -4,140 +4,96 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    /* Estilos exclusivos para el Switch (Interruptor) */
-    .switch {
-        position: relative;
-        display: inline-block;
-        width: 50px;
-        height: 26px;
-    }
-    .switch input { 
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-    .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background-color: #ccc;
-        transition: .4s;
-        border-radius: 34px;
-    }
-    .slider:before {
-        position: absolute;
-        content: "";
-        height: 18px;
-        width: 18px;
-        left: 4px;
-        bottom: 4px;
-        background-color: white;
-        transition: .4s;
-        border-radius: 50%;
-    }
-    input:checked + .slider {
-        background-color: #22c55e; /* Verde */
-    }
-    input:focus + .slider {
-        box-shadow: 0 0 1px #22c55e;
-    }
-    input:checked + .slider:before {
-        transform: translateX(24px);
-    }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    <div class="row justify-content-center">
-      <div class="col-lg-8 col-xl-6">
-        
-        <div class="d-flex align-items-center mb-4">
-            <a href="{{ url_for('admin.companies') }}" class="btn btn-sm btn-link text-muted pl-0">
-                <i class="fas fa-arrow-left"></i> Volver al listado
-            </a>
-        </div>
+  <main class="admin-main admin-main--compact admin-form-page">
 
-        <div class="admin-panel">
-            <div class="admin-panel-header border-bottom pb-3 mb-4">
-                <h2 class="admin-panel-title">Editar Empresa</h2>
-                <p class="admin-panel-subtitle mb-0">{{ company.nombre }}</p>
-            </div>
-
-            <form method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="form-row">
-                    <div class="form-group col-md-4">
-                        <label class="small font-weight-bold text-dark">Código Interno</label>
-                        <input type="text" name="code" class="form-control" value="{{ company.code }}" required>
-                        <small class="form-text text-muted">Identificador único (ej: ELEC_PEPE).</small>
-                    </div>
-                    <div class="form-group col-md-8">
-                        <label class="small font-weight-bold text-dark">Nombre Fiscal / Comercial</label>
-                        <input type="text" name="nombre" class="form-control" value="{{ company.nombre }}" required>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="small font-weight-bold text-dark">NIF / CIF</label>
-                    <input type="text" name="nif" class="form-control" value="{{ company.nif }}">
-                </div>
-
-                <div class="form-group">
-                    <label class="small font-weight-bold text-dark">Descripción</label>
-                    <textarea name="descripcion" class="form-control" rows="3">{{ company.descripcion }}</textarea>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Gremio / Especialidad</label>
-                        <input type="text" name="gremio" class="form-control" value="{{ company.gremio }}">
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Email de Contacto</label>
-                        <input type="email" name="email" class="form-control" value="{{ company.email }}">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="small font-weight-bold text-dark">Color Identificativo</label>
-                    <div class="d-flex align-items-center">
-                        <input type="color" name="color" class="form-control form-control-color mr-3" value="{{ company.color }}" title="Elige un color">
-                        <span class="text-muted small">Usado en el calendario y tablero para identificar a sus empleados.</span>
-                    </div>
-                </div>
-
-                {# --- INTERRUPTOR EMPRESA INTERNA --- #}
-                <div class="form-group bg-light p-3 rounded border mt-3">
-                    <div class="d-flex align-items-center">
-                        <label class="switch mr-3">
-                            <input type="checkbox" name="is_internal" {% if company.is_internal %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </label>
-                        <div>
-                            <label class="font-weight-bold text-dark mb-0" style="cursor: pointer;" onclick="this.parentElement.previousElementSibling.querySelector('input').click()">
-                                Marca como Empresa Interna (Propia)
-                            </label>
-                            <div class="text-muted small mt-1">
-                                Si activas esto, la empresa y sus trabajadores se considerarán "de la casa".
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-4 d-flex justify-content-end">
-                    <a href="{{ url_for('admin.companies') }}" class="btn btn-link text-muted mr-2">Cancelar</a>
-                    <button type="submit" class="btn btn-primary px-4">Guardar Cambios</button>
-                </div>
-            </form>
-        </div>
-
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <a href="{{ url_for('admin.companies') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
+          <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="page-toolbar-title">Editar subcontrata</h1>
       </div>
     </div>
+
+    <section class="admin-panel admin-form-panel">
+      <div class="admin-panel-header">
+        <h2 class="admin-panel-title">{{ company.nombre }}</h2>
+        <span class="admin-panel-subtitle">{{ company.code }}</span>
+      </div>
+
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">Código interno</label>
+            <input type="text" name="code" class="form-control" value="{{ company.code }}" required>
+            <small class="form-text text-muted" style="font-size: 0.72rem;">Identificador único</small>
+          </div>
+          <div class="form-group col-md-8">
+            <label class="admin-form-label">Nombre fiscal / comercial</label>
+            <input type="text" name="nombre" class="form-control" value="{{ company.nombre }}" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="admin-form-label">NIF / CIF</label>
+          <input type="text" name="nif" class="form-control" value="{{ company.nif }}">
+        </div>
+
+        <div class="form-group">
+          <label class="admin-form-label">Descripción</label>
+          <textarea name="descripcion" class="form-control" rows="2">{{ company.descripcion }}</textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Gremio / especialidad</label>
+            <input type="text" name="gremio" class="form-control" value="{{ company.gremio }}">
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Email de contacto</label>
+            <input type="email" name="email" class="form-control" value="{{ company.email }}">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="admin-form-label">Color identificativo</label>
+          <div class="d-flex align-items-center">
+            <input type="color" name="color" class="form-control form-control-color mr-2" style="height: 32px; width: 48px; padding: 2px;" value="{{ company.color }}">
+            <span class="text-muted" style="font-size: 0.72rem;">Usado en calendario y tablero</span>
+          </div>
+        </div>
+
+        <div class="admin-form-options">
+          <div class="admin-form-switch-row">
+            <label class="admin-form-switch">
+              <input type="checkbox" name="is_internal" id="isInternalCheck" {% if company.is_internal %}checked{% endif %}>
+              <span class="slider"></span>
+            </label>
+            <div>
+              <label for="isInternalCheck" class="admin-form-switch-label" style="cursor: pointer;">Empresa interna (propia)</label>
+              <p class="admin-form-switch-hint">La empresa y sus trabajadores se consideran «de la casa»</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="admin-form-actions">
+          <div></div>
+          <div class="admin-form-actions-right">
+            <a href="{{ url_for('admin.companies') }}" class="btn-admin-link">Cancelar</a>
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-save"></i> Guardar
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
   </main>
 </div>
 {% endblock %}

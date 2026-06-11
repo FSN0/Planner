@@ -1,260 +1,168 @@
 {% extends "base.html" %}
 {% block title %}Cuaderno de Bitácora{% endblock %}
-{% block body_class %}layout-admin bg-light{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css">
-
-<style>
-    .table-pro { font-size: 0.85rem; color: #374151; }
-    .table-pro th { background-color: #f9fafb; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.75rem 1rem; border-bottom: 2px solid #e5e7eb; }
-    .table-pro td { vertical-align: middle; padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; }
-    .badge-soft { background-color: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; font-weight: 600; padding: 0.35em 0.65em; }
-    .nota-preview { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #6b7280; font-size: 0.8rem; }
-    
-    .dataTables_wrapper .dataTables_filter input { border: 1px solid #d1d5db; border-radius: 6px; padding: 0.25rem 0.5rem; }
-    
-    .lectura-contenido { white-space: pre-wrap; font-size: 1.05rem; line-height: 1.7; color: #1f2937; resize: vertical; min-height: 350px; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); transition: min-height 0.3s ease; }
-    .lectura-contenido:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
-    
-    .titulo-editable { background: transparent; border: 1px dashed rgba(255,255,255,0.3); color: white; font-weight: bold; padding: 8px 15px; border-radius: 6px; transition: all 0.2s; }
-    .titulo-editable:focus { background: rgba(0,0,0,0.2); border-color: white; outline: none; }
-    .titulo-editable::placeholder { color: rgba(255,255,255,0.6); }
-
-    #notaMetadataSection { transition: all 0.3s ease; overflow: hidden; }
-
-    /* ========================================================
-       SANEAMIENTO VISUAL DE SELECT2 MÚLTIPLE (FLEXBOX FIX)
-       ======================================================== */
-    .select2-container--bootstrap4 .select2-selection--multiple {
-        height: auto !important; 
-        min-height: 42px !important;
-        border: 1px solid #d1d5db !important;
-        border-radius: 6px !important;
-        background-color: #ffffff;
-    }
-    .select2-container--bootstrap4 .select2-selection--multiple:focus-within {
-        border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25) !important;
-    }
-    .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__rendered {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        gap: 6px !important; 
-        padding: 6px !important;
-        margin: 0 !important;
-        list-style: none;
-    }
-    .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice {
-        background-color: #f3f4f6 !important;
-        border: 1px solid #e5e7eb !important;
-        color: #374151 !important;
-        border-radius: 6px !important;
-        padding: 4px 8px !important;
-        margin: 0 !important; 
-        font-weight: 600;
-        font-size: 0.85rem;
-        display: flex !important;
-        align-items: center;
-    }
-    .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove {
-        color: #ef4444 !important;
-        margin-right: 6px !important;
-        font-weight: bold;
-        border: none !important;
-        float: none !important; 
-    }
-    .select2-container--bootstrap4 .select2-selection--multiple .select2-selection__choice__remove:hover {
-        color: #b91c1c !important;
-    }
-    .select2-container--bootstrap4 .select2-search--inline {
-        display: flex !important;
-        align-items: center;
-        margin: 0 !important;
-        flex-grow: 1; 
-    }
-    .select2-container--bootstrap4 .select2-search--inline .select2-search__field {
-        margin: 0 !important;
-        height: 28px !important;
-        color: #374151 !important;
-        font-family: inherit;
-    }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main p-4">
-    
-    <div class="d-flex justify-content-between align-items-end mb-4 border-bottom pb-3">
-        <div>
-            <h2 class="font-weight-bolder text-dark mb-1" style="font-size: 1.5rem; letter-spacing: -0.5px;">
-                <i class="fas fa-book text-primary mr-2"></i>Cuaderno de Bitácora
-            </h2>
-            <p class="text-muted small mb-0">Registro maestro de reuniones, notas operativas e incidencias.</p>
-        </div>
-        <button class="btn btn-primary font-weight-bold shadow-sm" onclick="$('#modalNuevaNota').modal('show')">
-            <i class="fas fa-plus mr-2"></i>Nueva Nota / Reunión
-        </button>
+  <main class="admin-main admin-main--compact bitacora-page">
+
+    <div class="bitacora-toolbar">
+      <div>
+        <h1 class="bitacora-toolbar-title">
+          <i class="fas fa-book"></i>Cuaderno de Bitácora
+        </h1>
+        <p class="bitacora-toolbar-sub">Registro de reuniones, notas operativas e incidencias.</p>
+      </div>
+      <button class="btn-admin btn-admin-primary" onclick="$('#modalNuevaNota').modal('show')">
+        <i class="fas fa-plus mr-1"></i> Nueva nota / reunión
+      </button>
     </div>
 
-    <div class="card border-0 shadow-sm" style="border-radius: 12px; overflow: hidden;">
-        <div class="card-body p-0">
-            <div class="table-responsive p-3">
-                <table id="notasTable" class="table table-pro table-hover w-100 mb-0">
-                    <thead>
-                        <tr>
-                            <th style="width: 10%;">Fecha</th>
-                            <th style="width: 25%;">Asunto / Resumen</th>
-                            <th style="width: 20%;">Obras</th>
-                            <th style="width: 20%;">Implicados</th>
-                            <th style="width: 10%; text-align: center;">Acceso</th>
-                            <th style="width: 15%; text-align: right;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for nota in notas %}
-                        <tr>
-                            <td data-sort="{{ nota.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark">
-                                {{ nota.fecha.strftime('%d/%m/%Y') }}
-                            </td>
-                            
-                            <td>
-                                <strong class="text-dark d-block">{{ nota.titulo }}</strong>
-                                <div class="nota-preview" title="{{ nota.contenido }}">{{ nota.contenido }}</div>
-                            </td>
-                            
-                            <td>
-                                {% for o in nota.obras %}
-                                    <span class="badge badge-soft mb-1"><i class="fas fa-hard-hat text-muted mr-1"></i>{{ o.nombre }}</span>
-                                {% else %}
-                                    <span class="text-muted small font-italic">-</span>
-                                {% endfor %}
-                            </td>
-                            
-                            <td>
-                                {% for u in nota.usuarios_implicados %}
-                                    <span class="badge badge-soft mb-1"><i class="fas fa-user text-muted mr-1"></i>{{ u.name }}</span>
-                                {% else %}
-                                    <span class="text-muted small font-italic">-</span>
-                                {% endfor %}
-                            </td>
-                            
-                            <td class="text-center">
-                                {% if nota.es_privada %}
-                                    <span class="badge badge-warning text-dark"><i class="fas fa-lock mr-1"></i>Privada</span>
-                                {% else %}
-                                    <span class="badge badge-info text-white"><i class="fas fa-globe mr-1"></i>Pública</span>
-                                {% endif %}
-                                <div class="text-muted" style="font-size: 0.7rem; margin-top: 2px;">{{ nota.autor.name }}</div>
-                            </td>
-                            
-                            <td class="text-right">
-                                <div class="btn-group shadow-sm">
-                                    <button class="btn btn-sm btn-info text-white font-weight-bold" onclick="verNotaModal({{ nota.id }})" title="Leer / Editar Nota">
-                                        <i class="fas fa-eye"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-light border font-weight-bold text-primary" onclick="verNotaModal({{ nota.id }})" title="Leer / Editar Nota">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-danger font-weight-bold text-white" onclick="eliminarNota({{ nota.id }})" title="Eliminar Nota">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+    <div class="bitacora-card">
+      <div class="table-responsive p-3">
+        <table id="notasTable" class="table bitacora-table table-hover w-100 mb-0">
+          <thead>
+            <tr>
+              <th style="width: 10%;">Fecha</th>
+              <th style="width: 25%;">Asunto / Resumen</th>
+              <th style="width: 20%;">Obras</th>
+              <th style="width: 20%;">Implicados</th>
+              <th style="width: 10%; text-align: center;">Acceso</th>
+              <th style="width: 15%; text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for nota in notas %}
+            <tr>
+              <td data-sort="{{ nota.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark">
+                {{ nota.fecha.strftime('%d/%m/%Y') }}
+              </td>
+              <td>
+                <strong class="text-dark d-block">{{ nota.titulo }}</strong>
+                <div class="nota-preview" title="{{ nota.contenido }}">{{ nota.contenido }}</div>
+              </td>
+              <td>
+                {% for o in nota.obras %}
+                  <span class="badge-soft"><i class="fas fa-hard-hat"></i>{{ o.nombre }}</span>
+                {% else %}
+                  <span class="text-muted small font-italic">—</span>
+                {% endfor %}
+              </td>
+              <td>
+                {% for u in nota.usuarios_implicados %}
+                  <span class="badge-soft"><i class="fas fa-user"></i>{{ u.name }}</span>
+                {% else %}
+                  <span class="text-muted small font-italic">—</span>
+                {% endfor %}
+              </td>
+              <td class="text-center">
+                {% if nota.es_privada %}
+                  <span class="badge-soft"><i class="fas fa-lock text-warning"></i> Privada</span>
+                {% else %}
+                  <span class="badge-soft"><i class="fas fa-globe text-info"></i> Pública</span>
+                {% endif %}
+                <div class="text-muted" style="font-size: 0.7rem; margin-top: 2px;">{{ nota.autor.name }}</div>
+              </td>
+              <td>
+                <div class="bitacora-actions">
+                  <button class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="Ver / editar">
+                    <i class="fas fa-edit text-success"></i>
+                  </button>
+                  <button class="btn btn-light border btn-icon" onclick="eliminarNota({{ nota.id }})" title="Eliminar">
+                    <i class="fas fa-trash-alt text-danger"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
 
   </main>
 </div>
 
-<div class="modal fade" id="modalVerNota" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
-        <div class="modal-content border-0 shadow-lg">
-            
-            <form id="formVerEditarNota" onsubmit="event.preventDefault(); guardarCambiosNotaGiga();">
-                <input type="hidden" id="verNotaId" name="nota_id">
-                
-                <div class="modal-header bg-dark text-white align-items-center">
-                    <i class="fas fa-book-open mr-3 text-info" style="font-size: 1.5rem;"></i>
-                    <input type="text" id="verNotaTitulo" name="titulo" class="form-control form-control-lg titulo-editable" placeholder="Escribe el título aquí..." required>
-                    <button type="button" class="close text-white ml-3" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                
-                <div class="modal-body bg-light p-4">
-                    <div id="notaMetadataSection">
-                        <div class="row mb-4 border-bottom pb-3">
-                            <div class="col-md-4">
-                                <label class="font-weight-bold text-secondary text-uppercase mb-2" style="font-size: 0.8rem; letter-spacing: 1px;"><i class="fas fa-calendar-alt mr-1"></i> Fecha</label>
-                                <input type="date" id="verNotaFecha" name="fecha" class="form-control font-weight-bold text-primary shadow-sm" required>
-                            </div>
-                            <div class="col-md-4 text-center">
-                                <label class="font-weight-bold text-secondary text-uppercase mb-2" style="font-size: 0.8rem; letter-spacing: 1px;"><i class="fas fa-shield-alt mr-1"></i> Privacidad</label>
-                                <div class="custom-control custom-switch mt-1">
-                                    <input type="checkbox" class="custom-control-input" id="verNotaPrivacidad" name="es_privada">
-                                    <label class="custom-control-label font-weight-bold" for="verNotaPrivacidad" id="verNotaPrivacidadLabel" style="cursor: pointer; font-size: 1rem;">Cargando...</label>
-                                </div>
-                            </div>
-                        </div>
+<div class="modal fade admin-note-modal" id="modalVerNota" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <form id="formVerEditarNota" onsubmit="event.preventDefault(); guardarCambiosNotaGiga();">
+        <input type="hidden" id="verNotaId" name="nota_id">
 
-                        <div class="row mb-4">
-                            <div class="col-md-6">
-                                <label class="font-weight-bold text-secondary text-uppercase mb-2" style="font-size: 0.8rem; letter-spacing: 1px;"><i class="fas fa-hard-hat mr-1"></i> Obras Implicadas</label>
-                                <select id="verNotaObras" name="obras_ids[]" class="select2-modal" multiple style="width: 100%;">
-                                    {% for obra in obras %}
-                                        <option value="{{ obra.id }}">{{ obra.nombre }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="font-weight-bold text-secondary text-uppercase mb-2" style="font-size: 0.8rem; letter-spacing: 1px;"><i class="fas fa-users mr-1"></i> Usuarios Implicados</label>
-                                <select id="verNotaUsuarios" name="users_ids[]" class="select2-modal" multiple style="width: 100%;">
-                                    {% for usuario in usuarios %}
-                                        <option value="{{ usuario.id }}">{{ usuario.name }} {{ usuario.lastname }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-center mb-2 mt-2">
-                        <h6 class="font-weight-bold text-secondary text-uppercase mb-0" style="font-size: 0.8rem; letter-spacing: 1px;">
-                            <i class="fas fa-align-left mr-1"></i> Contenido
-                        </h6>
-                        <button type="button" class="btn btn-sm btn-outline-secondary font-weight-bold bg-white" id="btnExpandirContenido" onclick="toggleExpandirContenido()">
-                            <i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar Contenido
-                        </button>
-                    </div>
-
-                    <div class="card border-0 shadow-sm">
-                        <textarea id="verNotaContenido" name="contenido" class="form-control p-4 lectura-contenido" placeholder="Escribe el cuerpo de la nota o acta de reunión aquí..." required></textarea>
-                    </div>
-                </div>
-                
-                <div class="modal-footer bg-white border-top p-3">
-                    <button type="button" class="btn btn-outline-danger font-weight-bold mr-auto" id="btnVerEliminar" onclick="">
-                        <i class="fas fa-trash-alt mr-1"></i>Eliminar Nota
-                    </button>
-                    <button type="button" class="btn btn-secondary font-weight-bold" data-dismiss="modal">Cerrar</button>
-                    <button type="submit" class="btn btn-success font-weight-bold shadow-sm">
-                        <i class="fas fa-save mr-1"></i>Guardar Cambios
-                    </button>
-                </div>
-            </form>
-
+        <div class="modal-header">
+          <i class="fas fa-book-open mr-2" style="color:#22c55e;font-size:1.2rem;"></i>
+          <input type="text" id="verNotaTitulo" name="titulo" class="note-title-input" placeholder="Título de la nota o reunión…" required>
+          <button type="button" class="close ml-2" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
         </div>
+
+        <div class="modal-body">
+          <div id="notaMetadataSection" class="note-meta-section">
+            <div class="row mb-3 pb-3 border-bottom">
+              <div class="col-md-4">
+                <label class="form-label-sm" for="verNotaFecha"><i class="fas fa-calendar-alt mr-1"></i> Fecha</label>
+                <input type="date" id="verNotaFecha" name="fecha" class="form-control" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label-sm"><i class="fas fa-shield-alt mr-1"></i> Privacidad</label>
+                <div class="custom-control custom-switch mt-1">
+                  <input type="checkbox" class="custom-control-input" id="verNotaPrivacidad" name="es_privada">
+                  <label class="custom-control-label privacy-switch-label" for="verNotaPrivacidad" id="verNotaPrivacidadLabel">Cargando…</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label class="form-label-sm" for="verNotaObras"><i class="fas fa-hard-hat mr-1"></i> Obras implicadas</label>
+                <select id="verNotaObras" name="obras_ids[]" class="select2-modal" multiple style="width: 100%;">
+                  {% for obra in obras %}
+                    <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label-sm" for="verNotaUsuarios"><i class="fas fa-users mr-1"></i> Usuarios implicados</label>
+                <select id="verNotaUsuarios" name="users_ids[]" class="select2-modal" multiple style="width: 100%;">
+                  {% for usuario in usuarios %}
+                    <option value="{{ usuario.id }}">{{ usuario.name }} {{ usuario.lastname }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="form-label-sm mb-0" for="verNotaContenido"><i class="fas fa-align-left mr-1"></i> Contenido</label>
+            <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="btnExpandirContenido" onclick="toggleExpandirContenido()">
+              <i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar contenido
+            </button>
+          </div>
+
+          <textarea id="verNotaContenido" name="contenido" class="note-content-area w-100" placeholder="Escribe el cuerpo de la nota o acta de reunión…" required></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-admin btn-admin-danger mr-auto" id="btnVerEliminar" onclick="">
+            <i class="fas fa-trash-alt mr-1"></i> Eliminar
+          </button>
+          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn-admin btn-admin-primary">
+            <i class="fas fa-save mr-1"></i> Guardar cambios
+          </button>
+        </div>
+      </form>
     </div>
+  </div>
 </div>
 
 {% endblock %}
@@ -275,25 +183,19 @@ $(document).ready(function() {
         "pageLength": 25,
         "lengthMenu": [[10, 25, 50, 100], [10, 25, 50, 100]],
         "columnDefs": [
-            { "orderable": false, "targets": 5 } 
+            { "orderable": false, "targets": 5 }
         ]
     });
 
-    // =========================================================
-    // INICIALIZACIÓN DE SELECT2 CON FIX PARA LA 'X'
-    // =========================================================
     $('.select2-modal').select2({
-        theme: 'bootstrap4', 
+        theme: 'bootstrap4',
         dropdownParent: $('#modalVerNota'),
-        placeholder: "Buscar y seleccionar...",
+        placeholder: "Buscar y seleccionar…",
         allowClear: true,
         width: '100%'
     }).on('select2:unselecting', function() {
-        // Cuando le damos a la 'X', guardamos este flag en el elemento
         $(this).data('unselecting', true);
     }).on('select2:opening', function(e) {
-        // Inmediatamente después el navegador intenta abrir el menú, 
-        // pero si vemos el flag de arriba, lo cancelamos y reseteamos el flag
         if ($(this).data('unselecting')) {
             $(this).removeData('unselecting');
             e.preventDefault();
@@ -303,48 +205,37 @@ $(document).ready(function() {
     document.getElementById('verNotaPrivacidad').addEventListener('change', function() {
         let label = document.getElementById('verNotaPrivacidadLabel');
         if(this.checked) {
-            label.innerHTML = '<span class="text-warning"><i class="fas fa-lock mr-1"></i>Privada (Solo tú)</span>';
+            label.innerHTML = '<span class="text-warning"><i class="fas fa-lock mr-1"></i>Privada (solo tú)</span>';
         } else {
-            label.innerHTML = '<span class="text-info"><i class="fas fa-globe mr-1"></i>Pública (Implicados)</span>';
+            label.innerHTML = '<span class="text-success"><i class="fas fa-globe mr-1"></i>Pública (implicados)</span>';
         }
     });
 });
 
-// ==============================================
-// FUNCIONALIDAD: MODO LECTURA AMPLIADA
-// ==============================================
 function toggleExpandirContenido() {
     const metadatos = document.getElementById('notaMetadataSection');
     const textarea = document.getElementById('verNotaContenido');
     const btn = document.getElementById('btnExpandirContenido');
 
     if (metadatos.style.display === 'none') {
-        $(metadatos).slideDown(250); 
-        textarea.style.minHeight = '350px';
-        btn.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar Contenido';
-        btn.classList.replace('btn-primary', 'btn-outline-secondary');
-        btn.classList.add('bg-white');
+        $(metadatos).slideDown(250);
+        textarea.classList.remove('is-expanded');
+        btn.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar contenido';
     } else {
         $(metadatos).slideUp(250);
-        textarea.style.minHeight = '65vh'; 
-        btn.innerHTML = '<i class="fas fa-compress-arrows-alt mr-1"></i> Mostrar Datos Obra';
-        btn.classList.replace('btn-outline-secondary', 'btn-primary');
-        btn.classList.remove('bg-white');
+        textarea.classList.add('is-expanded');
+        btn.innerHTML = '<i class="fas fa-compress-arrows-alt mr-1"></i> Mostrar metadatos';
     }
 }
 
-// ==============================================
-// ABRIR EL MODAL Y CARGAR DATOS
-// ==============================================
 function verNotaModal(notaId) {
     document.getElementById('notaMetadataSection').style.display = 'block';
-    document.getElementById('verNotaContenido').style.minHeight = '350px';
+    const textarea = document.getElementById('verNotaContenido');
+    textarea.classList.remove('is-expanded');
     let btnExp = document.getElementById('btnExpandirContenido');
-    btnExp.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar Contenido';
-    btnExp.classList.replace('btn-primary', 'btn-outline-secondary');
-    btnExp.classList.add('bg-white');
+    btnExp.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar contenido';
 
-    fetch(`/notas/${notaId}/datos`) 
+    fetch(`/notas/${notaId}/datos`)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -352,7 +243,7 @@ function verNotaModal(notaId) {
                 document.getElementById('verNotaTitulo').value = data.titulo;
                 document.getElementById('verNotaFecha').value = data.fecha;
                 document.getElementById('verNotaContenido').value = data.contenido;
-                
+
                 let privCheckbox = document.getElementById('verNotaPrivacidad');
                 privCheckbox.checked = data.es_privada;
                 privCheckbox.dispatchEvent(new Event('change'));
@@ -361,10 +252,10 @@ function verNotaModal(notaId) {
                 $('#verNotaUsuarios').val(data.users_ids).trigger('change');
 
                 document.getElementById('btnVerEliminar').setAttribute('onclick', `eliminarNota(${data.id})`);
-                
+
                 $('#modalVerNota').modal('show');
             } else {
-                Swal.fire('Acceso Denegado', data.message || 'No puedes ver esta nota.', 'error');
+                Swal.fire('Acceso denegado', data.message || 'No puedes ver esta nota.', 'error');
             }
         })
         .catch(error => {
@@ -373,14 +264,11 @@ function verNotaModal(notaId) {
         });
 }
 
-// ==============================================
-// ENVIAR LAS EDICIONES AL SERVIDOR (AJAX)
-// ==============================================
 function guardarCambiosNotaGiga() {
     let notaId = document.getElementById('verNotaId').value;
     let form = document.getElementById('formVerEditarNota');
     let formData = new FormData(form);
-    
+
     if (document.getElementById('verNotaPrivacidad').checked) {
         formData.set('es_privada', 'true');
     } else {
@@ -416,23 +304,20 @@ function guardarCambiosNotaGiga() {
     });
 }
 
-// ==============================================
-// LÓGICA PARA ELIMINAR NOTA
-// ==============================================
 function eliminarNota(notaId) {
     Swal.fire({
-        title: '¿Eliminar Nota?',
-        text: "Esta acción no se puede deshacer. ¿Deseas borrar permanentemente esta anotación?",
+        title: '¿Eliminar nota?',
+        text: "Esta acción no se puede deshacer.",
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#6c757d',
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#64748b',
         confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i> Sí, eliminar',
         cancelButtonText: 'Cancelar'
     }).then((result) => {
         if (result.isConfirmed) {
             $('#modalVerNota').modal('hide');
-            
+
             let csrf = "";
             let parts = ("; " + document.cookie).split("; csrf_token=");
             if (parts.length === 2) csrf = parts.pop().split(";").shift();

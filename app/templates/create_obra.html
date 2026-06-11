@@ -5,130 +5,125 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<style>
-    .select2-container .select2-selection--single { height: 38px; border: 1px solid #ced4da; }
-    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 36px; }
-    .select2-container--default .select2-selection--single .select2-selection__arrow { height: 36px; }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    <div class="row justify-content-center">
-      <div class="col-lg-8 col-xl-7">
-        
-        <div class="d-flex align-items-center mb-4">
-            <a href="{{ url_for('admin.obras_list') }}" class="btn btn-sm btn-link text-muted pl-0">
-                <i class="fas fa-arrow-left"></i> Volver al listado
-            </a>
-        </div>
+  <main class="admin-main admin-main--compact admin-form-page">
 
-
-        <div class="admin-panel">
-            <div class="admin-panel-header border-bottom pb-3 mb-4">
-                <h2 class="admin-panel-title">Nueva Obra</h2>
-                <p class="admin-panel-subtitle mb-0">Define los datos iniciales.</p>
-            </div>
-
-            <form action="{{ url_for('admin.create_obra') }}" method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                
-                <h6 class="text-uppercase text-muted small font-weight-bold mb-3">Identificación</h6>
-                <div class="form-row">
-                    <div class="form-group col-md-3">
-                        <label class="small font-weight-bold text-dark">Código Obra</label>
-                        <input type="text" name="codigo" class="form-control" placeholder="Ej: 2024-001" value="{{ form_data.get('codigo', '') }}" required>
-                    </div>
-                    <div class="form-group col-md-9">
-                        <label class="small font-weight-bold text-dark">Nombre de la Obra</label>
-                        <input type="text" name="nombre" class="form-control" placeholder="Ej: Reforma Hotel" value="{{ form_data.get('nombre', '') }}" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Cliente / Descripción</label>
-                        <input type="text" name="descripcion" class="form-control" value="{{ form_data.get('descripcion', '') }}">
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Ubicación</label>
-                        <input type="text" name="ubicacion" class="form-control" value="{{ form_data.get('ubicacion', '') }}">
-                    </div>
-                </div>
-
-                <hr class="my-4">
-
-                <h6 class="text-uppercase text-muted small font-weight-bold mb-3">Planificación</h6>
-                <div class="form-row">
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Fecha Inicio</label>
-                        <input type="date" name="fecha_inicio" class="form-control" value="{{ form_data.get('fecha_inicio', '') }}" required>
-                    </div>
-                    <div class="form-group col-md-6">
-                        <label class="small font-weight-bold text-dark">Fecha Fin</label>
-                        <input type="date" name="fecha_fin" class="form-control" value="{{ form_data.get('fecha_fin', '') }}" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group col-md-4">
-                        <label class="small font-weight-bold text-dark">Estado</label>
-                        <select name="estado" class="form-control custom-select">
-                            <option value="Pendiente" {% if form_data.get('estado') == 'Pendiente' %}selected{% endif %}>Pendiente</option>
-                            <option value="En Curso" {% if form_data.get('estado') == 'En Curso' %}selected{% endif %}>En Curso</option>
-                        </select>
-                    </div>
-                    <div class="form-group col-md-4">
-                        <label class="small font-weight-bold text-dark">Límite Trabajadores</label>
-                        <input type="number" name="limite_trabajadores" class="form-control" value="{{ form_data.get('limite_trabajadores', '10') }}" required>
-                    </div>
-                    <div class="form-group col-md-4">
-                        <label class="small font-weight-bold text-dark">Color</label>
-                        <input type="color" name="color" class="form-control form-control-color" value="{{ form_data.get('color', '#cccccc') }}">
-                    </div>
-                </div>
-
-                <hr class="my-4">
-
-                <h6 class="text-uppercase text-muted small font-weight-bold mb-3">Responsable</h6>
-                <div class="form-group">
-                    <label class="small font-weight-bold text-dark">Jefe de Obra (Gestión)</label>
-                    <select name="jefe_obra_id" id="jefe_select" class="form-control custom-select" required>
-                        <option value="">-- Seleccione un Jefe --</option>
-                        {% for jefe in jefes %}
-                            <option value="{{ jefe.id }}" {% if form_data.get('jefe_obra_id')|string == jefe.id|string %}selected{% endif %}>
-                                {{ jefe.name }} {{ jefe.lastname }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="small font-weight-bold text-dark">Encargado (Pie de obra)</label>
-                    <select name="encargado_id" id="encargado_select" class="form-control custom-select">
-                        <option value="">-- Sin encargado --</option>
-                        {% for enc in encargados %}
-                            <option value="{{ enc.id }}" {% if form_data.get('encargado_id')|string == enc.id|string %}selected{% endif %}>
-                                {{ enc.name }} {{ enc.lastname }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="mt-4 d-flex justify-content-end">
-                    <a href="{{ url_for('admin.obras_list') }}" class="btn btn-link text-muted mr-2">Cancelar</a>
-                    <button type="submit" class="btn btn-primary px-4">Crear Obra</button>
-                </div>
-
-            </form>
-        </div>
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <a href="{{ url_for('admin.obras_list') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
+          <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="page-toolbar-title">Nueva obra</h1>
       </div>
     </div>
+
+    <section class="admin-panel admin-form-panel">
+      <div class="admin-panel-header">
+        <h2 class="admin-panel-title">Datos iniciales</h2>
+        <span class="admin-panel-subtitle">Define la identificación y planificación de la obra</span>
+      </div>
+
+      <form action="{{ url_for('admin.create_obra') }}" method="POST" id="createObraForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="admin-form-section">Identificación</div>
+        <div class="form-row">
+          <div class="form-group col-md-3">
+            <label class="admin-form-label">Código</label>
+            <input type="text" name="codigo" class="form-control" placeholder="Ej: 2024-001" value="{{ form_data.get('codigo', '') }}" required>
+          </div>
+          <div class="form-group col-md-9">
+            <label class="admin-form-label">Nombre</label>
+            <input type="text" name="nombre" class="form-control" placeholder="Ej: Reforma Hotel" value="{{ form_data.get('nombre', '') }}" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Cliente / descripción</label>
+            <input type="text" name="descripcion" class="form-control" value="{{ form_data.get('descripcion', '') }}">
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Ubicación</label>
+            <input type="text" name="ubicacion" class="form-control" value="{{ form_data.get('ubicacion', '') }}">
+          </div>
+        </div>
+
+        <div class="admin-form-section">Planificación</div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Fecha inicio</label>
+            <input type="date" name="fecha_inicio" class="form-control" value="{{ form_data.get('fecha_inicio', '') }}" required>
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Fecha fin</label>
+            <input type="date" name="fecha_fin" class="form-control" value="{{ form_data.get('fecha_fin', '') }}" required>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">Estado</label>
+            <select name="estado" class="form-control custom-select">
+              <option value="Pendiente" {% if form_data.get('estado') == 'Pendiente' %}selected{% endif %}>Pendiente</option>
+              <option value="En Curso" {% if form_data.get('estado') == 'En Curso' %}selected{% endif %}>En Curso</option>
+            </select>
+          </div>
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">Límite trabajadores</label>
+            <input type="number" name="limite_trabajadores" class="form-control" value="{{ form_data.get('limite_trabajadores', '10') }}" required>
+          </div>
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">Color</label>
+            <input type="color" name="color" class="form-control form-control-color w-100" style="height: 32px; padding: 2px;" value="{{ form_data.get('color', '#cccccc') }}">
+          </div>
+        </div>
+
+        <div class="admin-form-section">Responsables</div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Jefe de obra</label>
+            <select name="jefe_obra_id" id="jefe_select" class="form-control" required>
+              <option value="">— Seleccione un jefe —</option>
+              {% for jefe in jefes %}
+                <option value="{{ jefe.id }}" {% if form_data.get('jefe_obra_id')|string == jefe.id|string %}selected{% endif %}>
+                  {{ jefe.name }} {{ jefe.lastname }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">Encargado</label>
+            <select name="encargado_id" id="encargado_select" class="form-control">
+              <option value="">— Sin encargado —</option>
+              {% for enc in encargados %}
+                <option value="{{ enc.id }}" {% if form_data.get('encargado_id')|string == enc.id|string %}selected{% endif %}>
+                  {{ enc.name }} {{ enc.lastname }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="admin-form-actions">
+          <div></div>
+          <div class="admin-form-actions-right">
+            <a href="{{ url_for('admin.obras_list') }}" class="btn-admin-link">Cancelar</a>
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-plus"></i> Crear obra
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
   </main>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -138,5 +133,4 @@
       $('#encargado_select').select2({ width: '100%', placeholder: "Seleccione un encargado", allowClear: true });
   });
 </script>
-{% endblock %}
 {% endblock %}

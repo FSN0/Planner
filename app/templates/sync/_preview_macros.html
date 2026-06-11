@@ -1,0 +1,17 @@
+{# Layout compartido para previews manuales Odoo #}
+{% macro stat_chip(label, value, tone='') %}
+<div class="sync-preview-stat sync-preview-stat--{{ tone }}">
+  <span class="sync-preview-stat-val">{{ value }}</span>
+  <span class="sync-preview-stat-lbl">{{ label }}</span>
+</div>
+{% endmacro %}
+
+{% macro razon_list(razones) %}
+{% if razones %}
+<ul class="sync-preview-razones mb-0">
+  {% for r in razones %}
+  <li>{{ r }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}

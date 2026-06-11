@@ -1,85 +1,45 @@
 {# --- app/templates/components/_kanban_card_obra.html --- #}
 
-{# AÑADIDO: Clase 'is-pinned' si corresponde #}
 <div class="kanban-col obra-card {{ 'is-pinned' if item.obra.is_pinned else '' }}" data-obra-id="{{ item.obra.id }}">
     <div class="col-header" style="background-color: {{ item.obra.color }}40;">
-        {# 1. Título y Botones #}
         <div class="d-flex justify-content-between align-items-start">
-            
-            {# MODIFICADO: Agrupamos título e icono PIN #}
-            <div class="d-flex align-items-center" style="max-width: 70%;">
-                {# --- BOTÓN PIN --- #}
-                <i class="fas fa-thumbtack mr-2 cursor-pointer btn-pin-obra {{ 'text-primary' if item.obra.is_pinned else 'text-muted-light' }}" 
+            <div class="d-flex align-items-center" style="max-width: 85%;">
+                <i class="fas fa-thumbtack mr-2 cursor-pointer btn-pin-obra {{ 'text-primary' if item.obra.is_pinned else 'text-muted-light' }}"
                    style="font-size: 0.85rem; transition: transform 0.2s;"
-                   data-obra-id="{{ item.obra.id }}" 
+                   data-obra-id="{{ item.obra.id }}"
                    title="{{ 'Desanclar' if item.obra.is_pinned else 'Anclar al inicio' }}">
                 </i>
 
-                <div class="header-title text-truncate" title="{{ item.obra.nombre }}">
+                <a href="{{ url_for('admin.obra_panel', obra_id=item.obra.id) }}"
+                   class="header-title header-title-link text-truncate"
+                   title="{{ item.obra.nombre }} — Ver ficha de obra">
                     {{ item.obra.nombre }}
-                </div>
-            </div>
-            
-            <div class="d-flex align-items-center">
-                {% if current_user.role in ['jefe_obra', 'admin'] %}
-                <button type="button" 
-                        class="btn btn-xs btn-white text-primary mr-1 btn-request-worker"
-                        title="Solicitar personal"
-                        data-obra-id="{{ item.obra.id }}"
-                        data-obra-name="{{ item.obra.nombre }}">
-                    <i class="fas fa-user-plus"></i>
-                </button>
-                {% endif %}
-
-                {# --- NUEVO: BOTÓN A LA APP DE COSTES --- #}
-               
-                {% if item.obra.odoo_id %}
-                <a href="javascript:void(0);" 
-                   onclick="window.open(window.location.protocol + '//' + window.location.hostname + ':4999/obra/{{ item.obra.odoo_id }}', '_blank');"
-                   class="btn btn-xs btn-white text-success mr-1" 
-                   title="Ver Hoja de Costes (BIM)">
-                    <i class="fas fa-euro-sign"></i>
-                </a>
-                {% endif %}
-                {# --------------------------------------- #}
-                <a href="{{ url_for('admin.obra_panel', obra_id=item.obra.id) }}" 
-                   class="text-muted hover-primary" 
-                   title="Ver Calendario y Detalles"
-                   target="_blank">
-                    <i class="far fa-calendar-alt"></i>
                 </a>
             </div>
         </div>
-        
-        {# 2. Subtítulo #}
+
         <div class="header-subtitle mt-1">
             <span>{{ item.obra.codigo or 'S/C' }}</span>
             <span><strong>{{ item.workers|length }}</strong> / {{ item.obra.limite_trabajadores or '-' }}</span>
         </div>
 
-        {# 3. Responsables #}
         <div class="mt-2 pt-2 border-top border-white-50">
-            
-            {# --- JEFE DE OBRA --- #}
             <div class="d-flex align-items-center small mb-1 staff-row">
                 <i class="fas fa-user-tie mr-2 text-muted" title="Jefe de Obra" style="width: 14px; text-align: center;"></i>
-                
-                <span class="text-truncate editable-staff" 
+                <span class="text-truncate editable-staff"
                       style="max-width: 200px; color: #334155; cursor: pointer; border-bottom: 1px dashed #cbd5e1;"
                       title="Clic para cambiar Jefe"
                       data-obra-id="{{ item.obra.id }}"
-                      data-obra-name="{{ item.obra.nombre }}" 
+                      data-obra-name="{{ item.obra.nombre }}"
                       data-role="jefe"
                       data-current-id="{{ item.obra.jefe_obra.id if item.obra.jefe_obra else '' }}">
                      {{ item.obra.jefe_obra.name + ' ' + item.obra.jefe_obra.lastname if item.obra.jefe_obra else 'Sin jefe' }}
                 </span>
             </div>
 
-            {# --- ENCARGADO --- #}
             <div class="d-flex align-items-center small staff-row">
                 <i class="fas fa-hard-hat mr-2 text-warning" title="Encargado" style="width: 14px; text-align: center;"></i>
-                
-                <span class="text-truncate editable-staff" 
+                <span class="text-truncate editable-staff"
                       style="max-width: 200px; color: #334155; cursor: pointer; border-bottom: 1px dashed #cbd5e1;"
                       title="Clic para cambiar Encargado"
                       data-obra-id="{{ item.obra.id }}"
@@ -92,18 +52,14 @@
         </div>
     </div>
 
-    {# 4. Lista de Trabajadores #}
     <div class="worker-list-body" data-obra-id="{{ item.obra.id }}" data-obra-name="{{ item.obra.nombre }}">
         {% for worker in item.workers %}
         <div class="worker-chip"
              data-worker-id="{{ worker.id }}"
              data-worker-name="{{ worker.name }} {{ worker.lastname }}"
              style="border-left-color: {{ worker.company_rel.color if worker.company_rel else '#ccc' }}">
-            
-            {# Nombre y Reputación #}
+
             <div class="d-flex justify-content-between align-items-center">
-                
-                {# MODIFICADO: Inyección de la pelotita al lado del nombre #}
                 <div class="text-truncate d-flex align-items-center" style="max-width: 180px;">
                     {% if current_user.role == 'admin' and worker.temp_estado_fichaje %}
                         {% set st = worker.temp_estado_fichaje %}
@@ -121,37 +77,33 @@
                             <span class="status-dot-kanban dot-secondary" title="Sin Registro"></span>
                         {% endif %}
                     {% endif %}
-                    
-                    <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" 
-                       class="worker-name text-truncate text-dark font-weight-bold" 
+
+                    <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}"
+                       class="worker-name text-truncate text-dark font-weight-bold"
                        style="text-decoration: none;">
                         {{ worker.name }} {{ worker.lastname }}
                     </a>
                 </div>
-                
+
                 {% set rep = worker.reputation_score %}
                 {% if rep != 0 %}
-                    <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}" 
+                    <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}"
                           style="font-size: 0.65rem; padding: 1px 5px;">
                         {{ '+' if rep > 0 }}{{ rep }}
                     </span>
                 {% endif %}
             </div>
 
-            {# META DATOS #}
             <div class="worker-meta d-flex justify-content-between align-items-center mt-1">
-                {# Categoría (Izq) #}
                 <div class="text-truncate d-flex align-items-center" style="max-width: 55%;">
                     <i class="fas fa-hard-hat text-warning mr-1" style="font-size: 0.7rem;"></i>
                     <span>{{ worker.categoria_profesional if worker.categoria_profesional else '-' }}</span>
                 </div>
-                
-                {# Empresa (Der) - ENLACE AL PANEL DE EMPRESA #}
+
                 <div class="text-truncate d-flex align-items-center" style="max-width: 40%;">
                     <i class="fas fa-building text-secondary mr-1" style="font-size: 0.7rem;"></i>
-                    
                     {% if worker.company_rel %}
-                        <a href="{{ url_for('admin.company_panel', company_id=worker.company_rel.id) }}" 
+                        <a href="{{ url_for('admin.company_panel', company_id=worker.company_rel.id) }}"
                            class="text-secondary text-decoration-none hover-primary"
                            title="{{ worker.company_rel.nombre }}">
                             {{ worker.company_rel.code }}

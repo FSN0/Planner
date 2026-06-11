@@ -1,230 +1,99 @@
-{# --- BLOQUE CSS: REAJUSTE DE ALTURAS SIN SUPERPOSICIÓN --- #}
-<style>
-  #solicitud-obra-calendar {
-      max-width: 100%;
-      margin: 0 auto;
-  }
-  
-  /* Ajuste de altura base de las celdas de forma orgánica */
-  #solicitud-obra-calendar .fc-daygrid-day-frame {
-      min-height: 48px !important; 
-  }
-  #solicitud-obra-calendar .fc { font-size: 0.72rem !important; }
-  #solicitud-obra-calendar .fc-daygrid-day-top { padding: 1px 3px !important; }
-  #solicitud-obra-calendar .fc-daygrid-day-number { font-size: 0.7rem !important; padding: 1px !important; }
-
-  /* =======================================================
-     PÍLDORAS REDUCIDAS SEPARADAS (EVITA SUPERPOSICIÓN)
-     ======================================================= */
-  #solicitud-obra-calendar .fc-daygrid-event-harness {
-      margin-bottom: 3px !important; /* Más separación vertical entre eventos */
-      margin-top: 1px !important;
-  }
-  
-/* Le quitamos los height y margin forzados para que el motor de FullCalendar pueda apilarlos bien */
-  #solicitud-obra-calendar .fc-daygrid-event {
-      border-radius: 3px !important;
-      border: none !important;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;
-      cursor: pointer !important;
-  }
-
-  /* La reducción de tamaño se hace puramente desde el texto interno */
-  #solicitud-obra-calendar .fc-event-main > div {
-      padding: 1px 4px !important;  
-      font-size: 0.65rem !important; 
-      line-height: 1.2 !important;
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-  }
-  #solicitud-obra-calendar .fc-event-main {
-      padding: 0px 4px !important;
-      font-size: 9.5px !important;    
-      line-height: 15px !important;  /* Forzamos que el texto se alinee al alto real */
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      white-space: nowrap !important;
-  }
-
-  /* Ajustar botones superiores del calendario (mes, flechas) */
-  #solicitud-obra-calendar .fc-toolbar { margin-bottom: 0.4rem !important; }
-  #solicitud-obra-calendar .fc-toolbar-title { font-size: 0.9rem !important; font-weight: bold; }
-  #solicitud-obra-calendar .fc-button { padding: 0.1rem 0.3rem !important; font-size: 0.7rem !important; height: auto !important; }
-  /* =======================================================
-     SOBRESCRIBIR EL JS: MATAR EL PADDING Y LA LETRA GRANDE
-     ======================================================= */
-  
-  /* Atacamos al div inyectado para anular el 'p-1' de Bootstrap y el style inline */
-  #solicitud-obra-calendar .fc-event-main > div {
-      padding: 0px 4px !important;  /* Mata el p-1 */
-      font-size: 0.65rem !important; /* Mata el 0.85rem inline */
-      line-height: 15px !important;
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-  }
-
-  /* Hacer el puntito redondo de estado más pequeño */
-  #solicitud-obra-calendar .fc-event-main > div > span[style*="width:10px"] {
-      width: 6px !important;
-      height: 6px !important;
-      margin-right: 3px !important;
-  }
-</style>
-
-<section class="admin-panel solicitud-resumen-calendar">
-  <div class="row align-items-start">
-
-    {# ========================================== #}
-    {# COLUMNA IZQUIERDA: DATOS Y BOTONES SEPARADOS #}
-    {# ========================================== #}
-    <div class="col-lg-5">
-      <div class="solicitud-header-inline">
-        <h1 class="admin-page-title mb-1">
-            Solicitud #{{ solicitud.id }}
-            {% if solicitud.accion == 'DESASIGNAR' %}
-                <span class="badge badge-danger ml-2" style="font-size: 0.5em; vertical-align: middle;">SALIDA</span>
-            {% else %}
-                <span class="badge badge-success ml-2" style="font-size: 0.5em; vertical-align: middle;">INGRESO</span>
-            {% endif %}
-        </h1>
-        <p class="admin-page-subtitle mb-0">
-          {% if solicitud.tipo|lower == 'generica' %}
-            Asignación de personal para <strong>{{ solicitud.obra.nombre }}</strong>
-          {% elif solicitud.tipo|lower == 'concreta' %}
-            {% if solicitud.accion == 'DESASIGNAR' %}
-                Movimiento de operario a <strong>DESASIGNADO (Libres)</strong>
-            {% else %}
-                Movimiento de operario a <strong>{{ solicitud.obra.nombre }}</strong>
-            {% endif %}
-          {% else %}
-            {{ solicitud.tipo }}
-          {% endif %}
-        </p>
-      </div>
-
-      <div class="admin-panel-body solicitud-resumen-body">
-        <dl class="row mb-0">
-          <dt class="col-sm-3">ID</dt>
-          <dd class="col-sm-9 font-weight-bold">#{{ solicitud.id }}</dd>
-
-          <dt class="col-sm-3">Estado</dt>
-          <dd class="col-sm-9">
-            {% set est = solicitud.estado %}
-            {% if est == 'PENDIENTE' %} <span class="badge-soft badge-soft-amber">Pendiente</span>
-            {% elif est == 'EN_PROCESO' %} <span class="badge-soft badge-soft-blue">En proceso</span>
-            {% elif est == 'CUMPLIDA' %} <span class="badge-soft badge-soft-green">Cumplida</span>
-            {% elif est == 'CERRADA_PARCIAL' %} <span class="badge-soft badge-soft-gray">Cerrada parcial</span>
-            {% elif est == 'DENEGADA' %} <span class="badge-soft badge-soft-red">Denegada</span>
-            {% else %} <span class="badge-soft badge-soft-gray">{{ est }}</span>
-            {% endif %}
-          </dd>
-
-          <dt class="col-sm-3">Obra</dt>
-          <dd class="col-sm-9">
-            {% if solicitud.obra %} {{ solicitud.obra.codigo or "" }} — {{ solicitud.obra.nombre }}
-            {% else %} - {% endif %}
-          </dd>
-          
-          <dt class="col-sm-3">Jefe de Obra</dt>
-          <dd class="col-sm-9">
+<section class="admin-panel solicitud-resumen-panel">
+  <div class="row no-gutters">
+    <div class="col-lg-8 col-xl-8 border-right">
+      <div class="solicitud-resumen-body">
+        <div class="solicitud-meta-grid">
+          <div class="solicitud-meta-item">
+            <label>Obra</label>
+            {% if solicitud.obra %}
+              <a href="{{ url_for('admin.obra_panel', obra_id=solicitud.obra.id) }}" class="table-link-primary">
+                <span class="cell-code">{{ solicitud.obra.codigo or solicitud.obra.id }}</span>
+                {{ solicitud.obra.nombre }}
+              </a>
+            {% else %}—{% endif %}
+          </div>
+          <div class="solicitud-meta-item">
+            <label>Jefe de obra</label>
             {% if solicitud.obra and solicitud.obra.jefe_obra %}
+              <a href="{{ url_for('admin.worker_panel', user_id=solicitud.obra.jefe_obra.id) }}" class="table-link-primary">
                 {{ solicitud.obra.jefe_obra.name }} {{ solicitud.obra.jefe_obra.lastname }}
-            {% else %} - {% endif %}
-          </dd>
-
-          <dt class="col-sm-3">Rango</dt>
-          <dd class="col-sm-9">
+              </a>
+            {% else %}—{% endif %}
+          </div>
+          <div class="solicitud-meta-item">
+            <label>Rango</label>
             {% if solicitud.comentarios and 'all_obra' in solicitud.comentarios and solicitud.accion == 'DESASIGNAR' %}
-                <span class="text-danger font-weight-bold">
-                    {{ solicitud.fecha_inicio.strftime('%d/%m/%Y') }} — EN ADELANTE
-                </span>
+              <span class="text-danger font-weight-bold">{{ solicitud.fecha_inicio.strftime('%d/%m/%Y') }} — en adelante</span>
             {% elif solicitud.fecha_inicio and solicitud.fecha_fin %}
-                {{ solicitud.fecha_inicio.strftime('%d/%m/%Y') }} — {{ solicitud.fecha_fin.strftime('%d/%m/%Y') }}
-            {% else %} - {% endif %}
-          </dd>
+              {{ solicitud.fecha_inicio.strftime('%d/%m/%Y') }} — {{ solicitud.fecha_fin.strftime('%d/%m/%Y') }}
+            {% else %}—{% endif %}
+          </div>
+          <div class="solicitud-meta-item">
+            <label>Tipo</label>
+            {% if solicitud.tipo|lower == 'generica' %}
+              Asignación genérica
+            {% elif solicitud.accion == 'DESASIGNAR' %}
+              Desasignación
+            {% else %}
+              Movimiento concreto
+            {% endif %}
+          </div>
 
           {% if solicitud.tipo|lower == 'generica' %}
-            <hr class="my-2">
-            <dt class="col-sm-3">Progreso</dt>
-            <dd class="col-sm-9 font-weight-bold text-dark">
-              {{ solicitud.cantidad_cubierta }} / {{ solicitud.cantidad_solicitada }} cubiertos
-            </dd>
-            <dt class="col-sm-3">Perfil</dt>
-            <dd class="col-sm-9">{{ solicitud.perfil_categoria or 'Cualquiera' }}</dd>
+          <div class="solicitud-meta-item">
+            <label>Progreso</label>
+            <span class="font-weight-bold">{{ solicitud.cantidad_cubierta }} / {{ solicitud.cantidad_solicitada }}</span>
+          </div>
+          <div class="solicitud-meta-item">
+            <label>Perfil</label>
+            {{ solicitud.perfil_categoria or 'Cualquiera' }}
+          </div>
           {% endif %}
 
-          {% if solicitud.tipo|lower == 'concreta' %}
-            <hr class="my-2">
-            <dt class="col-sm-3">Operario</dt>
-            <dd class="col-sm-9 font-weight-bold">
-              {% if solicitud.empleado %}
-                {{ solicitud.empleado.name }} {{ solicitud.empleado.lastname }}
-                — <span class="text-muted small">{{ solicitud.empleado.company_rel.name if solicitud.empleado.company_rel else 'Sin empresa' }}</span>
-              {% else %} - {% endif %}
-            </dd>
+          {% if solicitud.tipo|lower == 'concreta' and solicitud.empleado %}
+          <div class="solicitud-meta-item solicitud-meta-item--full">
+            <label>Operario</label>
+            <a href="{{ url_for('admin.worker_panel', user_id=solicitud.empleado.id) }}" class="table-link-primary font-weight-bold">
+              {{ solicitud.empleado.name }} {{ solicitud.empleado.lastname }}
+            </a>
+            <span class="text-muted" style="font-size:0.72rem;">
+              — {{ solicitud.empleado.company_rel.nombre if solicitud.empleado.company_rel else 'Sin empresa' }}
+            </span>
+          </div>
           {% endif %}
 
           {% if solicitud_notas %}
-            <hr class="my-2">
-            <dt class="col-sm-3">Notas</dt>
-            <dd class="col-sm-9">
-              <div class="bg-light border rounded p-2 small text-dark" style="white-space: pre-wrap;">{{ solicitud_notas }}</div>
-            </dd>
+          <div class="solicitud-meta-item solicitud-meta-item--full">
+            <label>Notas del jefe</label>
+            <div class="solicitud-meta-notes">{{ solicitud_notas }}</div>
+          </div>
           {% endif %}
-        </dl>
-
-        {# ========================================================= #}
-        {# BOTONERA CLARA Y SEPARADA POR CONCEPTOS                   #}
-        {# ========================================================= #}
-        <div class="mt-4 pt-3 border-top">
-            
-            {# 1. ACCIÓN EXTERNA: TABLERO GENERAL #}
-            {% if solicitud.fecha_inicio %}
-            <div class="mb-3">
-                <h6 class="font-weight-bold small text-muted mb-2 text-uppercase">Planificación General</h6>
-                <a href="{{ url_for('admin.obras_detailed', selected_date=solicitud.fecha_inicio.strftime('%Y-%m-%d')) }}" 
-                   class="btn btn-sm btn-outline-primary" target="_blank">
-                   <i class="fas fa-external-link-alt mr-1"></i> Abrir Tablero de Obras
-                </a>
-            </div>
-            {% endif %}
-
-            {# 2. FILTRO DEL MINICALENDARIO DE LA DERECHA #}
-            {% if solicitud.empleado_id %}
-            <div>
-                <h6 class="font-weight-bold small text-muted mb-2 text-uppercase">Filtro del minicalendario:</h6>
-                <div class="btn-group btn-group-sm" role="group">
-                  <button type="button" class="btn btn-primary active" id="btn-view-obra" 
-                          title="Ver todos los operarios de {{ solicitud.obra.nombre }}" 
-                          onclick="switchCalendarView('obra', {{ solicitud.obra_id }}, 'empresas')">
-                    <i class="fas fa-building mr-1"></i> Obra
-                  </button>
-                  <button type="button" class="btn btn-outline-secondary" id="btn-view-worker" 
-                          title="Ver solo a {{ solicitud.empleado.name }} {{ solicitud.empleado.lastname }}" 
-                          onclick="switchCalendarView('worker', {{ solicitud.empleado_id }}, 'empleados')">
-                    <i class="fas fa-user-hard-hat mr-1"></i> Operario
-                  </button>
-                </div>
-            </div>
-            {% endif %}
-            
         </div>
+
+        {% if solicitud.empleado_id %}
+        <div class="solicitud-side-actions">
+          <span class="text-muted" style="font-size:0.68rem; font-weight:600; text-transform:uppercase;">Vista calendario:</span>
+          <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn-admin btn-admin-primary active" id="btn-view-obra"
+                    onclick="switchCalendarView('obra', {{ solicitud.obra_id }}, 'empresas')">
+              <i class="fas fa-building"></i> Obra
+            </button>
+            <button type="button" class="btn-admin btn-admin-ghost" id="btn-view-worker"
+                    onclick="switchCalendarView('worker', {{ solicitud.empleado_id }}, 'empleados')">
+              <i class="fas fa-user-hard-hat"></i> Operario
+            </button>
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
 
-    {# ========================================== #}
-    {# COLUMNA DERECHA: CALENDARIO TOTALMENTE SOLO #}
-    {# ========================================== #}
-    <div class="col-lg-7">
-      <div class="admin-panel-header solicitud-calendar-header pt-2 pb-0 border-0">
-        
-        <div class="admin-panel-body px-0 pt-0 pb-2">
-            <div id="solicitud-obra-calendar"></div>
+    <div class="col-lg-4 col-xl-4">
+      <div class="solicitud-resumen-body">
+        <div class="solicitud-calendar-wrap">
+          <div id="solicitud-obra-calendar"></div>
         </div>
       </div>
     </div>
-
   </div>
 </section>

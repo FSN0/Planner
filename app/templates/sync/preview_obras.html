@@ -1,263 +1,131 @@
 {% extends "base.html" %}
-{% block title %}Preview Obras{% endblock %}
+{% from "sync/_preview_macros.html" import stat_chip, razon_list %}
+{% block title %}Preview: Obras{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<style>
-    /* Estilos para tabla de alta densidad con Scroll interno */
-    .table-scroll-container { 
-        max-height: 55vh; 
-        overflow-y: auto; 
-        border: 1px solid #dee2e6;
-        border-radius: 0.25rem;
-        background: white;
-    }
-    
-    /* Cabecera Fija (Sticky) para que no desaparezca al hacer scroll */
-    .table-dense thead th { 
-        position: sticky; 
-        top: 0; 
-        background-color: #e9ecef; 
-        z-index: 10; 
-        box-shadow: 0 2px 2px -1px rgba(0,0,0,0.2);
-        padding: 0.6rem 0.4rem;
-    }
-    
-    .table-dense th, .table-dense td { padding: 0.4rem; vertical-align: middle; font-size: 0.85rem; }
-    
-    /* Ajustes para que select2 se vea compacto en la tabla */
-    .select2-container .select2-selection--single { height: 1.8rem !important; font-size: 0.8rem; }
-    .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 1.8rem !important; padding-left: 0.5rem; }
-    .select2-container--default .select2-selection--single .select2-selection__arrow { height: 1.6rem !important; }
-    
-    .cambios-text { font-size: 0.75rem; color: #0056b3; margin-top: 3px; display: block; }
-    .row-nueva { border-left: 4px solid #28a745 !important; }
-    .row-update { border-left: 4px solid #ffc107 !important; }
-    .row-finalizada { border-left: 4px solid #6c757d !important; background-color: #f8f9fa; }
-    .bg-light-danger { background-color: #fff5f5; border: 1px solid #ffcccc; }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main">
-    
-    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
-        <div>
-            <h1 class="admin-header-title mb-0 h3">Auditoría de Obras</h1>
-            <p class="text-muted small mb-0">Vista de alta densidad. Total: <b>{{ diff.nuevas|length + diff.actualizadas|length + diff.finalizadas|length }}</b> registros listos para sincronizar.</p>
-        </div>
-        <div class="btn-group shadow-sm">
-            <button class="btn btn-outline-success font-weight-bold" onclick="confirmSync('valid_only')" title="Guarda solo las que tienen todos los responsables asignados.">
-                <i class="fas fa-filter mr-1"></i> Guardar Solo Completados
-            </button>
-            <button class="btn btn-success font-weight-bold" onclick="confirmSync('all')" title="Guarda todo. Lo que no tenga responsable se quedará en blanco en la BD.">
-                <i class="fas fa-save mr-1"></i> Guardar TODO (Dejar vacíos)
-            </button>
-        </div>
+  <main class="admin-main admin-main--compact sync-preview-page">
+
+    <header class="sync-preview-header">
+      <div>
+        <a href="{{ url_for('sync.panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
+        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
+        <p class="sync-preview-sub">Análisis en vivo desde Odoo · qué se importará, qué se omitirá y por qué.</p>
+      </div>
+      <div class="sync-preview-actions">
+        <button class="btn-admin btn-admin-ghost" onclick="confirmSync('valid_only')">
+          <i class="fas fa-filter"></i> Guardar solo completos
+        </button>
+        <button class="btn-admin btn-admin-primary" onclick="confirmSync('all')">
+          <i class="fas fa-save"></i> Guardar todo
+        </button>
+      </div>
+    </header>
+
+    <div class="sync-preview-stats">
+      {{ stat_chip('Listos', preview.stats.listos, 'ok') }}
+      {{ stat_chip('Incidencias', preview.stats.incidencias, 'warn') }}
+      {{ stat_chip('Omitidos en auto', preview.stats.omitidos_auto, 'danger') }}
+      {{ stat_chip('A finalizar', preview.stats.finalizadas, 'muted') }}
+      {{ stat_chip('Sin cambios', preview.stats.sin_cambios, 'muted') }}
     </div>
 
-    <div class="table-scroll-container shadow-sm">
-        <table class="table table-hover table-dense mb-0">
-            <thead class="text-secondary text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">
-                <tr>
-                    <th width="8%">Acción</th>
-                    <th width="10%">Código</th>
-                    <th width="32%">Proyecto / Cambios</th>
-                    <th width="10%">Fecha Inicio</th>
-                    <th width="20%">Jefe de Obra (Local)</th>
-                    <th width="20%">Encargado (Local)</th>
-                </tr>
-            </thead>
-            <tbody>
-                
-                {% for obra in diff.nuevas %}
-                <tr class="row-nueva">
-                    <td><span class="badge badge-success w-100">NUEVA</span></td>
-                    <td class="font-weight-bold">
-                        {{ obra.codigo }}<br><small class="text-muted">#{{ obra.odoo_id }}</small>
-                    </td>
-                    <td>
-                        <span class="font-weight-bold text-dark">{{ obra.nombre }}</span><br>
-                        <span class="text-muted small"><i class="fas fa-building mr-1"></i>{{ obra.cliente or 'Sin cliente' }}</span>
-                    </td>
-                    <td>{{ obra.fecha_inicio or '-' }}</td>
-                    
-                    <td class="{% if obra.warn_jefe %}bg-light-danger{% endif %} rounded">
-                        {% if obra.warn_jefe %}
-                            <select class="form-control select2-personnel sync-jefe-select" data-odoo-id="{{ obra.odoo_id }}">
-                                <option value="">Falta: {{ obra.jefe_odoo_raw }}</option>
-                                {% for j in jefes %}
-                                    <option value="{{ j.id }}">{{ j.name }} {{ j.lastname }}</option>
-                                {% endfor %}
-                            </select>
-                        {% else %}
-                            <span class="text-success small"><i class="fas fa-check mr-1"></i>{{ obra.jefe_odoo_raw or 'No asignado' }}</span>
-                        {% endif %}
-                    </td>
-                    
-                    <td class="{% if obra.warn_encargado %}bg-light-danger{% endif %} rounded">
-                        {% if obra.warn_encargado %}
-                            <select class="form-control select2-personnel sync-enc-select" data-odoo-id="{{ obra.odoo_id }}">
-                                <option value="">Falta: {{ obra.enc_odoo_raw }}</option>
-                                {% for e in encargados %}
-                                    <option value="{{ e.id }}">{{ e.name }} {{ e.lastname }}</option>
-                                {% endfor %}
-                            </select>
-                        {% else %}
-                            <span class="text-success small"><i class="fas fa-check mr-1"></i>{{ obra.enc_odoo_raw or 'No asignado' }}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-
-                {% for obra in diff.actualizadas %}
-                <tr class="row-update">
-                    <td><span class="badge badge-warning text-dark w-100">UPDATE</span></td>
-                    <td class="font-weight-bold">
-                        <a href="/admin/obra_panel/{{ obra.local_id }}" target="_blank" title="Abrir Obra"><i class="fas fa-external-link-alt small mr-1"></i>{{ obra.codigo }}</a>
-                        <br><small class="text-muted">#{{ obra.odoo_id }}</small>
-                    </td>
-                    <td>
-                        <span class="font-weight-bold text-dark">{{ obra.nombre }}</span>
-                        {% if obra.cambios %}
-                            <div class="cambios-text">
-                                {% for campo, valor in obra.cambios.items() %}
-                                    <b>{{ campo }}:</b> {{ valor }} {% if not loop.last %} | {% endif %}
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                            <div class="cambios-text text-success"><i class="fas fa-link"></i> Solo enlazar ID interno.</div>
-                        {% endif %}
-                    </td>
-                    <td>{{ obra.fecha_inicio or '-' }}</td>
-                    
-                    <td class="{% if obra.warn_jefe %}bg-light-danger{% endif %} rounded">
-                        {% if obra.warn_jefe %}
-                            <select class="form-control select2-personnel sync-jefe-select" data-odoo-id="{{ obra.odoo_id }}">
-                                <option value="">Falta: {{ obra.jefe_odoo_raw }}</option>
-                                {% for j in jefes %}
-                                    <option value="{{ j.id }}">{{ j.name }} {{ j.lastname }}</option>
-                                {% endfor %}
-                            </select>
-                        {% else %}
-                            <span class="text-muted small"><i class="fas fa-link mr-1"></i>OK</span>
-                        {% endif %}
-                    </td>
-                    
-                    <td class="{% if obra.warn_encargado %}bg-light-danger{% endif %} rounded">
-                        {% if obra.warn_encargado %}
-                            <select class="form-control select2-personnel sync-enc-select" data-odoo-id="{{ obra.odoo_id }}">
-                                <option value="">Falta: {{ obra.enc_odoo_raw }}</option>
-                                {% for e in encargados %}
-                                    <option value="{{ e.id }}">{{ e.name }} {{ e.lastname }}</option>
-                                {% endfor %}
-                            </select>
-                        {% else %}
-                            <span class="text-muted small"><i class="fas fa-link mr-1"></i>OK</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-
-                {% for obra in diff.finalizadas %}
-                <tr class="row-finalizada">
-                    <td><span class="badge badge-secondary w-100">CERRAR</span></td>
-                    <td class="font-weight-bold">
-                        <a href="/admin/obra_panel/{{ obra.local_id }}" target="_blank" class="text-secondary"><i class="fas fa-external-link-alt small mr-1"></i>{{ obra.codigo }}</a>
-                    </td>
-                    <td colspan="4">
-                        <span class="font-weight-bold text-dark">{{ obra.nombre }}</span>
-                        <div class="cambios-text text-danger mt-1">
-                            <i class="fas fa-flag-checkered"></i> Ya no está en ejecución en Odoo. Su estado local pasará a "Finalizada".
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-
-            </tbody>
+    {% if preview.incidencias %}
+    <section class="sync-preview-section sync-preview-section--danger">
+      <h2 class="sync-preview-section-title"><i class="fas fa-exclamation-triangle"></i> Incidencias — requieren acción ({{ preview.incidencias|length }})</h2>
+      <p class="sync-preview-section-desc">Estos registros se <strong>omitirían en la sync automática</strong> hasta resolver el responsable.</p>
+      <div class="sync-preview-table-wrap">
+        <table class="sync-preview-table">
+          <thead>
+            <tr><th>Acción</th><th>Código</th><th>Proyecto</th><th>Motivo / resolución</th><th>Jefe</th><th>Encargado</th></tr>
+          </thead>
+          <tbody>
+            {% for obra in preview.incidencias %}
+            <tr class="sync-preview-row--incident">
+              <td><span class="sync-preview-badge sync-preview-badge--{{ obra.accion }}">{{ obra.accion|upper }}</span></td>
+              <td><strong>{{ obra.codigo }}</strong><br><small class="text-muted">#{{ obra.odoo_id }}</small></td>
+              <td>{{ obra.nombre }}<br><small class="text-muted">{{ obra.cliente or '—' }}</small></td>
+              <td class="sync-preview-reasons">{{ razon_list(obra.razones) }}</td>
+              <td class="{% if obra.warn_jefe %}sync-preview-cell--warn{% endif %}">
+                {% if obra.warn_jefe %}
+                <select class="form-control form-control-sm select2-personnel sync-jefe-select" data-odoo-id="{{ obra.odoo_id }}">
+                  <option value="">Asignar: {{ obra.jefe_odoo_raw }}</option>
+                  {% for j in jefes %}<option value="{{ j.id }}">{{ j.name }} {{ j.lastname }}</option>{% endfor %}
+                </select>
+                {% else %}<span class="text-success small">OK</span>{% endif %}
+              </td>
+              <td class="{% if obra.warn_encargado %}sync-preview-cell--warn{% endif %}">
+                {% if obra.warn_encargado %}
+                <select class="form-control form-control-sm select2-personnel sync-enc-select" data-odoo-id="{{ obra.odoo_id }}">
+                  <option value="">Asignar: {{ obra.enc_odoo_raw }}</option>
+                  {% for e in encargados %}<option value="{{ e.id }}">{{ e.name }} {{ e.lastname }}</option>{% endfor %}
+                </select>
+                {% else %}<span class="text-success small">OK</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
         </table>
-    </div>
-
-    {% if diff.validadas_manual %}
-    <div class="card mt-3 shadow-sm border-info">
-        <div class="card-header bg-info text-white py-2">
-            <h5 class="mb-0 h6"><i class="fas fa-check-double mr-1"></i> Obras Validadas Manualmente ({{ diff.validadas_manual|length }})</h5>
-            <small>Tienen un responsable asignado en la aplicación que sustituye al que propone Odoo.</small>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
-                <table class="table table-hover table-sm mb-0 table-dense">
-                    <thead class="bg-light sticky-top">
-                        <tr>
-                            <th width="15%" class="pl-3">Código</th>
-                            <th width="35%">Nombre</th>
-                            <th width="25%">Jefe de Obra</th>
-                            <th width="25%">Encargado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for obra in diff.validadas_manual %}
-                        <tr>
-                            <td class="font-weight-bold pl-3">
-                                <a href="/admin/obra_panel/{{ obra.local_id }}" target="_blank"><i class="fas fa-external-link-alt small mr-1"></i>{{ obra.codigo }}</a>
-                            </td>
-                            <td>{{ obra.nombre }}</td>
-                            
-                            {% set local_jefe = namespace(name='No asignado') %}
-                            {% for j in jefes %}
-                                {% if j.id == obra.jefe_obra_id %}
-                                    {% set local_jefe.name = j.name ~ ' ' ~ j.lastname %}
-                                {% endif %}
-                            {% endfor %}
-                            
-                            {% set local_enc = namespace(name='No asignado') %}
-                            {% for e in encargados %}
-                                {% if e.id == obra.encargado_id %}
-                                    {% set local_enc.name = e.name ~ ' ' ~ e.lastname %}
-                                {% endif %}
-                            {% endfor %}
-
-                            <td class="small">
-                                <span class="text-success font-weight-bold" title="Asignado en tu plataforma"><i class="fas fa-user-check mr-1"></i>{{ local_jefe.name }}</span><br>
-                                {% if obra.jefe_odoo_raw %}
-                                    <span class="text-muted" style="text-decoration: line-through;" title="Ignorado de Odoo">{{ obra.jefe_odoo_raw }}</span>
-                                {% endif %}
-                            </td>
-                            <td class="small">
-                                <span class="text-success font-weight-bold" title="Asignado en tu plataforma"><i class="fas fa-hard-hat mr-1"></i>{{ local_enc.name }}</span><br>
-                                {% if obra.enc_odoo_raw %}
-                                    <span class="text-muted" style="text-decoration: line-through;" title="Ignorado de Odoo">{{ obra.enc_odoo_raw }}</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+      </div>
+    </section>
     {% endif %}
 
-    {% if diff.sin_cambios %}
-    <div class="mt-3">
-        <button class="btn btn-sm btn-link text-muted p-0" type="button" data-toggle="collapse" data-target="#collapseSinCambios">
-            <i class="fas fa-eye"></i> Mostrar {{ diff.sin_cambios|length }} obras idénticas y sin cambios
-        </button>
-        <div class="collapse mt-2" id="collapseSinCambios">
-            <div class="bg-light border rounded p-2 small">
-                {% for obra in diff.sin_cambios %}
-                    <span class="mr-3 border-right pr-3">
-                        <i class="fas fa-check text-success"></i> 
-                        <a href="/admin/obra_panel/{{ obra.local_id }}" target="_blank" class="text-dark">{{ obra.codigo }}</a>
-                    </span>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+    {% if preview.listos %}
+    <section class="sync-preview-section sync-preview-section--ok">
+      <h2 class="sync-preview-section-title"><i class="fas fa-check-circle"></i> Listos para importar ({{ preview.listos|length }})</h2>
+      <div class="sync-preview-table-wrap">
+        <table class="sync-preview-table">
+          <thead><tr><th>Acción</th><th>Código</th><th>Proyecto</th><th>Cambios</th></tr></thead>
+          <tbody>
+            {% for obra in preview.listos %}
+            <tr>
+              <td><span class="sync-preview-badge sync-preview-badge--{{ obra.accion }}">{{ obra.accion|upper }}</span></td>
+              <td><strong>{{ obra.codigo }}</strong></td>
+              <td>{{ obra.nombre }}</td>
+              <td class="small">{% if obra.cambios %}{% for k,v in obra.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}{% else %}<span class="text-muted">Sin cambios de datos</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if preview.finalizadas %}
+    <section class="sync-preview-section">
+      <h2 class="sync-preview-section-title"><i class="fas fa-flag-checkered"></i> A marcar como finalizadas ({{ preview.finalizadas|length }})</h2>
+      <ul class="sync-preview-simple-list">
+        {% for o in preview.finalizadas %}
+        <li><strong>{{ o.codigo }}</strong> — {{ o.nombre }} <span class="text-muted small">({{ razon_list(o.razones)|striptags }})</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if preview.validadas_manual %}
+    <section class="sync-preview-section sync-preview-section--info">
+      <h2 class="sync-preview-section-title"><i class="fas fa-user-check"></i> Validadas manualmente ({{ preview.validadas_manual|length }})</h2>
+      <p class="sync-preview-section-desc">Responsables asignados en la app; Odoo no coincide pero se respeta tu elección.</p>
+      <ul class="sync-preview-simple-list">
+        {% for o in preview.validadas_manual %}<li><strong>{{ o.codigo }}</strong> — {{ o.nombre }}</li>{% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if preview.sin_cambios %}
+    <details class="sync-preview-collapse">
+      <summary>{{ preview.sin_cambios|length }} obras sin cambios (ya sincronizadas)</summary>
+      <div class="sync-preview-chips">
+        {% for o in preview.sin_cambios %}<span class="badge-soft">{{ o.codigo }}</span>{% endfor %}
+      </div>
+    </details>
     {% endif %}
 
   </main>
@@ -267,86 +135,43 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-$(document).ready(function() {
-    // Inicializamos el buscador en todos los desplegables de personal
-    $('.select2-personnel').select2({
-        width: '100%',
-        dropdownAutoWidth: true
-    });
-});
+$(function(){ $('.select2-personnel').select2({ width: '100%' }); });
 
 function confirmSync(mode) {
     let payload = {{ diff | tojson | safe }};
-    
     function processList(list) {
         let validItems = [];
         list.forEach(obra => {
             let selectJefe = document.querySelector(`.sync-jefe-select[data-odoo-id="${obra.odoo_id}"]`);
             let selectEnc = document.querySelector(`.sync-enc-select[data-odoo-id="${obra.odoo_id}"]`);
-            
             let isComplete = true;
-
             if (selectJefe) {
-                // Sacamos el valor usando jQuery para compatibilidad total con Select2
                 let valJefe = $(selectJefe).val();
-                if(valJefe) {
-                    obra.jefe_obra_id = parseInt(valJefe);
-                } else {
-                    isComplete = false;
-                    obra.jefe_obra_id = null;
-                }
+                if (valJefe) obra.jefe_obra_id = parseInt(valJefe); else { isComplete = false; obra.jefe_obra_id = null; }
             }
-            
             if (selectEnc) {
                 let valEnc = $(selectEnc).val();
-                if(valEnc) {
-                    obra.encargado_id = parseInt(valEnc);
-                } else {
-                    isComplete = false;
-                    obra.encargado_id = null;
-                }
+                if (valEnc) obra.encargado_id = parseInt(valEnc); else { isComplete = false; obra.encargado_id = null; }
             }
-
-            if (mode === 'all') {
-                validItems.push(obra);
-            } else if (mode === 'valid_only') {
-                if (isComplete) validItems.push(obra);
-            }
+            if (mode === 'all' || isComplete) validItems.push(obra);
         });
         return validItems;
     }
-
-    let finalNuevas = processList(payload.nuevas);
-    let finalActualizadas = processList(payload.actualizadas);
-
-    if (finalNuevas.length === 0 && finalActualizadas.length === 0 && payload.finalizadas.length === 0) {
-        alert("No hay obras seleccionadas para procesar con este filtro.");
-        return;
-    }
-
     let finalPayload = {
-        'nuevas': finalNuevas,
-        'actualizadas': finalActualizadas,
-        'finalizadas': payload.finalizadas 
+        nuevas: processList(payload.nuevas),
+        actualizadas: processList(payload.actualizadas),
+        finalizadas: payload.finalizadas,
+        errores: {{ preview.stats.omitidos_auto }}
     };
-
-    let btns = document.querySelectorAll('.btn-group .btn');
-    btns.forEach(b => { b.disabled = true; b.innerHTML = "<i class='fas fa-spinner fa-spin mr-1'></i> Guardando..."; });
-
+    if (!finalPayload.nuevas.length && !finalPayload.actualizadas.length && !finalPayload.finalizadas.length) {
+        alert('No hay registros para guardar con este filtro.'); return;
+    }
     fetch("{{ url_for('sync.commit_obras') }}", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalPayload)
-    })
-    .then(res => res.json())
-    .then(data => {
-        if(data.success) {
-            alert(`¡Guardado con éxito!\n\nProcesadas: ${finalNuevas.length} Nuevas, ${finalActualizadas.length} Actualizadas, ${payload.finalizadas.length} Finalizadas.`);
-            window.location.href = "{{ url_for('admin.obras_list') }}";
-        } else {
-            alert("Error en sincronización: " + data.error);
-            btns.forEach(b => { b.disabled = false; });
-        }
+    }).then(r => r.json()).then(data => {
+        if (data.success) { alert('Guardado correctamente.'); window.location.href = "{{ url_for('sync.panel') }}"; }
+        else alert('Error: ' + data.error);
     });
 }
 </script>

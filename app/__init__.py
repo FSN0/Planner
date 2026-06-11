@@ -76,9 +76,7 @@ def create_app():
     # Importación de Blueprints
     # ---------------------------------------------------------
     from app.auth.routes import auth_bp
-    from app.operarios.routes import operarios_bp
     from app.jefe_obra.routes import jefe_bp
-    from app.rrhh.routes import rrhh_bp
     from app.admin.routes import admin_bp
     from app.routes import main_bp
     from app.notas.routes import notas_bp
@@ -116,11 +114,11 @@ def create_app():
 
 
     # Importación local de constantes para evitar referencias circulares
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_RRHH, ROLE_OPERARIO
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO, ROLE_RRHH
 
     @app.context_processor
     def inject_notifications():
-        from app.models import Solicitud, ROLE_ADMIN, ROLE_JEFE, SystemLog, LogPreference
+        from app.models import Solicitud, ROLE_ADMIN, ROLE_JEFE
         
         pending_count = 0
         unread_logs_count = 0 # <-- NUEVO CONTADOR
@@ -131,15 +129,8 @@ def create_app():
                     Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
                 ).count()
                 
-                # --- NUEVO: CÁLCULO DE LA BURBUJA DE LOGS ---
-                prefs = LogPreference.query.filter_by(user_id=current_user.id, is_active=True).all()
-                for pref in prefs:
-                    # Cuenta cuántos logs de esta categoría se han creado DESPUÉS de su última lectura
-                    unread_logs_count += SystemLog.query.filter(
-                        SystemLog.category == pref.category,
-                        SystemLog.timestamp > pref.last_read_at
-                    ).count()
-                # --------------------------------------------
+                from app.services.log_notification_service import get_total_unread_logs
+                unread_logs_count = get_total_unread_logs(current_user.id)
 
             # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
             elif current_user.role == ROLE_JEFE:
@@ -172,10 +163,17 @@ def create_app():
     # ---------------------------------------------------------
     def redirect_by_role(user):
         """Redirige al usuario a su panel correspondiente según su rol."""
-        if user.role == ROLE_ADMIN: return redirect(url_for('admin.panel'))
-        elif user.role == ROLE_JEFE: return redirect(url_for('jefe.panel'))
-        elif user.role == ROLE_RRHH: return redirect(url_for('rrhh.panel'))
-        else: return redirect(url_for('main.dashboard'))
+        if user.role == ROLE_ADMIN:
+            return redirect(url_for('admin.panel'))
+        elif user.role == ROLE_JEFE:
+            return redirect(url_for('jefe.panel'))
+        elif user.role in (ROLE_RRHH, ROLE_OPERARIO):
+            from flask_login import logout_user
+            logout_user()
+            from flask import flash
+            flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
+            return redirect(url_for('auth.login'))
+        return redirect(url_for('auth.login'))
 
     @login_manager.unauthorized_handler
     def handle_needs_login():

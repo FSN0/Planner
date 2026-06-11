@@ -1,29 +1,28 @@
 {# --- app/templates/components/_kanban_col_libres.html --- #}
 
 {# 1. CONTENEDOR PRINCIPAL #}
-<div class="d-flex flex-column mr-3" 
-     style="background-color: #f8fafc; position: sticky; top: 110px; height: calc(100vh - 130px); z-index: 99; min-width: 260px;">
-    
-    {# 2. CABECERA: Barra de búsqueda #}
-    <div class="p-2 border-bottom bg-white" style="z-index: 10; flex-shrink: 0;">
-        <div class="input-group input-group-sm">
-            <div class="input-group-prepend">
-                <span class="input-group-text bg-light border-0">
-                    <i class="fas fa-search text-muted"></i>
-                </span>
-            </div>
-            <input type="text" id="search-libres-input" class="form-control border-0 bg-light" 
+<div class="kanban-libres-panel col-libres">
+
+    <div class="kanban-libres-head">
+        <div class="kanban-libres-title">
+            <i class="fas fa-users"></i> Operarios
+        </div>
+        <div class="kanban-libres-search-wrap">
+            <i class="fas fa-search"></i>
+            <input type="text" id="search-libres-input" class="kanban-libres-search"
                    placeholder="Buscar operario o empresa..." autocomplete="off">
         </div>
-        {# Contador resumen #}
-        <div class="d-flex justify-content-between mt-2 px-1">
-            <small class="text-muted font-weight-bold">Libres: {{ free_workers|length }}</small>
-            <small class="text-muted">Total: {{ free_workers|length + busy_workers|length }}</small>
+        <div class="kanban-libres-stats">
+            <span class="kanban-libres-stat kanban-libres-stat--free">
+                <strong>{{ free_workers|length }}</strong> libres
+            </span>
+            <span class="kanban-libres-stat">
+                {{ free_workers|length + busy_workers|length }} total
+            </span>
         </div>
     </div>
 
-    {# 3. CUERPO DE LA LISTA (Con Scroll) #}
-    <div class="worker-list-body flex-grow-1 overflow-auto p-2" id="list-libres-body" data-obra-id="0" data-obra-name="Libres">
+    <div class="worker-list-body kanban-libres-body" id="list-libres-body" data-obra-id="0" data-obra-name="Libres">
         
         {# --- BLOQUE A: OPERARIOS LIBRES --- #}
         {% for worker in free_workers %}

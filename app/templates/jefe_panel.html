@@ -1,76 +1,388 @@
 {% extends "base.html" %}
-{% block title %}Mis Obras{% endblock %}
+{% block title %}Mi panel{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
-  {# Reutilizamos la sidebar, que se adapta automáticamente al rol #}
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main">
-    
-    <header class="admin-header mb-4">
-        <div class="d-flex justify-content-between align-items-end">
-            <div>
-                <div class="admin-header-title">Hola, {{ current_user.name }}</div>
-                <p class="admin-header-subtitle">Bienvenido a tu panel de gestión de obras.</p>
-            </div>
-            <div>
-                {# Botón principal para ir al tablero de planificación #}
-                <a href="{{ url_for('jefe.obras_detailed') }}" class="btn btn-primary">
-                    <i class="fas fa-th mr-2"></i> Ir al Tablero de Planificación
-                </a>
-            </div>
-        </div>
-    </header>
+  <main class="admin-main admin-main--compact dashboard-page">
 
-    <section class="admin-panel">
-        <div class="admin-panel-header border-bottom pb-3 mb-3">
-            <h2 class="admin-panel-title">Mis Obras Asignadas</h2>
-        </div>
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">Mi panel</h1>
+        <span class="page-toolbar-count">{{ today.strftime('%d/%m/%Y') }}</span>
+      </div>
+      <div class="page-toolbar-actions">
+        <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-primary">
+          <i class="fas fa-th-large"></i> Tablero
+        </a>
+        <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-user-plus"></i> Solicitudes
+          {% if solicitudes_abiertas %}<span class="badge-soft badge-soft-amber ml-1">{{ solicitudes_abiertas }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-user-clock"></i> Auditoría
+          {% if audit_pendientes_total %}<span class="badge-soft badge-soft-red ml-1">{{ audit_pendientes_total }}</span>{% endif %}
+        </a>
+      </div>
+    </div>
 
-        {% if obras %}
-        <div class="row">
-            {% for obra in obras %}
-            <div class="col-md-4 mb-3">
-                <div class="card h-100 shadow-sm" style="border: 1px solid #e5e7eb; border-radius: 0.75rem;">
-                    <div class="card-body d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="h6 font-weight-bold text-dark mb-0">{{ obra.nombre }}</h5>
-                            <span class="badge badge-soft-slate">{{ obra.codigo or 'S/C' }}</span>
-                        </div>
-                        <p class="small text-muted mb-3 flex-grow-1">
-                            <i class="fas fa-map-marker-alt mr-1"></i> {{ obra.ubicacion or 'Sin ubicación' }}
-                        </p>
-                        
-                        <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                            <span class="status-dot {{ 'green' if obra.estado == 'En Curso' else 'gray' }}"></span>
-                            <small class="text-muted">{{ obra.estado }}</small>
-                            
-                            {# Enlace para ir al detalle de ESA obra en el calendario #}
-                            <a href="{{ url_for('jefe.obras_detailed', selected_date=obra.fecha_inicio.strftime('%Y-%m-%d') if obra.fecha_inicio else '') }}" 
-                               class="btn btn-xs btn-outline-primary">
-                                Gestionar
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
+    <section class="dashboard-kpi-grid" style="grid-template-columns: repeat(5, minmax(0, 1fr));">
+      <article class="dashboard-kpi dashboard-kpi--primary">
+        <div class="dashboard-kpi-icon"><i class="fas fa-building"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">Mis obras en curso</span>
+          <span class="dashboard-kpi-value">{{ obras_en_curso }}</span>
+          <span class="dashboard-kpi-meta">{{ total_obras }} asignadas en total</span>
         </div>
-        {% else %}
-        <div class="text-center py-5">
-            <div class="text-muted mb-3"><i class="fas fa-hard-hat fa-3x"></i></div>
-            <h3 class="h6 text-dark">No tienes obras asignadas</h3>
-            <p class="small text-muted">Contacta con administración para que te asignen como responsable de una obra.</p>
+      </article>
+      <article class="dashboard-kpi">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--blue"><i class="fas fa-users"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">Personal hoy</span>
+          <span class="dashboard-kpi-value">{{ planificados_hoy }}</span>
+          <span class="dashboard-kpi-meta">{{ asignaciones_hoy }} asignaciones en mis obras</span>
         </div>
-        {% endif %}
+      </article>
+      <article class="dashboard-kpi">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--amber"><i class="fas fa-clipboard-list"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">Solicitudes abiertas</span>
+          <span class="dashboard-kpi-value">{{ solicitudes_abiertas }}</span>
+          <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} pendientes · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} en proceso</span>
+        </div>
+      </article>
+      <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">Auditoría pendiente</span>
+          <span class="dashboard-kpi-value">{{ audit_pendientes_total }}</span>
+          <span class="dashboard-kpi-meta">{{ audit_conflictos }} desv. · {{ audit_paracaidistas }} sin plan. · {{ audit_ausencias }} aus.</span>
+        </div>
+      </article>
+      <article class="dashboard-kpi">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--green"><i class="fas fa-fingerprint"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">Fichajes hoy</span>
+          <span class="dashboard-kpi-value">{{ fichajes_total_hoy }}</span>
+          <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} incidencias</span>{% endif %}</span>
+        </div>
+      </article>
     </section>
+
+    <div class="dashboard-main-grid">
+      <section class="admin-panel dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2 class="admin-panel-title">Planificación · 14 días</h2>
+          <span class="admin-panel-subtitle">Asignaciones en mis obras</span>
+        </div>
+        <div class="dashboard-chart-wrap">
+          <canvas id="chartPlanificacion" height="120"></canvas>
+        </div>
+      </section>
+
+      <section class="admin-panel dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2 class="admin-panel-title">Solicitudes por estado</h2>
+        </div>
+        <div class="dashboard-chart-row">
+          <div class="dashboard-chart-donut">
+            <canvas id="chartSolicitudes" height="140"></canvas>
+          </div>
+          <ul class="dashboard-legend">
+            {% for est, cnt in solicitudes_por_estado.items() %}
+            <li>
+              <span class="dashboard-legend-dot dashboard-legend-dot--{{ est|lower }}"></span>
+              <span>{{ est|replace('_', ' ')|title }}</span>
+              <strong>{{ cnt }}</strong>
+            </li>
+            {% else %}
+            <li class="text-muted small">Sin solicitudes en tus obras</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+
+      <section class="admin-panel dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2 class="admin-panel-title">Mis obras en curso</h2>
+        </div>
+        {% if recent_obras %}
+        <ul class="dashboard-activity-list" style="margin-top:0.25rem;">
+          {% for obra in recent_obras %}
+          <li>
+            <span class="cell-code">{{ obra.codigo or obra.id }}</span>
+            <span class="dashboard-activity-body">
+              <strong>{{ obra.nombre|truncate(36) }}</strong>
+              <span class="text-muted">— {{ obra.ubicacion or 'Sin ubicación' }}</span>
+            </span>
+            <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.62rem;padding:0.15rem 0.4rem;">Gestionar</a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted small mb-0">No tienes obras en curso asignadas.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="dashboard-tables-grid">
+      <section class="admin-panel admin-panel-flush dashboard-panel">
+        <div class="dashboard-panel-head dashboard-panel-head--padded">
+          <h2 class="admin-panel-title"><i class="fas fa-user-plus text-primary mr-1"></i> Solicitudes recientes</h2>
+          <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Ver todas</a>
+        </div>
+        {% if recent_solicitudes %}
+        <table class="filterable-table admin-data-table mb-0 dashboard-table">
+          <thead>
+            <tr class="header-row">
+              <th>#</th>
+              <th>Obra</th>
+              <th>Tipo</th>
+              <th>Periodo</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in recent_solicitudes %}
+            <tr class="row-clickable" data-href="{{ url_for('admin.solicitud_detail', solicitud_id=s.id) }}">
+              <td class="text-muted">#{{ s.id }}</td>
+              <td>
+                {% if s.obra %}
+                <span class="cell-code">{{ s.obra.codigo or s.obra.id }}</span>
+                <span class="text-muted" style="font-size:0.68rem;">{{ s.obra.nombre|truncate(28) }}</span>
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                {% if s.tipo|lower == 'generica' %}<span class="badge-soft badge-soft-gray">Genérica</span>
+                {% else %}<span class="badge-soft badge-soft-blue">Concreta</span>{% endif %}
+              </td>
+              <td class="text-nowrap" style="font-size:0.72rem;">
+                {{ s.fecha_inicio.strftime('%d/%m') }}–{{ s.fecha_fin.strftime('%d/%m/%y') }}
+              </td>
+              <td>
+                {% set est = s.estado %}
+                {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
+                {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
+                {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
+                {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
+                {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+                {% else %}<span class="badge-soft badge-soft-gray">{{ est }}</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="table-empty-state"><i class="fas fa-inbox"></i>Sin solicitudes en tus obras</p>
+        {% endif %}
+      </section>
+
+      <section class="admin-panel admin-panel-flush dashboard-panel">
+        <div class="dashboard-panel-head dashboard-panel-head--padded">
+          <h2 class="admin-panel-title"><i class="fas fa-users text-primary mr-1"></i> Personal por obra hoy</h2>
+          <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Tablero</a>
+        </div>
+        {% if obras_hoy_rows %}
+        <table class="filterable-table admin-data-table mb-0 dashboard-table">
+          <thead>
+            <tr class="header-row">
+              <th>Obra</th>
+              <th class="text-center">Hoy</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for obra, count in obras_hoy_rows %}
+            <tr class="row-clickable" data-href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}">
+              <td>
+                <span class="cell-code">{{ obra.codigo or obra.id }}</span>
+                {{ obra.nombre|truncate(32) }}
+              </td>
+              <td class="text-center"><span class="badge-soft badge-soft-blue">{{ count }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="table-empty-state"><i class="fas fa-calendar-day"></i>Sin asignaciones hoy en tus obras</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="dashboard-bottom-grid">
+      <section class="admin-panel admin-panel-flush dashboard-panel">
+        <div class="dashboard-panel-head dashboard-panel-head--padded">
+          <h2 class="admin-panel-title"><i class="fas fa-user-clock text-danger mr-1"></i> Incidencias de fichaje</h2>
+          <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Ir a auditoría</a>
+        </div>
+        {% include 'components/_dashboard_incidencias.html' %}
+      </section>
+
+      <section class="admin-panel dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2 class="admin-panel-title"><i class="fas fa-history mr-1"></i> Actividad reciente</h2>
+        </div>
+        {% if recent_logs %}
+        <ul class="dashboard-activity-list">
+          {% for log in recent_logs %}
+          <li>
+            <span class="dashboard-activity-time">{{ log.timestamp|format_dt }}</span>
+            <span class="dashboard-activity-body">
+              <strong>{{ log.action }}</strong>
+              <span class="text-muted">— {{ (log.detail or '')|truncate(80) }}</span>
+            </span>
+            {% if log.user %}
+            <span class="badge-soft badge-soft-gray">{{ log.user.name }}</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted small mb-0">Sin actividad reciente.</p>
+        {% endif %}
+      </section>
+    </div>
 
   </main>
 </div>
+
+{% with modal_id='modalTimelineFichaje', modal_title='Historial del Fichaje' %}
+  {% include 'components/_person_day_timeline_modal.html' %}
+{% endwith %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+function dashboardResolverFichaje(id, accion) {
+  const row = document.getElementById('row-' + id);
+  if (row) {
+    row.style.transition = 'all 0.3s ease';
+    row.style.opacity = '0.3';
+    row.style.pointerEvents = 'none';
+  }
+  fetch("{{ url_for('sync.resolver_fichaje') }}", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ registro_id: id, accion: accion }),
+  })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success) {
+        setTimeout(function() {
+          if (row) row.remove();
+          const restantes = document.querySelectorAll('.dashboard-incidencia-row');
+          if (!restantes.length) window.location.reload();
+        }, 300);
+      } else {
+        alert('Error: ' + data.error);
+        if (row) {
+          row.style.opacity = '1';
+          row.style.pointerEvents = 'auto';
+        }
+      }
+    })
+    .catch(function() {
+      if (row) {
+        row.style.opacity = '1';
+        row.style.pointerEvents = 'auto';
+      }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof PersonDayTimeline !== 'undefined') {
+    PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
+      modalId: 'modalTimelineFichaje',
+      apiBase: '/sync/timeline_dia',
+      loadingMessage: 'Recopilando el día completo del operario...',
+    });
+  }
+
+  document.querySelectorAll('tr.row-clickable[data-href]').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+      if (e.target.closest('a, button, input, .no-row-nav')) return;
+      window.location.href = row.dataset.href;
+    });
+  });
+
+  const planLabels = {{ chart_plan_labels|tojson }};
+  const planValues = {{ chart_plan_values|tojson }};
+  const solLabels = {{ chart_solicitud_labels|tojson }};
+  const solValues = {{ chart_solicitud_values|tojson }};
+
+  const chartColors = {
+    primary: '#22c55e',
+    primaryLight: 'rgba(34, 197, 94, 0.15)',
+    slate: '#94a3b8',
+    blue: '#3b82f6',
+    amber: '#f59e0b',
+    red: '#ef4444',
+    green: '#22c55e',
+    gray: '#9ca3af',
+  };
+
+  const planCtx = document.getElementById('chartPlanificacion');
+  if (planCtx && typeof Chart !== 'undefined') {
+    new Chart(planCtx, {
+      type: 'bar',
+      data: {
+        labels: planLabels,
+        datasets: [{
+          label: 'Asignaciones',
+          data: planValues,
+          backgroundColor: chartColors.primaryLight,
+          borderColor: chartColors.primary,
+          borderWidth: 1.5,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  const solCtx = document.getElementById('chartSolicitudes');
+  if (solCtx && typeof Chart !== 'undefined' && solValues.length) {
+    const estadoColors = {
+      'PENDIENTE': chartColors.amber,
+      'EN_PROCESO': chartColors.blue,
+      'CUMPLIDA': chartColors.green,
+      'CERRADA_PARCIAL': chartColors.gray,
+      'DENEGADA': chartColors.red,
+    };
+    new Chart(solCtx, {
+      type: 'doughnut',
+      data: {
+        labels: solLabels,
+        datasets: [{
+          data: solValues,
+          backgroundColor: solLabels.map(function(l) { return estadoColors[l] || chartColors.slate; }),
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '68%',
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+});
+</script>
 {% endblock %}

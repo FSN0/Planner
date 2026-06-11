@@ -39,3 +39,5 @@ docker exec -it project-web-1 flask db upgrade
 
 echo "Proceso de migración completado."
 
+
+

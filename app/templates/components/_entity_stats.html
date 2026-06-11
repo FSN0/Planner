@@ -1,0 +1,44 @@
+{# Indicadores / KPIs de ficha de entidad
+   Espera: stats (lista de dicts), chart_14d (opcional), chart_14d_max (opcional)
+#}
+{% if stats %}
+<section class="entity-stats-section" aria-label="Indicadores">
+  <div class="entity-stats-section-head">
+    <h2 class="entity-stats-heading">
+      <i class="fas fa-chart-bar"></i> Indicadores
+    </h2>
+    {% if chart_14d %}
+    <div class="entity-mini-chart" title="Actividad últimos 14 días">
+      {% set mx = chart_14d_max or 1 %}
+      {% for v in chart_14d %}
+      <span class="entity-mini-chart-bar" style="height: {{ ((v / mx) * 100)|int }}%;" title="{{ v }}"></span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  <div class="entity-stats-grid">
+    {% for s in stats %}
+    {% set card_tag = 'a' if s.href else 'div' %}
+    <{{ card_tag }}
+      class="entity-stat-card entity-stat-card--{{ s.tone or 'slate' }}"
+      {% if s.href %}href="{{ s.href }}"{% endif %}
+      {% if s.sub %}title="{{ s.label }}: {{ s.value }} — {{ s.sub }}"{% endif %}
+    >
+      <div class="entity-stat-card-icon"><i class="fas {{ s.icon or 'fa-circle' }}"></i></div>
+      <div class="entity-stat-card-body">
+        <span class="entity-stat-card-label">{{ s.label }}</span>
+        <span class="entity-stat-card-value">{{ s.value }}</span>
+        {% if s.sub %}
+        <span class="entity-stat-card-sub">{{ s.sub }}</span>
+        {% endif %}
+        {% if s.progress is not none %}
+        <div class="entity-stat-progress" aria-hidden="true">
+          <span class="entity-stat-progress-fill" style="width: {{ s.progress }}%;"></span>
+        </div>
+        {% endif %}
+      </div>
+    </{{ card_tag }}>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}

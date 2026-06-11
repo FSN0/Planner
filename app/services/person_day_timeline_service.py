@@ -288,8 +288,35 @@ def _link_subject_in_text(html, subject_user):
     return Markup(html_str.replace(escaped_name, link, 1))
 
 
+def _append_fichaje_notes_from_registro(log, detail):
+    """Añade notas Odoo al detalle del log si el registro local las tiene."""
+    if log.category != 'fichaje_app' or not detail or 'Notas:' in detail:
+        return detail
+    if not log.target_user_id or not log.target_date:
+        return detail
+
+    regs = RegistroFichaje.query.filter_by(
+        user_id=log.target_user_id,
+        fecha=log.target_date,
+    ).filter(RegistroFichaje.nota_odoo.isnot(None)).all()
+
+    for reg in regs:
+        note = (reg.nota_odoo or '').strip()
+        if not note:
+            continue
+        obra = Obra.query.get(reg.obra_real_id) if reg.obra_real_id else None
+        if not obra:
+            continue
+        label = format_obra_label(obra)
+        codigo = (obra.codigo or '').strip()
+        if label in detail or (codigo and codigo in detail):
+            return f"{detail.rstrip('.')} Notas: {note}"
+    return detail
+
+
 def _build_detail_html(text, obra_cache, subject_user, target_date=None, log_timestamp=None, log=None):
     plain = _enrich_legacy_fichaje_detail(log, text or "") if log else (text or "")
+    plain = _append_fichaje_notes_from_registro(log, plain) if log else plain
     plain = _normalize_detail_obras(plain, obra_cache)
     plain = _normalize_fichaje_times_in_detail(plain, target_date, log_timestamp)
     html = _link_obras_in_text(plain, obra_cache)

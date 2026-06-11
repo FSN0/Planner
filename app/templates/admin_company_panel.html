@@ -1,116 +1,103 @@
 {% extends "base.html" %}
 {% block title %}Ficha: {{ company.nombre }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
-<style>
-    #company-timeline { font-family: system-ui; font-size: 0.8rem; }
-    .fc .fc-toolbar-title { font-size: 1rem !important; text-transform: capitalize; }
-    
-    /* Efecto interactivo para los bloques de estadísticas clicables */
-    .stat-link {
-        display: block;
-        text-decoration: none !important;
-        color: inherit;
-        border-radius: 8px;
-        padding: 8px 4px;
-        transition: transform 0.15s ease, background-color 0.15s ease;
-    }
-    .stat-link:hover {
-        transform: scale(1.05);
-        background-color: #f8fafc;
-    }
-    .stat-link:hover .h5 {
-        color: #3b82f6 !important; /* Azul destacado al pasar el ratón */
-    }
-</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main">
-    <div class="d-flex justify-content-between mb-3 align-items-center">
-        <a href="{{ url_for('admin.companies') }}" class="text-muted small"><i class="fas fa-arrow-left"></i> Volver</a>
-        <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn btn-xs btn-outline-secondary"><i class="fas fa-pencil-alt"></i> Editar</a>
-    </div>
+  <main class="admin-main entity-panel-page entity-panel-page--company"
+        style="--entity-accent: {{ company.color or '#6366f1' }};">
 
-    <div class="admin-panel mb-4">
-        <div class="admin-panel-header border-bottom pb-3 mb-3 d-flex justify-content-between align-items-start">
-            <div>
-                 <h1 class="h4 mb-0 font-weight-bold text-dark">{{ company.nombre }}</h1>
-                <p class="text-muted mb-0">{{ company.code }} | {{ company.nif or 'Sin NIF' }}</p>
-            </div>
-            <div class="text-right">
-                <div class="status-dot" style="background-color: {{ company.color }}; width: 15px; height: 15px;"></div>
-            </div>
+    <article class="entity-panel-card">
+      <header class="entity-panel-card-top">
+        <div class="entity-panel-toolbar-start">
+          <a href="{{ url_for('admin.companies') }}" class="entity-panel-back">
+            <i class="fas fa-arrow-left"></i> Empresas
+          </a>
+          <span class="entity-type-marker"><i class="fas fa-briefcase"></i> Empresa</span>
         </div>
-        
-        {# LÓGICA JINJA: Calcular la media de los trabajadores que sí tienen valoración #}
-        {% set ns = namespace(total=0, count=0) %}
-        {% for u in company.users %}
-            {% if u.reputation_score > 0 %}
-                {% set ns.total = ns.total + u.reputation_score %}
-                {% set ns.count = ns.count + 1 %}
-            {% endif %}
-        {% endfor %}
-        {% set avg_score = (ns.total / ns.count)|round(1) if ns.count > 0 else 0 %}
+        <div class="entity-panel-actions">
+          <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-pencil-alt"></i> Editar
+          </a>
+        </div>
+      </header>
 
-        <div class="row text-center align-items-center">
-            
-            {# 1. TRABAJADORES (Clicable) #}
-            <div class="col-3 border-right">
-                <<a href="{{ url_for('admin.personal', company_id=company.id) }}{{ '#internos' if company.is_internal else '#operarios' }}" class="stat-link" title="Ver listado y valoraciones">
-                    <div class="h5 font-weight-bold mb-0 text-dark">{{ company.users|length }}</div>
-                    <div class="small text-muted text-uppercase">Trabajadores</div>
-                </a>
+      <div class="entity-hero-accent" aria-hidden="true"></div>
+      <div class="entity-hero-body entity-hero-body--full">
+        <div class="entity-hero-main">
+          <div class="entity-hero-title-row">
+            <div class="entity-hero-icon-wrap">
+              <div class="entity-hero-icon">
+                <i class="fas fa-briefcase"></i>
+              </div>
             </div>
-            
-            {# 2. INTERVENCIONES #}
-            <div class="col-3 border-right">
-                <div class="h5 font-weight-bold mb-0 text-dark">-</div>
-                <div class="small text-muted text-uppercase">Intervenciones</div>
+            <div class="entity-hero-title-text">
+              <h1 class="entity-hero-name">{{ company.nombre }}</h1>
+              <p class="entity-hero-subtitle">
+                <span class="entity-code-badge">{{ company.code }}</span>
+                {% if company.nif %}
+                  <span>{{ company.nif }}</span>
+                {% else %}
+                  <span class="text-muted">Sin NIF</span>
+                {% endif %}
+                {% if company.is_internal %}
+                  <span class="badge-soft badge-soft-green">Interna</span>
+                {% endif %}
+              </p>
             </div>
-            
-            {# 3. INTERNA #}
-            <div class="col-3 border-right">
-                <div class="h5 font-weight-bold mb-0 {{ 'text-primary' if company.is_internal else 'text-dark' }}">{{ 'SI' if company.is_internal else 'NO' }}</div>
-                <div class="small text-muted text-uppercase">Interna</div>
-            </div>
-            
-            {# 4. VALORACIÓN MEDIA (Clicable) #}
-            <div class="col-3">
-                <a href="{{ url_for('admin.personal', company_id=company.id) }}" class="stat-link" title="Ver listado y valoraciones">
-                    <div class="h5 font-weight-bold mb-0 text-dark">
-                        {% if ns.count > 0 %}
-                            <i class="fas fa-star text-warning mr-1"></i>{{ avg_score }}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </div>
-                    <div class="small text-muted text-uppercase">Valoración</div>
-                </a>
-            </div>
+          </div>
 
+          <div class="entity-meta-grid">
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Código</span>
+              <span class="entity-meta-item-value">{{ company.code }}</span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">NIF</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not company.nif }}">
+                {{ company.nif or 'Sin NIF' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Tipo</span>
+              <span class="entity-meta-item-value">
+                {% if company.is_internal %}
+                  Empresa interna
+                {% else %}
+                  Subcontrata / externa
+                {% endif %}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Color identificativo</span>
+              <span class="entity-meta-item-value">
+                <span class="entity-color-swatch" style="background:{{ company.color or '#6366f1' }};"></span>
+                {{ company.color or '—' }}
+              </span>
+            </div>
+          </div>
         </div>
-    </div>
+      </div>
 
-    <section class="admin-panel">
-        <div class="admin-panel-header border-bottom pb-2 mb-2">
-            <h2 class="admin-panel-title">Cronograma de Obras</h2>
-            <p class="admin-panel-subtitle">Obras donde esta empresa tiene personal asignado.</p>
-        </div>
-        <div class="admin-panel-body">
-            <div id="company-timeline"></div>
-        </div>
+      {% include "components/_entity_stats.html" %}
+    </article>
+
+    <section class="entity-calendar-zone">
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Planificación</h2>
+      <div id="company-timeline" class="univ-calendar-root"></div>
     </section>
+
   </main>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
-
 <script>
 let companyCalendarInstance = null;
 
@@ -118,8 +105,9 @@ document.addEventListener('DOMContentLoaded', function() {
     companyCalendarInstance = new UniversalCalendarManager('company-timeline', {
         context: 'empresa',
         id: {{ company.id }},
-        entityName: '{{ company.nombre }}',
-        mode: 'empleados'
+        entityName: {{ company.nombre|tojson }},
+        mode: 'empleados',
+        hideTitle: true
     });
 });
 </script>
