@@ -6,7 +6,7 @@ set -euo pipefail
 
 VERSIONS_DIR="migrations/versions"
 CANONICAL_CUSTOM_DOMAIN="a8f3c2b1d0e9_add_tenant_custom_domain.py"
-CANONICAL_FICHAJES="b4c5d6e7f8a9_add_registros_fichajes_nota_odoo.py"
+CANONICAL_FICHAJES="e5f6a7b8c9d0_add_registros_fichajes_nota_odoo.py"
 
 if [ ! -d "$VERSIONS_DIR" ]; then
     echo "No existe $VERSIONS_DIR"
@@ -16,8 +16,9 @@ fi
 echo "==> Archivos de migración en disco:"
 ls -1 "$VERSIONS_DIR" || true
 
-echo "==> Eliminando revisiones obsoletas conocidas..."
-rm -f "$VERSIONS_DIR"/e5f6a7b8c9d0_*.py
+echo "==> Eliminando migraciones duplicadas/obsoletas..."
+rm -f "$VERSIONS_DIR"/b4c5d6e7f8a9_*.py
+rm -f "$VERSIONS_DIR"/e5f6a7b8c9d0_add_tenant_custom_domain.py
 
 if [ -f "$VERSIONS_DIR/$CANONICAL_CUSTOM_DOMAIN" ]; then
     for path in "$VERSIONS_DIR"/*custom_domain*.py; do
@@ -76,11 +77,11 @@ for path in versions.glob("*.py"):
         referenced.add(down.strip("'\""))
 
 heads = sorted(all_revs - referenced)
-if len(heads) > 1:
-    print(f"ERROR: varias heads en disco: {heads}", file=sys.stderr)
+if len(heads) != 1:
+    print(f"ERROR: se esperaba 1 head, encontradas: {heads}", file=sys.stderr)
     sys.exit(1)
 
-print(f"==> Head en disco: {heads[0] if heads else 'desconocida'}")
+print(f"==> Head en disco: {heads[0]}")
 PY
 
-echo "==> Listo. Reconstruye la imagen web antes de migrar (make migrate-prod ya lo hace)."
+echo "==> Cadena esperada: ... -> d4e5f6a7b8c9 -> e5f6a7b8c9d0 -> a8f3c2b1d0e9"
