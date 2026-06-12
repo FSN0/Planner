@@ -6,6 +6,7 @@ _CUSTOM_DOMAIN_RE = re.compile(
     r'^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
 )
 _RESERVED_SUBDOMAINS = frozenset({'www', 'admin', 'superadmin', 'signaplan'})
+_MARKETING_HOSTS = frozenset({'signaplan.com', 'www.signaplan.com'})
 
 
 def normalize_host(host):
@@ -44,6 +45,11 @@ def assert_custom_domain_available(domain, tenant_id=None):
     existing = Tenant.query.filter_by(custom_domain=domain).first()
     if existing and existing.id != tenant_id:
         raise ValueError(f"El dominio '{domain}' ya está asignado a {existing.nombre}.")
+
+
+def is_marketing_host(host):
+    """True en el dominio raíz público (escaparate comercial)."""
+    return normalize_host(host) in _MARKETING_HOSTS
 
 
 def is_signaplan_host(host):

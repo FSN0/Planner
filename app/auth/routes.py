@@ -9,6 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from app import db, limiter
 from app.models import User, ROLE_OPERARIO, ROLE_RRHH, Company
+from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -32,8 +33,14 @@ def login():
         return _redirect_authenticated_user()
 
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        host = normalize_host(request.host)
+        if is_marketing_host(host):
+            flash('Accede desde la URL de tu empresa, por ejemplo tuempresa.signaplan.com', 'info')
+            return redirect(url_for('main.dashboard'))
+        if host == 'localhost':
+            return redirect(url_for('superadmin.dashboard'))
         flash('Por favor, accede desde la URL específica de tu empresa.', 'warning')
-        return redirect('http://localhost/superadmin/')
+        return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
         email = request.form.get('email')

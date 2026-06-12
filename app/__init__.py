@@ -220,6 +220,7 @@ def create_app():
             normalize_host,
             resolve_tenant_by_custom_domain,
             resolve_tenant_by_subdomain,
+            _RESERVED_SUBDOMAINS,
         )
 
         host = normalize_host(request.host)
@@ -249,6 +250,10 @@ def create_app():
             return
         else:
             subdomain = parts[0]
+
+        if subdomain in _RESERVED_SUBDOMAINS:
+            db.session.execute(text("SET search_path TO public"))
+            return
 
         tenant = resolve_tenant_by_subdomain(subdomain)
         if tenant:

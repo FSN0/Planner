@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="SignaPlan — Planificación de obras, equipos y fichajes integrados con Odoo.">
+    <title>SignaPlan — Planificación inteligente para construcción</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="{{ url_for('main.dashboard') }}">
+            <i class="fas fa-hard-hat"></i>
+            <span>SignaPlan</span>
+        </a>
+        <nav class="mkt-nav-links">
+            <a href="#funciones">Funciones</a>
+            <a href="#acceso">Acceso clientes</a>
+            <a href="#contacto">Contacto</a>
+            <a class="mkt-btn mkt-btn-primary" href="mailto:info@signaplan.com">Solicitar demo</a>
+        </nav>
+    </header>
+
+    <section class="mkt-hero">
+        <div>
+            <span class="mkt-hero-badge">SaaS para empresas de construcción</span>
+            <h1>Planifica obras, equipos y fichajes en un solo lugar</h1>
+            <p>
+                SignaPlan centraliza la planificación diaria, la gestión de personal y subcontratas,
+                y la sincronización con Odoo. Cada cliente trabaja en su espacio aislado y seguro.
+            </p>
+            <div class="mkt-hero-actions">
+                <a class="mkt-btn mkt-btn-primary" href="mailto:info@signaplan.com">
+                    <i class="fas fa-calendar-check"></i> Pedir una demo
+                </a>
+                <a class="mkt-btn mkt-btn-ghost" href="#funciones">Ver funciones</a>
+            </div>
+        </div>
+        <div class="mkt-hero-card">
+            <h3>Todo lo que tu equipo necesita en obra</h3>
+            <div class="mkt-stat-grid">
+                <div class="mkt-stat">
+                    <strong>Planificador</strong>
+                    <span>Asignación visual por obra y fecha</span>
+                </div>
+                <div class="mkt-stat">
+                    <strong>Multi-empresa</strong>
+                    <span>Internos y subcontratas</span>
+                </div>
+                <div class="mkt-stat">
+                    <strong>Odoo</strong>
+                    <span>Sincronización de empleados y fichajes</span>
+                </div>
+                <div class="mkt-stat">
+                    <strong>Multi-cliente</strong>
+                    <span>Cada empresa con su propio entorno</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mkt-section" id="funciones">
+        <div class="mkt-section-header">
+            <h2>Diseñado para el día a día en obra</h2>
+            <p>
+                Una plataforma pensada para administradores, jefes de obra y equipos de planificación
+                que necesitan claridad, trazabilidad y menos Excel.
+            </p>
+        </div>
+        <div class="mkt-features">
+            <article class="mkt-feature">
+                <i class="fas fa-th-large"></i>
+                <h3>Planificador visual</h3>
+                <p>Organiza operarios y recursos por obra con una vista clara del día y de la semana.</p>
+            </article>
+            <article class="mkt-feature">
+                <i class="fas fa-users"></i>
+                <h3>Gestión de personal</h3>
+                <p>Administra plantilla interna, subcontratas, solicitudes y disponibilidad desde un solo panel.</p>
+            </article>
+            <article class="mkt-feature">
+                <i class="fas fa-sync-alt"></i>
+                <h3>Integración Odoo</h3>
+                <p>Sincroniza empleados, obras y fichajes con tu ERP sin duplicar trabajo administrativo.</p>
+            </article>
+            <article class="mkt-feature">
+                <i class="fas fa-shield-alt"></i>
+                <h3>Entornos aislados</h3>
+                <p>Arquitectura multi-tenant: cada cliente con sus datos separados y su propia URL de acceso.</p>
+            </article>
+            <article class="mkt-feature">
+                <i class="fas fa-globe"></i>
+                <h3>Dominio propio</h3>
+                <p>Tus clientes pueden trabajar desde su subdominio SignaPlan o desde su dominio corporativo.</p>
+            </article>
+            <article class="mkt-feature">
+                <i class="fas fa-clipboard-list"></i>
+                <h3>Solicitudes y auditoría</h3>
+                <p>Control de incidencias, notas y registros para mantener el seguimiento bajo control.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="mkt-section" id="acceso">
+        <div class="mkt-access">
+            <div>
+                <h2>¿Ya eres cliente?</h2>
+                <p>
+                    El acceso a la aplicación no se realiza desde esta web pública.
+                    Cada empresa dispone de su propia URL de trabajo.
+                </p>
+                <code>tuempresa.signaplan.com</code>
+                <p style="margin-top: 1rem; color: var(--mkt-muted); font-size: 0.95rem;">
+                    Si tu empresa usa dominio propio, accede desde la dirección que te facilitó tu administrador.
+                </p>
+            </div>
+            <div>
+                <h3>Ejemplos de acceso</h3>
+                <p style="color: var(--mkt-muted); margin-bottom: 0.75rem;">
+                    Sustituye <strong>tuempresa</strong> por el identificador de tu organización:
+                </p>
+                <code>https://tuempresa.signaplan.com/auth/login</code>
+            </div>
+        </div>
+    </section>
+
+    <section class="mkt-cta" id="contacto">
+        <div>
+            <h2>¿Quieres implantar SignaPlan en tu empresa?</h2>
+            <p>Cuéntanos cómo trabajáis hoy y te preparamos una demo adaptada a vuestro caso.</p>
+        </div>
+        <a class="mkt-btn mkt-btn-ghost" href="mailto:info@signaplan.com">
+            <i class="fas fa-envelope"></i> info@signaplan.com
+        </a>
+    </section>
+
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan · SOCTEC</span>
+        <span>Planificación y gestión de obra</span>
+    </footer>
+</body>
+</html>

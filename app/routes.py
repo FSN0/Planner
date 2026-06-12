@@ -1,16 +1,26 @@
 # app/routes.py
-from flask import Blueprint, redirect, url_for, request, flash
+from flask import Blueprint, redirect, url_for, request, flash, g
 from flask_login import login_required, current_user, logout_user
 from app import db
 from app.models import ROLE_OPERARIO, ROLE_RRHH
 from app.utils.timezone_utils import is_valid_timezone, get_app_timezone, timezone_label
+from app.services.tenant_domain_service import is_marketing_host, normalize_host
+from app.marketing.routes import render_landing
 
 main_bp = Blueprint('main', __name__)
 
 
 @main_bp.route('/')
-@login_required
 def dashboard():
+    if is_marketing_host(normalize_host(request.host)):
+        return render_landing()
+
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        return redirect(url_for('superadmin.dashboard'))
+
+    if not current_user.is_authenticated:
+        return redirect(url_for('auth.login'))
+
     if current_user.role == 'jefe_obra':
         return redirect(url_for('jefe.panel'))
     if current_user.role == 'admin':
