@@ -78,6 +78,7 @@ migrate-new: ## Crear nueva migración. Uso: make migrate-new MSG="descripcion"
 	docker compose -f $(DEV_COMPOSE) exec web flask db migrate -m "$(MSG)"
 
 migrate-prod: ## Aplicar migraciones en producción (funciona aunque web esté parado)
+	@bash scripts/fix_migration_heads.sh
 	docker compose -f $(PROD_COMPOSE) up -d db
 	@sleep 3
 	docker compose -f $(PROD_COMPOSE) run --rm --no-deps web flask db upgrade

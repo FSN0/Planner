@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r re
 COPY . .
 
 RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
-RUN chmod +x /app/entrypoint.sh /app/entrypoint.prod.sh
+RUN chmod +x /app/entrypoint.sh /app/entrypoint.prod.sh /app/scripts/fix_migration_heads.sh
 
 USER appuser
 

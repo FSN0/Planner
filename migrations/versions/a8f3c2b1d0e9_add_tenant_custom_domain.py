@@ -1,6 +1,6 @@
 """add tenant custom_domain
 
-Revision ID: e5f6a7b8c9d0
+Revision ID: a8f3c2b1d0e9
 Revises: d4e5f6a7b8c9
 Create Date: 2026-06-12
 """
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = 'e5f6a7b8c9d0'
+revision = 'a8f3c2b1d0e9'
 down_revision = 'd4e5f6a7b8c9'
 branch_labels = None
 depends_on = None

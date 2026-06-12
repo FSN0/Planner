@@ -202,9 +202,13 @@ def create_app():
     # ---------------------------------------------------------
     # Enrutamiento Dinámico Multi-Tenant (PostgreSQL Schemas)
     # ---------------------------------------------------------
+    @app.get('/health')
+    def health_check():
+        return {'status': 'ok'}, 200
+
     @app.before_request
     def handle_tenant_routing():
-        if request.endpoint == 'static':
+        if request.endpoint in ('static', 'health_check'):
             return
 
         # API de login para la app externa Alta Odoo (tenant va en el JSON, no en el Host)
