@@ -1,36 +1,10 @@
-# Configuración Caddy para desarrollo y producción
+# Configuración Caddy para DESARROLLO LOCAL
 #
-# DESARROLLO LOCAL (sin DOMAIN definido):
-#   - Escucha en :80 (HTTP)
-#   - Accesible desde cliente.localhost
-#
-# PRODUCCIÓN (con DOMAIN=tudominio.com):
-#   - HTTPS automático con Let's Encrypt
-#   - Para multi-tenant: DOMAIN="signaplan.com, *.signaplan.com"
-#   - Dominios propios de clientes (ej. planner.empresa.com):
-#     añade cada hostname al bloque de producción o usa on-demand TLS
-#     validado contra /api/v6/check-domain
+# En producción se usa Caddyfile.prod (montado por docker-compose.prod.yml).
+# No añadas dominios reales aquí: el bloque :80 captura el puerto 80 entero
+# y rompe la validación ACME / Let's Encrypt de Caddy.
 
 :80 {
     reverse_proxy web:5000
     encode gzip
 }
-
-# Descomentar para producción con dominio real:
-{$DOMAIN}, planner.soltecgrupo.es {
-    reverse_proxy web:5000
-    encode gzip
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
-        Referrer-Policy "strict-origin-when-cross-origin"
-    }
-}
-#
-# On-demand TLS (opcional, para muchos dominios propios sin listarlos uno a uno):
-# {
-#     on_demand_tls {
-#         ask http://web:5000/api/v6/check-domain?domain={http.request.tls.server_name}
-#     }
-# }

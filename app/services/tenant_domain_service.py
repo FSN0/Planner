@@ -46,10 +46,16 @@ def assert_custom_domain_available(domain, tenant_id=None):
         raise ValueError(f"El dominio '{domain}' ya está asignado a {existing.nombre}.")
 
 
+def is_signaplan_host(host):
+    """True si el host pertenece al dominio SaaS (subdominio, no dominio propio)."""
+    host = normalize_host(host)
+    return host == 'signaplan.com' or host.endswith('.signaplan.com')
+
+
 def resolve_tenant_by_custom_domain(host):
     """Busca un tenant activo por dominio propio (hostname completo)."""
     host = normalize_host(host)
-    if not host:
+    if not host or is_signaplan_host(host):
         return None
     return Tenant.query.filter_by(custom_domain=host, is_active=True).first()
 
@@ -71,11 +77,11 @@ def is_host_allowed_for_tls(domain):
     if domain in ('signaplan.com', 'www.signaplan.com', 'admin.signaplan.com'):
         return True
 
-    if resolve_tenant_by_custom_domain(domain):
+    if not is_signaplan_host(domain) and resolve_tenant_by_custom_domain(domain):
         return True
 
     parts = domain.split('.')
-    if len(parts) >= 3:
+    if is_signaplan_host(domain) and len(parts) >= 3:
         return resolve_tenant_by_subdomain(parts[0]) is not None
 
     return False

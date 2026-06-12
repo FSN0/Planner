@@ -1,12 +1,10 @@
 {
     on_demand_tls {
-        # Ahora sí apunta al contenedor 'web' y a la ruta exacta de tu API v6
         ask http://web:5000/api/v6/check-domain
-
     }
 }
 
-# Dominios base (generan el certificado normal)
+# Dominio raíz SignaPlan (certificado estático)
 signaplan.com, www.signaplan.com {
     reverse_proxy web:5000
     encode gzip
@@ -21,7 +19,9 @@ signaplan.com, www.signaplan.com {
     }
 }
 
-# Bloque atrapalotodo para los subdominios de los clientes (On-Demand TLS)
+# Subdominios *.signaplan.com y dominios propios de clientes (on-demand TLS).
+# Caddy abre :80 automáticamente para los retos ACME http-01.
+# No añadir un bloque :80 con reverse_proxy aquí: rompería la emisión de certificados.
 https:// {
     tls {
         on_demand

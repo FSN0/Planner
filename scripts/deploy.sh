@@ -16,12 +16,13 @@ NC='\033[0m'
 
 COMPOSE_FILE="docker-compose.prod.yml"
 BUILD=false
-MIGRATE=false
+MIGRATE=true
 
 for arg in "$@"; do
     case $arg in
         --build) BUILD=true ;;
         --migrate) MIGRATE=true ;;
+        --no-migrate) MIGRATE=false ;;
     esac
 done
 
@@ -75,8 +76,7 @@ docker compose -f $COMPOSE_FILE up -d --remove-orphans
 # --- Migraciones ---
 if [ "$MIGRATE" = true ]; then
     print_step "Ejecutando migraciones de base de datos..."
-    sleep 5
-    docker compose -f $COMPOSE_FILE exec -T web flask db upgrade
+    docker compose -f $COMPOSE_FILE run --rm --no-deps web flask db upgrade
 fi
 
 # --- Limpieza ---
