@@ -3,6 +3,7 @@ from flask import render_template, request, redirect, url_for, flash, current_ap
 from app.superadmin import superadmin_bp
 from app.models import Tenant
 from app.services.tenant_service import provision_new_tenant
+from app.services.tenant_domain_service import validate_custom_domain, assert_custom_domain_available
 from app.services.config_service import set_tenant_config
 from app import db, csrf
 from sqlalchemy import text
@@ -71,17 +72,53 @@ def create_tenant():
     subdominio = request.form.get('subdominio')
     admin_email = request.form.get('admin_email')
     admin_password = request.form.get('admin_password')
+    custom_domain_raw = request.form.get('custom_domain')
     
     if not all([nombre, subdominio, admin_email, admin_password]):
         flash("Faltan datos en el formulario.", "danger")
         return redirect(url_for('superadmin.dashboard'))
         
     try:
-        provision_new_tenant(nombre, subdominio, admin_email, admin_password)
+        custom_domain = validate_custom_domain(custom_domain_raw)
+        assert_custom_domain_available(custom_domain)
+        provision_new_tenant(
+            nombre,
+            subdominio,
+            admin_email,
+            admin_password,
+            custom_domain=custom_domain,
+        )
         flash(f"Inquilino '{nombre}' creado. El administrador ya puede iniciar sesión.", "success")
     except Exception as e:
         flash(f"Error al crear inquilino: {str(e)}", "danger")
         
+    return redirect(url_for('superadmin.dashboard'))
+
+@superadmin_bp.route('/tenant/<int:id_tenant>/dominio', methods=['POST'])
+def configurar_dominio_tenant(id_tenant):
+    tenant = Tenant.query.get_or_404(id_tenant)
+    custom_domain_raw = request.form.get('custom_domain')
+
+    try:
+        custom_domain = validate_custom_domain(custom_domain_raw)
+        assert_custom_domain_available(custom_domain, tenant_id=tenant.id)
+        tenant.custom_domain = custom_domain
+        db.session.commit()
+        if custom_domain:
+            flash(
+                f"Dominio propio actualizado para {tenant.nombre}: {custom_domain}",
+                "success",
+            )
+        else:
+            flash(
+                f"Dominio propio eliminado para {tenant.nombre}. "
+                f"Acceso por subdominio: {tenant.subdominio}.signaplan.com",
+                "success",
+            )
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error al actualizar dominio: {str(e)}", "danger")
+
     return redirect(url_for('superadmin.dashboard'))
 
 @superadmin_bp.route('/tenant/<int:id_tenant>/configurar_modulos', methods=['POST'])

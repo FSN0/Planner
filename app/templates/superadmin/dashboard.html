@@ -26,11 +26,19 @@
                     <label class="form-label">Nombre Empresa</label>
                     <input type="text" name="nombre" class="form-control" placeholder="Ej: Construcciones López" required>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label">Subdominio (URL)</label>
+                <div class="col-md-2">
+                    <label class="form-label">Subdominio SignaPlan</label>
                     <div class="input-group">
                         <input type="text" name="subdominio" class="form-control" placeholder="lopez" required>
+                        <div class="input-group-append">
+                            <span class="input-group-text">.signaplan.com</span>
+                        </div>
                     </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Dominio propio (opcional)</label>
+                    <input type="text" name="custom_domain" class="form-control" placeholder="planner.empresa.com">
+                    <small class="text-muted">Si el cliente accede desde su propio dominio.</small>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Email del Admin</label>
@@ -53,7 +61,8 @@
             <tr>
                 <th>ID</th>
                 <th>Nombre Cliente</th>
-                <th>Subdominio de acceso</th>
+                <th>Acceso SignaPlan</th>
+                <th>Dominio propio</th>
                 <th>Esquema (Postgres)</th>
                 <th>Módulos (Addons)</th> 
                 <th>Estado</th>
@@ -66,7 +75,17 @@
                 <td class="align-middle">{{ t.id }}</td>
                 <td class="align-middle"><strong>{{ t.nombre }}</strong></td>
                 <td class="align-middle">
-                    <a href="http://{{ t.subdominio }}.localhost:5000" target="_blank">{{ t.subdominio }}.tusaas.com</a>
+                    <code>{{ t.subdominio }}.signaplan.com</code>
+                </td>
+                <td class="align-middle">
+                    {% if t.custom_domain %}
+                        <code>{{ t.custom_domain }}</code>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm ml-2" data-toggle="modal" data-target="#modalDominio_{{ t.id }}">
+                        <i class="fas fa-globe mr-1"></i> Dominio
+                    </button>
                 </td>
                 <td class="align-middle"><code>{{ t.schema_name }}</code></td>
                 
@@ -87,7 +106,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="7" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
+                <td colspan="8" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -95,6 +114,43 @@
 </div>
 
 {% for t in tenants %}
+<div class="modal fade" id="modalDominio_{{ t.id }}" tabindex="-1" role="dialog" aria-labelledby="modalDominioLabel_{{ t.id }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title" id="modalDominioLabel_{{ t.id }}">🌐 Dominio propio — {{ t.nombre }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form action="{{ url_for('superadmin.configurar_dominio_tenant', id_tenant=t.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body p-4">
+          <p class="text-muted mb-3">
+            El cliente puede seguir entrando por <code>{{ t.subdominio }}.signaplan.com</code>
+            o, si lo prefiere, por su propio dominio.
+          </p>
+          <label class="font-weight-bold">Dominio personalizado</label>
+          <input
+            type="text"
+            name="custom_domain"
+            class="form-control"
+            placeholder="planner.empresa.com"
+            value="{{ t.custom_domain or '' }}"
+          >
+          <small class="text-muted d-block mt-2">
+            Deja el campo vacío para quitar el dominio propio. El DNS del cliente debe apuntar a este servidor.
+          </small>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn btn-info text-white"><i class="fas fa-save"></i> Guardar dominio</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="modalModulos_{{ t.id }}" tabindex="-1" role="dialog" aria-labelledby="modalLabel_{{ t.id }}" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content border-0 shadow-lg">

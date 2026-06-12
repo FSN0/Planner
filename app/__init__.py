@@ -212,12 +212,25 @@ def create_app():
             db.session.execute(text('SET search_path TO public'))
             return
 
-        # Limpiamos el puerto por si el host viene como "demo.localhost:5000"
-        host = request.host.split(':')[0]
+        from app.services.tenant_domain_service import (
+            normalize_host,
+            resolve_tenant_by_custom_domain,
+            resolve_tenant_by_subdomain,
+        )
+
+        host = normalize_host(request.host)
 
         # Si acceden desde localhost, red interna Docker o IP pura → esquema public
         if host in ('localhost', 'web', 'host.docker.internal') or host.replace('.', '').isnumeric():
             db.session.execute(text("SET search_path TO public"))
+            return
+
+        tenant = resolve_tenant_by_custom_domain(host)
+        if tenant:
+            if not is_safe_schema_name(tenant.schema_name):
+                abort(500, description="Configuración de esquema inválida para esta organización.")
+            g.current_tenant = tenant
+            db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
             return
 
         parts = host.split('.')
@@ -233,19 +246,14 @@ def create_app():
         else:
             subdomain = parts[0]
 
-        # Añadimos tu dominio base 'signaplan' a la lista por seguridad adicional
-        if subdomain not in ['www', 'admin', 'superadmin', 'signaplan']:
-            from app.models import Tenant
-            tenant = Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
-            
-            if tenant:
-                # Defensa en profundidad: nunca interpolar un schema_name no validado
-                if not is_safe_schema_name(tenant.schema_name):
-                    abort(500, description="Configuración de esquema inválida para esta organización.")
-                g.current_tenant = tenant
-                db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
-            else:
-                abort(404, description="La organización solicitada no existe o se encuentra inactiva.")
+        tenant = resolve_tenant_by_subdomain(subdomain)
+        if tenant:
+            if not is_safe_schema_name(tenant.schema_name):
+                abort(500, description="Configuración de esquema inválida para esta organización.")
+            g.current_tenant = tenant
+            db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
+        elif subdomain:
+            abort(404, description="La organización solicitada no existe o se encuentra inactiva.")
         else:
             db.session.execute(text("SET search_path TO public"))
 

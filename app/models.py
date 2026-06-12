@@ -34,6 +34,7 @@ class Tenant(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     subdominio = db.Column(db.String(50), unique=True, nullable=False)  # Ej: 'soltec', 'acme'
+    custom_domain = db.Column(db.String(255), unique=True, nullable=True)  # Ej: 'planner.empresa.com'
     schema_name = db.Column(db.String(50), unique=True, nullable=False) # Ej: 'tenant_soltec', 'tenant_acme'
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

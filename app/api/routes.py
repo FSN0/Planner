@@ -577,25 +577,15 @@ def person_day_timeline(user_id, fecha_str):
 # ==============================================================================
 @api_bp.route('/check-domain', methods=['GET'])
 def check_domain():
+    from app.services.tenant_domain_service import is_host_allowed_for_tls
+
     domain = request.args.get('domain')
     if not domain:
         return "Falta dominio", 400
 
-    # 1. Dominios base del sistema (siempre permitidos)
-    if domain in ['signaplan.com', 'www.signaplan.com', 'admin.signaplan.com']:
+    if is_host_allowed_for_tls(domain):
         return "OK", 200
 
-    # 2. Subdominios de inquilinos (vamos a la base de datos)
-    parts = domain.split('.')
-    if len(parts) >= 3:
-        subdomain = parts[0]
-        # Importación local para evitar errores de dependencias circulares
-        from app.models import Tenant
-        tenant = Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
-        if tenant:
-            return "OK", 200
-
-    # Si llega aquí, es un dominio inventado o inactivo -> Denegamos el SSL
     return "Not Found", 404
 
 

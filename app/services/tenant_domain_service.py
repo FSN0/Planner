@@ -1,0 +1,81 @@
+import re
+
+from app.models import Tenant
+
+_CUSTOM_DOMAIN_RE = re.compile(
+    r'^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
+)
+_RESERVED_SUBDOMAINS = frozenset({'www', 'admin', 'superadmin', 'signaplan'})
+
+
+def normalize_host(host):
+    """Normaliza un host HTTP (sin puerto, minúsculas)."""
+    return (host or '').split(':')[0].lower().strip().rstrip('.')
+
+
+def validate_custom_domain(domain):
+    """
+    Valida y normaliza un dominio propio de cliente.
+    Devuelve None si el valor está vacío (sin dominio personalizado).
+    """
+    domain = normalize_host(domain)
+    if not domain:
+        return None
+
+    if not _CUSTOM_DOMAIN_RE.match(domain):
+        raise ValueError(
+            'Dominio no válido. Usa un hostname completo, por ejemplo planner.empresa.com'
+        )
+
+    if domain == 'signaplan.com' or domain.endswith('.signaplan.com'):
+        raise ValueError(
+            'Los dominios *.signaplan.com se resuelven por subdominio; '
+            'no hace falta registrar uno como dominio propio.'
+        )
+
+    return domain
+
+
+def assert_custom_domain_available(domain, tenant_id=None):
+    """Comprueba que el dominio no esté asignado a otro tenant."""
+    if not domain:
+        return
+
+    existing = Tenant.query.filter_by(custom_domain=domain).first()
+    if existing and existing.id != tenant_id:
+        raise ValueError(f"El dominio '{domain}' ya está asignado a {existing.nombre}.")
+
+
+def resolve_tenant_by_custom_domain(host):
+    """Busca un tenant activo por dominio propio (hostname completo)."""
+    host = normalize_host(host)
+    if not host:
+        return None
+    return Tenant.query.filter_by(custom_domain=host, is_active=True).first()
+
+
+def resolve_tenant_by_subdomain(subdomain):
+    """Busca un tenant activo por subdominio SignaPlan (ej. soltec)."""
+    subdomain = (subdomain or '').lower().strip()
+    if not subdomain or subdomain in _RESERVED_SUBDOMAINS:
+        return None
+    return Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
+
+
+def is_host_allowed_for_tls(domain):
+    """Indica si Caddy puede emitir certificado para este hostname."""
+    domain = normalize_host(domain)
+    if not domain:
+        return False
+
+    if domain in ('signaplan.com', 'www.signaplan.com', 'admin.signaplan.com'):
+        return True
+
+    if resolve_tenant_by_custom_domain(domain):
+        return True
+
+    parts = domain.split('.')
+    if len(parts) >= 3:
+        return resolve_tenant_by_subdomain(parts[0]) is not None
+
+    return False

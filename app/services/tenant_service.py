@@ -1,11 +1,12 @@
 import re
 from app import db
 from sqlalchemy import text
-from app.models import Tenant, User, ROLE_ADMIN, Company # <--- AÑADIDO Company
+from app.models import Tenant, User, ROLE_ADMIN, Company
+from app.services.tenant_domain_service import validate_custom_domain, assert_custom_domain_available
 from werkzeug.security import generate_password_hash
 from flask_migrate import stamp 
 
-def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password):
+def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password, custom_domain=None):
     """
     Registra un nuevo cliente, construye su esquema aislado, crea su empresa matriz y su primer administrador.
     """
@@ -23,9 +24,13 @@ def provision_new_tenant(nombre_empresa, subdominio, admin_email, admin_password
         if Tenant.query.filter_by(subdominio=subdominio).first():
             raise ValueError(f"El subdominio '{subdominio}' ya está en uso.")
 
+        custom_domain = validate_custom_domain(custom_domain)
+        assert_custom_domain_available(custom_domain)
+
         nuevo_tenant = Tenant(
             nombre=nombre_empresa, 
-            subdominio=subdominio, 
+            subdominio=subdominio,
+            custom_domain=custom_domain,
             schema_name=schema_name
         )
         db.session.add(nuevo_tenant)
