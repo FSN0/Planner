@@ -77,6 +77,8 @@ docker compose -f $COMPOSE_FILE up -d --remove-orphans
 if [ "$MIGRATE" = true ]; then
     print_step "Preparando migraciones..."
     bash scripts/fix_migration_heads.sh
+    print_step "Reconstruyendo imagen web (migraciones van dentro de la imagen)..."
+    docker compose -f $COMPOSE_FILE build web
     print_step "Ejecutando migraciones de base de datos..."
     docker compose -f $COMPOSE_FILE run --rm --no-deps web flask db upgrade
 fi
