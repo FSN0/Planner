@@ -23,7 +23,11 @@ signaplan.com, www.signaplan.com {
 # Instalado por hub/provision/install_planner_hub_sso.py
 planner.soltecgrupo.es {
     handle /outpost.goauthentik.io/* {
-        reverse_proxy {$HUB_AUTHENTIK_URL:https://apps.soltecgrupo.es}
+        reverse_proxy https://apps.soltecgrupo.es {
+            header_up Host planner.soltecgrupo.es
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Host planner.soltecgrupo.es
+        }
     }
 
     handle /sso/hub* {
@@ -33,7 +37,7 @@ planner.soltecgrupo.es {
         }
         reverse_proxy web:5000
     }
-
+    
     handle {
         reverse_proxy web:5000
     }
