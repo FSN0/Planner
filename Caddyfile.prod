@@ -19,6 +19,37 @@ signaplan.com, www.signaplan.com {
     }
 }
 
+# Soltec Hub SSO — planner.soltecgrupo.es (Forward Auth → Authentik en apps.soltecgrupo.es)
+# Instalado por hub/provision/install_planner_hub_sso.py
+planner.soltecgrupo.es {
+    handle /outpost.goauthentik.io/* {
+        reverse_proxy {$HUB_AUTHENTIK_URL:https://apps.soltecgrupo.es}
+    }
+
+    handle /sso/hub* {
+        forward_auth {
+            uri /outpost.goauthentik.io/auth/caddy
+            copy_headers X-authentik-username X-authentik-email X-authentik-name X-authentik-uid X-authentik-groups X-authentik-jwt X-authentik-entitlements
+        }
+        reverse_proxy web:5000
+    }
+
+    handle {
+        reverse_proxy web:5000
+    }
+
+    encode gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-XSS-Protection "1; mode=block"
+        -Server
+    }
+}
+
 # Subdominios *.signaplan.com y dominios propios de clientes (on-demand TLS).
 # Caddy abre :80 automáticamente para los retos ACME http-01.
 # No añadir un bloque :80 con reverse_proxy aquí: rompería la emisión de certificados.

@@ -52,6 +52,12 @@ class Config:
     REMEMBER_COOKIE_SECURE = not _env_bool('FLASK_DEBUG', default=False)
     REMEMBER_COOKIE_HTTPONLY = True
 
+
+    HUB_SSO_ENABLED = _env_bool('HUB_SSO_ENABLED', default=False)
+    HUB_URL = (os.environ.get('HUB_URL') or 'https://apps.soltecgrupo.es').strip().rstrip('/')
+    HUB_SSO_TENANTS = (os.environ.get('HUB_SSO_TENANTS') or 'soltec').strip()
+    BEHIND_PROXY = _env_bool('BEHIND_PROXY', default=False)
+
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 20,
         'max_overflow': 40,

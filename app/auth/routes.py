@@ -16,6 +16,16 @@ auth_bp = Blueprint('auth', __name__)
 LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO, ROLE_RRHH)
 
 
+def _login_page_context():
+    from app.services.hub_sso_service import hub_sso_enabled_for_tenant, hub_url
+    tenant = g.current_tenant
+    return {
+        'tenant_name': tenant.nombre,
+        'hub_sso_enabled': hub_sso_enabled_for_tenant(tenant),
+        'hub_url': hub_url(),
+    }
+
+
 def _redirect_authenticated_user():
     if current_user.role == 'admin':
         return redirect(url_for('admin.panel'))
@@ -65,11 +75,11 @@ def login():
                     'Tu perfil no tiene acceso a la aplicación. Contacta con administración.',
                     'warning',
                 )
-                return render_template('login.html', tenant_name=g.current_tenant.nombre)
+                return render_template('login.html', **_login_page_context())
 
             if not user.is_active:
                 flash('Tu cuenta aún no está activa. Espera la aprobación de RRHH.', 'warning')
-                return render_template('login.html', tenant_name=g.current_tenant.nombre)
+                return render_template('login.html', **_login_page_context())
 
             login_user(user, remember=remember)
             session['tenant_id'] = g.current_tenant.id
@@ -89,7 +99,7 @@ def login():
 
             logout_user()
             flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
-            return render_template('login.html', tenant_name=g.current_tenant.nombre)
+            return render_template('login.html', **_login_page_context())
 
         if user:
             from app.utils import register_log
@@ -101,7 +111,7 @@ def login():
             )
         flash('Credenciales inválidas', 'danger')
 
-    return render_template('login.html', tenant_name=g.current_tenant.nombre)
+    return render_template('login.html', **_login_page_context())
 
 
 @auth_bp.route('/logout')

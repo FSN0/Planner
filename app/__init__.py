@@ -38,6 +38,10 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    if app.config.get('BEHIND_PROXY'):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
     # --- Verificación de configuración crítica ---
     if not app.config.get('SECRET_KEY'):
         raise RuntimeError(
@@ -84,6 +88,7 @@ def create_app():
     from app.sync.routes import sync_bp
     from app.api.asignaciones import asignaciones_api
     from app.superadmin import superadmin_bp
+    from app.auth.hub_sso import hub_sso_bp
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
     # Forzamos el 'url_prefix' para que ninguna ruta se vuelva a quedar en blanco
@@ -96,6 +101,7 @@ def create_app():
     app.register_blueprint(sync_bp, url_prefix='/sync')
     app.register_blueprint(asignaciones_api, url_prefix='/api')
     app.register_blueprint(superadmin_bp, url_prefix='/superadmin')
+    app.register_blueprint(hub_sso_bp)
 
     # ---------------------------------------------------------
     # Registro de utilidades de Jinja
@@ -224,9 +230,10 @@ def create_app():
         )
 
         host = normalize_host(request.host)
+        hub_sso_path = request.path == '/sso/hub'
 
         # Si acceden desde localhost, red interna Docker o IP pura → esquema public
-        if host in ('localhost', 'web', 'host.docker.internal') or host.replace('.', '').isnumeric():
+        if not hub_sso_path and (host in ('localhost', 'web', 'host.docker.internal') or host.replace('.', '').isnumeric()):
             db.session.execute(text("SET search_path TO public"))
             return
 
