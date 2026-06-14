@@ -74,6 +74,30 @@ def resolve_tenant_by_subdomain(subdomain):
     return Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
 
 
+def resolve_tenant_by_hub_host(host):
+    """
+    Resuelve tenant cuando el host es un dominio de despliegue Hub (ej. planner.soltecgrupo.es)
+    listado en HUB_SSO_TENANTS junto al subdominio del tenant (ej. soltec).
+    """
+    from flask import current_app
+
+    host = normalize_host(host)
+    if not host:
+        return None
+
+    raw = current_app.config.get('HUB_SSO_TENANTS') or 'soltec'
+    entries = [part.strip().lower() for part in raw.split(',') if part.strip()]
+    if host not in entries:
+        return None
+
+    for entry in entries:
+        if '.' not in entry:
+            tenant = resolve_tenant_by_subdomain(entry)
+            if tenant:
+                return tenant
+    return None
+
+
 def is_host_allowed_for_tls(domain):
     """Indica si Caddy puede emitir certificado para este hostname."""
     domain = normalize_host(domain)

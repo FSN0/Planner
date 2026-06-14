@@ -225,6 +225,7 @@ def create_app():
         from app.services.tenant_domain_service import (
             normalize_host,
             resolve_tenant_by_custom_domain,
+            resolve_tenant_by_hub_host,
             resolve_tenant_by_subdomain,
             _RESERVED_SUBDOMAINS,
         )
@@ -238,6 +239,14 @@ def create_app():
             return
 
         tenant = resolve_tenant_by_custom_domain(host)
+        if tenant:
+            if not is_safe_schema_name(tenant.schema_name):
+                abort(500, description="Configuración de esquema inválida para esta organización.")
+            g.current_tenant = tenant
+            db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
+            return
+
+        tenant = resolve_tenant_by_hub_host(host)
         if tenant:
             if not is_safe_schema_name(tenant.schema_name):
                 abort(500, description="Configuración de esquema inválida para esta organización.")

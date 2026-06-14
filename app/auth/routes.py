@@ -52,11 +52,6 @@ def login():
         flash('Por favor, accede desde la URL específica de tu empresa.', 'warning')
         return redirect(url_for('main.dashboard'))
 
-    if request.method == 'GET' and not request.args.get('local'):
-        from app.services.hub_sso_service import hub_sso_enabled_for_tenant
-        if hub_sso_enabled_for_tenant(g.current_tenant):
-            return redirect(url_for('hub_sso.sso_hub'))
-
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')

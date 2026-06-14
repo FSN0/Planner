@@ -12,6 +12,10 @@ from app.services.hub_sso_service import get_authentik_identity, hub_sso_enabled
 hub_sso_bp = Blueprint("hub_sso", __name__)
 
 
+def _login_local():
+    return redirect(url_for("auth.login", local=1))
+
+
 def _redirect_authenticated_user():
     if current_user.role == "admin":
         return redirect(url_for("admin.panel"))
@@ -37,7 +41,7 @@ def sso_hub():
     tenant = getattr(g, "current_tenant", None)
     if not tenant or not hub_sso_enabled_for_tenant(tenant):
         flash("El inicio de sesion con Hub no esta disponible para esta organizacion.", "warning")
-        return redirect(url_for("auth.login"))
+        return _login_local()
 
     ident = get_authentik_identity()
     email = (ident["email"] or ident["username"] or "").strip()
@@ -53,12 +57,12 @@ def sso_hub():
             "o usa email y contrasena.",
             "warning",
         )
-        return redirect(url_for("auth.login"))
+        return _login_local()
 
     user = User.query.filter(func.lower(User.email) == email.lower()).first()
     if not user:
         flash("Usuario no registrado en SignaPlan.", "warning")
-        return redirect(url_for("auth.login"))
+        return _login_local()
 
     if user.role in LOGIN_BLOCKED_ROLES:
         from app.utils import register_log
@@ -76,11 +80,11 @@ def sso_hub():
             "Tu perfil no tiene acceso a la aplicacion. Contacta con administracion.",
             "warning",
         )
-        return redirect(url_for("auth.login"))
+        return _login_local()
 
     if not user.is_active:
         flash("Tu cuenta aun no esta activa. Espera la aprobacion de RRHH.", "warning")
-        return redirect(url_for("auth.login"))
+        return _login_local()
 
     login_user(user, remember=True)
     session["tenant_id"] = tenant.id
