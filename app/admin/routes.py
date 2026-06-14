@@ -2042,39 +2042,12 @@ def batch_delete_companies():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def sso_odoo_contactos():
-    """SSO hacia la app externa de Alta Odoo (web aparte, p. ej. :5002)."""
-    from flask import current_app
-    from itsdangerous import URLSafeTimedSerializer
-    from app.utils.timezone_utils import utc_now
-
-    sso_secret = current_app.config.get('SSO_SECRET_KEY')
-    if not sso_secret:
-        flash('SSO no configurado (SSO_SECRET_KEY).', 'danger')
-        return redirect(url_for('admin.panel'))
-
-    alta_url = current_app.config.get('ODOO_ALTA_APP_URL')
+    """Enlace a Alta Odoo vía SSO Hub (misma sesion Authentik que el Hub)."""
+    alta_url = (current_app.config.get('ODOO_ALTA_APP_URL') or '').strip().rstrip('/')
     if not alta_url:
-        dominio_base = request.host.split(':')[0]
-        alta_url = f"{request.scheme}://{dominio_base}:5002"
-
-    u_name = current_user.name if current_user.name and str(current_user.name).lower() != 'none' else ''
-    u_last = current_user.lastname if current_user.lastname and str(current_user.lastname).lower() != 'none' else ''
-    full_name = f'{u_name} {u_last}'.strip() or current_user.email
-
-    external_ids = getattr(current_user, 'external_ids', None) or {}
-    odoo_id = external_ids.get('odoo') if isinstance(external_ids, dict) else None
-
-    serializer = URLSafeTimedSerializer(sso_secret)
-    payload = {
-        'user_id': current_user.id,
-        'odoo_id': odoo_id,
-        'name': full_name,
-        'email': current_user.email,
-        'role': current_user.role,
-        'iat': utc_now().timestamp(),
-    }
-    token = serializer.dumps(payload)
-    return redirect(f'{alta_url}/sso_login?token={token}')
+        flash('Alta Odoo no configurada (ODOO_ALTA_APP_URL).', 'danger')
+        return redirect(url_for('admin.panel'))
+    return redirect(f'{alta_url}/sso/hub')
 
 # --- NUEVO MÓDULO DE LOGS Y AUDITORÍA ---
 @admin_bp.route("/logs", methods=["GET"])

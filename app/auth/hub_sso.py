@@ -39,11 +39,14 @@ def sso_hub():
         flash("El inicio de sesion con Hub no esta disponible para esta organizacion.", "warning")
         return redirect(url_for("auth.login"))
 
-    if current_user.is_authenticated:
-        return _redirect_authenticated_user()
-
     ident = get_authentik_identity()
     email = (ident["email"] or ident["username"] or "").strip()
+
+    if current_user.is_authenticated:
+        if email and (current_user.email or "").lower() != email.lower():
+            logout_user()
+        else:
+            return _redirect_authenticated_user()
     if not email:
         flash(
             "No se detecto sesion del Hub. Entra primero en el Hub de aplicaciones "

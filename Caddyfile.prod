@@ -20,7 +20,6 @@ signaplan.com, www.signaplan.com {
 }
 
 # Soltec Hub SSO — planner.soltecgrupo.es (Forward Auth → Authentik en apps.soltecgrupo.es)
-# Instalado por hub/provision/install_planner_hub_sso.py
 planner.soltecgrupo.es {
     # Callbacks del outpost (login Authentik en el navegador)
     handle /outpost.goauthentik.io/* {
