@@ -37,7 +37,7 @@ planner.soltecgrupo.es {
         }
         reverse_proxy web:5000
     }
-    
+
     handle {
         reverse_proxy web:5000
     }
