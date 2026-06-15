@@ -5,7 +5,6 @@ from flask import current_app, request, session
 from sqlalchemy import func
 
 HUB_SSO_SKIP_AUTO_KEY = "hub_sso_skip_auto"
-HUB_SSO_UID_KEY = "hub_authentik_uid"
 
 
 def _parse_csv_set(value: str | None, default: str) -> set[str]:
@@ -44,28 +43,6 @@ def should_skip_hub_sso_auto() -> bool:
 
 def clear_hub_sso_skip_auto() -> None:
     session.pop(HUB_SSO_SKIP_AUTO_KEY, None)
-
-
-def store_hub_authentik_uid(uid: str | None) -> None:
-    value = (uid or "").strip()
-    if value:
-        session[HUB_SSO_UID_KEY] = value
-    else:
-        session.pop(HUB_SSO_UID_KEY, None)
-
-
-def get_stored_hub_authentik_uid() -> str:
-    return (session.get(HUB_SSO_UID_KEY) or "").strip()
-
-
-def clear_hub_authentik_uid() -> None:
-    session.pop(HUB_SSO_UID_KEY, None)
-
-
-def hub_proxy_sign_out_path(return_url: str) -> str:
-    from urllib.parse import quote
-
-    return f"/outpost.goauthentik.io/sign_out?rd={quote(return_url, safe='')}"
 
 
 def _parse_hub_groups(raw: str) -> set[str]:
