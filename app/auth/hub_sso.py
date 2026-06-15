@@ -6,13 +6,18 @@ from flask_login import current_user, login_user, logout_user
 from app import csrf
 from app.auth.routes import LOGIN_BLOCKED_ROLES
 from app.services.hub_sso_service import (
+    clear_hub_authentik_uid,
     clear_hub_sso_skip_auto,
     find_user_for_hub_identity,
     get_authentik_identity,
+    get_stored_hub_authentik_uid,
     has_authentik_proxy_cookie,
     hub_identity_lookup_keys,
+    hub_proxy_sign_out_path,
     hub_sso_enabled_for_tenant,
+    is_hub_portal_referer,
     should_skip_hub_sso_auto,
+    store_hub_authentik_uid,
 )
 
 hub_sso_bp = Blueprint("hub_sso", __name__)
@@ -23,6 +28,20 @@ _HUB_SSO_ENTRY_PATHS = frozenset({"/", "/auth/login"})
 
 def _login_local():
     return redirect(url_for("auth.login", local=1))
+
+
+def _redirect_hub_proxy_refresh():
+    """Renueva cookie proxy Authentik (impersonacion admin en el Hub)."""
+    return_url = url_for("hub_sso.sso_hub", reauth=1, _external=True)
+    return redirect(hub_proxy_sign_out_path(return_url))
+
+
+def _should_refresh_hub_proxy() -> bool:
+    if request.args.get("reauth"):
+        return False
+    if not is_hub_portal_referer():
+        return False
+    return has_authentik_proxy_cookie()
 
 
 def _auto_redirect_hub_sso_entry():
@@ -81,16 +100,16 @@ def sso_hub():
         flash("El inicio de sesion con Hub no esta disponible para esta organizacion.", "warning")
         return _login_local()
 
+    if _should_refresh_hub_proxy():
+        logout_user()
+        clear_hub_authentik_uid()
+        return _redirect_hub_proxy_refresh()
+
     ident = get_authentik_identity()
     lookup_keys = hub_identity_lookup_keys(ident)
+    header_uid = (ident.get("uid") or "").strip()
+    stored_uid = get_stored_hub_authentik_uid()
 
-    if current_user.is_authenticated:
-        current_email = (current_user.email or "").lower()
-        hub_emails = {key.lower() for key in lookup_keys}
-        if hub_emails and current_email not in hub_emails:
-            logout_user()
-        else:
-            return _redirect_authenticated_user()
     if not lookup_keys:
         flash(
             "No se detecto sesion del Hub. Entra primero en el Hub de aplicaciones "
@@ -109,6 +128,14 @@ def sso_hub():
         )
         return _login_local()
     email = matched_key
+
+    if current_user.is_authenticated:
+        same_user = current_user.id == user.id
+        same_hub_uid = not header_uid or not stored_uid or header_uid == stored_uid
+        if same_user and same_hub_uid:
+            store_hub_authentik_uid(header_uid)
+            return _redirect_authenticated_user()
+        logout_user()
 
     if user.role in LOGIN_BLOCKED_ROLES:
         from app.utils import register_log
@@ -134,6 +161,7 @@ def sso_hub():
 
     login_user(user, remember=True)
     session["tenant_id"] = tenant.id
+    store_hub_authentik_uid(header_uid)
     from app.utils import register_log
 
     register_log(
