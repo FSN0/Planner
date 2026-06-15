@@ -7,13 +7,46 @@ from sqlalchemy import func
 from app import csrf
 from app.auth.routes import LOGIN_BLOCKED_ROLES
 from app.models import User
-from app.services.hub_sso_service import get_authentik_identity, hub_sso_enabled_for_tenant
+from app.services.hub_sso_service import (
+    get_authentik_identity,
+    has_authentik_proxy_cookie,
+    hub_sso_enabled_for_tenant,
+)
 
 hub_sso_bp = Blueprint("hub_sso", __name__)
+
+# Authentik devuelve a / tras el primer OAuth; reenviar a /sso/hub si ya hay cookie proxy.
+_HUB_SSO_ENTRY_PATHS = frozenset({"/", "/auth/login"})
 
 
 def _login_local():
     return redirect(url_for("auth.login", local=1))
+
+
+def _auto_redirect_hub_sso_entry():
+    if request.method != "GET":
+        return None
+    if request.path == "/sso/hub" or request.path.startswith("/outpost.goauthentik.io"):
+        return None
+    if request.args.get("local"):
+        return None
+    if current_user.is_authenticated:
+        return None
+    tenant = getattr(g, "current_tenant", None)
+    if not tenant or not hub_sso_enabled_for_tenant(tenant):
+        return None
+    if not has_authentik_proxy_cookie():
+        return None
+    path = request.path.rstrip("/") or "/"
+    if path not in _HUB_SSO_ENTRY_PATHS:
+        return None
+    return redirect(url_for("hub_sso.sso_hub"))
+
+
+def register_hub_sso_auto_redirect(app):
+    @app.before_request
+    def _hub_sso_auto_redirect_after_tenant():
+        return _auto_redirect_hub_sso_entry()
 
 
 def _redirect_authenticated_user():
@@ -23,7 +56,7 @@ def _redirect_authenticated_user():
         return redirect(url_for("jefe.obras_detailed", selected_date=date.today()))
     logout_user()
     flash("Tu perfil no tiene acceso a la aplicacion.", "warning")
-    return redirect(url_for("auth.login"))
+    return _login_local()
 
 
 def _redirect_after_login(user):
@@ -33,7 +66,7 @@ def _redirect_after_login(user):
         return redirect(url_for("jefe.obras_detailed", selected_date=date.today()))
     logout_user()
     flash("Tu perfil no tiene acceso a la aplicacion.", "warning")
-    return redirect(url_for("auth.login"))
+    return _login_local()
 
 
 @hub_sso_bp.route("/sso/hub")

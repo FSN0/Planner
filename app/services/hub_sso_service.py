@@ -35,6 +35,11 @@ def _parse_hub_groups(raw: str) -> set[str]:
     return {group.strip() for group in raw.split("|") if group.strip()}
 
 
+def has_authentik_proxy_cookie() -> bool:
+    """Presente tras el primer OAuth del outpost Authentik en este dominio."""
+    return any(name.startswith("authentik_proxy_") for name in request.cookies)
+
+
 def get_authentik_identity() -> dict[str, str | set[str]]:
     return {
         "email": (request.headers.get("X-authentik-email") or "").strip(),

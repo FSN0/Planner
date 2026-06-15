@@ -88,7 +88,7 @@ def create_app():
     from app.sync.routes import sync_bp
     from app.api.asignaciones import asignaciones_api
     from app.superadmin import superadmin_bp
-    from app.auth.hub_sso import hub_sso_bp
+    from app.auth.hub_sso import hub_sso_bp, register_hub_sso_auto_redirect
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
     # Forzamos el 'url_prefix' para que ninguna ruta se vuelva a quedar en blanco
@@ -281,5 +281,7 @@ def create_app():
             abort(404, description="La organización solicitada no existe o se encuentra inactiva.")
         else:
             db.session.execute(text("SET search_path TO public"))
+
+    register_hub_sso_auto_redirect(app)
 
     return app
