@@ -15,7 +15,6 @@ from app.services.hub_sso_service import (
     hub_identity_lookup_keys,
     hub_proxy_sign_out_path,
     hub_sso_enabled_for_tenant,
-    is_hub_portal_referer,
     should_skip_hub_sso_auto,
     store_hub_authentik_uid,
 )
@@ -37,9 +36,8 @@ def _redirect_hub_proxy_refresh():
 
 
 def _should_refresh_hub_proxy() -> bool:
+    """Renueva identidad proxy en cada entrada a /sso/hub (impersonacion Authentik)."""
     if request.args.get("reauth"):
-        return False
-    if not is_hub_portal_referer():
         return False
     return has_authentik_proxy_cookie()
 

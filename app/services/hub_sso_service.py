@@ -62,15 +62,6 @@ def clear_hub_authentik_uid() -> None:
     session.pop(HUB_SSO_UID_KEY, None)
 
 
-def is_hub_portal_referer() -> bool:
-    """True si la peticion viene del portal Authentik (tile SignaPlan)."""
-    referer = (request.referrer or "").strip()
-    if not referer:
-        return False
-    hub = hub_url().lower()
-    return hub in referer.lower() or "apps.soltecgrupo.es" in referer.lower()
-
-
 def hub_proxy_sign_out_path(return_url: str) -> str:
     from urllib.parse import quote
 
