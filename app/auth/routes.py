@@ -117,14 +117,23 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
-    from app.services.hub_sso_service import hub_sso_enabled_for_tenant, mark_hub_sso_skip_auto
+    from app.services.hub_sso_service import (
+        hub_proxy_sign_out_path,
+        hub_sso_enabled_for_tenant,
+        mark_hub_sso_skip_auto,
+    )
 
     tenant = getattr(g, 'current_tenant', None)
-    if tenant and hub_sso_enabled_for_tenant(tenant):
+    hub_sso = tenant and hub_sso_enabled_for_tenant(tenant)
+    if hub_sso:
         mark_hub_sso_skip_auto()
 
     logout_user()
     flash('Sesión cerrada', 'info')
+
+    if hub_sso:
+        return_url = url_for('auth.login', local=1, _external=True)
+        return redirect(hub_proxy_sign_out_path(return_url))
     return redirect(url_for('auth.login', local=1))
 
 

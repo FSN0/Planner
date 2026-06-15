@@ -76,7 +76,6 @@ def _redirect_after_login(user):
 @hub_sso_bp.route("/sso/hub")
 def sso_hub():
     """Entrada SSO desde Hub (Authentik Forward Auth via Caddy)."""
-    clear_hub_sso_skip_auto()
     tenant = getattr(g, "current_tenant", None)
     if not tenant or not hub_sso_enabled_for_tenant(tenant):
         flash("El inicio de sesion con Hub no esta disponible para esta organizacion.", "warning")
@@ -132,6 +131,7 @@ def sso_hub():
 
     login_user(user, remember=True)
     session["tenant_id"] = tenant.id
+    clear_hub_sso_skip_auto()
     from app.utils import register_log
 
     register_log(

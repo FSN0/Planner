@@ -45,6 +45,13 @@ def clear_hub_sso_skip_auto() -> None:
     session.pop(HUB_SSO_SKIP_AUTO_KEY, None)
 
 
+def hub_proxy_sign_out_path(return_url: str) -> str:
+    """Invalida cookie proxy Authentik en planner (solo al cerrar sesion en SignaPlan)."""
+    from urllib.parse import quote
+
+    return f"/outpost.goauthentik.io/sign_out?rd={quote(return_url, safe='')}"
+
+
 def _parse_hub_groups(raw: str) -> set[str]:
     if not raw:
         return set()
