@@ -1,7 +1,10 @@
 """Integracion SSO con Soltec Hub (Authentik Forward Auth via Caddy)."""
 from __future__ import annotations
 
-from flask import current_app, request
+from flask import current_app, request, session
+from sqlalchemy import func
+
+HUB_SSO_SKIP_AUTO_KEY = "hub_sso_skip_auto"
 
 
 def _parse_csv_set(value: str | None, default: str) -> set[str]:
@@ -29,6 +32,19 @@ def hub_url() -> str:
     return url.rstrip("/")
 
 
+def mark_hub_sso_skip_auto() -> None:
+    """Evita re-login Hub tras cerrar sesion en SignaPlan."""
+    session[HUB_SSO_SKIP_AUTO_KEY] = True
+
+
+def should_skip_hub_sso_auto() -> bool:
+    return bool(session.get(HUB_SSO_SKIP_AUTO_KEY))
+
+
+def clear_hub_sso_skip_auto() -> None:
+    session.pop(HUB_SSO_SKIP_AUTO_KEY, None)
+
+
 def _parse_hub_groups(raw: str) -> set[str]:
     if not raw:
         return set()
@@ -48,3 +64,29 @@ def get_authentik_identity() -> dict[str, str | set[str]]:
         "uid": (request.headers.get("X-authentik-uid") or "").strip(),
         "groups": _parse_hub_groups(request.headers.get("X-authentik-groups") or ""),
     }
+
+
+def hub_identity_lookup_keys(ident: dict[str, str | set[str]]) -> list[str]:
+    """Emails/login a probar: username Hub suele coincidir con SignaPlan, email Odoo a veces no."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for raw in (ident.get("username"), ident.get("email")):
+        value = (raw or "").strip()
+        if not value:
+            continue
+        norm = value.lower()
+        if norm in seen:
+            continue
+        seen.add(norm)
+        keys.append(value)
+    return keys
+
+
+def find_user_for_hub_identity(ident: dict[str, str | set[str]]):
+    from app.models import User
+
+    for key in hub_identity_lookup_keys(ident):
+        user = User.query.filter(func.lower(User.email) == key.lower()).first()
+        if user:
+            return user, key
+    return None, None

@@ -117,9 +117,15 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    from app.services.hub_sso_service import hub_sso_enabled_for_tenant, mark_hub_sso_skip_auto
+
+    tenant = getattr(g, 'current_tenant', None)
+    if tenant and hub_sso_enabled_for_tenant(tenant):
+        mark_hub_sso_skip_auto()
+
     logout_user()
     flash('Sesión cerrada', 'info')
-    return redirect(url_for('auth.login'))
+    return redirect(url_for('auth.login', local=1))
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])

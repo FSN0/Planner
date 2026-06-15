@@ -2,15 +2,17 @@ from datetime import date
 
 from flask import Blueprint, flash, g, redirect, request, session, url_for
 from flask_login import current_user, login_user, logout_user
-from sqlalchemy import func
 
 from app import csrf
 from app.auth.routes import LOGIN_BLOCKED_ROLES
-from app.models import User
 from app.services.hub_sso_service import (
+    clear_hub_sso_skip_auto,
+    find_user_for_hub_identity,
     get_authentik_identity,
     has_authentik_proxy_cookie,
+    hub_identity_lookup_keys,
     hub_sso_enabled_for_tenant,
+    should_skip_hub_sso_auto,
 )
 
 hub_sso_bp = Blueprint("hub_sso", __name__)
@@ -29,6 +31,8 @@ def _auto_redirect_hub_sso_entry():
     if request.path == "/sso/hub" or request.path.startswith("/outpost.goauthentik.io"):
         return None
     if request.args.get("local"):
+        return None
+    if should_skip_hub_sso_auto():
         return None
     if current_user.is_authenticated:
         return None
@@ -71,20 +75,23 @@ def _redirect_after_login(user):
 
 @hub_sso_bp.route("/sso/hub")
 def sso_hub():
+    clear_hub_sso_skip_auto()
     tenant = getattr(g, "current_tenant", None)
     if not tenant or not hub_sso_enabled_for_tenant(tenant):
         flash("El inicio de sesion con Hub no esta disponible para esta organizacion.", "warning")
         return _login_local()
 
     ident = get_authentik_identity()
-    email = (ident["email"] or ident["username"] or "").strip()
+    lookup_keys = hub_identity_lookup_keys(ident)
 
     if current_user.is_authenticated:
-        if email and (current_user.email or "").lower() != email.lower():
+        current_email = (current_user.email or "").lower()
+        hub_emails = {key.lower() for key in lookup_keys}
+        if hub_emails and current_email not in hub_emails:
             logout_user()
         else:
             return _redirect_authenticated_user()
-    if not email:
+    if not lookup_keys:
         flash(
             "No se detecto sesion del Hub. Entra primero en el Hub de aplicaciones "
             "o usa email y contrasena.",
@@ -92,10 +99,16 @@ def sso_hub():
         )
         return _login_local()
 
-    user = User.query.filter(func.lower(User.email) == email.lower()).first()
+    user, matched_key = find_user_for_hub_identity(ident)
     if not user:
-        flash("Usuario no registrado en SignaPlan.", "warning")
+        flash(
+            "Usuario no registrado en SignaPlan. "
+            f"El Hub identifico «{lookup_keys[0]}»; usa el mismo email en SignaPlan "
+            "o entra con email y contrasena.",
+            "warning",
+        )
         return _login_local()
+    email = matched_key
 
     if user.role in LOGIN_BLOCKED_ROLES:
         from app.utils import register_log
