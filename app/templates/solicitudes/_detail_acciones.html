@@ -21,12 +21,24 @@
     <div class="admin-actions-buttons">
         {% if solicitud.estado in ['PENDIENTE', 'EN_PROCESO'] %}
             {% if solicitud.tipo|lower == 'concreta' %}
+                {% if solicitud.accion == 'DESASIGNAR' %}
+                <button type="button" onclick="submitConcretaTotal()" class="btn-admin btn-admin-primary">
+                    <i class="fas fa-user-minus"></i> Desasignar
+                </button>
+                <button type="button" onclick="openTrasladoObraModal()" class="btn-admin btn-admin-ghost">
+                    <i class="fas fa-exchange-alt"></i> Desasignar y enviar a otra obra
+                </button>
+                <button type="button" id="btn-assign-partial" class="btn-admin btn-admin-ghost" onclick="submitPartialFromMain()">
+                    <i class="far fa-calendar-check"></i> Días sueltos
+                </button>
+                {% else %}
                 <button type="button" onclick="submitConcretaTotal()" class="btn-admin btn-admin-primary">
                     <i class="fas fa-check-double"></i> Todo el periodo
                 </button>
                 <button type="button" id="btn-assign-partial" class="btn-admin btn-admin-ghost" onclick="submitPartialFromMain()">
                     <i class="far fa-calendar-check"></i> Días sueltos
                 </button>
+                {% endif %}
             {% else %}
                 <button type="button" class="btn-admin btn-admin-primary" onclick="submitGenericTotal()">
                     <i class="fas fa-check-double"></i> Asignar seleccionados

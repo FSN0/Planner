@@ -86,7 +86,7 @@
           <span class="planificador-filter-control-label">Obras</span>
           <select id="obrasSelect" class="form-control select2-multiple" multiple="multiple" aria-label="Filtrar por obras">
             {% for obra in todas_obras %}
-            <option value="{{ obra.id }}" data-jefe="{{ obra.jefe_obra_id or '' }}">{{ obra.nombre }}</option>
+            <option value="{{ obra.id }}" data-jefe="{{ obra.jefe_obra_id or '' }}">{% if obra.codigo %}{{ obra.codigo }} - {% endif %}{{ obra.nombre }}</option>
             {% endfor %}
           </select>
         </div>

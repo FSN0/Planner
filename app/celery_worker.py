@@ -317,11 +317,28 @@ def auto_sync_subcontratas():
 
 
 @celery.task
+def auto_sync_ausencias():
+    with app.app_context():
+        from app.services.sync_runner_service import run_auto_sync_ausencias
+        from app.services.sync_config_service import SyncConfigService
+
+        def _run_for_tenant(_tenant_data):
+            if SyncConfigService.get_config().get('ausencias_enabled', True):
+                run_auto_sync_ausencias()
+
+        try:
+            _for_each_tenant(_run_for_tenant)
+        finally:
+            _cleanup_db_session()
+
+
+@celery.task
 def auto_sync_odoo():
     with app.app_context():
         from app.services.sync_config_service import SyncConfigService
         from app.services.sync_runner_service import (
             run_auto_sync_obras, run_auto_sync_empleados, run_auto_sync_subcontratas,
+            run_auto_sync_ausencias,
         )
 
         def _run_for_tenant(_tenant_data):
@@ -336,6 +353,8 @@ def auto_sync_odoo():
                     run_auto_sync_empleados()
                 if cfg['subcontratas_enabled']:
                     run_auto_sync_subcontratas()
+                if cfg.get('ausencias_enabled', True):
+                    run_auto_sync_ausencias()
                 SyncConfigService.mark_master_sync_done()
                 app.logger.info(">>> Sincronización nocturna finalizada con éxito.")
             except Exception as e:

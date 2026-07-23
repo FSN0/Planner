@@ -17,13 +17,7 @@ LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO, ROLE_RRHH)
 
 
 def _login_page_context():
-    from app.services.hub_sso_service import hub_sso_enabled_for_tenant, hub_url
-    tenant = g.current_tenant
-    return {
-        'tenant_name': tenant.nombre,
-        'hub_sso_enabled': hub_sso_enabled_for_tenant(tenant),
-        'hub_url': hub_url(),
-    }
+    return {'tenant_name': g.current_tenant.nombre}
 
 
 def _redirect_authenticated_user():
@@ -117,24 +111,9 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
-    from app.services.hub_sso_service import (
-        hub_proxy_sign_out_path,
-        hub_sso_enabled_for_tenant,
-        mark_hub_sso_skip_auto,
-    )
-
-    tenant = getattr(g, 'current_tenant', None)
-    hub_sso = tenant and hub_sso_enabled_for_tenant(tenant)
-    if hub_sso:
-        mark_hub_sso_skip_auto()
-
     logout_user()
     flash('Sesión cerrada', 'info')
-
-    if hub_sso:
-        return_url = url_for('auth.login', local=1, _external=True)
-        return redirect(hub_proxy_sign_out_path(return_url))
-    return redirect(url_for('auth.login', local=1))
+    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])

@@ -54,10 +54,12 @@
 
     <div class="worker-list-body" data-obra-id="{{ item.obra.id }}" data-obra-name="{{ item.obra.nombre }}">
         {% for worker in item.workers %}
-        <div class="worker-chip"
+        {% set en_leave = worker.temp_en_ausencia %}
+        <div class="worker-chip{% if en_leave %} worker-chip--leave{% if not worker.temp_ausencia_aprobada %} worker-chip--leave-pending{% endif %}{% endif %}"
              data-worker-id="{{ worker.id }}"
              data-worker-name="{{ worker.name }} {{ worker.lastname }}"
-             style="border-left-color: {{ worker.company_rel.color if worker.company_rel else '#ccc' }}">
+             {% if en_leave %}data-en-ausencia="1" title="{{ worker.temp_ausencia_tipo }} — sigue asignado"{% endif %}
+             style="border-left-color: {{ '#7c3aed' if en_leave and worker.temp_ausencia_aprobada else ('#a78bfa' if en_leave else (worker.company_rel.color if worker.company_rel else '#ccc')) }}">
 
             <div class="d-flex justify-content-between align-items-center">
                 <div class="text-truncate d-flex align-items-center" style="max-width: 180px;">
@@ -67,6 +69,8 @@
                             <span class="status-dot-kanban dot-success" title="Correcto"></span>
                         {% elif st == 'Correcto_Automatico' %}
                             <span class="status-dot-kanban dot-auto" title="Auto-Asignado"></span>
+                        {% elif st == 'Exento_Ausencia' %}
+                            <span class="status-dot-kanban" style="background:#7c3aed;" title="Exento (ausencia planificada)"></span>
                         {% elif st == 'Ausencia' %}
                             <span class="status-dot-kanban dot-warning" title="Ausencia"></span>
                         {% elif st == 'Conflicto' or st == 'Paracaidista' %}
@@ -83,6 +87,9 @@
                        style="text-decoration: none;">
                         {{ worker.name }} {{ worker.lastname }}
                     </a>
+                    {% if en_leave and worker.temp_ausencia_tipo %}
+                    <span class="worker-chip-leave-badge" title="{{ worker.temp_ausencia_tipo }}">{{ worker.temp_ausencia_tipo }}</span>
+                    {% endif %}
                 </div>
 
                 {% set rep = worker.reputation_score %}

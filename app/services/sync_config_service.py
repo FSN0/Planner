@@ -10,6 +10,7 @@ DEFAULTS = {
     'sync_empleados_enabled': 'true',
     'sync_subcontratas_enabled': 'true',
     'sync_fichajes_enabled': 'true',
+    'sync_ausencias_enabled': 'true',
     'sync_master_hour': '3',
     'sync_master_minute': '0',
     'sync_fichajes_interval': '30',
@@ -53,6 +54,16 @@ SYNC_MODULES = [
         'color': 'warning',
         'config_enabled': 'sync_subcontratas_enabled',
         'description': 'Importa empresas subcontrata y sus contactos externos.',
+        'default_schedule': 'Diario a las 03:00',
+    },
+    {
+        'key': 'ausencias',
+        'tipo_log': 'Ausencias',
+        'label': 'Ausencias / Time Off',
+        'icon': 'fa-umbrella-beach',
+        'color': 'success',
+        'config_enabled': 'sync_ausencias_enabled',
+        'description': 'Importa vacaciones, bajas, permisos y puentes (hr.leave) con su tipo y estado.',
         'default_schedule': 'Diario a las 03:00',
     },
     {
@@ -102,7 +113,11 @@ class SyncConfigService:
         cfg['empleados_enabled'] = cfg['sync_empleados_enabled'].lower() == 'true'
         cfg['subcontratas_enabled'] = cfg['sync_subcontratas_enabled'].lower() == 'true'
         cfg['fichajes_enabled'] = cfg['sync_fichajes_enabled'].lower() == 'true'
-        cfg['master_enabled'] = cfg['obras_enabled'] or cfg['empleados_enabled'] or cfg['subcontratas_enabled']
+        cfg['ausencias_enabled'] = cfg['sync_ausencias_enabled'].lower() == 'true'
+        cfg['master_enabled'] = (
+            cfg['obras_enabled'] or cfg['empleados_enabled']
+            or cfg['subcontratas_enabled'] or cfg['ausencias_enabled']
+        )
         return cfg
 
     @classmethod
@@ -112,6 +127,7 @@ class SyncConfigService:
             'sync_empleados_enabled': data.get('sync_empleados_enabled'),
             'sync_subcontratas_enabled': data.get('sync_subcontratas_enabled'),
             'sync_fichajes_enabled': data.get('sync_fichajes_enabled'),
+            'sync_ausencias_enabled': data.get('sync_ausencias_enabled'),
             'sync_fichajes_retro_enabled': data.get('sync_fichajes_retro_enabled'),
         }
         for k, v in bool_map.items():

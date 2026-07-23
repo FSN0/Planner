@@ -1619,36 +1619,67 @@ def api_planificador_events():
         events_map[key].append(a.fecha)
         
     events = []
+
+    from app.services.leave_service import (
+        apply_leave_overlay_title,
+        build_leaves_by_user,
+        leave_covering,
+    )
+    leaves_idx = build_leaves_by_user(
+        {info['worker_id'] for info in workers_info.values()},
+        start_date,
+        end_date,
+    )
     
-    def crear_bloque(start_d, end_d, curr_key, curr_info):
+    def crear_bloque(start_d, end_d, curr_key, curr_info, leave=None):
+        base_title = curr_info["name"]
+        title, overlay_color, is_overlay = apply_leave_overlay_title(
+            base_title, leave, name_first=True
+        )
         events.append({
             "id": f"{curr_key}_{start_d}", "resourceId": str(curr_info["obra_id"]),
-            "title": curr_info["name"], "start": start_d.strftime("%Y-%m-%d"),
+            "title": title,
+            "start": start_d.strftime("%Y-%m-%d"),
             "end": (end_d + timedelta(days=1)).strftime("%Y-%m-%d"),
-            "color": curr_info["color"], "worker_id": curr_info["worker_id"], "editable": True,
+            "color": overlay_color or curr_info["color"],
+            "worker_id": curr_info["worker_id"], "editable": True,
             "empresa_nombre": curr_info["empresa_nombre"],
             "empresa_id": curr_info["empresa_id"],
             "categoria": curr_info["categoria"],
             "especialidad": curr_info["especialidad"],
-            "nota": curr_info["nota"]
+            "nota": curr_info["nota"],
+            "en_ausencia": is_overlay,
+            "ausencia_tipo": leave.tipo if leave else None,
         })
 
     for key, fechas in events_map.items():
         fechas.sort()
         if not fechas: continue
         info = workers_info[key]
+        user_leaves = leaves_idx.get(info["worker_id"], [])
+
+        # Partir bloques si cambia continuidad O estado de ausencia
         bloque_start = fechas[0]
         bloque_end = fechas[0]
-        
+        bloque_leave = leave_covering(user_leaves, fechas[0])
+        bloque_leave_id = bloque_leave.id if bloque_leave else None
+
         for i in range(1, len(fechas)):
-            if (fechas[i] - bloque_end).days == 1:
-                bloque_end = fechas[i]
+            d = fechas[i]
+            leave_d = leave_covering(user_leaves, d)
+            leave_id = leave_d.id if leave_d else None
+            contiguous = (d - bloque_end).days == 1
+            same_leave = leave_id == bloque_leave_id
+            if contiguous and same_leave:
+                bloque_end = d
             else:
-                crear_bloque(bloque_start, bloque_end, key, info)
-                bloque_start = fechas[i]
-                bloque_end = fechas[i]
+                crear_bloque(bloque_start, bloque_end, key, info, bloque_leave)
+                bloque_start = d
+                bloque_end = d
+                bloque_leave = leave_d
+                bloque_leave_id = leave_id
                 
-        crear_bloque(bloque_start, bloque_end, key, info)
+        crear_bloque(bloque_start, bloque_end, key, info, bloque_leave)
 
     # MARCADOR FIN DE OBRA
     obras_objs = Obra.query.filter(Obra.id.in_(obras_ids)).all()
@@ -1745,20 +1776,25 @@ def api_planificador_events():
 def search_workers():
     """Buscador Select2 filtrado por texto, excluyendo inactivos."""
     q = request.args.get('q', '').lower()
-    
-    # 1. Opción Genérica
-    results = [{"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"}]
-    
+    plain = request.args.get('plain') in ('1', 'true', 'yes')
+
+    # 1. Opción Genérica (solo solicitudes; no en alta de ausencias)
+    results = []
+    if not plain:
+        results.append({"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"})
+
     # 2. Buscar en BD
-    query = User.query.filter(User.role == 'operario', User.active == True, User.is_deleted == False)
+    query = User.query.filter(User.active == True, User.is_deleted == False)
+    if not plain:
+        query = query.filter(User.role == 'operario')
     if q:
         query = query.filter(or_(
             func.lower(User.name).contains(q),
             func.lower(User.lastname).contains(q)
         ))
-        
-    workers = query.limit(30).all()
-    
+
+    workers = query.order_by(User.name, User.lastname).limit(40).all()
+
     # Agrupar para el Select2
     grouped = {}
     for w in workers:
@@ -1769,13 +1805,13 @@ def search_workers():
             "id": w.id,
             "text": f"{w.name} {w.lastname}"
         })
-        
+
     for comp_name, children in grouped.items():
         results.append({
             "text": f"🏢 {comp_name}",
             "children": children
         })
-        
+
     return jsonify({"results": results})
 
     
@@ -1847,6 +1883,25 @@ def update_config():
         db.session.add(ConfiguracionGlobal(clave='aceptar_primer_fichaje', valor=primer_fichaje_val))
     else:
         conf_primer.valor = primer_fichaje_val
+
+    # Ausencias planificadas (vacaciones / conflictos)
+    jefe_resuelve = 'True' if request.form.get('ausencias_jefe_puede_resolver') else 'False'
+    conf_jefe = ConfiguracionGlobal.query.filter_by(clave='ausencias_jefe_puede_resolver').first()
+    if not conf_jefe:
+        db.session.add(ConfiguracionGlobal(clave='ausencias_jefe_puede_resolver', valor=jefe_resuelve))
+    else:
+        conf_jefe.valor = jefe_resuelve
+
+    auto_res = request.form.get('ausencias_auto_resolucion') or 'overlay'
+    if auto_res == 'prefer_leave':
+        auto_res = 'overlay'
+    if auto_res not in ('overlay', 'none', 'prefer_assignment'):
+        auto_res = 'overlay'
+    conf_auto = ConfiguracionGlobal.query.filter_by(clave='ausencias_auto_resolucion').first()
+    if not conf_auto:
+        db.session.add(ConfiguracionGlobal(clave='ausencias_auto_resolucion', valor=auto_res))
+    else:
+        conf_auto.valor = auto_res
 
     odoo_url = request.form.get('odoo_url')
     if odoo_url:
@@ -2042,12 +2097,37 @@ def batch_delete_companies():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def sso_odoo_contactos():
-    """Enlace a Alta Odoo vía SSO Hub (misma sesion Authentik que el Hub)."""
+    """SSO firmado hacia la app externa Alta Odoo (/sso_login)."""
+    from app.utils.timezone_utils import utc_now
+
+    sso_secret = current_app.config.get('SSO_SECRET_KEY')
+    if not sso_secret:
+        flash('SSO no configurado (SSO_SECRET_KEY).', 'danger')
+        return redirect(url_for('admin.panel'))
+
     alta_url = (current_app.config.get('ODOO_ALTA_APP_URL') or '').strip().rstrip('/')
     if not alta_url:
-        flash('Alta Odoo no configurada (ODOO_ALTA_APP_URL).', 'danger')
-        return redirect(url_for('admin.panel'))
-    return redirect(f'{alta_url}/sso/hub')
+        dominio_base = request.host.split(':')[0]
+        alta_url = f"{request.scheme}://{dominio_base}:5002"
+
+    u_name = current_user.name if current_user.name and str(current_user.name).lower() != 'none' else ''
+    u_last = current_user.lastname if current_user.lastname and str(current_user.lastname).lower() != 'none' else ''
+    full_name = f'{u_name} {u_last}'.strip() or current_user.email
+
+    external_ids = getattr(current_user, 'external_ids', None) or {}
+    odoo_id = external_ids.get('odoo') if isinstance(external_ids, dict) else None
+
+    serializer = URLSafeTimedSerializer(sso_secret)
+    token = serializer.dumps({
+        'user_id': current_user.id,
+        'odoo_id': odoo_id,
+        'name': full_name,
+        'email': current_user.email,
+        'role': current_user.role,
+        'iat': utc_now().timestamp(),
+    })
+    return redirect(f'{alta_url}/sso_login?token={token}')
+
 
 # --- NUEVO MÓDULO DE LOGS Y AUDITORÍA ---
 @admin_bp.route("/logs", methods=["GET"])
@@ -2101,3 +2181,147 @@ def save_log_preferences():
     db.session.commit()
     flash("Preferencias de notificaciones actualizadas.", "success")
     return redirect(url_for('admin.system_logs', category=request.form.get('current_category', 'accesos')))
+
+
+# ==========================================
+# AUSENCIAS PLANIFICADAS
+# ==========================================
+
+@admin_bp.route('/ausencias')
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
+def ausencias_list():
+    from datetime import date as date_cls
+    from app.services.leave_service import (
+        jefe_puede_resolver_ausencias,
+        get_pending_conflicts,
+        get_upcoming_leaves,
+        get_leaves_scoped,
+        obras_for_leave,
+        auto_resolucion_ausencias,
+    )
+
+    estado = request.args.get('estado') or ''
+    puede_resolver = current_user.role == ROLE_ADMIN or (
+        current_user.role == ROLE_JEFE and jefe_puede_resolver_ausencias()
+    )
+    obra_ids = None
+    if current_user.role == ROLE_JEFE:
+        obra_ids = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id, is_deleted=False).all()]
+
+    auto_mode = auto_resolucion_ausencias()
+    conflictos = []
+    if auto_mode == 'none' and puede_resolver:
+        conflictos = get_pending_conflicts(obra_ids=obra_ids)
+
+    def _rows(leaves):
+        return [{'leave': leave, 'obras': obras_for_leave(leave)} for leave in leaves]
+
+    en_curso_rows = _rows(get_upcoming_leaves(
+        current_user, horizon_days=45, limit=40, only_active=True
+    ))
+    proximas_rows = _rows(get_upcoming_leaves(
+        current_user, horizon_days=45, limit=40, only_future=True
+    ))
+    ausencias = get_leaves_scoped(current_user, estado=estado or None, limit=200)
+
+    return render_template(
+        'admin_ausencias.html',
+        ausencias=ausencias,
+        en_curso_rows=en_curso_rows,
+        proximas_rows=proximas_rows,
+        conflictos=conflictos,
+        puede_resolver=puede_resolver,
+        filtro_estado=estado,
+        auto_mode=auto_mode,
+        today=date_cls.today(),
+        horizon_days=45,
+    )
+
+
+@admin_bp.route('/ausencias/sync', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def ausencias_sync():
+    from app.services.leave_service import sync_leaves_from_erp
+    try:
+        stats = sync_leaves_from_erp()
+        flash(
+            f"Sync ausencias: {stats['nuevos']} nuevas, {stats['actualizados']} actualizadas, "
+            f"{stats['omitidos']} omitidas, {stats['errores']} errores.",
+            'success' if stats['errores'] == 0 else 'warning',
+        )
+    except Exception as exc:
+        flash(f'Error sincronizando ausencias: {exc}', 'danger')
+    return redirect(url_for('admin.ausencias_list'))
+
+
+@admin_bp.route('/ausencias/crear', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def ausencias_crear():
+    from app.services.leave_service import create_manual_leave
+
+    user_id = request.form.get('user_id', type=int)
+    fecha_inicio = request.form.get('fecha_inicio')
+    fecha_fin = request.form.get('fecha_fin')
+    tipo = (request.form.get('tipo') or 'Vacaciones').strip()
+    estado = request.form.get('estado') or 'aprobada'
+    descripcion = request.form.get('descripcion') or None
+
+    if not user_id or not fecha_inicio or not fecha_fin:
+        flash('Faltan empleado o fechas.', 'danger')
+        return redirect(url_for('admin.ausencias_list'))
+
+    try:
+        create_manual_leave(
+            user_id=user_id,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            tipo=tipo,
+            estado=estado,
+            descripcion=descripcion,
+            created_by_id=current_user.id,
+        )
+        flash('Ausencia creada.', 'success')
+    except Exception as exc:
+        flash(f'Error al crear ausencia: {exc}', 'danger')
+    return redirect(url_for('admin.ausencias_list'))
+
+
+@admin_bp.route('/ausencias/conflictos/<int:conflict_id>/resolver', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
+def ausencias_resolver_conflicto(conflict_id):
+    from app.models import AusenciaConflicto, CONFLICT_KEEP_LEAVE, CONFLICT_KEEP_ASSIGNMENT
+    from app.services.leave_service import (
+        jefe_puede_resolver_ausencias,
+        resolve_conflict,
+    )
+
+    if current_user.role == ROLE_JEFE and not jefe_puede_resolver_ausencias():
+        flash('No tienes permiso para resolver conflictos de ausencias.', 'danger')
+        return redirect(url_for('admin.ausencias_list'))
+
+    decision = request.form.get('decision')
+    if decision not in (CONFLICT_KEEP_LEAVE, CONFLICT_KEEP_ASSIGNMENT):
+        flash('Decisión no válida.', 'danger')
+        return redirect(url_for('admin.ausencias_list'))
+
+    conflict = AusenciaConflicto.query.get_or_404(conflict_id)
+    if current_user.role == ROLE_JEFE:
+        obra = Obra.query.get(conflict.obra_id)
+        if not obra or obra.jefe_obra_id != current_user.id:
+            flash('Solo puedes resolver conflictos de tus obras.', 'danger')
+            return redirect(url_for('admin.ausencias_list'))
+
+    try:
+        ok = resolve_conflict(conflict_id, decision, resolved_by_id=current_user.id)
+        db.session.commit()
+        flash('Conflicto resuelto.' if ok else 'El conflicto ya estaba resuelto.', 'success')
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'Error al resolver: {exc}', 'danger')
+    return redirect(url_for('admin.ausencias_list'))
+
+

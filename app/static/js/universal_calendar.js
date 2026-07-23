@@ -553,74 +553,36 @@ class UniversalCalendarManager {
                 if (notasRow) notasRow.style.display = 'block';
                 if (notasInput) notasInput.value = '';
 
-                let selectLabel = this.context === 'obra' ? 'Trabajador a asignar' : 'Obra destino';
-
-                const existingSelect = $(`#${this.panelId}-select`);
-                if (existingSelect.length && existingSelect.data('select2')) {
-                    existingSelect.select2('destroy');
-                }
-                
-                container.innerHTML = `
-                    <label class="small font-weight-bold mb-1 text-secondary">${selectLabel}</label>
-                    <select id="${this.panelId}-select" class="form-control form-control-sm" style="width: 100%;">
-                        <option></option>
-                    </select>
-                `;
-
-                setTimeout(() => {
-                    let $select = $(`#${this.panelId}-select`);
-                    if (this.context === 'obra') {
-                        if (typeof $ !== 'undefined' && $.fn.select2) {
-                            this.initPanelSelect2($select, {
-                                placeholder: "Escribe o elige 'CUALQUIERA'...",
-                                allowClear: true,
-                                ajax: {
-                                    url: '/admin/api/planificador/search_workers',
-                                    dataType: 'json', delay: 250,
-                                    data: (p) => ({ q: p.term }),
-                                    processResults: (d) => ({ results: d.results })
-                                }
-                            }).on('change', (e) => {
-                                let gRow = document.getElementById(`${this.panelId}-generic-options`);
-                                if(gRow) { e.target.value === 'GENERICO' ? $(gRow).slideDown(150) : $(gRow).slideUp(150); }
-                            });
-                            this._applyPendingPrefillToSelect($select);
-                        }
-                    } else if (this.context === 'worker') {
-                        fetch('/api/v6/recursos_activos').then(r=>r.json()).then(data => {
-                            if (typeof $ !== 'undefined' && $.fn.select2) {
-                                this.initPanelSelect2($select, {
-                                    placeholder: "Selecciona una obra...",
-                                    allowClear: true,
-                                    data: data.obras
-                                });
-                                this._applyPendingPrefillToSelect($select);
-                            }
-                        });
-                    }
-                }, 150);
-
+                this._renderResourceSelect(container, null);
             } else {
                 titleEl.innerHTML = '<i class="fas fa-edit mr-2 univ-calendar-icon"></i>Editar Asignación';
                 extraBtns.style.display = 'block';
 
                 let notasRow = document.getElementById(`${this.panelId}-notas-row`);
                 if (notasRow) notasRow.style.display = 'none';
-                
-                container.innerHTML = `
-                    <label class="small font-weight-bold mb-1 text-secondary">Elemento Asignado</label>
-                    <div class="form-control form-control-sm bg-light text-dark font-weight-bold" style="cursor: not-allowed; border: 1px solid #e2e8f0;">
-                        ${event.title}
-                    </div>
-                `;
+
+                const props = event.extendedProps || {};
+                if (this.context === 'worker' || this.context === 'obra') {
+                    const prefill = this.context === 'worker'
+                        ? { obraId: props.obra_id, obraName: event.title }
+                        : { workerId: props.worker_id, workerName: event.title };
+                    this._renderResourceSelect(container, prefill);
+                } else {
+                    container.innerHTML = `
+                        <label class="small font-weight-bold mb-1 text-secondary">Elemento Asignado</label>
+                        <div class="form-control form-control-sm bg-light text-dark font-weight-bold" style="cursor: not-allowed; border: 1px solid #e2e8f0;">
+                            ${event.title}
+                        </div>
+                    `;
+                }
 
                 let btnView = document.getElementById(`${this.panelId}-view`);
                 if (btnView) {
                     btnView.onclick = () => {
-                        if(event.extendedProps && event.extendedProps.obra_url) { window.open(event.extendedProps.obra_url, '_blank'); return;}
+                        if(props.obra_url) { window.open(props.obra_url, '_blank'); return;}
                         let targetUrl = null;
-                        if (this.context === 'worker') targetUrl = `/admin/obra_panel/${event.extendedProps.obra_id}`;
-                        else if (this.context === 'obra') targetUrl = `/admin/worker_panel/${event.extendedProps.worker_id}`;
+                        if (this.context === 'worker') targetUrl = `/admin/obra_panel/${props.obra_id}`;
+                        else if (this.context === 'obra') targetUrl = `/admin/worker_panel/${props.worker_id}`;
                         
                         if (targetUrl) window.open(targetUrl, '_blank');
                         else if(typeof Swal !== 'undefined') Swal.fire('Información', 'No hay enlace directo disponible.', 'info');
@@ -628,6 +590,57 @@ class UniversalCalendarManager {
                 }
             }
         }
+    }
+
+    _renderResourceSelect(container, prefill) {
+        let selectLabel = this.context === 'obra' ? 'Trabajador a asignar' : 'Obra destino';
+
+        const existingSelect = $(`#${this.panelId}-select`);
+        if (existingSelect.length && existingSelect.data('select2')) {
+            existingSelect.select2('destroy');
+        }
+
+        container.innerHTML = `
+            <label class="small font-weight-bold mb-1 text-secondary">${selectLabel}</label>
+            <select id="${this.panelId}-select" class="form-control form-control-sm" style="width: 100%;">
+                <option></option>
+            </select>
+        `;
+
+        if (prefill) this._pendingPrefill = prefill;
+
+        setTimeout(() => {
+            let $select = $(`#${this.panelId}-select`);
+            if (this.context === 'obra') {
+                if (typeof $ !== 'undefined' && $.fn.select2) {
+                    this.initPanelSelect2($select, {
+                        placeholder: "Escribe o elige 'CUALQUIERA'...",
+                        allowClear: true,
+                        ajax: {
+                            url: '/admin/api/planificador/search_workers',
+                            dataType: 'json', delay: 250,
+                            data: (p) => ({ q: p.term }),
+                            processResults: (d) => ({ results: d.results })
+                        }
+                    }).on('change', (e) => {
+                        let gRow = document.getElementById(`${this.panelId}-generic-options`);
+                        if(gRow) { e.target.value === 'GENERICO' ? $(gRow).slideDown(150) : $(gRow).slideUp(150); }
+                    });
+                    this._applyPendingPrefillToSelect($select);
+                }
+            } else if (this.context === 'worker') {
+                fetch('/api/v6/recursos_activos').then(r=>r.json()).then(data => {
+                    if (typeof $ !== 'undefined' && $.fn.select2) {
+                        this.initPanelSelect2($select, {
+                            placeholder: "Selecciona una obra...",
+                            allowClear: true,
+                            data: data.obras
+                        });
+                        this._applyPendingPrefillToSelect($select);
+                    }
+                });
+            }
+        }, 150);
     }
 
     updatePanelDatesFromEvent(event) {
@@ -747,21 +760,54 @@ class UniversalCalendarManager {
                     return;
                 }
 
+                let selEl = document.getElementById(`${this.panelId}-select`);
+                let selVal = selEl ? selEl.value : null;
+
                 let payload = {
                     start_date: startVal,
-                    end_date: endVal, // <-- SOLUCIONADO: Ya no suma un día de más
+                    end_date: endVal,
                     original_start: this.activeEvent.extendedProps.real_original_start,
                     original_end: this.activeEvent.extendedProps.real_original_end ? moment(this.activeEvent.extendedProps.real_original_end).subtract(1, 'days').format('YYYY-MM-DD') : null,
                     overwrite_mode: 'overwrite', 
                     include_weekends: includeWeekends
                 };
 
+                const props = this.activeEvent.extendedProps || {};
+                const afterSave = () => {
+                    this.calendar.refetchEvents(); this.hidePanel();
+                    if (window.loadTimelineData) window.loadTimelineData();
+                };
+
                 if (this.context === 'worker') {
+                    if (!selVal) {
+                        if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Debes seleccionar una obra.', 'warning');
+                        return;
+                    }
                     payload.worker_id = this.entityId;
-                    payload.target_obra_id = this.activeEvent.extendedProps.obra_id;
-                    payload.old_obra_id = this.activeEvent.extendedProps.obra_id;
+                    payload.old_obra_id = props.obra_id;
+                    payload.target_obra_id = selVal;
+                } else if (this.context === 'obra') {
+                    if (!selVal) {
+                        if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Debes seleccionar un trabajador.', 'warning');
+                        return;
+                    }
+                    const oldWorkerId = props.worker_id;
+                    payload.target_obra_id = this.entityId;
+                    payload.old_obra_id = this.entityId;
+                    payload.worker_id = selVal;
+
+                    // Cambio de persona: primero desasignar la anterior en el rango editado
+                    if (oldWorkerId && String(selVal) !== String(oldWorkerId) && String(selVal) !== 'GENERICO') {
+                        const dates = this._buildEditableDates(startVal, endVal);
+                        if (!dates.length) {
+                            if (typeof Swal !== 'undefined') Swal.fire('Histórico Protegido', 'No hay días futuros editables en este bloque.', 'info');
+                            return;
+                        }
+                        this._unassignThenSave(oldWorkerId, this.entityId, dates, payload, afterSave);
+                        return;
+                    }
                 } else {
-                    payload.worker_id = this.activeEvent.extendedProps.worker_id || this.entityId;
+                    payload.worker_id = props.worker_id || this.entityId;
                     payload.target_obra_id = this.entityId;
                     payload.old_obra_id = this.entityId;
                 }
@@ -769,10 +815,7 @@ class UniversalCalendarManager {
                 if (this.callbacks.onEventModified) {
                     this.callbacks.onEventModified(payload, null); 
                 } else {
-                    this.executeSave(payload, () => {
-                        this.calendar.refetchEvents(); this.hidePanel();
-                        if (window.loadTimelineData) window.loadTimelineData();
-                    });
+                    this.executeSave(payload, afterSave);
                 }
             }
         });
@@ -884,9 +927,55 @@ class UniversalCalendarManager {
         if (notasInput) notasInput.value = '';
     }
 
+    _buildEditableDates(startVal, endVal) {
+        const today = moment().startOf('day');
+        let start = moment(startVal).startOf('day');
+        let end = moment(endVal).startOf('day');
+        if (start.isBefore(today)) start = today.clone();
+        const dates = [];
+        let curr = start.clone();
+        while (curr.isSameOrBefore(end)) {
+            dates.push(curr.format('YYYY-MM-DD'));
+            curr.add(1, 'days');
+        }
+        return dates;
+    }
+
+    _csrfToken() {
+        let csrf = "";
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta && meta.content) return meta.content;
+        let parts = ("; " + document.cookie).split("; csrf_token=");
+        if (parts.length === 2) csrf = parts.pop().split(";").shift();
+        return csrf;
+    }
+
+    _unassignThenSave(workerId, obraId, dates, assignPayload, afterSave) {
+        fetch('/api/v6/unassign_worker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this._csrfToken() },
+            body: JSON.stringify({ worker_id: workerId, obra_id: obraId, dates: dates, mode: 'selected' })
+        }).then(r => r.json()).then(data => {
+            if (!data.success) {
+                if (typeof Swal !== 'undefined') Swal.fire('Error', data.message || 'No se pudo desasignar al trabajador anterior.', 'error');
+                return;
+            }
+            // Tras desasignar, el alta del nuevo es una asignación nueva (sin rango original)
+            const createPayload = Object.assign({}, assignPayload, {
+                original_start: null,
+                original_end: null,
+                overwrite_mode: 'check',
+            });
+            this.executeSave(createPayload, afterSave);
+        }).catch(() => {
+            if (typeof Swal !== 'undefined') Swal.fire('Error', 'Error de red al cambiar el trabajador.', 'error');
+        });
+    }
+
     _applyPendingPrefillToSelect($select) {
         if (!this._pendingPrefill || !$select || !$select.length) return;
         const pf = this._pendingPrefill;
+        this._pendingPrefill = null;
         if (this.context === 'obra' && pf.workerId) {
             const val = String(pf.workerId);
             if (!$select.find(`option[value="${val}"]`).length) {

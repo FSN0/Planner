@@ -32,6 +32,7 @@
         </header>
         <div class="config-block-body">
           <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="config-fields-grid">
               <div class="config-field">
                 <label for="zona_horaria">Zona horaria</label>
@@ -69,6 +70,28 @@
               </div>
             </div>
 
+            <div class="config-switch-box mt-3">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="ausencias_jefe_puede_resolver" name="ausencias_jefe_puede_resolver"
+                       {% if configs.get('ausencias_jefe_puede_resolver', 'False') == 'True' %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">Jefe de obra puede resolver conflictos de ausencias</p>
+                <p class="admin-form-switch-hint mb-0">Solo aplica si la resolución automática está en modo Manual. Con “marcar vacaciones” no hace falta confirmar.</p>
+              </div>
+            </div>
+
+            <div class="config-field mt-3">
+              <label for="ausencias_auto_resolucion">Ausencias vs asignación (Odoo manda)</label>
+              <select id="ausencias_auto_resolucion" name="ausencias_auto_resolucion" class="form-control form-control-sm custom-select">
+                <option value="overlay" {% if configs.get('ausencias_auto_resolucion', 'overlay') in ['overlay', 'prefer_leave'] %}selected{% endif %}>Mantener asignación y marcar vacaciones (recomendado)</option>
+                <option value="none" {% if configs.get('ausencias_auto_resolucion') == 'none' %}selected{% endif %}>Manual (cola de conflictos)</option>
+                <option value="prefer_assignment" {% if configs.get('ausencias_auto_resolucion') == 'prefer_assignment' %}selected{% endif %}>Ignorar ausencia ese día (no marcar en calendario)</option>
+              </select>
+              <p class="config-field-hint">Las ausencias aprobadas en Odoo se muestran en calendarios/planificador sin desasignar. Sin email al jefe.</p>
+            </div>
+
             <div class="config-block-actions">
               <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar operación</button>
             </div>
@@ -87,6 +110,7 @@
         </header>
         <div class="config-block-body">
           <form action="{{ url_for('admin.add_festivo') }}" method="POST" class="config-festivo-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="config-field">
               <label for="festivo-fecha">Fecha</label>
               <input type="date" id="festivo-fecha" name="fecha" class="form-control form-control-sm" required>
@@ -144,6 +168,7 @@
         </header>
         <div class="config-block-body">
           <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="config-email-groups">
 
               <div>

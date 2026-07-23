@@ -560,8 +560,8 @@ def api_resolver_solicitud(solicitud_id):
         return jsonify({'success': False, 'message': 'Falta la acción a realizar.'}), 400
         
     try:
-        mensaje = resolver_solicitud_admin(solicitud, accion, current_user)
-        flash(mensaje, "success" if accion in ['aceptar_concreta', 'reabrir'] else "warning")
+        mensaje = resolver_solicitud_admin(solicitud, accion, current_user, target_obra_id=data.get('target_obra_id'))
+        flash(mensaje, "success" if accion in ['aceptar_concreta', 'aceptar_concreta_traslado', 'reabrir'] else "warning")
         return jsonify({'success': True, 'message': mensaje})
     except ValueError as e:
         return jsonify({'success': False, 'message': str(e)}), 400

@@ -1,0 +1,42 @@
+=== MAKE MIGRATE ===
+docker compose -f docker-compose.yml exec web flask db upgrade
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade f7a8b9c0d1e2 -> g8b9c0d1e2f3, create ausencias tables in tenant schemas (fix public-only create)
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade f7a8b9c0d1e2 -> g8b9c0d1e2f3, create ausencias tables in tenant schemas (fix public-only create)
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade f7a8b9c0d1e2 -> g8b9c0d1e2f3, create ausencias tables in tenant schemas (fix public-only create)
+🚀 Aplicando migraciones al inquilino: tenant_paco
+🚀 Aplicando migraciones al inquilino: tenant_soltec
+MIGRATE_EXIT:True
+
+=== TABLES ===
+    schema     |         table          
+---------------+------------------------
+ public        | ausencias_conflictos
+ public        | ausencias_planificadas
+ tenant_paco   | ausencias_conflictos
+ tenant_paco   | ausencias_planificadas
+ tenant_soltec | ausencias_conflictos
+ tenant_soltec | ausencias_planificadas
+(6 rows)
+
+
+=== FKS ===
+                 tbl                  |        refs         |               conname               
+--------------------------------------+---------------------+-------------------------------------
+ ausencias_planificadas               | users               | ausencias_planificadas_user_id_fkey
+ tenant_paco.ausencias_planificadas   | tenant_paco.users   | ausencias_planificadas_user_id_fkey
+ tenant_soltec.ausencias_planificadas | tenant_soltec.users | ausencias_planificadas_user_id_fkey
+(3 rows)
+
+
+=== ALEMBIC VERSION tenant_soltec ===
+ version_num  
+--------------
+ g8b9c0d1e2f3
+(1 row)
+

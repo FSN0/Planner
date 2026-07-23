@@ -239,3 +239,7 @@ def run_fichajes_retro_sync(days=None, modo='Automático'):
     ))
     db.session.commit()
     return {'dias': dias, 'ok': not had_error, 'error': err_msg}
+
+def run_auto_sync_ausencias():
+    from app.services.leave_service import sync_leaves_from_erp
+    return sync_leaves_from_erp()

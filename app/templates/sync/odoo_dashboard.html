@@ -211,6 +211,13 @@
           <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('subcontratas')">
             <i class="fas fa-robot"></i> Auto ahora
           </button>
+          {% elif mod.key == 'ausencias' %}
+          <a href="{{ url_for('admin.ausencias_list') }}" class="btn-admin btn-admin-ghost btn-sm">
+            <i class="fas fa-list"></i> Ver ausencias
+          </a>
+          <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('ausencias')">
+            <i class="fas fa-robot"></i> Sync ahora
+          </button>
           {% elif mod.key == 'fichajes' %}
           <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost btn-sm">
             <i class="fas fa-gavel"></i> Auditoría
@@ -392,22 +399,28 @@
             </div>
           </div>
           <div class="row mb-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
               <div class="custom-control custom-switch">
                 <input type="checkbox" class="custom-control-input" id="cfgObras" name="sync_obras_enabled" {% if config.obras_enabled %}checked{% endif %}>
                 <label class="custom-control-label" for="cfgObras">Obras</label>
               </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <div class="custom-control custom-switch">
                 <input type="checkbox" class="custom-control-input" id="cfgEmp" name="sync_empleados_enabled" {% if config.empleados_enabled %}checked{% endif %}>
                 <label class="custom-control-label" for="cfgEmp">Empleados</label>
               </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <div class="custom-control custom-switch">
                 <input type="checkbox" class="custom-control-input" id="cfgSub" name="sync_subcontratas_enabled" {% if config.subcontratas_enabled %}checked{% endif %}>
                 <label class="custom-control-label" for="cfgSub">Subcontratas</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="cfgAus" name="sync_ausencias_enabled" {% if config.ausencias_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgAus">Ausencias</label>
               </div>
             </div>
           </div>
@@ -591,6 +604,7 @@ function runSyncNow(moduleKey) {
     obras: 'obras',
     empleados: 'empleados internos',
     subcontratas: 'subcontratas',
+    ausencias: 'ausencias / time off (hr.leave)',
     fichajes: 'fichajes del día (en vivo)',
     'fichajes-retro': 'fichajes retrospectivos (últimos ' + {{ config.fichajes_retro_days }} + ' días)',
   };

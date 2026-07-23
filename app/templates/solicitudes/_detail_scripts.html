@@ -18,6 +18,32 @@
   </div>
 </div>
 
+{% if solicitud.accion == 'DESASIGNAR' %}
+<div class="modal fade" id="trasladoObraModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title h6"><i class="fas fa-exchange-alt"></i> Desasignar y enviar a otra obra</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">
+          Se quitará el periodo de la obra origen y se asignará en la obra elegida (mismos días).
+        </p>
+        <label for="trasladoTargetObra" class="font-weight-bold small">Obra destino</label>
+        <select id="trasladoTargetObra" class="form-control" style="width:100%;"></select>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnConfirmTraslado" onclick="submitTrasladoObra()">
+          Confirmar traslado
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <script>
 /* ==========================================
  A. FUNCIONES GLOBALES DE VISIBILIDAD DE TABLA
@@ -184,7 +210,7 @@ window.submitConcretaTotal = function() {
     var $btn = $('button[onclick="submitConcretaTotal()"]');
     var originalHtml = $btn.html();
 
-    {% if solicitud.tipo|lower == 'concreta' and solicitud.empleado %}
+    {% if solicitud.tipo|lower == 'concreta' and solicitud.empleado and solicitud.accion != 'DESASIGNAR' %}
     var workerId = "{{ solicitud.empleado.id }}";
     var payload = {
         worker_id: workerId,
@@ -242,6 +268,70 @@ function ejecutarAsignacionConcretaApi() {
 }
 
 // 3. LA FUNCIÓN PARA DENEGAR Y REABRIR
+
+{% if solicitud.accion == 'DESASIGNAR' %}
+window.openTrasladoObraModal = function() {
+  var $sel = $('#trasladoTargetObra');
+  if ($sel.hasClass('select2-hidden-accessible')) {
+    $sel.select2('destroy');
+  }
+  $sel.empty();
+  $('#trasladoObraModal').modal('show');
+
+  fetch('/api/v6/recursos_activos')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var obras = (data.obras || []).filter(function(o) {
+        return String(o.id) !== String(GLOBAL_OBRA_ID);
+      });
+      $sel.select2({
+        data: obras,
+        placeholder: 'Buscar obra (código - nombre)…',
+        allowClear: true,
+        width: '100%',
+        dropdownParent: $('#trasladoObraModal')
+      });
+    })
+    .catch(function() {
+      alert('No se pudieron cargar las obras.');
+    });
+};
+
+window.submitTrasladoObra = function() {
+  var targetId = $('#trasladoTargetObra').val();
+  if (!targetId) {
+    alert('Selecciona la obra de destino.');
+    return;
+  }
+  if (!confirm('¿Desasignar de la obra origen y asignar esos días a la obra elegida?')) return;
+
+  var $btn = $('#btnConfirmTraslado');
+  $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Trasladando...');
+
+  $.ajax({
+    url: "/api/v6/solicitudes/{{ solicitud.id }}/resolver",
+    type: "POST",
+    contentType: "application/json",
+    data: JSON.stringify({
+      accion: 'aceptar_concreta_traslado',
+      target_obra_id: parseInt(targetId, 10)
+    }),
+    success: function(res) {
+      if (res.success) location.reload();
+      else {
+        alert(res.message || 'No se pudo completar el traslado');
+        $btn.prop('disabled', false).html('Confirmar traslado');
+      }
+    },
+    error: function(xhr) {
+      var msg = (xhr.responseJSON && xhr.responseJSON.message) ? xhr.responseJSON.message : 'Error de servidor';
+      alert(msg);
+      $btn.prop('disabled', false).html('Confirmar traslado');
+    }
+  });
+};
+{% endif %}
+
 window.resolverSolicitudApi = function(solicitudId, accion) {
     var mensajes = {
         'denegar': '¿Seguro que quieres DENEGAR esta solicitud?',

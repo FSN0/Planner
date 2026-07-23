@@ -88,6 +88,22 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
                     # Inyectamos estado de fichaje al usuario
                     u.temp_estado_fichaje = fichajes_dict.get(u.id, 'Sin_Registro') if user.role == ROLE_ADMIN else None
                     mapa_asig[a.obra_id].append(u)
+
+    # Overlay vacaciones/ausencias del día seleccionado (tarjeta distinta en tablero)
+    from app.services.leave_service import (
+        build_leaves_by_user,
+        leave_covering,
+        leave_overlay_meta,
+    )
+    worker_ids_hoy = {u.id for workers in mapa_asig.values() for u in workers}
+    leaves_idx = build_leaves_by_user(worker_ids_hoy, selected_date, selected_date)
+    for workers in mapa_asig.values():
+        for u in workers:
+            leave = leave_covering(leaves_idx.get(u.id, []), selected_date)
+            meta = leave_overlay_meta(leave)
+            u.temp_en_ausencia = bool(meta)
+            u.temp_ausencia_tipo = meta['label_prefix'] if meta else None
+            u.temp_ausencia_aprobada = meta['aprobada'] if meta else False
     
     # --- DIVISIÓN: PINEADAS vs NO PINEADAS ---
     # Recuperamos configuración del usuario

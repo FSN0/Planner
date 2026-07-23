@@ -127,6 +127,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             )
 
     todas_asig = Asignacion.query.filter_by(fecha=fecha_obj).all()
+    from app.services.leave_service import user_has_approved_leave
     for asig in todas_asig:
         registro = RegistroFichaje.query.filter_by(
             user_id=asig.user_id,
@@ -134,11 +135,20 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             obra_planificada_id=asig.obra_id,
         ).first()
         if not registro:
+            estado_ini = (
+                'Exento_Ausencia'
+                if user_has_approved_leave(asig.user_id, fecha_obj)
+                else 'Sin_Registro'
+            )
             db.session.add(RegistroFichaje(
                 user_id=asig.user_id,
                 fecha=fecha_obj,
                 obra_planificada_id=asig.obra_id,
-                estado='Sin_Registro',
+                estado=estado_ini,
+                notas_resolucion=(
+                    'Exento: ausencia planificada aprobada (Odoo/manual).'
+                    if estado_ini == 'Exento_Ausencia' else None
+                ),
             ))
             db.session.flush()
 
@@ -287,7 +297,9 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             registro_vacio_exacto.obra_real_id = local_obra.id
             registro_vacio_exacto.check_in = check_in_dt
             registro_vacio_exacto.check_out = check_out_dt
-            registro_vacio_exacto.nota_odoo = f.get('note')
+            registro_vacio_exacto.nota_odoo = _merge_fichaje_notes(
+                registro_vacio_exacto.nota_odoo, f.get('note')
+            )
         else:
             registro_existente = RegistroFichaje.query.filter_by(
                 user_id=local_user.id, fecha=fecha_obj, obra_real_id=local_obra.id
@@ -322,7 +334,9 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     registro_existente.obra_planificada_id = nuevo_plan_id
                 registro_existente.check_in = check_in_dt
                 registro_existente.check_out = check_out_dt
-                registro_existente.nota_odoo = f.get('note')
+                registro_existente.nota_odoo = _merge_fichaje_notes(
+                    registro_existente.nota_odoo, f.get('note')
+                )
 
         if crear_asignacion_magica:
             existe_asig = Asignacion.query.filter_by(
@@ -346,12 +360,21 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
         ahora_local = now_local()
 
         if ahora_local.time() >= hora_corte:
-            sin_registros = RegistroFichaje.query.filter_by(
-                fecha=fecha_obj, estado='Sin_Registro'
+            from app.services.leave_service import user_has_approved_leave
+
+            candidatos = RegistroFichaje.query.filter(
+                RegistroFichaje.fecha == fecha_obj,
+                RegistroFichaje.estado.in_(['Sin_Registro', 'Ausencia']),
             ).all()
-            for reg in sin_registros:
-                reg.estado = 'Ausencia'
-                reg.notas_resolucion = 'Generada automáticamente tras superar la hora de corte.'
+            for reg in candidatos:
+                if user_has_approved_leave(reg.user_id, fecha_obj):
+                    # Asignado pero de vacaciones/baja/permiso: no marcar ausencia
+                    reg.estado = 'Exento_Ausencia'
+                    reg.notas_resolucion = 'Cubierto por ausencia planificada (no cuenta como ausencia).'
+                    continue
+                if reg.estado == 'Sin_Registro':
+                    reg.estado = 'Ausencia'
+                    reg.notas_resolucion = 'Generada automáticamente tras superar la hora de corte.'
         else:
             ausencias_tempranas = RegistroFichaje.query.filter_by(
                 fecha=fecha_obj, estado='Ausencia'

@@ -88,7 +88,6 @@ def create_app():
     from app.sync.routes import sync_bp
     from app.api.asignaciones import asignaciones_api
     from app.superadmin import superadmin_bp
-    from app.auth.hub_sso import hub_sso_bp, register_hub_sso_auto_redirect
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
     # Forzamos el 'url_prefix' para que ninguna ruta se vuelva a quedar en blanco
@@ -101,7 +100,6 @@ def create_app():
     app.register_blueprint(sync_bp, url_prefix='/sync')
     app.register_blueprint(asignaciones_api, url_prefix='/api')
     app.register_blueprint(superadmin_bp, url_prefix='/superadmin')
-    app.register_blueprint(hub_sso_bp)
 
     # ---------------------------------------------------------
     # Registro de utilidades de Jinja
@@ -225,16 +223,15 @@ def create_app():
         from app.services.tenant_domain_service import (
             normalize_host,
             resolve_tenant_by_custom_domain,
-            resolve_tenant_by_hub_host,
+            resolve_tenant_by_host_alias,
             resolve_tenant_by_subdomain,
             _RESERVED_SUBDOMAINS,
         )
 
         host = normalize_host(request.host)
-        hub_sso_path = request.path == '/sso/hub'
 
         # Si acceden desde localhost, red interna Docker o IP pura → esquema public
-        if not hub_sso_path and (host in ('localhost', 'web', 'host.docker.internal') or host.replace('.', '').isnumeric()):
+        if host in ('localhost', 'web', 'host.docker.internal') or host.replace('.', '').isnumeric():
             db.session.execute(text("SET search_path TO public"))
             return
 
@@ -246,7 +243,7 @@ def create_app():
             db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
             return
 
-        tenant = resolve_tenant_by_hub_host(host)
+        tenant = resolve_tenant_by_host_alias(host)
         if tenant:
             if not is_safe_schema_name(tenant.schema_name):
                 abort(500, description="Configuración de esquema inválida para esta organización.")
@@ -281,7 +278,5 @@ def create_app():
             abort(404, description="La organización solicitada no existe o se encuentra inactiva.")
         else:
             db.session.execute(text("SET search_path TO public"))
-
-    register_hub_sso_auto_redirect(app)
 
     return app

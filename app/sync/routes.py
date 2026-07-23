@@ -149,6 +149,7 @@ def api_run_sync(task_name):
         'obras': 'obras',
         'empleados': 'empleados internos',
         'subcontratas': 'subcontratas',
+        'ausencias': 'ausencias / time off',
         'fichajes': 'fichajes del día',
         'fichajes-retro': 'fichajes retrospectivos',
     }
@@ -157,12 +158,14 @@ def api_run_sync(task_name):
     try:
         from app.celery_worker import (
             auto_sync_obras, auto_sync_empleados, auto_sync_subcontratas,
+            auto_sync_ausencias,
             fichajes_en_vivo, fichajes_retroactivos,
         )
         tasks = {
             'obras': auto_sync_obras,
             'empleados': auto_sync_empleados,
             'subcontratas': auto_sync_subcontratas,
+            'ausencias': auto_sync_ausencias,
             'fichajes': fichajes_en_vivo,
             'fichajes-retro': fichajes_retroactivos,
         }

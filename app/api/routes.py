@@ -12,6 +12,15 @@ from collections import defaultdict # AÑADIDO PARA LA LÓGICA DE AGRUPACIÓN
 api_bp = Blueprint('api_v6', __name__, url_prefix='/api/v6')
 
 
+def _obra_label(obra, fallback='Obra desconocida'):
+    """Formato consistente código - nombre para calendarios y selectores."""
+    if not obra:
+        return fallback
+    if getattr(obra, 'codigo', None):
+        return f"{obra.codigo} - {obra.nombre}"
+    return obra.nombre or fallback
+
+
 @api_bp.route('/recursos_activos', methods=['GET'])
 @login_required
 def recursos_activos():
@@ -30,7 +39,15 @@ def recursos_activos():
     users = User.query.filter_by(is_deleted=False).order_by(User.name).all()
     
     return jsonify({
-        'obras': [{'id': o.id, 'text': o.nombre} for o in obras],
+        'obras': [
+            {
+                'id': o.id,
+                'text': f"{o.codigo} - {o.nombre}" if o.codigo else o.nombre,
+                'codigo': o.codigo,
+                'nombre': o.nombre,
+            }
+            for o in obras
+        ],
         'users': [{'id': u.id, 'text': f"{u.name} {u.lastname}"} for u in users]
     })
     
@@ -99,32 +116,97 @@ def get_universal_calendar_events():
     # 1. CONTEXTO: FICHA DE OPERARIO
     # =====================================================================
     if context == 'worker':
+        from app.services.leave_service import (
+            apply_leave_overlay_title,
+            build_leaves_by_user,
+            leave_covering,
+            leave_overlay_meta,
+        )
+        from app.models import AusenciaPlanificada
+
         asignaciones = Asignacion.query.filter(
             Asignacion.user_id == entity_id,
             Asignacion.fecha >= start_date,
             Asignacion.fecha < end_date
         ).order_by(Asignacion.fecha).all()
 
+        # end_date de FullCalendar es exclusivo → índice inclusivo
+        range_end_inclusive = end_date - timedelta(days=1) if end_date > start_date else end_date
+        leaves_idx = build_leaves_by_user([entity_id], start_date, range_end_inclusive)
+        user_leaves = leaves_idx.get(entity_id, [])
+        assigned_dates = {a.fecha for a in asignaciones}
+
         raw_events = []
         for a in asignaciones:
             obra = a.obra
             if not obra and a.obra_id: obra = Obra.query.get(a.obra_id)
-            obra_name = obra.nombre if obra else "Obra desconocida"
+            obra_name = _obra_label(obra)
             obra_color = obra.color if obra else "#3b82f6"
-            
+            leave = leave_covering(user_leaves, a.fecha)
+            title, overlay_color, is_overlay = apply_leave_overlay_title(obra_name, leave)
+            color = overlay_color or obra_color
             raw_events.append({
-                'title': obra_name,
+                'title': title,
                 'start_date': a.fecha,
                 'end_date': a.fecha,
-                'color': obra_color,
-                'extendedProps': {'type': 'asignacion', 'obra_id': obra.id if obra else 0}
+                'color': color,
+                'extendedProps': {
+                    'type': 'asignacion',
+                    'obra_id': obra.id if obra else 0,
+                    'en_ausencia': is_overlay,
+                    'ausencia_tipo': leave.tipo if leave else None,
+                    'ausencia_estado': leave.estado if leave else None,
+                }
             })
-        # Agrupamos los raw_events en bloques continuos (Capa 1)
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
 
+        # Ausencias en días SIN asignación (sigue viéndose el periodo de vacaciones)
+        leaves = AusenciaPlanificada.query.filter(
+            AusenciaPlanificada.user_id == entity_id,
+            AusenciaPlanificada.fecha_inicio < end_date,
+            AusenciaPlanificada.fecha_fin >= start_date,
+            AusenciaPlanificada.estado == 'aprobada',
+        ).all()
+        for leave in leaves:
+            meta = leave_overlay_meta(leave)
+            if not meta:
+                continue
+            # Expandir por días sin asignación para no duplicar overlay de asignación
+            day = max(leave.fecha_inicio, start_date)
+            end_leave = min(leave.fecha_fin, range_end_inclusive)
+            gap_start = None
+            gap_end = None
+
+            def flush_gap(gs, ge):
+                if gs is None:
+                    return
+                end_excl = ge + timedelta(days=1)
+                events.append({
+                    'title': meta['label_prefix'],
+                    'start': gs.strftime('%Y-%m-%d'),
+                    'end': min(end_excl, end_date).strftime('%Y-%m-%d'),
+                    'color': meta['color'],
+                    'extendedProps': {
+                        'type': 'ausencia',
+                        'ausencia_id': leave.id,
+                        'estado': leave.estado,
+                        'tipo': leave.tipo,
+                        'conflicto': False,
+                    },
+                })
+
+            while day <= end_leave:
+                if day not in assigned_dates:
+                    if gap_start is None:
+                        gap_start = day
+                    gap_end = day
+                else:
+                    flush_gap(gap_start, gap_end)
+                    gap_start = gap_end = None
+                day = day + timedelta(days=1)
+            flush_gap(gap_start, gap_end)
+
         # --- MOTOR UNIVERSAL DE PRIORIDADES PARA FICHAJES MULTI-OBRA (Capa 2) ---
-        show_fichajes = request.args.get('show_fichajes') == '1'
-        
         if show_fichajes:
             from app.models import RegistroFichaje
             fichajes = RegistroFichaje.query.filter(
@@ -168,7 +250,7 @@ def get_universal_calendar_events():
                                 "🟠" if f.estado in ['Ausencia', 'Pendiente', 'Retraso'] else \
                                 "🔵" if f.estado.startswith('Resuelto') else \
                                 "⚪" if f.estado == 'Sin_Registro' else "🟢"
-                        nom_obra = f.obra_planificada.nombre if f.obra_planificada else "Obra Externa"
+                        nom_obra = _obra_label(f.obra_planificada, fallback='Obra Externa')
                         html_items.append(f"<li>{icono} <b>{nom_obra}</b>: {f.estado.replace('_', ' ')}</li>")
 
                     tooltip_html = f"<div style='text-align:left;'><strong style='border-bottom:1px solid #ccc; padding-bottom:3px; display:block; margin-bottom:5px;'>Fichajes ({fecha.strftime('%d/%m/%Y')}):</strong><ul style='padding-left:15px; margin-bottom:0; font-size:0.85em; list-style:none;'>{''.join(html_items)}</ul></div>"
@@ -194,7 +276,7 @@ def get_universal_calendar_events():
         for s in solicitudes:
             accion = getattr(s, 'accion', 'ASIGNAR')
             url_sol = url_for('admin.solicitud_detail', solicitud_id=s.id)
-            nom_obra = s.obra.nombre if s.obra else '?'
+            nom_obra = _obra_label(s.obra, fallback='?')
 
             if accion == 'DESASIGNAR':
                 title = "LIBRE (Salida)"
@@ -221,11 +303,22 @@ def get_universal_calendar_events():
     # 2. CONTEXTO: FICHA DE OBRA
     # =====================================================================
     elif context == 'obra':
+        from app.services.leave_service import (
+            apply_leave_overlay_title,
+            build_leaves_by_user,
+            leave_covering,
+        )
+
         asignaciones = Asignacion.query.filter(
             Asignacion.obra_id == entity_id,
             Asignacion.fecha >= start_date,
             Asignacion.fecha < end_date
         ).order_by(Asignacion.fecha).all()
+
+        range_end_inclusive = end_date - timedelta(days=1) if end_date > start_date else end_date
+        leaves_idx = build_leaves_by_user(
+            {a.user_id for a in asignaciones}, start_date, range_end_inclusive
+        )
 
         if mode == 'empleados':
             raw_events = []
@@ -241,17 +334,27 @@ def get_universal_calendar_events():
                 else:
                     c_name, c_color = "Sin Empresa", "#10b981"
 
+                base_title = f"{worker.name} {worker.lastname} ({c_name})"
+                leave = leave_covering(leaves_idx.get(worker.id, []), a.fecha)
+                title, overlay_color, is_overlay = apply_leave_overlay_title(
+                    base_title, leave, name_first=True
+                )
                 raw_events.append({
-                    'title': f"{worker.name} {worker.lastname} ({c_name})",
+                    'title': title,
                     'start_date': a.fecha,
                     'end_date': a.fecha,
-                    'color': c_color,
-                    'extendedProps': {'type': 'asignacion', 'worker_id': worker.id}
+                    'color': overlay_color or c_color,
+                    'extendedProps': {
+                        'type': 'asignacion',
+                        'worker_id': worker.id,
+                        'en_ausencia': is_overlay,
+                        'ausencia_tipo': leave.tipo if leave else None,
+                    }
                 })
             events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
         
         elif mode == 'empresas':
-            events.extend(procesar_bloques_empresa(asignaciones))
+            events.extend(procesar_bloques_empresa(asignaciones, leaves_by_user=leaves_idx))
 
         # --- AÑADIR SOLICITUDES ---
         solicitudes = Solicitud.query.filter(
@@ -292,11 +395,22 @@ def get_universal_calendar_events():
     # 3. CONTEXTO: FICHA DE EMPRESA
     # =====================================================================
     elif context == 'empresa':
+        from app.services.leave_service import (
+            apply_leave_overlay_title,
+            build_leaves_by_user,
+            leave_covering,
+        )
+
         asignaciones = Asignacion.query.outerjoin(User, Asignacion.user_id == User.id).filter(
             db.or_(Asignacion.company_id == entity_id, User.company_id == entity_id),
             Asignacion.fecha >= start_date,
             Asignacion.fecha < end_date
         ).order_by(Asignacion.fecha).all()
+
+        range_end_inclusive = end_date - timedelta(days=1) if end_date > start_date else end_date
+        leaves_idx = build_leaves_by_user(
+            {a.user_id for a in asignaciones}, start_date, range_end_inclusive
+        )
 
         raw_events = []
         for a in asignaciones:
@@ -307,15 +421,25 @@ def get_universal_calendar_events():
             obra = a.obra
             if not obra and a.obra_id: obra = Obra.query.get(a.obra_id)
             
-            obra_name = obra.nombre if obra else "Sin Obra"
+            obra_name = _obra_label(obra, fallback='Sin Obra')
             obra_color = obra.color if obra else "#3b82f6"
+            base_title = f"{worker.name} {worker.lastname} ({obra_name})"
+            leave = leave_covering(leaves_idx.get(worker.id, []), a.fecha)
+            title, overlay_color, is_overlay = apply_leave_overlay_title(
+                base_title, leave, name_first=True
+            )
 
             raw_events.append({
-                'title': f"{worker.name} {worker.lastname} ({obra_name})",
+                'title': title,
                 'start_date': a.fecha,
                 'end_date': a.fecha,
-                'color': obra_color,
-                'extendedProps': {'type': 'asignacion', 'worker_id': worker.id, 'obra_id': obra.id if obra else 0}
+                'color': overlay_color or obra_color,
+                'extendedProps': {
+                    'type': 'asignacion',
+                    'worker_id': worker.id,
+                    'obra_id': obra.id if obra else 0,
+                    'en_ausencia': is_overlay,
+                }
             })
         
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
@@ -334,14 +458,15 @@ def get_universal_calendar_events():
         for s in solicitudes:
             accion = getattr(s, 'accion', 'ASIGNAR')
             url_sol = url_for('admin.solicitud_detail', solicitud_id=s.id)
+            obra_txt = _obra_label(s.obra, fallback='?')
 
             if s.tipo == 'CONCRETA':
                 emp_name = s.empleado.name if s.empleado else '?'
-                title = f"BAJA: {emp_name} ({s.obra.nombre})" if accion == 'DESASIGNAR' else f"FALTA: {emp_name} ({s.obra.nombre})"
+                title = f"BAJA: {emp_name} ({obra_txt})" if accion == 'DESASIGNAR' else f"FALTA: {emp_name} ({obra_txt})"
             else:
                 faltan = s.cantidad_solicitada - s.cantidad_cubierta
                 if faltan <= 0: continue
-                title = f"FALTAN: {faltan} ({s.obra.nombre})"
+                title = f"FALTAN: {faltan} ({obra_txt})"
 
             color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
             visual_end = s.fecha_fin
@@ -471,11 +596,15 @@ def format_event(ev):
         'extendedProps': ev.get('extendedProps', {})
     }
 
-def procesar_bloques_empresa(asignaciones):
+def procesar_bloques_empresa(asignaciones, leaves_by_user=None):
+    from app.services.leave_service import leave_covering, leave_overlay_meta
+
+    leaves_by_user = leaves_by_user or {}
     day_counts = defaultdict(lambda: defaultdict(int))
     day_workers = defaultdict(lambda: defaultdict(list))
+    day_leave_flags = defaultdict(lambda: defaultdict(bool))  # empresa -> fecha -> algún leave
     colors = {}
-    company_ids = {} # <-- NUEVO: Guardamos el ID de la empresa
+    company_ids = {}
     
     for a in asignaciones:
         worker = getattr(a, 'user_obj', getattr(a, 'user', None))
@@ -484,18 +613,25 @@ def procesar_bloques_empresa(asignaciones):
 
         if a.company:
             c_name, c_color = a.company.nombre, a.company.color
-            c_id = a.company.id # <-- Extraemos la ID
+            c_id = a.company.id
         elif worker.company_rel:
             c_name, c_color = worker.company_rel.nombre, worker.company_rel.color
-            c_id = worker.company_rel.id # <-- Extraemos la ID
+            c_id = worker.company_rel.id
         else:
             c_name, c_color = "Sin Empresa", "#6366f1"
-            c_id = 0 # <-- 0 para los que no tienen empresa
+            c_id = 0
+
+        leave = leave_covering(leaves_by_user.get(worker.id, []), a.fecha)
+        meta = leave_overlay_meta(leave)
+        label = f"{worker.name} {worker.lastname}"
+        if meta:
+            label = f"{label} · {meta['label_prefix']}"
+            day_leave_flags[c_name][a.fecha] = True
             
         day_counts[c_name][a.fecha] += 1
-        day_workers[c_name][a.fecha].append(f"{worker.name} {worker.lastname}") 
+        day_workers[c_name][a.fecha].append(label)
         colors[c_name] = c_color
-        company_ids[c_name] = c_id # <-- Lo guardamos en el diccionario
+        company_ids[c_name] = c_id
 
     final_events = []
     for empresa, days in day_counts.items():
@@ -504,32 +640,47 @@ def procesar_bloques_empresa(asignaciones):
         
         current_start = sorted_dates[0]
         current_count = days[current_start]
-        current_workers = sorted(day_workers[empresa][current_start]) 
+        current_workers = sorted(day_workers[empresa][current_start])
+        current_has_leave = day_leave_flags[empresa].get(current_start, False)
         last_date = current_start
-        empresa_id = company_ids[empresa] # <-- Rescatamos el ID para esta empresa
+        empresa_id = company_ids[empresa]
         
         for date_obj in sorted_dates[1:]:
             workers_today = sorted(day_workers[empresa][date_obj])
+            has_leave_today = day_leave_flags[empresa].get(date_obj, False)
             
-            # Cortamos el bloque si: hay hueco, cambia el número, o cambian LOS NOMBRES
-            if (date_obj - last_date).days > 1 or days[date_obj] != current_count or workers_today != current_workers:
-                # Le pasamos el empresa_id a la función creadora
-                final_events.append(crear_evento_empresa(empresa, empresa_id, current_start, last_date, current_count, colors[empresa], current_workers))
+            if (
+                (date_obj - last_date).days > 1
+                or days[date_obj] != current_count
+                or workers_today != current_workers
+                or has_leave_today != current_has_leave
+            ):
+                final_events.append(crear_evento_empresa(
+                    empresa, empresa_id, current_start, last_date, current_count,
+                    colors[empresa], current_workers, en_ausencia=current_has_leave,
+                ))
                 current_start = date_obj
                 current_count = days[date_obj]
                 current_workers = workers_today
+                current_has_leave = has_leave_today
                 
             last_date = date_obj
             
-        # Añadir el último bloque de la iteración
-        final_events.append(crear_evento_empresa(empresa, empresa_id, current_start, last_date, current_count, colors[empresa], current_workers))
+        final_events.append(crear_evento_empresa(
+            empresa, empresa_id, current_start, last_date, current_count,
+            colors[empresa], current_workers, en_ausencia=current_has_leave,
+        ))
         
     return final_events
 
-def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color, workers_list):
+def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color, workers_list, en_ausencia=False):
+    from app.services.leave_service import LEAVE_COLOR_APROBADA
+
     end_date_exclusive = (end_date + timedelta(days=1)).strftime("%Y-%m-%d")
     
-    if not color or color.strip() == "":
+    if en_ausencia:
+        color = LEAVE_COLOR_APROBADA
+    elif not color or color.strip() == "":
         color = "#f3f4f6"
         
     text_color = "#ffffff"
@@ -545,17 +696,22 @@ def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color
     html_list = "".join([f"<li>{w}</li>" for w in workers_list])
     tooltip_html = f"<div style='text-align:left;'><strong style='border-bottom: 1px solid #ccc; padding-bottom: 3px; display: block; margin-bottom: 5px;'>{empresa} ({count} operarios)</strong><ul style='padding-left:15px; margin-bottom:0; font-size: 0.85em;'>{html_list}</ul></div>"
     
+    title = f"({count}) {empresa}"
+    if en_ausencia:
+        title = f"Ausencia · {title}"
+
     return {
-        'title': f"({count}) {empresa}",
+        'title': title,
         'start': start_date.strftime("%Y-%m-%d"),
         'end': end_date_exclusive,
         'backgroundColor': color,       
         'textColor': text_color,        
         'extendedProps': {
-            'type': 'empresa_group', 
+            'type': 'empresa_group',
             'empresa': empresa,
-            'empresa_id': empresa_id,  # <--- AQUÍ ESTÁ LA MAGIA, AHORA SÍ VIAJA AL JAVASCRIPT
-            'tooltipContent': tooltip_html
+            'empresa_id': empresa_id,
+            'tooltipContent': tooltip_html,
+            'en_ausencia': en_ausencia,
         }
     }
 

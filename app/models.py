@@ -490,7 +490,114 @@ class Festivo(db.Model):
 
     def __repr__(self):
         return f'<Festivo {self.fecha}: {self.descripcion}>'
-    
+
+
+# ==========================================
+# AUSENCIAS PLANIFICADAS (vacaciones, bajas, permisos…)
+# ==========================================
+# Estados internos (genéricos, independientes del ERP):
+LEAVE_STATUS_APROBADA = 'aprobada'
+LEAVE_STATUS_PENDIENTE = 'pendiente'
+LEAVE_STATUS_RECHAZADA = 'rechazada'
+
+LEAVE_SOURCE_MANUAL = 'manual'
+LEAVE_SOURCE_ODOO = 'odoo'
+LEAVE_SOURCE_ERP = 'erp'
+
+CONFLICT_PENDING = 'pendiente'
+CONFLICT_KEEP_LEAVE = 'mantener_ausencia'      # quitar asignación (manual / legacy)
+CONFLICT_KEEP_ASSIGNMENT = 'mantener_asignacion'  # ignorar ausencia ese día
+CONFLICT_OVERLAY = 'overlay'  # Odoo manda: mantener asignación, marcar en UI
+
+
+class AusenciaPlanificada(db.Model):
+    """
+    Ausencia genérica por empleado (vacaciones, puente, baja, permiso…).
+    Origen: alta manual o sync ERP (Odoo hr.leave u otro adaptador).
+    Solo estado=aprobada es efectiva (conflictos, no-ausencia, calendario efectivo).
+    """
+    __tablename__ = 'ausencias_planificadas'
+    __table_args__ = (
+        db.Index('ix_ausencias_user_fechas', 'user_id', 'fecha_inicio', 'fecha_fin'),
+        db.Index('ix_ausencias_external', 'origen', 'external_id'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
+    fecha_inicio = db.Column(db.Date, nullable=False)
+    fecha_fin = db.Column(db.Date, nullable=False)
+    dias = db.Column(db.Float, nullable=True)
+
+    # Etiqueta visible: "Vacaciones", "Baja médica", "Puente", …
+    tipo = db.Column(db.String(120), nullable=False, default='Ausencia')
+    tipo_external_id = db.Column(db.String(64), nullable=True)
+
+    estado = db.Column(db.String(20), nullable=False, default=LEAVE_STATUS_APROBADA)
+    origen = db.Column(db.String(20), nullable=False, default=LEAVE_SOURCE_MANUAL)
+    external_id = db.Column(db.String(64), nullable=True)
+
+    descripcion = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+    updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    user = db.relationship('User', foreign_keys=[user_id], backref='ausencias_planificadas')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+    @property
+    def es_efectiva(self):
+        return self.estado == LEAVE_STATUS_APROBADA
+
+    def covers(self, day):
+        return self.fecha_inicio <= day <= self.fecha_fin
+
+    def __repr__(self):
+        return f'<AusenciaPlanificada {self.id} {self.tipo} {self.fecha_inicio}-{self.fecha_fin}>'
+
+
+class AusenciaConflicto(db.Model):
+    """
+    Conflicto: empleado con asignación en un día y ausencia planificada aprobada.
+    Requiere confirmación (admin / jefe según config) salvo auto-resolución del tenant.
+    """
+    __tablename__ = 'ausencias_conflictos'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'user_id', 'fecha', 'obra_id', 'ausencia_id',
+            name='uq_ausencia_conflicto_dia',
+        ),
+        db.Index('ix_ausencias_conflictos_estado', 'estado'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    fecha = db.Column(db.Date, nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=False)
+    ausencia_id = db.Column(db.Integer, db.ForeignKey('ausencias_planificadas.id'), nullable=False)
+    asignacion_id = db.Column(
+        db.Integer, db.ForeignKey('asignaciones.id', ondelete='SET NULL'), nullable=True
+    )
+
+    estado = db.Column(db.String(30), nullable=False, default=CONFLICT_PENDING)
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    obra = db.relationship('Obra', foreign_keys=[obra_id])
+    ausencia = db.relationship('AusenciaPlanificada', backref='conflictos')
+    asignacion = db.relationship('Asignacion', foreign_keys=[asignacion_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+
+    @property
+    def pendiente(self):
+        return self.estado == CONFLICT_PENDING
+
+    def __repr__(self):
+        return f'<AusenciaConflicto {self.id} user={self.user_id} {self.fecha} {self.estado}>'
+
+
 class ConfiguracionGlobal(db.Model):
     __tablename__ = 'configuracion_global'
     id = db.Column(db.Integer, primary_key=True)

@@ -575,6 +575,39 @@ html, body {
     transform: translateY(-1px);
     border-color: #cbd5e1;
 }
+
+/* Asignado pero de vacaciones / baja / permiso (overlay Odoo) */
+.worker-chip.worker-chip--leave {
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    border-color: #c4b5fd;
+    border-left-color: #7c3aed !important;
+}
+.worker-chip.worker-chip--leave-pending {
+    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    border-color: #d8b4fe;
+    border-left-color: #a78bfa !important;
+}
+.worker-chip-leave-badge {
+    display: inline-block;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #6d28d9;
+    background: rgba(124, 58, 237, 0.12);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    max-width: 7.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.worker-chip--leave-pending .worker-chip-leave-badge {
+    color: #7c3aed;
+    background: rgba(167, 139, 250, 0.18);
+}
 .worker-name {
     font-weight: 600;
     font-size: 0.74rem;

@@ -74,10 +74,10 @@ def resolve_tenant_by_subdomain(subdomain):
     return Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
 
 
-def resolve_tenant_by_hub_host(host):
+def resolve_tenant_by_host_alias(host):
     """
-    Resuelve tenant cuando el host es un dominio de despliegue Hub (ej. planner.soltecgrupo.es)
-    listado en HUB_SSO_TENANTS junto al subdominio del tenant (ej. soltec).
+    Resuelve tenant cuando el host es un dominio dedicado (ej. planner.soltecgrupo.es)
+    listado en TENANT_HOST_ALIASES junto al subdominio del tenant (ej. soltec).
     """
     from flask import current_app
 
@@ -85,9 +85,9 @@ def resolve_tenant_by_hub_host(host):
     if not host:
         return None
 
-    raw = current_app.config.get('HUB_SSO_TENANTS') or 'soltec'
+    raw = current_app.config.get('TENANT_HOST_ALIASES') or ''
     entries = [part.strip().lower() for part in raw.split(',') if part.strip()]
-    if host not in entries:
+    if not entries or host not in entries:
         return None
 
     for entry in entries:

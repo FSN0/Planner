@@ -53,10 +53,11 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
 
 
-    HUB_SSO_ENABLED = _env_bool('HUB_SSO_ENABLED', default=False)
-    HUB_URL = (os.environ.get('HUB_URL') or 'https://apps.soltecgrupo.es').strip().rstrip('/')
-    HUB_SSO_TENANTS = (os.environ.get('HUB_SSO_TENANTS') or 'soltec').strip()
+    # Detrás de Caddy/Traefik: ProxyFix para esquema/host/IP reales.
     BEHIND_PROXY = _env_bool('BEHIND_PROXY', default=False)
+    # Hosts dedicados → tenant (csv). Entradas con punto = hostname; sin punto = subdominio.
+    # Ej: soltec,planner.soltecgrupo.es  → planner.soltecgrupo.es resuelve al tenant soltec.
+    TENANT_HOST_ALIASES = (os.environ.get('TENANT_HOST_ALIASES') or '').strip()
 
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 20,

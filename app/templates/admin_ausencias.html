@@ -1,0 +1,592 @@
+{% extends "base.html" %}
+{% block title %}Ausencias planificadas{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  /* Ancho completo del main (sin columna vacía a la derecha) */
+  .admin-main.aus-page {
+    max-width: none;
+    width: 100%;
+    min-width: 0;
+  }
+  .aus-page > .aus-acc,
+  .aus-page > .aus-kpis,
+  .aus-page > .page-toolbar {
+    flex-shrink: 0;
+    width: 100%;
+  }
+
+  .aus-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+  }
+  @media (max-width: 720px) {
+    .aus-kpis { grid-template-columns: 1fr; }
+  }
+  .aus-kpi {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .aus-kpi-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .aus-kpi-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1;
+  }
+  .aus-kpi--now .aus-kpi-value { color: #6d28d9; }
+  .aus-kpi--next .aus-kpi-value { color: #1d4ed8; }
+  .aus-kpi--warn .aus-kpi-value { color: #b91c1c; }
+
+  .aus-acc {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 0.65rem;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+  .aus-acc.is-open {
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.35);
+  }
+  .aus-acc-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    min-height: 3.25rem;
+    background: #fff;
+    border: 0;
+    border-radius: 10px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .aus-acc.is-open > .aus-acc-toggle {
+    border-radius: 10px 10px 0 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .aus-acc-toggle:hover { background: #f8fafc; }
+  .aus-acc-toggle:focus { outline: none; box-shadow: inset 0 0 0 2px #93c5fd; }
+  .aus-acc-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+  }
+  .aus-acc-icon--violet { background: #ede9fe; color: #6d28d9; }
+  .aus-acc-icon--blue { background: #dbeafe; color: #1d4ed8; }
+  .aus-acc-icon--slate { background: #f1f5f9; color: #475569; }
+  .aus-acc-icon--red { background: #fee2e2; color: #b91c1c; }
+  .aus-acc-icon--green { background: #dcfce7; color: #15803d; }
+  .aus-acc-text { flex: 1; min-width: 0; }
+  .aus-acc-title {
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.25;
+  }
+  .aus-acc-sub {
+    display: block;
+    font-size: 0.72rem;
+    color: #64748b;
+    margin-top: 0.15rem;
+    line-height: 1.3;
+  }
+  .aus-acc-count {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #475569;
+    background: #f1f5f9;
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    flex-shrink: 0;
+  }
+  .aus-acc-count.is-alert { background: #fee2e2; color: #b91c1c; }
+  .aus-acc-chevron {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+  .aus-acc.is-open .aus-acc-chevron { transform: rotate(180deg); }
+  .aus-acc-body {
+    display: none;
+    padding: 0.85rem 1rem 1rem;
+    background: #fcfcfd;
+    border-radius: 0 0 10px 10px;
+  }
+  .aus-acc.is-open > .aus-acc-body { display: block; }
+
+  .ausencias-form-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(110px, 1fr)) auto;
+    gap: 0.65rem 0.75rem;
+    align-items: end;
+  }
+  @media (max-width: 1100px) {
+    .ausencias-form-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .ausencias-form-grid .config-field label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+  }
+  .ausencias-conflicts-actions form {
+    display: inline-block;
+    margin-left: 0.25rem;
+  }
+  .aus-empty {
+    font-size: 0.82rem;
+    color: #64748b;
+    padding: 0.75rem 0.25rem;
+    margin: 0;
+  }
+  .aus-table-wrap {
+    overflow-x: auto;
+    width: 100%;
+  }
+  .aus-table-wrap .admin-data-table {
+    margin-bottom: 0;
+    table-layout: auto;
+  }
+  .aus-obra-chip {
+    display: inline-block;
+    font-size: 0.65rem;
+    background: #f1f5f9;
+    color: #475569;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin: 0 0.15rem 0.15rem 0;
+  }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main admin-main--compact aus-page">
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">Ausencias</h1>
+        <span class="page-toolbar-count">
+          {% if current_user.role == 'admin' %}Todas las obras{% else %}Tu personal{% endif %}
+          · Odoo manda
+        </span>
+      </div>
+      <div class="page-toolbar-right" style="display:flex;gap:.5rem;flex-wrap:wrap;">
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-plug"></i> Integración Odoo
+        </a>
+        <form method="POST" action="{{ url_for('admin.ausencias_sync') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-sync"></i> Sync ERP</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show mb-3">
+          {{ message }}
+          <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+        </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="aus-kpis">
+      <div class="aus-kpi aus-kpi--now">
+        <span class="aus-kpi-label">En curso hoy</span>
+        <span class="aus-kpi-value">{{ en_curso_rows|length }}</span>
+      </div>
+      <div class="aus-kpi aus-kpi--next">
+        <span class="aus-kpi-label">Próximas ({{ horizon_days }}d)</span>
+        <span class="aus-kpi-value">{{ proximas_rows|length }}</span>
+      </div>
+      <div class="aus-kpi {% if conflictos %}aus-kpi--warn{% endif %}">
+        <span class="aus-kpi-label">Conflictos</span>
+        <span class="aus-kpi-value">{{ conflictos|length }}</span>
+      </div>
+    </div>
+
+    {% if conflictos %}
+    <section class="aus-acc is-open" data-aus-acc>
+      <button type="button" class="aus-acc-toggle" aria-expanded="true">
+        <span class="aus-acc-icon aus-acc-icon--red"><i class="fas fa-exclamation-triangle"></i></span>
+        <span class="aus-acc-text">
+          <span class="aus-acc-title">Conflictos pendientes</span>
+          <span class="aus-acc-sub">Modo manual · requieren confirmación</span>
+        </span>
+        <span class="aus-acc-count is-alert">{{ conflictos|length }}</span>
+        <i class="fas fa-chevron-down aus-acc-chevron"></i>
+      </button>
+      <div class="aus-acc-body">
+        <div class="aus-table-wrap">
+          <table class="filterable-table admin-data-table mb-0">
+            <thead>
+              <tr class="header-row">
+                <th>Fecha</th>
+                <th>Empleado</th>
+                <th>Tipo</th>
+                <th>Obra</th>
+                {% if puede_resolver %}<th class="text-right">Acción</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in conflictos %}
+              <tr>
+                <td class="font-weight-bold">{{ c.fecha.strftime('%d/%m/%Y') }}</td>
+                <td>{{ c.user.name }} {{ c.user.lastname }}</td>
+                <td><span class="badge-soft badge-soft-blue">{{ c.ausencia.tipo }}</span></td>
+                <td>{% if c.obra.codigo %}{{ c.obra.codigo }} — {% endif %}{{ c.obra.nombre }}</td>
+                {% if puede_resolver %}
+                <td class="text-right ausencias-conflicts-actions">
+                  <form method="POST" action="{{ url_for('admin.ausencias_resolver_conflicto', conflict_id=c.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="decision" value="mantener_ausencia">
+                    <button type="submit" class="btn-admin btn-admin-sm">Mantener ausencia</button>
+                  </form>
+                  <form method="POST" action="{{ url_for('admin.ausencias_resolver_conflicto', conflict_id=c.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="decision" value="mantener_asignacion">
+                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-primary">Mantener asignación</button>
+                  </form>
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="aus-acc" data-aus-acc>
+      <button type="button" class="aus-acc-toggle" aria-expanded="false">
+        <span class="aus-acc-icon aus-acc-icon--violet"><i class="fas fa-umbrella-beach"></i></span>
+        <span class="aus-acc-text">
+          <span class="aus-acc-title">En curso ahora</span>
+          <span class="aus-acc-sub">Quien está de vacaciones / baja / permiso hoy</span>
+        </span>
+        <span class="aus-acc-count">{{ en_curso_rows|length }}</span>
+        <i class="fas fa-chevron-down aus-acc-chevron"></i>
+      </button>
+      <div class="aus-acc-body">
+        {% if en_curso_rows %}
+        <div class="aus-table-wrap">
+          <table class="filterable-table admin-data-table mb-0">
+            <thead>
+              <tr class="header-row">
+                <th>Empleado</th>
+                <th>Tipo</th>
+                <th>Desde</th>
+                <th>Hasta</th>
+                <th>Obras</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in en_curso_rows %}
+              {% set a = row.leave %}
+              <tr>
+                <td>
+                  {% if a.user %}
+                  <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
+                  {% else %}#{{ a.user_id }}{% endif %}
+                </td>
+                <td><strong>{{ a.tipo }}</strong></td>
+                <td>{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                <td>{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
+                <td>
+                  {% for o in row.obras %}
+                  <span class="aus-obra-chip" title="{{ o.nombre }}">{% if o.codigo %}{{ o.codigo }}{% else %}{{ o.nombre|truncate(16) }}{% endif %}</span>
+                  {% else %}<span class="text-muted">—</span>{% endfor %}
+                </td>
+                <td>
+                  {% if a.estado == 'aprobada' %}
+                  <span class="badge-soft badge-soft-green">Aprobada</span>
+                  {% else %}
+                  <span class="badge-soft badge-soft-blue">Pendiente</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="aus-empty">Nadie de tu ámbito está de ausencia hoy.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="aus-acc" data-aus-acc>
+      <button type="button" class="aus-acc-toggle" aria-expanded="false">
+        <span class="aus-acc-icon aus-acc-icon--blue"><i class="fas fa-calendar-alt"></i></span>
+        <span class="aus-acc-text">
+          <span class="aus-acc-title">Próximas ausencias</span>
+          <span class="aus-acc-sub">Empiezan en los próximos {{ horizon_days }} días (aún no han empezado)</span>
+        </span>
+        <span class="aus-acc-count">{{ proximas_rows|length }}</span>
+        <i class="fas fa-chevron-down aus-acc-chevron"></i>
+      </button>
+      <div class="aus-acc-body">
+        {% if proximas_rows %}
+        <div class="aus-table-wrap">
+          <table class="filterable-table admin-data-table mb-0">
+            <thead>
+              <tr class="header-row">
+                <th>Empleado</th>
+                <th>Tipo</th>
+                <th>Desde</th>
+                <th>Hasta</th>
+                <th>Días</th>
+                <th>Obras</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in proximas_rows %}
+              {% set a = row.leave %}
+              <tr>
+                <td>
+                  {% if a.user %}
+                  <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
+                  {% else %}#{{ a.user_id }}{% endif %}
+                </td>
+                <td><strong>{{ a.tipo }}</strong></td>
+                <td>{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                <td>{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
+                <td>{{ a.dias if a.dias is not none else '—' }}</td>
+                <td>
+                  {% for o in row.obras %}
+                  <span class="aus-obra-chip" title="{{ o.nombre }}">{% if o.codigo %}{{ o.codigo }}{% else %}{{ o.nombre|truncate(16) }}{% endif %}</span>
+                  {% else %}<span class="text-muted">—</span>{% endfor %}
+                </td>
+                <td>
+                  {% if a.estado == 'aprobada' %}
+                  <span class="badge-soft badge-soft-green">Aprobada</span>
+                  {% else %}
+                  <span class="badge-soft badge-soft-blue">Pendiente</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="aus-empty">No hay ausencias programadas que empiecen en los próximos {{ horizon_days }} días.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    {% if current_user.role == 'admin' %}
+    <section class="aus-acc" data-aus-acc>
+      <button type="button" class="aus-acc-toggle" aria-expanded="false">
+        <span class="aus-acc-icon aus-acc-icon--green"><i class="fas fa-plus"></i></span>
+        <span class="aus-acc-text">
+          <span class="aus-acc-title">Alta manual</span>
+          <span class="aus-acc-sub">Crear ausencia fuera del sync de Odoo</span>
+        </span>
+        <i class="fas fa-chevron-down aus-acc-chevron"></i>
+      </button>
+      <div class="aus-acc-body">
+        <form method="POST" action="{{ url_for('admin.ausencias_crear') }}" id="formAltaAusencia">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="ausencias-form-grid">
+            <div class="config-field">
+              <label for="user_id">Empleado</label>
+              <select name="user_id" id="user_id" class="form-control form-control-sm" required style="width:100%;"></select>
+            </div>
+            <div class="config-field">
+              <label for="fecha_inicio">Desde</label>
+              <input type="date" name="fecha_inicio" id="fecha_inicio" class="form-control form-control-sm" required>
+            </div>
+            <div class="config-field">
+              <label for="fecha_fin">Hasta</label>
+              <input type="date" name="fecha_fin" id="fecha_fin" class="form-control form-control-sm" required>
+            </div>
+            <div class="config-field">
+              <label for="tipo">Tipo</label>
+              <input type="text" name="tipo" id="tipo" class="form-control form-control-sm" value="Vacaciones" list="tipos-ausencia">
+              <datalist id="tipos-ausencia">
+                <option value="Vacaciones">
+                <option value="Puente">
+                <option value="Baja médica">
+                <option value="Permiso retribuido">
+                <option value="Falta justificada">
+              </datalist>
+            </div>
+            <div class="config-field">
+              <label for="estado">Estado</label>
+              <select name="estado" id="estado" class="form-control form-control-sm">
+                <option value="aprobada">Aprobada</option>
+                <option value="pendiente">Pendiente</option>
+              </select>
+            </div>
+            <div class="config-field">
+              <label>&nbsp;</label>
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-plus"></i> Crear</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="aus-acc" data-aus-acc {% if filtro_estado %}data-open-default="1"{% endif %}>
+      <button type="button" class="aus-acc-toggle" aria-expanded="false">
+        <span class="aus-acc-icon aus-acc-icon--slate"><i class="fas fa-list"></i></span>
+        <span class="aus-acc-text">
+          <span class="aus-acc-title">Listado / historial</span>
+          <span class="aus-acc-sub">Consulta y filtros · {% if current_user.role == 'jefe_obra' %}tu personal{% else %}global{% endif %}</span>
+        </span>
+        <span class="aus-acc-count">{{ ausencias|length }}</span>
+        <i class="fas fa-chevron-down aus-acc-chevron"></i>
+      </button>
+      <div class="aus-acc-body">
+        <div class="mb-3" style="display:flex;gap:.4rem;flex-wrap:wrap;">
+          <span class="btn-admin btn-admin-sm btn-admin-primary" style="pointer-events:none;">Aprobadas</span>
+          <span class="text-muted small align-self-center">Solo se muestran ausencias validadas (Odoo / alta manual aprobada).</span>
+        </div>
+        <div class="aus-table-wrap">
+          <table class="filterable-table admin-data-table mb-0">
+            <thead>
+              <tr class="header-row">
+                <th>Empleado</th>
+                <th>Tipo</th>
+                <th>Desde</th>
+                <th>Hasta</th>
+                <th>Días</th>
+                <th>Estado</th>
+                <th>Origen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in ausencias %}
+              <tr>
+                <td>
+                  {% if a.user %}
+                  <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
+                  {% else %}#{{ a.user_id }}{% endif %}
+                </td>
+                <td><strong>{{ a.tipo }}</strong></td>
+                <td>{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
+                <td>{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
+                <td>{{ a.dias if a.dias is not none else '—' }}</td>
+                <td>
+                  {% if a.estado == 'aprobada' %}
+                  <span class="badge-soft badge-soft-green">Aprobada</span>
+                  {% elif a.estado == 'pendiente' %}
+                  <span class="badge-soft badge-soft-blue">Pendiente</span>
+                  {% else %}
+                  <span class="badge-soft">{{ a.estado }}</span>
+                  {% endif %}
+                </td>
+                <td>{{ a.origen }}{% if a.external_id %} · {{ a.external_id }}{% endif %}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="7" class="table-empty-state" style="padding:1.25rem;">
+                  Sin ausencias en este filtro.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function setOpen(acc, open) {
+    acc.classList.toggle('is-open', open);
+    var btn = acc.querySelector('.aus-acc-toggle');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  document.querySelectorAll('[data-aus-acc]').forEach(function (acc) {
+    if (acc.getAttribute('data-open-default') === '1') setOpen(acc, true);
+    var btn = acc.querySelector('.aus-acc-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      setOpen(acc, !acc.classList.contains('is-open'));
+    });
+  });
+})();
+</script>
+{% if current_user.role == 'admin' %}
+<script>
+(function initAusenciaEmpleadoSelect() {
+  if (typeof $ === 'undefined' || !$.fn.select2) {
+    setTimeout(initAusenciaEmpleadoSelect, 50);
+    return;
+  }
+  var $el = $('#user_id');
+  if (!$el.length || $el.hasClass('select2-hidden-accessible')) return;
+  $el.select2({
+    placeholder: 'Buscar empleado por nombre…',
+    allowClear: true,
+    width: '100%',
+    minimumInputLength: 0,
+    ajax: {
+      url: "{{ url_for('admin.search_workers') }}",
+      dataType: 'json',
+      delay: 200,
+      data: function (params) {
+        return { q: params.term || '', plain: 1 };
+      },
+      processResults: function (data) {
+        var results = [];
+        (data.results || []).forEach(function (item) {
+          if (item.id === 'GENERICO') return;
+          if (item.children) {
+            results.push({ text: item.text, children: item.children });
+          } else if (item.id) {
+            results.push(item);
+          }
+        });
+        return { results: results };
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

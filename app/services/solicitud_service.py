@@ -305,69 +305,114 @@ class SolicitudService:
         notificar_nueva_solicitud(sol_baja, jefe.name if jefe else 'Sistema')
         return sol_baja, "new"
     
-def resolver_solicitud_admin(solicitud, accion, user_actor):
+def _parse_desasignacion_config(solicitud):
+    mode = 'all_obra'
+    dates_to_remove = []
+    if solicitud.comentarios and '{' in solicitud.comentarios:
+        try:
+            config = json.loads(solicitud.comentarios)
+            mode = config.get('mode', 'all_obra')
+            dates_to_remove = config.get('dates', []) or []
+        except Exception:
+            pass
+    return mode, dates_to_remove
+
+
+def _collect_desasignacion_asignaciones(solicitud):
+    """Asignaciones a eliminar según mode de la solicitud de baja."""
+    mode, dates_to_remove = _parse_desasignacion_config(solicitud)
+    asigs = []
+
+    if mode == 'selected' and dates_to_remove:
+        for d_str in dates_to_remove:
+            try:
+                d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            a = Asignacion.query.filter_by(
+                user_id=solicitud.empleado_id,
+                obra_id=solicitud.obra_id,
+                fecha=d_obj,
+            ).first()
+            if a:
+                asigs.append(a)
+    elif mode == 'auto_range':
+        asigs = Asignacion.query.filter(
+            Asignacion.user_id == solicitud.empleado_id,
+            Asignacion.obra_id == solicitud.obra_id,
+            Asignacion.fecha >= solicitud.fecha_inicio,
+            Asignacion.fecha <= solicitud.fecha_fin,
+        ).all()
+    else:  # all_obra
+        start_del = solicitud.fecha_inicio if solicitud.fecha_inicio else today_local()
+        asigs = Asignacion.query.filter(
+            Asignacion.user_id == solicitud.empleado_id,
+            Asignacion.obra_id == solicitud.obra_id,
+            Asignacion.fecha >= start_del,
+        ).all()
+
+    return asigs
+
+
+def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None):
     from app.services.assignment_service import process_assignment_action
     from app.services.email_service import notificar_resolucion_solicitud
-    from datetime import date
-    
-    if accion == 'aceptar_concreta':
+    from app.services.core_assignment_service import CoreAssignmentService
+
+    if accion in ('aceptar_concreta', 'aceptar_concreta_traslado'):
         if not solicitud.empleado_id:
             raise ValueError("Error: Solicitud concreta sin empleado asignado.")
 
         tipo_accion = getattr(solicitud, 'accion', 'ASIGNAR')
 
-        if tipo_accion == 'DESASIGNAR':
-            mode = 'all_obra'
-            dates_to_remove = []
-            if solicitud.comentarios and '{' in solicitud.comentarios:
-                try:
-                    config = json.loads(solicitud.comentarios)
-                    mode = config.get('mode', 'all_obra')
-                    dates_to_remove = config.get('dates', [])
-                except Exception: pass
+        if accion == 'aceptar_concreta_traslado':
+            if tipo_accion != 'DESASIGNAR':
+                raise ValueError("El traslado solo aplica a solicitudes de desasignación.")
+            if not target_obra_id:
+                raise ValueError("Debes indicar la obra de destino.")
+            target_obra_id = int(target_obra_id)
+            if int(target_obra_id) == int(solicitud.obra_id):
+                raise ValueError("La obra de destino debe ser distinta a la de origen.")
 
-            from app.services.core_assignment_service import CoreAssignmentService
+            asigs = _collect_desasignacion_asignaciones(solicitud)
+            if not asigs:
+                raise ValueError("No hay asignaciones que trasladar en el periodo solicitado.")
+
+            fechas = sorted({a.fecha for a in asigs})
+            for a in asigs:
+                CoreAssignmentService.desasignar(
+                    a.user_id, a.obra_id, a.fecha, user_actor.id,
+                    "Traslado desde solicitud de baja",
+                    detalle_extra=f"Origen obra {solicitud.obra_id} → destino {target_obra_id}",
+                )
+
+            result = process_assignment_action(
+                actor_user=user_actor,
+                worker_id=solicitud.empleado_id,
+                target_obra_id=target_obra_id,
+                date_list=fechas,
+                overwrite=True,
+            )
+            if not result.get('success'):
+                raise ValueError(
+                    f"Desasignado del origen, pero fallo al asignar destino: {result.get('message')}"
+                )
+
+            mensaje = (
+                f"Traslado completado: {len(fechas)} día(s) de la obra origen "
+                f"a la obra {target_obra_id}."
+            )
+
+        elif tipo_accion == 'DESASIGNAR':
+            asigs = _collect_desasignacion_asignaciones(solicitud)
             count = 0
-            if mode == 'all_obra':
-                start_del = solicitud.fecha_inicio if solicitud.fecha_inicio else today_local()
-                asigs = Asignacion.query.filter(
-                    Asignacion.user_id == solicitud.empleado_id, 
-                    Asignacion.obra_id == solicitud.obra_id, 
-                    Asignacion.fecha >= start_del
-                ).all()
-                count = len(asigs)
-                for a in asigs:
-                    CoreAssignmentService.desasignar(
-                        a.user_id, a.obra_id, a.fecha, user_actor.id,
-                        "Aprobación de Solicitud de Baja"
-                    )
-                
-            elif mode == 'selected' and dates_to_remove:
-                for d_str in dates_to_remove:
-                    try:
-                        d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-                        borrado = CoreAssignmentService.desasignar(
-                            solicitud.empleado_id, solicitud.obra_id, d_obj, user_actor.id,
-                            "Aprobación de Solicitud de Baja"
-                        )
-                        if borrado:
-                            count += 1
-                    except ValueError: continue
-                    
-            elif mode == 'auto_range':
-                asigs = Asignacion.query.filter(
-                    Asignacion.user_id == solicitud.empleado_id, 
-                    Asignacion.obra_id == solicitud.obra_id, 
-                    Asignacion.fecha >= solicitud.fecha_inicio, 
-                    Asignacion.fecha <= solicitud.fecha_fin
-                ).all()
-                count = len(asigs)
-                for a in asigs:
-                    CoreAssignmentService.desasignar(
-                        a.user_id, a.obra_id, a.fecha, user_actor.id,
-                        "Aprobación de Solicitud de Baja"
-                    )
-            
+            for a in asigs:
+                borrado = CoreAssignmentService.desasignar(
+                    a.user_id, a.obra_id, a.fecha, user_actor.id,
+                    "Aprobación de Solicitud de Baja",
+                )
+                if borrado:
+                    count += 1
             mensaje = f"Devolución aprobada. Se han eliminado {count} asignaciones."
 
         else:
@@ -376,19 +421,19 @@ def resolver_solicitud_admin(solicitud, accion, user_actor):
             while curr <= solicitud.fecha_fin:
                 dias.append(curr)
                 curr += timedelta(days=1)
-            
+
             result = process_assignment_action(
                 actor_user=user_actor, worker_id=solicitud.empleado_id,
-                target_obra_id=solicitud.obra_id, date_list=dias, overwrite=True 
+                target_obra_id=solicitud.obra_id, date_list=dias, overwrite=True
             )
-            
+
             if not result.get('success'):
                 raise ValueError(f"Error al asignar: {result.get('message')}")
-            
+
             mensaje = "Solicitud aceptada y trabajador asignado."
 
         solicitud.estado = 'CUMPLIDA'
-        solicitud.cantidad_cubierta = solicitud.cantidad_solicitada 
+        solicitud.cantidad_cubierta = solicitud.cantidad_solicitada
         solicitud.resolved_at = utc_now()
         solicitud.resolved_by_id = user_actor.id
         db.session.commit()

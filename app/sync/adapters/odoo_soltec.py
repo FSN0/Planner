@@ -46,7 +46,7 @@ class Adapter(BaseSyncAdapter):
                 self.db_name, self.uid, self.pwd, 
                 'hr.attendance', 'search_read', 
                 [domain], 
-                {'fields': ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out']}
+                {'fields': ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']}
             )
             
             # Seguro contra respuestas malformadas de Odoo (típico de XML-RPC cuando falla)
@@ -65,6 +65,7 @@ class Adapter(BaseSyncAdapter):
                         'check_in': a.get('check_in'),
                         'check_out': a.get('check_out'),
                         'autor': modificado_por,
+                        'note': a.get('note') if a.get('note') not in (False, None, '') else None,
                     })
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en hr.attendance. Error: {str(e)}")
@@ -76,7 +77,7 @@ class Adapter(BaseSyncAdapter):
                 self.db_name, self.uid, self.pwd, 
                 'partner.attendance', 'search_read', 
                 [domain], 
-                {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out']}
+                {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']}
             )
             
             if not isinstance(att_ext, list):
@@ -94,13 +95,92 @@ class Adapter(BaseSyncAdapter):
                         'check_in': a.get('check_in'),
                         'check_out': a.get('check_out'),
                         'autor': modificado_por,
+                        'note': a.get('note') if a.get('note') not in (False, None, '') else None,
                     })
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en partner.attendance. Error: {str(e)}")
             raise e  # <- CRÍTICO: Lanzamos el error hacia arriba
 
         return fichajes_estandarizados
-    
+
+    def get_leaves(self, date_from=None, date_to=None) -> list:
+        """Sincroniza hr.leave (todos los tipos: vacaciones, bajas, puentes, permisos…)."""
+        import logging
+        from datetime import date, timedelta
+
+        logger = logging.getLogger(__name__)
+        if not date_from:
+            date_from = (date.today() - timedelta(days=30)).isoformat()
+        if not date_to:
+            date_to = (date.today() + timedelta(days=400)).isoformat()
+
+        # Solo ausencias validadas en Odoo (aprobadas). Borradores/confirm no interesan.
+        domain = [
+            ('state', '=', 'validate'),
+            '|',
+            '&',
+            ('request_date_from', '<=', date_to),
+            ('request_date_to', '>=', date_from),
+            '&',
+            ('date_from', '<=', f'{date_to} 23:59:59'),
+            ('date_to', '>=', f'{date_from} 00:00:00'),
+        ]
+        fields = [
+            'id', 'name', 'state', 'employee_id', 'holiday_status_id',
+            'request_date_from', 'request_date_to', 'date_from', 'date_to',
+            'number_of_days',
+        ]
+        state_map = {
+            'validate': 'aprobada',
+        }
+
+        try:
+            rows = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'hr.leave', 'search_read',
+                [domain],
+                {'fields': fields, 'limit': 5000},
+            )
+        except Exception as e:
+            logger.error(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] Fallo hr.leave: {e}"
+            )
+            raise
+
+        if not isinstance(rows, list):
+            raise ConnectionError("Respuesta inválida de Odoo para hr.leave.")
+
+        leaves = []
+        for row in rows:
+            emp = row.get('employee_id')
+            if not emp:
+                continue
+            htype = row.get('holiday_status_id')
+            tipo_name = htype[1] if isinstance(htype, (list, tuple)) else (htype or 'Ausencia')
+            tipo_id = str(htype[0]) if isinstance(htype, (list, tuple)) else None
+
+            fecha_inicio = row.get('request_date_from')
+            fecha_fin = row.get('request_date_to')
+            if not fecha_inicio and row.get('date_from'):
+                fecha_inicio = str(row['date_from'])[:10]
+            if not fecha_fin and row.get('date_to'):
+                fecha_fin = str(row['date_to'])[:10]
+            if not fecha_inicio or not fecha_fin:
+                continue
+
+            leaves.append({
+                'external_id': str(row['id']),
+                'empleado_external_id': str(emp[0]),
+                'tipo': tipo_name,
+                'tipo_external_id': tipo_id,
+                'estado': state_map.get(row.get('state'), 'aprobada'),
+                'fecha_inicio': fecha_inicio,
+                'fecha_fin': fecha_fin,
+                'dias': row.get('number_of_days'),
+                'descripcion': row.get('name') or None,
+            })
+        return leaves
+
     def get_diff_obras(self):
         domain = [['state_id', '=', 6], ['active', '=', True]]
         fields = ['id', 'name', 'nombre', 'customer_id', 'date_ini', 'nexecution_manager', 'encargado_obra']
