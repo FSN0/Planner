@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "sync/_preview_macros.html" import stat_chip %}
+{% block title %}Preview: Vehículos{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact sync-preview-page">
+
+    <header class="sync-preview-header">
+      <div>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
+        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
+        <p class="sync-preview-sub">Flota desde fleet.vehicle · matrícula, marca, modelo y conductor Odoo.</p>
+      </div>
+      <button class="btn-admin btn-admin-primary" onclick="confirmSyncVehiculos()" {% if preview.error %}disabled{% endif %}>
+        <i class="fas fa-save"></i> Guardar cambios
+      </button>
+    </header>
+
+    {% if preview.error %}
+    <div class="alert alert-warning">
+      <i class="fas fa-exclamation-triangle mr-1"></i> {{ preview.error }}
+      <div class="small mt-1">Ejecuta <code>scripts/inspect_odoo_fleet.py</code> para confirmar campos Fleet.</div>
+    </div>
+    {% endif %}
+
+    <div class="sync-preview-stats">
+      {{ stat_chip('Listos', preview.stats.listos, 'ok') }}
+      {{ stat_chip('Nuevos', preview.stats.nuevos, 'ok') }}
+      {{ stat_chip('Actualizados', preview.stats.actualizados, 'warn') }}
+      {{ stat_chip('Sin cambios', preview.stats.sin_cambios, 'muted') }}
+    </div>
+
+    {% if preview.listos %}
+    <section class="sync-preview-section sync-preview-section--ok">
+      <h2 class="sync-preview-section-title"><i class="fas fa-check"></i> Listos para importar ({{ preview.listos|length }})</h2>
+      <div class="sync-preview-table-wrap">
+        <table class="sync-preview-table">
+          <thead>
+            <tr>
+              <th>Acción</th>
+              <th>Nombre</th>
+              <th>Matrícula</th>
+              <th>Marca / Modelo</th>
+              <th>Conductor Odoo</th>
+              <th>Cambios</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in preview.listos %}
+            <tr>
+              <td><span class="sync-preview-badge sync-preview-badge--{{ v.accion }}">{{ v.accion|upper }}</span></td>
+              <td>{{ v.nombre }}</td>
+              <td>{{ v.matricula or '—' }}</td>
+              <td>{{ v.marca or '—' }} / {{ v.modelo or '—' }}</td>
+              <td>{{ v.driver_name or '—' }}</td>
+              <td class="sync-preview-reasons small">
+                {% if v.cambios %}
+                  {% for k, val in v.cambios.items() %}{{ k }}: {{ val }}{% if not loop.last %}; {% endif %}{% endfor %}
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if preview.sin_cambios %}
+    <section class="sync-preview-section">
+      <h2 class="sync-preview-section-title text-muted"><i class="fas fa-equals"></i> Sin cambios ({{ preview.sin_cambios|length }})</h2>
+      <p class="text-muted small">Ya vinculados y con los mismos datos.</p>
+    </section>
+    {% endif %}
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+const DIFF_PAYLOAD = {{ {'nuevos': diff.nuevos|default([]), 'actualizados': diff.actualizados|default([])}|tojson }};
+
+function confirmSyncVehiculos() {
+  Swal.fire({
+    title: '¿Guardar flota?',
+    text: 'Se crearán/actualizarán los vehículos listos.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Guardar',
+    cancelButtonText: 'Cancelar'
+  }).then(result => {
+    if (!result.isConfirmed) return;
+    fetch('{{ url_for("sync.commit_vehiculos") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(DIFF_PAYLOAD)
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        Swal.fire('Guardado', 'Flota sincronizada.', 'success').then(() => {
+          window.location.href = '{{ url_for("sync.odoo_panel") }}';
+        });
+      } else {
+        Swal.fire('Error', res.error || 'No se pudo guardar', 'error');
+      }
+    });
+  });
+}
+</script>
+{% endblock %}

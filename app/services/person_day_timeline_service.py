@@ -1,6 +1,6 @@
 # app/services/person_day_timeline_service.py
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from flask import url_for
 from markupsafe import Markup, escape
@@ -8,6 +8,18 @@ from markupsafe import Markup, escape
 from app.models import User, SystemLog, RegistroFichaje, Obra
 from app.services.core_assignment_service import CoreAssignmentService
 from app.utils.timezone_utils import format_datetime, format_time
+
+MAX_TIMELINE_RANGE_DAYS = 31
+
+
+def _parse_fecha(fecha_obj):
+    if isinstance(fecha_obj, str):
+        return datetime.strptime(fecha_obj, "%Y-%m-%d").date()
+    if isinstance(fecha_obj, datetime):
+        return fecha_obj.date()
+    if isinstance(fecha_obj, date):
+        return fecha_obj
+    raise ValueError("Fecha inválida")
 
 SYSTEM_ACTOR = "Sistema Automático"
 SYSTEM_ACTIONS = {
@@ -371,10 +383,7 @@ def build_person_day_timeline(user_id, fecha_obj):
     if not user:
         return None
 
-    if isinstance(fecha_obj, str):
-        fecha_obj = datetime.strptime(fecha_obj, "%Y-%m-%d").date()
-    elif isinstance(fecha_obj, datetime):
-        fecha_obj = fecha_obj.date()
+    fecha_obj = _parse_fecha(fecha_obj)
 
     logs_del_dia = (
         SystemLog.query.filter_by(target_user_id=user_id, target_date=fecha_obj)
@@ -417,4 +426,60 @@ def build_person_day_timeline(user_id, fecha_obj):
         "fecha_iso": fecha_obj.strftime("%Y-%m-%d"),
         "estado_actual": estado_actual,
         "hitos": hitos,
+    }
+
+
+def build_person_day_timeline_range(user_id, fecha_inicio, fecha_fin):
+    """Historial apilado por día entre fecha_inicio y fecha_fin (inclusive)."""
+    user = User.query.get(user_id)
+    if not user:
+        return None
+
+    try:
+        fecha_inicio = _parse_fecha(fecha_inicio)
+        fecha_fin = _parse_fecha(fecha_fin)
+    except (TypeError, ValueError):
+        return {"success": False, "error": "Formato de fecha inválido (YYYY-MM-DD)"}
+
+    if fecha_fin < fecha_inicio:
+        return {"success": False, "error": "La fecha fin debe ser posterior o igual a la fecha inicio"}
+
+    num_days = (fecha_fin - fecha_inicio).days + 1
+    if num_days > MAX_TIMELINE_RANGE_DAYS:
+        return {
+            "success": False,
+            "error": f"El rango máximo es de {MAX_TIMELINE_RANGE_DAYS} días",
+        }
+
+    days = []
+    current = fecha_inicio
+    while current <= fecha_fin:
+        day_data = build_person_day_timeline(user_id, current)
+        days.append({
+            "fecha": day_data["fecha"],
+            "fecha_iso": day_data["fecha_iso"],
+            "estado_actual": day_data["estado_actual"],
+            "hitos": day_data["hitos"],
+        })
+        current += timedelta(days=1)
+
+    if fecha_inicio == fecha_fin:
+        fecha_label = fecha_inicio.strftime("%d/%m/%Y")
+    else:
+        fecha_label = (
+            f"{fecha_inicio.strftime('%d/%m/%Y')} – {fecha_fin.strftime('%d/%m/%Y')}"
+        )
+
+    return {
+        "success": True,
+        "empleado": f"{user.name} {user.lastname}",
+        "empleado_url": _worker_panel_url(user.id),
+        "target_user_id": user.id,
+        "fecha": fecha_label,
+        "fecha_inicio": fecha_inicio.strftime("%d/%m/%Y"),
+        "fecha_fin": fecha_fin.strftime("%d/%m/%Y"),
+        "fecha_inicio_iso": fecha_inicio.strftime("%Y-%m-%d"),
+        "fecha_fin_iso": fecha_fin.strftime("%Y-%m-%d"),
+        "estado_actual": f"{num_days} día{'s' if num_days != 1 else ''}",
+        "days": days,
     }

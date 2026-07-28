@@ -87,6 +87,7 @@ def create_app():
     from app.api.routes import api_bp 
     from app.sync.routes import sync_bp
     from app.api.asignaciones import asignaciones_api
+    from app.api.vehiculos import vehiculos_api
     from app.superadmin import superadmin_bp
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
@@ -99,6 +100,7 @@ def create_app():
     app.register_blueprint(api_bp, url_prefix='/api/v6')
     app.register_blueprint(sync_bp, url_prefix='/sync')
     app.register_blueprint(asignaciones_api, url_prefix='/api')
+    app.register_blueprint(vehiculos_api, url_prefix='/api')
     app.register_blueprint(superadmin_bp, url_prefix='/superadmin')
 
     # ---------------------------------------------------------
@@ -116,14 +118,15 @@ def create_app():
 
 
     # Importación local de constantes para evitar referencias circulares
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO, ROLE_RRHH
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL
 
     @app.context_processor
     def inject_notifications():
         from app.models import Solicitud, ROLE_ADMIN, ROLE_JEFE
         
         pending_count = 0
-        unread_logs_count = 0 # <-- NUEVO CONTADOR
+        unread_logs_count = 0
+        unread_laboral_count = 0
 
         if current_user.is_authenticated:
             if current_user.role == ROLE_ADMIN:
@@ -131,8 +134,15 @@ def create_app():
                     Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
                 ).count()
                 
-                from app.services.log_notification_service import get_total_unread_logs
+                from app.services.log_notification_service import (
+                    get_total_unread_logs,
+                    get_unread_laboral_logs,
+                )
                 unread_logs_count = get_total_unread_logs(current_user.id)
+                unread_laboral_count = get_unread_laboral_logs(current_user.id)
+            elif current_user.role == ROLE_LABORAL:
+                from app.services.log_notification_service import get_unread_laboral_logs
+                unread_laboral_count = get_unread_laboral_logs(current_user.id)
 
             # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
             elif current_user.role == ROLE_JEFE:
@@ -166,13 +176,21 @@ def create_app():
                 tenant_has_odoo_alta = bool(modulos_activos.get('odoo_alta'))
                 tenant_has_integrations = tenant_has_odoo or tenant_has_odoo_alta
 
+        from app.services.permission_service import (
+            user_can, is_laboral, is_admin, can_resolve_fichajes,
+        )
         return dict(
             pending_notifications=pending_count,
             unread_logs_count=unread_logs_count,
+            unread_laboral_count=unread_laboral_count,
             modulos_activos=modulos_activos,
             tenant_has_odoo=tenant_has_odoo,
             tenant_has_odoo_alta=tenant_has_odoo_alta,
             tenant_has_integrations=tenant_has_integrations,
+            user_can=user_can,
+            is_laboral=is_laboral,
+            is_admin=is_admin,
+            can_resolve_fichajes=can_resolve_fichajes,
             **tz_ctx,
         )
 
@@ -185,6 +203,8 @@ def create_app():
             return redirect(url_for('admin.panel'))
         elif user.role == ROLE_JEFE:
             return redirect(url_for('jefe.panel'))
+        elif user.role == ROLE_LABORAL:
+            return redirect(url_for('admin.ausencias_list'))
         elif user.role in (ROLE_RRHH, ROLE_OPERARIO):
             from flask_login import logout_user
             logout_user()

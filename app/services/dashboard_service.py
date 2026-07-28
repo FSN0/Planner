@@ -8,7 +8,7 @@ from flask import url_for
 
 from app import db
 # IMPORTANTE: Añadido RegistroFichaje a los imports
-from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN, UserObraConfig, RegistroFichaje
+from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN, ROLE_LABORAL, UserObraConfig, RegistroFichaje
 from app.utils.timezone_utils import today_local
 
 def parse_date(date_str):
@@ -67,9 +67,9 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     obra_ids = [o.id for o in obras]
     mapa_asig = {oid: [] for oid in obra_ids}
 
-    # NUEVO: Precargar fichajes del día si es Admin
+    # Precargar fichajes del día para admin / laboral
     fichajes_dict = {}
-    if user.role == ROLE_ADMIN:
+    if user.role in (ROLE_ADMIN, ROLE_LABORAL):
         fichajes = RegistroFichaje.query.filter_by(fecha=selected_date).all()
         for f in fichajes:
             fichajes_dict[f.user_id] = f.estado
@@ -85,8 +85,12 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
             if a.obra_id in mapa_asig:
                 u = User.query.get(a.user_id)
                 if u: 
-                    # Inyectamos estado de fichaje al usuario
-                    u.temp_estado_fichaje = fichajes_dict.get(u.id, 'Sin_Registro') if user.role == ROLE_ADMIN else None
+                    # Inyectamos estado de fichaje al usuario (admin y laboral)
+                    u.temp_estado_fichaje = (
+                        fichajes_dict.get(u.id, 'Sin_Registro')
+                        if user.role in (ROLE_ADMIN, ROLE_LABORAL)
+                        else None
+                    )
                     mapa_asig[a.obra_id].append(u)
 
     # Overlay vacaciones/ausencias del día seleccionado (tarjeta distinta en tablero)

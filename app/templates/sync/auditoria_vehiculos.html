@@ -1,0 +1,449 @@
+{% extends "base.html" %}
+{% block title %}Auditoría de vehículos{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% macro audit_sort_th(col, label, width='', align='', sort_type='') %}
+<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ label }}</span><i class="fas fa-sort sort-icon"></i></th>
+{% endmacro %}
+
+{% macro fila_odometro(reg) %}
+<tr class="audit-data-row">
+  <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+  <td data-sort-value="{{ (reg.vehiculo.matricula or reg.vehiculo.nombre)|lower }}">
+    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=reg.vehiculo.id) }}" class="link-user">
+      <strong>{{ reg.vehiculo.matricula or '—' }}</strong>
+      <span class="d-block text-muted small">{{ reg.vehiculo.nombre }}</span>
+    </a>
+  </td>
+  <td data-sort-value="{{ (reg.planned_user.lastname if reg.planned_user else '')|lower }}">
+    {% if reg.planned_user %}
+      <a href="{{ url_for('admin.worker_panel', user_id=reg.planned_user.id) }}" class="link-user">
+        {{ reg.planned_user.name }} {{ reg.planned_user.lastname }}
+      </a>
+    {% else %}
+      <span class="text-muted">—</span>
+    {% endif %}
+  </td>
+  <td data-sort-value="{{ (reg.odoo_driver_name or '')|lower }}">
+    {% if reg.odoo_driver_name %}
+      {{ reg.odoo_driver_name }}
+      {% if reg.odoo_driver_partner_id %}
+        <span class="d-block text-muted small">partner #{{ reg.odoo_driver_partner_id }}</span>
+      {% endif %}
+    {% else %}
+      <span class="text-muted">—</span>
+    {% endif %}
+  </td>
+  <td class="text-right" data-sort-value="{{ reg.valor if reg.valor is not none else '' }}">
+    {% if reg.valor is not none %}{{ '%.0f'|format(reg.valor) }} km{% else %}<span class="text-muted">—</span>{% endif %}
+  </td>
+  <td data-sort-value="{{ reg.estado }}">
+    {% if reg.estado == 'mismatch_driver' %}
+      <span class="badge badge-danger">Conductor distinto</span>
+    {% elif reg.estado == 'sin_km' %}
+      <span class="badge badge-warning">Sin kilómetros</span>
+    {% elif reg.estado == 'sin_planificar' %}
+      <span class="badge badge-info">Sin planificar</span>
+    {% else %}
+      <span class="badge badge-success">OK</span>
+    {% endif %}
+  </td>
+</tr>
+{% endmacro %}
+
+{% macro tabla_odometros(table_id, rows) %}
+{% if rows %}
+<div class="audit-table-wrap">
+  <table id="{{ table_id }}" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+    <thead>
+      <tr>
+        {{ audit_sort_th(0, 'Fecha', '12%', '', 'date') }}
+        {{ audit_sort_th(1, 'Vehículo', '18%') }}
+        {{ audit_sort_th(2, 'Planificado', '20%') }}
+        {{ audit_sort_th(3, 'Conductor Odoo', '20%') }}
+        {{ audit_sort_th(4, 'Km', '12%', 'right', 'num') }}
+        {{ audit_sort_th(5, 'Estado', '18%') }}
+      </tr>
+    </thead>
+    <tbody>
+      {% for reg in rows %}
+      {{ fila_odometro(reg) }}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin registros en esta categoría</div>
+{% endif %}
+{% endmacro %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell auditoria-page">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact">
+
+    <form method="GET" id="formAuditoriaVehiculos">
+      <div class="page-toolbar">
+        <div class="page-toolbar-left">
+          <h1 class="page-toolbar-title">Auditoría de vehículos</h1>
+          <span class="page-toolbar-count">Informativa · plan vs odómetro Odoo</span>
+        </div>
+        <div class="page-toolbar-actions" style="align-items:center; flex-wrap:wrap;">
+          <label class="mb-0 text-muted small" for="fechaDesde" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Desde</label>
+          <input type="date" id="fechaDesde" name="fecha_desde" class="form-control form-control-sm" value="{{ fecha_desde_default }}" style="width:auto;min-width:9.5rem;">
+          <label class="mb-0 text-muted small" for="fechaHasta" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Hasta</label>
+          <input type="date" id="fechaHasta" name="fecha_hasta" class="form-control form-control-sm" value="{{ fecha_hasta_default }}" style="width:auto;min-width:9.5rem;">
+          {% if current_user.role == 'admin' %}
+          <button type="button" onclick="forzarSyncVehiculos()" class="btn-admin btn-admin-primary">
+            <i class="fas fa-sync-alt"></i> Sincronizar
+          </button>
+          <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-arrow-left"></i> Sync
+          </a>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="admin-panel admin-panel-flush admin-panel--no-header mb-0" style="flex-shrink:0;">
+        <div class="admin-filter-bar" style="border:1px solid var(--color-border-strong); border-radius:10px; overflow:hidden;">
+          <div class="admin-filter-group">
+            <label for="filtroEstado">Estado</label>
+            <select id="filtroEstado" name="estado" class="form-control custom-select">
+              <option value="all" {% if filtros.estado == 'all' %}selected{% endif %}>Todos</option>
+              <option value="salto_km" {% if filtros.estado == 'salto_km' %}selected{% endif %}>Saltos de odómetro</option>
+              <option value="vehiculo_distinto" {% if filtros.estado == 'vehiculo_distinto' %}selected{% endif %}>Vehículo distinto al plan</option>
+              <option value="mismatch_driver" {% if filtros.estado == 'mismatch_driver' %}selected{% endif %}>Conductor distinto</option>
+              <option value="sin_km" {% if filtros.estado == 'sin_km' %}selected{% endif %}>Sin kilómetros</option>
+              <option value="sin_planificar" {% if filtros.estado == 'sin_planificar' %}selected{% endif %}>Sin planificar</option>
+              <option value="ok" {% if filtros.estado == 'ok' %}selected{% endif %}>Solo OK</option>
+            </select>
+          </div>
+          <div class="admin-filter-group">
+            <label for="filtroOrden">Orden</label>
+            <select id="filtroOrden" name="orden" class="form-control custom-select">
+              <option value="fecha_desc" {% if filtros.orden == 'fecha_desc' %}selected{% endif %}>Fecha desc</option>
+              <option value="fecha_asc" {% if filtros.orden == 'fecha_asc' %}selected{% endif %}>Fecha asc</option>
+              <option value="vehiculo_asc" {% if filtros.orden == 'vehiculo_asc' %}selected{% endif %}>Vehículo A-Z</option>
+              <option value="vehiculo_desc" {% if filtros.orden == 'vehiculo_desc' %}selected{% endif %}>Vehículo Z-A</option>
+              <option value="km_desc" {% if filtros.orden == 'km_desc' %}selected{% endif %}>Km desc</option>
+              <option value="km_asc" {% if filtros.orden == 'km_asc' %}selected{% endif %}>Km asc</option>
+              <option value="estado_asc" {% if filtros.orden == 'estado_asc' %}selected{% endif %}>Estado A-Z</option>
+              <option value="estado_desc" {% if filtros.orden == 'estado_desc' %}selected{% endif %}>Estado Z-A</option>
+            </select>
+          </div>
+          <div class="admin-filter-group" style="flex:1 1 160px; min-width:140px;">
+            <label for="filtroQ">Buscar</label>
+            <input type="text" id="filtroQ" name="q" class="form-control" value="{{ filtros.q }}" placeholder="Vehículo, conductor…" style="min-width:12rem; width:100%;">
+          </div>
+          <div class="admin-filter-group" style="margin-left:auto; gap:0.4rem;">
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-filter"></i> Filtrar
+            </button>
+            <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">Limpiar</a>
+            <span class="page-toolbar-count" title="Registros en el rango filtrado">
+              {{ total_filtrado }} reg. · {{ total_ok }} OK
+            </span>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <div class="auditoria-stats">
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSaltos" title="Saltos de odómetro">
+        <i class="fas fa-bolt"></i> {{ saltos|length }} saltos km
+      </span>
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseVehiculoDistinto" title="Planificado en un vehículo, reporta en otro">
+        <i class="fas fa-exchange-alt"></i> {{ vehiculo_distinto|length }} vehículo distinto
+      </span>
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseMismatch" title="Conductor distinto">
+        <i class="fas fa-user-slash"></i> {{ mismatch|length }} conductor distinto
+      </span>
+      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSinKm" title="Sin kilómetros">
+        <i class="fas fa-tachometer-alt"></i> {{ sin_km|length }} sin km
+      </span>
+      <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSinPlan" title="Sin planificar">
+        <i class="fas fa-route"></i> {{ sin_planificar|length }} sin planificar
+      </span>
+      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseOk" title="Histórico OK">
+        <i class="fas fa-check"></i> {{ historial_ok|length }} OK recientes
+      </span>
+    </div>
+    {% if umbrales_salto %}
+    <p class="text-muted small mb-2" style="margin-top:-0.25rem;">
+      Umbrales saltos: ≥ <strong>{{ umbrales_salto.km_dia }}</strong> km/día
+      · ≥ <strong>{{ umbrales_salto.delta_km }}</strong> km en ≤ <strong>{{ umbrales_salto.ventana_dias }}</strong> días
+      · odómetro hacia atrás siempre
+      {% if current_user.role == 'admin' %}
+        · <a href="{{ url_for('admin.configuracion_global') }}">Configurar</a>
+      {% endif %}
+    </p>
+    {% endif %}
+
+    <div class="accordion auditoria-accordion" id="accordionVehiculos">
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header {% if not saltos %}collapsed{% endif %}" data-target="#collapseSaltos" role="button" aria-expanded="{{ 'true' if saltos else 'false' }}">
+          <h6 class="auditoria-section-title text-danger mb-0">
+            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-bolt"></i></span>
+            Saltos de odómetro
+            <span class="badge-count badge-count-danger">{{ saltos|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseSaltos" class="collapse {% if saltos %}show{% endif %}">
+          {% if saltos %}
+          <div class="audit-table-wrap">
+            <table id="auditSaltosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+              <thead>
+                <tr>
+                  {{ audit_sort_th(0, 'Lectura', '11%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Vehículo', '16%') }}
+                  {{ audit_sort_th(2, 'Anterior → actual', '16%') }}
+                  {{ audit_sort_th(3, 'Δ km', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(4, 'km/día', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(5, 'Conductor Odoo', '18%') }}
+                  {{ audit_sort_th(6, 'Motivo', '19%') }}
+                </tr>
+              </thead>
+              <tbody>
+                {% for j in saltos %}
+                <tr class="audit-data-row">
+                  <td class="font-weight-bold" data-sort-value="{{ j.fecha_actual.strftime('%Y%m%d') }}">
+                    {{ j.fecha_actual.strftime('%d/%m/%Y') }}
+                    <span class="d-block text-muted small">desde {{ j.fecha_anterior.strftime('%d/%m/%Y') }} ({{ j.delta_dias }}d)</span>
+                  </td>
+                  <td data-sort-value="{{ (j.vehiculo.matricula or j.vehiculo.nombre if j.vehiculo else '')|lower }}">
+                    {% if j.vehiculo %}
+                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=j.vehiculo.id) }}" class="link-user">
+                      <strong>{{ j.vehiculo.matricula or '—' }}</strong>
+                      <span class="d-block text-muted small">{{ j.vehiculo.nombre }}</span>
+                    </a>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td data-sort-value="{{ j.km_anterior }}">
+                    {{ '%.0f'|format(j.km_anterior) }} → {{ '%.0f'|format(j.km_actual) }}
+                  </td>
+                  <td class="text-right font-weight-bold {% if j.delta_km < 0 %}text-danger{% endif %}" data-sort-value="{{ j.delta_km }}">
+                    {% if j.delta_km >= 0 %}+{% endif %}{{ '%.0f'|format(j.delta_km) }}
+                  </td>
+                  <td class="text-right" data-sort-value="{{ j.km_dia }}">{{ '%.0f'|format(j.km_dia) }}</td>
+                  <td data-sort-value="{{ (j.conductor_odoo or '')|lower }}">{{ j.conductor_odoo or '—' }}</td>
+                  <td>
+                    {% for m in j.motivos %}
+                      {% if m == 'odometro_atras' %}
+                        <span class="badge badge-danger">Odómetro atrás</span>
+                      {% elif m == 'km_dia' %}
+                        <span class="badge badge-danger">Km/día alto</span>
+                      {% elif m == 'delta_ventana' %}
+                        <span class="badge badge-warning">Salto en ventana</span>
+                      {% else %}
+                        <span class="badge badge-secondary">{{ m }}</span>
+                      {% endif %}
+                    {% endfor %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin saltos anómalos en el rango</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header {% if not vehiculo_distinto %}collapsed{% endif %}" data-target="#collapseVehiculoDistinto" role="button" aria-expanded="{{ 'true' if vehiculo_distinto else 'false' }}">
+          <h6 class="auditoria-section-title text-danger mb-0">
+            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-exchange-alt"></i></span>
+            Vehículo distinto al planificado
+            <span class="badge-count badge-count-danger">{{ vehiculo_distinto|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseVehiculoDistinto" class="collapse {% if vehiculo_distinto %}show{% endif %}">
+          {% if vehiculo_distinto %}
+          <div class="audit-table-wrap">
+            <table id="auditVehiculoDistintoTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+              <thead>
+                <tr>
+                  {{ audit_sort_th(0, 'Fecha', '12%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Operario', '20%') }}
+                  {{ audit_sort_th(2, 'Planificado', '24%') }}
+                  {{ audit_sort_th(3, 'Reportado Odoo', '24%') }}
+                  {{ audit_sort_th(4, 'Km', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(5, 'Conductor Odoo', '10%') }}
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in vehiculo_distinto %}
+                <tr class="audit-data-row">
+                  <td class="font-weight-bold" data-sort-value="{{ a.fecha.strftime('%Y%m%d') }}">{{ a.fecha.strftime('%d/%m/%Y') }}</td>
+                  <td>
+                    <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}" class="link-user">
+                      {{ a.user.name }} {{ a.user.lastname }}
+                    </a>
+                  </td>
+                  <td>
+                    {% if a.vehiculo_planificado %}
+                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_planificado_id) }}" class="link-user">
+                      {{ a.vehiculo_planificado.label() }}
+                    </a>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td>
+                    {% if a.vehiculo_reportado %}
+                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_reportado_id) }}" class="link-user">
+                      {{ a.vehiculo_reportado.label() }}
+                    </a>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td class="text-right" data-sort-value="{{ a.km if a.km is not none else '' }}">
+                    {% if a.km is not none %}{{ '%.0f'|format(a.km) }}{% else %}—{% endif %}
+                  </td>
+                  <td>{{ a.conductor_odoo or '—' }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin cruces de vehículo en el rango</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header {% if not mismatch %}collapsed{% endif %}" data-target="#collapseMismatch" role="button" aria-expanded="{{ 'true' if mismatch else 'false' }}">
+          <h6 class="auditoria-section-title text-danger mb-0">
+            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-user-slash"></i></span>
+            Conductor distinto
+            <span class="badge-count badge-count-danger">{{ mismatch|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseMismatch" class="collapse {% if mismatch %}show{% endif %}">
+          {{ tabla_odometros('auditMismatchTable', mismatch) }}
+        </div>
+      </div>
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header collapsed" data-target="#collapseSinKm" role="button" aria-expanded="false">
+          <h6 class="auditoria-section-title text-warning mb-0">
+            <span class="section-icon-wrap section-icon-wrap--warning"><i class="fas fa-tachometer-alt"></i></span>
+            Sin kilómetros
+            <span class="badge-count">{{ sin_km|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseSinKm" class="collapse">
+          {{ tabla_odometros('auditSinKmTable', sin_km) }}
+        </div>
+      </div>
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header collapsed" data-target="#collapseSinPlan" role="button" aria-expanded="false">
+          <h6 class="auditoria-section-title text-info mb-0">
+            <span class="section-icon-wrap section-icon-wrap--info"><i class="fas fa-route"></i></span>
+            Sin planificar
+            <span class="badge-count">{{ sin_planificar|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseSinPlan" class="collapse">
+          {{ tabla_odometros('auditSinPlanTable', sin_planificar) }}
+        </div>
+      </div>
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header collapsed" data-target="#collapseOk" role="button" aria-expanded="false">
+          <h6 class="auditoria-section-title text-muted mb-0">
+            <span class="section-icon-wrap"><i class="fas fa-archive"></i></span>
+            Histórico / OK recientes
+            <span class="badge-count">{{ historial_ok|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseOk" class="collapse">
+          {{ tabla_odometros('auditOkTable', historial_ok) }}
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+document.querySelectorAll('.auditoria-section-header[data-target]').forEach(function(header) {
+  header.addEventListener('click', function() {
+    var target = document.querySelector(header.getAttribute('data-target'));
+    if (!target) return;
+    var open = target.classList.contains('show');
+    target.classList.toggle('show', !open);
+    header.classList.toggle('collapsed', open);
+    header.setAttribute('aria-expanded', open ? 'false' : 'true');
+  });
+});
+document.querySelectorAll('.auditoria-stat-link[data-audit-target]').forEach(function(el) {
+  el.addEventListener('click', function() {
+    var sel = el.getAttribute('data-audit-target');
+    var panel = document.querySelector(sel);
+    var header = document.querySelector('.auditoria-section-header[data-target="' + sel + '"]');
+    if (panel) {
+      panel.classList.add('show');
+      if (header) {
+        header.classList.remove('collapsed');
+        header.setAttribute('aria-expanded', 'true');
+      }
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+function forzarSyncVehiculos() {
+  var desde = document.getElementById('fechaDesde').value;
+  var hasta = document.getElementById('fechaHasta').value;
+  if (!desde || !hasta) {
+    Swal.fire('Fechas', 'Indica desde y hasta.', 'warning');
+    return;
+  }
+  Swal.fire({
+    title: '¿Sincronizar vehículos?',
+    text: 'Flota + odómetros del ' + desde + ' al ' + hasta + '.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Sincronizar',
+    cancelButtonText: 'Cancelar'
+  }).then(function(result) {
+    if (!result.isConfirmed) return;
+    Swal.fire({ title: 'Sincronizando…', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
+    fetch('{{ url_for("sync.sync_vehiculos_manual") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha_desde: desde, fecha_hasta: hasta })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.success) {
+        Swal.fire('Listo', 'Sync completada. Recargando…', 'success').then(function() {
+          location.reload();
+        });
+      } else {
+        Swal.fire('Error', res.error || 'Falló la sync', 'error');
+      }
+    })
+    .catch(function(e) {
+      Swal.fire('Error', String(e), 'error');
+    });
+  });
+}
+</script>
+{% endblock %}

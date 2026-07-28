@@ -60,3 +60,35 @@ class BaseSyncAdapter(ABC):
         Por defecto vacío: adapters sin time off no rompen el sync.
         """
         return []
+
+    def get_diff_vehiculos(self) -> dict:
+        """
+        Opcional. Diff de flota (fleet.vehicle) vs Vehiculo local.
+        {
+          'nuevos': [{
+            'odoo_id': 1, 'nombre': '...', 'matricula': '...',
+            'marca': '...', 'modelo': '...', 'active': True,
+            'driver_partner_id': 10, 'driver_name': '...', 'cambios': {},
+          }],
+          'actualizados': [...],
+          'sin_cambios': [...],
+          'error': None,  # str si el módulo Fleet no está disponible
+        }
+        """
+        return {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'error': 'No implementado'}
+
+    def get_odometros_diarios(self, fecha=None, fecha_hasta=None) -> list:
+        """
+        Opcional. Lecturas de odómetro (fleet.vehicle.odometer).
+        fecha / fecha_hasta: 'YYYY-MM-DD' (si solo fecha → ese día).
+        [
+          {
+            'odoo_vehicle_id': 1,
+            'date': '2026-07-28',
+            'value': 12345.0,
+            'driver_partner_id': 10,
+            'driver_name': 'Juan Pérez',
+          }
+        ]
+        """
+        return []

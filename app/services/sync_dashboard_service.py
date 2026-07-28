@@ -113,6 +113,11 @@ def get_sync_panel_context():
             enabled = cfg['fichajes_enabled']
             next_run = SyncConfigService.estimate_next_fichajes(cfg)
             retro_next_run = SyncConfigService.estimate_next_fichajes_retro(cfg)
+        elif mod['key'] == 'vehiculos':
+            schedule = SyncConfigService.format_vehiculos_schedule(cfg)
+            enabled = cfg['vehiculos_enabled']
+            next_run = SyncConfigService.estimate_next_vehiculos(cfg)
+            retro_next_run = SyncConfigService.estimate_next_vehiculos_retro(cfg)
         else:
             schedule = SyncConfigService.format_master_schedule(cfg)
             enabled = cfg.get(f"{mod['key']}_enabled", True)

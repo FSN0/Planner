@@ -290,11 +290,56 @@
 .trace-panel {
   border-color: var(--color-border-strong, #e2e8f0) !important;
   border-radius: var(--radius-md, 0.625rem);
-  overflow: hidden;
+  overflow: visible;
   background: var(--color-surface, #fff);
 }
 
 .trace-filters {
   background: #f8fafc !important;
   border-color: var(--color-border-strong, #e2e8f0) !important;
+}
+
+/* Secciones por día (rango) */
+.person-day-timeline-container--range {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.person-day-timeline-day {
+  margin: 0;
+}
+
+.person-day-timeline-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.55rem;
+  padding: 0.4rem 0.6rem;
+  background: #f1f5f9;
+  border: 1px solid var(--color-border-strong, #e2e8f0);
+  border-radius: var(--radius-sm, 0.375rem);
+}
+
+.person-day-timeline-day-date {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text, #0f172a);
+  letter-spacing: 0.01em;
+}
+
+.person-day-timeline-day-date i {
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.7rem;
+}
+
+.person-day-timeline-day-body {
+  padding-left: 0.15rem;
+}
+
+.person-day-timeline-empty--compact {
+  padding: 0.85rem 0.75rem;
+  font-size: 0.74rem;
 }

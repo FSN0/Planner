@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}Ficha: {{ vehiculo.label() }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .vehicle-history-acc {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .vehicle-history-acc.is-open {
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.35);
+  }
+  .vehicle-history-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    min-height: 3.25rem;
+    background: #fff;
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+  }
+  .vehicle-history-toggle:hover { background: #f8fafc; }
+  .vehicle-history-toggle:focus { outline: none; box-shadow: inset 0 0 0 2px #93c5fd; }
+  .vehicle-history-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 0.85rem;
+  }
+  .vehicle-history-text { flex: 1; min-width: 0; }
+  .vehicle-history-title {
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.25;
+  }
+  .vehicle-history-sub {
+    display: block;
+    font-size: 0.72rem;
+    color: #64748b;
+    margin-top: 0.15rem;
+  }
+  .vehicle-history-chevron {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+  .vehicle-history-acc.is-open .vehicle-history-chevron { transform: rotate(180deg); }
+  .vehicle-history-body {
+    display: none;
+    padding: 0.85rem 1rem 1rem;
+    background: #fcfcfd;
+    border-top: 1px solid #e2e8f0;
+  }
+  .vehicle-history-acc.is-open > .vehicle-history-body { display: block; }
+  .vehicle-history-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.55rem 0.75rem;
+    margin-bottom: 0.85rem;
+  }
+  .vehicle-history-controls .config-field label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+  }
+  .vehicle-history-controls .form-control {
+    min-width: 5.5rem;
+    max-width: 7rem;
+  }
+  .vehicle-history-scroll {
+    max-height: min(420px, 55vh);
+    overflow: auto;
+  }
+  .vehicle-history-meta {
+    font-size: 0.72rem;
+    margin-top: 0.55rem;
+  }
+  .vehicle-history-loading {
+    padding: 1.25rem 0.25rem;
+    font-size: 0.82rem;
+    color: #64748b;
+  }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main entity-panel-page entity-panel-page--vehicle">
+
+    <article class="entity-panel-card">
+      <header class="entity-panel-card-top">
+        <div class="entity-panel-toolbar-start">
+          <a href="{{ url_for('admin.vehiculos') }}" class="entity-panel-back">
+            <i class="fas fa-arrow-left"></i> Vehículos
+          </a>
+          <span class="entity-type-marker"><i class="fas fa-car"></i> Vehículo</span>
+        </div>
+        <div class="entity-panel-actions">
+          {% if current_user.role in ['admin', 'laboral'] %}
+          <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-clipboard-check"></i> Auditoría
+          </a>
+          {% endif %}
+        </div>
+      </header>
+
+      <div class="entity-hero-accent" aria-hidden="true"></div>
+      <div class="entity-hero-body entity-hero-body--full">
+        <div class="entity-hero-main">
+          <div class="entity-hero-title-row">
+            <div class="entity-hero-icon-wrap">
+              <div class="entity-hero-icon">
+                <i class="fas fa-car"></i>
+              </div>
+            </div>
+            <div class="entity-hero-title-text">
+              <h1 class="entity-hero-name">{{ vehiculo.label() }}</h1>
+              <p class="entity-hero-subtitle">
+                {% set marca_modelo = ((vehiculo.marca or '') ~ ' ' ~ (vehiculo.modelo or ''))|trim %}
+                {% if marca_modelo %}
+                  <span>{{ marca_modelo }}</span>
+                {% else %}
+                  <span class="text-muted">Sin marca/modelo</span>
+                {% endif %}
+                {% if vehiculo.active %}
+                  <span class="entity-status-badge entity-status-badge--active">Activo</span>
+                {% else %}
+                  <span class="entity-status-badge entity-status-badge--inactive">Inactivo</span>
+                {% endif %}
+              </p>
+            </div>
+          </div>
+
+          <div class="entity-meta-grid">
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Matrícula</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not vehiculo.matricula }}">
+                {{ vehiculo.matricula or '—' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Marca / Modelo</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not marca_modelo }}">
+                {{ marca_modelo or '—' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Conductor Odoo</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not vehiculo.odoo_driver_name }}">
+                {{ vehiculo.odoo_driver_name or '—' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">Odómetro Odoo</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if vehiculo.odoo_odometer_value is none }}">
+                {% if vehiculo.odoo_odometer_value is not none %}
+                  {{ '%.0f'|format(vehiculo.odoo_odometer_value) }} km
+                  {% if vehiculo.odoo_odometer_date %}
+                    <span class="text-muted">({{ vehiculo.odoo_odometer_date.strftime('%d/%m/%Y') }})</span>
+                  {% endif %}
+                {% else %}
+                  —
+                {% endif %}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% include "components/_entity_stats.html" %}
+    </article>
+
+    <section class="entity-calendar-zone entity-vehicles-zone" style="padding:0; background:transparent; border:0; box-shadow:none;">
+      <div class="vehicle-history-acc{% if history_open %} is-open{% endif %}" id="vehicleHistoryAcc" data-vehicle-id="{{ vehiculo.id }}">
+        <button type="button" class="vehicle-history-toggle" id="vehicleHistoryToggle" aria-expanded="{{ 'true' if history_open else 'false' }}">
+          <span class="vehicle-history-icon"><i class="fas fa-history"></i></span>
+          <span class="vehicle-history-text">
+            <span class="vehicle-history-title">Historial de uso</span>
+            <span class="vehicle-history-sub">Planificado + odómetros Odoo · despliega para consultar</span>
+          </span>
+          <i class="fas fa-chevron-down vehicle-history-chevron"></i>
+        </button>
+        <div class="vehicle-history-body" id="vehicleHistoryBody">
+          <div class="vehicle-history-controls">
+            <div class="config-field">
+              <label for="historyDaysPreset">Periodo</label>
+              <select id="historyDaysPreset" class="form-control form-control-sm">
+                <option value="7" {% if history_days == 7 %}selected{% endif %}>7 días</option>
+                <option value="30" {% if history_days == 30 %}selected{% endif %}>30 días</option>
+                <option value="90" {% if history_days == 90 %}selected{% endif %}>90 días</option>
+                <option value="180" {% if history_days == 180 %}selected{% endif %}>180 días</option>
+                <option value="365" {% if history_days == 365 %}selected{% endif %}>365 días</option>
+                <option value="730" {% if history_days == 730 %}selected{% endif %}>730 días</option>
+                <option value="custom" {% if history_days not in [7, 30, 90, 180, 365, 730] %}selected{% endif %}>Personalizado</option>
+              </select>
+            </div>
+            <div class="config-field" id="historyDaysCustomWrap" style="{% if history_days in [7, 30, 90, 180, 365, 730] %}display:none;{% endif %}">
+              <label for="historyDaysCustom">Días</label>
+              <input type="number" id="historyDaysCustom" class="form-control form-control-sm"
+                     min="1" max="730" value="{{ history_days }}" placeholder="1–730">
+            </div>
+            <div class="config-field">
+              <label>&nbsp;</label>
+              <button type="button" class="btn-admin btn-admin-primary btn-admin-sm" id="historyDaysApply">
+                <i class="fas fa-search"></i> Consultar
+              </button>
+            </div>
+          </div>
+          <div id="vehicleHistoryContent">
+            {% if history_open %}
+              {% include "components/_vehicle_history_table.html" %}
+            {% else %}
+              <p class="vehicle-history-loading mb-0">Abre el historial o pulsa Consultar para cargar datos.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="entity-calendar-zone">
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Uso y planificación</h2>
+      <div id="vehicle-calendar" class="univ-calendar-root" style="min-height: 500px;"></div>
+    </section>
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    window.vehicleCalendar = new UniversalCalendarManager('vehicle-calendar', {
+        context: 'vehiculo',
+        id: {{ vehiculo.id }},
+        mode: 'empleados',
+        entityName: {{ vehiculo.label()|tojson }},
+        hideTitle: true,
+        readonly: {{ (not can_edit_calendar)|tojson }}
+    });
+
+    var acc = document.getElementById('vehicleHistoryAcc');
+    var toggle = document.getElementById('vehicleHistoryToggle');
+    var content = document.getElementById('vehicleHistoryContent');
+    var preset = document.getElementById('historyDaysPreset');
+    var customWrap = document.getElementById('historyDaysCustomWrap');
+    var customInput = document.getElementById('historyDaysCustom');
+    var applyBtn = document.getElementById('historyDaysApply');
+    var historialUrl = {{ url_for('admin.vehicle_panel_historial', vehiculo_id=vehiculo.id)|tojson }};
+    var loadedDays = {{ history_days|tojson }};
+    var hasLoaded = {{ history_open|tojson }};
+
+    function setOpen(open) {
+        acc.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function selectedDays() {
+        var p = preset.value;
+        if (p === 'custom') {
+            var n = parseInt(customInput.value, 10);
+            if (!n || n < 1) n = 30;
+            if (n > 730) n = 730;
+            return n;
+        }
+        return parseInt(p, 10) || 30;
+    }
+
+    function syncCustomVisibility() {
+        customWrap.style.display = preset.value === 'custom' ? '' : 'none';
+    }
+
+    function loadHistory(days, force) {
+        if (!force && hasLoaded && days === loadedDays) return Promise.resolve();
+        content.innerHTML = '<p class="vehicle-history-loading mb-0"><i class="fas fa-spinner fa-spin"></i> Cargando historial…</p>';
+        return fetch(historialUrl + '?days=' + encodeURIComponent(days), {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+        }).then(function(html) {
+            content.innerHTML = html;
+            loadedDays = days;
+            hasLoaded = true;
+            try {
+                var url = new URL(window.location.href);
+                url.searchParams.set('history_days', String(days));
+                url.searchParams.set('history_open', '1');
+                window.history.replaceState({}, '', url.toString());
+            } catch (e) {}
+        }).catch(function() {
+            content.innerHTML = '<p class="text-danger mb-0" style="padding:0.75rem 0;">No se pudo cargar el historial.</p>';
+        });
+    }
+
+    preset.addEventListener('change', syncCustomVisibility);
+
+    toggle.addEventListener('click', function() {
+        var willOpen = !acc.classList.contains('is-open');
+        setOpen(willOpen);
+        if (willOpen) loadHistory(selectedDays(), false);
+    });
+
+    applyBtn.addEventListener('click', function() {
+        var days = selectedDays();
+        customInput.value = days;
+        setOpen(true);
+        loadHistory(days, true);
+    });
+
+    syncCustomVisibility();
+});
+</script>
+{% endblock %}

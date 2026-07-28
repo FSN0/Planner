@@ -20,7 +20,7 @@
   <nav class="sidebar-nav-wrap" aria-label="Navegación principal">
     <ul class="sidebar-nav">
       <li>
-        <a href="{% if current_user.role == 'jefe_obra' %}{{ url_for('jefe.panel') }}{% elif current_user.role == 'admin' %}{{ url_for('admin.panel') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" class="sidebar-link {% if request.endpoint in ['main.dashboard', 'admin.panel', 'jefe.panel'] %}is-active{% endif %}">
+        <a href="{% if current_user.role == 'jefe_obra' %}{{ url_for('jefe.panel') }}{% elif current_user.role == 'admin' %}{{ url_for('admin.panel') }}{% elif current_user.role == 'laboral' %}{{ url_for('admin.ausencias_list') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" class="sidebar-link {% if request.endpoint in ['main.dashboard', 'admin.panel', 'jefe.panel', 'admin.ausencias_list'] and current_user.role == 'laboral' %}is-active{% elif request.endpoint in ['main.dashboard', 'admin.panel', 'jefe.panel'] and current_user.role != 'laboral' %}is-active{% endif %}">
           <i class="fas fa-home fa-fw"></i><span>Inicio</span>
         </a>
       </li>
@@ -54,6 +54,52 @@
     </ul>
     {% endif %}
 
+    {% if current_user.role == 'laboral' %}
+    <div class="sidebar-section-title">Planificación</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('admin.obras_detailed') }}" class="sidebar-link {% if request.endpoint == 'admin.obras_detailed' %}is-active{% endif %}">
+          <i class="fas fa-th-large fa-fw"></i><span>Tablero</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('admin.ausencias_list') }}" class="sidebar-link {% if 'ausencias' in request.endpoint %}is-active{% endif %}">
+          <i class="fas fa-umbrella-beach fa-fw"></i><span>Ausencias</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-title">Control</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('admin.system_logs', category='solicitud') }}" class="sidebar-link {% if 'system_logs' in request.endpoint %}is-active{% endif %}">
+          <i class="fas fa-history fa-fw"></i>
+          <span>Logs</span>
+          {% if unread_laboral_count and unread_laboral_count > 0 %}
+          <span class="sidebar-badge sidebar-badge--laboral" title="Logs laborales sin acusar">{{ unread_laboral_count }}</span>
+          {% endif %}
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_fichajes' %}is-active{% endif %}">
+          <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('admin.vehiculos') }}" class="sidebar-link {% if request.endpoint in ['admin.vehiculos', 'admin.vehicle_panel'] %}is-active{% endif %}">
+          <i class="fas fa-car fa-fw"></i><span>Vehículos</span>
+        </a>
+      </li>
+      {% if tenant_has_odoo %}
+      <li>
+        <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_vehiculos' %}is-active{% endif %}">
+          <i class="fas fa-clipboard-check fa-fw"></i><span>Auditoría vehículos</span>
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+    {% endif %}
+
     {% if current_user.role in ['admin', 'jefe_obra'] %}
     <div class="sidebar-section-title">Personal</div>
     <ul class="sidebar-nav">
@@ -64,11 +110,16 @@
         </a>
       </li>
       <li>
-        <a href="{{ url_for('admin.companies') }}" class="sidebar-link {% if 'companies' in request.endpoint %}is-active{% endif %}">
+        <a href="{{ url_for('admin.companies') }}" class="sidebar-link {% if 'companies' in request.endpoint or request.endpoint == 'admin.company_panel' %}is-active{% endif %}">
           <i class="fas fa-industry fa-fw"></i><span>Subcontratas</span>
         </a>
       </li>
       {% endif %}
+      <li>
+        <a href="{{ url_for('admin.vehiculos') }}" class="sidebar-link {% if request.endpoint in ['admin.vehiculos', 'admin.vehicle_panel'] %}is-active{% endif %}">
+          <i class="fas fa-car fa-fw"></i><span>Vehículos</span>
+        </a>
+      </li>
       <li>
         <a href="{{ url_for('admin.solicitudes_list') }}" class="sidebar-link {% if 'solicitud' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-user-plus fa-fw"></i>
@@ -97,6 +148,13 @@
           <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
         </a>
       </li>
+      {% if current_user.role == 'admin' and tenant_has_odoo %}
+      <li>
+        <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_vehiculos' %}is-active{% endif %}">
+          <i class="fas fa-car fa-fw"></i><span>Auditoría vehículos</span>
+        </a>
+      </li>
+      {% endif %}
 
       {% if show_integrations_nav %}
       <li class="sidebar-nav-group{% if integrations_nav_open %} is-open{% endif %}">
@@ -142,8 +200,17 @@
         <a href="{{ url_for('admin.system_logs') }}" class="sidebar-link {% if 'system_logs' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-history fa-fw"></i>
           <span>Logs</span>
-          {% if unread_logs_count and unread_logs_count > 0 %}
-            <span class="sidebar-badge sidebar-badge--danger">{{ unread_logs_count }}</span>
+          {% set show_classic_badge = unread_logs_count and unread_logs_count > 0 %}
+          {% set show_laboral_badge = unread_laboral_count and unread_laboral_count > 0 %}
+          {% if show_classic_badge or show_laboral_badge %}
+          <span class="sidebar-badges">
+            {% if show_classic_badge %}
+              <span class="sidebar-badge sidebar-badge--danger" title="Avisos clásicos">{{ unread_logs_count }}</span>
+            {% endif %}
+            {% if show_laboral_badge %}
+              <span class="sidebar-badge sidebar-badge--laboral" title="Logs laborales sin acusar">{{ unread_laboral_count }}</span>
+            {% endif %}
+          </span>
           {% endif %}
         </a>
       </li>

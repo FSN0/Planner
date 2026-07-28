@@ -171,7 +171,7 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
     only_future: fecha_inicio > hoy (aún no han empezado).
     Admin: todas. Jefe: personal con asignación en sus obras en el periodo.
     """
-    from app.models import ROLE_ADMIN, ROLE_JEFE, Obra
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, Obra
 
     today = today_local()
     horizon = today + timedelta(days=horizon_days)
@@ -207,7 +207,7 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
         if not user_ids:
             return []
         q = q.filter(AusenciaPlanificada.user_id.in_(user_ids))
-    elif actor_user.role != ROLE_ADMIN:
+    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
         return []
 
     return (
@@ -219,7 +219,7 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
 
 def get_leaves_scoped(actor_user, estado=None, limit=200):
     """Listado histórico / filtro, acotado al ámbito del rol. Default: solo aprobadas."""
-    from app.models import ROLE_ADMIN, ROLE_JEFE, Obra
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, Obra
 
     today = today_local()
     q = AusenciaPlanificada.query
@@ -248,7 +248,7 @@ def get_leaves_scoped(actor_user, estado=None, limit=200):
         if not user_ids:
             return []
         q = q.filter(AusenciaPlanificada.user_id.in_(user_ids))
-    elif actor_user.role != ROLE_ADMIN:
+    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
         return []
 
     return q.order_by(AusenciaPlanificada.fecha_inicio.desc()).limit(limit).all()

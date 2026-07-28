@@ -1,0 +1,50 @@
+{% if history_rows %}
+<div class="admin-table-scroll vehicle-history-scroll">
+  <table class="filterable-table admin-data-table mb-0" id="vehicleHistoryTable">
+    <thead>
+      <tr class="header-row">
+        <th>Fecha</th>
+        <th>Operario / Conductor</th>
+        <th>Obra</th>
+        <th>Km Odoo</th>
+        <th>Conductor Odoo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in history_rows %}
+      <tr class="data-row">
+        <td>{{ row.fecha.strftime('%d/%m/%Y') }}</td>
+        <td>
+          {% if row.user_id %}
+          <a href="{{ url_for('admin.worker_panel', user_id=row.user_id) }}" class="table-link-primary">
+            {{ row.operario }}
+          </a>
+          {% else %}
+            {{ row.operario }}
+          {% endif %}
+        </td>
+        <td>
+          {% if row.obra_id %}
+          <a href="{{ url_for('admin.obra_panel', obra_id=row.obra_id) }}" class="table-link-primary">
+            {{ row.obra_label }}
+          </a>
+          {% else %}
+            —
+          {% endif %}
+        </td>
+        <td>{% if row.km is not none %}{{ '%.0f'|format(row.km) }}{% else %}—{% endif %}</td>
+        <td>{{ row.conductor or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="vehicle-history-meta text-muted mb-0">
+  {{ history_rows|length }} registro{{ 's' if history_rows|length != 1 else '' }}
+  · últimos {{ history_days }} días
+</p>
+{% else %}
+<p class="text-muted mb-0" style="padding:0.75rem 0;">
+  Sin uso planificado ni odómetros Odoo en los últimos {{ history_days }} días.
+</p>
+{% endif %}

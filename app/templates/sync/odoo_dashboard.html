@@ -228,6 +228,19 @@
           <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('fichajes')">
             <i class="fas fa-robot"></i> En vivo ahora
           </button>
+          {% elif mod.key == 'vehiculos' %}
+          <a href="{{ url_for('sync.preview_vehiculos') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader('Vehículos')">
+            <i class="fas fa-search"></i> Preview
+          </a>
+          <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost btn-sm">
+            <i class="fas fa-car"></i> Auditoría
+          </a>
+          <button type="button" class="btn-admin btn-admin-ghost btn-sm" onclick="runSyncNow('vehiculos-retro')">
+            <i class="fas fa-history"></i> Retro ahora
+          </button>
+          <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('vehiculos')">
+            <i class="fas fa-robot"></i> En vivo ahora
+          </button>
           {% endif %}
         </div>
       </article>
@@ -469,6 +482,51 @@
               <input type="number" class="form-control" name="sync_fichajes_retro_minute" min="0" max="59" value="{{ config.fichajes_retro_minute }}">
             </div>
           </div>
+
+          <h6 class="sync-config-group-title">Vehículos / flota en vivo</h6>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <div class="custom-control custom-switch mb-2">
+                <input type="checkbox" class="custom-control-input" id="cfgVeh" name="sync_vehiculos_enabled" {% if config.vehiculos_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgVeh">Vehículos activos</label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label-sm">Intervalo (min)</label>
+              <input type="number" class="form-control" name="sync_vehiculos_interval" min="5" max="180" value="{{ config.vehiculos_interval }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Desde h</label>
+              <input type="number" class="form-control" name="sync_vehiculos_hour_start" min="0" max="23" value="{{ config.vehiculos_hour_start }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Hasta h</label>
+              <input type="number" class="form-control" name="sync_vehiculos_hour_end" min="0" max="23" value="{{ config.vehiculos_hour_end }}">
+            </div>
+          </div>
+
+          <h6 class="sync-config-group-title">Vehículos retrospectivos</h6>
+          <p class="text-muted small mb-2">Reimporta odómetros de días anteriores para la auditoría informativa.</p>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <div class="custom-control custom-switch mb-2">
+                <input type="checkbox" class="custom-control-input" id="cfgVehRetro" name="sync_vehiculos_retro_enabled" {% if config.vehiculos_retro_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="cfgVehRetro">Revisión retrospectiva activa</label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label-sm">Días hacia atrás</label>
+              <input type="number" class="form-control" name="sync_vehiculos_retro_days" min="1" max="365" value="{{ config.vehiculos_retro_days }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Hora</label>
+              <input type="number" class="form-control" name="sync_vehiculos_retro_hour" min="0" max="23" value="{{ config.vehiculos_retro_hour }}">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label-sm">Minuto</label>
+              <input type="number" class="form-control" name="sync_vehiculos_retro_minute" min="0" max="59" value="{{ config.vehiculos_retro_minute }}">
+            </div>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
@@ -607,6 +665,8 @@ function runSyncNow(moduleKey) {
     ausencias: 'ausencias / time off (hr.leave)',
     fichajes: 'fichajes del día (en vivo)',
     'fichajes-retro': 'fichajes retrospectivos (últimos ' + {{ config.fichajes_retro_days }} + ' días)',
+    vehiculos: 'vehículos / flota (master + odómetros de hoy)',
+    'vehiculos-retro': 'vehículos retrospectivos (últimos ' + {{ config.vehiculos_retro_days }} + ' días)',
   };
   const label = labels[moduleKey] || moduleKey;
   Swal.fire({

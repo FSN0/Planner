@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify, url_for
 from flask_login import login_required, current_user
 # IMPORTAMOS db AQUÍ
 from app import db 
-from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE
+from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
+from app.services.permission_service import is_laboral
 from datetime import datetime, timedelta
 import json
 from collections import defaultdict # AÑADIDO PARA LA LÓGICA DE AGRUPACIÓN
@@ -32,6 +33,8 @@ def recursos_activos():
     elif current_user.role == ROLE_JEFE:
         # MAGIA: Si es jefe, solo traemos las que tienen su ID
         obras = Obra.query.filter_by(is_deleted=False, jefe_obra_id=current_user.id).order_by(Obra.nombre).all()
+    elif current_user.role == ROLE_LABORAL:
+        obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
     else:
         obras = []
         
@@ -54,6 +57,8 @@ def recursos_activos():
 @api_bp.route('/toggle_pin_obra', methods=['POST'])
 @login_required
 def toggle_pin_obra():
+    if is_laboral(current_user):
+        return jsonify({'success': False, 'message': 'Modo solo lectura'}), 403
     data = request.get_json()
     obra_id = data.get('obra_id')
     if not obra_id: return jsonify({'success': False}), 400
@@ -71,6 +76,8 @@ def toggle_pin_obra():
 @api_bp.route('/reorder_pinned_obras', methods=['POST'])
 @login_required
 def reorder_pinned_obras():
+    if is_laboral(current_user):
+        return jsonify({'success': False, 'message': 'Modo solo lectura'}), 403
     data = request.get_json()
     ordered_ids = data.get('ordered_ids', [])
     if not ordered_ids: return jsonify({'success': False})
@@ -137,10 +144,30 @@ def get_universal_calendar_events():
         assigned_dates = {a.fecha for a in asignaciones}
 
         raw_events = []
+        vehicle_by_date = {}
+        try:
+            from app.models import AsignacionVehiculo
+            asig_veh = AsignacionVehiculo.query.filter(
+                AsignacionVehiculo.user_id == entity_id,
+                AsignacionVehiculo.fecha >= start_date,
+                AsignacionVehiculo.fecha < end_date,
+            ).all()
+            for av in asig_veh:
+                v = av.vehiculo
+                if not v and av.vehiculo_id:
+                    from app.models import Vehiculo
+                    v = Vehiculo.query.get(av.vehiculo_id)
+                vehicle_by_date[av.fecha] = v.label() if v else f"Vehículo #{av.vehiculo_id}"
+        except Exception:
+            vehicle_by_date = {}
+
         for a in asignaciones:
             obra = a.obra
             if not obra and a.obra_id: obra = Obra.query.get(a.obra_id)
             obra_name = _obra_label(obra)
+            v_label = vehicle_by_date.get(a.fecha)
+            if v_label:
+                obra_name = f"{obra_name} · {v_label}"
             obra_color = obra.color if obra else "#3b82f6"
             leave = leave_covering(user_leaves, a.fecha)
             title, overlay_color, is_overlay = apply_leave_overlay_title(obra_name, leave)
@@ -153,12 +180,31 @@ def get_universal_calendar_events():
                 'extendedProps': {
                     'type': 'asignacion',
                     'obra_id': obra.id if obra else 0,
+                    'vehiculo_label': v_label,
                     'en_ausencia': is_overlay,
                     'ausencia_tipo': leave.tipo if leave else None,
                     'ausencia_estado': leave.estado if leave else None,
                 }
             })
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
+
+        # Días con vehículo pero sin obra
+        raw_veh_only = []
+        for d, v_label in vehicle_by_date.items():
+            if d in assigned_dates:
+                continue
+            raw_veh_only.append({
+                'title': f"Vehículo: {v_label}",
+                'start_date': d,
+                'end_date': d,
+                'color': '#64748b',
+                'extendedProps': {
+                    'type': 'vehiculo',
+                    'vehiculo_label': v_label,
+                }
+            })
+        if raw_veh_only:
+            events.extend(merge_events_v2(raw_veh_only, group_by=['title', 'color']))
 
         # Ausencias en días SIN asignación (sigue viéndose el periodo de vacaciones)
         leaves = AusenciaPlanificada.query.filter(
@@ -559,6 +605,203 @@ def get_universal_calendar_events():
         # Usamos nuestro motor de fusión para agrupar los días seguidos y que quede limpio
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
 
+    # =====================================================================
+    # 5. CONTEXTO: FICHA DE VEHÍCULO
+    # =====================================================================
+    elif context == 'vehiculo':
+        from app.models import AsignacionVehiculo, RegistroOdometro, SolicitudVehiculo, Vehiculo
+        from app.services.vehicle_sync_service import _build_user_indexes, _match_driver_user
+
+        vehiculo = Vehiculo.query.get(entity_id)
+        if not vehiculo:
+            return jsonify([])
+
+        asig_veh = AsignacionVehiculo.query.filter(
+            AsignacionVehiculo.vehiculo_id == entity_id,
+            AsignacionVehiculo.fecha >= start_date,
+            AsignacionVehiculo.fecha < end_date,
+        ).order_by(AsignacionVehiculo.fecha).all()
+        planned_by_date = {av.fecha: av for av in asig_veh}
+
+        odo_regs = RegistroOdometro.query.filter(
+            RegistroOdometro.vehiculo_id == entity_id,
+            RegistroOdometro.fecha >= start_date,
+            RegistroOdometro.fecha < end_date,
+        ).order_by(RegistroOdometro.fecha).all()
+        odo_by_date = {r.fecha: r for r in odo_regs}
+
+        users_by_odoo, users_by_name = _build_user_indexes()
+        raw_events = []
+
+        def _obra_for_user_day(user_id, fecha):
+            if not user_id:
+                return None
+            obra_asig = Asignacion.query.filter_by(user_id=user_id, fecha=fecha).first()
+            if not obra_asig:
+                return None
+            return obra_asig.obra or (
+                Obra.query.get(obra_asig.obra_id) if obra_asig.obra_id else None
+            )
+
+        def _resolve_odoo_driver(reg):
+            matched = _match_driver_user(
+                reg.odoo_driver_partner_id,
+                reg.odoo_driver_name,
+                users_by_odoo,
+                users_by_name,
+            )
+            if matched:
+                return matched, f"{matched.name} {matched.lastname}", False
+            name = (reg.odoo_driver_name or '').strip()
+            if name:
+                return None, f"{name} (no está en el programa)", True
+            return None, "Uso Odoo (sin conductor)", True
+
+        all_dates = sorted(set(planned_by_date.keys()) | set(odo_by_date.keys()))
+        for fecha in all_dates:
+            av = planned_by_date.get(fecha)
+            reg = odo_by_date.get(fecha)
+
+            planned_worker = None
+            planned_name = None
+            if av:
+                planned_worker = av.user or (User.query.get(av.user_id) if av.user_id else None)
+                planned_name = (
+                    f"{planned_worker.name} {planned_worker.lastname}"
+                    if planned_worker else f"#{av.user_id}"
+                )
+
+            odoo_worker = None
+            odoo_title = None
+            odoo_external = False
+            has_odoo_usage = bool(
+                reg and (
+                    reg.valor is not None
+                    or (reg.odoo_driver_name or '').strip()
+                    or reg.odoo_driver_partner_id
+                )
+            )
+            if has_odoo_usage:
+                odoo_worker, odoo_title, odoo_external = _resolve_odoo_driver(reg)
+
+            # Caso 1: solo planificación
+            if av and not has_odoo_usage:
+                obra = _obra_for_user_day(av.user_id, fecha)
+                title = planned_name
+                if obra:
+                    title = f"{planned_name} · {_obra_label(obra)}"
+                color = "#0ea5e9"
+                if planned_worker and getattr(planned_worker, 'company_rel', None) and planned_worker.company_rel.color:
+                    color = planned_worker.company_rel.color
+                raw_events.append({
+                    'title': title,
+                    'start_date': fecha,
+                    'end_date': fecha,
+                    'color': color,
+                    'extendedProps': {
+                        'type': 'vehiculo',
+                        'source': 'planificado',
+                        'worker_id': av.user_id,
+                        'vehiculo_id': entity_id,
+                        'obra_id': obra.id if obra else None,
+                    },
+                })
+                continue
+
+            # Caso 2: solo uso Odoo (lo habitual si aún no hay AsignacionVehiculo)
+            if has_odoo_usage and not av:
+                obra = _obra_for_user_day(odoo_worker.id, fecha) if odoo_worker else None
+                title = odoo_title
+                if reg and reg.valor is not None:
+                    title = f"{title} · {int(reg.valor)} km"
+                if obra:
+                    title = f"{title} · {_obra_label(obra)}"
+                color = "#94a3b8" if odoo_external else (
+                    odoo_worker.company_rel.color
+                    if odoo_worker and getattr(odoo_worker, 'company_rel', None) and odoo_worker.company_rel.color
+                    else "#64748b"
+                )
+                raw_events.append({
+                    'title': title,
+                    'start_date': fecha,
+                    'end_date': fecha,
+                    'color': color,
+                    'extendedProps': {
+                        'type': 'vehiculo_odoo',
+                        'source': 'odoo',
+                        'worker_id': odoo_worker.id if odoo_worker else None,
+                        'vehiculo_id': entity_id,
+                        'obra_id': obra.id if obra else None,
+                        'external': odoo_external,
+                        'km': reg.valor if reg else None,
+                    },
+                })
+                continue
+
+            # Caso 3: planificación + Odoo el mismo día
+            if av and has_odoo_usage:
+                same_person = bool(
+                    odoo_worker and av.user_id and odoo_worker.id == av.user_id
+                )
+                obra = _obra_for_user_day(av.user_id, fecha)
+                title = planned_name
+                if obra:
+                    title = f"{planned_name} · {_obra_label(obra)}"
+                if reg and reg.valor is not None:
+                    title = f"{title} · {int(reg.valor)} km"
+                if not same_person and odoo_title:
+                    title = f"{title} | Odoo: {odoo_title}"
+                color = "#0ea5e9"
+                if planned_worker and getattr(planned_worker, 'company_rel', None) and planned_worker.company_rel.color:
+                    color = planned_worker.company_rel.color
+                if not same_person:
+                    color = "#f59e0b"  # mismatch planificado vs Odoo
+                raw_events.append({
+                    'title': title,
+                    'start_date': fecha,
+                    'end_date': fecha,
+                    'color': color,
+                    'extendedProps': {
+                        'type': 'vehiculo',
+                        'source': 'ambos',
+                        'worker_id': av.user_id,
+                        'vehiculo_id': entity_id,
+                        'obra_id': obra.id if obra else None,
+                        'odoo_external': odoo_external,
+                        'km': reg.valor if reg else None,
+                    },
+                })
+
+        events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
+
+        # Solicitudes abiertas de este vehículo
+        try:
+            solicitudes = SolicitudVehiculo.query.filter(
+                SolicitudVehiculo.vehiculo_id == entity_id,
+                SolicitudVehiculo.estado.in_(('PENDIENTE', 'EN_PROCESO')),
+                SolicitudVehiculo.fecha_inicio < end_date,
+                SolicitudVehiculo.fecha_fin >= start_date,
+            ).all()
+            for s in solicitudes:
+                emp = s.empleado
+                emp_name = f"{emp.name} {emp.lastname}" if emp else '?'
+                accion = (s.accion or 'ASIGNAR').upper()
+                title = f"{'BAJA' if accion == 'DESASIGNAR' else 'SOL'}: {emp_name}"
+                color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
+                end_to_draw = min(s.fecha_fin, end_date - timedelta(days=1))
+                events.append({
+                    "title": title,
+                    "start": s.fecha_inicio.strftime("%Y-%m-%d"),
+                    "end": (end_to_draw + timedelta(days=1)).strftime("%Y-%m-%d"),
+                    "color": color,
+                    "extendedProps": {
+                        "type": "solicitud_vehiculo",
+                        "worker_id": s.empleado_id,
+                        "vehiculo_id": entity_id,
+                    },
+                })
+        except Exception:
+            pass
 
     return jsonify(events)
 
@@ -720,12 +963,43 @@ def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color
 def person_day_timeline(user_id, fecha_str):
     from app.services.person_day_timeline_service import build_person_day_timeline
 
-    if current_user.role != ROLE_ADMIN:
+    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
 
     data = build_person_day_timeline(user_id, fecha_str)
     if not data:
         return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+    return jsonify(data)
+
+
+@api_bp.route('/person-day-timeline/<int:user_id>', methods=['GET'])
+@login_required
+def person_day_timeline_range(user_id):
+    """Rango de fechas: ?from=YYYY-MM-DD&to=YYYY-MM-DD (uno solo = un día)."""
+    from app.services.person_day_timeline_service import build_person_day_timeline_range
+
+    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
+        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+
+    fecha_from = request.args.get('from') or request.args.get('fecha_inicio')
+    fecha_to = request.args.get('to') or request.args.get('fecha_fin')
+
+    if not fecha_from and not fecha_to:
+        return jsonify({
+            'success': False,
+            'error': 'Indica from y/o to (YYYY-MM-DD)',
+        }), 400
+
+    if fecha_from and not fecha_to:
+        fecha_to = fecha_from
+    elif fecha_to and not fecha_from:
+        fecha_from = fecha_to
+
+    data = build_person_day_timeline_range(user_id, fecha_from, fecha_to)
+    if data is None:
+        return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+    if not data.get('success'):
+        return jsonify(data), 400
     return jsonify(data)
 
 # ==============================================================================

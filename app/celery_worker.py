@@ -121,22 +121,29 @@ celery.conf.beat_schedule = {
 
 @celery.task
 def sync_scheduler():
-    """Despachador configurable: master data nocturno + fichajes en vivo."""
+    """Despachador configurable: master data nocturno + fichajes/vehículos en vivo."""
     with app.app_context():
         from app.services.sync_config_service import SyncConfigService
 
         master_needed = False
         fichajes_needed = False
         retro_needed = False
+        vehiculos_needed = False
+        vehiculos_retro_needed = False
 
         def _check_tenant_schedule(_tenant_data):
             nonlocal master_needed, fichajes_needed, retro_needed
+            nonlocal vehiculos_needed, vehiculos_retro_needed
             if SyncConfigService.should_run_master_sync():
                 master_needed = True
             if SyncConfigService.should_run_fichajes_sync():
                 fichajes_needed = True
             if SyncConfigService.should_run_fichajes_retro_sync():
                 retro_needed = True
+            if SyncConfigService.should_run_vehiculos_sync():
+                vehiculos_needed = True
+            if SyncConfigService.should_run_vehiculos_retro_sync():
+                vehiculos_retro_needed = True
 
         try:
             _for_each_tenant(_check_tenant_schedule)
@@ -149,6 +156,12 @@ def sync_scheduler():
             if retro_needed:
                 app.logger.info(">>> Scheduler: lanzando sync retrospectiva de fichajes")
                 fichajes_retroactivos.delay()
+            if vehiculos_needed:
+                app.logger.info(">>> Scheduler: lanzando sync de vehículos en vivo")
+                vehiculos_en_vivo.delay()
+            if vehiculos_retro_needed:
+                app.logger.info(">>> Scheduler: lanzando sync retrospectiva de vehículos")
+                vehiculos_retroactivos.delay()
         finally:
             _cleanup_db_session()
 
@@ -264,6 +277,70 @@ def fichajes_retroactivos():
             _for_each_tenant(_run_for_tenant)
         except Exception as e:
             app.logger.error(f"!!! Error en sync retrospectiva de fichajes: {e}")
+        finally:
+            _cleanup_db_session()
+
+
+@celery.task
+def vehiculos_en_vivo():
+    with app.app_context():
+        from app.services.vehicle_sync_service import run_vehiculos_en_vivo
+        from app.services.sync_config_service import SyncConfigService
+        from app.utils.timezone_utils import utc_now
+
+        def _run_for_tenant(tenant_data):
+            t0 = time.time()
+            had_error = False
+            err_msg = None
+            app.logger.info(f">>> INICIANDO SYNC VEHÍCULOS EN VIVO ({tenant_data['subdominio']})")
+            try:
+                if not SyncConfigService.get_config()['vehiculos_enabled']:
+                    return
+                run_vehiculos_en_vivo(modo='Automático')
+                SyncConfigService.mark_vehiculos_sync_done()
+                app.logger.info(">>> Sincronización de vehículos en vivo completada.")
+            except Exception as e:
+                had_error = True
+                err_msg = str(e)
+                app.logger.error(f"!!! Error sync vehículos en vivo: {e}")
+            finally:
+                if had_error:
+                    duracion = int((time.time() - t0) * 1000)
+                    db.session.add(SyncLog(
+                        fecha=utc_now(),
+                        tipo='Vehículos',
+                        modo='Automático',
+                        nuevos=0, actualizados=0, finalizados=0, errores=1,
+                        detalles='Fallo en sincronización de vehículos del día.',
+                        estado='error',
+                        duracion_ms=duracion,
+                        mensaje_error=err_msg,
+                    ))
+
+        try:
+            _for_each_tenant(_run_for_tenant)
+        finally:
+            _cleanup_db_session()
+
+
+@celery.task
+def vehiculos_retroactivos():
+    with app.app_context():
+        from app.services.vehicle_sync_service import run_vehiculos_retro
+        from app.services.sync_config_service import SyncConfigService
+
+        def _run_for_tenant(_tenant_data):
+            if not SyncConfigService.get_config()['vehiculos_enabled']:
+                return
+            app.logger.info(">>> INICIANDO SYNC RETROSPECTIVA DE VEHÍCULOS (AUTOMÁTICO)")
+            run_vehiculos_retro(modo='Automático')
+            SyncConfigService.mark_vehiculos_retro_sync_done()
+            app.logger.info(">>> Revisión retrospectiva de vehículos completada.")
+
+        try:
+            _for_each_tenant(_run_for_tenant)
+        except Exception as e:
+            app.logger.error(f"!!! Error en sync retrospectiva de vehículos: {e}")
         finally:
             _cleanup_db_session()
 

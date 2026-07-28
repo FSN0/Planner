@@ -8,6 +8,7 @@ from app.services.solicitud_service import (
     build_comentarios_config,
     merge_comentarios_dates,
     merge_notas,
+    log_nueva_solicitud,
 )
 from app.services.email_service import send_email, notificar_nueva_solicitud, notificar_traslado_interno
 from app.services.core_assignment_service import CoreAssignmentService
@@ -259,6 +260,7 @@ def _create_solicitud_concreta_obj(jefe, worker, obra, dates, notas=None):
     )
     db.session.add(solicitud)
     db.session.commit()
+    log_nueva_solicitud(solicitud)
     return solicitud, "new"
 
 def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_id=None):

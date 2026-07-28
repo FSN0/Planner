@@ -11,6 +11,7 @@ DEFAULTS = {
     'sync_subcontratas_enabled': 'true',
     'sync_fichajes_enabled': 'true',
     'sync_ausencias_enabled': 'true',
+    'sync_vehiculos_enabled': 'true',
     'sync_master_hour': '3',
     'sync_master_minute': '0',
     'sync_fichajes_interval': '30',
@@ -20,9 +21,18 @@ DEFAULTS = {
     'sync_fichajes_retro_days': '30',
     'sync_fichajes_retro_hour': '2',
     'sync_fichajes_retro_minute': '30',
+    'sync_vehiculos_interval': '60',
+    'sync_vehiculos_hour_start': '7',
+    'sync_vehiculos_hour_end': '19',
+    'sync_vehiculos_retro_enabled': 'true',
+    'sync_vehiculos_retro_days': '14',
+    'sync_vehiculos_retro_hour': '3',
+    'sync_vehiculos_retro_minute': '15',
     'sync_last_master_date': '',
     'sync_last_fichajes_at': '',
     'sync_last_fichajes_retro_date': '',
+    'sync_last_vehiculos_at': '',
+    'sync_last_vehiculos_retro_date': '',
 }
 
 SYNC_MODULES = [
@@ -76,6 +86,16 @@ SYNC_MODULES = [
         'description': 'Cruza fichajes Odoo con la planificación. En vivo durante el día y revisión retrospectiva nocturna.',
         'default_schedule': 'Cada 30 min (07:00–19:00) + retrospectivo diario',
     },
+    {
+        'key': 'vehiculos',
+        'tipo_log': 'Vehículos',
+        'label': 'Vehículos / Flota',
+        'icon': 'fa-car',
+        'color': 'secondary',
+        'config_enabled': 'sync_vehiculos_enabled',
+        'description': 'Sincroniza flota (fleet.vehicle) y odómetros diarios. Auditoría informativa plan vs conductor Odoo.',
+        'default_schedule': 'Cada 60 min (07:00–19:00) + retrospectivo diario',
+    },
 ]
 
 
@@ -109,11 +129,19 @@ class SyncConfigService:
         cfg['fichajes_retro_days'] = int(cfg['sync_fichajes_retro_days'])
         cfg['fichajes_retro_hour'] = int(cfg['sync_fichajes_retro_hour'])
         cfg['fichajes_retro_minute'] = int(cfg['sync_fichajes_retro_minute'])
+        cfg['vehiculos_interval'] = int(cfg['sync_vehiculos_interval'])
+        cfg['vehiculos_hour_start'] = int(cfg['sync_vehiculos_hour_start'])
+        cfg['vehiculos_hour_end'] = int(cfg['sync_vehiculos_hour_end'])
+        cfg['vehiculos_retro_enabled'] = cfg['sync_vehiculos_retro_enabled'].lower() == 'true'
+        cfg['vehiculos_retro_days'] = int(cfg['sync_vehiculos_retro_days'])
+        cfg['vehiculos_retro_hour'] = int(cfg['sync_vehiculos_retro_hour'])
+        cfg['vehiculos_retro_minute'] = int(cfg['sync_vehiculos_retro_minute'])
         cfg['obras_enabled'] = cfg['sync_obras_enabled'].lower() == 'true'
         cfg['empleados_enabled'] = cfg['sync_empleados_enabled'].lower() == 'true'
         cfg['subcontratas_enabled'] = cfg['sync_subcontratas_enabled'].lower() == 'true'
         cfg['fichajes_enabled'] = cfg['sync_fichajes_enabled'].lower() == 'true'
         cfg['ausencias_enabled'] = cfg['sync_ausencias_enabled'].lower() == 'true'
+        cfg['vehiculos_enabled'] = cfg['sync_vehiculos_enabled'].lower() == 'true'
         cfg['master_enabled'] = (
             cfg['obras_enabled'] or cfg['empleados_enabled']
             or cfg['subcontratas_enabled'] or cfg['ausencias_enabled']
@@ -128,7 +156,9 @@ class SyncConfigService:
             'sync_subcontratas_enabled': data.get('sync_subcontratas_enabled'),
             'sync_fichajes_enabled': data.get('sync_fichajes_enabled'),
             'sync_ausencias_enabled': data.get('sync_ausencias_enabled'),
+            'sync_vehiculos_enabled': data.get('sync_vehiculos_enabled'),
             'sync_fichajes_retro_enabled': data.get('sync_fichajes_retro_enabled'),
+            'sync_vehiculos_retro_enabled': data.get('sync_vehiculos_retro_enabled'),
         }
         for k, v in bool_map.items():
             if v is not None:
@@ -143,6 +173,12 @@ class SyncConfigService:
             'sync_fichajes_retro_days': (1, 365, 'sync_fichajes_retro_days'),
             'sync_fichajes_retro_hour': (0, 23, 'sync_fichajes_retro_hour'),
             'sync_fichajes_retro_minute': (0, 59, 'sync_fichajes_retro_minute'),
+            'sync_vehiculos_interval': (5, 180, 'sync_vehiculos_interval'),
+            'sync_vehiculos_hour_start': (0, 23, 'sync_vehiculos_hour_start'),
+            'sync_vehiculos_hour_end': (0, 23, 'sync_vehiculos_hour_end'),
+            'sync_vehiculos_retro_days': (1, 365, 'sync_vehiculos_retro_days'),
+            'sync_vehiculos_retro_hour': (0, 23, 'sync_vehiculos_retro_hour'),
+            'sync_vehiculos_retro_minute': (0, 59, 'sync_vehiculos_retro_minute'),
         }
         for field, (lo, hi, key) in int_map.items():
             if field in data and data[field] is not None and data[field] != '':
@@ -164,6 +200,16 @@ class SyncConfigService:
     @classmethod
     def mark_fichajes_retro_sync_done(cls):
         cls._set_raw('sync_last_fichajes_retro_date', today_local().isoformat())
+        db.session.commit()
+
+    @classmethod
+    def mark_vehiculos_sync_done(cls):
+        cls._set_raw('sync_last_vehiculos_at', now_local().strftime('%Y-%m-%d %H:%M:%S'))
+        db.session.commit()
+
+    @classmethod
+    def mark_vehiculos_retro_sync_done(cls):
+        cls._set_raw('sync_last_vehiculos_retro_date', today_local().isoformat())
         db.session.commit()
 
     @classmethod
@@ -214,6 +260,41 @@ class SyncConfigService:
         return last != today_local().isoformat()
 
     @classmethod
+    def should_run_vehiculos_sync(cls):
+        cfg = cls.get_config()
+        if not cfg['vehiculos_enabled']:
+            return False
+        now = now_local()
+        if not (cfg['vehiculos_hour_start'] <= now.hour <= cfg['vehiculos_hour_end']):
+            return False
+        last_str = cls._get_raw('sync_last_vehiculos_at', '')
+        if not last_str:
+            return True
+        try:
+            last = datetime.strptime(last_str, '%Y-%m-%d %H:%M:%S')
+            last = last.replace(tzinfo=now.tzinfo) if now.tzinfo else last
+        except ValueError:
+            return True
+        return (now - last).total_seconds() >= cfg['vehiculos_interval'] * 60
+
+    @classmethod
+    def should_run_vehiculos_retro_sync(cls):
+        cfg = cls.get_config()
+        if not cfg['vehiculos_enabled'] or not cfg['vehiculos_retro_enabled']:
+            return False
+        now = now_local()
+        target = now.replace(
+            hour=cfg['vehiculos_retro_hour'],
+            minute=cfg['vehiculos_retro_minute'],
+            second=0,
+            microsecond=0,
+        )
+        if abs((now - target).total_seconds()) > 300:
+            return False
+        last = cls._get_raw('sync_last_vehiculos_retro_date', '')
+        return last != today_local().isoformat()
+
+    @classmethod
     def format_master_schedule(cls, cfg=None):
         cfg = cfg or cls.get_config()
         return f"Diario a las {cfg['master_hour']:02d}:{cfg['master_minute']:02d}"
@@ -229,6 +310,20 @@ class SyncConfigService:
             live += (
                 f" · Retrospectivo {cfg['fichajes_retro_hour']:02d}:"
                 f"{cfg['fichajes_retro_minute']:02d} ({cfg['fichajes_retro_days']} días)"
+            )
+        return live
+
+    @classmethod
+    def format_vehiculos_schedule(cls, cfg=None):
+        cfg = cfg or cls.get_config()
+        live = (
+            f"En vivo cada {cfg['vehiculos_interval']} min "
+            f"({cfg['vehiculos_hour_start']:02d}:00–{cfg['vehiculos_hour_end']:02d}:59)"
+        )
+        if cfg['vehiculos_retro_enabled']:
+            live += (
+                f" · Retrospectivo {cfg['vehiculos_retro_hour']:02d}:"
+                f"{cfg['vehiculos_retro_minute']:02d} ({cfg['vehiculos_retro_days']} días)"
             )
         return live
 
@@ -281,6 +376,44 @@ class SyncConfigService:
             microsecond=0,
         )
         last = cls._get_raw('sync_last_fichajes_retro_date', '')
+        if last == today_local().isoformat():
+            nxt += timedelta(days=1)
+        elif nxt <= now:
+            nxt += timedelta(days=1)
+        return nxt
+
+    @classmethod
+    def estimate_next_vehiculos(cls, cfg=None):
+        cfg = cfg or cls.get_config()
+        now = now_local()
+        last_str = cls._get_raw('sync_last_vehiculos_at', '')
+        if last_str:
+            try:
+                base = datetime.strptime(last_str, '%Y-%m-%d %H:%M:%S')
+                base = base.replace(tzinfo=now.tzinfo) if now.tzinfo else base
+                nxt = base + timedelta(minutes=cfg['vehiculos_interval'])
+                if nxt > now:
+                    return nxt
+            except ValueError:
+                pass
+        if cfg['vehiculos_hour_start'] <= now.hour <= cfg['vehiculos_hour_end']:
+            return now + timedelta(minutes=cfg['vehiculos_interval'])
+        tomorrow = now + timedelta(days=1)
+        return tomorrow.replace(hour=cfg['vehiculos_hour_start'], minute=0, second=0, microsecond=0)
+
+    @classmethod
+    def estimate_next_vehiculos_retro(cls, cfg=None):
+        cfg = cfg or cls.get_config()
+        if not cfg['vehiculos_retro_enabled']:
+            return None
+        now = now_local()
+        nxt = now.replace(
+            hour=cfg['vehiculos_retro_hour'],
+            minute=cfg['vehiculos_retro_minute'],
+            second=0,
+            microsecond=0,
+        )
+        last = cls._get_raw('sync_last_vehiculos_retro_date', '')
         if last == today_local().isoformat():
             nxt += timedelta(days=1)
         elif nxt <= now:

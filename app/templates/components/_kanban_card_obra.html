@@ -4,11 +4,13 @@
     <div class="col-header" style="background-color: {{ item.obra.color }}40;">
         <div class="d-flex justify-content-between align-items-start">
             <div class="d-flex align-items-center" style="max-width: 85%;">
+                {% if current_user.role == 'admin' %}
                 <i class="fas fa-thumbtack mr-2 cursor-pointer btn-pin-obra {{ 'text-primary' if item.obra.is_pinned else 'text-muted-light' }}"
                    style="font-size: 0.85rem; transition: transform 0.2s;"
                    data-obra-id="{{ item.obra.id }}"
                    title="{{ 'Desanclar' if item.obra.is_pinned else 'Anclar al inicio' }}">
                 </i>
+                {% endif %}
 
                 <a href="{{ url_for('admin.obra_panel', obra_id=item.obra.id) }}"
                    class="header-title header-title-link text-truncate"
@@ -26,9 +28,9 @@
         <div class="mt-2 pt-2 border-top border-white-50">
             <div class="d-flex align-items-center small mb-1 staff-row">
                 <i class="fas fa-user-tie mr-2 text-muted" title="Jefe de Obra" style="width: 14px; text-align: center;"></i>
-                <span class="text-truncate editable-staff"
-                      style="max-width: 200px; color: #334155; cursor: pointer; border-bottom: 1px dashed #cbd5e1;"
-                      title="Clic para cambiar Jefe"
+                <span class="text-truncate{% if current_user.role == 'admin' %} editable-staff{% endif %}"
+                      style="max-width: 200px; color: #334155;{% if current_user.role == 'admin' %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
+                      title="{% if current_user.role == 'admin' %}Clic para cambiar Jefe{% endif %}"
                       data-obra-id="{{ item.obra.id }}"
                       data-obra-name="{{ item.obra.nombre }}"
                       data-role="jefe"
@@ -39,9 +41,9 @@
 
             <div class="d-flex align-items-center small staff-row">
                 <i class="fas fa-hard-hat mr-2 text-warning" title="Encargado" style="width: 14px; text-align: center;"></i>
-                <span class="text-truncate editable-staff"
-                      style="max-width: 200px; color: #334155; cursor: pointer; border-bottom: 1px dashed #cbd5e1;"
-                      title="Clic para cambiar Encargado"
+                <span class="text-truncate{% if current_user.role == 'admin' %} editable-staff{% endif %}"
+                      style="max-width: 200px; color: #334155;{% if current_user.role == 'admin' %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
+                      title="{% if current_user.role == 'admin' %}Clic para cambiar Encargado{% endif %}"
                       data-obra-id="{{ item.obra.id }}"
                       data-obra-name="{{ item.obra.nombre }}"
                       data-role="encargado"

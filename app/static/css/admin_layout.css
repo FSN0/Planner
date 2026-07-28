@@ -354,6 +354,16 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
 .admin-main--compact.solicitud-detail-page .admin-panel-flush {
   overflow: visible !important;
 }
+.admin-main--compact.logs-page.logs-page--persona-obra > .admin-panel {
+  flex-shrink: 0;
+  min-height: auto;
+}
+.admin-main--compact.logs-page.logs-page--persona-obra .admin-panel-flush {
+  overflow: visible !important;
+}
+.admin-main--compact.logs-page.logs-page--persona-obra {
+  padding-bottom: 5rem !important;
+}
 .admin-main--compact .admin-table-scroll {
   max-height: calc(100vh - 108px);
   width: 100%;
@@ -1616,9 +1626,10 @@ html.sidebar-collapsed .admin-sidebar {
 
 .admin-logo-text,
 .sidebar-section-title,
-.sidebar-link > span:not(.sidebar-badge),
+.sidebar-link > span:not(.sidebar-badge):not(.sidebar-badges),
 .sidebar-link-ext,
 .sidebar-badge,
+.sidebar-badges,
 .sidebar-footer,
 .sidebar-tz-form,
 .admin-user-chip,
@@ -1628,9 +1639,10 @@ html.sidebar-collapsed .admin-sidebar {
 
 html.sidebar-collapsed .admin-logo-text,
 html.sidebar-collapsed .sidebar-section-title,
-html.sidebar-collapsed .sidebar-link > span:not(.sidebar-badge),
+html.sidebar-collapsed .sidebar-link > span:not(.sidebar-badge):not(.sidebar-badges),
 html.sidebar-collapsed .sidebar-link-ext,
 html.sidebar-collapsed .sidebar-badge,
+html.sidebar-collapsed .sidebar-badges,
 html.sidebar-collapsed .sidebar-footer,
 html.sidebar-collapsed .sidebar-tz-form,
 html.sidebar-collapsed .admin-user-chip,
@@ -1784,9 +1796,25 @@ html.sidebar-collapsed .sidebar-link i.fa-fw {
   color: #fbbf24;
 }
 
+.sidebar-badges {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.sidebar-badges .sidebar-badge {
+  margin-left: 0;
+}
+
 .sidebar-badge--danger {
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
+}
+
+.sidebar-badge--laboral {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
 }
 
 .sidebar-link:hover {
@@ -2337,6 +2365,14 @@ html.sidebar-collapsed .admin-main {
 .logs-page .filterable-table.admin-data-table tbody td {
   padding-top: 0.28rem;
   padding-bottom: 0.28rem;
+}
+.logs-page tr.log-row--unread {
+  background: #fffbeb;
+  box-shadow: inset 3px 0 0 #f59e0b;
+  cursor: pointer;
+}
+.logs-page tr.log-row[data-log-id]:not(.log-row--unread) {
+  cursor: context-menu;
 }
 
 /* Configuración global */

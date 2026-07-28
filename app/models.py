@@ -16,6 +16,7 @@ ROLE_OPERARIO = 'operario'
 ROLE_JEFE = 'jefe_obra'
 ROLE_RRHH = 'rrhh'
 ROLE_ADMIN = 'admin'
+ROLE_LABORAL = 'laboral'
 from sqlalchemy import event
 
 # Esta función se dispara cada vez que SQLAlchemy hace una consulta
@@ -271,7 +272,23 @@ class LogPreference(db.Model):
     last_read_at = db.Column(db.DateTime, default=_utc_now) 
 
     user = db.relationship('User', backref=db.backref('log_preferences', lazy='dynamic'))
-    
+
+
+class LogAcknowledgement(db.Model):
+    """Acuse de lectura individual de un SystemLog (contador laboral)."""
+    __tablename__ = 'log_acknowledgements'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    log_id = db.Column(db.Integer, db.ForeignKey('system_logs.id'), nullable=False, index=True)
+    acknowledged_at = db.Column(db.DateTime, default=_utc_now, nullable=False)
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'log_id', name='uq_log_ack_user_log'),
+    )
+
+    user = db.relationship('User', backref=db.backref('log_acknowledgements', lazy='dynamic'))
+    log = db.relationship('SystemLog', backref=db.backref('acknowledgements', lazy='dynamic'))
+
+
 class Obra(db.Model):
     """
     Unidad central de planificación.
@@ -464,6 +481,133 @@ class Solicitud(db.Model):
         return f'<Solicitud {self.id} {self.tipo} {self.estado}>'
     
     
+# ==========================================
+# MÓDULO DE VEHÍCULOS
+# ==========================================
+
+class Vehiculo(db.Model):
+    """Flota de vehículos asignables a operarios por día."""
+    __tablename__ = 'vehiculos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    external_ids = db.Column(JSONB, server_default='{}', nullable=False)
+
+    nombre = db.Column(db.String(120), nullable=False)
+    matricula = db.Column(db.String(40), unique=True, nullable=True)
+    marca = db.Column(db.String(80), nullable=True)
+    modelo = db.Column(db.String(80), nullable=True)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+
+    # Último conductor / odómetro conocidos (sync Odoo — relleno futuro)
+    odoo_driver_partner_id = db.Column(db.Integer, nullable=True)
+    odoo_driver_name = db.Column(db.String(160), nullable=True)
+    odoo_odometer_date = db.Column(db.Date, nullable=True)
+    odoo_odometer_value = db.Column(db.Float, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=_utc_now)
+    updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
+
+    asignaciones = db.relationship('AsignacionVehiculo', backref='vehiculo', lazy=True)
+
+    def label(self):
+        mat = (self.matricula or '').strip()
+        nom = (self.nombre or '').strip()
+        if mat and nom:
+            return f"{mat} — {nom}"
+        return mat or nom or f"Vehículo #{self.id}"
+
+    def __repr__(self):
+        return f'<Vehiculo {self.id} {self.matricula or self.nombre}>'
+
+
+class AsignacionVehiculo(db.Model):
+    """Empleado con vehículo en una fecha (1 vehículo/día y 1 persona/día)."""
+    __tablename__ = 'asignaciones_vehiculo'
+    __table_args__ = (
+        db.UniqueConstraint('vehiculo_id', 'fecha', name='uq_vehiculo_fecha'),
+        db.UniqueConstraint('user_id', 'fecha', name='uq_user_vehiculo_fecha'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    vehiculo_id = db.Column(db.Integer, db.ForeignKey('vehiculos.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    fecha = db.Column(db.Date, nullable=False)
+    solicitud_id = db.Column(
+        db.Integer, db.ForeignKey('solicitudes_vehiculo.id', ondelete='SET NULL'), nullable=True
+    )
+
+    created_at = db.Column(db.DateTime, default=_utc_now)
+
+    user = db.relationship('User', backref='asignaciones_vehiculo')
+    solicitud = db.relationship(
+        'SolicitudVehiculo', backref='asignaciones_vinculadas', foreign_keys=[solicitud_id]
+    )
+
+    def __repr__(self):
+        return f'<AsignacionVehiculo V:{self.vehiculo_id} U:{self.user_id} {self.fecha}>'
+
+
+class RegistroOdometro(db.Model):
+    """Snapshot diario odómetro Odoo vs asignación planificada (auditoría informativa)."""
+    __tablename__ = 'registros_odometro'
+    __table_args__ = (
+        db.UniqueConstraint('vehiculo_id', 'fecha', name='uq_odometro_vehiculo_fecha'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    vehiculo_id = db.Column(db.Integer, db.ForeignKey('vehiculos.id'), nullable=False)
+    fecha = db.Column(db.Date, nullable=False)
+    valor = db.Column(db.Float, nullable=True)
+
+    odoo_driver_partner_id = db.Column(db.Integer, nullable=True)
+    odoo_driver_name = db.Column(db.String(160), nullable=True)
+
+    planned_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # ok | mismatch_driver | sin_km | sin_planificar
+    estado = db.Column(db.String(40), nullable=False, default='ok')
+
+    created_at = db.Column(db.DateTime, default=_utc_now)
+    updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
+
+    vehiculo = db.relationship('Vehiculo', backref='registros_odometro')
+    planned_user = db.relationship('User', foreign_keys=[planned_user_id])
+
+    def __repr__(self):
+        return f'<RegistroOdometro V:{self.vehiculo_id} {self.fecha} {self.estado}>'
+
+
+class SolicitudVehiculo(db.Model):
+    """Petición de vehículo (espejo de Solicitud personal, persona-bound)."""
+    __tablename__ = 'solicitudes_vehiculo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    accion = db.Column(db.String(20), nullable=False, server_default='ASIGNAR')
+
+    requested_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    empleado_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    vehiculo_id = db.Column(db.Integer, db.ForeignKey('vehiculos.id'), nullable=True)
+
+    fecha_inicio = db.Column(db.Date, nullable=False)
+    fecha_fin = db.Column(db.Date, nullable=False)
+
+    # PENDIENTE | EN_PROCESO | CUMPLIDA | CERRADA_PARCIAL | DENEGADA
+    estado = db.Column(db.String(20), nullable=False, default='PENDIENTE')
+    notas = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=_utc_now)
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+    requested_by = db.relationship('User', foreign_keys=[requested_by_id])
+    empleado = db.relationship('User', foreign_keys=[empleado_id])
+    vehiculo = db.relationship('Vehiculo', foreign_keys=[vehiculo_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+
+    def __repr__(self):
+        return f'<SolicitudVehiculo {self.id} {self.accion} {self.estado}>'
+
+
 class Rating(db.Model):
     """Sistema de Puntuación/Reputación para Operarios."""
     __tablename__ = 'ratings'

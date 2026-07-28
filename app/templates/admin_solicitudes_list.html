@@ -1,6 +1,6 @@
 {# templates/admin_solicitudes_list.html #}
 {% extends "base.html" %}
-{% block title %}Solicitudes de personal{% endblock %}
+{% block title %}{% if seccion == 'vehiculos' %}Solicitudes de vehículos{% else %}Solicitudes de personal{% endif %}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -15,9 +15,26 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Solicitudes de personal</h1>
-        <span class="page-toolbar-count">{{ solicitudes|length }} registros</span>
+        <h1 class="page-toolbar-title">
+          {% if seccion == 'vehiculos' %}Solicitudes de vehículos{% else %}Solicitudes de personal{% endif %}
+        </h1>
+        <span class="page-toolbar-count">
+          {% if seccion == 'vehiculos' %}{{ solicitudes_vehiculo|length }}{% else %}{{ solicitudes|length }}{% endif %} registros
+        </span>
       </div>
+    </div>
+
+    <div class="mb-2 d-flex" style="gap: 0.4rem;">
+      <a href="{{ url_for('admin.solicitudes_list', seccion='personal') }}"
+         class="btn-admin {% if seccion != 'vehiculos' %}btn-admin-primary{% else %}btn-admin-ghost{% endif %}"
+         style="font-size: 0.78rem;">
+        <i class="fas fa-users mr-1"></i> Personal
+      </a>
+      <a href="{{ url_for('admin.solicitudes_list', seccion='vehiculos') }}"
+         class="btn-admin {% if seccion == 'vehiculos' %}btn-admin-primary{% else %}btn-admin-ghost{% endif %}"
+         style="font-size: 0.78rem;">
+        <i class="fas fa-car mr-1"></i> Vehículos
+      </a>
     </div>
 
     <section class="admin-panel admin-panel-flush admin-panel--no-header">
@@ -25,20 +42,21 @@
       {% if obra_filtro or date_filtro %}
       <div class="admin-filter-chips">
         <span><i class="fas fa-filter mr-1"></i> Filtros activos:</span>
-        {% if obra_filtro %}
+        {% if obra_filtro and seccion != 'vehiculos' %}
           <span class="badge-soft badge-soft-blue">Obra: {{ obra_filtro.nombre }}</span>
         {% endif %}
         {% if date_filtro %}
           <span class="badge-soft badge-soft-blue">Fecha: {{ date_filtro.strftime('%d/%m/%Y') }}</span>
         {% endif %}
-        <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost ml-auto" style="font-size: 0.72rem;">
+        <a href="{{ url_for('admin.solicitudes_list', seccion=seccion) }}" class="btn-admin btn-admin-ghost ml-auto" style="font-size: 0.72rem;">
           <i class="fas fa-times"></i> Limpiar
         </a>
       </div>
       {% endif %}
 
       <form class="admin-filter-bar" method="get">
-        {% if obra_filtro %}
+        <input type="hidden" name="seccion" value="{{ seccion }}">
+        {% if obra_filtro and seccion != 'vehiculos' %}
           <input type="hidden" name="obra_id" value="{{ obra_filtro.id }}">
         {% endif %}
         <div class="admin-filter-group">
@@ -51,6 +69,7 @@
             {% endfor %}
           </select>
         </div>
+        {% if seccion != 'vehiculos' %}
         <div class="admin-filter-group">
           <label for="tipo">Tipo</label>
           <select id="tipo" name="tipo" class="form-control custom-select" onchange="this.form.submit()">
@@ -65,9 +84,102 @@
             {% endfor %}
           </select>
         </div>
+        {% endif %}
         <noscript><button type="submit" class="btn-admin btn-admin-primary">Filtrar</button></noscript>
       </form>
 
+      {% if seccion == 'vehiculos' %}
+        {% if solicitudes_vehiculo %}
+        <div class="admin-table-scroll">
+          <table class="filterable-table admin-data-table mb-0" id="solicitudesVehiculoTable">
+            <thead>
+              <tr class="header-row">
+                <th>ID</th>
+                <th>Acción</th>
+                <th>Vehículo</th>
+                <th>Operario</th>
+                <th>Solicitante</th>
+                <th>Petición</th>
+                <th>Periodo</th>
+                <th>Estado</th>
+                {% if can_resolve_vehiculo %}<th class="text-right">Acciones</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in solicitudes_vehiculo %}
+              <tr class="data-row">
+                <td><span class="cell-code">#{{ s.id }}</span></td>
+                <td>
+                  {% if s.accion == 'DESASIGNAR' %}
+                    <span class="badge-soft badge-soft-red">Desasignar</span>
+                  {% else %}
+                    <span class="badge-soft badge-soft-blue">Asignar</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if s.vehiculo %}{{ s.vehiculo.label() }}{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                  {% if s.empleado %}
+                    <a href="{{ url_for('admin.worker_panel', user_id=s.empleado.id) }}" class="table-link-primary">
+                      {{ s.empleado.name }} {{ s.empleado.lastname }}
+                    </a>
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if s.requested_by %}
+                    {{ s.requested_by.name }} {{ s.requested_by.lastname }}
+                  {% else %}—{% endif %}
+                </td>
+                <td class="text-muted">
+                  {{ s.created_at|format_dt('%d/%m/%y') if s.created_at else '—' }}
+                </td>
+                <td>
+                  {% if s.fecha_inicio %}
+                    <span class="text-nowrap">{{ s.fecha_inicio.strftime('%d/%m') }}</span>–<span class="text-nowrap">{{ s.fecha_fin.strftime('%d/%m') }}</span>
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% set est = s.estado %}
+                  {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
+                  {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
+                  {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
+                  {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
+                  {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+                  {% endif %}
+                </td>
+                {% if can_resolve_vehiculo %}
+                <td class="text-right no-row-nav">
+                  {% if s.estado in ('PENDIENTE', 'EN_PROCESO') %}
+                  <form method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=s.id) }}" class="d-inline">
+                    <input type="hidden" name="decision" value="aceptar">
+                    <button type="submit" class="btn-admin btn-admin-primary" style="font-size: 0.7rem;"
+                            onclick="return confirm('¿Aprobar y crear asignaciones de vehículo?');">
+                      Aprobar
+                    </button>
+                  </form>
+                  <form method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=s.id) }}" class="d-inline">
+                    <input type="hidden" name="decision" value="denegar">
+                    <button type="submit" class="btn-admin btn-admin-ghost" style="font-size: 0.7rem;"
+                            onclick="return confirm('¿Denegar esta solicitud?');">
+                      Denegar
+                    </button>
+                  </form>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+          <div class="p-3 text-muted" style="font-size: 0.8rem;">No hay solicitudes de vehículo con los filtros actuales.</div>
+        {% endif %}
+
+      {% else %}
       {% if solicitudes %}
       <div class="admin-table-scroll">
         <table class="filterable-table admin-data-table mb-0" id="solicitudesTable">
@@ -203,6 +315,7 @@
       {% else %}
         <div class="p-3 text-muted" style="font-size: 0.8rem;">No hay solicitudes con los filtros actuales.</div>
       {% endif %}
+      {% endif %}
     </section>
   </main>
 </div>
@@ -211,7 +324,9 @@
 {% block extra_js %}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    initClickableTableRows('solicitudesTable');
+    if (document.getElementById('solicitudesTable')) {
+      initClickableTableRows('solicitudesTable');
+    }
   });
 </script>
 {% endblock %}

@@ -62,6 +62,62 @@ def merge_notas(existing_notas, new_notas):
     return f"{existing}\n---\n{new_notas}"
 
 
+def log_nueva_solicitud(solicitud):
+    """Registra en SystemLog la creación de una solicitud (solo altas nuevas)."""
+    from app.utils import register_log
+    from app.models import Obra
+
+    tipo = (solicitud.tipo or '').upper()
+    accion = (getattr(solicitud, 'accion', None) or 'ASIGNAR').upper()
+    if tipo == 'GENERICA':
+        action = 'Nueva solicitud GENERICA'
+    elif accion == 'DESASIGNAR':
+        action = 'Nueva solicitud DESASIGNAR'
+    else:
+        action = 'Nueva solicitud ASIGNAR'
+
+    obra = getattr(solicitud, 'obra', None)
+    if obra is None and solicitud.obra_id:
+        obra = Obra.query.get(solicitud.obra_id)
+    if obra:
+        obra_txt = f"{obra.codigo or ''} {obra.nombre}".strip()
+    else:
+        obra_txt = f"obra #{solicitud.obra_id}"
+
+    emp_txt = None
+    if solicitud.empleado_id:
+        emp = getattr(solicitud, 'empleado', None)
+        if emp is None:
+            emp = User.query.get(solicitud.empleado_id)
+        if emp:
+            emp_txt = f"{emp.name} {emp.lastname}".strip()
+
+    requester = getattr(solicitud, 'requested_by', None)
+    if requester is None and solicitud.requested_by_id:
+        requester = User.query.get(solicitud.requested_by_id)
+    if requester:
+        req_txt = f"{requester.name} {requester.lastname}".strip()
+    else:
+        req_txt = f"user #{solicitud.requested_by_id}"
+
+    fi = solicitud.fecha_inicio.strftime('%Y-%m-%d') if solicitud.fecha_inicio else '?'
+    ff = solicitud.fecha_fin.strftime('%Y-%m-%d') if solicitud.fecha_fin else '?'
+
+    parts = [f"Obra: {obra_txt}"]
+    if emp_txt:
+        parts.append(f"Empleado: {emp_txt}")
+    parts.append(f"Fechas: {fi} → {ff}")
+    parts.append(f"Solicitante: {req_txt}")
+
+    register_log(
+        user_id=solicitud.requested_by_id,
+        category='solicitud',
+        action=action,
+        detail=' | '.join(parts),
+        target_user_id=solicitud.empleado_id if tipo == 'CONCRETA' else None,
+    )
+
+
 def get_solicitud_notas(solicitud):
     if getattr(solicitud, 'notas', None):
         text = solicitud.notas.strip()
@@ -267,6 +323,7 @@ class SolicitudService:
         )
         db.session.add(nueva_solicitud)
         db.session.commit()
+        log_nueva_solicitud(nueva_solicitud)
         notificar_nueva_solicitud(nueva_solicitud, solicitante.name)
         return nueva_solicitud
 
@@ -300,7 +357,8 @@ class SolicitudService:
         )
         db.session.add(sol_baja)
         db.session.commit()
-        
+        log_nueva_solicitud(sol_baja)
+
         jefe = User.query.get(jefe_id)
         notificar_nueva_solicitud(sol_baja, jefe.name if jefe else 'Sistema')
         return sol_baja, "new"

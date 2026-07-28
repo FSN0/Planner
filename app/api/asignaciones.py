@@ -15,6 +15,7 @@ from app.services.solicitud_service import (
     merge_comentarios_dates,
     merge_notas,
     build_comentarios_config,
+    log_nueva_solicitud,
 )
 from app.services.core_assignment_service import CoreAssignmentService
 from app.services.email_service import (
@@ -22,12 +23,15 @@ from app.services.email_service import (
     notificar_movimiento_admin_a_jo, 
     notificar_nueva_solicitud
 )
+from app.services.permission_service import is_laboral
 
 asignaciones_api = Blueprint('asignaciones_api', __name__)
 
 @asignaciones_api.route("/v6/assign", methods=["POST"])
 @login_required
 def api_assign_worker():
+    if is_laboral(current_user):
+        return jsonify({"success": False, "message": "Modo solo lectura para perfil laboral."}), 403
     data = request.get_json() or {}
     try:
         worker_id = int(data.get("worker_id"))
@@ -61,6 +65,8 @@ def api_assign_worker():
 @asignaciones_api.route("/v6/unassign_worker", methods=["POST"])
 @login_required
 def api_unassign_worker():
+    if is_laboral(current_user):
+        return jsonify({'success': False, 'message': 'Modo solo lectura para perfil laboral.'}), 403
     data = request.get_json() or {}
     worker_id = data.get('worker_id')
     obra_id = data.get('obra_id')
@@ -221,6 +227,8 @@ def api_solicitud_asignar_parcial(solicitud_id):
 @asignaciones_api.route("/v6/planificador/action", methods=['POST'])
 @login_required
 def api_planificador_action():
+    if is_laboral(current_user):
+        return jsonify({"success": False, "error": "Perfil laboral sin permisos de edición."}), 403
     data = request.json
     worker_id = data.get('worker_id')
     target_obra_id = data.get('target_obra_id')
@@ -322,6 +330,7 @@ def api_planificador_action():
                         )
                         db.session.add(sol_baja)
                         db.session.commit()
+                        log_nueva_solicitud(sol_baja)
                         notificar_nueva_solicitud(sol_baja, current_user.name)
                         sol_baja_creada = True
                         msg_baja = "Se generó una solicitud de baja para los días recortados."

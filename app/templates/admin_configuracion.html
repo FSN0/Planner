@@ -4,6 +4,57 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .config-page .config-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.15rem;
+  }
+  .config-page .config-nav a {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #475569;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    padding: 0.28rem 0.65rem;
+    text-decoration: none;
+  }
+  .config-page .config-nav a:hover {
+    border-color: #94a3b8;
+    color: #0f172a;
+  }
+  .config-page .config-section-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    margin: 0.15rem 0 0.55rem;
+  }
+  .config-page .config-block-icon--slate {
+    background: rgba(100, 116, 139, 0.14);
+    color: #334155;
+  }
+  .config-page .config-block-icon--violet {
+    background: rgba(124, 58, 237, 0.12);
+    color: #6d28d9;
+  }
+  .config-page .config-block--tight .config-block-body {
+    padding-top: 0.85rem;
+  }
+  .config-page .config-block-actions {
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e2e8f0;
+  }
+  .config-page .config-email-table input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+  }
+</style>
 {% endblock %}
 
 {% block wrapper %}
@@ -14,25 +65,36 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Configuración global</h1>
-        <span class="page-toolbar-count">Sistema · planificación · avisos</span>
+        <h1 class="page-toolbar-title">Configuración</h1>
+        <span class="page-toolbar-count">Ajustes del sistema</span>
       </div>
     </div>
 
+    <nav class="config-nav" aria-label="Secciones">
+      <a href="#cfg-horario">Horario</a>
+      <a href="#cfg-fichajes">Fichajes</a>
+      <a href="#cfg-ausencias">Ausencias</a>
+      <a href="#cfg-laboral">Laboral</a>
+      <a href="#cfg-vehiculos">Vehículos</a>
+      <a href="#cfg-festivos">Festivos</a>
+      <a href="#cfg-emails">Correos</a>
+    </nav>
+
     <div class="config-layout">
 
-      {# —— Operación diaria —— #}
-      <section class="config-block">
+      {# —— 1. Horario y planificación —— #}
+      <section class="config-block" id="cfg-horario">
         <header class="config-block-head">
           <div class="config-block-icon config-block-icon--blue"><i class="fas fa-clock"></i></div>
           <div>
-            <h2>Operación diaria</h2>
-            <p>Zona horaria, cortes de ausencias y reglas de asignación</p>
+            <h2>Horario y planificación</h2>
+            <p>Zona horaria del tenant, corte diario y custodia del jefe de obra</p>
           </div>
         </header>
         <div class="config-block-body">
           <form action="{{ url_for('admin.update_config') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="horario">
             <div class="config-fields-grid">
               <div class="config-field">
                 <label for="zona_horaria">Zona horaria</label>
@@ -41,24 +103,40 @@
                   <option value="{{ tz_code }}" {% if configs.get('zona_horaria', 'Europe/Madrid') == tz_code %}selected{% endif %}>{{ tz_label }}</option>
                   {% endfor %}
                 </select>
-                <p class="config-field-hint">Fichajes, Odoo y tareas programadas</p>
+                <p class="config-field-hint">Afecta a fichajes, sync Odoo y tareas programadas</p>
               </div>
               <div class="config-field">
                 <label for="hora_limite_entrada">Hora límite de entrada</label>
                 <input type="time" id="hora_limite_entrada" name="hora_limite_entrada" class="form-control form-control-sm font-weight-bold" value="{{ configs.get('hora_limite_entrada', '08:30') }}" required>
-                <p class="config-field-hint">Corte de ausencias y resumen diario</p>
+                <p class="config-field-hint">Corte para el resumen diario de ausencias / entradas</p>
               </div>
               <div class="config-field">
-                <label for="limite_custodia">Custodia jefe de obra</label>
-                <div class="d-flex align-items-center" style="gap:0.35rem;">
-                  <input type="number" id="limite_custodia" name="limite_custodia" class="form-control form-control-sm text-center font-weight-bold" value="{{ limite_custodia }}" min="0" required style="max-width:5rem;">
-                  <span class="text-muted small">días</span>
-                </div>
-                <p class="config-field-hint">Derecho sobre operario tras su último día en obra</p>
+                <label for="limite_custodia">Custodia del jefe (días)</label>
+                <input type="number" id="limite_custodia" name="limite_custodia" class="form-control form-control-sm text-center font-weight-bold" value="{{ limite_custodia }}" min="0" required>
+                <p class="config-field-hint">Días que el jefe puede reasignar a un operario tras su último día en su obra</p>
               </div>
             </div>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar horario</button>
+            </div>
+          </form>
+        </div>
+      </section>
 
-            <div class="config-switch-box">
+      {# —— 2. Fichajes —— #}
+      <section class="config-block" id="cfg-fichajes">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--amber"><i class="fas fa-user-clock"></i></div>
+          <div>
+            <h2>Fichajes</h2>
+            <p>Comportamiento de la auditoría cuando alguien ficha sin estar planificado</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="fichajes">
+            <div class="config-switch-box mb-0">
               <label class="admin-form-switch">
                 <input type="checkbox" id="aceptar_primer_fichaje" name="aceptar_primer_fichaje"
                        {% if configs.get('aceptar_primer_fichaje', 'True') == 'True' %}checked{% endif %}>
@@ -66,46 +144,142 @@
               </label>
               <div>
                 <p class="admin-form-switch-label mb-0">Aceptar automáticamente el primer fichaje</p>
-                <p class="admin-form-switch-hint mb-0">Desactivado → operarios nuevos sin planificar saltan como paracaidistas.</p>
+                <p class="admin-form-switch-hint mb-0">
+                  Activado: el primer fichaje sin plan se acepta solo.
+                  Desactivado: aparece como «paracaidista» en auditoría para revisar.
+                </p>
               </div>
             </div>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar fichajes</button>
+            </div>
+          </form>
+        </div>
+      </section>
 
-            <div class="config-switch-box mt-3">
+      {# —— 3. Ausencias —— #}
+      <section class="config-block" id="cfg-ausencias">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--violet"><i class="fas fa-umbrella-beach"></i></div>
+          <div>
+            <h2>Ausencias</h2>
+            <p>Qué hacer cuando Odoo marca vacaciones / baja y hay alguien asignado ese día</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="ausencias">
+            <div class="config-field">
+              <label for="ausencias_auto_resolucion">Cuando hay ausencia y asignación el mismo día</label>
+              <select id="ausencias_auto_resolucion" name="ausencias_auto_resolucion" class="form-control form-control-sm custom-select">
+                <option value="overlay" {% if configs.get('ausencias_auto_resolucion', 'overlay') in ['overlay', 'prefer_leave'] %}selected{% endif %}>Mantener la asignación y marcar vacaciones en el calendario (recomendado)</option>
+                <option value="none" {% if configs.get('ausencias_auto_resolucion') == 'none' %}selected{% endif %}>Manual: crear conflicto para confirmar a mano</option>
+                <option value="prefer_assignment" {% if configs.get('ausencias_auto_resolucion') == 'prefer_assignment' %}selected{% endif %}>Ignorar la ausencia ese día (no marcar en calendario)</option>
+              </select>
+              <p class="config-field-hint">Odoo manda en las ausencias aprobadas. No se envía email al jefe por este motivo.</p>
+            </div>
+            <div class="config-switch-box mt-3 mb-0">
               <label class="admin-form-switch">
                 <input type="checkbox" id="ausencias_jefe_puede_resolver" name="ausencias_jefe_puede_resolver"
                        {% if configs.get('ausencias_jefe_puede_resolver', 'False') == 'True' %}checked{% endif %}>
                 <span class="slider"></span>
               </label>
               <div>
-                <p class="admin-form-switch-label mb-0">Jefe de obra puede resolver conflictos de ausencias</p>
-                <p class="admin-form-switch-hint mb-0">Solo aplica si la resolución automática está en modo Manual. Con “marcar vacaciones” no hace falta confirmar.</p>
+                <p class="admin-form-switch-label mb-0">El jefe de obra puede resolver conflictos de ausencias</p>
+                <p class="admin-form-switch-hint mb-0">Solo tiene efecto si arriba eliges el modo Manual.</p>
               </div>
             </div>
-
-            <div class="config-field mt-3">
-              <label for="ausencias_auto_resolucion">Ausencias vs asignación (Odoo manda)</label>
-              <select id="ausencias_auto_resolucion" name="ausencias_auto_resolucion" class="form-control form-control-sm custom-select">
-                <option value="overlay" {% if configs.get('ausencias_auto_resolucion', 'overlay') in ['overlay', 'prefer_leave'] %}selected{% endif %}>Mantener asignación y marcar vacaciones (recomendado)</option>
-                <option value="none" {% if configs.get('ausencias_auto_resolucion') == 'none' %}selected{% endif %}>Manual (cola de conflictos)</option>
-                <option value="prefer_assignment" {% if configs.get('ausencias_auto_resolucion') == 'prefer_assignment' %}selected{% endif %}>Ignorar ausencia ese día (no marcar en calendario)</option>
-              </select>
-              <p class="config-field-hint">Las ausencias aprobadas en Odoo se muestran en calendarios/planificador sin desasignar. Sin email al jefe.</p>
-            </div>
-
             <div class="config-block-actions">
-              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar operación</button>
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar ausencias</button>
             </div>
           </form>
         </div>
       </section>
 
-      {# —— Festivos —— #}
-      <section class="config-block">
+      {# —— 4. Perfil Laboral —— #}
+      <section class="config-block" id="cfg-laboral">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--slate"><i class="fas fa-user-shield"></i></div>
+          <div>
+            <h2>Perfil Laboral</h2>
+            <p>Permisos extra del rol Laboral (además de lo que ya puede ver por defecto)</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="laboral">
+            <div class="config-switch-box mb-0">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="laboral_puede_resolver_fichajes" name="laboral_puede_resolver_fichajes"
+                       {% if configs.get('laboral_puede_resolver_fichajes', 'False') == 'True' %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">Puede resolver incidencias en auditoría de fichajes</p>
+                <p class="admin-form-switch-hint mb-0">Si está apagado, Laboral solo consulta (y el histórico). Por defecto: apagado.</p>
+              </div>
+            </div>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar laboral</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {# —— 5. Vehículos —— #}
+      <section class="config-block" id="cfg-vehiculos">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--amber"><i class="fas fa-car"></i></div>
+          <div>
+            <h2>Alertas de vehículos</h2>
+            <p>Umbrales de saltos de odómetro en Auditoría de vehículos. Si saltan mucho, súbelos aquí.</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="vehiculos">
+            <p class="config-section-label">Cuándo avisar de un salto raro</p>
+            <div class="config-fields-grid">
+              <div class="config-field">
+                <label for="vehiculo_salto_km_dia">Km por día</label>
+                <input type="number" id="vehiculo_salto_km_dia" name="vehiculo_salto_km_dia"
+                       class="form-control form-control-sm" min="50" max="5000" step="1"
+                       value="{{ configs.get('vehiculo_salto_km_dia', '400') }}">
+                <p class="config-field-hint">Si el ritmo entre dos lecturas supera esto → alerta</p>
+              </div>
+              <div class="config-field">
+                <label for="vehiculo_salto_delta_km">Salto acumulado (km)</label>
+                <input type="number" id="vehiculo_salto_delta_km" name="vehiculo_salto_delta_km"
+                       class="form-control form-control-sm" min="50" max="50000" step="1"
+                       value="{{ configs.get('vehiculo_salto_delta_km', '1000') }}">
+                <p class="config-field-hint">Km totales entre lecturas que disparan alerta</p>
+              </div>
+              <div class="config-field">
+                <label for="vehiculo_salto_ventana_dias">Ventana (días)</label>
+                <input type="number" id="vehiculo_salto_ventana_dias" name="vehiculo_salto_ventana_dias"
+                       class="form-control form-control-sm" min="1" max="60" step="1"
+                       value="{{ configs.get('vehiculo_salto_ventana_dias', '7') }}">
+                <p class="config-field-hint">El salto acumulado solo cuenta si cabe en estos días</p>
+              </div>
+            </div>
+            <p class="config-field-hint mb-0">También se alerta siempre si el odómetro baja. Ver: Auditoría de vehículos → Saltos de odómetro.</p>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar vehículos</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {# —— 6. Festivos —— #}
+      <section class="config-block" id="cfg-festivos">
         <header class="config-block-head">
           <div class="config-block-icon config-block-icon--red"><i class="fas fa-calendar-times"></i></div>
           <div>
-            <h2>Calendario laboral</h2>
-            <p>Días inhábiles excluidos de la auditoría de ausencias</p>
+            <h2>Festivos</h2>
+            <p>Días inhábiles (no cuentan en la lógica de ausencias / cortes)</p>
           </div>
         </header>
         <div class="config-block-body">
@@ -119,7 +293,7 @@
               <label for="festivo-desc">Descripción</label>
               <input type="text" id="festivo-desc" name="descripcion" class="form-control form-control-sm" placeholder="Ej. Festivo local">
             </div>
-            <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-plus"></i> Añadir</button>
+            <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-plus"></i> Añadir festivo</button>
           </form>
 
           <div class="config-festivos-table-wrap">
@@ -157,18 +331,19 @@
         </div>
       </section>
 
-      {# —— Emails —— #}
-      <section class="config-block">
+      {# —— 7. Emails —— #}
+      <section class="config-block" id="cfg-emails">
         <header class="config-block-head">
           <div class="config-block-icon config-block-icon--green"><i class="fas fa-envelope-open-text"></i></div>
           <div>
-            <h2>Notificaciones por correo</h2>
-            <p>Quién recibe cada aviso automático del sistema</p>
+            <h2>Correos automáticos</h2>
+            <p>Quién recibe cada aviso por email. Marca Admin / Jefe / Trabajador según convenga.</p>
           </div>
         </header>
         <div class="config-block-body">
           <form action="{{ url_for('admin.update_config') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="emails">
             <div class="config-email-groups">
 
               <div>
@@ -232,6 +407,10 @@
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar correos</button>
             </div>
           </form>
         </div>

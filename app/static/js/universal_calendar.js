@@ -62,6 +62,10 @@ class UniversalCalendarManager {
                 icon = 'fa-briefcase'; typeName = 'Empresa'; prep = 'de la'; 
                 headerUrl = `/admin/company_panel/${this.entityId}`;
             }
+            else if (this.context === 'vehiculo') {
+                icon = 'fa-car'; typeName = 'Vehículo'; prep = 'del';
+                headerUrl = `/admin/vehicle_panel/${this.entityId}`;
+            }
 
             let titleText = `Calendario ${prep} ${typeName}`;
             if (this.entityName) {
@@ -151,6 +155,9 @@ class UniversalCalendarManager {
                         <div class="col-md-1 pl-0">
                             <button id="${this.panelId}-save" class="btn btn-sm btn-primary w-100" title="Guardar cambios (Enter)"><i class="fas fa-check"></i></button>
                         </div>
+                    </div>
+                    <div class="row mt-2" id="${this.panelId}-vehicle-row" style="display: none;">
+                        <div class="col-md-5" id="${this.panelId}-vehicle-container"></div>
                     </div>
                     <div class="row mt-2" id="${this.panelId}-generic-options" style="display: none;">
                         <div class="col-md-3">
@@ -306,6 +313,7 @@ class UniversalCalendarManager {
                     let targetUrl = null;
                     if (props.worker_id && _this.context !== 'worker') targetUrl = `/admin/worker_panel/${props.worker_id}`;
                     else if (props.obra_id && _this.context !== 'obra') targetUrl = `/admin/obra_panel/${props.obra_id}`;
+                    else if (props.vehiculo_id && _this.context !== 'vehiculo') targetUrl = `/admin/vehicle_panel/${props.vehiculo_id}`;
                     else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
                         let cid = props.empresa_id || props.company_id; targetUrl = `/admin/company_panel/${cid}`;
                     } else if (props.type === 'empresa_group' && _this.context !== 'empresa') targetUrl = `/admin/companies`; 
@@ -366,6 +374,7 @@ class UniversalCalendarManager {
                 let targetUrl = null;
                 if (props.worker_id && _this.context !== 'worker') targetUrl = `/admin/worker_panel/${props.worker_id}`;
                 else if (props.obra_id && _this.context !== 'obra') targetUrl = `/admin/obra_panel/${props.obra_id}`;
+                else if (props.vehiculo_id && _this.context !== 'vehiculo') targetUrl = `/admin/vehicle_panel/${props.vehiculo_id}`;
                 else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
                     let cid = props.empresa_id || props.company_id;
                     targetUrl = `/admin/company_panel/${cid}`;
@@ -396,11 +405,15 @@ class UniversalCalendarManager {
                 } else if (_this.mode === 'empresas' || props.type === 'empresa_group') {
                     isEditable = false;
                     reasonText = "Estás en vista agrupada. Cambia a 'Por Trabajadores' para editar bloques individuales.";
+                } else if (props.type === 'solicitud_vehiculo' || props.type === 'request') {
+                    isEditable = false;
+                    reasonText = "Las solicitudes se gestionan desde el centro de solicitudes.";
                 }
 
                 let targetName = null;
                 if (props.worker_id && _this.context !== 'worker') targetName = 'Ver Empleado';
                 else if (props.obra_id && _this.context !== 'obra') targetName = 'Ver Obra';
+                else if (props.vehiculo_id && _this.context !== 'vehiculo') targetName = 'Ver Vehículo';
                 else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') targetName = 'Ver Empresa';
                 else if ((_this.mode === 'empresas' || props.type === 'empresa_group') && _this.context !== 'empresa') targetName = 'Ver Empresas';
 
@@ -554,18 +567,23 @@ class UniversalCalendarManager {
                 if (notasInput) notasInput.value = '';
 
                 this._renderResourceSelect(container, null);
+                this._toggleVehicleRow(true);
             } else {
                 titleEl.innerHTML = '<i class="fas fa-edit mr-2 univ-calendar-icon"></i>Editar Asignación';
                 extraBtns.style.display = 'block';
 
                 let notasRow = document.getElementById(`${this.panelId}-notas-row`);
                 if (notasRow) notasRow.style.display = 'none';
+                this._toggleVehicleRow(false);
 
                 const props = event.extendedProps || {};
-                if (this.context === 'worker' || this.context === 'obra') {
-                    const prefill = this.context === 'worker'
-                        ? { obraId: props.obra_id, obraName: event.title }
-                        : { workerId: props.worker_id, workerName: event.title };
+                if (this.context === 'worker' || this.context === 'obra' || this.context === 'vehiculo') {
+                    let prefill = null;
+                    if (this.context === 'worker') {
+                        prefill = { obraId: props.obra_id, obraName: event.title };
+                    } else if (this.context === 'obra' || this.context === 'vehiculo') {
+                        prefill = { workerId: props.worker_id, workerName: event.title };
+                    }
                     this._renderResourceSelect(container, prefill);
                 } else {
                     container.innerHTML = `
@@ -582,7 +600,7 @@ class UniversalCalendarManager {
                         if(props.obra_url) { window.open(props.obra_url, '_blank'); return;}
                         let targetUrl = null;
                         if (this.context === 'worker') targetUrl = `/admin/obra_panel/${props.obra_id}`;
-                        else if (this.context === 'obra') targetUrl = `/admin/worker_panel/${props.worker_id}`;
+                        else if (this.context === 'obra' || this.context === 'vehiculo') targetUrl = `/admin/worker_panel/${props.worker_id}`;
                         
                         if (targetUrl) window.open(targetUrl, '_blank');
                         else if(typeof Swal !== 'undefined') Swal.fire('Información', 'No hay enlace directo disponible.', 'info');
@@ -592,8 +610,51 @@ class UniversalCalendarManager {
         }
     }
 
+    _toggleVehicleRow(showForNew) {
+        const row = document.getElementById(`${this.panelId}-vehicle-row`);
+        const container = document.getElementById(`${this.panelId}-vehicle-container`);
+        if (!row || !container) return;
+
+        const show = !!showForNew && this.context === 'worker';
+        row.style.display = show ? 'flex' : 'none';
+        if (!show) {
+            const existing = $(`#${this.panelId}-vehicle-select`);
+            if (existing.length && existing.data('select2')) existing.select2('destroy');
+            container.innerHTML = '';
+            return;
+        }
+
+        const existingSelect = $(`#${this.panelId}-vehicle-select`);
+        if (existingSelect.length && existingSelect.data('select2')) {
+            existingSelect.select2('destroy');
+        }
+        container.innerHTML = `
+            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-car mr-1"></i>Vehículo</label>
+            <select id="${this.panelId}-vehicle-select" class="form-control form-control-sm" style="width: 100%;">
+                <option></option>
+            </select>
+        `;
+        setTimeout(() => {
+            const $select = $(`#${this.panelId}-vehicle-select`);
+            if (typeof $ === 'undefined' || !$.fn.select2) return;
+            this.initPanelSelect2($select, {
+                placeholder: "Opcional: asignar vehículo...",
+                allowClear: true,
+                ajax: {
+                    url: '/api/v6/vehicles',
+                    dataType: 'json',
+                    delay: 250,
+                    data: (p) => ({ q: p.term }),
+                    processResults: (d) => ({ results: d.results || [] })
+                }
+            });
+        }, 150);
+    }
+
     _renderResourceSelect(container, prefill) {
-        let selectLabel = this.context === 'obra' ? 'Trabajador a asignar' : 'Obra destino';
+        let selectLabel = (this.context === 'obra' || this.context === 'vehiculo')
+            ? 'Trabajador a asignar'
+            : 'Obra destino';
 
         const existingSelect = $(`#${this.panelId}-select`);
         if (existingSelect.length && existingSelect.data('select2')) {
@@ -628,11 +689,27 @@ class UniversalCalendarManager {
                     });
                     this._applyPendingPrefillToSelect($select);
                 }
+            } else if (this.context === 'vehiculo') {
+                if (typeof $ !== 'undefined' && $.fn.select2) {
+                    this.initPanelSelect2($select, {
+                        placeholder: "Selecciona un operario...",
+                        allowClear: true,
+                        ajax: {
+                            url: '/admin/api/planificador/search_workers',
+                            dataType: 'json', delay: 250,
+                            data: (p) => ({ q: p.term }),
+                            processResults: (d) => ({
+                                results: (d.results || []).filter((r) => String(r.id) !== 'GENERICO')
+                            })
+                        }
+                    });
+                    this._applyPendingPrefillToSelect($select);
+                }
             } else if (this.context === 'worker') {
                 fetch('/api/v6/recursos_activos').then(r=>r.json()).then(data => {
                     if (typeof $ !== 'undefined' && $.fn.select2) {
                         this.initPanelSelect2($select, {
-                            placeholder: "Selecciona una obra...",
+                            placeholder: "Selecciona una obra (opcional si hay vehículo)...",
                             allowClear: true,
                             data: data.obras
                         });
@@ -715,38 +792,108 @@ class UniversalCalendarManager {
                     return;
                 }
 
-                if (!selVal) {
+                let vehicleEl = document.getElementById(`${this.panelId}-vehicle-select`);
+                let vehicleVal = (this.context === 'worker' && vehicleEl) ? vehicleEl.value : null;
+                let notasEl = document.getElementById(`${this.panelId}-notas`);
+                let notasVal = notasEl ? notasEl.value.trim() : '';
+
+                if (this.context === 'vehiculo') {
+                    if (!selVal || String(selVal) === 'GENERICO') {
+                        Swal.fire('Atención', 'Selecciona un operario para asignar el vehículo.', 'warning');
+                        return;
+                    }
+                    const vPayload = {
+                        worker_id: selVal,
+                        vehicle_id: this.entityId,
+                        start: startVal,
+                        end: endVal,
+                        include_weekends: includeWeekends,
+                        overwrite_mode: 'check'
+                    };
+                    if (notasVal) vPayload.notas = notasVal;
+                    this.executeVehicleSave(vPayload, (vres) => {
+                        if (!vres || !vres.success) return;
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Vehículo asignado', showConfirmButton: false, timer: 1800});
+                        }
+                        this.calendar.refetchEvents(); this.hidePanel();
+                        if (window.loadTimelineData) window.loadTimelineData();
+                    });
+                    return;
+                }
+
+                if (this.context === 'worker') {
+                    if (!selVal && !vehicleVal) {
+                        Swal.fire('Atención', 'Selecciona una obra y/o un vehículo.', 'warning');
+                        return;
+                    }
+                } else if (!selVal) {
                     Swal.fire('Atención', 'Debes seleccionar un destino/trabajador.', 'warning');
                     return;
                 }
 
                 let qtyEl = document.getElementById(`${this.panelId}-quantity`);
                 let qty = qtyEl ? parseInt(qtyEl.value) || 1 : 1;
-                let notasEl = document.getElementById(`${this.panelId}-notas`);
-                let notasVal = notasEl ? notasEl.value.trim() : '';
 
-                let payload = {
-                    start_date: startVal, end_date: endVal, original_start: null, original_end: null,
-                    overwrite_mode: 'check', include_weekends: includeWeekends, cantidad: selVal === 'GENERICO' ? qty : 1
-                };
-                if (notasVal) payload.notas = notasVal;
-
-                if (this.context === 'obra') {
-                    payload.worker_id = selVal;
-                    payload.target_obra_id = this.entityId;
-                    payload.old_obra_id = (this.kanbanSourceObraId !== undefined && this.kanbanSourceObraId !== null)
-                        ? this.kanbanSourceObraId : this.entityId;
-                } else if (this.context === 'worker') {
-                    payload.worker_id = this.entityId;
-                    payload.target_obra_id = selVal;
-                    payload.old_obra_id = (this.kanbanSourceObraId !== undefined && this.kanbanSourceObraId !== null)
-                        ? this.kanbanSourceObraId : selVal;
-                }
-
-                this.executeSave(payload, () => {
+                const afterSave = () => {
                     this.calendar.refetchEvents(); this.hidePanel();
-                    if (window.loadTimelineData) window.loadTimelineData(); 
-                });
+                    if (window.loadTimelineData) window.loadTimelineData();
+                };
+
+                const runVehicleSave = (onDone) => {
+                    if (!vehicleVal) {
+                        if (onDone) onDone({ success: true });
+                        return;
+                    }
+                    const vPayload = {
+                        worker_id: this.entityId,
+                        vehicle_id: vehicleVal,
+                        start: startVal,
+                        end: endVal,
+                        include_weekends: includeWeekends,
+                        overwrite_mode: 'check'
+                    };
+                    if (notasVal) vPayload.notas = notasVal;
+                    this.executeVehicleSave(vPayload, onDone);
+                };
+
+                if (selVal) {
+                    let payload = {
+                        start_date: startVal, end_date: endVal, original_start: null, original_end: null,
+                        overwrite_mode: 'check', include_weekends: includeWeekends, cantidad: selVal === 'GENERICO' ? qty : 1
+                    };
+                    if (notasVal) payload.notas = notasVal;
+
+                    if (this.context === 'obra') {
+                        payload.worker_id = selVal;
+                        payload.target_obra_id = this.entityId;
+                        payload.old_obra_id = (this.kanbanSourceObraId !== undefined && this.kanbanSourceObraId !== null)
+                            ? this.kanbanSourceObraId : this.entityId;
+                    } else if (this.context === 'worker') {
+                        payload.worker_id = this.entityId;
+                        payload.target_obra_id = selVal;
+                        payload.old_obra_id = (this.kanbanSourceObraId !== undefined && this.kanbanSourceObraId !== null)
+                            ? this.kanbanSourceObraId : selVal;
+                    }
+
+                    this.executeSave(payload, (obraRes) => {
+                        // Solo continuar con vehículo si la obra se guardó (cancelar conflicto no pasa success)
+                        if (!obraRes || !obraRes.success) return;
+                        runVehicleSave((vres) => {
+                            if (!vres || !vres.success) return;
+                            afterSave();
+                        });
+                    }, { skipHideOnSuccess: !!vehicleVal });
+                } else {
+                    // Solo vehículo (contexto worker)
+                    runVehicleSave((vres) => {
+                        if (!vres || !vres.success) return;
+                        if (typeof Swal !== 'undefined') {
+                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Vehículo guardado', showConfirmButton: false, timer: 1800});
+                        }
+                        afterSave();
+                    });
+                }
 
             } else {
                 let originalStart = moment(this.activeEvent.extendedProps.real_original_start || this.activeEvent.start).startOf('day');
@@ -786,6 +933,62 @@ class UniversalCalendarManager {
                     payload.worker_id = this.entityId;
                     payload.old_obra_id = props.obra_id;
                     payload.target_obra_id = selVal;
+                } else if (this.context === 'vehiculo') {
+                    if (!selVal || String(selVal) === 'GENERICO') {
+                        if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Selecciona un operario.', 'warning');
+                        return;
+                    }
+                    const oldWorkerId = props.worker_id;
+                    const afterVehicleSave = () => {
+                        this.calendar.refetchEvents(); this.hidePanel();
+                        if (window.loadTimelineData) window.loadTimelineData();
+                    };
+                    const assignNew = () => {
+                        const vPayload = {
+                            worker_id: selVal,
+                            vehicle_id: this.entityId,
+                            start: startVal,
+                            end: endVal,
+                            include_weekends: includeWeekends,
+                            overwrite_mode: 'overwrite',
+                            accion: 'ASIGNAR',
+                        };
+                        this.executeVehicleSave(vPayload, (vres) => {
+                            if (!vres || !vres.success) return;
+                            if (typeof Swal !== 'undefined') {
+                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Guardado', showConfirmButton: false, timer: 1500});
+                            }
+                            afterVehicleSave();
+                        });
+                    };
+                    // Limpiar rango original editable, luego asignar el nuevo
+                    if (oldWorkerId) {
+                        const origStart = this.activeEvent.extendedProps.real_original_start
+                            || moment(this.activeEvent.start).format('YYYY-MM-DD');
+                        let origEnd = endVal;
+                        if (this.activeEvent.extendedProps.real_original_end) {
+                            origEnd = moment(this.activeEvent.extendedProps.real_original_end).subtract(1, 'days').format('YYYY-MM-DD');
+                        } else if (this.activeEvent.end) {
+                            origEnd = moment(this.activeEvent.end).subtract(1, 'days').format('YYYY-MM-DD');
+                        }
+                        // Solo desasignar días futuros del rango original
+                        const clearStart = moment(origStart).isBefore(today) ? today.format('YYYY-MM-DD') : origStart;
+                        this.executeVehicleSave({
+                            worker_id: oldWorkerId,
+                            vehicle_id: this.entityId,
+                            start: clearStart,
+                            end: origEnd,
+                            include_weekends: true,
+                            overwrite_mode: 'overwrite',
+                            accion: 'DESASIGNAR',
+                        }, (vres) => {
+                            if (!vres || !vres.success) return;
+                            assignNew();
+                        });
+                    } else {
+                        assignNew();
+                    }
+                    return;
                 } else if (this.context === 'obra') {
                     if (!selVal) {
                         if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Debes seleccionar un trabajador.', 'warning');
@@ -869,6 +1072,26 @@ class UniversalCalendarManager {
                         if (this.callbacks.onDeleteAssignment) {
                             this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today));
                             this.hidePanel();
+                        } else if (this.context === 'vehiculo') {
+                            const wId = this.activeEvent.extendedProps.worker_id;
+                            if (!wId) {
+                                Swal.fire('Error', 'No se pudo identificar el operario del bloque.', 'error');
+                                return;
+                            }
+                            this.executeVehicleSave({
+                                worker_id: wId,
+                                vehicle_id: this.entityId,
+                                start: start.format('YYYY-MM-DD'),
+                                end: end.format('YYYY-MM-DD'),
+                                include_weekends: true,
+                                overwrite_mode: 'overwrite',
+                                accion: 'DESASIGNAR',
+                            }, (vres) => {
+                                if (!vres || !vres.success) return;
+                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Desasignado', showConfirmButton: false, timer: 1500});
+                                this.calendar.refetchEvents(); this.hidePanel();
+                                if (window.loadTimelineData) window.loadTimelineData();
+                            });
                         } else {
                             let wId = this.context === 'worker' ? this.entityId : this.activeEvent.extendedProps.worker_id;
                             let oId = this.context === 'obra' ? this.entityId : this.activeEvent.extendedProps.obra_id;
@@ -925,6 +1148,7 @@ class UniversalCalendarManager {
         if (notasRow) notasRow.style.display = 'none';
         let notasInput = document.getElementById(`${this.panelId}-notas`);
         if (notasInput) notasInput.value = '';
+        this._toggleVehicleRow(false);
     }
 
     _buildEditableDates(startVal, endVal) {
@@ -977,6 +1201,12 @@ class UniversalCalendarManager {
         const pf = this._pendingPrefill;
         this._pendingPrefill = null;
         if (this.context === 'obra' && pf.workerId) {
+            const val = String(pf.workerId);
+            if (!$select.find(`option[value="${val}"]`).length) {
+                $select.append(new Option(pf.workerName || 'Operario', val, true, true));
+            }
+            $select.val(val).trigger('change');
+        } else if (this.context === 'vehiculo' && pf.workerId) {
             const val = String(pf.workerId);
             if (!$select.find(`option[value="${val}"]`).length) {
                 $select.append(new Option(pf.workerName || 'Operario', val, true, true));
@@ -1062,9 +1292,10 @@ class UniversalCalendarManager {
         if (this.element) this.element.innerHTML = ''; 
     }
 
-    executeSave(payload, revertFunc) {
+    executeSave(payload, revertFunc, options) {
         if (!payload.overwrite_mode) payload.overwrite_mode = 'check';
         payload.check_conflicts = true;
+        options = options || {};
 
         $.ajax({
             url: "/api/v6/planificador/action",
@@ -1073,17 +1304,19 @@ class UniversalCalendarManager {
             data: JSON.stringify(payload),
             success: (res) => {
                 if (res.success) {
-                    if(typeof Swal !== 'undefined') Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
-                    this.calendar.refetchEvents();
-                    this.hidePanel();
+                    if (!options.skipHideOnSuccess) {
+                        if(typeof Swal !== 'undefined') Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                        this.calendar.refetchEvents();
+                        this.hidePanel();
+                    }
                     if (this.callbacks.onAfterSave) this.callbacks.onAfterSave(res);
-                    if(revertFunc) revertFunc();
+                    if(revertFunc) revertFunc(res);
                     
                 } else if (res.conflict || res.action === 'confirm_overwrite') {
                     if (typeof window.resolverConflictoAsignacion === 'function') {
                         window.resolverConflictoAsignacion(
                             res, payload, 
-                            (nuevoPayload) => { this.executeSave(nuevoPayload, revertFunc); }, 
+                            (nuevoPayload) => { this.executeSave(nuevoPayload, revertFunc, options); }, 
                             revertFunc
                         );
                     } else {
@@ -1097,6 +1330,59 @@ class UniversalCalendarManager {
             error: () => {
                 if(typeof Swal !== 'undefined') Swal.fire('Error', 'Fallo de red', 'error');
                 if (revertFunc) revertFunc();
+            }
+        });
+    }
+
+    executeVehicleSave(payload, onDone) {
+        if (!payload.overwrite_mode) payload.overwrite_mode = 'check';
+
+        $.ajax({
+            url: "/api/v6/planificador/vehicle-action",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify(payload),
+            success: (res) => {
+                if (res.success) {
+                    if (onDone) onDone(res);
+                } else if (res.conflict) {
+                    if (typeof Swal === 'undefined') {
+                        if (onDone) onDone(res);
+                        return;
+                    }
+                    let detailHtml = '';
+                    if (res.conflict_details) {
+                        detailHtml = '<ul style="text-align:left;font-size:0.85rem;">';
+                        Object.keys(res.conflict_details).forEach((k) => {
+                            detailHtml += `<li><b>${k}</b>: ${res.conflict_details[k].join(', ')}</li>`;
+                        });
+                        detailHtml += '</ul>';
+                    }
+                    Swal.fire({
+                        title: 'Conflicto de vehículo',
+                        html: (res.message || '') + detailHtml,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Sobrescribir',
+                        cancelButtonText: 'Cancelar',
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            const next = Object.assign({}, payload, { overwrite_mode: 'overwrite' });
+                            this.executeVehicleSave(next, onDone);
+                        } else if (onDone) {
+                            onDone(res);
+                        }
+                    });
+                } else {
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire('Error', res.error || res.message || 'Error de vehículo', 'error');
+                    }
+                    if (onDone) onDone(res);
+                }
+            },
+            error: () => {
+                if (typeof Swal !== 'undefined') Swal.fire('Error', 'Fallo de red (vehículo)', 'error');
+                if (onDone) onDone({ success: false });
             }
         });
     }

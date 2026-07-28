@@ -1,8 +1,10 @@
 # app/routes.py
+from datetime import date
+
 from flask import Blueprint, redirect, url_for, request, flash, g
 from flask_login import login_required, current_user, logout_user
 from app import db
-from app.models import ROLE_OPERARIO, ROLE_RRHH
+from app.models import ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL
 from app.utils.timezone_utils import is_valid_timezone, get_app_timezone, timezone_label
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 from app.marketing.routes import render_landing
@@ -25,6 +27,8 @@ def dashboard():
         return redirect(url_for('jefe.panel'))
     if current_user.role == 'admin':
         return redirect(url_for('admin.panel'))
+    if current_user.role == ROLE_LABORAL:
+        return redirect(url_for('admin.ausencias_list'))
     if current_user.role in (ROLE_OPERARIO, ROLE_RRHH):
         logout_user()
         flash('Tu perfil no tiene acceso a la aplicación.', 'warning')

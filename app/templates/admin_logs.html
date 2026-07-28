@@ -10,7 +10,7 @@
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main admin-main--compact logs-page">
+  <main class="admin-main admin-main--compact logs-page{% if current_category == 'persona_obra' %} logs-page--persona-obra{% endif %}">
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
@@ -18,14 +18,24 @@
         <span class="page-toolbar-count">Auditoría y trazabilidad</span>
       </div>
       <div class="page-toolbar-actions">
+        {% if unread_laboral_count and unread_laboral_count > 0 and current_user.role == 'admin' %}
+        <button type="button" class="btn-admin btn-admin-ghost" id="btnAckAllLaboral"
+                title="Marca como leídos los avisos laborales de todos (admin + laboral)">
+          <i class="fas fa-check-double"></i> Leer todas
+          <span class="page-toolbar-count" style="margin-left:0.25rem;">{{ unread_laboral_count }}</span>
+        </button>
+        {% endif %}
+        {% if can_manage_log_prefs %}
         <button type="button" class="btn-admin btn-admin-ghost" id="btnEditNotifs">
           <i class="fas fa-bell"></i> Avisos
         </button>
+        {% endif %}
       </div>
     </div>
 
     <section class="admin-panel admin-panel-flush admin-panel--no-header">
 
+      {% if can_manage_log_prefs %}
       <form action="{{ url_for('admin.save_log_preferences') }}" method="POST" id="formPrefs" style="display: none;" class="logs-prefs-panel">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="current_category" value="{{ current_category }}">
@@ -34,6 +44,7 @@
           <label><input type="checkbox" name="pref_accesos" {% if 'accesos' in active_prefs %}checked{% endif %}> Accesos</label>
           <label><input type="checkbox" name="pref_valoraciones" {% if 'valoraciones' in active_prefs %}checked{% endif %}> Valoraciones</label>
           <label><input type="checkbox" name="pref_planificacion" {% if 'planificacion' in active_prefs %}checked{% endif %}> Planificación</label>
+          <label><input type="checkbox" name="pref_solicitud" {% if 'solicitud' in active_prefs %}checked{% endif %}> Solicitud</label>
           <label><input type="checkbox" name="pref_obras" {% if 'obras' in active_prefs %}checked{% endif %}> Obras</label>
           <label><input type="checkbox" name="pref_fichajes" {% if 'fichajes' in active_prefs %}checked{% endif %}> Fichajes</label>
         </div>
@@ -42,17 +53,19 @@
           <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar</button>
         </div>
       </form>
+      {% endif %}
 
       <nav class="admin-logs-tabs" aria-label="Categorías de logs">
-        {% set log_tabs = [
+        {% set log_tabs_meta = [
           ('accesos', 'fa-sign-in-alt', 'Accesos'),
           ('valoraciones', 'fa-star', 'Valoraciones'),
           ('planificacion', 'fa-calendar-alt', 'Planificación'),
+          ('solicitud', 'fa-user-plus', 'Solicitud'),
           ('obras', 'fa-building', 'Obras'),
           ('fichajes', 'fa-user-clock', 'Fichajes'),
           ('persona_obra', 'fa-route', 'Persona-Obra'),
         ] %}
-        {% for cat_key, cat_icon, cat_label in log_tabs %}
+        {% for cat_key, cat_icon, cat_label in log_tabs_meta if cat_key in log_tabs %}
         <a class="{% if current_category == cat_key %}is-active{% endif %}"
            href="{{ url_for('admin.system_logs', category=cat_key) }}">
           <i class="fas {{ cat_icon }}"></i> {{ cat_label }}
@@ -68,6 +81,7 @@
           {% include 'components/_person_day_timeline_panel.html' %}
         </div>
       {% else %}
+        {% set is_laboral_tab = current_category in ['solicitud', 'planificacion'] %}
         <div class="admin-table-scroll">
           <table class="filterable-table admin-data-table mb-0" id="logsTable">
             <thead>
@@ -86,7 +100,10 @@
             </thead>
             <tbody id="logsTableBody">
               {% for log in logs %}
-              <tr class="log-row data-row">
+              {% set can_ack = is_laboral_tab and log.action not in laboral_excluded_actions %}
+              {% set is_unread = can_ack and log.id not in laboral_acked_ids %}
+              <tr class="log-row data-row{% if is_unread %} log-row--unread{% endif %}"
+                  {% if can_ack %}data-log-id="{{ log.id }}"{% endif %}>
                 <td data-sort-value="{{ log.timestamp.strftime('%Y%m%d%H%M%S') if log.timestamp else '' }}" class="text-muted" style="font-family:var(--font-mono); font-size:0.72rem;">
                   {{ log.timestamp|format_dt }}
                 </td>
@@ -126,23 +143,30 @@
 </div>
 
 <script>
-document.getElementById('btnEditNotifs').addEventListener('click', function() {
-    document.getElementById('formPrefs').style.display = 'block';
-});
-document.getElementById('btnCancelNotifs').addEventListener('click', function() {
-    document.getElementById('formPrefs').style.display = 'none';
-});
+var btnEditNotifs = document.getElementById('btnEditNotifs');
+var btnCancelNotifs = document.getElementById('btnCancelNotifs');
+if (btnEditNotifs) {
+    btnEditNotifs.addEventListener('click', function() {
+        document.getElementById('formPrefs').style.display = 'block';
+    });
+}
+if (btnCancelNotifs) {
+    btnCancelNotifs.addEventListener('click', function() {
+        document.getElementById('formPrefs').style.display = 'none';
+    });
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     const filterInputs = document.querySelectorAll('#logsTable .filter-input');
-    if (!filterInputs.length) return;
     const rows = document.querySelectorAll('.log-row');
     const emptySearchRow = document.getElementById('emptySearchRow');
     const emptyStateRow = document.getElementById('emptyStateRow');
 
-    filterInputs.forEach(function(input) {
-        input.addEventListener('input', filtrarLogs);
-    });
+    if (filterInputs.length) {
+        filterInputs.forEach(function(input) {
+            input.addEventListener('input', filtrarLogs);
+        });
+    }
 
     function filtrarLogs() {
         const filters = Array.from(filterInputs).map(function(inp) { return inp.value.toLowerCase().trim(); });
@@ -163,6 +187,96 @@ document.addEventListener('DOMContentLoaded', function() {
             emptySearchRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
         }
     }
+
+    function getCsrfToken() {
+        if (typeof window.getCsrfToken === 'function') return window.getCsrfToken();
+        var value = '; ' + document.cookie;
+        var parts = value.split('; csrf_token=');
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return '{{ csrf_token() }}';
+    }
+
+    function updateLaboralBadge(delta) {
+        var badge = document.querySelector('.sidebar-badge--laboral');
+        if (!badge) return;
+        var current = parseInt(badge.textContent, 10) || 0;
+        var next = Math.max(0, current + delta);
+        if (next <= 0) {
+            badge.remove();
+            var wrap = document.querySelector('.sidebar-badges');
+            if (wrap && !wrap.querySelector('.sidebar-badge')) wrap.remove();
+        } else {
+            badge.textContent = String(next);
+        }
+    }
+
+    function clearAllLaboralUi() {
+        document.querySelectorAll('#logsTableBody tr.log-row--unread').forEach(function(row) {
+            row.classList.remove('log-row--unread');
+        });
+        var badge = document.querySelector('.sidebar-badge--laboral');
+        if (badge) {
+            badge.remove();
+            var wrap = document.querySelector('.sidebar-badges');
+            if (wrap && !wrap.querySelector('.sidebar-badge')) wrap.remove();
+        }
+        document.querySelectorAll('.logs-tab-badge').forEach(function(el) {
+            var tab = el.closest('a');
+            if (tab && (tab.href.indexOf('planificacion') !== -1 || tab.href.indexOf('solicitud') !== -1)) {
+                el.remove();
+            }
+        });
+        var btn = document.getElementById('btnAckAllLaboral');
+        if (btn) btn.remove();
+    }
+
+    function postAck(url, onOk) {
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: '{}',
+        }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data && data.ok) onOk(data);
+        }).catch(function() {});
+    }
+
+    var btnAckAll = document.getElementById('btnAckAllLaboral');
+    if (btnAckAll) {
+        btnAckAll.addEventListener('click', function() {
+            if (!confirm('¿Marcar como leídos TODOS los avisos laborales pendientes para todos los usuarios (admin y laboral)?\n\nLos logs nuevos que lleguen después sí volverán a notificar.')) {
+                return;
+            }
+            btnAckAll.disabled = true;
+            postAck('/admin/logs/acknowledge-all-laboral', function() {
+                clearAllLaboralUi();
+            });
+        });
+    }
+
+    rows.forEach(function(row) {
+        var logId = row.getAttribute('data-log-id');
+        if (!logId) return;
+
+        row.addEventListener('click', function() {
+            if (!row.classList.contains('log-row--unread')) return;
+            postAck('/admin/logs/' + logId + '/acknowledge', function() {
+                row.classList.remove('log-row--unread');
+                updateLaboralBadge(-1);
+            });
+        });
+
+        row.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            if (row.classList.contains('log-row--unread')) return;
+            postAck('/admin/logs/' + logId + '/unacknowledge', function() {
+                row.classList.add('log-row--unread');
+                updateLaboralBadge(1);
+            });
+        });
+    });
 });
 </script>
 {% endblock %}

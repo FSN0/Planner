@@ -1,5 +1,5 @@
 # app/services/entity_panel_service.py
-"""Estadísticas e indicadores para fichas de Obra, Empleado y Empresa."""
+"""Estadísticas e indicadores para fichas de Obra, Empleado, Empresa y Vehículo."""
 
 from datetime import timedelta
 
@@ -36,10 +36,407 @@ def _asignaciones_empresa_q(company_id):
     )
 
 
+def get_worker_vehicle_rows(worker, days=30):
+    """Last N days AsignacionVehiculo for worker + optional RegistroOdometro km/driver."""
+    from app.models import AsignacionVehiculo, RegistroOdometro, Vehiculo
+    today = today_local()
+    start = today - timedelta(days=days - 1)
+    asignaciones = (
+        AsignacionVehiculo.query
+        .filter(
+            AsignacionVehiculo.user_id == worker.id,
+            AsignacionVehiculo.fecha >= start,
+            AsignacionVehiculo.fecha <= today,
+        )
+        .order_by(AsignacionVehiculo.fecha.desc())
+        .all()
+    )
+    if not asignaciones:
+        return []
+    veh_ids = {a.vehiculo_id for a in asignaciones}
+    fechas = {a.fecha for a in asignaciones}
+    vehiculos = {v.id: v for v in Vehiculo.query.filter(Vehiculo.id.in_(veh_ids)).all()}
+    odo_map = {}
+    try:
+        for r in RegistroOdometro.query.filter(
+            RegistroOdometro.vehiculo_id.in_(veh_ids),
+            RegistroOdometro.fecha.in_(fechas),
+        ).all():
+            odo_map[(r.vehiculo_id, r.fecha)] = r
+    except Exception:
+        odo_map = {}
+    rows = []
+    for a in asignaciones:
+        v = vehiculos.get(a.vehiculo_id)
+        odo = odo_map.get((a.vehiculo_id, a.fecha))
+        km = odo.valor if odo and odo.valor is not None else None
+        if km is None and v and v.odoo_odometer_date == a.fecha:
+            km = v.odoo_odometer_value
+        driver = (odo.odoo_driver_name if odo else None) or (v.odoo_driver_name if v else None)
+        rows.append({
+            'fecha': a.fecha,
+            'vehiculo_id': a.vehiculo_id,
+            'vehiculo_label': v.label() if v else f'#{a.vehiculo_id}',
+            'km': km,
+            'conductor': driver,
+        })
+    return rows
+
+
+def get_obra_vehicle_rows(obra, days=30):
+    """Days when operario assigned to obra ALSO has AsignacionVehiculo that day."""
+    from app.models import Asignacion, AsignacionVehiculo, RegistroOdometro, Vehiculo, User
+    today = today_local()
+    start = today - timedelta(days=days - 1)
+    obra_asigs = Asignacion.query.filter(
+        Asignacion.obra_id == obra.id,
+        Asignacion.fecha >= start,
+        Asignacion.fecha <= today,
+        Asignacion.user_id.isnot(None),
+    ).all()
+    if not obra_asigs:
+        return []
+    pairs = {(a.user_id, a.fecha) for a in obra_asigs}
+    user_ids = {u for u, _ in pairs}
+    fechas = {f for _, f in pairs}
+    veh_asigs = AsignacionVehiculo.query.filter(
+        AsignacionVehiculo.user_id.in_(user_ids),
+        AsignacionVehiculo.fecha.in_(fechas),
+    ).all()
+    veh_asigs = [a for a in veh_asigs if (a.user_id, a.fecha) in pairs]
+    if not veh_asigs:
+        return []
+    veh_ids = {a.vehiculo_id for a in veh_asigs}
+    vehiculos = {v.id: v for v in Vehiculo.query.filter(Vehiculo.id.in_(veh_ids)).all()}
+    users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()}
+    odo_map = {}
+    try:
+        for r in RegistroOdometro.query.filter(
+            RegistroOdometro.vehiculo_id.in_(veh_ids),
+            RegistroOdometro.fecha.in_(fechas),
+        ).all():
+            odo_map[(r.vehiculo_id, r.fecha)] = r
+    except Exception:
+        odo_map = {}
+    rows = []
+    for a in sorted(veh_asigs, key=lambda x: (x.fecha, x.id), reverse=True):
+        v = vehiculos.get(a.vehiculo_id)
+        u = users.get(a.user_id)
+        odo = odo_map.get((a.vehiculo_id, a.fecha))
+        km = odo.valor if odo and odo.valor is not None else None
+        if km is None and v and v.odoo_odometer_date == a.fecha:
+            km = v.odoo_odometer_value
+        rows.append({
+            'fecha': a.fecha,
+            'vehiculo_id': a.vehiculo_id,
+            'vehiculo_label': v.label() if v else f'#{a.vehiculo_id}',
+            'operario': f'{u.name} {u.lastname}' if u else f'#{a.user_id}',
+            'km': km,
+        })
+    return rows
+
+
+def get_vehicle_panel_stats(vehiculo):
+    """KPIs for vehicle ficha: planificación local + uso Odoo (odómetros)."""
+    from app.models import AsignacionVehiculo, RegistroOdometro, SolicitudVehiculo
+    from app.services.vehicle_sync_service import _build_user_indexes, _match_driver_user
+    from sqlalchemy import or_
+
+    today = today_local()
+    range_30 = today - timedelta(days=29)
+    veh_id = vehiculo.id
+
+    def _odo_usage_filter():
+        return or_(
+            RegistroOdometro.valor.isnot(None),
+            RegistroOdometro.odoo_driver_name.isnot(None),
+            RegistroOdometro.odoo_driver_partner_id.isnot(None),
+        )
+
+    planned_hoy = AsignacionVehiculo.query.filter_by(
+        vehiculo_id=veh_id, fecha=today
+    ).first()
+    odo_hoy = (
+        RegistroOdometro.query
+        .filter(
+            RegistroOdometro.vehiculo_id == veh_id,
+            RegistroOdometro.fecha == today,
+            _odo_usage_filter(),
+        )
+        .first()
+    )
+
+    users_by_odoo, users_by_name = _build_user_indexes()
+    conductor_hoy = None
+    usado_hoy = False
+    if planned_hoy and planned_hoy.user:
+        conductor_hoy = f'{planned_hoy.user.name} {planned_hoy.user.lastname}'
+        usado_hoy = True
+    elif odo_hoy:
+        usado_hoy = True
+        matched = _match_driver_user(
+            odo_hoy.odoo_driver_partner_id,
+            odo_hoy.odoo_driver_name,
+            users_by_odoo,
+            users_by_name,
+        )
+        if matched:
+            conductor_hoy = f'{matched.name} {matched.lastname}'
+        elif (odo_hoy.odoo_driver_name or '').strip():
+            conductor_hoy = f'{odo_hoy.odoo_driver_name.strip()} (no está en el programa)'
+        else:
+            conductor_hoy = 'Uso Odoo (sin conductor)'
+
+    planned_fechas = {
+        f for (f,) in db.session.query(AsignacionVehiculo.fecha).filter(
+            AsignacionVehiculo.vehiculo_id == veh_id,
+            AsignacionVehiculo.fecha >= range_30,
+            AsignacionVehiculo.fecha <= today,
+        ).all()
+    }
+    odo_fechas = {
+        f for (f,) in db.session.query(RegistroOdometro.fecha).filter(
+            RegistroOdometro.vehiculo_id == veh_id,
+            RegistroOdometro.fecha >= range_30,
+            RegistroOdometro.fecha <= today,
+            _odo_usage_filter(),
+        ).all()
+    }
+    dias_30 = len(planned_fechas | odo_fechas)
+
+    # Conductores distintos: users de planificación + matches Odoo + nombres externos
+    conductor_keys = set()
+    for a in AsignacionVehiculo.query.filter(
+        AsignacionVehiculo.vehiculo_id == veh_id,
+        AsignacionVehiculo.fecha >= range_30,
+        AsignacionVehiculo.fecha <= today,
+    ).all():
+        if a.user_id:
+            conductor_keys.add(f'u:{a.user_id}')
+
+    for r in RegistroOdometro.query.filter(
+        RegistroOdometro.vehiculo_id == veh_id,
+        RegistroOdometro.fecha >= range_30,
+        RegistroOdometro.fecha <= today,
+        _odo_usage_filter(),
+    ).all():
+        matched = _match_driver_user(
+            r.odoo_driver_partner_id, r.odoo_driver_name, users_by_odoo, users_by_name
+        )
+        if matched:
+            conductor_keys.add(f'u:{matched.id}')
+        elif (r.odoo_driver_name or '').strip():
+            conductor_keys.add(f'n:{(r.odoo_driver_name or "").strip().lower()}')
+        elif r.odoo_driver_partner_id is not None:
+            conductor_keys.add(f'p:{r.odoo_driver_partner_id}')
+    conductores_unicos = len(conductor_keys)
+
+    solicitudes_abiertas = SolicitudVehiculo.query.filter(
+        SolicitudVehiculo.vehiculo_id == veh_id,
+        SolicitudVehiculo.estado.in_(OPEN_SOLICITUD),
+    ).count()
+
+    chart_start = today - timedelta(days=13)
+    usage_dates = set()
+    for (f,) in db.session.query(AsignacionVehiculo.fecha).filter(
+        AsignacionVehiculo.vehiculo_id == veh_id,
+        AsignacionVehiculo.fecha >= chart_start,
+        AsignacionVehiculo.fecha <= today,
+    ).all():
+        usage_dates.add(f)
+    for (f,) in db.session.query(RegistroOdometro.fecha).filter(
+        RegistroOdometro.vehiculo_id == veh_id,
+        RegistroOdometro.fecha >= chart_start,
+        RegistroOdometro.fecha <= today,
+        _odo_usage_filter(),
+    ).all():
+        usage_dates.add(f)
+    chart_14d = [
+        1 if (chart_start + timedelta(days=i)) in usage_dates else 0
+        for i in range(14)
+    ]
+
+    km_txt = '—'
+    if vehiculo.odoo_odometer_value is not None:
+        km_txt = f'{int(vehiculo.odoo_odometer_value):,}'.replace(',', '.')
+        if vehiculo.odoo_odometer_date:
+            km_txt = f'{km_txt} ({vehiculo.odoo_odometer_date.strftime("%d/%m")})'
+
+    stats = [
+        {
+            'key': 'hoy',
+            'label': 'En uso hoy',
+            'value': 1 if usado_hoy else 0,
+            'sub': conductor_hoy or 'Libre hoy',
+            'icon': 'fa-calendar-day',
+            'tone': 'green' if usado_hoy else 'slate',
+        },
+        {
+            'key': 'dias_30',
+            'label': 'Días en uso (30d)',
+            'value': dias_30,
+            'sub': 'Planificado + Odoo',
+            'icon': 'fa-calendar-check',
+            'tone': 'slate',
+        },
+        {
+            'key': 'conductores',
+            'label': 'Conductores (30d)',
+            'value': conductores_unicos,
+            'sub': 'Personas distintas',
+            'icon': 'fa-users',
+            'tone': 'blue',
+        },
+        {
+            'key': 'odometro',
+            'label': 'Odómetro Odoo',
+            'value': km_txt,
+            'sub': vehiculo.odoo_driver_name or 'Sin conductor Odoo',
+            'icon': 'fa-tachometer-alt',
+            'tone': 'slate',
+        },
+        {
+            'key': 'solicitudes',
+            'label': 'Solicitudes abiertas',
+            'value': solicitudes_abiertas,
+            'sub': 'Pendientes / en proceso',
+            'icon': 'fa-clipboard-list',
+            'tone': 'amber' if solicitudes_abiertas else 'slate',
+            'href': url_for('admin.solicitudes_list', seccion='vehiculos') if solicitudes_abiertas else None,
+        },
+    ]
+
+    return {
+        'stats': stats,
+        'chart_14d': chart_14d,
+        'chart_14d_max': max(chart_14d) if chart_14d else 1,
+    }
+
+
+def get_vehicle_history_rows(vehiculo, days=30):
+    """Últimos N días: planificación local + uso Odoo (odómetro), unidos por fecha."""
+    from app.models import AsignacionVehiculo, Asignacion, RegistroOdometro, User, Obra
+    from app.services.vehicle_sync_service import _build_user_indexes, _match_driver_user
+
+    try:
+        days = int(days or 30)
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(730, days))
+
+    today = today_local()
+    start = today - timedelta(days=days - 1)
+    veh_id = vehiculo.id
+
+    asignaciones = (
+        AsignacionVehiculo.query
+        .filter(
+            AsignacionVehiculo.vehiculo_id == veh_id,
+            AsignacionVehiculo.fecha >= start,
+            AsignacionVehiculo.fecha <= today,
+        )
+        .all()
+    )
+    planned_by_date = {a.fecha: a for a in asignaciones}
+
+    odo_regs = RegistroOdometro.query.filter(
+        RegistroOdometro.vehiculo_id == veh_id,
+        RegistroOdometro.fecha >= start,
+        RegistroOdometro.fecha <= today,
+    ).all()
+    odo_by_date = {
+        r.fecha: r for r in odo_regs
+        if r.valor is not None or (r.odoo_driver_name or '').strip() or r.odoo_driver_partner_id
+    }
+
+    if not planned_by_date and not odo_by_date:
+        return []
+
+    users_by_odoo, users_by_name = _build_user_indexes()
+    user_ids = {a.user_id for a in asignaciones if a.user_id}
+    for r in odo_regs:
+        matched = _match_driver_user(
+            r.odoo_driver_partner_id, r.odoo_driver_name, users_by_odoo, users_by_name
+        )
+        if matched:
+            user_ids.add(matched.id)
+    users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
+
+    fechas = set(planned_by_date.keys()) | set(odo_by_date.keys())
+    obra_map = {}
+    if user_ids and fechas:
+        for a in Asignacion.query.filter(
+            Asignacion.user_id.in_(user_ids),
+            Asignacion.fecha.in_(fechas),
+        ).all():
+            key = (a.user_id, a.fecha)
+            if key not in obra_map:
+                obra_map[key] = a
+
+    obra_ids = {a.obra_id for a in obra_map.values() if a.obra_id}
+    obras = {o.id: o for o in Obra.query.filter(Obra.id.in_(obra_ids)).all()} if obra_ids else {}
+
+    rows = []
+    for fecha in sorted(fechas, reverse=True):
+        a = planned_by_date.get(fecha)
+        odo = odo_by_date.get(fecha)
+
+        planned_user = users.get(a.user_id) if a else None
+        matched = None
+        if odo:
+            matched = _match_driver_user(
+                odo.odoo_driver_partner_id, odo.odoo_driver_name, users_by_odoo, users_by_name
+            )
+
+        display_user = planned_user or matched
+        user_id = display_user.id if display_user else (a.user_id if a else None)
+
+        if planned_user:
+            operario = f'{planned_user.name} {planned_user.lastname}'
+            origen = 'planificado'
+        elif matched:
+            operario = f'{matched.name} {matched.lastname}'
+            origen = 'odoo'
+        elif odo and (odo.odoo_driver_name or '').strip():
+            operario = f'{odo.odoo_driver_name.strip()} (no está en el programa)'
+            origen = 'odoo_externo'
+        elif odo:
+            operario = 'Uso Odoo (sin conductor)'
+            origen = 'odoo'
+        else:
+            operario = f'#{a.user_id}' if a else '—'
+            origen = 'planificado'
+
+        obra_asig = obra_map.get((user_id, fecha)) if user_id else None
+        obra = obras.get(obra_asig.obra_id) if obra_asig and obra_asig.obra_id else None
+        km = odo.valor if odo and odo.valor is not None else None
+        if km is None and vehiculo.odoo_odometer_date == fecha:
+            km = vehiculo.odoo_odometer_value
+        driver = (odo.odoo_driver_name if odo else None) or None
+        if not driver and vehiculo.odoo_odometer_date == fecha:
+            driver = vehiculo.odoo_driver_name
+
+        rows.append({
+            'fecha': fecha,
+            'user_id': user_id,
+            'operario': operario,
+            'origen': origen,
+            'obra_id': obra.id if obra else None,
+            'obra_label': (
+                f'{obra.codigo} - {obra.nombre}' if obra and obra.codigo
+                else (obra.nombre if obra else None)
+            ),
+            'km': km,
+            'conductor': driver,
+        })
+    return rows
+
+
 def get_obra_panel_stats(obra):
     today = today_local()
     month_start, month_end = _month_bounds(today)
     chart_start = today - timedelta(days=13)
+    range_30 = today - timedelta(days=29)
     obra_id = obra.id
 
     q_hoy = Asignacion.query.filter(Asignacion.obra_id == obra_id, Asignacion.fecha == today)

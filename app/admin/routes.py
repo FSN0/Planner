@@ -1,7 +1,7 @@
 # app/admin/routes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, g
 from flask_login import login_required, current_user
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 from app.models import (
     User,
     Obra,
@@ -9,8 +9,11 @@ from app.models import (
     ROLE_ADMIN,
     ROLE_JEFE,
     ROLE_OPERARIO,
+    ROLE_LABORAL,
     Company,
     Solicitud,
+    SolicitudVehiculo,
+    Vehiculo,
 )
 from app import db
 from werkzeug.security import generate_password_hash
@@ -33,6 +36,15 @@ from app.services.entity_panel_service import (
     get_obra_panel_stats,
     get_worker_panel_stats,
     get_company_panel_stats,
+    get_worker_vehicle_rows,
+    get_obra_vehicle_rows,
+    get_vehicle_panel_stats,
+    get_vehicle_history_rows,
+)
+from app.services.permission_service import (
+    is_laboral,
+    laboral_log_categories,
+    user_can,
 )
 
 from app.services.email_service import notificar_resolucion_solicitud, notificar_movimiento_admin_a_jo
@@ -70,10 +82,51 @@ def import_obras():
 @admin_bp.route('/solicitudes')
 @login_required
 def solicitudes_list():
+    seccion = request.args.get('seccion', 'personal')
+    if seccion not in ('personal', 'vehiculos'):
+        seccion = 'personal'
+
     estado = request.args.get('estado', 'todas')
     tipo = request.args.get('tipo', 'todas')
     obra_id = request.args.get('obra_id')
     date_filter_str = request.args.get('date_filter')
+    estados_posibles = ['todas', 'PENDIENTE', 'EN_PROCESO', 'CUMPLIDA', 'CERRADA_PARCIAL', 'DENEGADA']
+    tipos_posibles = ['todas', 'generica', 'concreta']
+    target_date = parse_date(date_filter_str) if date_filter_str else None
+    obra_seleccionada = Obra.query.get(int(obra_id)) if obra_id and obra_id.isdigit() else None
+
+    # --- SECCIÓN VEHÍCULOS ---
+    if seccion == 'vehiculos':
+        v_query = SolicitudVehiculo.query
+        if current_user.role == ROLE_JEFE:
+            v_query = v_query.filter(SolicitudVehiculo.requested_by_id == current_user.id)
+
+        if estado != 'todas':
+            v_query = v_query.filter(SolicitudVehiculo.estado == estado)
+
+        if target_date:
+            v_query = v_query.filter(
+                SolicitudVehiculo.fecha_inicio <= target_date,
+                SolicitudVehiculo.fecha_fin >= target_date,
+            )
+
+        solicitudes_vehiculo = v_query.order_by(SolicitudVehiculo.created_at.desc()).all()
+        return render_template(
+            'admin_solicitudes_list.html',
+            seccion=seccion,
+            solicitudes=[],
+            solicitudes_vehiculo=solicitudes_vehiculo,
+            stats={},
+            estado_filtro=estado,
+            tipo_filtro=tipo,
+            date_filtro=target_date,
+            obra_filtro=obra_seleccionada,
+            estados_posibles=estados_posibles,
+            tipos_posibles=tipos_posibles,
+            can_resolve_vehiculo=(current_user.role == ROLE_ADMIN),
+        )
+
+    # --- SECCIÓN PERSONAL (default) ---
     query = Solicitud.query
     if current_user.role == ROLE_JEFE:
         # Un Jefe solo debe ver:
@@ -99,14 +152,11 @@ def solicitudes_list():
     if tipo != 'todas':
         query = query.filter(func.lower(Solicitud.tipo) == tipo.lower())
 
-    target_date = None
-    if date_filter_str:
-        target_date = parse_date(date_filter_str)
-        if target_date:
-            query = query.filter(
-                Solicitud.fecha_inicio <= target_date,
-                Solicitud.fecha_fin >= target_date
-            )
+    if target_date:
+        query = query.filter(
+            Solicitud.fecha_inicio <= target_date,
+            Solicitud.fecha_fin >= target_date
+        )
             
     solicitudes = query.order_by(Solicitud.created_at.desc()).all()
 
@@ -167,13 +217,11 @@ def solicitudes_list():
                 
             stats[s.id] = {'pct': min(pct, 100)}
 
-    estados_posibles = ['todas', 'PENDIENTE', 'EN_PROCESO', 'CUMPLIDA', 'CERRADA_PARCIAL', 'DENEGADA']
-    tipos_posibles = ['todas', 'generica', 'concreta']
-    obra_seleccionada = Obra.query.get(int(obra_id)) if obra_id and obra_id.isdigit() else None
-
     return render_template(
         'admin_solicitudes_list.html',
+        seccion=seccion,
         solicitudes=solicitudes,
+        solicitudes_vehiculo=[],
         stats=stats, 
         estado_filtro=estado,
         tipo_filtro=tipo,
@@ -181,11 +229,35 @@ def solicitudes_list():
         obra_filtro=obra_seleccionada,
         estados_posibles=estados_posibles,
         tipos_posibles=tipos_posibles,
+        can_resolve_vehiculo=(current_user.role == ROLE_ADMIN),
     )
+
+
+@admin_bp.route('/solicitudes-vehiculo/<int:solicitud_id>/resolver', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def resolver_solicitud_vehiculo(solicitud_id):
+    from app.services.vehicle_solicitud_service import VehicleSolicitudService
+
+    solicitud = SolicitudVehiculo.query.get_or_404(solicitud_id)
+    decision = request.form.get('decision') or (request.get_json() or {}).get('decision')
+    if not decision:
+        flash('Falta la decisión (aceptar/denegar).', 'danger')
+        return redirect(url_for('admin.solicitudes_list', seccion='vehiculos'))
+
+    try:
+        mensaje = VehicleSolicitudService.resolve(solicitud, decision, current_user)
+        flash(mensaje, 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(str(e), 'danger')
+
+    return redirect(url_for('admin.solicitudes_list', seccion='vehiculos', estado=request.args.get('estado', 'todas')))
+
     
 @admin_bp.route("/worker_panel/<int:user_id>", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def worker_panel(user_id):
     """
     Ficha del trabajador con calendario de sus asignaciones Y SOLICITUDES.
@@ -199,6 +271,8 @@ def worker_panel(user_id):
         stats=panel_stats["stats"],
         chart_14d=panel_stats["chart_14d"],
         chart_14d_max=panel_stats["chart_14d_max"],
+        vehicle_rows=get_worker_vehicle_rows(worker),
+        can_edit_calendar=user_can(current_user, 'worker_panel', 'w'),
     )
 
 
@@ -510,7 +584,7 @@ def buscar_obras():
 # --- EN app/admin/routes.py ---
 @admin_bp.route("/obra_panel/<int:obra_id>", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def obra_panel(obra_id):
     """
     Panel específico de una obra (Ficha de Obra).
@@ -536,6 +610,8 @@ def obra_panel(obra_id):
         chart_14d_max=panel_stats["chart_14d_max"],
         operarios_hoy=panel_stats["operarios_hoy"],
         ocupacion_pct=panel_stats["ocupacion_pct"],
+        vehicle_rows=get_obra_vehicle_rows(obra),
+        can_edit_calendar=user_can(current_user, 'obra_panel', 'w'),
     )
     
 @admin_bp.route("/companies", methods=["GET"])
@@ -550,6 +626,68 @@ def companies():
     companies_list = query.all()
     return render_template("admin_companies.html", companies=companies_list, filter_nombre=filter_nombre)
 
+
+@admin_bp.route("/vehiculos", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+def vehiculos():
+    """Listado de flota (origen sync Odoo)."""
+    vehicles = (
+        Vehiculo.query
+        .order_by(Vehiculo.active.desc(), Vehiculo.matricula.asc().nullslast(), Vehiculo.nombre.asc())
+        .all()
+    )
+    return render_template("admin_vehiculos.html", vehicles=vehicles)
+
+
+@admin_bp.route("/vehicle_panel/<int:vehiculo_id>", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+def vehicle_panel(vehiculo_id):
+    """Ficha de vehículo con historial (plegable) y calendario de asignaciones."""
+    vehiculo = Vehiculo.query.get_or_404(vehiculo_id)
+    panel_stats = get_vehicle_panel_stats(vehiculo)
+    try:
+        history_days = int(request.args.get('history_days') or 30)
+    except (TypeError, ValueError):
+        history_days = 30
+    history_days = max(1, min(730, history_days))
+    history_open = request.args.get('history_open') in ('1', 'true', 'yes')
+
+    return render_template(
+        "admin_vehicle_panel.html",
+        vehiculo=vehiculo,
+        stats=panel_stats["stats"],
+        chart_14d=panel_stats["chart_14d"],
+        chart_14d_max=panel_stats["chart_14d_max"],
+        history_days=history_days,
+        history_open=history_open,
+        history_rows=get_vehicle_history_rows(vehiculo, days=history_days) if history_open else [],
+        can_edit_calendar=(
+            current_user.role in (ROLE_ADMIN, ROLE_JEFE) and not is_laboral(current_user)
+        ),
+    )
+
+
+@admin_bp.route("/vehicle_panel/<int:vehiculo_id>/historial", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+def vehicle_panel_historial(vehiculo_id):
+    """Fragmento HTML del historial de uso (rango configurable, máx. 730 días)."""
+    vehiculo = Vehiculo.query.get_or_404(vehiculo_id)
+    try:
+        days = int(request.args.get('days') or 30)
+    except (TypeError, ValueError):
+        days = 30
+    days = max(1, min(730, days))
+    rows = get_vehicle_history_rows(vehiculo, days=days)
+    return render_template(
+        "components/_vehicle_history_table.html",
+        history_rows=rows,
+        history_days=days,
+    )
+
+
 @admin_bp.route("/create_company", methods=["GET", "POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -557,7 +695,7 @@ def create_company():
     """Gestiona el formulario de creación."""
     if request.method == "POST":
         code = request.form.get("code")
-        
+
         # --- FIX: Generar código automático si viene vacío o "None" ---
         if not code or str(code).strip() == "" or str(code).strip().lower() == "none":
             import uuid
@@ -570,7 +708,7 @@ def create_company():
         gremio = request.form.get("gremio")
         email = request.form.get("email")
         color = request.form.get("color") or "#ffffff"
-        
+
         # LEER CHECKBOX: Si está marcado viene 'on', si no, None.
         is_internal = True if request.form.get("is_internal") == "on" else False
 
@@ -858,7 +996,7 @@ def obras_detailed():
     context['next_month_url'] = url_for('admin.obras_detailed', selected_date=context['next_date_str'])
     
     # 4. Configurar modo vista (para activar botones de edición en el HTML)
-    context['view_mode'] = 'admin' 
+    context['view_mode'] = 'readonly' if is_laboral(current_user) else 'admin'
     
     # 5. Renderizar desempaquetando el contexto (header_days, timeline_data, free_workers, etc.)
     return render_template("obras_detailed_unificado.html", **context)
@@ -1467,6 +1605,9 @@ from app.services.assignment_service import process_assignment_action
 @admin_bp.route("/planificador")
 @login_required
 def planificador_jo():
+    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL]:
+        flash("Acceso denegado.", "danger")
+        return redirect(url_for('main.dashboard'))
     todas_obras = []
     jefes = []
     
@@ -1475,7 +1616,7 @@ def planificador_jo():
     # reciban la lista de empresas y puedan usar el filtro.
     empresas = Company.query.order_by(Company.nombre).all()
     
-    if current_user.role == ROLE_ADMIN:
+    if current_user.role in [ROLE_ADMIN, ROLE_LABORAL]:
         today = date.today()
         # Filtro blindado: Ni finalizadas, ni borradas lógicamente, ni pasadas de fecha
         todas_obras = Obra.query.filter(
@@ -1485,7 +1626,8 @@ def planificador_jo():
         ).order_by(Obra.nombre).all()
         
         # Cargamos los Jefes de Obra para el nuevo desplegable
-        jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).order_by(User.name).all()
+        if current_user.role == ROLE_ADMIN:
+            jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).order_by(User.name).all()
         
     return render_template("planificador.html", todas_obras=todas_obras, jefes=jefes, empresas=empresas, ROLE_ADMIN=ROLE_ADMIN)
 
@@ -1506,7 +1648,7 @@ def api_planificador_resources():
     
     if current_user.role == ROLE_JEFE:
         obras = Obra.query.filter(Obra.jefe_obra_id == current_user.id, *base_filters).all()
-    elif current_user.role == ROLE_ADMIN:
+    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL):
         if jefe_id:
             obras = Obra.query.filter(Obra.jefe_obra_id == jefe_id, *base_filters).all()
         else:
@@ -1552,7 +1694,7 @@ def api_planificador_events():
     # Recopilamos IDs asegurándonos de aplicar los mismos filtros blindados
     if current_user.role == ROLE_JEFE:
         obras_ids = [o.id for o in Obra.query.filter(Obra.jefe_obra_id == current_user.id, *base_filters).all()]
-    elif current_user.role == ROLE_ADMIN:
+    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL):
         if jefe_id:
             obras_ids = [o.id for o in Obra.query.filter(Obra.jefe_obra_id == jefe_id, *base_filters).all()]
         else:
@@ -1841,85 +1983,127 @@ def configuracion_global():
 def update_config():
     if current_user.role != 'admin':
         return redirect(url_for('main.dashboard'))
-        
+
     from app.models import ConfiguracionGlobal
-    
-    # 1. Guardar Límite de Custodia
-    limite = request.form.get('limite_custodia')
-    if limite and limite.isdigit():
-        conf = ConfiguracionGlobal.query.filter_by(clave='limite_custodia').first()
-        if not conf: db.session.add(ConfiguracionGlobal(clave='limite_custodia', valor=limite))
-        else: conf.valor = limite
-    
-    hora_limite = request.form.get('hora_limite_entrada')
-    if hora_limite:
-        conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
-        if not conf_hora:
-            db.session.add(ConfiguracionGlobal(clave='hora_limite_entrada', valor=hora_limite))
-        else:
-            conf_hora.valor = hora_limite
-            
-    # 2. Guardar Matriz de Emails (Convertimos la lista de checkboxes en un string separado por comas: "admin,jefe,trabajador")
-    eventos_email = ['email_sol_generica', 'email_sol_concreta', 'email_sol_resuelta', 'email_asignacion', 'email_desasignacion', 'email_traslado']
-    
-    for evento in eventos_email:
-        # request.form.getlist te da los values marcados, ej: ['admin', 'trabajador']
-        valores_marcados = request.form.getlist(evento)
-        valor_str = ",".join(valores_marcados) 
-        
-        conf = ConfiguracionGlobal.query.filter_by(clave=evento).first()
+
+    section = (request.form.get('form_section') or 'all').strip()
+
+    def _upsert(clave, valor):
+        conf = ConfiguracionGlobal.query.filter_by(clave=clave).first()
         if not conf:
-            db.session.add(ConfiguracionGlobal(clave=evento, valor=valor_str))
+            db.session.add(ConfiguracionGlobal(clave=clave, valor=str(valor)))
         else:
-            conf.valor = valor_str
-    
-    # --- AÑADIR ESTE BLOQUE ---
-    # 3. Guardar Configuración del Primer Fichaje (Inercia)
-    # Si el checkbox está marcado en el formulario, llega como 'on', si no, llega None
-    primer_fichaje_val = 'True' if request.form.get('aceptar_primer_fichaje') else 'False'
-        
-    conf_primer = ConfiguracionGlobal.query.filter_by(clave='aceptar_primer_fichaje').first()
-    if not conf_primer:
-        db.session.add(ConfiguracionGlobal(clave='aceptar_primer_fichaje', valor=primer_fichaje_val))
-    else:
-        conf_primer.valor = primer_fichaje_val
+            conf.valor = str(valor)
 
-    # Ausencias planificadas (vacaciones / conflictos)
-    jefe_resuelve = 'True' if request.form.get('ausencias_jefe_puede_resolver') else 'False'
-    conf_jefe = ConfiguracionGlobal.query.filter_by(clave='ausencias_jefe_puede_resolver').first()
-    if not conf_jefe:
-        db.session.add(ConfiguracionGlobal(clave='ausencias_jefe_puede_resolver', valor=jefe_resuelve))
-    else:
-        conf_jefe.valor = jefe_resuelve
+    def _upsert_int_cfg(clave, raw, default, min_v=1, max_v=100000):
+        try:
+            val = int(float(str(raw).strip().replace(',', '.'))) if raw not in (None, '') else int(default)
+        except (TypeError, ValueError):
+            val = int(default)
+        val = max(min_v, min(max_v, val))
+        _upsert(clave, val)
 
-    auto_res = request.form.get('ausencias_auto_resolucion') or 'overlay'
-    if auto_res == 'prefer_leave':
-        auto_res = 'overlay'
-    if auto_res not in ('overlay', 'none', 'prefer_assignment'):
-        auto_res = 'overlay'
-    conf_auto = ConfiguracionGlobal.query.filter_by(clave='ausencias_auto_resolucion').first()
-    if not conf_auto:
-        db.session.add(ConfiguracionGlobal(clave='ausencias_auto_resolucion', valor=auto_res))
+    # Compat: formularios antiguos sin form_section
+    if section == 'all':
+        section_keys = {'horario', 'fichajes', 'ausencias', 'laboral', 'vehiculos', 'emails'}
     else:
-        conf_auto.valor = auto_res
+        section_keys = {section}
+
+    if 'horario' in section_keys:
+        zona = (request.form.get('zona_horaria') or '').strip()
+        if zona:
+            _upsert('zona_horaria', zona)
+            from app.utils.timezone_utils import invalidate_app_timezone_cache
+            invalidate_app_timezone_cache()
+
+        hora_limite = request.form.get('hora_limite_entrada')
+        if hora_limite:
+            _upsert('hora_limite_entrada', hora_limite)
+
+        limite = request.form.get('limite_custodia')
+        if limite and str(limite).isdigit():
+            _upsert('limite_custodia', limite)
+
+    if 'fichajes' in section_keys:
+        primer_fichaje_val = 'True' if request.form.get('aceptar_primer_fichaje') else 'False'
+        _upsert('aceptar_primer_fichaje', primer_fichaje_val)
+
+    if 'ausencias' in section_keys:
+        jefe_resuelve = 'True' if request.form.get('ausencias_jefe_puede_resolver') else 'False'
+        _upsert('ausencias_jefe_puede_resolver', jefe_resuelve)
+
+        auto_res = request.form.get('ausencias_auto_resolucion') or 'overlay'
+        if auto_res == 'prefer_leave':
+            auto_res = 'overlay'
+        if auto_res not in ('overlay', 'none', 'prefer_assignment'):
+            auto_res = 'overlay'
+        _upsert('ausencias_auto_resolucion', auto_res)
+
+    if 'laboral' in section_keys:
+        laboral_resuelve = 'True' if request.form.get('laboral_puede_resolver_fichajes') else 'False'
+        _upsert('laboral_puede_resolver_fichajes', laboral_resuelve)
+
+    if 'vehiculos' in section_keys:
+        from app.services.vehicle_anomaly_service import DEFAULT_THRESHOLDS
+        _upsert_int_cfg(
+            'vehiculo_salto_km_dia',
+            request.form.get('vehiculo_salto_km_dia'),
+            DEFAULT_THRESHOLDS['vehiculo_salto_km_dia'],
+            min_v=50, max_v=5000,
+        )
+        _upsert_int_cfg(
+            'vehiculo_salto_delta_km',
+            request.form.get('vehiculo_salto_delta_km'),
+            DEFAULT_THRESHOLDS['vehiculo_salto_delta_km'],
+            min_v=50, max_v=50000,
+        )
+        _upsert_int_cfg(
+            'vehiculo_salto_ventana_dias',
+            request.form.get('vehiculo_salto_ventana_dias'),
+            DEFAULT_THRESHOLDS['vehiculo_salto_ventana_dias'],
+            min_v=1, max_v=60,
+        )
+
+    if 'emails' in section_keys:
+        eventos_email = [
+            'email_sol_generica', 'email_sol_concreta', 'email_sol_resuelta',
+            'email_asignacion', 'email_desasignacion', 'email_traslado',
+        ]
+        for evento in eventos_email:
+            valores_marcados = request.form.getlist(evento)
+            _upsert(evento, ",".join(valores_marcados))
 
     odoo_url = request.form.get('odoo_url')
     if odoo_url:
-        conf_odoo = ConfiguracionGlobal.query.filter_by(clave='odoo_url').first()
-        if not conf_odoo:
-            db.session.add(ConfiguracionGlobal(clave='odoo_url', valor=odoo_url))
-        else:
-            conf_odoo.valor = odoo_url
-            
+        _upsert('odoo_url', odoo_url)
+
+    flash_msgs = {
+        'horario': 'Horario y planificación guardados.',
+        'fichajes': 'Configuración de fichajes guardada.',
+        'ausencias': 'Configuración de ausencias guardada.',
+        'laboral': 'Permisos de Laboral guardados.',
+        'vehiculos': 'Alertas de vehículos guardadas.',
+        'emails': 'Notificaciones por correo guardadas.',
+        'all': 'Configuración global actualizada correctamente.',
+    }
+
     try:
-            db.session.commit()
-            flash('Configuración global actualizada correctamente.', 'success')
+        db.session.commit()
+        flash(flash_msgs.get(section, flash_msgs['all']), 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al guardar la configuración: {str(e)}', 'danger')
-        
-    
-            
+
+    anchor = {
+        'horario': 'cfg-horario',
+        'fichajes': 'cfg-fichajes',
+        'ausencias': 'cfg-ausencias',
+        'laboral': 'cfg-laboral',
+        'vehiculos': 'cfg-vehiculos',
+        'emails': 'cfg-emails',
+    }.get(section)
+    if anchor:
+        return redirect(url_for('admin.configuracion_global') + f'#{anchor}')
     return redirect(url_for('admin.configuracion_global'))
 
 @admin_bp.route('/configuracion/festivos/add', methods=['POST'])
@@ -2132,42 +2316,104 @@ def sso_odoo_contactos():
 # --- NUEVO MÓDULO DE LOGS Y AUDITORÍA ---
 @admin_bp.route("/logs", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN)
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def system_logs():
     from app.models import SystemLog, LogPreference
-    from app.services.log_notification_service import get_unread_logs_by_category
-    from datetime import datetime
-    
-    category = request.args.get('category', 'accesos')
+    from app.services.log_notification_service import (
+        get_unread_logs_by_category,
+        get_unread_laboral_logs_by_category,
+        get_laboral_acknowledged_ids,
+        LABORAL_LOG_CATEGORIES,
+        LABORAL_EXCLUDED_ACTIONS,
+    )
+    from datetime import timedelta
+
+    allowed_categories = laboral_log_categories(current_user)
+    if is_laboral(current_user):
+        default_category = allowed_categories[0] if allowed_categories else 'solicitud'
+    else:
+        default_category = 'accesos'
+    category = request.args.get('category', default_category)
+    if category not in allowed_categories:
+        category = default_category
     from app.utils.timezone_utils import utc_now, today_local
 
     logs = []
+    laboral_acked_ids = set()
     if category != 'persona_obra':
         logs = SystemLog.query.filter_by(category=category).order_by(SystemLog.timestamp.desc()).limit(300).all()
 
-        pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
-        if pref and pref.is_active:
-            pref.last_read_at = utc_now()
-            db.session.commit()
+        if current_user.role == ROLE_ADMIN:
+            pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()
+            if pref and pref.is_active:
+                pref.last_read_at = utc_now()
+                db.session.commit()
 
-    all_prefs = LogPreference.query.filter_by(user_id=current_user.id).all()
-    active_prefs = [p.category for p in all_prefs if p.is_active]
+        if category in LABORAL_LOG_CATEGORIES:
+            laboral_acked_ids = get_laboral_acknowledged_ids(
+                current_user.id, [log.id for log in logs]
+            )
 
+    active_prefs = []
+    if current_user.role == ROLE_ADMIN:
+        all_prefs = LogPreference.query.filter_by(user_id=current_user.id).all()
+        active_prefs = [p.category for p in all_prefs if p.is_active]
+
+    today = today_local()
     return render_template(
         "admin_logs.html",
         logs=logs,
         current_category=category,
         active_prefs=active_prefs,
-        log_unread_by_category=get_unread_logs_by_category(current_user.id, active_only=True),
-        default_date=today_local().strftime('%Y-%m-%d'),
+        log_unread_by_category=(
+            get_unread_laboral_logs_by_category(current_user.id)
+            if is_laboral(current_user)
+            else get_unread_logs_by_category(current_user.id, active_only=True)
+        ),
+        laboral_acked_ids=laboral_acked_ids,
+        laboral_excluded_actions=LABORAL_EXCLUDED_ACTIONS,
+        default_date=today.strftime('%Y-%m-%d'),
+        default_date_from=(today - timedelta(days=7)).strftime('%Y-%m-%d'),
+        default_date_to=today.strftime('%Y-%m-%d'),
+        can_manage_log_prefs=(current_user.role == ROLE_ADMIN),
+        log_tabs=allowed_categories,
     )
+
+
+@admin_bp.route("/logs/<int:log_id>/acknowledge", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def acknowledge_system_log(log_id):
+    from app.services.log_notification_service import acknowledge_log
+    acknowledge_log(current_user.id, log_id)
+    return jsonify({'ok': True})
+
+
+@admin_bp.route("/logs/<int:log_id>/unacknowledge", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def unacknowledge_system_log(log_id):
+    from app.services.log_notification_service import unacknowledge_log
+    unacknowledge_log(current_user.id, log_id)
+    return jsonify({'ok': True})
+
+
+@admin_bp.route("/logs/acknowledge-all-laboral", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def acknowledge_all_laboral_system_logs():
+    """Admin: marca como leídos TODOS los avisos laborales para todos los usuarios."""
+    from app.services.log_notification_service import acknowledge_all_laboral_logs_global
+    remaining = acknowledge_all_laboral_logs_global()
+    return jsonify({'ok': True, 'remaining': remaining})
+
 
 @admin_bp.route("/logs/preferencias", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
 def save_log_preferences():
     from app.models import LogPreference
-    categorias = ['accesos', 'valoraciones', 'planificacion', 'obras', 'fichajes']
+    categorias = ['accesos', 'valoraciones', 'planificacion', 'obras', 'fichajes', 'solicitud']
     
     for cat in categorias:
         pref = LogPreference.query.filter_by(user_id=current_user.id, category=cat).first()
@@ -2189,7 +2435,7 @@ def save_log_preferences():
 
 @admin_bp.route('/ausencias')
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def ausencias_list():
     from datetime import date as date_cls
     from app.services.leave_service import (
@@ -2202,7 +2448,7 @@ def ausencias_list():
     )
 
     estado = request.args.get('estado') or ''
-    puede_resolver = current_user.role == ROLE_ADMIN or (
+    puede_resolver = current_user.role in (ROLE_ADMIN, ROLE_LABORAL) or (
         current_user.role == ROLE_JEFE and jefe_puede_resolver_ausencias()
     )
     obra_ids = None
@@ -2241,7 +2487,7 @@ def ausencias_list():
 
 @admin_bp.route('/ausencias/sync', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN)
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def ausencias_sync():
     from app.services.leave_service import sync_leaves_from_erp
     try:
@@ -2258,7 +2504,7 @@ def ausencias_sync():
 
 @admin_bp.route('/ausencias/crear', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN)
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def ausencias_crear():
     from app.services.leave_service import create_manual_leave
 
@@ -2291,7 +2537,7 @@ def ausencias_crear():
 
 @admin_bp.route('/ausencias/conflictos/<int:conflict_id>/resolver', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def ausencias_resolver_conflicto(conflict_id):
     from app.models import AusenciaConflicto, CONFLICT_KEEP_LEAVE, CONFLICT_KEEP_ASSIGNMENT
     from app.services.leave_service import (
@@ -2300,6 +2546,9 @@ def ausencias_resolver_conflicto(conflict_id):
     )
 
     if current_user.role == ROLE_JEFE and not jefe_puede_resolver_ausencias():
+        flash('No tienes permiso para resolver conflictos de ausencias.', 'danger')
+        return redirect(url_for('admin.ausencias_list'))
+    if current_user.role == ROLE_LABORAL and not user_can(current_user, 'ausencias', 'x'):
         flash('No tienes permiso para resolver conflictos de ausencias.', 'danger')
         return redirect(url_for('admin.ausencias_list'))
 
@@ -2314,6 +2563,7 @@ def ausencias_resolver_conflicto(conflict_id):
         if not obra or obra.jefe_obra_id != current_user.id:
             flash('Solo puedes resolver conflictos de tus obras.', 'danger')
             return redirect(url_for('admin.ausencias_list'))
+    # laboral: like admin, no obra scope
 
     try:
         ok = resolve_conflict(conflict_id, decision, resolved_by_id=current_user.id)

@@ -16,8 +16,8 @@
     <article class="entity-panel-card">
       <header class="entity-panel-card-top">
         <div class="entity-panel-toolbar-start">
-          <a href="{{ url_for('admin.personal') }}" class="entity-panel-back">
-            <i class="fas fa-arrow-left"></i> Personal
+          <a href="{{ url_for('admin.personal') if current_user.role == 'admin' else url_for('admin.obras_detailed') }}" class="entity-panel-back">
+            <i class="fas fa-arrow-left"></i> {{ 'Personal' if current_user.role == 'admin' else 'Tablero' }}
           </a>
           <span class="entity-type-marker"><i class="fas fa-hard-hat"></i> Empleado</span>
         </div>
@@ -128,6 +128,37 @@
       {% include "components/_entity_stats.html" %}
     </article>
 
+    <section class="entity-calendar-zone entity-vehicles-zone">
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-car"></i> Vehículos</h2>
+      {% if vehicle_rows %}
+      <div class="admin-table-scroll">
+        <table class="filterable-table admin-data-table mb-0">
+          <thead><tr class="header-row">
+            <th>Fecha</th><th>Vehículo</th><th>Km Odoo</th><th>Conductor Odoo</th>
+          </tr></thead>
+          <tbody>
+          {% for row in vehicle_rows %}
+            <tr>
+              <td>{{ row.fecha.strftime('%d/%m/%Y') }}</td>
+              <td>
+                {% if row.vehiculo_id %}
+                <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=row.vehiculo_id) }}" class="table-link-primary">{{ row.vehiculo_label }}</a>
+                {% else %}
+                {{ row.vehiculo_label }}
+                {% endif %}
+              </td>
+              <td>{% if row.km is not none %}{{ '%.0f'|format(row.km) }}{% else %}—{% endif %}</td>
+              <td>{{ row.conductor or '—' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0" style="padding:0.75rem 0;">Sin asignaciones de vehículo en los últimos 30 días.</p>
+      {% endif %}
+    </section>
+
     <section class="entity-calendar-zone">
       <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Planificación</h2>
       <div id="worker-calendar" class="univ-calendar-root" style="min-height: 500px;"></div>
@@ -186,7 +217,8 @@ document.addEventListener('DOMContentLoaded', function() {
         mode: 'obras',
         entityName: {{ (worker.name ~ ' ' ~ worker.lastname)|tojson }},
         showFichajes: true,
-        hideTitle: true
+        hideTitle: true,
+        readonly: {{ (not can_edit_calendar)|tojson }}
     });
 
     window.enviarAccionPerfil = function(payload, revertFunc) {

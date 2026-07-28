@@ -25,6 +25,8 @@
 {% endblock %}
 
 {% block wrapper %}
+{% set auditoria_sections = auditoria_sections if auditoria_sections is defined else visible_sections %}
+{% set visible_sections = auditoria_sections %}
 <div class="admin-shell auditoria-page">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact">
@@ -35,6 +37,7 @@
         <span class="page-toolbar-count">Odoo vs planificación</span>
       </div>
       <div class="page-toolbar-actions">
+        {% if current_user.role != 'laboral' %}
         <select id="diasSync" class="form-control custom-select mr-2">
           <option value="0">Solo hoy</option>
           <option value="7" selected>Últimos 7 días</option>
@@ -48,6 +51,7 @@
         <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-arrow-left"></i> Sync
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -56,27 +60,38 @@
     {% set var_ausencias = pendientes | selectattr('estado', 'equalto', 'Ausencia') | list %}
 
     <div class="auditoria-stats">
+      {% if 'conflictos' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseConflictos" title="Ir a desviaciones">
         <i class="fas fa-random"></i> {{ var_conflictos|length }} desviaciones
       </span>
+      {% endif %}
+      {% if 'paracaidistas' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseParacaidistas" title="Ir a sin planificar">
         <i class="fas fa-parachute-box"></i> {{ var_paracaidistas|length }} sin planificar
       </span>
+      {% endif %}
+      {% if 'ausencias' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseAusencias" title="Ir a ausencias">
         <i class="fas fa-user-slash"></i> {{ var_ausencias|length }} ausencias
       </span>
+      {% endif %}
+      {% if correcciones and 'modificacion_odoo' in visible_sections %}
       {% if correcciones %}
       <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseCorrecciones" title="Ir a modificaciones Odoo">
         <i class="fas fa-pen"></i> {{ correcciones|length }} cambios Odoo
       </span>
       {% endif %}
+      {% endif %}
+      {% if 'historico_global' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseHistorial" title="Ir al histórico">
         <i class="fas fa-archive"></i> {{ historial|length }} en histórico
       </span>
+      {% endif %}
     </div>
 
     <div class="accordion auditoria-accordion" id="accordionAuditoria">
 
+        {% if 'conflictos' in visible_sections %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;">
             <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
                 <h6 class="auditoria-section-title text-danger mb-0">
@@ -131,9 +146,13 @@
                                 </td>
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
+                                    {% if can_resolve|default(can_resolve_fichajes) %}
                                     <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')">Mover</button>
                                     <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')">+ Añadir</button>
                                     <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')">Ignorar</button>
+                                    {% else %}
+                                    <span class="text-muted small">Solo lectura</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -145,7 +164,9 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
+        {% if 'paracaidistas' in visible_sections %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;">
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title text-info mb-0">
@@ -194,8 +215,12 @@
                                 </td>
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
+                                    {% if can_resolve|default(can_resolve_fichajes) %}
                                     <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="Asignar oficialmente a esta obra">Aceptar</button>
                                     <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="Ocultar esta alerta">Ignorar</button>
+                                    {% else %}
+                                    <span class="text-muted small">Solo lectura</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -207,7 +232,9 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
+        {% if 'ausencias' in visible_sections %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;">
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title mb-0" style="color: #d97706;">
@@ -248,9 +275,13 @@
                                 <td data-sort-value="ausencia"><span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> Sin registro Odoo</span></td>
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
+                                    {% if can_resolve|default(can_resolve_fichajes) %}
                                     <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'confirmar_ausencia')" title="Falta real (Mantiene la planificación)">Ausencia</button>
                                     <button class="btn btn-outline-warning btn-audit text-dark mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'borrar_planificacion')" title="Elimina la planificación asignada para este día">Falta</button>
                                     <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="Oculta esta alerta sin realizar cambios">Ignorar</button>
+                                    {% else %}
+                                    <span class="text-muted small">Solo lectura</span>
+                                    {% endif %}
 
                                 </td>
                             </tr>
@@ -263,7 +294,9 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
+        {% if correcciones and 'modificacion_odoo' in visible_sections %}
         {% if correcciones %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;">
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseCorrecciones" role="button" aria-expanded="false">
@@ -331,7 +364,9 @@
             </div>
         </div>
         {% endif %}
+        {% endif %}
 
+        {% if 'historico_global' in visible_sections %}
         <div class="auditoria-section card-modern card mb-4" style="overflow: hidden;">
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseHistorial" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title mb-0 text-secondary">
@@ -443,6 +478,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
     </div>{# /accordionAuditoria #}
 

@@ -2,7 +2,7 @@ import xmlrpc.client
 import os
 import re
 from app import db
-from app.models import Obra, User, Company
+from app.models import Obra, User, Company, Vehiculo
 from app.sync.adapters.base import BaseSyncAdapter
 from app.services.config_service import get_tenant_config
 
@@ -484,3 +484,269 @@ class Adapter(BaseSyncAdapter):
                 diff['empleados']['nuevos'].append(data_cont)
                 
         return diff
+
+    # ------------------------------------------------------------------
+    # Flota / odómetros (Odoo Fleet)
+    # ------------------------------------------------------------------
+
+    def _odoo_model_exists(self, model_name: str) -> bool:
+        try:
+            count = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'ir.model', 'search_count', [[('model', '=', model_name)]],
+            )
+            return bool(count)
+        except Exception:
+            return False
+
+    def _odoo_fields_get(self, model_name: str) -> dict:
+        try:
+            return self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                model_name, 'fields_get', [],
+                {'attributes': ['string', 'type', 'relation']},
+            ) or {}
+        except Exception:
+            return {}
+
+    def _m2o_id_name(self, val):
+        if isinstance(val, (list, tuple)) and len(val) >= 2:
+            return val[0], val[1]
+        return None, None
+
+    def get_diff_vehiculos(self):
+        """Diff fleet.vehicle ↔ Vehiculo local (external_ids['odoo'])."""
+        import logging
+        logger = logging.getLogger(__name__)
+        empty = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'error': None}
+
+        if not self._odoo_model_exists('fleet.vehicle'):
+            empty['error'] = 'Modelo fleet.vehicle no disponible en Odoo (¿módulo Fleet instalado?).'
+            logger.warning(f"[Odoo Adapter - Tenant {self.tenant_id}] {empty['error']}")
+            return empty
+
+        available = self._odoo_fields_get('fleet.vehicle')
+        # Campos estándar Fleet; brand_id puede ser related o ausente según versión.
+        wanted = ['id', 'name', 'license_plate', 'model_id', 'brand_id', 'active', 'driver_id']
+        fields = [f for f in wanted if f in available] or ['id', 'name']
+        if 'license_plate' not in fields and 'license_plate' in available:
+            fields.append('license_plate')
+
+        try:
+            odoo_vehicles = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'fleet.vehicle', 'search_read',
+                [[]],
+                {'fields': fields},
+            )
+        except Exception as e:
+            empty['error'] = f'Error leyendo fleet.vehicle: {e}'
+            logger.error(f"[Odoo Adapter - Tenant {self.tenant_id}] {empty['error']}")
+            return empty
+
+        if not isinstance(odoo_vehicles, list):
+            empty['error'] = 'Respuesta inválida de Odoo para fleet.vehicle.'
+            return empty
+
+        # Cache marca desde fleet.vehicle.model si no hay brand_id en vehicle
+        model_brand_cache = {}
+        need_model_brand = 'brand_id' not in fields and 'model_id' in fields
+        if need_model_brand and self._odoo_model_exists('fleet.vehicle.model'):
+            model_fields = self._odoo_fields_get('fleet.vehicle.model')
+            brand_field = 'brand_id' if 'brand_id' in model_fields else None
+            if brand_field:
+                model_ids = sorted({
+                    self._m2o_id_name(v.get('model_id'))[0]
+                    for v in odoo_vehicles if v.get('model_id')
+                } - {None})
+                if model_ids:
+                    try:
+                        models_rows = self.models.execute_kw(
+                            self.db_name, self.uid, self.pwd,
+                            'fleet.vehicle.model', 'search_read',
+                            [[('id', 'in', model_ids)]],
+                            {'fields': ['id', brand_field]},
+                        )
+                        for row in models_rows or []:
+                            _, bname = self._m2o_id_name(row.get(brand_field))
+                            model_brand_cache[row['id']] = bname or ''
+                    except Exception as e:
+                        logger.warning(
+                            f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                            f"No se pudo resolver marca vía model: {e}"
+                        )
+
+        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'error': None}
+
+        for veh in odoo_vehicles:
+            model_id, modelo_name = self._m2o_id_name(veh.get('model_id'))
+            marca = ''
+            if 'brand_id' in fields:
+                _, marca = self._m2o_id_name(veh.get('brand_id'))
+                marca = marca or ''
+            elif model_id and model_id in model_brand_cache:
+                marca = model_brand_cache[model_id]
+
+            driver_partner_id, driver_name = self._m2o_id_name(veh.get('driver_id'))
+            matricula = (veh.get('license_plate') or '') if isinstance(veh.get('license_plate'), str) else ''
+            matricula = matricula.strip() or None
+            nombre = (veh.get('name') or matricula or f"Vehículo {veh['id']}").strip()
+            active = bool(veh.get('active', True))
+
+            data = {
+                'odoo_id': veh['id'],
+                'nombre': nombre,
+                'matricula': matricula,
+                'marca': marca or None,
+                'modelo': (modelo_name or None),
+                'active': active,
+                'driver_partner_id': driver_partner_id,
+                'driver_name': driver_name,
+                'cambios': {},
+            }
+
+            local = Vehiculo.query.filter(
+                Vehiculo.external_ids['odoo'].astext == str(veh['id'])
+            ).first()
+            if not local and matricula:
+                local = Vehiculo.query.filter(Vehiculo.matricula == matricula).first()
+
+            if local:
+                data['local_id'] = local.id
+                if (local.nombre or '') != nombre:
+                    data['cambios']['Nombre'] = f"{local.nombre} ➔ {nombre}"
+                if (local.matricula or '') != (matricula or ''):
+                    data['cambios']['Matrícula'] = f"{local.matricula or '—'} ➔ {matricula or '—'}"
+                if (local.marca or '') != (marca or ''):
+                    data['cambios']['Marca'] = f"{local.marca or '—'} ➔ {marca or '—'}"
+                if (local.modelo or '') != (modelo_name or ''):
+                    data['cambios']['Modelo'] = f"{local.modelo or '—'} ➔ {modelo_name or '—'}"
+                if bool(local.active) != active:
+                    data['cambios']['Activo'] = f"{local.active} ➔ {active}"
+
+                if data['cambios'] or not (local.external_ids or {}).get('odoo'):
+                    diff['actualizados'].append(data)
+                else:
+                    diff['sin_cambios'].append(data)
+            else:
+                diff['nuevos'].append(data)
+
+        return diff
+
+    def get_odometros_diarios(self, fecha=None, fecha_hasta=None):
+        """Lee fleet.vehicle.odometer; fields_get para nombres de campo variables."""
+        import logging
+        from datetime import date as date_cls
+
+        logger = logging.getLogger(__name__)
+
+        if not fecha:
+            fecha = date_cls.today().strftime('%Y-%m-%d')
+        if not fecha_hasta:
+            fecha_hasta = fecha
+
+        if not self._odoo_model_exists('fleet.vehicle.odometer'):
+            logger.warning(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                "fleet.vehicle.odometer no disponible."
+            )
+            return []
+
+        available = self._odoo_fields_get('fleet.vehicle.odometer')
+        if not available:
+            return []
+
+        # Campos comunes según versión / customizaciones Soltec
+        vehicle_field = next(
+            (c for c in ('vehicle_id', 'fleet_vehicle_id', 'vehiculo_id') if c in available),
+            None,
+        )
+        value_field = next(
+            (c for c in ('value', 'odometer', 'km', 'kilometros') if c in available),
+            None,
+        )
+        date_field = next(
+            (c for c in ('date', 'odometer_date', 'fecha') if c in available),
+            None,
+        )
+        driver_field = next(
+            (
+                c for c in (
+                    'driver_id', 'partner_id', 'employee_id',
+                    'create_uid', 'user_id',
+                ) if c in available
+            ),
+            None,
+        )
+
+        if not vehicle_field or not value_field or not date_field:
+            logger.error(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                f"odómetro: faltan campos obligatorios "
+                f"(vehicle={vehicle_field}, value={value_field}, date={date_field}). "
+                f"Disponibles: {sorted(available.keys())}"
+            )
+            return []
+
+        fields = [vehicle_field, value_field, date_field]
+        if driver_field:
+            fields.append(driver_field)
+
+        domain = [
+            (date_field, '>=', fecha),
+            (date_field, '<=', fecha_hasta),
+        ]
+
+        try:
+            rows = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'fleet.vehicle.odometer', 'search_read',
+                [domain],
+                {'fields': fields, 'order': f'{date_field} asc, id asc', 'limit': 10000},
+            )
+        except Exception as e:
+            logger.error(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                f"Error leyendo fleet.vehicle.odometer: {e}"
+            )
+            return []
+
+        if not isinstance(rows, list):
+            return []
+
+        result = []
+        for row in rows:
+            veh_id, _ = self._m2o_id_name(row.get(vehicle_field))
+            if veh_id is None and isinstance(row.get(vehicle_field), int):
+                veh_id = row.get(vehicle_field)
+            if not veh_id:
+                continue
+
+            raw_date = row.get(date_field)
+            if not raw_date:
+                continue
+            date_str = str(raw_date)[:10]
+
+            raw_val = row.get(value_field)
+            try:
+                value = float(raw_val) if raw_val not in (False, None, '') else None
+            except (TypeError, ValueError):
+                value = None
+
+            driver_partner_id, driver_name = None, None
+            if driver_field:
+                driver_partner_id, driver_name = self._m2o_id_name(row.get(driver_field))
+                # create_uid / user_id son res.users; el nombre sigue siendo útil
+                if driver_field in ('create_uid', 'user_id') and driver_partner_id:
+                    # Conservamos el id de user Odoo solo como referencia débil
+                    pass
+
+            result.append({
+                'odoo_vehicle_id': int(veh_id),
+                'date': date_str,
+                'value': value,
+                'driver_partner_id': int(driver_partner_id) if driver_partner_id else None,
+                'driver_name': driver_name,
+            })
+
+        return result

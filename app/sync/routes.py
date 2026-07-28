@@ -4,17 +4,19 @@ import xmlrpc.client
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, g
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
 
 from app import db
-from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje, ROLE_ADMIN
+from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje, RegistroOdometro, ROLE_ADMIN, ROLE_LABORAL
 from app.services.core_assignment_service import CoreAssignmentService
 from app.services.sync_dashboard_service import get_sync_panel_context, test_odoo_connection
 from app.services.sync_config_service import SyncConfigService
 from app.services.config_service import set_tenant_config, get_tenant_config
 from app.sync.dispatcher import get_sync_adapter
 from app.decorators import roles_required
+from app.services.permission_service import can_resolve_fichajes, is_laboral, laboral_auditoria_sections
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
 
@@ -152,6 +154,8 @@ def api_run_sync(task_name):
         'ausencias': 'ausencias / time off',
         'fichajes': 'fichajes del día',
         'fichajes-retro': 'fichajes retrospectivos',
+        'vehiculos': 'vehículos / flota (en vivo)',
+        'vehiculos-retro': 'vehículos retrospectivos',
     }
     if task_name not in labels:
         return jsonify({'success': False, 'message': 'Módulo desconocido'}), 400
@@ -160,6 +164,7 @@ def api_run_sync(task_name):
             auto_sync_obras, auto_sync_empleados, auto_sync_subcontratas,
             auto_sync_ausencias,
             fichajes_en_vivo, fichajes_retroactivos,
+            vehiculos_en_vivo, vehiculos_retroactivos,
         )
         tasks = {
             'obras': auto_sync_obras,
@@ -168,6 +173,8 @@ def api_run_sync(task_name):
             'ausencias': auto_sync_ausencias,
             'fichajes': fichajes_en_vivo,
             'fichajes-retro': fichajes_retroactivos,
+            'vehiculos': vehiculos_en_vivo,
+            'vehiculos-retro': vehiculos_retroactivos,
         }
         tasks[task_name].delay()
         return jsonify({
@@ -577,7 +584,7 @@ def commit_empleados():
 @sync_bp.route('/auditoria')
 @login_required
 def auditoria_fichajes():
-    if current_user.role not in ['admin', 'jefe_obra']:
+    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL]:
         flash("Acceso denegado. Solo Admin o Jefes de Obra pueden auditar fichajes.", "danger")
         return redirect(url_for('main.index'))
     
@@ -603,11 +610,16 @@ def auditoria_fichajes():
     pendientes = RegistroFichaje.query.filter(*filtros_pendientes).order_by(RegistroFichaje.fecha.desc()).all()
     historial = RegistroFichaje.query.filter(*filtros_historial).order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc()).limit(1500).all()
     correcciones = RegistroFichaje.query.filter(*filtros_correcciones).order_by(RegistroFichaje.fecha.desc()).limit(500).all()
+    visible_sections = laboral_auditoria_sections(current_user)
     
     return render_template('sync/auditoria.html', 
                            pendientes=pendientes, 
                            historial=historial,
-                           correcciones=correcciones) # Pasamos la nueva variable
+                           correcciones=correcciones,
+                           auditoria_sections=visible_sections,
+                           visible_sections=visible_sections,
+                           can_resolve=can_resolve_fichajes(current_user),
+                           can_resolve_fichajes=can_resolve_fichajes(current_user))
 
 ACCION_RESOLUCION_TITULOS = {
     'ignorar': 'Ignorar',
@@ -679,8 +691,10 @@ def resolver_fichaje():
     from app.models import RegistroFichaje, Asignacion, Obra
     from datetime import datetime
     
-    if current_user.role not in ['admin', 'jefe_obra']:
+    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL]:
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    if not can_resolve_fichajes(current_user):
+        return jsonify({'success': False, 'error': 'Resolución deshabilitada para este perfil.'}), 403
         
     data = request.json
     registro_id = data.get('registro_id')
@@ -815,6 +829,243 @@ def sync_fichajes_manual():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/preview_vehiculos', methods=['GET'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def preview_vehiculos():
+    if not _require_odoo_module():
+        return redirect(url_for('admin.panel'))
+    try:
+        from app.services.vehicle_sync_service import preview_diff
+        preview = preview_diff()
+        return render_template(
+            'sync/preview_vehiculos.html',
+            preview=preview,
+            diff=preview.get('diff') or {},
+        )
+    except Exception as e:
+        flash(f"Error obteniendo diff de vehículos: {e}", "danger")
+        return redirect(url_for('sync.odoo_panel'))
+
+
+@sync_bp.route('/commit_vehiculos', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def commit_vehiculos():
+    if not _require_odoo_module():
+        return jsonify({'success': False, 'error': 'Módulo Odoo no habilitado'}), 403
+    try:
+        from app.services.vehicle_sync_service import apply_diff
+        data = request.get_json() or {}
+        # Si el cliente manda buckets, reconstruimos; si no, re-diff desde Odoo
+        if 'nuevos' in data or 'actualizados' in data:
+            diff = {
+                'nuevos': data.get('nuevos', []),
+                'actualizados': data.get('actualizados', []),
+                'sin_cambios': data.get('sin_cambios', []),
+                'error': None,
+            }
+            result = apply_diff(diff=diff, modo='Manual')
+        else:
+            result = apply_diff(modo='Manual')
+        if result.get('error'):
+            return jsonify({'success': False, 'error': result['error']}), 400
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/auditoria-vehiculos')
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def auditoria_vehiculos():
+    """Auditoría informativa plan vs odómetro Odoo (sin acciones de resolución)."""
+    if not _require_odoo_module():
+        return redirect(url_for('admin.panel'))
+
+    from app.utils.timezone_utils import today_local
+
+    hoy = today_local()
+    fecha_desde_str = (request.args.get('fecha_desde') or '').strip()
+    fecha_hasta_str = (request.args.get('fecha_hasta') or '').strip()
+    estado = (request.args.get('estado') or 'all').strip()
+    orden = (request.args.get('orden') or 'fecha_desc').strip()
+    search = (request.args.get('q') or '').strip().lower()
+
+    def _parse_iso_date(raw, default):
+        if not raw:
+            return default
+        try:
+            return datetime.strptime(raw, '%Y-%m-%d').date()
+        except ValueError:
+            return default
+
+    fecha_hasta = _parse_iso_date(fecha_hasta_str, hoy)
+    fecha_desde = _parse_iso_date(fecha_desde_str, hoy - timedelta(days=7))
+    if fecha_hasta < fecha_desde:
+        fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
+
+    registros = (
+        RegistroOdometro.query
+        .options(
+            joinedload(RegistroOdometro.vehiculo),
+            joinedload(RegistroOdometro.planned_user),
+        )
+        .filter(
+            RegistroOdometro.fecha >= fecha_desde,
+            RegistroOdometro.fecha <= fecha_hasta,
+        )
+        .all()
+    )
+
+    if estado in {'mismatch_driver', 'sin_km', 'sin_planificar', 'ok'}:
+        registros = [r for r in registros if r.estado == estado]
+
+    if search:
+        def _match_text(reg):
+            values = [
+                reg.vehiculo.matricula if reg.vehiculo else '',
+                reg.vehiculo.nombre if reg.vehiculo else '',
+                reg.odoo_driver_name or '',
+                reg.planned_user.name if reg.planned_user else '',
+                reg.planned_user.lastname if reg.planned_user else '',
+                reg.estado or '',
+            ]
+            haystack = ' '.join(v for v in values if v).lower()
+            return search in haystack
+
+        registros = [r for r in registros if _match_text(r)]
+
+    sorters = {
+        'fecha_desc': lambda r: (r.fecha, r.id),
+        'fecha_asc': lambda r: (r.fecha, r.id),
+        'vehiculo_asc': lambda r: (
+            ((r.vehiculo.matricula if r.vehiculo else '') or (r.vehiculo.nombre if r.vehiculo else '') or '').lower(),
+            r.fecha,
+            r.id,
+        ),
+        'vehiculo_desc': lambda r: (
+            ((r.vehiculo.matricula if r.vehiculo else '') or (r.vehiculo.nombre if r.vehiculo else '') or '').lower(),
+            r.fecha,
+            r.id,
+        ),
+        'km_desc': lambda r: (r.valor if r.valor is not None else -1, r.fecha, r.id),
+        'km_asc': lambda r: (r.valor if r.valor is not None else -1, r.fecha, r.id),
+        'estado_asc': lambda r: ((r.estado or '').lower(), r.fecha, r.id),
+        'estado_desc': lambda r: ((r.estado or '').lower(), r.fecha, r.id),
+    }
+    reverse = orden in {'fecha_desc', 'vehiculo_desc', 'km_desc', 'estado_desc'}
+    registros = sorted(registros, key=sorters.get(orden, sorters['fecha_desc']), reverse=reverse)
+
+    mismatch = [r for r in registros if r.estado == 'mismatch_driver']
+    sin_km = [r for r in registros if r.estado == 'sin_km']
+    sin_plan = [r for r in registros if r.estado == 'sin_planificar']
+    ok_hist = [r for r in registros if r.estado == 'ok']
+
+    from app.services.vehicle_anomaly_service import (
+        detect_cross_vehicle_reports,
+        detect_odometer_jumps,
+        get_odometer_jump_thresholds,
+    )
+
+    thresholds = get_odometer_jump_thresholds()
+    saltos = detect_odometer_jumps(fecha_desde, fecha_hasta, thresholds=thresholds)
+    vehiculo_distinto = detect_cross_vehicle_reports(fecha_desde, fecha_hasta)
+
+    if search:
+        def _jump_match(j):
+            v = j.get('vehiculo')
+            values = [
+                v.matricula if v else '',
+                v.nombre if v else '',
+                j.get('conductor_odoo') or '',
+                (j['planned_user'].name if j.get('planned_user') else ''),
+                (j['planned_user'].lastname if j.get('planned_user') else ''),
+                ' '.join(j.get('motivos') or []),
+            ]
+            return search in ' '.join(x for x in values if x).lower()
+
+        def _cross_match(a):
+            values = [
+                a['user'].name if a.get('user') else '',
+                a['user'].lastname if a.get('user') else '',
+                a['vehiculo_planificado'].label() if a.get('vehiculo_planificado') else '',
+                a['vehiculo_reportado'].label() if a.get('vehiculo_reportado') else '',
+                a.get('conductor_odoo') or '',
+            ]
+            return search in ' '.join(x for x in values if x).lower()
+
+        saltos = [j for j in saltos if _jump_match(j)]
+        vehiculo_distinto = [a for a in vehiculo_distinto if _cross_match(a)]
+
+    if estado == 'salto_km':
+        mismatch, sin_km, sin_plan, ok_hist, vehiculo_distinto = [], [], [], [], []
+    elif estado == 'vehiculo_distinto':
+        mismatch, sin_km, sin_plan, ok_hist, saltos = [], [], [], [], []
+    elif estado in {'mismatch_driver', 'sin_km', 'sin_planificar', 'ok'}:
+        saltos, vehiculo_distinto = [], []
+
+    return render_template(
+        'sync/auditoria_vehiculos.html',
+        mismatch=mismatch,
+        sin_km=sin_km,
+        sin_planificar=sin_plan,
+        historial_ok=ok_hist,
+        saltos=saltos,
+        vehiculo_distinto=vehiculo_distinto,
+        umbrales_salto=thresholds,
+        fecha_desde_default=fecha_desde.isoformat(),
+        fecha_hasta_default=fecha_hasta.isoformat(),
+        filtros={
+            'estado': estado,
+            'orden': orden,
+            'q': request.args.get('q', '').strip(),
+        },
+        total_filtrado=len(registros) + (len(saltos) if estado in ('all', 'salto_km') else 0) + (
+            len(vehiculo_distinto) if estado in ('all', 'vehiculo_distinto') else 0
+        ),
+        total_ok=len(ok_hist),
+    )
+
+
+@sync_bp.route('/vehiculos_manual', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def sync_vehiculos_manual():
+    """Fuerza sync de flota + odómetros en un rango de fechas."""
+    if not _require_odoo_module():
+        return jsonify({'success': False, 'error': 'Módulo Odoo no habilitado'}), 403
+    try:
+        from app.services.vehicle_sync_service import apply_diff, sync_odometros
+        from app.utils.timezone_utils import today_local
+        from datetime import timedelta
+
+        data = request.get_json() or {}
+        hoy = today_local()
+        fecha_desde = data.get('fecha_desde')
+        fecha_hasta = data.get('fecha_hasta')
+        if not fecha_desde and data.get('dias') is not None:
+            dias = max(0, min(365, int(data.get('dias', 7))))
+            fecha_hasta = hoy.isoformat()
+            fecha_desde = (hoy - timedelta(days=dias)).isoformat()
+        if not fecha_desde:
+            fecha_desde = hoy.isoformat()
+        if not fecha_hasta:
+            fecha_hasta = fecha_desde
+
+        fleet = apply_diff(modo='Manual')
+        odo = sync_odometros(
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            modo='Manual',
+        )
+        return jsonify({'success': True, 'fleet': fleet, 'odometros': odo})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
     
     
     
@@ -824,7 +1075,7 @@ def get_timeline_dia(user_id, fecha_str):
     """Compatibilidad con auditoría de fichajes. Delega en el servicio compartido."""
     from app.services.person_day_timeline_service import build_person_day_timeline
 
-    if current_user.role not in ['admin', 'jefe_obra']:
+    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL]:
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
 
     data = build_person_day_timeline(user_id, fecha_str)

@@ -243,3 +243,8 @@ def run_fichajes_retro_sync(days=None, modo='Automático'):
 def run_auto_sync_ausencias():
     from app.services.leave_service import sync_leaves_from_erp
     return sync_leaves_from_erp()
+
+
+def run_auto_sync_vehiculos():
+    from app.services.vehicle_sync_service import run_vehiculos_en_vivo
+    return run_vehiculos_en_vivo(modo='Automático')

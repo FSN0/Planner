@@ -55,6 +55,7 @@
             <option value="operario" {% if edit_mode and user.role == 'operario' %}selected{% endif %}>Operario</option>
             <option value="jefe_obra" {% if edit_mode and user.role == 'jefe_obra' %}selected{% endif %}>Jefe de obra</option>
             <option value="rrhh" {% if edit_mode and user.role == 'rrhh' %}selected{% endif %}>RRHH / Administrativo</option>
+            <option value="laboral" {% if edit_mode and user.role == 'laboral' %}selected{% endif %}>Laboral</option>
             <option value="admin" {% if edit_mode and user.role == 'admin' %}selected{% endif %}>Administrador</option>
           </select>
           <small class="form-text text-muted" style="font-size: 0.72rem;">Define los permisos de acceso a la plataforma.</small>

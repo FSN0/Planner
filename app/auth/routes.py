@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from app import db, limiter
-from app.models import User, ROLE_OPERARIO, ROLE_RRHH, Company
+from app.models import User, ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL, Company
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 auth_bp = Blueprint('auth', __name__)
@@ -25,6 +25,8 @@ def _redirect_authenticated_user():
         return redirect(url_for('admin.panel'))
     if current_user.role == 'jefe_obra':
         return redirect(url_for('jefe.obras_detailed', selected_date=date.today()))
+    if current_user.role == ROLE_LABORAL:
+        return redirect(url_for('admin.ausencias_list'))
     logout_user()
     flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
     return redirect(url_for('auth.login'))
@@ -90,6 +92,8 @@ def login():
                 return redirect(url_for('admin.panel'))
             if user.role == 'jefe_obra':
                 return redirect(url_for('jefe.obras_detailed', selected_date=date.today()))
+            if user.role == ROLE_LABORAL:
+                return redirect(url_for('admin.ausencias_list'))
 
             logout_user()
             flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
