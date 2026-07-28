@@ -115,6 +115,7 @@
             <select id="filtroEstado" name="estado" class="form-control custom-select">
               <option value="all" {% if filtros.estado == 'all' %}selected{% endif %}>Todos</option>
               <option value="salto_km" {% if filtros.estado == 'salto_km' %}selected{% endif %}>Saltos de odómetro</option>
+              <option value="en_ausencia" {% if filtros.estado == 'en_ausencia' %}selected{% endif %}>Vehículo en ausencia</option>
               <option value="vehiculo_distinto" {% if filtros.estado == 'vehiculo_distinto' %}selected{% endif %}>Vehículo distinto al plan</option>
               <option value="mismatch_driver" {% if filtros.estado == 'mismatch_driver' %}selected{% endif %}>Conductor distinto</option>
               <option value="sin_km" {% if filtros.estado == 'sin_km' %}selected{% endif %}>Sin kilómetros</option>
@@ -155,6 +156,9 @@
     <div class="auditoria-stats">
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSaltos" title="Saltos de odómetro">
         <i class="fas fa-bolt"></i> {{ saltos|length }} saltos km
+      </span>
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseEnAusencia" title="Vehículo planificado o reportado en día de ausencia aprobada">
+        <i class="fas fa-umbrella-beach"></i> {{ vehiculo_en_ausencia|length }} en ausencia
       </span>
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseVehiculoDistinto" title="Planificado en un vehículo, reporta en otro">
         <i class="fas fa-exchange-alt"></i> {{ vehiculo_distinto|length }} vehículo distinto
@@ -252,6 +256,76 @@
           </div>
           {% else %}
           <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin saltos anómalos en el rango</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header {% if not vehiculo_en_ausencia %}collapsed{% endif %}" data-target="#collapseEnAusencia" role="button" aria-expanded="{{ 'true' if vehiculo_en_ausencia else 'false' }}">
+          <h6 class="auditoria-section-title text-danger mb-0">
+            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-umbrella-beach"></i></span>
+            Vehículo en día de ausencia
+            <span class="badge-count badge-count-danger">{{ vehiculo_en_ausencia|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseEnAusencia" class="collapse {% if vehiculo_en_ausencia %}show{% endif %}">
+          {% if vehiculo_en_ausencia %}
+          <div class="audit-table-wrap">
+            <table id="auditEnAusenciaTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+              <thead>
+                <tr>
+                  {{ audit_sort_th(0, 'Fecha', '11%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Operario', '18%') }}
+                  {{ audit_sort_th(2, 'Vehículo', '18%') }}
+                  {{ audit_sort_th(3, 'Ausencia', '18%') }}
+                  {{ audit_sort_th(4, 'Origen', '12%') }}
+                  {{ audit_sort_th(5, 'Km', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(6, 'Conductor Odoo', '13%') }}
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in vehiculo_en_ausencia %}
+                <tr class="audit-data-row">
+                  <td class="font-weight-bold" data-sort-value="{{ a.fecha.strftime('%Y%m%d') }}">{{ a.fecha.strftime('%d/%m/%Y') }}</td>
+                  <td>
+                    <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}" class="link-user">
+                      {{ a.user.name }} {{ a.user.lastname }}
+                    </a>
+                  </td>
+                  <td>
+                    {% if a.vehiculo %}
+                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_id) }}" class="link-user">
+                      {{ a.vehiculo.label() }}
+                    </a>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td data-sort-value="{{ (a.ausencia_tipo or '')|lower }}">
+                    <strong>{{ a.ausencia_tipo }}</strong>
+                    <span class="d-block text-muted small">
+                      {{ a.ausencia_inicio.strftime('%d/%m/%Y') }} – {{ a.ausencia_fin.strftime('%d/%m/%Y') }}
+                    </span>
+                  </td>
+                  <td>
+                    {% if a.fuente == 'ambos' %}
+                      <span class="badge badge-danger">Plan + Odoo</span>
+                    {% elif a.fuente == 'planificado' %}
+                      <span class="badge badge-warning">Planificado</span>
+                    {% else %}
+                      <span class="badge badge-secondary">Reportado Odoo</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-right" data-sort-value="{{ a.km if a.km is not none else '' }}">
+                    {% if a.km is not none %}{{ '%.0f'|format(a.km) }}{% else %}—{% endif %}
+                  </td>
+                  <td>{{ a.conductor_odoo or '—' }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin vehículos en días de ausencia</div>
           {% endif %}
         </div>
       </div>

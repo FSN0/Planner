@@ -145,27 +145,27 @@ def get_universal_calendar_events():
 
         raw_events = []
         vehicle_by_date = {}
+        vehicle_meta_by_date = {}
         try:
-            from app.models import AsignacionVehiculo
-            asig_veh = AsignacionVehiculo.query.filter(
-                AsignacionVehiculo.user_id == entity_id,
-                AsignacionVehiculo.fecha >= start_date,
-                AsignacionVehiculo.fecha < end_date,
-            ).all()
-            for av in asig_veh:
-                v = av.vehiculo
-                if not v and av.vehiculo_id:
-                    from app.models import Vehiculo
-                    v = Vehiculo.query.get(av.vehiculo_id)
-                vehicle_by_date[av.fecha] = v.label() if v else f"Vehículo #{av.vehiculo_id}"
+            from app.services.entity_panel_service import get_worker_vehicle_day_map
+            worker = User.query.get(entity_id)
+            if worker:
+                vehicle_meta_by_date = get_worker_vehicle_day_map(
+                    worker, start_date, end_date, end_exclusive=True
+                )
+                vehicle_by_date = {
+                    d: info['label'] for d, info in vehicle_meta_by_date.items()
+                }
         except Exception:
             vehicle_by_date = {}
+            vehicle_meta_by_date = {}
 
         for a in asignaciones:
             obra = a.obra
             if not obra and a.obra_id: obra = Obra.query.get(a.obra_id)
             obra_name = _obra_label(obra)
             v_label = vehicle_by_date.get(a.fecha)
+            v_meta = vehicle_meta_by_date.get(a.fecha) or {}
             if v_label:
                 obra_name = f"{obra_name} · {v_label}"
             obra_color = obra.color if obra else "#3b82f6"
@@ -181,6 +181,8 @@ def get_universal_calendar_events():
                     'type': 'asignacion',
                     'obra_id': obra.id if obra else 0,
                     'vehiculo_label': v_label,
+                    'vehiculo_id': v_meta.get('vehiculo_id'),
+                    'vehiculo_source': v_meta.get('source'),
                     'en_ausencia': is_overlay,
                     'ausencia_tipo': leave.tipo if leave else None,
                     'ausencia_estado': leave.estado if leave else None,
@@ -188,19 +190,27 @@ def get_universal_calendar_events():
             })
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
 
-        # Días con vehículo pero sin obra
+        # Días con vehículo (planificado u Odoo) pero sin obra
         raw_veh_only = []
         for d, v_label in vehicle_by_date.items():
             if d in assigned_dates:
                 continue
+            v_meta = vehicle_meta_by_date.get(d) or {}
+            title = f"Vehículo: {v_label}"
+            if v_meta.get('km') is not None:
+                title = f"{title} · {int(v_meta['km'])} km"
+            color = '#64748b' if v_meta.get('source') == 'odoo' else '#0ea5e9'
             raw_veh_only.append({
-                'title': f"Vehículo: {v_label}",
+                'title': title,
                 'start_date': d,
                 'end_date': d,
-                'color': '#64748b',
+                'color': color,
                 'extendedProps': {
-                    'type': 'vehiculo',
+                    'type': 'vehiculo_odoo' if v_meta.get('source') == 'odoo' else 'vehiculo',
+                    'source': v_meta.get('source') or 'planificado',
                     'vehiculo_label': v_label,
+                    'vehiculo_id': v_meta.get('vehiculo_id'),
+                    'km': v_meta.get('km'),
                 }
             })
         if raw_veh_only:

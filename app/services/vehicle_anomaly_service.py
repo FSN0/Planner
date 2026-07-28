@@ -1,5 +1,5 @@
 # app/services/vehicle_anomaly_service.py
-"""Detección de anomalías de vehículos (saltos de odómetro y plan vs reporte)."""
+"""Detección de anomalías de vehículos (saltos de odómetro, plan vs reporte, uso en ausencia)."""
 
 from __future__ import annotations
 
@@ -204,4 +204,118 @@ def detect_cross_vehicle_reports(fecha_desde, fecha_hasta):
         })
 
     alerts.sort(key=lambda a: a['fecha'], reverse=True)
+    return alerts
+
+
+def detect_vehicle_on_leave(fecha_desde, fecha_hasta):
+    """
+    Operario con vehículo planificado y/o reportado en Odoo un día
+    en el que tiene ausencia aprobada (vacaciones, baja, permiso…).
+    """
+    from app.models import LEAVE_STATUS_APROBADA, User
+    from app.services.leave_service import build_leaves_by_user, leave_covering
+
+    users_by_odoo, users_by_name = _build_user_indexes()
+    candidates = {}
+
+    asignaciones = AsignacionVehiculo.query.filter(
+        AsignacionVehiculo.fecha >= fecha_desde,
+        AsignacionVehiculo.fecha <= fecha_hasta,
+    ).all()
+    for a in asignaciones:
+        key = (a.user_id, a.fecha, a.vehiculo_id)
+        entry = candidates.setdefault(key, {
+            'user_id': a.user_id,
+            'fecha': a.fecha,
+            'vehiculo_id': a.vehiculo_id,
+            'fuente_plan': False,
+            'fuente_odoo': False,
+            'km': None,
+            'conductor_odoo': None,
+            'reg_id': None,
+            'asignacion_id': None,
+        })
+        entry['fuente_plan'] = True
+        entry['asignacion_id'] = a.id
+
+    odo_regs = RegistroOdometro.query.filter(
+        RegistroOdometro.fecha >= fecha_desde,
+        RegistroOdometro.fecha <= fecha_hasta,
+        or_(
+            RegistroOdometro.valor.isnot(None),
+            RegistroOdometro.odoo_driver_name.isnot(None),
+            RegistroOdometro.odoo_driver_partner_id.isnot(None),
+        ),
+    ).all()
+    for reg in odo_regs:
+        matched = _match_driver_user(
+            reg.odoo_driver_partner_id,
+            reg.odoo_driver_name,
+            users_by_odoo,
+            users_by_name,
+        )
+        if not matched:
+            continue
+        key = (matched.id, reg.fecha, reg.vehiculo_id)
+        entry = candidates.setdefault(key, {
+            'user_id': matched.id,
+            'fecha': reg.fecha,
+            'vehiculo_id': reg.vehiculo_id,
+            'fuente_plan': False,
+            'fuente_odoo': False,
+            'km': None,
+            'conductor_odoo': None,
+            'reg_id': None,
+            'asignacion_id': None,
+        })
+        entry['fuente_odoo'] = True
+        entry['km'] = reg.valor
+        entry['conductor_odoo'] = reg.odoo_driver_name
+        entry['reg_id'] = reg.id
+
+    if not candidates:
+        return []
+
+    user_ids = {c['user_id'] for c in candidates.values()}
+    leaves_idx = build_leaves_by_user(list(user_ids), fecha_desde, fecha_hasta)
+    users = {
+        u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()
+    } if user_ids else {}
+    veh_ids = {c['vehiculo_id'] for c in candidates.values()}
+    vehiculos = {
+        v.id: v for v in Vehiculo.query.filter(Vehiculo.id.in_(veh_ids)).all()
+    } if veh_ids else {}
+
+    alerts = []
+    for entry in candidates.values():
+        leave = leave_covering(leaves_idx.get(entry['user_id'], []), entry['fecha'])
+        if not leave or leave.estado != LEAVE_STATUS_APROBADA:
+            continue
+        user = users.get(entry['user_id'])
+        if not user:
+            continue
+        if entry['fuente_plan'] and entry['fuente_odoo']:
+            fuente = 'ambos'
+        elif entry['fuente_plan']:
+            fuente = 'planificado'
+        else:
+            fuente = 'reportado'
+        alerts.append({
+            'fecha': entry['fecha'],
+            'user': user,
+            'user_id': entry['user_id'],
+            'vehiculo': vehiculos.get(entry['vehiculo_id']),
+            'vehiculo_id': entry['vehiculo_id'],
+            'fuente': fuente,
+            'km': entry['km'],
+            'conductor_odoo': entry['conductor_odoo'],
+            'ausencia': leave,
+            'ausencia_tipo': (leave.tipo or 'Ausencia').strip() or 'Ausencia',
+            'ausencia_inicio': leave.fecha_inicio,
+            'ausencia_fin': leave.fecha_fin,
+            'reg_id': entry['reg_id'],
+            'asignacion_id': entry['asignacion_id'],
+        })
+
+    alerts.sort(key=lambda a: (a['fecha'], a['user_id']), reverse=True)
     return alerts

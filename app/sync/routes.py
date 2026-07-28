@@ -968,12 +968,14 @@ def auditoria_vehiculos():
     from app.services.vehicle_anomaly_service import (
         detect_cross_vehicle_reports,
         detect_odometer_jumps,
+        detect_vehicle_on_leave,
         get_odometer_jump_thresholds,
     )
 
     thresholds = get_odometer_jump_thresholds()
     saltos = detect_odometer_jumps(fecha_desde, fecha_hasta, thresholds=thresholds)
     vehiculo_distinto = detect_cross_vehicle_reports(fecha_desde, fecha_hasta)
+    vehiculo_en_ausencia = detect_vehicle_on_leave(fecha_desde, fecha_hasta)
 
     if search:
         def _jump_match(j):
@@ -998,15 +1000,29 @@ def auditoria_vehiculos():
             ]
             return search in ' '.join(x for x in values if x).lower()
 
+        def _leave_match(a):
+            values = [
+                a['user'].name if a.get('user') else '',
+                a['user'].lastname if a.get('user') else '',
+                a['vehiculo'].label() if a.get('vehiculo') else '',
+                a.get('conductor_odoo') or '',
+                a.get('ausencia_tipo') or '',
+                a.get('fuente') or '',
+            ]
+            return search in ' '.join(x for x in values if x).lower()
+
         saltos = [j for j in saltos if _jump_match(j)]
         vehiculo_distinto = [a for a in vehiculo_distinto if _cross_match(a)]
+        vehiculo_en_ausencia = [a for a in vehiculo_en_ausencia if _leave_match(a)]
 
     if estado == 'salto_km':
-        mismatch, sin_km, sin_plan, ok_hist, vehiculo_distinto = [], [], [], [], []
+        mismatch, sin_km, sin_plan, ok_hist, vehiculo_distinto, vehiculo_en_ausencia = [], [], [], [], [], []
     elif estado == 'vehiculo_distinto':
-        mismatch, sin_km, sin_plan, ok_hist, saltos = [], [], [], [], []
+        mismatch, sin_km, sin_plan, ok_hist, saltos, vehiculo_en_ausencia = [], [], [], [], [], []
+    elif estado == 'en_ausencia':
+        mismatch, sin_km, sin_plan, ok_hist, saltos, vehiculo_distinto = [], [], [], [], [], []
     elif estado in {'mismatch_driver', 'sin_km', 'sin_planificar', 'ok'}:
-        saltos, vehiculo_distinto = [], []
+        saltos, vehiculo_distinto, vehiculo_en_ausencia = [], [], []
 
     return render_template(
         'sync/auditoria_vehiculos.html',
@@ -1016,6 +1032,7 @@ def auditoria_vehiculos():
         historial_ok=ok_hist,
         saltos=saltos,
         vehiculo_distinto=vehiculo_distinto,
+        vehiculo_en_ausencia=vehiculo_en_ausencia,
         umbrales_salto=thresholds,
         fecha_desde_default=fecha_desde.isoformat(),
         fecha_hasta_default=fecha_hasta.isoformat(),
@@ -1024,9 +1041,10 @@ def auditoria_vehiculos():
             'orden': orden,
             'q': request.args.get('q', '').strip(),
         },
-        total_filtrado=len(registros) + (len(saltos) if estado in ('all', 'salto_km') else 0) + (
-            len(vehiculo_distinto) if estado in ('all', 'vehiculo_distinto') else 0
-        ),
+        total_filtrado=len(registros)
+            + (len(saltos) if estado in ('all', 'salto_km') else 0)
+            + (len(vehiculo_distinto) if estado in ('all', 'vehiculo_distinto') else 0)
+            + (len(vehiculo_en_ausencia) if estado in ('all', 'en_ausencia') else 0),
         total_ok=len(ok_hist),
     )
 
