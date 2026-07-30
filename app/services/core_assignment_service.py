@@ -33,13 +33,11 @@ class CoreAssignmentService:
 
     @staticmethod
     def asignar(user_id, obra_id, fecha, autor_id, contexto_origen,
-                detalle_extra=None, *, company_id=None, solicitud_id=None):
+                detalle_extra=None, *, company_id=None, solicitud_id=None,
+                registrar_log=True):
         """
-        Crea una Asignacion y registra un SystemLog en la misma transacción.
-        Hace flush() para garantizar integridad referencial; el commit()
-        queda como responsabilidad del flujo superior.
-
-        Retorna el objeto Asignacion recién creado.
+        Crea una Asignacion. Por defecto registra SystemLog del día.
+        En lotes (rangos) pasar registrar_log=False y llamar registrar_log_rango.
         """
         nueva = Asignacion(
             user_id=user_id,
@@ -50,22 +48,20 @@ class CoreAssignmentService:
         )
         db.session.add(nueva)
 
-        CoreAssignmentService._registrar_log(
-            user_id, obra_id, fecha, autor_id, contexto_origen,
-            es_alta=True, detalle_extra=detalle_extra,
-        )
+        if registrar_log:
+            CoreAssignmentService._registrar_log(
+                user_id, obra_id, fecha, autor_id, contexto_origen,
+                es_alta=True, detalle_extra=detalle_extra,
+            )
 
         db.session.flush()
         return nueva
 
     @staticmethod
     def desasignar(user_id, obra_id, fecha, autor_id, contexto_origen,
-                   detalle_extra=None):
+                   detalle_extra=None, *, registrar_log=True):
         """
-        Elimina la Asignacion que coincida con (user_id, obra_id, fecha)
-        y registra un SystemLog en la misma transacción.
-        Hace flush(); el commit() queda para el flujo superior.
-
+        Elimina la Asignacion (user_id, obra_id, fecha).
         Retorna True si se encontró y borró, False si no existía.
         """
         asig = Asignacion.query.filter_by(
@@ -77,17 +73,52 @@ class CoreAssignmentService:
 
         db.session.delete(asig)
 
-        CoreAssignmentService._registrar_log(
-            user_id, obra_id, fecha, autor_id, contexto_origen,
-            es_alta=False, detalle_extra=detalle_extra,
-        )
+        if registrar_log:
+            CoreAssignmentService._registrar_log(
+                user_id, obra_id, fecha, autor_id, contexto_origen,
+                es_alta=False, detalle_extra=detalle_extra,
+            )
 
         db.session.flush()
         return True
 
-    # ------------------------------------------------------------------
-    # Helpers internos
-    # ------------------------------------------------------------------
+    @staticmethod
+    def registrar_log_rango(user_id, obra_id, fecha_inicio, fecha_fin, n_dias,
+                            autor_id, contexto_origen, es_alta,
+                            detalle_extra=None):
+        """Una sola entrada de log para un rango de asignación/desasignación."""
+        if not n_dias or n_dias < 1:
+            return
+        if n_dias == 1 and fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
+            CoreAssignmentService._registrar_log(
+                user_id, obra_id, fecha_inicio, autor_id, contexto_origen,
+                es_alta=es_alta, detalle_extra=detalle_extra,
+            )
+            return
+
+        verbo = "Asignado" if es_alta else "Desasignado"
+        obra = Obra.query.get(obra_id)
+        user = User.query.get(user_id)
+        obra_label = CoreAssignmentService.format_obra_label(obra)
+        user_nombre = f"{user.name} {user.lastname}" if user else f"ID {user_id}"
+
+        fi = fecha_inicio.strftime('%d/%m/%Y') if fecha_inicio else '?'
+        ff = fecha_fin.strftime('%d/%m/%Y') if fecha_fin else '?'
+        detail = f"{verbo} {user_nombre} → '{obra_label}' ({fi} → {ff}, {n_dias} días)."
+        if detalle_extra:
+            detail = f"{detail} {detalle_extra}"
+
+        log_user_id = None if CoreAssignmentService._is_system_action(contexto_origen) else autor_id
+        db.session.add(SystemLog(
+            timestamp=utc_now(),
+            user_id=log_user_id,
+            category='planificacion',
+            action=contexto_origen,
+            detail=detail,
+            target_user_id=user_id,
+            target_date=fecha_inicio,
+        ))
+
     @staticmethod
     def _registrar_log(user_id, obra_id, fecha, autor_id, contexto_origen,
                        es_alta, detalle_extra=None):

@@ -1304,16 +1304,34 @@ def edit_obra(obra_id):
             for asig in futuras:
                 CoreAssignmentService.desasignar(
                     asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                    "Pausa de Obra", f"Obra '{obra.nombre}' pausada."
+                    "Pausa de Obra", f"Obra '{obra.nombre}' pausada.",
+                    registrar_log=False,
                 )
-            if futuras: flash(f"Obra pausada. {len(futuras)} asignaciones eliminadas.", "warning")
+            if futuras:
+                from app.utils import register_log
+                register_log(
+                    user_id=current_user.id,
+                    category='planificacion',
+                    action='Pausa de Obra',
+                    detail=f"Obra '{obra.nombre}' pausada: {len(futuras)} asignaciones futuras eliminadas.",
+                )
+                flash(f"Obra pausada. {len(futuras)} asignaciones eliminadas.", "warning")
         elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
             obra.fecha_fin = today
             futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
             for asig in futuras:
                 CoreAssignmentService.desasignar(
                     asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                    "Finalización de Obra", f"Obra '{obra.nombre}' finalizada."
+                    "Finalización de Obra", f"Obra '{obra.nombre}' finalizada.",
+                    registrar_log=False,
+                )
+            if futuras:
+                from app.utils import register_log
+                register_log(
+                    user_id=current_user.id,
+                    category='planificacion',
+                    action='Finalización de Obra',
+                    detail=f"Obra '{obra.nombre}' finalizada: {len(futuras)} asignaciones futuras eliminadas.",
                 )
             flash(f"Obra finalizada. {len(futuras)} asignaciones eliminadas.", "success")
 
@@ -1527,7 +1545,16 @@ def delete_obra(obra_id):
     for asign in future_asignaciones:
         CoreAssignmentService.desasignar(
             asign.user_id, asign.obra_id, asign.fecha, current_user.id,
-            "Eliminación de Obra", f"Obra '{obra.nombre}' eliminada."
+            "Eliminación de Obra", f"Obra '{obra.nombre}' eliminada.",
+            registrar_log=False,
+        )
+    if future_asignaciones:
+        from app.utils import register_log
+        register_log(
+            user_id=current_user.id,
+            category='planificacion',
+            action='Eliminación de Obra',
+            detail=f"Obra '{obra.nombre}' eliminada: {len(future_asignaciones)} asignaciones futuras liberadas.",
         )
 
     db.session.commit()
@@ -2044,7 +2071,11 @@ def update_config():
         _upsert('laboral_puede_resolver_fichajes', laboral_resuelve)
 
     if 'vehiculos' in section_keys:
-        from app.services.vehicle_anomaly_service import DEFAULT_THRESHOLDS
+        from app.services.vehicle_anomaly_service import (
+            DEFAULT_DESVIO_MAX_PCT,
+            DEFAULT_DESVIO_MIN_PCT,
+            DEFAULT_THRESHOLDS,
+        )
         _upsert_int_cfg(
             'vehiculo_salto_km_dia',
             request.form.get('vehiculo_salto_km_dia'),
@@ -2052,16 +2083,16 @@ def update_config():
             min_v=50, max_v=5000,
         )
         _upsert_int_cfg(
-            'vehiculo_salto_delta_km',
-            request.form.get('vehiculo_salto_delta_km'),
-            DEFAULT_THRESHOLDS['vehiculo_salto_delta_km'],
-            min_v=50, max_v=50000,
+            'vehiculo_desvio_max_pct',
+            request.form.get('vehiculo_desvio_max_pct'),
+            DEFAULT_DESVIO_MAX_PCT,
+            min_v=1, max_v=500,
         )
         _upsert_int_cfg(
-            'vehiculo_salto_ventana_dias',
-            request.form.get('vehiculo_salto_ventana_dias'),
-            DEFAULT_THRESHOLDS['vehiculo_salto_ventana_dias'],
-            min_v=1, max_v=60,
+            'vehiculo_desvio_min_pct',
+            request.form.get('vehiculo_desvio_min_pct'),
+            DEFAULT_DESVIO_MIN_PCT,
+            min_v=1, max_v=500,
         )
 
     if 'emails' in section_keys:
@@ -2180,7 +2211,8 @@ def batch_update_obras_status():
                 for asig in futuras:
                     CoreAssignmentService.desasignar(
                         asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                        "Pausa de Obra (Masiva)", f"Obra '{obra.nombre}' pausada."
+                        "Pausa de Obra (Masiva)", f"Obra '{obra.nombre}' pausada.",
+                        registrar_log=False,
                     )
                 total_deleted += len(futuras)
             elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
@@ -2189,9 +2221,19 @@ def batch_update_obras_status():
                 for asig in futuras:
                     CoreAssignmentService.desasignar(
                         asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                        "Finalización de Obra (Masiva)", f"Obra '{obra.nombre}' finalizada."
+                        "Finalización de Obra (Masiva)", f"Obra '{obra.nombre}' finalizada.",
+                        registrar_log=False,
                     )
                 total_deleted += len(futuras)
+
+        if total_deleted > 0:
+            from app.utils import register_log
+            register_log(
+                user_id=current_user.id,
+                category='planificacion',
+                action=f'Cambio masivo a {new_estado}',
+                detail=f"{len(obras)} obra(s) → '{new_estado}': {total_deleted} jornadas futuras liberadas.",
+            )
 
         db.session.commit()
         

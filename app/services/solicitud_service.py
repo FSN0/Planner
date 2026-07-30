@@ -442,6 +442,14 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
                     a.user_id, a.obra_id, a.fecha, user_actor.id,
                     "Traslado desde solicitud de baja",
                     detalle_extra=f"Origen obra {solicitud.obra_id} → destino {target_obra_id}",
+                    registrar_log=False,
+                )
+            if fechas:
+                CoreAssignmentService.registrar_log_rango(
+                    solicitud.empleado_id, solicitud.obra_id,
+                    fechas[0], fechas[-1], len(fechas),
+                    user_actor.id, "Traslado desde solicitud de baja", False,
+                    detalle_extra=f"Origen obra {solicitud.obra_id} → destino {target_obra_id}",
                 )
 
             result = process_assignment_action(
@@ -464,13 +472,23 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
         elif tipo_accion == 'DESASIGNAR':
             asigs = _collect_desasignacion_asignaciones(solicitud)
             count = 0
+            fechas = []
             for a in asigs:
                 borrado = CoreAssignmentService.desasignar(
                     a.user_id, a.obra_id, a.fecha, user_actor.id,
                     "Aprobación de Solicitud de Baja",
+                    registrar_log=False,
                 )
                 if borrado:
                     count += 1
+                    fechas.append(a.fecha)
+            if count and fechas:
+                fechas = sorted(set(fechas))
+                CoreAssignmentService.registrar_log_rango(
+                    solicitud.empleado_id, solicitud.obra_id,
+                    fechas[0], fechas[-1], count,
+                    user_actor.id, "Aprobación de Solicitud de Baja", False,
+                )
             mensaje = f"Devolución aprobada. Se han eliminado {count} asignaciones."
 
         else:

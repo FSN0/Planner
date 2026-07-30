@@ -166,6 +166,7 @@ class VehicleSolicitudService:
                 if CoreVehicleAssignmentService.desasignar(
                     solicitud.vehiculo_id, solicitud.empleado_id, d,
                     actor.id, "Resolución de Solicitud Vehículo",
+                    registrar_log=False,
                 ):
                     count += 1
         else:
@@ -174,8 +175,17 @@ class VehicleSolicitudService:
                     solicitud.vehiculo_id, solicitud.empleado_id, d,
                     actor.id, "Resolución de Solicitud Vehículo",
                     solicitud_id=solicitud.id, overwrite=overwrite,
+                    registrar_log=False,
                 )
                 count += 1
+
+        if count and days:
+            CoreVehicleAssignmentService.registrar_log_rango(
+                solicitud.empleado_id, solicitud.vehiculo_id,
+                days[0], days[-1], count,
+                actor.id, "Resolución de Solicitud Vehículo",
+                es_alta=(accion != 'DESASIGNAR'),
+            )
 
         solicitud.estado = 'CUMPLIDA'
         solicitud.resolved_at = utc_now()

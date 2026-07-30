@@ -35,7 +35,16 @@
     {% endif %}
   </td>
   <td class="text-right" data-sort-value="{{ reg.valor if reg.valor is not none else '' }}">
-    {% if reg.valor is not none %}{{ '%.0f'|format(reg.valor) }} km{% else %}<span class="text-muted">—</span>{% endif %}
+    {% if reg.qty_km is not none %}
+      {{ '%.0f'|format(reg.qty_km) }} km
+      {% if reg.valor is not none %}
+        <span class="d-block text-muted small">fin {{ '%.0f'|format(reg.valor) }}</span>
+      {% endif %}
+    {% elif reg.valor is not none %}
+      {{ '%.0f'|format(reg.valor) }} km
+    {% else %}
+      <span class="text-muted">—</span>
+    {% endif %}
   </td>
   <td data-sort-value="{{ reg.estado }}">
     {% if reg.estado == 'mismatch_driver' %}
@@ -90,7 +99,7 @@
       <div class="page-toolbar">
         <div class="page-toolbar-left">
           <h1 class="page-toolbar-title">Auditoría de vehículos</h1>
-          <span class="page-toolbar-count">Informativa · plan vs odómetro Odoo</span>
+          <span class="page-toolbar-count">Plan vs viajes Odoo (tms.shipment)</span>
         </div>
         <div class="page-toolbar-actions" style="align-items:center; flex-wrap:wrap;">
           <label class="mb-0 text-muted small" for="fechaDesde" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Desde</label>
@@ -98,8 +107,11 @@
           <label class="mb-0 text-muted small" for="fechaHasta" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Hasta</label>
           <input type="date" id="fechaHasta" name="fecha_hasta" class="form-control form-control-sm" value="{{ fecha_hasta_default }}" style="width:auto;min-width:9.5rem;">
           {% if current_user.role == 'admin' %}
-          <button type="button" onclick="forzarSyncVehiculos()" class="btn-admin btn-admin-primary">
+          <button type="button" onclick="forzarSyncVehiculos(false)" class="btn-admin btn-admin-primary">
             <i class="fas fa-sync-alt"></i> Sincronizar
+          </button>
+          <button type="button" onclick="forzarSyncVehiculos(true)" class="btn-admin btn-admin-ghost" title="Borra todo el histórico local de uso y regenera desde viajes">
+            <i class="fas fa-broom"></i> Limpiar y resync
           </button>
           <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-arrow-left"></i> Sync
@@ -115,6 +127,7 @@
             <select id="filtroEstado" name="estado" class="form-control custom-select">
               <option value="all" {% if filtros.estado == 'all' %}selected{% endif %}>Todos</option>
               <option value="salto_km" {% if filtros.estado == 'salto_km' %}selected{% endif %}>Saltos de odómetro</option>
+              <option value="desvio" {% if filtros.estado == 'desvio' %}selected{% endif %}>Desvío km previsto</option>
               <option value="en_ausencia" {% if filtros.estado == 'en_ausencia' %}selected{% endif %}>Vehículo en ausencia</option>
               <option value="vehiculo_distinto" {% if filtros.estado == 'vehiculo_distinto' %}selected{% endif %}>Vehículo distinto al plan</option>
               <option value="mismatch_driver" {% if filtros.estado == 'mismatch_driver' %}selected{% endif %}>Conductor distinto</option>
@@ -157,6 +170,9 @@
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSaltos" title="Saltos de odómetro">
         <i class="fas fa-bolt"></i> {{ saltos|length }} saltos km
       </span>
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseDesvios" title="Desvío vs km previsto del viaje">
+        <i class="fas fa-percentage"></i> {{ desvios|length }} desvío
+      </span>
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseEnAusencia" title="Vehículo planificado o reportado en día de ausencia aprobada">
         <i class="fas fa-umbrella-beach"></i> {{ vehiculo_en_ausencia|length }} en ausencia
       </span>
@@ -178,9 +194,10 @@
     </div>
     {% if umbrales_salto %}
     <p class="text-muted small mb-2" style="margin-top:-0.25rem;">
-      Umbrales saltos: ≥ <strong>{{ umbrales_salto.km_dia }}</strong> km/día
-      · ≥ <strong>{{ umbrales_salto.delta_km }}</strong> km en ≤ <strong>{{ umbrales_salto.ventana_dias }}</strong> días
+      Umbrales: ≥ <strong>{{ umbrales_salto.km_dia }}</strong> km/día
       · odómetro hacia atrás siempre
+      · desvío +≥ <strong>{{ umbrales_desvio.max_pct if umbrales_desvio else umbral_desvio }}</strong>%
+      / −≥ <strong>{{ umbrales_desvio.min_pct if umbrales_desvio else umbral_desvio }}</strong>%
       {% if current_user.role == 'admin' %}
         · <a href="{{ url_for('admin.configuracion_global') }}">Configurar</a>
       {% endif %}
@@ -242,8 +259,6 @@
                         <span class="badge badge-danger">Odómetro atrás</span>
                       {% elif m == 'km_dia' %}
                         <span class="badge badge-danger">Km/día alto</span>
-                      {% elif m == 'delta_ventana' %}
-                        <span class="badge badge-warning">Salto en ventana</span>
                       {% else %}
                         <span class="badge badge-secondary">{{ m }}</span>
                       {% endif %}
@@ -256,6 +271,77 @@
           </div>
           {% else %}
           <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin saltos anómalos en el rango</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="auditoria-section card-modern card" style="overflow: hidden;">
+        <div class="auditoria-section-header card-header {% if not desvios %}collapsed{% endif %}" data-target="#collapseDesvios" role="button" aria-expanded="{{ 'true' if desvios else 'false' }}">
+          <h6 class="auditoria-section-title text-danger mb-0">
+            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-percentage"></i></span>
+            Desvío vs km previsto
+            <span class="badge-count badge-count-danger">{{ desvios|length }}</span>
+          </h6>
+          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+        </div>
+        <div id="collapseDesvios" class="collapse {% if desvios %}show{% endif %}">
+          {% if desvios %}
+          <div class="audit-table-wrap">
+            <table id="auditDesviosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+              <thead>
+                <tr>
+                  {{ audit_sort_th(0, 'Fecha', '11%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Vehículo', '16%') }}
+                  {{ audit_sort_th(2, 'Viaje', '12%') }}
+                  {{ audit_sort_th(3, 'Km real', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(4, 'Previsto', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(5, 'Desvío %', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(6, 'Conductor', '16%') }}
+                  {{ audit_sort_th(7, 'Planificado', '15%') }}
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in desvios %}
+                <tr class="audit-data-row">
+                  <td class="font-weight-bold" data-sort-value="{{ a.fecha.strftime('%Y%m%d') }}">{{ a.fecha.strftime('%d/%m/%Y') }}</td>
+                  <td>
+                    {% if a.vehiculo %}
+                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_id) }}" class="link-user">
+                      <strong>{{ a.vehiculo.matricula or '—' }}</strong>
+                      <span class="d-block text-muted small">{{ a.vehiculo.nombre }}</span>
+                    </a>
+                    {% else %}—{% endif %}
+                  </td>
+                  <td data-sort-value="{{ (a.viaje_code or '')|lower }}">{{ a.viaje_code or '—' }}</td>
+                  <td class="text-right" data-sort-value="{{ a.qty_km if a.qty_km is not none else '' }}">
+                    {% if a.qty_km is not none %}{{ '%.0f'|format(a.qty_km) }}{% else %}—{% endif %}
+                  </td>
+                  <td class="text-right" data-sort-value="{{ a.km_previsto if a.km_previsto is not none else '' }}">
+                    {% if a.km_previsto is not none %}{{ '%.0f'|format(a.km_previsto) }}{% else %}—{% endif %}
+                  </td>
+                  <td class="text-right font-weight-bold text-danger" data-sort-value="{{ a.desvio }}">
+                    {% if a.desvio >= 0 %}+{% endif %}{{ '%.1f'|format(a.desvio) }}%
+                    {% if a.lado == 'por_encima' %}
+                      <span class="d-block text-muted small">de más</span>
+                    {% elif a.lado == 'por_debajo' %}
+                      <span class="d-block text-muted small">de menos</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ a.conductor_odoo or '—' }}</td>
+                  <td>
+                    {% if a.planned_user %}
+                    <a href="{{ url_for('admin.worker_panel', user_id=a.planned_user.id) }}" class="link-user">
+                      {{ a.planned_user.name }} {{ a.planned_user.lastname }}
+                    </a>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin desvíos altos en el rango</div>
           {% endif %}
         </div>
       </div>
@@ -482,19 +568,23 @@ document.querySelectorAll('.auditoria-stat-link[data-audit-target]').forEach(fun
   });
 });
 
-function forzarSyncVehiculos() {
+function forzarSyncVehiculos(limpiarTodo) {
   var desde = document.getElementById('fechaDesde').value;
   var hasta = document.getElementById('fechaHasta').value;
   if (!desde || !hasta) {
     Swal.fire('Fechas', 'Indica desde y hasta.', 'warning');
     return;
   }
+  var titulo = limpiarTodo ? '¿Limpiar histórico y resincronizar?' : '¿Sincronizar vehículos?';
+  var texto = limpiarTodo
+    ? 'Borra TODO el uso diario local (basura del odómetro) y regenera desde viajes tms.shipment del ' + desde + ' al ' + hasta + '.'
+    : 'Borra el uso del rango y lo regenera solo desde viajes tms.shipment (' + desde + ' → ' + hasta + ').';
   Swal.fire({
-    title: '¿Sincronizar vehículos?',
-    text: 'Flota + odómetros del ' + desde + ' al ' + hasta + '.',
-    icon: 'question',
+    title: titulo,
+    text: texto,
+    icon: limpiarTodo ? 'warning' : 'question',
     showCancelButton: true,
-    confirmButtonText: 'Sincronizar',
+    confirmButtonText: limpiarTodo ? 'Limpiar y sincronizar' : 'Sincronizar',
     cancelButtonText: 'Cancelar'
   }).then(function(result) {
     if (!result.isConfirmed) return;
@@ -502,12 +592,32 @@ function forzarSyncVehiculos() {
     fetch('{{ url_for("sync.sync_vehiculos_manual") }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fecha_desde: desde, fecha_hasta: hasta })
+      body: JSON.stringify({
+        fecha_desde: desde,
+        fecha_hasta: hasta,
+        limpiar_todo: !!limpiarTodo
+      })
     })
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (res.success) {
-        Swal.fire('Listo', 'Sync completada. Recargando…', 'success').then(function() {
+        var odo = res.odometros || {};
+        var est = odo.estados || {};
+        var msg =
+          'Rango sync: ' + (odo.desde || '?') + ' → ' + (odo.hasta || '?') + '\n' +
+          'Viajes Odoo: ' + (odo.viajes || 0) +
+          ' · Aplicados: ' + (odo.viajes_aplicados || 0) +
+          ' · Días únicos: ' + (odo.dias_unicos || 0) +
+          ' (' + (odo.min_dia || '?') + ' → ' + (odo.max_dia || '?') + ')\n' +
+          'Registros día: ' + (odo.upserts || 0) +
+          ' · Sin planificar: ' + (est.sin_planificar || 0) +
+          ' · Vehículos nuevos: ' + (odo.vehiculos_auto_creados || 0);
+        if (odo.borrados) msg += '\nBorrados: ' + odo.borrados;
+        if (res.purgados_totales) msg += ' · Purgados totales: ' + res.purgados_totales;
+        if ((odo.dias_unicos || 0) < 10 && (odo.viajes || 0) > 100) {
+          msg += '\n\n⚠ Las fechas de los viajes en Odoo salen casi todas el mismo día. Revisa SyncLog.';
+        }
+        Swal.fire({ title: 'Listo', html: '<pre style="text-align:left;white-space:pre-wrap;font-size:13px;">' + msg + '</pre>', icon: 'success' }).then(function() {
           location.reload();
         });
       } else {

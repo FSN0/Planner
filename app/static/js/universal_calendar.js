@@ -212,6 +212,10 @@ class UniversalCalendarManager {
                 eventData.classNames = eventData.classNames || [];
                 if (!eventData.classNames.includes('font-weight-bold')) eventData.classNames.push('font-weight-bold');
                 if (!eventData.classNames.includes('rounded')) eventData.classNames.push('rounded');
+                const evType = (eventData.extendedProps && eventData.extendedProps.type) || '';
+                if ((evType === 'vehiculo' || evType === 'vehiculo_odoo') && !eventData.classNames.includes('fc-event-vehiculo')) {
+                    eventData.classNames.push('fc-event-vehiculo');
+                }
                 eventData.borderColor = bgColor;
 
                 if (bgColor.toLowerCase() === '#ffffff' || bgColor.toLowerCase() === '#fff' || bgColor.toLowerCase() === 'white') {
@@ -242,8 +246,9 @@ class UniversalCalendarManager {
                 }
 
                 let innerHtml = '';
-                if (arg.event.extendedProps && arg.event.extendedProps.estado_fichaje) {
-                    let estado = arg.event.extendedProps.estado_fichaje;
+                const props = arg.event.extendedProps || {};
+                if (props.estado_fichaje) {
+                    let estado = props.estado_fichaje;
                     let dotClass = '#94a3b8'; let titleMsg = 'Sin Registro';
                     if (estado === 'Correcto') { dotClass = '#10b981'; titleMsg = 'Fichaje Correcto'; }
                     else if (estado === 'Ausencia') { dotClass = '#f59e0b'; titleMsg = 'Ausencia Pendiente'; }
@@ -251,6 +256,12 @@ class UniversalCalendarManager {
                     else if (estado.startsWith('Resuelto')) { dotClass = '#3b82f6'; titleMsg = 'Resuelto Manual'; }
 
                     innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background-color:${dotClass}; margin-right:3px; flex-shrink:0;"></span>`;
+                }
+                if (props.type === 'vehiculo' || props.type === 'vehiculo_odoo' || props.vehiculo_label) {
+                    const tip = props.vehiculo_label
+                        ? `Vehículo: ${props.vehiculo_label}${props.km != null ? ' · ' + Math.round(props.km) + ' km' : ''}`
+                        : 'Vehículo';
+                    innerHtml += `<i class="fas fa-car" title="${tip}" style="margin-right:3px; flex-shrink:0; opacity:0.95;"></i>`;
                 }
                 innerHtml += `<span class="text-truncate">${arg.event.title}</span>`;
                 return { html: `<div class="d-flex align-items-center" style="font-size:${evFont}; line-height:${evLine}; overflow:hidden; width:100%; padding:${evPad}; color:${arg.event.textColor || 'inherit'};">${innerHtml}</div>` };

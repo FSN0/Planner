@@ -10,13 +10,16 @@ class Adapter(BaseSyncAdapter):
     def __init__(self, tenant_id: int):
         super().__init__(tenant_id)
         
-        self.url = get_tenant_config('odoo_url', default=os.environ.get('ODOO_URL', '')).strip()
-        self.db_name = get_tenant_config('odoo_db', default=os.environ.get('ODOO_DB', '')).strip()
-        self.user = get_tenant_config('odoo_user', default=os.environ.get('ODOO_USER', '')).strip()
-        self.pwd = get_tenant_config('odoo_password', desencriptar=True, default=os.environ.get('ODOO_PASSWORD', '')).strip()
-        
+        self.url = (get_tenant_config('odoo_url', default=os.environ.get('ODOO_URL', '')) or '').strip()
+        self.db_name = (get_tenant_config('odoo_db', default=os.environ.get('ODOO_DB', '')) or '').strip()
+        self.user = (get_tenant_config('odoo_user', default=os.environ.get('ODOO_USER', '')) or '').strip()
+        self.pwd = (get_tenant_config('odoo_password', desencriptar=True, default=os.environ.get('ODOO_PASSWORD', '')) or '').strip()
+
         if not self.url or not self.url.startswith('http'):
-            raise ValueError("No hay ODOO_URL configurada para este inquilino.")
+            raise ValueError(
+                "No hay ODOO_URL configurada para este inquilino. "
+                "Guarda la URL en Integración Odoo (debe empezar por https://)."
+            )
             
         try:
             self.common = xmlrpc.client.ServerProxy(f'{self.url}/xmlrpc/2/common')
@@ -748,5 +751,250 @@ class Adapter(BaseSyncAdapter):
                 'driver_partner_id': int(driver_partner_id) if driver_partner_id else None,
                 'driver_name': driver_name,
             })
+
+        return result
+
+    def get_viajes_diarios(self, fecha=None, fecha_hasta=None):
+        """
+        Viajes Soltec: tms.shipment confirmed.
+        Día de uso = date_start..date_end (fallback: date de registro).
+        """
+        import logging
+        from datetime import date as date_cls, datetime as dt_cls
+
+        logger = logging.getLogger(__name__)
+
+        if not fecha:
+            fecha = date_cls.today().strftime('%Y-%m-%d')
+        if not fecha_hasta:
+            fecha_hasta = fecha
+
+        model = 'tms.shipment'
+        try:
+            from app.models import ConfiguracionGlobal
+            conf = ConfiguracionGlobal.query.filter_by(clave='odoo_viaje_model').first()
+            if conf and (conf.valor or '').strip():
+                model = conf.valor.strip()
+        except Exception:
+            pass
+
+        if not self._odoo_model_exists(model):
+            logger.error(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                f"Modelo de viajes '{model}' no existe."
+            )
+            return []
+
+        available = self._odoo_fields_get(model) or {}
+
+        def _has(*names):
+            for n in names:
+                if n in available:
+                    return n
+            return None
+
+        f_vehicle = _has('bim_transport_equipment_id', 'vehicle_id', 'equipo_id')
+        f_date = _has('date')
+        f_start = _has('date_start', 'fecha_inicio')
+        f_end = _has('date_end', 'fecha_fin')
+        f_km0 = _has('begin_kilometers', 'km_start', 'km_inicial')
+        f_km1 = _has('end_kilometers', 'km_end', 'km_final')
+        f_driver = _has('driver_id')
+        f_qty = _has('qty')
+        f_previsto = _has('km_previsto')
+        f_desvio = _has('desvio')
+        f_state = _has('state')
+        f_name = _has('name')
+        f_origin = _has('bim_project_origin_id')
+        f_dest = _has('bim_project_destination_id')
+        f_nota = _has('x_studio_nota', 'nota')
+        f_reviewed = _has('reviewed')
+
+        if not f_vehicle:
+            logger.error(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                f"{model}: falta equipo/vehículo. Campos: {sorted(available.keys())}"
+            )
+            return []
+
+        fields = ['id', f_vehicle]
+        for f in (
+            f_date, f_start, f_end, f_km0, f_km1, f_driver, f_qty,
+            f_previsto, f_desvio, f_state, f_name, f_origin, f_dest, f_nota, f_reviewed,
+        ):
+            if f and f not in fields:
+                fields.append(f)
+
+        # Dominio SIMPLE y correcto (notación polaca Odoo):
+        # confirmed AND (
+        #   date_start en rango
+        #   OR (date_end cubre el rango)
+        #   OR date registro en rango  ← catch-up
+        # )
+        leafs = []
+        if f_start:
+            leafs.append('&')
+            leafs.append((f_start, '>=', fecha))
+            leafs.append((f_start, '<=', fecha_hasta))
+        if f_start and f_end:
+            leafs.append('&')
+            leafs.append('&')
+            leafs.append((f_end, '!=', False))
+            leafs.append((f_end, '>=', fecha))
+            leafs.append((f_start, '<=', fecha_hasta))
+        if f_date:
+            leafs.append('&')
+            leafs.append((f_date, '>=', f'{fecha} 00:00:00'))
+            leafs.append((f_date, '<=', f'{fecha_hasta} 23:59:59'))
+
+        n_branches = (1 if f_start else 0) + (1 if (f_start and f_end) else 0) + (1 if f_date else 0)
+        if n_branches == 0:
+            domain = [('state', '=', 'confirmed')] if f_state else []
+        else:
+            ors = ['|'] * (n_branches - 1) if n_branches > 1 else []
+            domain = ors + leafs
+            if f_state:
+                domain = ['&', ('state', '=', 'confirmed')] + domain
+
+        # Paginado: no depender de un único search_read enorme
+        rows = []
+        offset = 0
+        page = 2000
+        try:
+            while True:
+                chunk = self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    model, 'search_read',
+                    [domain],
+                    {
+                        'fields': fields,
+                        'order': 'id asc',
+                        'limit': page,
+                        'offset': offset,
+                    },
+                )
+                if not isinstance(chunk, list) or not chunk:
+                    break
+                rows.extend(chunk)
+                if len(chunk) < page:
+                    break
+                offset += page
+                if offset > 100000:
+                    break
+        except Exception as e:
+            logger.error(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                f"Error leyendo {model}: {e} domain={domain}"
+            )
+            return []
+
+        def _as_date(raw):
+            if not raw or raw is False:
+                return None
+            s = str(raw).strip()[:10]
+            try:
+                dt_cls.strptime(s, '%Y-%m-%d')
+                return s
+            except ValueError:
+                return None
+
+        def _as_float(raw):
+            try:
+                return float(raw) if raw not in (False, None, '') else None
+            except (TypeError, ValueError):
+                return None
+
+        def _m2o_label(raw):
+            return self._m2o_id_name(raw)
+
+        result = []
+        for row in rows:
+            if f_state and row.get(f_state) not in (None, False, 'confirmed'):
+                continue
+
+            veh_id, veh_name = _m2o_label(row.get(f_vehicle))
+            if not veh_id:
+                continue
+
+            d_reg = _as_date(row.get(f_date)) if f_date else None
+            d_start = _as_date(row.get(f_start)) if f_start else None
+            d_end = _as_date(row.get(f_end)) if f_end else None
+            # Día de uso real: ficha; si falta, fecha de registro
+            if not d_start:
+                d_start = d_reg
+            if not d_end:
+                d_end = d_start
+            if not d_start:
+                continue
+            if d_end < d_start:
+                d_start, d_end = d_end, d_start
+
+            driver_partner_id, driver_name = (None, None)
+            if f_driver:
+                driver_partner_id, driver_name = _m2o_label(row.get(f_driver))
+
+            origin_id, origin_name = (None, None)
+            dest_id, dest_name = (None, None)
+            if f_origin:
+                origin_id, origin_name = _m2o_label(row.get(f_origin))
+            if f_dest:
+                dest_id, dest_name = _m2o_label(row.get(f_dest))
+
+            km_start = _as_float(row.get(f_km0)) if f_km0 else None
+            km_end = _as_float(row.get(f_km1)) if f_km1 else None
+            qty = _as_float(row.get(f_qty)) if f_qty else None
+            if qty is None and km_start is not None and km_end is not None:
+                qty = km_end - km_start
+
+            result.append({
+                'odoo_vehicle_id': int(veh_id),
+                'odoo_vehicle_name': veh_name,
+                'odoo_viaje_id': int(row['id']) if row.get('id') else None,
+                'code': row.get(f_name) if f_name else None,
+                'state': row.get(f_state) if f_state else None,
+                'date_registro': d_reg or d_end,
+                'date_start': d_start,
+                'date_end': d_end,
+                'km_start': km_start,
+                'km_end': km_end,
+                'qty_km': qty,
+                'km_previsto': _as_float(row.get(f_previsto)) if f_previsto else None,
+                'desvio': _as_float(row.get(f_desvio)) if f_desvio else None,
+                'driver_partner_id': int(driver_partner_id) if driver_partner_id else None,
+                'driver_name': driver_name,
+                'obra_origen': origin_name,
+                'obra_destino': dest_name,
+                'obra_origen_id': int(origin_id) if origin_id else None,
+                'obra_destino_id': int(dest_id) if dest_id else None,
+                'nota': row.get(f_nota) if f_nota else None,
+                'reviewed': bool(row.get(f_reviewed)) if f_reviewed else None,
+                'source_model': model,
+            })
+
+        # Diagnóstico de fechas (para cazar el colapso a pocos días)
+        starts = [r['date_start'] for r in result]
+        unique_starts = sorted(set(starts))
+        logger.info(
+            f"[Odoo Adapter - Tenant {self.tenant_id}] "
+            f"viajes ({model}): {len(result)} rows, "
+            f"date_start unicos={len(unique_starts)}, "
+            f"min={unique_starts[0] if unique_starts else None}, "
+            f"max={unique_starts[-1] if unique_starts else None}, "
+            f"domain={domain}"
+        )
+
+        # Si date_start viene colapsado (p.ej. computed=hoy para todos),
+        # el día de uso real pasa a ser la fecha de registro del viaje.
+        if len(result) >= 200 and len(unique_starts) <= 5:
+            logger.warning(
+                f"[Odoo Adapter - Tenant {self.tenant_id}] "
+                f"date_start colapsado ({len(unique_starts)} únicos / {len(result)} viajes). "
+                f"Usando date (registro) como día de uso."
+            )
+            for r in result:
+                d = r.get('date_registro') or r['date_start']
+                r['date_start'] = d
+                r['date_end'] = d
+                r['_fecha_desde_registro'] = True
 
         return result

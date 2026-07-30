@@ -166,8 +166,6 @@ def get_universal_calendar_events():
             obra_name = _obra_label(obra)
             v_label = vehicle_by_date.get(a.fecha)
             v_meta = vehicle_meta_by_date.get(a.fecha) or {}
-            if v_label:
-                obra_name = f"{obra_name} · {v_label}"
             obra_color = obra.color if obra else "#3b82f6"
             leave = leave_covering(user_leaves, a.fecha)
             title, overlay_color, is_overlay = apply_leave_overlay_title(obra_name, leave)
@@ -190,31 +188,38 @@ def get_universal_calendar_events():
             })
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
 
-        # Días con vehículo (planificado u Odoo) pero sin obra
-        raw_veh_only = []
+        # Vehículo siempre como evento propio (también si hay obra ese día)
+        raw_veh = []
         for d, v_label in vehicle_by_date.items():
-            if d in assigned_dates:
-                continue
             v_meta = vehicle_meta_by_date.get(d) or {}
             title = f"Vehículo: {v_label}"
             if v_meta.get('km') is not None:
-                title = f"{title} · {int(v_meta['km'])} km"
-            color = '#64748b' if v_meta.get('source') == 'odoo' else '#0ea5e9'
-            raw_veh_only.append({
+                try:
+                    title = f"{title} · {int(v_meta['km'])} km"
+                except (TypeError, ValueError):
+                    pass
+            source = v_meta.get('source') or 'planificado'
+            if source == 'odoo':
+                color = '#64748b'
+                ev_type = 'vehiculo_odoo'
+            else:
+                color = '#0ea5e9'
+                ev_type = 'vehiculo'
+            raw_veh.append({
                 'title': title,
                 'start_date': d,
                 'end_date': d,
                 'color': color,
                 'extendedProps': {
-                    'type': 'vehiculo_odoo' if v_meta.get('source') == 'odoo' else 'vehiculo',
-                    'source': v_meta.get('source') or 'planificado',
+                    'type': ev_type,
+                    'source': source,
                     'vehiculo_label': v_label,
                     'vehiculo_id': v_meta.get('vehiculo_id'),
                     'km': v_meta.get('km'),
                 }
             })
-        if raw_veh_only:
-            events.extend(merge_events_v2(raw_veh_only, group_by=['title', 'color']))
+        if raw_veh:
+            events.extend(merge_events_v2(raw_veh, group_by=['title', 'color']))
 
         # Ausencias en días SIN asignación (sigue viéndose el periodo de vacaciones)
         leaves = AusenciaPlanificada.query.filter(

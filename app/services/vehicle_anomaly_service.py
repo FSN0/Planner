@@ -13,8 +13,6 @@ from app.services.vehicle_sync_service import _build_user_indexes, _match_driver
 
 DEFAULT_THRESHOLDS = {
     'vehiculo_salto_km_dia': 400,
-    'vehiculo_salto_delta_km': 1000,
-    'vehiculo_salto_ventana_dias': 7,
 }
 
 
@@ -29,22 +27,21 @@ def _cfg_int(clave, default):
 
 
 def get_odometer_jump_thresholds():
-    """Umbrales configurables (configuración global)."""
+    """Umbral único: km/día medios entre dos lecturas consecutivas."""
     return {
         'km_dia': max(1, _cfg_int(
             'vehiculo_salto_km_dia', DEFAULT_THRESHOLDS['vehiculo_salto_km_dia']
-        )),
-        'delta_km': max(1, _cfg_int(
-            'vehiculo_salto_delta_km', DEFAULT_THRESHOLDS['vehiculo_salto_delta_km']
-        )),
-        'ventana_dias': max(1, _cfg_int(
-            'vehiculo_salto_ventana_dias', DEFAULT_THRESHOLDS['vehiculo_salto_ventana_dias']
         )),
     }
 
 
 def _classify_jump(delta_km, delta_dias, km_dia, thresholds):
-    """Devuelve (severidad, motivos[]) o (None, [])."""
+    """
+    Alerta si:
+    - el odómetro baja, o
+    - km_totales / días >= umbral km/día
+      (1000 km en 1 día o en 2 con umbral 400 → alerta; en 3 → no).
+    """
     motivos = []
     severidad = None
 
@@ -55,14 +52,9 @@ def _classify_jump(delta_km, delta_dias, km_dia, thresholds):
     if delta_dias <= 0:
         delta_dias = 1
 
-    if km_dia >= thresholds['km_dia']:
+    if delta_km > 0 and km_dia >= thresholds['km_dia']:
         motivos.append('km_dia')
         severidad = 'alta'
-
-    if delta_km >= thresholds['delta_km'] and delta_dias <= thresholds['ventana_dias']:
-        motivos.append('delta_ventana')
-        if severidad != 'alta':
-            severidad = 'alta'
 
     return severidad, motivos
 
@@ -74,7 +66,7 @@ def detect_odometer_jumps(fecha_desde, fecha_hasta, thresholds=None):
     Solo emite alertas cuya lectura actual cae dentro de [fecha_desde, fecha_hasta].
     """
     thresholds = thresholds or get_odometer_jump_thresholds()
-    lookback = fecha_desde - timedelta(days=max(90, thresholds['ventana_dias'] * 3))
+    lookback = fecha_desde - timedelta(days=90)
 
     regs = (
         RegistroOdometro.query
@@ -82,6 +74,7 @@ def detect_odometer_jumps(fecha_desde, fecha_hasta, thresholds=None):
             RegistroOdometro.fecha >= lookback,
             RegistroOdometro.fecha <= fecha_hasta,
             RegistroOdometro.valor.isnot(None),
+            RegistroOdometro.viaje_odoo_id.isnot(None),
         )
         .order_by(RegistroOdometro.vehiculo_id.asc(), RegistroOdometro.fecha.asc(), RegistroOdometro.id.asc())
         .all()
@@ -144,8 +137,8 @@ def detect_odometer_jumps(fecha_desde, fecha_hasta, thresholds=None):
 
 def detect_cross_vehicle_reports(fecha_desde, fecha_hasta):
     """
-    Operario planificado en vehículo A ese día, pero el odómetro de ese día
-    (matched a ese operario) está en vehículo B.
+    Operario planificado en vehículo A ese día, pero el viaje tms.shipment
+    de ese día (matched a ese operario) está en vehículo B.
     """
     users_by_odoo, users_by_name = _build_user_indexes()
 
@@ -163,8 +156,10 @@ def detect_cross_vehicle_reports(fecha_desde, fecha_hasta):
     odo_regs = RegistroOdometro.query.filter(
         RegistroOdometro.fecha >= fecha_desde,
         RegistroOdometro.fecha <= fecha_hasta,
+        RegistroOdometro.viaje_odoo_id.isnot(None),
         or_(
             RegistroOdometro.valor.isnot(None),
+            RegistroOdometro.qty_km.isnot(None),
             RegistroOdometro.odoo_driver_name.isnot(None),
             RegistroOdometro.odoo_driver_partner_id.isnot(None),
         ),
@@ -241,8 +236,10 @@ def detect_vehicle_on_leave(fecha_desde, fecha_hasta):
     odo_regs = RegistroOdometro.query.filter(
         RegistroOdometro.fecha >= fecha_desde,
         RegistroOdometro.fecha <= fecha_hasta,
+        RegistroOdometro.viaje_odoo_id.isnot(None),
         or_(
             RegistroOdometro.valor.isnot(None),
+            RegistroOdometro.qty_km.isnot(None),
             RegistroOdometro.odoo_driver_name.isnot(None),
             RegistroOdometro.odoo_driver_partner_id.isnot(None),
         ),
@@ -269,7 +266,7 @@ def detect_vehicle_on_leave(fecha_desde, fecha_hasta):
             'asignacion_id': None,
         })
         entry['fuente_odoo'] = True
-        entry['km'] = reg.valor
+        entry['km'] = reg.qty_km if reg.qty_km is not None else reg.valor
         entry['conductor_odoo'] = reg.odoo_driver_name
         entry['reg_id'] = reg.id
 
@@ -318,4 +315,99 @@ def detect_vehicle_on_leave(fecha_desde, fecha_hasta):
         })
 
     alerts.sort(key=lambda a: (a['fecha'], a['user_id']), reverse=True)
+    return alerts
+
+
+DEFAULT_DESVIO_PCT = 25  # legado (simétrico)
+DEFAULT_DESVIO_MAX_PCT = 40  # alerta si desvío ≥ +este %
+DEFAULT_DESVIO_MIN_PCT = 30  # alerta si desvío ≤ -este %
+
+
+def get_desvio_thresholds():
+    """
+    Umbrales asimétricos de desvío vs km previsto.
+    - max_pct: dispara si desvio >= +max_pct
+    - min_pct: dispara si desvio <= -min_pct
+    Si solo existe la clave legada vehiculo_desvio_pct, se usa en ambos lados.
+    """
+    legado = ConfiguracionGlobal.query.filter_by(clave='vehiculo_desvio_pct').first()
+    legado_val = None
+    if legado and legado.valor not in (None, ''):
+        try:
+            legado_val = max(1, int(float(str(legado.valor).strip().replace(',', '.'))))
+        except (TypeError, ValueError):
+            legado_val = None
+
+    default_max = legado_val if legado_val is not None else DEFAULT_DESVIO_MAX_PCT
+    default_min = legado_val if legado_val is not None else DEFAULT_DESVIO_MIN_PCT
+
+    return {
+        'max_pct': max(1, _cfg_int('vehiculo_desvio_max_pct', default_max)),
+        'min_pct': max(1, _cfg_int('vehiculo_desvio_min_pct', default_min)),
+    }
+
+
+def get_desvio_threshold():
+    """Compat: umbral simétrico (el mayor de max/min)."""
+    t = get_desvio_thresholds()
+    return max(t['max_pct'], t['min_pct'])
+
+
+def detect_viaje_desvios(fecha_desde, fecha_hasta, thresholds=None):
+    """
+    Viajes con desvío fuera de banda: desvio >= +max_pct o desvio <= -min_pct.
+    Requiere km_previsto > 0.
+    """
+    thresholds = thresholds or get_desvio_thresholds()
+    max_pct = thresholds['max_pct']
+    min_pct = thresholds['min_pct']
+
+    regs = (
+        RegistroOdometro.query
+        .filter(
+            RegistroOdometro.fecha >= fecha_desde,
+            RegistroOdometro.fecha <= fecha_hasta,
+            RegistroOdometro.desvio.isnot(None),
+            RegistroOdometro.km_previsto.isnot(None),
+            RegistroOdometro.km_previsto > 0,
+        )
+        .all()
+    )
+
+    alerts = []
+    for reg in regs:
+        try:
+            desvio = float(reg.desvio)
+        except (TypeError, ValueError):
+            continue
+
+        por_encima = desvio >= max_pct
+        por_debajo = desvio <= -min_pct
+        if not por_encima and not por_debajo:
+            continue
+
+        if por_encima and por_debajo:
+            lado = 'ambos'
+        elif por_encima:
+            lado = 'por_encima'
+        else:
+            lado = 'por_debajo'
+
+        alerts.append({
+            'fecha': reg.fecha,
+            'vehiculo': reg.vehiculo,
+            'vehiculo_id': reg.vehiculo_id,
+            'planned_user': reg.planned_user,
+            'conductor_odoo': reg.odoo_driver_name,
+            'qty_km': reg.qty_km,
+            'km_previsto': reg.km_previsto,
+            'desvio': desvio,
+            'lado': lado,
+            'viaje_code': reg.viaje_code,
+            'viaje_odoo_id': reg.viaje_odoo_id,
+            'reg_id': reg.id,
+            'severidad': 'alta' if abs(desvio) >= max(max_pct, min_pct) * 2 else 'media',
+        })
+
+    alerts.sort(key=lambda a: (abs(a['desvio']), a['fecha']), reverse=True)
     return alerts

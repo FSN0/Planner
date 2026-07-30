@@ -56,11 +56,20 @@ def process_vehicle_assignment_action(
     if actor_user.role == ROLE_ADMIN:
         if accion == 'DESASIGNAR':
             count = 0
+            done_dates = []
             for d in valid_dates:
                 if CoreVehicleAssignmentService.desasignar(
                     vehicle.id, worker.id, d, actor_user.id, "Planificación Manual",
+                    registrar_log=False,
                 ):
                     count += 1
+                    done_dates.append(d)
+            if count and done_dates:
+                CoreVehicleAssignmentService.registrar_log_rango(
+                    worker.id, vehicle.id,
+                    min(done_dates), max(done_dates), count,
+                    actor_user.id, "Planificación Manual", False,
+                )
             db.session.commit()
             return {
                 'success': True,
@@ -136,8 +145,15 @@ def process_vehicle_assignment_action(
             CoreVehicleAssignmentService.asignar(
                 vehicle.id, worker.id, d, actor_user.id, "Planificación Manual",
                 overwrite=(mode == 'overwrite'),
+                registrar_log=False,
             )
             count += 1
+        if count:
+            CoreVehicleAssignmentService.registrar_log_rango(
+                worker.id, vehicle.id,
+                min(dates_to_assign), max(dates_to_assign), count,
+                actor_user.id, "Planificación Manual", True,
+            )
         db.session.commit()
         return {
             'success': True,

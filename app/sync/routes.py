@@ -92,10 +92,18 @@ def odoo_save_config():
     if not _require_odoo_module():
         return redirect(url_for('sync.panel'))
     try:
-        set_tenant_config('odoo_url', request.form.get('url', '').strip())
-        set_tenant_config('odoo_db', request.form.get('db', '').strip())
-        set_tenant_config('odoo_user', request.form.get('user', '').strip())
-        password = request.form.get('password', '').strip()
+        url = (request.form.get('url') or '').strip()
+        db_name = (request.form.get('db') or '').strip()
+        user = (request.form.get('user') or '').strip()
+        password = (request.form.get('password') or '').strip()
+
+        # No pisar con vacío: evita el error intermitente "No hay ODOO_URL"
+        if url:
+            set_tenant_config('odoo_url', url)
+        if db_name:
+            set_tenant_config('odoo_db', db_name)
+        if user:
+            set_tenant_config('odoo_user', user)
         if password:
             set_tenant_config('odoo_password', password, encriptar=True)
 
@@ -969,13 +977,17 @@ def auditoria_vehiculos():
         detect_cross_vehicle_reports,
         detect_odometer_jumps,
         detect_vehicle_on_leave,
+        detect_viaje_desvios,
+        get_desvio_thresholds,
         get_odometer_jump_thresholds,
     )
 
     thresholds = get_odometer_jump_thresholds()
+    umbrales_desvio = get_desvio_thresholds()
     saltos = detect_odometer_jumps(fecha_desde, fecha_hasta, thresholds=thresholds)
     vehiculo_distinto = detect_cross_vehicle_reports(fecha_desde, fecha_hasta)
     vehiculo_en_ausencia = detect_vehicle_on_leave(fecha_desde, fecha_hasta)
+    desvios = detect_viaje_desvios(fecha_desde, fecha_hasta, thresholds=umbrales_desvio)
 
     if search:
         def _jump_match(j):
@@ -1011,18 +1023,42 @@ def auditoria_vehiculos():
             ]
             return search in ' '.join(x for x in values if x).lower()
 
+        def _desvio_match(a):
+            v = a.get('vehiculo')
+            pu = a.get('planned_user')
+            values = [
+                v.matricula if v else '',
+                v.nombre if v else '',
+                a.get('conductor_odoo') or '',
+                a.get('viaje_code') or '',
+                pu.name if pu else '',
+                pu.lastname if pu else '',
+            ]
+            return search in ' '.join(x for x in values if x).lower()
+
         saltos = [j for j in saltos if _jump_match(j)]
         vehiculo_distinto = [a for a in vehiculo_distinto if _cross_match(a)]
         vehiculo_en_ausencia = [a for a in vehiculo_en_ausencia if _leave_match(a)]
+        desvios = [a for a in desvios if _desvio_match(a)]
 
     if estado == 'salto_km':
-        mismatch, sin_km, sin_plan, ok_hist, vehiculo_distinto, vehiculo_en_ausencia = [], [], [], [], [], []
+        mismatch, sin_km, sin_plan, ok_hist, vehiculo_distinto, vehiculo_en_ausencia, desvios = (
+            [], [], [], [], [], [], []
+        )
     elif estado == 'vehiculo_distinto':
-        mismatch, sin_km, sin_plan, ok_hist, saltos, vehiculo_en_ausencia = [], [], [], [], [], []
+        mismatch, sin_km, sin_plan, ok_hist, saltos, vehiculo_en_ausencia, desvios = (
+            [], [], [], [], [], [], []
+        )
     elif estado == 'en_ausencia':
-        mismatch, sin_km, sin_plan, ok_hist, saltos, vehiculo_distinto = [], [], [], [], [], []
+        mismatch, sin_km, sin_plan, ok_hist, saltos, vehiculo_distinto, desvios = (
+            [], [], [], [], [], [], []
+        )
+    elif estado == 'desvio':
+        mismatch, sin_km, sin_plan, ok_hist, saltos, vehiculo_distinto, vehiculo_en_ausencia = (
+            [], [], [], [], [], [], []
+        )
     elif estado in {'mismatch_driver', 'sin_km', 'sin_planificar', 'ok'}:
-        saltos, vehiculo_distinto, vehiculo_en_ausencia = [], [], []
+        saltos, vehiculo_distinto, vehiculo_en_ausencia, desvios = [], [], [], []
 
     return render_template(
         'sync/auditoria_vehiculos.html',
@@ -1033,7 +1069,10 @@ def auditoria_vehiculos():
         saltos=saltos,
         vehiculo_distinto=vehiculo_distinto,
         vehiculo_en_ausencia=vehiculo_en_ausencia,
+        desvios=desvios,
         umbrales_salto=thresholds,
+        umbrales_desvio=umbrales_desvio,
+        umbral_desvio=max(umbrales_desvio['max_pct'], umbrales_desvio['min_pct']),
         fecha_desde_default=fecha_desde.isoformat(),
         fecha_hasta_default=fecha_hasta.isoformat(),
         filtros={
@@ -1044,7 +1083,8 @@ def auditoria_vehiculos():
         total_filtrado=len(registros)
             + (len(saltos) if estado in ('all', 'salto_km') else 0)
             + (len(vehiculo_distinto) if estado in ('all', 'vehiculo_distinto') else 0)
-            + (len(vehiculo_en_ausencia) if estado in ('all', 'en_ausencia') else 0),
+            + (len(vehiculo_en_ausencia) if estado in ('all', 'en_ausencia') else 0)
+            + (len(desvios) if estado in ('all', 'desvio') else 0),
         total_ok=len(ok_hist),
     )
 
@@ -1053,11 +1093,13 @@ def auditoria_vehiculos():
 @login_required
 @roles_required(ROLE_ADMIN)
 def sync_vehiculos_manual():
-    """Fuerza sync de flota + odómetros en un rango de fechas."""
+    """Fuerza sync de flota + uso desde viajes tms.shipment (borra basura del rango)."""
     if not _require_odoo_module():
         return jsonify({'success': False, 'error': 'Módulo Odoo no habilitado'}), 403
     try:
-        from app.services.vehicle_sync_service import apply_diff, sync_odometros
+        from app.services.vehicle_sync_service import (
+            apply_diff, purge_registros_uso, sync_odometros,
+        )
         from app.utils.timezone_utils import today_local
         from datetime import timedelta
 
@@ -1065,6 +1107,7 @@ def sync_vehiculos_manual():
         hoy = today_local()
         fecha_desde = data.get('fecha_desde')
         fecha_hasta = data.get('fecha_hasta')
+        limpiar_todo = bool(data.get('limpiar_todo'))
         if not fecha_desde and data.get('dias') is not None:
             dias = max(0, min(365, int(data.get('dias', 7))))
             fecha_hasta = hoy.isoformat()
@@ -1074,13 +1117,24 @@ def sync_vehiculos_manual():
         if not fecha_hasta:
             fecha_hasta = fecha_desde
 
+        purged = 0
+        if limpiar_todo:
+            # Tira TODO el histórico contaminado del odómetro y regenera el rango
+            purged = purge_registros_uso()
+
         fleet = apply_diff(modo='Manual')
         odo = sync_odometros(
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
             modo='Manual',
+            limpiar_rango=True,
         )
-        return jsonify({'success': True, 'fleet': fleet, 'odometros': odo})
+        return jsonify({
+            'success': True,
+            'fleet': fleet,
+            'odometros': odo,
+            'purgados_totales': purged,
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500

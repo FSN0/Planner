@@ -28,15 +28,10 @@ class CoreVehicleAssignmentService:
 
     @staticmethod
     def asignar(vehiculo_id, user_id, fecha, autor_id, contexto_origen,
-                detalle_extra=None, *, solicitud_id=None, overwrite=False):
+                detalle_extra=None, *, solicitud_id=None, overwrite=False,
+                registrar_log=True):
         """
-        Crea AsignacionVehiculo y SystemLog (category=planificacion).
-        Hace flush(); commit queda al flujo superior.
-
-        Si overwrite=True y hay conflicto (vehículo u operario ocupado ese día
-        por otra pareja), desasigna primero las filas conflictivas.
-        Si overwrite=False y hay conflicto, lanza ValueError.
-        Si ya existe la misma pareja (vehiculo, user, fecha), retorna esa fila.
+        Crea AsignacionVehiculo. En lotes: registrar_log=False + registrar_log_rango.
         """
         existing_same = AsignacionVehiculo.query.filter_by(
             vehiculo_id=vehiculo_id, user_id=user_id, fecha=fecha,
@@ -70,15 +65,16 @@ class CoreVehicleAssignmentService:
                     conflict_vehicle.vehiculo_id, conflict_vehicle.user_id, fecha,
                     autor_id, contexto_origen,
                     detalle_extra="Sobreescritura: liberar vehículo.",
+                    registrar_log=registrar_log,
                 )
             if conflict_user and conflict_user.vehiculo_id != vehiculo_id:
-                # Puede quedar tras liberar vehículo si era otra pareja
                 still = AsignacionVehiculo.query.filter_by(user_id=user_id, fecha=fecha).first()
                 if still:
                     CoreVehicleAssignmentService.desasignar(
                         still.vehiculo_id, still.user_id, fecha,
                         autor_id, contexto_origen,
                         detalle_extra="Sobreescritura: liberar operario.",
+                        registrar_log=registrar_log,
                     )
 
         nueva = AsignacionVehiculo(
@@ -89,19 +85,20 @@ class CoreVehicleAssignmentService:
         )
         db.session.add(nueva)
 
-        CoreVehicleAssignmentService._registrar_log(
-            user_id, vehiculo_id, fecha, autor_id, contexto_origen,
-            es_alta=True, detalle_extra=detalle_extra,
-        )
+        if registrar_log:
+            CoreVehicleAssignmentService._registrar_log(
+                user_id, vehiculo_id, fecha, autor_id, contexto_origen,
+                es_alta=True, detalle_extra=detalle_extra,
+            )
 
         db.session.flush()
         return nueva
 
     @staticmethod
     def desasignar(vehiculo_id, user_id, fecha, autor_id, contexto_origen,
-                   detalle_extra=None):
+                   detalle_extra=None, *, registrar_log=True):
         """
-        Elimina AsignacionVehiculo (vehiculo_id, user_id, fecha) y registra log.
+        Elimina AsignacionVehiculo (vehiculo_id, user_id, fecha).
         Retorna True si borró, False si no existía.
         """
         asig = AsignacionVehiculo.query.filter_by(
@@ -112,13 +109,53 @@ class CoreVehicleAssignmentService:
 
         db.session.delete(asig)
 
-        CoreVehicleAssignmentService._registrar_log(
-            user_id, vehiculo_id, fecha, autor_id, contexto_origen,
-            es_alta=False, detalle_extra=detalle_extra,
-        )
+        if registrar_log:
+            CoreVehicleAssignmentService._registrar_log(
+                user_id, vehiculo_id, fecha, autor_id, contexto_origen,
+                es_alta=False, detalle_extra=detalle_extra,
+            )
 
         db.session.flush()
         return True
+
+    @staticmethod
+    def registrar_log_rango(user_id, vehiculo_id, fecha_inicio, fecha_fin, n_dias,
+                            autor_id, contexto_origen, es_alta,
+                            detalle_extra=None):
+        """Una sola entrada de log para un rango de vehículo."""
+        if not n_dias or n_dias < 1:
+            return
+        if n_dias == 1 and fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
+            CoreVehicleAssignmentService._registrar_log(
+                user_id, vehiculo_id, fecha_inicio, autor_id, contexto_origen,
+                es_alta=es_alta, detalle_extra=detalle_extra,
+            )
+            return
+
+        verbo = "Asignado" if es_alta else "Desasignado"
+        vehiculo = Vehiculo.query.get(vehiculo_id)
+        user = User.query.get(user_id)
+        v_label = CoreVehicleAssignmentService.format_vehiculo_label(vehiculo)
+        user_nombre = f"{user.name} {user.lastname}" if user else f"ID {user_id}"
+        fi = fecha_inicio.strftime('%d/%m/%Y') if fecha_inicio else '?'
+        ff = fecha_fin.strftime('%d/%m/%Y') if fecha_fin else '?'
+        detail = (
+            f"Vehículo {v_label} → {user_nombre} ({fi} → {ff}, {n_dias} días). "
+            f"{verbo}."
+        )
+        if detalle_extra:
+            detail = f"{detail} {detalle_extra}"
+
+        log_user_id = None if CoreVehicleAssignmentService._is_system_action(contexto_origen) else autor_id
+        db.session.add(SystemLog(
+            timestamp=utc_now(),
+            user_id=log_user_id,
+            category='planificacion',
+            action=contexto_origen,
+            detail=detail,
+            target_user_id=user_id,
+            target_date=fecha_inicio,
+        ))
 
     @staticmethod
     def _registrar_log(user_id, vehiculo_id, fecha, autor_id, contexto_origen,

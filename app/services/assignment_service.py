@@ -265,15 +265,16 @@ def _create_solicitud_concreta_obj(jefe, worker, obra, dates, notas=None):
 
 def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_id=None):
     count = 0
-    deleted_info = [] 
-    
+    deleted_info = []
+    assigned_dates = []
+
     for d in dates:
         same_obra_conflict = Asignacion.query.filter_by(
             user_id=worker.id, fecha=d, obra_id=obra.id
         ).first()
-        
+
         if same_obra_conflict:
-            continue 
+            continue
 
         if overwrite:
             existing_others = Asignacion.query.filter_by(user_id=worker.id, fecha=d).all()
@@ -281,18 +282,32 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
                 deleted_info.append((exist.obra_id, exist.user_id, d))
                 CoreAssignmentService.desasignar(
                     exist.user_id, exist.obra_id, exist.fecha, actor.id,
-                    "Planificación Manual", "Sobreescritura de asignación previa."
+                    "Planificación Manual", "Sobreescritura de asignación previa.",
+                    registrar_log=False,
                 )
 
         CoreAssignmentService.asignar(
             worker.id, obra.id, d, actor.id, "Planificación Manual",
             company_id=worker.company_id, solicitud_id=solicitud_id,
+            registrar_log=False,
         )
+        assigned_dates.append(d)
         count += 1
+
+    if count:
+        CoreAssignmentService.registrar_log_rango(
+            worker.id, obra.id,
+            min(assigned_dates), max(assigned_dates), count,
+            actor.id, "Planificación Manual", True,
+            detalle_extra=(
+                f"Incluye sobreescritura de {len(deleted_info)} día(s)."
+                if deleted_info else None
+            ),
+        )
 
     for o_id, w_id, d_del in deleted_info:
         update_solicitudes_for_assignment(o_id, w_id, d_del, resolved_by_id=actor.id)
-        
+
     for d in dates:
         update_solicitudes_for_assignment(obra.id, worker.id, d, resolved_by_id=actor.id)
 
@@ -341,11 +356,20 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
 
     count = len(asignaciones)
     fechas_borradas = [a.fecha.strftime('%d/%m/%Y') for a in asignaciones]
-    
+    fechas_objs = sorted({a.fecha for a in asignaciones})
+
     for a in asignaciones:
         CoreAssignmentService.desasignar(
             a.user_id, a.obra_id, a.fecha, actor_user.id,
-            "Planificación Manual"
+            "Planificación Manual",
+            registrar_log=False,
+        )
+
+    if count and fechas_objs:
+        CoreAssignmentService.registrar_log_rango(
+            worker_id, target_obra_id or asignaciones[0].obra_id,
+            fechas_objs[0], fechas_objs[-1], count,
+            actor_user.id, "Planificación Manual", False,
         )
     
     for d_obj in date_objs:

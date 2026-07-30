@@ -112,17 +112,28 @@ def api_solicitud_asignar_parcial(solicitud_id):
     # LÓGICA EXCLUSIVA PARA DESASIGNACIONES (BAJAS) - BYPASS DE CONFLICTOS
     # =========================================================================
     if accion == 'DESASIGNAR':
+        fechas_ok = []
         for d_str in selected_dates:
             try:
                 d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
                 borrado = CoreAssignmentService.desasignar(
                     int(worker_id), solicitud.obra_id, d_obj, current_user.id,
-                    "Resolución de Solicitud de Baja"
+                    "Resolución de Solicitud de Baja",
+                    registrar_log=False,
                 )
                 if borrado:
                     count_processed += 1
+                    fechas_ok.append(d_obj)
             except ValueError: 
                 continue
+
+        if count_processed and fechas_ok:
+            fechas_ok = sorted(set(fechas_ok))
+            CoreAssignmentService.registrar_log_rango(
+                int(worker_id), solicitud.obra_id,
+                fechas_ok[0], fechas_ok[-1], count_processed,
+                current_user.id, "Resolución de Solicitud de Baja", False,
+            )
         
         # Mandamos recalcular al motor puro de coberturas
         for d_str in selected_dates:
@@ -291,7 +302,15 @@ def api_planificador_action():
                     for d_borrar in fechas_a_borrar:
                         CoreAssignmentService.desasignar(
                             int(worker_id), old_obra_id, d_borrar, current_user.id,
-                            "Planificación Manual", "Recorte de rango desde planificador."
+                            "Planificación Manual", "Recorte de rango desde planificador.",
+                            registrar_log=False,
+                        )
+                    if fechas_a_borrar:
+                        CoreAssignmentService.registrar_log_rango(
+                            int(worker_id), old_obra_id,
+                            min(fechas_a_borrar), max(fechas_a_borrar), len(fechas_a_borrar),
+                            current_user.id, "Planificación Manual", False,
+                            detalle_extra="Recorte de rango desde planificador.",
                         )
                     db.session.commit()
                     
@@ -436,11 +455,18 @@ def api_solicitud_asignar_candidatos(solicitud_id):
                 ).all()
                 
                 if asignaciones_a_borrar:
+                    fechas = sorted({a.fecha for a in asignaciones_a_borrar})
                     for a in asignaciones_a_borrar:
                         CoreAssignmentService.desasignar(
                             a.user_id, a.obra_id, a.fecha, current_user.id,
-                            "Resolución de Solicitud de Baja"
+                            "Resolución de Solicitud de Baja",
+                            registrar_log=False,
                         )
+                    CoreAssignmentService.registrar_log_rango(
+                        int(wid), solicitud.obra_id,
+                        fechas[0], fechas[-1], len(asignaciones_a_borrar),
+                        current_user.id, "Resolución de Solicitud de Baja", False,
+                    )
                     count_exito += 1
                     
                 continue # Saltamos a la siguiente iteración del for, no validamos nada más
@@ -539,12 +565,20 @@ def api_solicitud_desasignar_candidato(solicitud_id):
         return jsonify({'success': False, 'message': 'No se encontraron asignaciones para eliminar.'}), 400
 
     count = len(asignaciones)
-    fechas_eliminadas = [a.fecha for a in asignaciones] 
-    
+    fechas_eliminadas = [a.fecha for a in asignaciones]
+    fechas_sorted = sorted(set(fechas_eliminadas))
+
     for a in asignaciones:
         CoreAssignmentService.desasignar(
             a.user_id, a.obra_id, a.fecha, current_user.id,
-            "Desasignación de Candidato"
+            "Desasignación de Candidato",
+            registrar_log=False,
+        )
+    if count and fechas_sorted:
+        CoreAssignmentService.registrar_log_rango(
+            worker_id, solicitud.obra_id,
+            fechas_sorted[0], fechas_sorted[-1], count,
+            current_user.id, "Desasignación de Candidato", False,
         )
     
     for d_obj in fechas_eliminadas:

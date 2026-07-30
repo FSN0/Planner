@@ -80,8 +80,12 @@ def _odometer_regs_for_worker(worker, start_date, end_date, end_exclusive=True):
             matched.append(reg)
             seen.add(reg.id)
             continue
+        # Solo uso real respaldado por viaje tms.shipment (NO odómetro contaminado)
+        if not getattr(reg, 'viaje_odoo_id', None):
+            continue
         has_usage = bool(
             reg.valor is not None
+            or reg.qty_km is not None
             or (reg.odoo_driver_name or '').strip()
             or reg.odoo_driver_partner_id
         )
@@ -136,7 +140,12 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
         v = vehiculos.get(a.vehiculo_id)
         label = v.label() if v else f"Vehículo #{a.vehiculo_id}"
         odo = odo_by_veh_date.get((a.vehiculo_id, a.fecha))
-        km = odo.valor if odo and odo.valor is not None else None
+        km = None
+        if odo:
+            if odo.qty_km is not None:
+                km = odo.qty_km
+            elif odo.valor is not None:
+                km = odo.valor
         day_map[a.fecha] = {
             'label': label,
             'vehiculo_id': a.vehiculo_id,
@@ -153,10 +162,11 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
             continue
         v = vehiculos.get(r.vehiculo_id)
         label = v.label() if v else f"Vehículo #{r.vehiculo_id}"
+        km = r.qty_km if r.qty_km is not None else (r.valor if r.valor is not None else None)
         day_map[r.fecha] = {
             'label': label,
             'vehiculo_id': r.vehiculo_id,
-            'km': r.valor if r.valor is not None else None,
+            'km': km,
             'source': 'odoo',
             'conductor': r.odoo_driver_name or (v.odoo_driver_name if v else None),
         }

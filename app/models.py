@@ -548,7 +548,7 @@ class AsignacionVehiculo(db.Model):
 
 
 class RegistroOdometro(db.Model):
-    """Snapshot diario odómetro Odoo vs asignación planificada (auditoría informativa)."""
+    """Snapshot diario viaje Odoo (tms.shipment) vs asignación planificada."""
     __tablename__ = 'registros_odometro'
     __table_args__ = (
         db.UniqueConstraint('vehiculo_id', 'fecha', name='uq_odometro_vehiculo_fecha'),
@@ -557,12 +557,20 @@ class RegistroOdometro(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehiculo_id = db.Column(db.Integer, db.ForeignKey('vehiculos.id'), nullable=False)
     fecha = db.Column(db.Date, nullable=False)
-    valor = db.Column(db.Float, nullable=True)
+    valor = db.Column(db.Float, nullable=True)  # end_kilometers del viaje
 
     odoo_driver_partner_id = db.Column(db.Integer, nullable=True)
     odoo_driver_name = db.Column(db.String(160), nullable=True)
 
     planned_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Datos del viaje tms.shipment (fuente de uso real)
+    km_start = db.Column(db.Float, nullable=True)
+    qty_km = db.Column(db.Float, nullable=True)
+    km_previsto = db.Column(db.Float, nullable=True)
+    desvio = db.Column(db.Float, nullable=True)  # % desvío vs previsto
+    viaje_code = db.Column(db.String(64), nullable=True)
+    viaje_odoo_id = db.Column(db.Integer, nullable=True)
 
     # ok | mismatch_driver | sin_km | sin_planificar
     estado = db.Column(db.String(40), nullable=False, default='ok')

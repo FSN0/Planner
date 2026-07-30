@@ -92,3 +92,22 @@ class BaseSyncAdapter(ABC):
         ]
         """
         return []
+
+    def get_viajes_diarios(self, fecha=None, fecha_hasta=None) -> list:
+        """
+        Opcional. Viajes / trayectos de flota (cobertura por fecha inicio–fin).
+        [
+          {
+            'odoo_vehicle_id': 1,
+            'odoo_viaje_id': 99,
+            'date_registro': '2026-07-29',
+            'date_start': '2026-07-28',
+            'date_end': '2026-07-29',
+            'km_start': 1000.0,   # suele ser último odómetro
+            'km_end': 1120.0,
+            'driver_partner_id': 10,
+            'driver_name': 'Juan Pérez',
+          }
+        ]
+        """
+        return []
