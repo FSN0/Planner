@@ -409,9 +409,10 @@ def build_person_day_timeline(user_id, fecha_obj):
             "descripcion_html": "No hay ningún evento histórico registrado en el sistema para este día.",
         }]
 
-    registro = RegistroFichaje.query.filter_by(user_id=user_id, fecha=fecha_obj).first()
-    if registro and registro.estado:
-        estado_actual = registro.estado
+    registros = RegistroFichaje.query.filter_by(user_id=user_id, fecha=fecha_obj).all()
+    if registros:
+        from app.services.fichaje_estado_service import estado_fichaje_agregado
+        estado_actual = estado_fichaje_agregado([r.estado for r in registros])
     elif hitos and hitos[0].get("titulo") != "Sin actividad":
         estado_actual = "Actividad registrada"
     else:

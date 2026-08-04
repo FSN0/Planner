@@ -160,6 +160,7 @@ class VehicleSolicitudService:
 
         accion = (solicitud.accion or 'ASIGNAR').upper()
         count = 0
+        omitidos_ausencia = 0
 
         if accion == 'DESASIGNAR':
             for d in days:
@@ -170,7 +171,11 @@ class VehicleSolicitudService:
                 ):
                     count += 1
         else:
+            from app.services.leave_service import user_has_approved_leave
             for d in days:
+                if user_has_approved_leave(solicitud.empleado_id, d):
+                    omitidos_ausencia += 1
+                    continue
                 CoreVehicleAssignmentService.asignar(
                     solicitud.vehiculo_id, solicitud.empleado_id, d,
                     actor.id, "Resolución de Solicitud Vehículo",
@@ -191,4 +196,7 @@ class VehicleSolicitudService:
         solicitud.resolved_at = utc_now()
         solicitud.resolved_by_id = actor.id
         db.session.commit()
-        return f"Solicitud de vehículo aceptada ({count} día(s))."
+        msg = f"Solicitud de vehículo aceptada ({count} día(s))."
+        if omitidos_ausencia:
+            msg += f" Omitidos {omitidos_ausencia} d. con ausencia aprobada."
+        return msg

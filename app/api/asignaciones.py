@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, date
 import json
 
 from app import db
-from app.models import User, Obra, Asignacion, Solicitud, Festivo, ROLE_ADMIN, ROLE_JEFE
+from app.models import User, Obra, Asignacion, Solicitud, Festivo, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
 from app.decorators import roles_required
 
 from app.services.assignment_service import process_assignment_action, process_unassign_action

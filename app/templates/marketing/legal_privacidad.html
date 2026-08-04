@@ -2,39 +2,79 @@
 {% block legal_content %}
 <h2>1. Quién trata los datos</h2>
 <p>
-    SignaPlan trata datos personales como responsable del tratamiento respecto de la web
-    comercial y del alta de cuentas. Respecto de los datos de trabajadores que cada empresa
-    cliente introduce en su espacio, SignaPlan actúa como <strong>encargado del tratamiento</strong>
-    (ver el documento de encargo).
+    <strong>{{ legal.razon_social }}</strong> («SignaPlan») trata datos personales:
 </p>
-<h2>2. Finalidades</h2>
 <ul>
-    <li>Crear y administrar la cuenta de la empresa cliente.</li>
-    <li>Prestar el servicio de planificación y fichaje.</li>
-    <li>Atención comercial y soporte.</li>
-    <li>Cumplir obligaciones legales aplicables.</li>
+    <li>Como <strong>responsable</strong> respecto de la web comercial, el alta de cuentas
+        y la relación contractual con la empresa cliente (datos de contacto del administrador,
+        facturación cuando proceda).</li>
+    <li>Como <strong>encargado del tratamiento</strong> respecto de los datos de trabajadores
+        y colaboradores que cada empresa cliente introduce en su espacio aislado
+        (planificación, ausencias, fichajes, vehículos, etc.). Ver el
+        <a href="{{ url_for('marketing.legal', slug='encargado') }}">encargo de tratamiento</a>.</li>
 </ul>
-<h2>3. Base jurídica</h2>
+
+<h2>2. Qué datos tratamos</h2>
+<ul>
+    <li>Datos de cuenta: nombre de empresa, subdominio, correo y contraseña del administrador.</li>
+    <li>Datos de trabajadores aportados por el cliente: identificación (nombre, DNI/NIE cuando
+        se facilite), rol, asignaciones a obra, ausencias, registros de jornada, PIN de fichaje
+        (almacenado de forma irreversible/hasheada), y, si el cliente lo activa, geolocalización
+        asociada al fichaje.</li>
+    <li>Datos técnicos: dirección IP, registros de acceso y cookies esenciales de sesión y seguridad.</li>
+</ul>
+
+<h2>3. Finalidades y base jurídica</h2>
+<ul>
+    <li><strong>Prestar el SaaS</strong> (ejecución del contrato / medidas precontractuales).</li>
+    <li><strong>Seguridad del servicio</strong> (interés legítimo: prevenir abusos y accesos indebidos).</li>
+    <li><strong>Cumplir obligaciones legales</strong> (p. ej. fiscales o de respuesta a autoridades).</li>
+    <li><strong>Comunicaciones de soporte</strong> relacionadas con la cuenta.</li>
+</ul>
 <p>
-    Ejecución del contrato (alta y prestación del SaaS), interés legítimo en la seguridad
-    del servicio y, cuando proceda, consentimiento (cookies no esenciales, comunicaciones
-    comerciales).
+    La geolocalización al fichar solo se usa si el cliente la activa en su configuración y
+    conforme a su propia base jurídica frente a sus trabajadores.
 </p>
+
 <h2>4. Conservación</h2>
 <p>
-    Los datos de cuenta se conservan mientras la relación esté activa y, después, los plazos
-    legales de facturación y responsabilidad. Los registros de jornada se conservan según la
-    normativa laboral aplicable y la configuración del cliente.
+    Los datos de cuenta se conservan mientras la relación esté activa y, después, durante
+    los plazos legales de facturación y responsabilidad civil. Los registros de jornada y
+    eventos asociados se conservan según la normativa laboral aplicable (orientativamente,
+    hasta cuatro años para el registro de jornada) y las instrucciones del cliente, salvo
+    obligación legal de conservación adicional.
 </p>
-<h2>5. Destinatarios</h2>
+
+<h2>5. Destinatarios y encargados</h2>
 <p>
-    Proveedores de alojamiento, correo y, en el futuro, pasarela de pago, bajo contrato de
-    encargo. No se venden datos a terceros.
+    Pueden intervenir proveedores de alojamiento, base de datos, correo electrónico y,
+    en su caso, pasarela de pago, bajo contrato y con obligaciones equivalentes. No se
+    venden datos a terceros con fines comerciales. Si el cliente conecta un ERP (p. ej. Odoo),
+    el tratamiento en ese sistema queda bajo la responsabilidad del propio cliente.
 </p>
-<h2>6. Derechos</h2>
+
+<h2>6. Transferencias internacionales</h2>
 <p>
-    Puedes solicitar acceso, rectificación, supresión, limitación, portabilidad y oposición
-    escribiendo a <a href="mailto:info@signaplan.com">info@signaplan.com</a>. También puedes
-    reclamar ante la Agencia Española de Protección de Datos (aepd.es).
+    Preferimos infraestructura en el Espacio Económico Europeo. Si en algún momento un
+    proveedor trata datos fuera del EEE, se aplicarán las garantías del RGPD (cláusulas
+    tipo u otras medidas adecuadas).
+</p>
+
+<h2>7. Derechos</h2>
+<p>
+    Puedes solicitar acceso, rectificación, supresión, limitación, portabilidad y oposición,
+    así como retirar el consentimiento cuando la base sea el consentimiento, escribiendo a
+    <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>. También puedes reclamar ante
+    la Agencia Española de Protección de Datos (<a href="https://www.aepd.es" rel="noopener" target="_blank">aepd.es</a>).
+</p>
+<p>
+    Si tus datos los ha introducido tu empresa en SignaPlan, en muchos casos debes ejercer
+    tus derechos primero ante esa empresa (responsable). SignaPlan colaborará con ella
+    como encargado.
+</p>
+
+<h2>8. Menores</h2>
+<p>
+    El servicio está dirigido a empresas. No está pensado para el alta por menores de 18 años.
 </p>
 {% endblock %}

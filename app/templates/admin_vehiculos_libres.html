@@ -253,6 +253,9 @@
               </td>
               <td class="col-actions">
                 <div class="table-actions">
+                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=s.vehiculo_id) }}" class="btn-table-action" title="Abrir ficha y asignar">
+                    <i class="fas fa-user-plus"></i>
+                  </a>
                   <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=s.vehiculo_id) }}" class="btn-table-action" title="Ficha del coche">
                     <i class="fas fa-eye"></i>
                   </a>

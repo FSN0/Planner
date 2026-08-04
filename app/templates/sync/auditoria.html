@@ -60,7 +60,7 @@
     {% set var_ausencias = pendientes | selectattr('estado', 'equalto', 'Ausencia') | list %}
 
     <div class="auditoria-stats">
-      {% if 'conflictos' in visible_sections %}
+      {% if 'conflictos' in visible_sections and var_conflictos %}
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseConflictos" title="Ir a desviaciones">
         <i class="fas fa-random"></i> {{ var_conflictos|length }} desviaciones
       </span>
@@ -91,7 +91,7 @@
 
     <div class="accordion auditoria-accordion" id="accordionAuditoria">
 
-        {% if 'conflictos' in visible_sections %}
+        {% if 'conflictos' in visible_sections and var_conflictos %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;">
             <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
                 <h6 class="auditoria-section-title text-danger mb-0">
@@ -407,17 +407,17 @@
                             {% elif reg.estado == 'Correcto_Automatico' %}
                                 <span class="font-weight-bold" style="font-size:0.75rem;" title="El sistema lo asignó por inercia del día anterior"><span class="status-dot dot-auto"></span>Inercia (Auto)</span>
                             {% elif reg.estado == 'Resuelto_Movido' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Reasignación manual' }}"><span class="status-dot dot-info"></span>Reasignado</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Reasignación manual' }}"><span class="status-dot dot-success"></span>Reasignado</span>
                             {% elif reg.estado == 'Resuelto_Asignado' %}
-                                <span class="text-info font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Asignación manual' }}"><span class="status-dot dot-info"></span>Asignado</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Asignación manual' }}"><span class="status-dot dot-success"></span>Asignado</span>
                             {% elif reg.estado == 'Resuelto_Dividido' %}
-                                <span class="text-primary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Multitarea manual' }}"><span class="status-dot dot-warning"></span>Multitarea</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Multitarea manual' }}"><span class="status-dot dot-success"></span>Multitarea</span>
                             
                             {% elif reg.estado == 'Resuelto_Ausencia' %}
-                                <span class="text-danger font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot" style="background-color: #ef4444; box-shadow: 0 0 5px rgba(239, 68, 68, 0.4);"></span>Ausencia</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>Ausencia OK</span>
                             
                             {% elif reg.estado == 'Resuelto_Falta' %}
-                                <span class="text-warning font-weight-bold text-dark" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot" style="background-color: #f59e0b;"></span>Plan. Borrada</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>Plan. Borrada</span>
                             
                             {% else %}
                                 <span class="text-secondary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Ignorado o Falta justificada' }}"><span class="status-dot dot-secondary"></span>Ignorado/Justif.</span>

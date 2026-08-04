@@ -2,19 +2,37 @@
 {% block legal_content %}
 <h2>1. Qué son las cookies</h2>
 <p>
-    Las cookies son pequeños archivos que el navegador guarda para que el sitio funcione
-    (sesión, seguridad) o para medir uso.
+    Las cookies (y tecnologías similares) son pequeños archivos o datos que el navegador
+    almacena para que el sitio funcione (sesión, seguridad) o, en su caso, para medir uso.
 </p>
-<h2>2. Cookies que usamos</h2>
+
+<h2>2. Cookies que utilizamos</h2>
 <ul>
-    <li><strong>Esenciales:</strong> sesión de usuario, token CSRF y preferencias técnicas.
-        Necesarias para el servicio; no requieren consentimiento.</li>
-    <li><strong>Analítica / marketing:</strong> hoy no están activas por defecto. Si se
-        incorporan, se pedirá consentimiento previo.</li>
+    <li><strong>Esenciales / técnicas:</strong> cookie de sesión de usuario, token CSRF
+        (protección frente a falsificación de peticiones) y preferencias técnicas mínimas
+        del interfaz. Son necesarias para prestar el servicio y no requieren consentimiento.</li>
+    <li><strong>Analítica o marketing:</strong> no están activas por defecto. Si se incorporan
+        en el futuro, se solicitará consentimiento previo cuando la normativa lo exija y
+        esta política se actualizará.</li>
 </ul>
-<h2>3. Cómo gestionarlas</h2>
+
+<h2>3. Base jurídica</h2>
 <p>
-    Puedes borrar o bloquear cookies desde la configuración de tu navegador. Si bloqueas las
-    esenciales, es posible que no puedas iniciar sesión.
+    Las cookies esenciales se basan en la necesidad de prestar el servicio solicitado
+    (art. 6.1.b RGPD / excepción técnica de la normativa de cookies). Las no esenciales,
+    cuando existan, se basarán en el consentimiento.
+</p>
+
+<h2>4. Cómo gestionarlas</h2>
+<p>
+    Puedes borrar o bloquear cookies desde la configuración de tu navegador. Si bloqueas
+    las esenciales, es posible que no puedas iniciar sesión o completar el alta.
+</p>
+
+<h2>5. Más información</h2>
+<p>
+    Consulta también la
+    <a href="{{ url_for('marketing.legal', slug='privacidad') }}">política de privacidad</a>
+    o escribe a <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>.
 </p>
 {% endblock %}

@@ -631,13 +631,94 @@ def companies():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def vehiculos():
-    """Listado de flota (origen sync Odoo)."""
+    """Listado de flota (alta manual y/o sync Odoo)."""
     vehicles = (
         Vehiculo.query
         .order_by(Vehiculo.active.desc(), Vehiculo.matricula.asc().nullslast(), Vehiculo.nombre.asc())
         .all()
     )
     return render_template("admin_vehiculos.html", vehicles=vehicles)
+
+
+@admin_bp.route("/vehiculos/crear", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def vehiculos_crear():
+    """Alta manual de vehículo (sin ERP)."""
+    nombre = (request.form.get('nombre') or '').strip()
+    matricula = (request.form.get('matricula') or '').strip().upper() or None
+    marca = (request.form.get('marca') or '').strip() or None
+    modelo = (request.form.get('modelo') or '').strip() or None
+
+    if not nombre:
+        flash('Indica un nombre para el vehículo.', 'danger')
+        return redirect(url_for('admin.vehiculos'))
+
+    if matricula:
+        dup = Vehiculo.query.filter(
+            db.func.upper(Vehiculo.matricula) == matricula
+        ).first()
+        if dup:
+            flash(f'Ya existe un vehículo con matrícula {matricula}.', 'danger')
+            return redirect(url_for('admin.vehiculos'))
+
+    v = Vehiculo(
+        nombre=nombre[:120],
+        matricula=matricula[:40] if matricula else None,
+        marca=marca[:80] if marca else None,
+        modelo=modelo[:80] if modelo else None,
+        active=True,
+    )
+    db.session.add(v)
+    db.session.commit()
+    flash(f'Vehículo «{v.label()}» dado de alta.', 'success')
+    return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
+
+
+@admin_bp.route("/vehiculos/<int:vehiculo_id>/editar", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def vehiculos_editar(vehiculo_id):
+    v = Vehiculo.query.get_or_404(vehiculo_id)
+    nombre = (request.form.get('nombre') or '').strip()
+    matricula = (request.form.get('matricula') or '').strip().upper() or None
+    marca = (request.form.get('marca') or '').strip() or None
+    modelo = (request.form.get('modelo') or '').strip() or None
+
+    if not nombre:
+        flash('El nombre no puede quedar vacío.', 'danger')
+        return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
+
+    if matricula:
+        dup = Vehiculo.query.filter(
+            db.func.upper(Vehiculo.matricula) == matricula,
+            Vehiculo.id != v.id,
+        ).first()
+        if dup:
+            flash(f'Ya existe otro vehículo con matrícula {matricula}.', 'danger')
+            return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
+
+    v.nombre = nombre[:120]
+    v.matricula = matricula[:40] if matricula else None
+    v.marca = marca[:80] if marca else None
+    v.modelo = modelo[:80] if modelo else None
+    db.session.commit()
+    flash('Vehículo actualizado.', 'success')
+    return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
+
+
+@admin_bp.route("/vehiculos/<int:vehiculo_id>/toggle", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def vehiculos_toggle(vehiculo_id):
+    v = Vehiculo.query.get_or_404(vehiculo_id)
+    v.active = not bool(v.active)
+    db.session.commit()
+    flash(
+        f'Vehículo «{v.label()}» {"activado" if v.active else "desactivado"}.',
+        'success',
+    )
+    return redirect(request.referrer or url_for('admin.vehiculos'))
 
 
 @admin_bp.route("/vehiculos/libres", methods=["GET"])
@@ -2765,6 +2846,7 @@ def ausencias_list():
     from app.services.leave_service import (
         jefe_puede_resolver_ausencias,
         get_pending_conflicts,
+        get_pending_manual_leaves,
         get_upcoming_leaves,
         get_leaves_scoped,
         obras_for_leave,
@@ -2794,14 +2876,22 @@ def ausencias_list():
         current_user, horizon_days=45, limit=40, only_future=True
     ))
     ausencias = get_leaves_scoped(current_user, estado=estado or None, limit=200)
+    pendientes = []
+    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL):
+        pendientes = get_pending_manual_leaves(current_user, limit=100)
+    elif current_user.role == ROLE_JEFE:
+        pendientes = get_pending_manual_leaves(current_user, limit=100)
 
     return render_template(
         'admin_ausencias.html',
         ausencias=ausencias,
+        pendientes=pendientes,
         en_curso_rows=en_curso_rows,
         proximas_rows=proximas_rows,
         conflictos=conflictos,
         puede_resolver=puede_resolver,
+        puede_validar_pendientes=current_user.role in (ROLE_ADMIN, ROLE_LABORAL),
+        puede_alta_manual=current_user.role in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL),
         filtro_estado=estado,
         auto_mode=auto_mode,
         today=date_cls.today(),
@@ -2813,6 +2903,9 @@ def ausencias_list():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def ausencias_sync():
+    modulos = getattr(getattr(g, 'current_tenant', None), 'modulos_activos', {}) or {}
+    if not modulos.get('odoo'):
+        return redirect(url_for('admin.ausencias_list'))
     from app.services.leave_service import sync_leaves_from_erp
     try:
         stats = sync_leaves_from_erp()
@@ -2828,15 +2921,18 @@ def ausencias_sync():
 
 @admin_bp.route('/ausencias/crear', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def ausencias_crear():
-    from app.services.leave_service import create_manual_leave
+    from app.services.leave_service import (
+        create_manual_leave,
+        estado_alta_por_rol,
+    )
 
     user_id = request.form.get('user_id', type=int)
     fecha_inicio = request.form.get('fecha_inicio')
     fecha_fin = request.form.get('fecha_fin')
     tipo = (request.form.get('tipo') or 'Vacaciones').strip()
-    estado = request.form.get('estado') or 'aprobada'
+    estado = estado_alta_por_rol(current_user, request.form.get('estado'))
     descripcion = request.form.get('descripcion') or None
 
     if not user_id or not fecha_inicio or not fecha_fin:
@@ -2844,7 +2940,7 @@ def ausencias_crear():
         return redirect(url_for('admin.ausencias_list'))
 
     try:
-        create_manual_leave(
+        leave = create_manual_leave(
             user_id=user_id,
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
@@ -2853,9 +2949,40 @@ def ausencias_crear():
             descripcion=descripcion,
             created_by_id=current_user.id,
         )
-        flash('Ausencia creada.', 'success')
+        if leave.estado == 'pendiente':
+            flash('Solicitud de ausencia enviada. Pendiente de validación.', 'info')
+        else:
+            flash('Ausencia creada.', 'success')
     except Exception as exc:
         flash(f'Error al crear ausencia: {exc}', 'danger')
+    return redirect(url_for('admin.ausencias_list'))
+
+
+@admin_bp.route('/ausencias/<int:leave_id>/aprobar', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def ausencias_aprobar(leave_id):
+    from app.models import LEAVE_STATUS_APROBADA
+    from app.services.leave_service import set_leave_estado
+    try:
+        set_leave_estado(leave_id, LEAVE_STATUS_APROBADA, resolved_by_id=current_user.id)
+        flash('Ausencia aprobada.', 'success')
+    except Exception as exc:
+        flash(str(exc), 'danger')
+    return redirect(url_for('admin.ausencias_list'))
+
+
+@admin_bp.route('/ausencias/<int:leave_id>/rechazar', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def ausencias_rechazar(leave_id):
+    from app.models import LEAVE_STATUS_RECHAZADA
+    from app.services.leave_service import set_leave_estado
+    try:
+        set_leave_estado(leave_id, LEAVE_STATUS_RECHAZADA, resolved_by_id=current_user.id)
+        flash('Ausencia rechazada.', 'info')
+    except Exception as exc:
+        flash(str(exc), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -2954,7 +3081,6 @@ def registro_jornada():
     from app.services.onboarding_service import tenant_tiene_registro_jornada
 
     if not tenant_tiene_registro_jornada():
-        flash('El registro de jornada no está activo en este tenant.', 'warning')
         return redirect(url_for('admin.panel'))
 
     desde_def, hasta_def = periodo_por_defecto()
@@ -2992,7 +3118,6 @@ def registro_jornada_imprimir():
     from app.services.onboarding_service import tenant_tiene_registro_jornada
 
     if not tenant_tiene_registro_jornada():
-        flash('El registro de jornada no está activo en este tenant.', 'warning')
         return redirect(url_for('admin.panel'))
 
     informe = _parametros_informe()
@@ -3016,7 +3141,6 @@ def registro_jornada_csv():
     from app.services.onboarding_service import tenant_tiene_registro_jornada
 
     if not tenant_tiene_registro_jornada():
-        flash('El registro de jornada no está activo en este tenant.', 'warning')
         return redirect(url_for('admin.panel'))
 
     informe = _parametros_informe()
@@ -3048,7 +3172,6 @@ def registro_jornada_pdf():
     from app.services.onboarding_service import tenant_tiene_registro_jornada
 
     if not tenant_tiene_registro_jornada():
-        flash('El registro de jornada no está activo en este tenant.', 'warning')
         return redirect(url_for('admin.panel'))
 
     informe = _parametros_informe()

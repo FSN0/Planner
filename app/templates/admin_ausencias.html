@@ -196,19 +196,19 @@
         <h1 class="page-toolbar-title">Ausencias</h1>
         <span class="page-toolbar-count">
           {% if current_user.role in ['admin', 'laboral'] %}Todas las obras{% else %}Tu personal{% endif %}
-          · Odoo manda
+          {% if tenant_has_odoo %}· Sync ERP disponible{% else %}· Gestión manual{% endif %}
         </span>
       </div>
       <div class="page-toolbar-right" style="display:flex;gap:.5rem;flex-wrap:wrap;">
-        {% if current_user.role == 'admin' %}
+        {% if tenant_has_odoo and current_user.role == 'admin' %}
         <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-plug"></i> Integración Odoo
         </a>
         {% endif %}
-        {% if current_user.role in ['admin', 'laboral'] %}
+        {% if tenant_has_odoo and current_user.role in ['admin', 'laboral'] %}
         <form method="POST" action="{{ url_for('admin.ausencias_sync') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-sync"></i> Sync ERP</button>
+          <button type="submit" class="btn-admin btn-admin-ghost"><i class="fas fa-sync"></i> Sync ERP</button>
         </form>
         {% endif %}
       </div>
@@ -239,6 +239,61 @@
         <span class="aus-kpi-value">{{ conflictos|length }}</span>
       </div>
     </div>
+
+    {% if pendientes %}
+    <section class="aus-acc is-open" data-aus-acc>
+      <button type="button" class="aus-acc-toggle" aria-expanded="true">
+        <span class="aus-acc-icon aus-acc-icon--amber" style="background:#fef3c7;color:#b45309;"><i class="fas fa-hourglass-half"></i></span>
+        <span class="aus-acc-text">
+          <span class="aus-acc-title">Pendientes de validar</span>
+          <span class="aus-acc-sub">{% if puede_validar_pendientes %}Solicitudes de jefe / altas pendientes{% else %}Tus solicitudes en espera{% endif %}</span>
+        </span>
+        <span class="aus-acc-count is-alert">{{ pendientes|length }}</span>
+        <i class="fas fa-chevron-down aus-acc-chevron"></i>
+      </button>
+      <div class="aus-acc-body">
+        <div class="aus-table-wrap">
+          <table class="admin-data-table mb-0">
+            <thead>
+              <tr class="header-row">
+                <th>Empleado</th>
+                <th>Periodo</th>
+                <th>Tipo</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for leave in pendientes %}
+              <tr class="data-row">
+                <td>
+                  <a href="{{ url_for('admin.worker_panel', user_id=leave.user_id) }}">
+                    {{ leave.user.name }} {{ leave.user.lastname }}
+                  </a>
+                </td>
+                <td>{{ leave.fecha_inicio.strftime('%d/%m/%Y') }} — {{ leave.fecha_fin.strftime('%d/%m/%Y') }}</td>
+                <td><span class="badge-soft badge-soft-blue">{{ leave.tipo }}</span></td>
+                <td class="text-right">
+                  {% if puede_validar_pendientes %}
+                  <form method="POST" action="{{ url_for('admin.ausencias_aprobar', leave_id=leave.id) }}" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-primary">Aprobar</button>
+                  </form>
+                  <form method="POST" action="{{ url_for('admin.ausencias_rechazar', leave_id=leave.id) }}" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-ghost">Rechazar</button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small">Pendiente de admin</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    {% endif %}
 
     {% if conflictos %}
     <section class="aus-acc is-open" data-aus-acc>
@@ -471,13 +526,21 @@
       </div>
     </section>
 
-    {% if current_user.role in ['admin', 'laboral'] %}
-    <section class="aus-acc" data-aus-acc>
-      <button type="button" class="aus-acc-toggle" aria-expanded="false">
+    {% if puede_alta_manual %}
+    <section class="aus-acc {% if not tenant_has_odoo %}is-open{% endif %}" data-aus-acc {% if not tenant_has_odoo %}data-open-default="1"{% endif %}>
+      <button type="button" class="aus-acc-toggle" aria-expanded="{{ 'true' if not tenant_has_odoo else 'false' }}">
         <span class="aus-acc-icon aus-acc-icon--green"><i class="fas fa-plus"></i></span>
         <span class="aus-acc-text">
-          <span class="aus-acc-title">Alta manual</span>
-          <span class="aus-acc-sub">Crear ausencia fuera del sync de Odoo</span>
+          <span class="aus-acc-title">{% if current_user.role == 'jefe_obra' %}Solicitar ausencia{% else %}Alta de ausencia{% endif %}</span>
+          <span class="aus-acc-sub">
+            {% if current_user.role == 'jefe_obra' %}
+            Quedará pendiente hasta que administración la valide
+            {% elif tenant_has_odoo %}
+            Crear ausencia manual (además del sync ERP)
+            {% else %}
+            Vacaciones, bajas y permisos de tu plantilla
+            {% endif %}
+          </span>
         </span>
         <i class="fas fa-chevron-down aus-acc-chevron"></i>
       </button>
@@ -508,6 +571,7 @@
                 <option value="Falta justificada">
               </datalist>
             </div>
+            {% if current_user.role in ['admin', 'laboral'] %}
             <div class="config-field">
               <label for="estado">Estado</label>
               <select name="estado" id="estado" class="form-control form-control-sm">
@@ -515,9 +579,13 @@
                 <option value="pendiente">Pendiente</option>
               </select>
             </div>
+            {% endif %}
             <div class="config-field">
               <label>&nbsp;</label>
-              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-plus"></i> Crear</button>
+              <button type="submit" class="btn-admin btn-admin-primary">
+                <i class="fas fa-plus"></i>
+                {% if current_user.role == 'jefe_obra' %}Solicitar{% else %}Crear{% endif %}
+              </button>
             </div>
           </div>
         </form>
@@ -538,7 +606,7 @@
       <div class="aus-acc-body">
         <div class="mb-3" style="display:flex;gap:.4rem;flex-wrap:wrap;">
           <span class="btn-admin btn-admin-sm btn-admin-primary" style="pointer-events:none;">Aprobadas</span>
-          <span class="text-muted small align-self-center">Solo se muestran ausencias validadas (Odoo / alta manual aprobada).</span>
+          <span class="text-muted small align-self-center">Ausencias validadas que afectan a la planificación.</span>
         </div>
         <div class="aus-table-wrap">
           <table class="filterable-table admin-data-table mb-0" id="ausListadoTable">

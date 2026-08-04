@@ -67,6 +67,15 @@ def provision_new_tenant(
         # 6. Creamos las tablas pasándole explícitamente esta misma conexión (bind=connection)
         db.metadata.create_all(bind=connection)
 
+        # 6.4. create_all no aplica triggers: el libro de fichajes debe ser
+        # inmutable también en tenants nuevos (no solo en los que pasaron
+        # por la migración Alembic del ledger).
+        from app.ddl import proteger_libro_fichajes
+        proteger_libro_fichajes(
+            lambda sql: connection.execute(text(sql)),
+            schema_name,
+        )
+
         # ========================================================
         # 6.5. EL SELLO ORTODOXO: Marcar como migrado a la última versión
         # ========================================================

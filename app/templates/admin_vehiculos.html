@@ -4,6 +4,37 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .veh-alta {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+    margin-bottom: 1rem;
+  }
+  .veh-alta h2 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+    color: #0f172a;
+  }
+  .veh-alta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+    gap: 0.65rem;
+    align-items: end;
+  }
+  @media (max-width: 900px) {
+    .veh-alta-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .veh-alta-grid label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 0.2rem;
+  }
+</style>
 {% endblock %}
 
 {% block wrapper %}
@@ -21,7 +52,7 @@
         <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-car-side"></i> Coches libres
         </a>
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role == 'admin' and tenant_has_odoo %}
         <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-clipboard-check"></i> Auditoría
         </a>
@@ -29,17 +60,53 @@
       </div>
     </div>
 
+    {% if current_user.role == 'admin' %}
+    <section class="veh-alta">
+      <h2><i class="fas fa-plus-circle text-primary mr-1"></i> Añadir vehículo</h2>
+      <form method="POST" action="{{ url_for('admin.vehiculos_crear') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="veh-alta-grid">
+          <div>
+            <label for="veh-nombre">Nombre *</label>
+            <input type="text" id="veh-nombre" name="nombre" class="form-control form-control-sm" required
+                   placeholder="Ej. Furgoneta 1" maxlength="120">
+          </div>
+          <div>
+            <label for="veh-matricula">Matrícula</label>
+            <input type="text" id="veh-matricula" name="matricula" class="form-control form-control-sm"
+                   placeholder="1234 ABC" maxlength="40">
+          </div>
+          <div>
+            <label for="veh-marca">Marca</label>
+            <input type="text" id="veh-marca" name="marca" class="form-control form-control-sm" maxlength="80">
+          </div>
+          <div>
+            <label for="veh-modelo">Modelo</label>
+            <input type="text" id="veh-modelo" name="modelo" class="form-control form-control-sm" maxlength="80">
+          </div>
+          <div>
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-plus"></i> Crear
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+
     <section class="admin-panel admin-panel-flush admin-panel--no-header">
       <div class="admin-table-scroll">
         <table class="filterable-table admin-data-table mb-0" id="vehiclesTable">
           <colgroup>
             <col style="width: 14%">
-            <col style="width: 20%">
+            <col style="width: 22%">
             <col style="width: 12%">
             <col style="width: 12%">
-            <col style="width: 8%">
-            <col style="width: 16%">
             <col style="width: 10%">
+            {% if tenant_has_odoo %}
+            <col style="width: 14%">
+            <col style="width: 8%">
+            {% endif %}
             <col class="col-actions-fixed">
           </colgroup>
           <thead>
@@ -49,8 +116,10 @@
               <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Marca</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Modelo</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Activo</span><i class="fas fa-sort sort-icon"></i></th>
+              {% if tenant_has_odoo %}
               <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Conductor Odoo</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="num" onclick="sortAdminTable(this)"><span class="sortable-label">Km</span><i class="fas fa-sort sort-icon"></i></th>
+              {% endif %}
               <th class="col-actions"></th>
             </tr>
             <tr class="filter-row">
@@ -59,8 +128,10 @@
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 2, this.value)" placeholder="…" title="Filtrar marca"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 3, this.value)" placeholder="…" title="Filtrar modelo"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 4, this.value)" placeholder="…" title="Filtrar activo"></th>
+              {% if tenant_has_odoo %}
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 5, this.value)" placeholder="…" title="Filtrar conductor"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 6, this.value)" placeholder="…" title="Filtrar km"></th>
+              {% endif %}
               <th></th>
             </tr>
           </thead>
@@ -75,24 +146,34 @@
                 {% if v.active %}<span class="badge-soft badge-soft-green">Activo</span>
                 {% else %}<span class="badge-soft badge-soft-slate">Inactivo</span>{% endif %}
               </td>
+              {% if tenant_has_odoo %}
               <td data-sort-value="{{ (v.odoo_driver_name or '')|lower }}">{{ v.odoo_driver_name or '—' }}</td>
               <td data-sort-value="{{ v.odoo_odometer_value if v.odoo_odometer_value is not none else '' }}">
                 {% if v.odoo_odometer_value is not none %}{{ '%.0f'|format(v.odoo_odometer_value) }}{% else %}—{% endif %}
               </td>
+              {% endif %}
               <td class="col-actions">
                 <div class="table-actions">
                   <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="Ver ficha"><i class="fas fa-eye"></i></a>
+                  {% if current_user.role == 'admin' %}
+                  <form method="POST" action="{{ url_for('admin.vehiculos_toggle', vehiculo_id=v.id) }}" style="display:inline;" onclick="event.stopPropagation();">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-table-action" title="{{ 'Desactivar' if v.active else 'Activar' }}">
+                      <i class="fas fa-{{ 'toggle-on' if v.active else 'toggle-off' }}"></i>
+                    </button>
+                  </form>
+                  {% endif %}
                 </div>
               </td>
             </tr>
             {% else %}
             <tr>
-              <td colspan="8" class="table-empty-state">
+              <td colspan="{{ 8 if tenant_has_odoo else 6 }}" class="table-empty-state">
                 <i class="fas fa-car"></i>
-                Sin vehículos. Sincronízalos desde
-                <a href="{{ url_for('sync.auditoria_vehiculos') }}">Auditoría de vehículos</a>
                 {% if current_user.role == 'admin' %}
-                o el <a href="{{ url_for('sync.odoo_panel') }}">panel Sync Odoo</a>.
+                Aún no hay vehículos. Usa el formulario de arriba para dar de alta el primero.
+                {% else %}
+                Aún no hay vehículos en la flota.
                 {% endif %}
               </td>
             </tr>

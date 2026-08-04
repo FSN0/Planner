@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="SignaPlan — Planificación de obras, fichaje móvil y registro de jornada listo para Inspección.">
+    <meta name="description" content="SignaPlan — Planificación de obras, fichaje móvil y registro de jornada con trazabilidad.">
     <title>SignaPlan — Planificación y fichaje para construcción</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,10 +28,10 @@
     <section class="mkt-hero">
         <div>
             <span class="mkt-hero-badge">Sin tarjeta</span>
-            <h1>Planifica obras y ficha en obra con trazabilidad legal</h1>
+            <h1>Planifica obras y ficha en obra con trazabilidad</h1>
             <p>
                 SignaPlan une el planificador diario, el fichaje desde el móvil del trabajador
-                y el registro de jornada inalterable — listo si viene Inspección.
+                y un registro de jornada inalterable para ayudarte a preparar la documentación laboral.
             </p>
             <div class="mkt-hero-actions">
                 <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">
@@ -52,8 +52,8 @@
                     <span>DNI + PIN en el móvil del operario</span>
                 </div>
                 <div class="mkt-stat">
-                    <strong>Inspección</strong>
-                    <span>Informe PDF con cadena de hashes</span>
+                    <strong>Informe de jornada</strong>
+                    <span>PDF/CSV con cadena de hashes para tu archivo</span>
                 </div>
                 <div class="mkt-stat">
                     <strong>Sin tarjeta</strong>
@@ -79,8 +79,8 @@
             </article>
             <article class="mkt-feature">
                 <i class="fas fa-balance-scale"></i>
-                <h3>Registro para Inspección</h3>
-                <p>Libro de jornada inalterable con cadena de hashes e informe PDF/CSV listo para enseñar.</p>
+                <h3>Registro de jornada</h3>
+                <p>Libro de eventos inalterable con cadena de hashes e informe PDF/CSV para tu archivo laboral.</p>
             </article>
             <article class="mkt-feature">
                 <i class="fas fa-th-large"></i>
@@ -95,7 +95,7 @@
             <article class="mkt-feature">
                 <i class="fas fa-sync-alt"></i>
                 <h3>Integración Odoo</h3>
-                <p>Si ya tienes ERP, sincroniza empleados, obras y fichajes sin duplicar trabajo (plan avanzado).</p>
+                <p>Si ya tienes ERP, puedes sincronizar empleados, obras y fichajes (opcional; se activa por empresa).</p>
             </article>
             <article class="mkt-feature">
                 <i class="fas fa-shield-alt"></i>
@@ -147,6 +147,7 @@
             <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">Aviso legal</a> ·
             <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a> ·
             <a href="{{ url_for('marketing.legal', slug='cookies') }}">Cookies</a> ·
+            <a href="{{ url_for('marketing.legal', slug='condiciones') }}">Condiciones</a> ·
             <a href="{{ url_for('marketing.legal', slug='encargado') }}">Encargo de tratamiento</a>
         </span>
     </footer>

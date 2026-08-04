@@ -333,16 +333,12 @@ def get_universal_calendar_events():
                 else:
                     estados = [f.estado for f in lista_fichajes]
 
-                    # Estados finales OK (admin validó o el fichaje cuadra solo).
-                    # Importante: NO usar len(set(estados))>1 — Correcto + Resuelto_Asignado
-                    # es multi-obra resuelta y debe ser verde, no naranja.
-                    FICHAJE_OK = {
-                        'Correcto', 'Correcto_Automatico',
-                        'Resuelto_Movido', 'Resuelto_Asignado', 'Resuelto_Dividido',
-                        'Resuelto_Ignorado', 'Resuelto_Falta',
-                    }
-                    FICHAJE_ROJO = {'Conflicto', 'Paracaidista', 'Resuelto_Ausencia'}
-                    FICHAJE_NARANJA = {'Ausencia', 'Pendiente', 'Retraso'}
+                    from app.services.fichaje_estado_service import (
+                        FICHAJE_OK,
+                        FICHAJE_NARANJA,
+                        FICHAJE_ROJO,
+                        color_fichaje_agregado,
+                    )
 
                     def _label_estado_fichaje(estado):
                         return {
@@ -353,7 +349,8 @@ def get_universal_calendar_events():
                             'Resuelto_Dividido': 'Correcto (dividido por admin)',
                             'Resuelto_Ignorado': 'Ignorado por admin',
                             'Resuelto_Falta': 'Correcto (falta resuelta)',
-                            'Resuelto_Ausencia': 'Ausencia resuelta',
+                            'Resuelto_Ausencia': 'Ausencia confirmada',
+                            'Exento_Ausencia': 'Exento (ausencia planificada)',
                             'Conflicto': 'Conflicto (pendiente)',
                             'Paracaidista': 'Paracaidista (pendiente)',
                             'Ausencia': 'Ausencia (pendiente)',
@@ -361,20 +358,7 @@ def get_universal_calendar_events():
                             'Retraso': 'Retraso',
                         }.get(estado, (estado or '').replace('_', ' '))
 
-                    if any(est in FICHAJE_ROJO for est in estados):
-                        color_final = "#ef4444"  # 🔴 abierto grave
-                    elif any(est in FICHAJE_NARANJA for est in estados):
-                        color_final = "#f59e0b"  # 🟠 pendiente real
-                    elif all(est in FICHAJE_OK for est in estados):
-                        color_final = "#10b981"  # 🟢 todo OK / resuelto
-                    elif any(
-                        (est or '').startswith('Resuelto') for est in estados
-                    ) and not any(
-                        est in FICHAJE_ROJO or est in FICHAJE_NARANJA for est in estados
-                    ):
-                        color_final = "#10b981"  # 🟢 resuelto
-                    else:
-                        color_final = "#f59e0b"  # 🟠 desconocido / mezcla rara
+                    color_final = color_fichaje_agregado(estados)
 
                     html_items = []
                     for f in lista_fichajes:

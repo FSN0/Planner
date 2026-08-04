@@ -72,6 +72,12 @@ def pwa(session, tenant_soltec, company_internal,
     session.execute(text('ALTER TABLE fichajes_eventos DISABLE TRIGGER USER'))
     session.execute(text('DELETE FROM fichajes_eventos'))
     session.execute(text('ALTER TABLE fichajes_eventos ENABLE TRIGGER USER'))
+    # Módulo comercial + config: ambos hacen falta para abrir /mi.
+    mods = dict(tenant_soltec.modulos_activos or {})
+    mods['fichaje_operario'] = True
+    tenant_soltec.modulos_activos = mods
+    session.add(tenant_soltec)
+    session.commit()
     _configurar(session, fichaje_operario_activo='True')
     yield session
 
@@ -425,14 +431,14 @@ class TestMisHoras:
         assert respuesta.status_code == 200
         assert 'Mis horas' in respuesta.get_data(as_text=True)
 
-    def test_con_el_modulo_apagado_la_pantalla_de_fichar_lo_explica(
+    def test_con_el_modulo_apagado_fichar_no_existe(
         self, pwa, operario_conectado
     ):
+        """Config off: /mi no se anuncia (404), sin página de «desactivado»."""
         _configurar(pwa, fichaje_operario_activo='False')
 
-        html = operario_conectado.get('/mi/').get_data(as_text=True)
-
-        assert 'no está activado' in html
+        assert operario_conectado.get('/mi/').status_code == 404
+        assert operario_conectado.get('/mi/entrar').status_code == 404
 
     def test_un_rango_de_fechas_absurdo_no_rompe_la_pantalla(self, operario_conectado):
         respuesta = operario_conectado.get('/mi/registros?desde=manzana&hasta=1')

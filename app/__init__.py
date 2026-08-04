@@ -88,6 +88,7 @@ def create_app():
     from app.sync.routes import sync_bp
     from app.api.asignaciones import asignaciones_api
     from app.api.vehiculos import vehiculos_api
+    from app.api.ausencias import ausencias_api
     from app.superadmin import superadmin_bp
     from app.operarios import operarios_bp
     from app.marketing.routes import marketing_bp
@@ -104,6 +105,7 @@ def create_app():
     app.register_blueprint(sync_bp, url_prefix='/sync')
     app.register_blueprint(asignaciones_api, url_prefix='/api')
     app.register_blueprint(vehiculos_api, url_prefix='/api')
+    app.register_blueprint(ausencias_api, url_prefix='/api')
     app.register_blueprint(superadmin_bp, url_prefix='/superadmin')
     # El prefijo lo declara el propio blueprint: la PWA lo necesita fijo en /mi
     # porque el alcance del service worker se registra contra esa ruta.

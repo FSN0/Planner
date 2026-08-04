@@ -1,35 +1,90 @@
 {% extends "marketing/legal_base.html" %}
 {% block legal_content %}
-<h2>1. Naturaleza del documento</h2>
+<h2>1. Partes</h2>
 <p>
-    Este texto describe el marco del encargo de tratamiento entre la empresa cliente
-    (responsable) y SignaPlan (encargado) conforme al art. 28 del RGPD. No sustituye un
-    contrato firmado: al contratar el servicio se formalizará el DPA completo.
+    Este documento regula el encargo de tratamiento de datos personales entre:
 </p>
-<h2>2. Objeto</h2>
+<ul>
+    <li>La <strong>empresa cliente</strong> de SignaPlan (responsable del tratamiento de
+        los datos de sus trabajadores y colaboradores), y</li>
+    <li><strong>{{ legal.razon_social }}</strong> (encargado del tratamiento), conforme al
+        artículo 28 del Reglamento (UE) 2016/679 (RGPD).</li>
+</ul>
 <p>
-    SignaPlan trata, por cuenta del cliente, datos de empleados y colaboradores necesarios
-    para planificar obras y registrar la jornada laboral en el espacio aislado del cliente.
+    Al crear una cuenta y usar el servicio, el cliente acepta este marco de encargo.
+    Si en el futuro se firma un DPA específico, prevalecerá ese documento en lo que
+    resulte incompatible.
 </p>
-<h2>3. Instrucciones</h2>
+
+<h2>2. Objeto y duración</h2>
 <p>
-    El encargado solo tratará los datos según las instrucciones documentadas del cliente y
-    la configuración del producto, sin destinarlos a fines propios ajenos al servicio.
+    El encargado tratará, por cuenta del cliente y durante la vigencia de la cuenta,
+    los datos necesarios para prestar SignaPlan: identificación y datos laborales
+    operativos de empleados y colaboradores, asignaciones a obra, ausencias, fichajes
+    y eventos de jornada (incluido, si el cliente lo activa, geolocalización), datos de
+    vehículos y registros de auditoría asociados al servicio.
 </p>
-<h2>4. Seguridad</h2>
+
+<h2>3. Naturaleza e instrucciones</h2>
 <p>
-    Se aplican medidas técnicas y organizativas (aislamiento multi-tenant, control de acceso,
-    cifrado de secretos, registro inmutable de fichajes cuando el módulo está activo).
+    El tratamiento es automatizado y se limita a las finalidades del servicio
+    (planificación, fichaje, flota, informes de jornada y administración del espacio).
+    El encargado solo tratará los datos según las instrucciones documentadas del cliente
+    (incluida la configuración del producto) y la normativa aplicable, sin destinarlos a
+    fines propios ajenos al servicio.
 </p>
-<h2>5. Subencargados</h2>
+
+<h2>4. Obligaciones del encargado</h2>
+<ul>
+    <li>Garantizar que las personas autorizadas se comprometen a confidencialidad.</li>
+    <li>Adoptar medidas técnicas y organizativas adecuadas (aislamiento multi-tenant,
+        control de acceso por roles, cifrado de secretos de integración, registro de
+        eventos de jornada con medidas de integridad cuando el módulo está activo).</li>
+    <li>No comunicar los datos a terceros salvo subencargados autorizados, obligación
+        legal o instrucción del cliente.</li>
+    <li>Asistir al cliente, en la medida de lo razonable y del producto, en el ejercicio
+        de derechos de los interesados y en notificaciones de brechas de seguridad.</li>
+    <li>A disposición del cliente, información necesaria para demostrar el cumplimiento
+        de este encargo.</li>
+</ul>
+
+<h2>5. Obligaciones del cliente (responsable)</h2>
+<ul>
+    <li>Disponer de base jurídica para tratar los datos de su plantilla e informar a los
+        interesados conforme al RGPD y a la normativa laboral.</li>
+    <li>Configurar el producto de forma adecuada (roles, geolocalización, módulos) y no
+        introducir datos innecesarios.</li>
+    <li>Gestionar las solicitudes de derechos de sus trabajadores; SignaPlan colaborará
+        como encargado.</li>
+</ul>
+
+<h2>6. Subencargados</h2>
 <p>
-    Podrán intervenir proveedores de infraestructura y correo, informados al cliente y bajo
-    obligaciones equivalentes.
+    Podrán intervenir proveedores de infraestructura, alojamiento, correo u otros
+    servicios técnicos necesarios, bajo contrato y con obligaciones equivalentes.
+    SignaPlan informará de cambios relevantes de subencargados cuando sea exigible.
+    Contacto: <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>.
 </p>
-<h2>6. Fin del servicio</h2>
+
+<h2>7. Seguridad y brechas</h2>
 <p>
-    Al terminar el contrato, el cliente podrá exportar sus datos en los formatos disponibles
-    y SignaPlan suprimirá o devolverá la información según lo acordado, salvo obligación legal
-    de conservación.
+    Ante una brecha de seguridad que afecte a datos del cliente, el encargado lo
+    comunicará al cliente sin dilación indebida para que este pueda cumplir sus
+    obligaciones de notificación.
+</p>
+
+<h2>8. Fin del encargo</h2>
+<p>
+    Al terminar el servicio, el cliente podrá exportar sus datos en los formatos
+    disponibles en el producto. A continuación, SignaPlan suprimirá o devolverá la
+    información del espacio del cliente, salvo obligación legal de conservación o
+    bloqueo necesario para el ejercicio o la defensa de reclamaciones.
+</p>
+
+<h2>9. Contacto del encargado</h2>
+<p>
+    <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>
+    {% if legal.domicilio %} · {{ legal.domicilio }}{% endif %}
+    {% if legal.nif %} · {{ legal.nif }}{% endif %}
 </p>
 {% endblock %}

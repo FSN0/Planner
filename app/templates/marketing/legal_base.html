@@ -10,7 +10,7 @@
         .legal-body h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
         .legal-body h2 { font-size: 1.15rem; margin-top: 1.75rem; }
         .legal-body p, .legal-body li { color: #374151; }
-        .legal-note { background: #f3f4f6; border-radius: 8px; padding: 0.85rem 1rem; font-size: 0.9rem; margin: 1rem 0; }
+        .legal-meta { color: #6b7280; font-size: 0.9rem; margin-bottom: 1.5rem; }
     </style>
 </head>
 <body class="marketing-page">
@@ -22,10 +22,7 @@
     </header>
     <article class="legal-body">
         <h1>{{ page_title }}</h1>
-        <p class="legal-note">
-            Texto orientativo pendiente de revisión jurídica. Sustituye los datos del responsable
-            cuando firmes el alta fiscal. Última actualización: julio 2026.
-        </p>
+        <p class="legal-meta">Última actualización: agosto 2026 · Contacto: <a href="mailto:{{ legal.email }}">{{ legal.email }}</a></p>
         {% block legal_content %}{% endblock %}
     </article>
     <footer class="mkt-footer">
@@ -34,6 +31,7 @@
             <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">Aviso legal</a> ·
             <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a> ·
             <a href="{{ url_for('marketing.legal', slug='cookies') }}">Cookies</a> ·
+            <a href="{{ url_for('marketing.legal', slug='condiciones') }}">Condiciones</a> ·
             <a href="{{ url_for('marketing.legal', slug='encargado') }}">Encargo de tratamiento</a>
         </span>
     </footer>

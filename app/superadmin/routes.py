@@ -17,7 +17,6 @@ MODULOS_DISPONIBLES = {
     'onboarding': 'Onboarding de primeros pasos',
     'odoo': 'Integración Odoo (ERP / Sincronización)',
     'odoo_alta': 'Alta Odoo (Fichajes Soltec / SSO)',
-    'chat': 'Chat de Comunicación (Próximamente)'
 }
 
 ADAPTADORES_ODOO = {

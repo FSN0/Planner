@@ -15,7 +15,11 @@ from app.utils.timezone_utils import today_local
 
 OPEN_SOLICITUD = ('PENDIENTE', 'EN_PROCESO')
 FICHAJE_INCIDENTES = ('Conflicto', 'Paracaidista', 'Ausencia')
-FICHAJE_OK = ('Correcto', 'Correcto_Automatico')
+FICHAJE_OK = (
+    'Correcto', 'Correcto_Automatico',
+    'Resuelto_Movido', 'Resuelto_Asignado', 'Resuelto_Dividido',
+    'Resuelto_Ignorado', 'Resuelto_Falta', 'Resuelto_Ausencia',
+)
 
 
 def _month_bounds(ref):

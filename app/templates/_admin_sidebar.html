@@ -3,8 +3,8 @@
     <div class="admin-logo">
       <div class="admin-logo-mark"><i class="fas fa-hard-hat"></i></div>
       <div class="admin-logo-text">
-        <span>SOCTEC</span>
-        <span>Planning</span>
+        <span>SignaPlan</span>
+        <span>Planificación</span>
       </div>
     </div>
     <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle" title="Contraer menú" aria-label="Contraer menú">
@@ -44,6 +44,12 @@
       <li>
         <a href="{{ url_for('admin.obras_list') }}" class="sidebar-link {% if request.endpoint == 'admin.obras_list' %}is-active{% endif %}">
           <i class="fas fa-building fa-fw"></i><span>Directorio</span>
+        </a>
+      </li>
+      {% elif current_user.role == 'jefe_obra' %}
+      <li>
+        <a href="{{ url_for('jefe.obras_detailed') }}" class="sidebar-link {% if request.endpoint == 'jefe.obras_detailed' %}is-active{% endif %}">
+          <i class="fas fa-th-large fa-fw"></i><span>Tablero</span>
         </a>
       </li>
       {% endif %}
@@ -117,7 +123,7 @@
           <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
         </a>
       </li>
-      {% if tenant_has_registro_jornada %}
+      {% if tenant_has_registro_jornada and current_user.role == 'admin' %}
       <li>
         <a href="{{ url_for('admin.registro_jornada') }}" class="sidebar-link {% if 'registro_jornada' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-file-signature fa-fw"></i><span>Registro jornada</span>

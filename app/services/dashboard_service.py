@@ -67,12 +67,20 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     obra_ids = [o.id for o in obras]
     mapa_asig = {oid: [] for oid in obra_ids}
 
-    # Precargar fichajes del día para admin / laboral
+    # Precargar fichajes del día para admin / laboral (estado final del día,
+    # misma precedencia que las pelotitas del calendario del trabajador).
     fichajes_dict = {}
     if user.role in (ROLE_ADMIN, ROLE_LABORAL):
-        fichajes = RegistroFichaje.query.filter_by(fecha=selected_date).all()
-        for f in fichajes:
-            fichajes_dict[f.user_id] = f.estado
+        from collections import defaultdict
+        from app.services.fichaje_estado_service import estado_fichaje_agregado
+
+        por_usuario = defaultdict(list)
+        for f in RegistroFichaje.query.filter_by(fecha=selected_date).all():
+            por_usuario[f.user_id].append(f.estado)
+        fichajes_dict = {
+            uid: estado_fichaje_agregado(estados)
+            for uid, estados in por_usuario.items()
+        }
 
     if obra_ids:
         # Buscamos asignaciones HOY para saber cuántos hay en cada obra

@@ -19,6 +19,10 @@ $(document).ready(function() {
         return new Date().toISOString().slice(0, 10);
     }
 
+    const kanbanReadonly = window.KANBAN_READONLY === true
+        || window.CURRENT_USER_ROLE === 'laboral';
+
+    if (!kanbanReadonly) {
     $(".worker-chip").draggable({
         revert: "invalid", helper: "clone", appendTo: "body", zIndex: 9999, scroll: false,
         start: function() { $(this).addClass('dragging-source'); },
@@ -44,6 +48,9 @@ $(document).ready(function() {
             }
         }
     });
+    } else {
+        $(".worker-chip").css('cursor', 'default');
+    }
 
     // =========================================================================
     // 2. LÓGICA DEL CALENDARIO UNIVERSAL: ASIGNAR A OBRA (CON CAMBIO DE VISTA)

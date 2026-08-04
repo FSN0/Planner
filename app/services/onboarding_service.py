@@ -91,8 +91,11 @@ def estado_onboarding():
         {
             'id': 'gente',
             'titulo': 'Ten plantilla lista para fichar',
-            'hecho': len(operarios) > 0,
-            'hint': 'Si ya has importado empleados, luego puedes asignarles PIN al editar su ficha.',
+            'hecho': len(operarios) > 0 and con_pin > 0,
+            'hint': (
+                'Alta al menos un operario con PIN: sin PIN no puede entrar en /mi. '
+                'Si ya importaste empleados, asígnales PIN al editar su ficha.'
+            ),
         },
         {
             'id': 'fichaje',
@@ -102,10 +105,10 @@ def estado_onboarding():
         },
         {
             'id': 'informe',
-            'titulo': 'Abre el informe de jornada (Inspección)',
+            'titulo': 'Abre el informe de jornada',
             'hecho': informe,
             'hint': (
-                'PDF/CSV con cadena de hashes: lo que enseñas si viene Inspección. '
+                'PDF/CSV con cadena de hashes para tu archivo laboral. '
                 'Con un fichaje de prueba ya tiene contenido.'
             ),
         },

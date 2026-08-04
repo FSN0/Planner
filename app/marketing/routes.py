@@ -43,6 +43,17 @@ LEGAL_PAGES = {
 }
 
 
+def _legal_entity():
+    """Datos del titular. Sobreescribibles por env sin tocar plantillas."""
+    import os
+    return {
+        'razon_social': (os.environ.get('LEGAL_RAZON_SOCIAL') or 'SignaPlan').strip(),
+        'nif': (os.environ.get('LEGAL_NIF') or '').strip(),
+        'domicilio': (os.environ.get('LEGAL_DOMICILIO') or '').strip(),
+        'email': (os.environ.get('LEGAL_EMAIL') or 'info@signaplan.com').strip(),
+    }
+
+
 def _require_marketing():
     if not is_marketing_host(normalize_host(request.host)):
         abort(404)
@@ -112,4 +123,5 @@ def legal(slug):
         page['template'],
         current_year=datetime.utcnow().year,
         page_title=page['title'],
+        legal=_legal_entity(),
     )

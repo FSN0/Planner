@@ -6,17 +6,19 @@ from app.models import User, Obra, RegistroFichaje, ConfiguracionGlobal
 from datetime import datetime, date, timedelta
 
 def send_email(subject, recipients, text_body, html_body=None):
-    """Función genérica para enviar correos usando Flask-Mail"""
+    """Envía correo. Devuelve True si salió; False si no hay destino o falla SMTP."""
     if not recipients:
-        return
+        return False
     msg = Message(subject, sender=current_app.config.get('MAIL_DEFAULT_SENDER'), recipients=recipients)
     msg.body = text_body
     if html_body:
         msg.html = html_body
     try:
         mail.send(msg)
+        return True
     except Exception as e:
-        print(f"Error enviando correo a {recipients}: {e}")
+        current_app.logger.warning('Error enviando correo a %s: %s', recipients, e)
+        return False
 
 def _obtener_destinatarios(evento_clave, obra_id=None, worker_id=None):
     """

@@ -39,14 +39,12 @@ def _tenant_has_integrations():
 
 def _require_odoo_module():
     if not _tenant_modulos().get('odoo'):
-        flash("Tu empresa no tiene habilitado el módulo de Odoo.", "danger")
         return False
     return True
 
 
 def _require_integration_access():
     if not _tenant_has_integrations():
-        flash("Tu empresa no tiene módulos de integración contratados.", "warning")
         return False
     return True
 
@@ -194,6 +192,7 @@ def api_run_sync(task_name):
 
 @sync_bp.route('/resolve_conflict_empleado', methods=['POST'])
 @login_required
+@roles_required(ROLE_ADMIN)
 def resolve_conflict_empleado():
     data = request.json
     emp_data = data['emp']
@@ -270,6 +269,7 @@ def preview_obras():
 
 @sync_bp.route('/commit_obras', methods=['POST'])
 @login_required
+@roles_required(ROLE_ADMIN)
 def commit_obras():
     data = request.json
     from app.utils.timezone_utils import utc_now
@@ -387,6 +387,7 @@ def preview_subcontratas():
 
 @sync_bp.route('/commit_subcontratas', methods=['POST'])
 @login_required
+@roles_required(ROLE_ADMIN)
 def commit_subcontratas():
     data = request.json
     from app.utils.timezone_utils import utc_now
@@ -513,6 +514,7 @@ def commit_subcontratas():
     
 @sync_bp.route('/commit_empleados', methods=['POST'])
 @login_required
+@roles_required(ROLE_ADMIN)
 def commit_empleados():
     data = request.json
     from app.utils.timezone_utils import utc_now
@@ -679,6 +681,38 @@ ACCION_RESOLUCION_TITULOS = {
     'confirmar_ausencia': 'Confirmar Ausencia',
 }
 
+# Placeholders / pendientes que dejan la pelotita naranja tras resolver otra fila.
+_ESTADOS_HERMANO_PLACEHOLDER = (
+    'Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso',
+)
+
+
+def _cerrar_hermanos_placeholder(registro, accion):
+    """
+    Al aceptar/mover/borrar, cierra filas hermanas del mismo día que solo son
+    semillas de sync (Sin_Registro/Ausencia/…). Así el día queda verde si el
+    admin ya resolvió el caso (p. ej. multi-obra Resuelto_Asignado).
+    """
+    if accion not in ('anadir', 'mover', 'borrar_planificacion', 'ignorar'):
+        return
+    hermanos = RegistroFichaje.query.filter(
+        RegistroFichaje.user_id == registro.user_id,
+        RegistroFichaje.fecha == registro.fecha,
+        RegistroFichaje.id != registro.id,
+        RegistroFichaje.estado.in_(_ESTADOS_HERMANO_PLACEHOLDER),
+    ).all()
+    nota = {
+        'anadir': 'Cerrado: el día quedó aceptado (multi-obra / asignación).',
+        'mover': 'Cerrado: el fichaje se movió a otra obra.',
+        'borrar_planificacion': 'Cerrado: se eliminó la planificación asociada.',
+        'ignorar': 'Cerrado junto con la incidencia ignorada.',
+    }.get(accion, 'Cerrado tras resolución de auditoría.')
+    for h in hermanos:
+        h.estado = 'Resuelto_Ignorado'
+        h.resuelto_por_id = registro.resuelto_por_id
+        h.fecha_auditoria = registro.fecha_auditoria
+        h.notas_resolucion = nota
+
 
 def _obra_label_resolucion(obra_id):
     if not obra_id:
@@ -838,6 +872,8 @@ def resolver_fichaje():
         registro.notas_resolucion = _detalle_resolucion_fichaje(
             registro, accion, estado_anterior=estado_anterior
         )
+
+        _cerrar_hermanos_placeholder(registro, accion)
 
         from app.utils import register_log
         accion_titulo = ACCION_RESOLUCION_TITULOS.get(

@@ -200,3 +200,26 @@ def verificar(subdominio):
 
     if hubo_incidencias['valor']:
         raise SystemExit(1)
+
+
+@fichajes_cli.command('proteger')
+@click.option('--tenant', 'subdominio', default=None, help='Limitar a un subdominio.')
+def proteger(subdominio):
+    """
+    Aplica (o reaplica) los triggers de inmutabilidad del libro de fichajes.
+
+    Útil para tenants creados con create_all + stamp antes de que el
+    aprovisionamiento llamara a proteger_libro_fichajes. Es idempotente.
+    """
+    from app.ddl import proteger_libro_fichajes
+
+    def _procesar(tenant):
+        schema = tenant['schema_name']
+        proteger_libro_fichajes(
+            lambda sql: db.session.execute(text(sql)),
+            schema,
+        )
+        click.secho('  Triggers de inmutabilidad aplicados.', fg='green')
+
+    _en_cada_tenant(subdominio, _procesar)
+    click.secho('\nProtección aplicada.', fg='green')

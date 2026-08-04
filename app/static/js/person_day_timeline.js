@@ -21,8 +21,8 @@ window.PersonDayTimeline = (function () {
         const value = (estado || 'Sin registro').replace(/_/g, ' ');
         el.textContent = value;
         el.className = 'badge-soft person-day-timeline-estado badge-soft-gray';
-        if (value.includes('Correcto')) el.className = 'badge-soft person-day-timeline-estado badge-soft-green';
-        else if (value === 'Paracaidista' || value.includes('Movido')) el.className = 'badge-soft person-day-timeline-estado badge-soft-amber';
+        if (value.includes('Correcto') || value.startsWith('Resuelto')) el.className = 'badge-soft person-day-timeline-estado badge-soft-green';
+        else if (value === 'Paracaidista' || value === 'Conflicto') el.className = 'badge-soft person-day-timeline-estado badge-soft-amber';
         else if (value.includes('Ausencia') || value === 'Conflicto') el.className = 'badge-soft person-day-timeline-estado badge-soft-red';
         else if (value.includes('Asignado') || value.includes('RRHH') || value.includes('Actividad') || value.includes('día')) {
             el.className = 'badge-soft person-day-timeline-estado badge-soft-blue';
@@ -92,8 +92,8 @@ window.PersonDayTimeline = (function () {
     function renderDaySection(day) {
         const estado = (day.estado_actual || '').replace(/_/g, ' ');
         let estadoClass = 'badge-soft person-day-timeline-estado badge-soft-gray';
-        if (estado.includes('Correcto')) estadoClass = 'badge-soft person-day-timeline-estado badge-soft-green';
-        else if (estado === 'Paracaidista' || estado.includes('Movido')) estadoClass = 'badge-soft person-day-timeline-estado badge-soft-amber';
+        if (estado.includes('Correcto') || estado.startsWith('Resuelto')) estadoClass = 'badge-soft person-day-timeline-estado badge-soft-green';
+        else if (estado === 'Paracaidista' || estado === 'Conflicto') estadoClass = 'badge-soft person-day-timeline-estado badge-soft-amber';
         else if (estado.includes('Ausencia') || estado === 'Conflicto') estadoClass = 'badge-soft person-day-timeline-estado badge-soft-red';
         else if (estado.includes('Asignado') || estado.includes('RRHH') || estado.includes('Actividad')) {
             estadoClass = 'badge-soft person-day-timeline-estado badge-soft-blue';

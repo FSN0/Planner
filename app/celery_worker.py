@@ -87,11 +87,17 @@ def _tenant_has_odoo_module(tenant_data):
     return bool(modulos.get('odoo'))
 
 
-def _for_each_tenant(callback):
-    """Ejecuta callback(tenant_data) en el schema de cada tenant activo con Odoo."""
+def _for_each_tenant(callback, *, solo_odoo=True):
+    """
+    Ejecuta callback(tenant_data) en el schema de cada tenant activo.
+
+    Por defecto solo tenants con módulo Odoo (sync ERP). Para cierre de
+    jornada / hora de corte pasar solo_odoo=False: el fichaje local (PWA)
+    también necesita marcar ausencias tras el corte.
+    """
     _cleanup_db_session()
     for tenant_data in _load_active_tenants():
-        if not _tenant_has_odoo_module(tenant_data):
+        if solo_odoo and not _tenant_has_odoo_module(tenant_data):
             continue
         subdominio = tenant_data['subdominio']
         try:
@@ -217,7 +223,10 @@ def verificar_hora_corte():
                 conf_ultimo.valor = hoy_str
 
         try:
-            _for_each_tenant(_run_for_tenant)
+            # Todos los tenants activos: con o sin Odoo. Sin ERP el adaptador
+            # local no trae fichajes externos, pero sí siembra Sin_Registro y
+            # marca Ausencia tras la hora de corte (PWA / plan local).
+            _for_each_tenant(_run_for_tenant, solo_odoo=False)
         finally:
             _cleanup_db_session()
 

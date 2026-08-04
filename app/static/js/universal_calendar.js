@@ -188,6 +188,11 @@ class UniversalCalendarManager {
                         <button id="${this.panelId}-delete" class="btn btn-sm btn-danger mr-2" title="Borrar (Supr)"><i class="fas fa-trash-alt mr-1"></i> Desasignar bloque</button>
                         <button id="${this.panelId}-view" class="btn btn-sm btn-outline-secondary"><i class="fas fa-external-link-alt mr-1"></i> Ver Ficha</button>
                     </div>
+                    <div class="mt-2 pt-2 border-top text-right" id="${this.panelId}-leave-row" style="display:none;">
+                        <button type="button" id="${this.panelId}-leave" class="btn btn-sm btn-outline-warning">
+                            <i class="fas fa-umbrella-beach mr-1"></i> Marcar vacaciones / ausencia
+                        </button>
+                    </div>
                 </div>
             </div>
             `;
@@ -255,8 +260,8 @@ class UniversalCalendarManager {
                     let dotClass = '#94a3b8'; let titleMsg = 'Sin Registro';
                     if (estado === 'Correcto' || estado === 'Correcto_Automatico') { dotClass = '#10b981'; titleMsg = 'Fichaje Correcto'; }
                     else if (estado === 'Ausencia') { dotClass = '#f59e0b'; titleMsg = 'Ausencia Pendiente'; }
-                    else if (estado === 'Resuelto_Ausencia' || estado === 'Conflicto' || estado === 'Paracaidista') { dotClass = '#ef4444'; titleMsg = 'Conflicto/Desviación'; }
-                    else if (estado.startsWith('Resuelto')) { dotClass = '#10b981'; titleMsg = 'Fichaje resuelto'; }
+                    else if (estado === 'Conflicto' || estado === 'Paracaidista') { dotClass = '#ef4444'; titleMsg = 'Conflicto/Desviación'; }
+                    else if (estado.startsWith('Resuelto') || estado === 'Correcto' || estado === 'Correcto_Automatico') { dotClass = '#10b981'; titleMsg = 'Fichaje resuelto'; }
 
                     innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background-color:${dotClass}; margin-right:3px; flex-shrink:0;"></span>`;
                 }
@@ -578,9 +583,13 @@ class UniversalCalendarManager {
         let titleEl = document.getElementById(`${this.panelId}-title`);
         let container = document.getElementById(`${this.panelId}-selector-container`);
         let extraBtns = document.getElementById(`${this.panelId}-extra-buttons`);
+        let leaveRow = document.getElementById(`${this.panelId}-leave-row`);
         
         this.updatePanelDatesFromEvent(event);
         panel.style.display = 'block';
+        if (leaveRow) {
+            leaveRow.style.display = (this.context === 'worker' && !this.readonly) ? 'block' : 'none';
+        }
 
         if (!isSameEvent) {
             if (isNew) {
@@ -792,6 +801,7 @@ class UniversalCalendarManager {
         let endInput = document.getElementById(`${this.panelId}-end`);
         let saveBtn = document.getElementById(`${this.panelId}-save`);
         let delBtn = document.getElementById(`${this.panelId}-delete`);
+        let leaveBtn = document.getElementById(`${this.panelId}-leave`);
 
         if(startInput) startInput.addEventListener('change', (e) => {
             if(this.activeEvent && e.target.value) this.activeEvent.setStart(e.target.value);
@@ -799,6 +809,68 @@ class UniversalCalendarManager {
         
         if(endInput) endInput.addEventListener('change', (e) => {
             if(this.activeEvent && e.target.value) this.activeEvent.setEnd(moment(e.target.value).add(1, 'days').format('YYYY-MM-DD'));
+        });
+
+        if (leaveBtn) leaveBtn.addEventListener('click', () => {
+            if (this.readonly || this.context !== 'worker' || !this.entityId) return;
+            let startVal = startInput ? startInput.value : null;
+            let endVal = endInput ? endInput.value : null;
+            if (!startVal || !endVal) {
+                if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Indica fecha de inicio y fin.', 'warning');
+                return;
+            }
+            const doSave = (tipo) => {
+                fetch('/api/v6/ausencias', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
+                    },
+                    body: JSON.stringify({
+                        worker_id: this.entityId,
+                        fecha_inicio: startVal,
+                        fecha_fin: endVal,
+                        tipo: tipo || 'Vacaciones',
+                    }),
+                })
+                .then((r) => r.json())
+                .then((res) => {
+                    if (!res.success) {
+                        if (typeof Swal !== 'undefined') Swal.fire('Error', res.error || 'No se pudo guardar', 'error');
+                        return;
+                    }
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            toast: true,
+                            position: 'top-end',
+                            icon: 'success',
+                            title: res.message || 'Ausencia guardada',
+                            showConfirmButton: false,
+                            timer: 2200,
+                        });
+                    }
+                    this.calendar.refetchEvents();
+                    this.hidePanel();
+                })
+                .catch(() => {
+                    if (typeof Swal !== 'undefined') Swal.fire('Error', 'Fallo de conexión', 'error');
+                });
+            };
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'Marcar ausencia',
+                    input: 'text',
+                    inputValue: 'Vacaciones',
+                    inputPlaceholder: 'Tipo (Vacaciones, Baja…)',
+                    showCancelButton: true,
+                    confirmButtonText: 'Guardar',
+                    cancelButtonText: 'Cancelar',
+                }).then((result) => {
+                    if (result.isConfirmed) doSave(result.value || 'Vacaciones');
+                });
+            } else {
+                doSave('Vacaciones');
+            }
         });
 
         if(saveBtn) saveBtn.addEventListener('click', () => {
@@ -857,7 +929,7 @@ class UniversalCalendarManager {
 
                 if (this.context === 'worker') {
                     if (!selVal && !vehicleVal) {
-                        Swal.fire('Atención', 'Selecciona una obra y/o un vehículo.', 'warning');
+                        Swal.fire('Atención', 'Selecciona una obra y/o un vehículo, o usa «Marcar vacaciones».', 'warning');
                         return;
                     }
                 } else if (!selVal) {

@@ -20,6 +20,7 @@ from app.models import (
     LEAVE_SOURCE_ODOO,
     LEAVE_STATUS_APROBADA,
     LEAVE_STATUS_PENDIENTE,
+    LEAVE_STATUS_RECHAZADA,
     SyncLog,
     User,
 )
@@ -402,6 +403,91 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO)
     return stats
 
 
+def release_vehicles_blocked_by_leave(
+    date_from=None,
+    date_to=None,
+    *,
+    user_id=None,
+    autor_id=None,
+):
+    """
+    Quita AsignacionVehiculo de días en los que el conductor tiene ausencia
+    aprobada. Sin confirmación: de vacaciones no usa el coche.
+
+    Se llama al crear/aprobar ausencias y tras el sync ERP.
+    """
+    from app.models import AsignacionVehiculo
+    from app.services.core_vehicle_assignment_service import CoreVehicleAssignmentService
+
+    if not date_from:
+        date_from = today_local() - timedelta(days=7)
+    if not date_to:
+        date_to = today_local() + timedelta(days=120)
+
+    date_from = _parse_date(date_from)
+    date_to = _parse_date(date_to)
+    if not date_from or not date_to:
+        return 0
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+
+    q = AsignacionVehiculo.query.filter(
+        AsignacionVehiculo.fecha >= date_from,
+        AsignacionVehiculo.fecha <= date_to,
+    )
+    if user_id is not None:
+        q = q.filter(AsignacionVehiculo.user_id == int(user_id))
+
+    pendientes = [
+        (av.vehiculo_id, av.user_id, av.fecha)
+        for av in q.all()
+        if user_has_approved_leave(av.user_id, av.fecha)
+    ]
+    if not pendientes:
+        return 0
+
+    liberados = 0
+    for vehiculo_id, uid, fecha in pendientes:
+        if CoreVehicleAssignmentService.desasignar(
+            vehiculo_id,
+            uid,
+            fecha,
+            autor_id,
+            'Liberado por ausencia planificada',
+            detalle_extra=(
+                'El conductor tiene ausencia aprobada; '
+                'el coche queda libre sin validación.'
+            ),
+            registrar_log=False,
+        ):
+            liberados += 1
+
+    if liberados:
+        # Un log por persona afectada (rango) para no inundar el historial.
+        por_persona = {}
+        for vehiculo_id, uid, fecha in pendientes:
+            por_persona.setdefault(uid, []).append((vehiculo_id, fecha))
+        for uid, items in por_persona.items():
+            fechas = [f for _, f in items]
+            # Un vehículo representativo del lote (el primero)
+            CoreVehicleAssignmentService.registrar_log_rango(
+                uid,
+                items[0][0],
+                min(fechas),
+                max(fechas),
+                len(items),
+                autor_id,
+                'Liberado por ausencia planificada',
+                False,
+                detalle_extra=(
+                    f'{len(items)} día(s) liberados automáticamente '
+                    f'por ausencia aprobada.'
+                ),
+            )
+
+    return liberados
+
+
 def detect_and_upsert_conflicts(date_from=None, date_to=None):
     """
     Registra solapes asignación + ausencia aprobada.
@@ -467,6 +553,9 @@ def detect_and_upsert_conflicts(date_from=None, date_to=None):
                     resolve_conflict(conflict.id, CONFLICT_KEEP_ASSIGNMENT, resolved_by_id=None)
 
             day = day + timedelta(days=1)
+
+    # Vehículos: a diferencia de obra, la ausencia libera el coche sin pedir OK.
+    release_vehicles_blocked_by_leave(date_from=date_from, date_to=date_to)
 
     return created
 
@@ -539,3 +628,46 @@ def create_manual_leave(
     detect_and_upsert_conflicts(date_from=fecha_inicio, date_to=fecha_fin)
     db.session.commit()
     return leave
+
+
+def get_pending_manual_leaves(actor_user, limit=100):
+    """Ausencias pendientes de validar (alta manual / jefe)."""
+    return get_leaves_scoped(actor_user, estado=LEAVE_STATUS_PENDIENTE, limit=limit)
+
+
+def set_leave_estado(leave_id, nuevo_estado, resolved_by_id=None):
+    """Aprueba o rechaza una ausencia pendiente."""
+    leave = AusenciaPlanificada.query.get(leave_id)
+    if not leave:
+        raise ValueError('Ausencia no encontrada.')
+    if nuevo_estado not in (LEAVE_STATUS_APROBADA, LEAVE_STATUS_RECHAZADA, LEAVE_STATUS_PENDIENTE):
+        raise ValueError('Estado no válido.')
+    leave.estado = nuevo_estado
+    db.session.flush()
+    if nuevo_estado == LEAVE_STATUS_APROBADA:
+        detect_and_upsert_conflicts(
+            date_from=leave.fecha_inicio, date_to=leave.fecha_fin
+        )
+    db.session.commit()
+    return leave
+
+
+def actor_puede_crear_ausencia(actor_user):
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
+    return getattr(actor_user, 'role', None) in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+
+
+def estado_alta_por_rol(actor_user, solicitado=None):
+    """
+    Admin/laboral pueden aprobar al crear.
+    Jefe siempre deja pendiente (el admin valida).
+    """
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
+
+    if actor_user.role == ROLE_JEFE:
+        return LEAVE_STATUS_PENDIENTE
+    if solicitado in (LEAVE_STATUS_APROBADA, LEAVE_STATUS_PENDIENTE):
+        return solicitado
+    if actor_user.role in (ROLE_ADMIN, ROLE_LABORAL):
+        return LEAVE_STATUS_APROBADA
+    return LEAVE_STATUS_PENDIENTE

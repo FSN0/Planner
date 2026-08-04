@@ -71,12 +71,17 @@ def solicitar_reset(email, tenant, reset_url_builder):
         f'<p><a href="{url}">Restablecer contraseña</a></p>'
         f'<p>El enlace caduca en una hora. Si no has sido tú, ignora este correo.</p>'
     )
-    send_email(
+    send_ok = send_email(
         f'Restablecer contraseña — {tenant.nombre}',
         [user.email],
         texto,
         html_body=html,
     )
+    if not send_ok:
+        raise PasswordResetError(
+            'No se ha podido enviar el correo de recuperación. '
+            'Comprueba la configuración de correo del servidor o contacta con soporte.'
+        )
     return True
 
 

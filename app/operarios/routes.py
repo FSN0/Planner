@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from flask import (
     Blueprint,
     Response,
+    abort,
     current_app,
     flash,
     g,
@@ -94,11 +95,11 @@ def entrar():
     existiendo para oficina; aquí el teclado es numérico y no hace falta
     recordar un email.
     """
+    if not fichaje_operario_activo():
+        abort(404)
+
     if current_user.is_authenticated and current_user.role in ROLES_CON_FICHAJE:
         return redirect(url_for('operarios.inicio'))
-
-    if not fichaje_operario_activo():
-        return render_template('operario/desactivado.html')
 
     if request.method == 'POST':
         try:
@@ -148,7 +149,7 @@ def salir():
 @operarios_bp.route('/')
 def inicio():
     if not fichaje_operario_activo():
-        return render_template('operario/desactivado.html')
+        abort(404)
 
     contexto = estado_para_pantalla(current_user)
     return render_template('operario/fichar.html', **contexto)
