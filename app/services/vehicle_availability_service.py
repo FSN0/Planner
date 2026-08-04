@@ -12,12 +12,22 @@ from app.models import (
 from app.services.leave_service import build_leaves_by_user, leave_covering
 from app.utils.timezone_utils import today_local
 
-# Colores de calendario (plan muerto vs uso efectivo)
-# Paleta fija en ficha de vehículo: no usar color de empresa (rompe la lectura).
-VEHICLE_COLOR_PLAN_MUERTO = '#dc2626'   # rojo: planificado pero no cuenta
-VEHICLE_COLOR_EFECTIVO = '#16a34a'      # verde vivo: conductor real (Odoo / mismatch)
-VEHICLE_COLOR_PLAN_OK = '#0ea5e9'       # azul: plan vigente (misma persona, sin conflicto)
-VEHICLE_COLOR_ODOO_SOLO = '#64748b'     # gris: solo Odoo sin match interno
+# Colores ficha/calendario de vehículo (regla de negocio única):
+#   Azul   = planificado (aún no hay dato Odoo; típico futuro / hoy)
+#   Verde  = cumplido (planificado + km Odoo, misma persona)
+#   Naranja = conflicto (km sin plan | plan pasado sin km | otro conductor)
+#   Rojo   = ausencia (planificado en vacaciones/baja)
+VEHICLE_COLOR_PLAN = '#0ea5e9'
+VEHICLE_COLOR_CUMPLIDO = '#16a34a'
+VEHICLE_COLOR_CONFLICTO = '#f59e0b'
+VEHICLE_COLOR_AUSENCIA = '#dc2626'
+VEHICLE_COLOR_ODOO_EXT = '#64748b'  # conductor Odoo no matcheado en el programa
+
+# Alias legados (imports antiguos)
+VEHICLE_COLOR_PLAN_OK = VEHICLE_COLOR_PLAN
+VEHICLE_COLOR_EFECTIVO = VEHICLE_COLOR_CUMPLIDO
+VEHICLE_COLOR_PLAN_MUERTO = VEHICLE_COLOR_AUSENCIA
+VEHICLE_COLOR_ODOO_SOLO = VEHICLE_COLOR_ODOO_EXT
 
 
 HORIZON_MONTHS_ALLOWED = (1, 2, 3, 6)
