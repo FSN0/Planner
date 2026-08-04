@@ -13,9 +13,10 @@ from app.services.leave_service import build_leaves_by_user, leave_covering
 from app.utils.timezone_utils import today_local
 
 # Colores de calendario (plan muerto vs uso efectivo)
+# Paleta fija en ficha de vehículo: no usar color de empresa (rompe la lectura).
 VEHICLE_COLOR_PLAN_MUERTO = '#dc2626'   # rojo: planificado pero no cuenta
-VEHICLE_COLOR_EFECTIVO = '#16a34a'      # verde: conductor real / replan
-VEHICLE_COLOR_PLAN_OK = '#0ea5e9'       # azul: plan vigente sin conflicto
+VEHICLE_COLOR_EFECTIVO = '#16a34a'      # verde vivo: conductor real (Odoo / mismatch)
+VEHICLE_COLOR_PLAN_OK = '#0ea5e9'       # azul: plan vigente (misma persona, sin conflicto)
 VEHICLE_COLOR_ODOO_SOLO = '#64748b'     # gris: solo Odoo sin match interno
 
 

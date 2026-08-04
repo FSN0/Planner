@@ -707,11 +707,6 @@ def get_universal_calendar_events():
                 return None, f"{name} (no está en el programa)", True
             return None, "Uso Odoo (sin conductor)", True
 
-        def _company_color(worker, fallback):
-            if worker and getattr(worker, 'company_rel', None) and worker.company_rel.color:
-                return worker.company_rel.color
-            return fallback
-
         def _leave_for(user_id, fecha):
             leave = leave_covering(leaves_idx.get(user_id, []), fecha)
             if leave and leave.estado == LEAVE_STATUS_APROBADA:
@@ -759,7 +754,7 @@ def get_universal_calendar_events():
                     title = f"{planned_name} · {_obra_label(obra)}"
                 color = (
                     VEHICLE_COLOR_PLAN_MUERTO if on_leave
-                    else _company_color(planned_worker, VEHICLE_COLOR_PLAN_OK)
+                    else VEHICLE_COLOR_PLAN_OK
                 )
                 raw_events.append({
                     'title': title,
@@ -819,7 +814,7 @@ def get_universal_calendar_events():
                     if obra_planned:
                         title = f"{planned_name} · {_obra_label(obra_planned)}"
                     title = f"{title}{km_bit}"
-                    color = _company_color(planned_worker, VEHICLE_COLOR_PLAN_OK)
+                    color = VEHICLE_COLOR_PLAN_OK
                     raw_events.append({
                         'title': title,
                         'start_date': fecha,
