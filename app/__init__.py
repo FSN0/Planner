@@ -1,5 +1,5 @@
 import os
-from flask import Flask, redirect, url_for, request, g, abort
+from flask import Flask, redirect, url_for, request, g, abort, current_app
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
@@ -89,10 +89,13 @@ def create_app():
     from app.api.asignaciones import asignaciones_api
     from app.api.vehiculos import vehiculos_api
     from app.superadmin import superadmin_bp
+    from app.operarios import operarios_bp
+    from app.marketing.routes import marketing_bp
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN! 
     # Forzamos el 'url_prefix' para que ninguna ruta se vuelva a quedar en blanco
     app.register_blueprint(main_bp)
+    app.register_blueprint(marketing_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(admin_bp, url_prefix='/admin')
     app.register_blueprint(jefe_bp, url_prefix='/jefe')
@@ -102,6 +105,12 @@ def create_app():
     app.register_blueprint(asignaciones_api, url_prefix='/api')
     app.register_blueprint(vehiculos_api, url_prefix='/api')
     app.register_blueprint(superadmin_bp, url_prefix='/superadmin')
+    # El prefijo lo declara el propio blueprint: la PWA lo necesita fijo en /mi
+    # porque el alcance del service worker se registra contra esa ruta.
+    app.register_blueprint(operarios_bp)
+
+    from app.cli import register_cli
+    register_cli(app)
 
     # ---------------------------------------------------------
     # Registro de utilidades de Jinja
@@ -168,6 +177,8 @@ def create_app():
         tenant_has_odoo = False
         tenant_has_odoo_alta = False
         tenant_has_integrations = False
+        tenant_has_registro_jornada = True
+        tenant_has_fichaje_operario = False
         if current_user.is_authenticated:
             tenant = getattr(g, 'current_tenant', None)
             if tenant:
@@ -175,10 +186,23 @@ def create_app():
                 tenant_has_odoo = bool(modulos_activos.get('odoo'))
                 tenant_has_odoo_alta = bool(modulos_activos.get('odoo_alta'))
                 tenant_has_integrations = tenant_has_odoo or tenant_has_odoo_alta
+                tenant_has_registro_jornada = bool(
+                    modulos_activos.get('registro_jornada', True)
+                )
+                tenant_has_fichaje_operario = bool(
+                    modulos_activos.get('fichaje_operario')
+                )
 
         from app.services.permission_service import (
             user_can, is_laboral, is_admin, can_resolve_fichajes,
         )
+        mostrar_onboarding = False
+        if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
+            try:
+                from app.services.onboarding_service import necesita_onboarding
+                mostrar_onboarding = necesita_onboarding()
+            except Exception:
+                mostrar_onboarding = False
         return dict(
             pending_notifications=pending_count,
             unread_logs_count=unread_logs_count,
@@ -187,6 +211,9 @@ def create_app():
             tenant_has_odoo=tenant_has_odoo,
             tenant_has_odoo_alta=tenant_has_odoo_alta,
             tenant_has_integrations=tenant_has_integrations,
+            tenant_has_registro_jornada=tenant_has_registro_jornada,
+            tenant_has_fichaje_operario=tenant_has_fichaje_operario,
+            mostrar_onboarding=mostrar_onboarding,
             user_can=user_can,
             is_laboral=is_laboral,
             is_admin=is_admin,
@@ -250,8 +277,9 @@ def create_app():
 
         host = normalize_host(request.host)
 
-        # Si acceden desde localhost, red interna Docker o IP pura → esquema public
-        if host in ('localhost', 'web', 'host.docker.internal') or host.replace('.', '').isnumeric():
+        # IP / localhost sin subdominio → marketing (igual que producción).
+        es_ip = bool(host) and all(p.isdigit() for p in host.split('.')) and host.count('.') == 3
+        if host in ('localhost', 'web', 'host.docker.internal') or es_ip:
             db.session.execute(text("SET search_path TO public"))
             return
 
@@ -274,15 +302,17 @@ def create_app():
         parts = host.split('.')
         subdomain = None
 
-        # Desarrollo local: empresa.localhost (2 partes, subdominio + localhost)
+        # empresa.localhost, empresa.signaplan.com, empresa.<ip>.sslip.io (parts[0])
         if len(parts) == 2 and parts[1] == 'localhost' and parts[0] not in ('localhost', 'www'):
             subdomain = parts[0]
         # Producción: dominio raíz (ej: signaplan.com) → esquema público
         elif len(parts) == 2:
             db.session.execute(text("SET search_path TO public"))
             return
-        else:
+        elif len(parts) > 2:
             subdomain = parts[0]
+        else:
+            subdomain = None
 
         if subdomain in _RESERVED_SUBDOMAINS:
             db.session.execute(text("SET search_path TO public"))
@@ -294,9 +324,10 @@ def create_app():
                 abort(500, description="Configuración de esquema inválida para esta organización.")
             g.current_tenant = tenant
             db.session.execute(text(f"SET search_path TO {tenant.schema_name}, public"))
-        elif subdomain:
+            return
+
+        if subdomain:
             abort(404, description="La organización solicitada no existe o se encuentra inactiva.")
-        else:
-            db.session.execute(text("SET search_path TO public"))
+        db.session.execute(text("SET search_path TO public"))
 
     return app

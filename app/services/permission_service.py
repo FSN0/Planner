@@ -13,6 +13,7 @@ LABORAL_ACL = {
     'tablero': frozenset('r'),
     'auditoria_vehiculos': frozenset('r'),
     'vehiculos': frozenset('r'),
+    'vehiculos_libres': frozenset('r'),
     'vehicle_panel': frozenset('r'),
     'worker_panel': frozenset('r'),
     'obra_panel': frozenset('r'),

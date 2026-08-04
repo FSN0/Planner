@@ -4,11 +4,10 @@ from datetime import date
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, session
 from flask_login import login_user, logout_user, login_required, current_user
-from sqlalchemy.exc import IntegrityError
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 
-from app import db, limiter
-from app.models import User, ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL, Company
+from app import limiter
+from app.models import User, ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 auth_bp = Blueprint('auth', __name__)
@@ -16,20 +15,110 @@ auth_bp = Blueprint('auth', __name__)
 LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO, ROLE_RRHH)
 
 
+def _login_blocked_roles():
+    """
+    Roles sin acceso en este tenant.
+
+    Los operarios solo pueden entrar si la empresa ha activado el fichaje desde
+    el móvil. Esto no es una comodidad: en instalaciones que importan la
+    plantilla desde un ERP hay cuentas creadas en masa, y abrirles el login sin
+    que nadie lo haya pedido convertiría esas cuentas en superficie de ataque.
+    Ante cualquier duda al leer la configuración, se deniega.
+    """
+    try:
+        from app.services.fichaje_operario_service import fichaje_operario_activo
+        if fichaje_operario_activo():
+            return tuple(r for r in LOGIN_BLOCKED_ROLES if r != ROLE_OPERARIO)
+    except Exception:
+        pass
+    return LOGIN_BLOCKED_ROLES
+
+
 def _login_page_context():
-    return {'tenant_name': g.current_tenant.nombre}
+    fichaje_activo = False
+    try:
+        from app.services.fichaje_operario_service import fichaje_operario_activo
+        fichaje_activo = fichaje_operario_activo()
+    except Exception:
+        pass
+    return {
+        'tenant_name': g.current_tenant.nombre,
+        'fichaje_activo': fichaje_activo,
+    }
+
+
+def _destino_por_rol(user):
+    """A dónde va cada perfil nada más entrar. None si no tiene sitio."""
+    if user.role == 'admin':
+        try:
+            from app.services.onboarding_service import debe_redirigir_a_wizard
+            if debe_redirigir_a_wizard():
+                return url_for('admin.primeros_pasos')
+        except Exception:
+            pass
+        return url_for('admin.panel')
+    if user.role == 'jefe_obra':
+        return url_for('jefe.obras_detailed', selected_date=date.today())
+    if user.role == ROLE_LABORAL:
+        return url_for('admin.ausencias_list')
+    if user.role == ROLE_OPERARIO:
+        return url_for('operarios.inicio')
+    return None
 
 
 def _redirect_authenticated_user():
-    if current_user.role == 'admin':
-        return redirect(url_for('admin.panel'))
-    if current_user.role == 'jefe_obra':
-        return redirect(url_for('jefe.obras_detailed', selected_date=date.today()))
-    if current_user.role == ROLE_LABORAL:
-        return redirect(url_for('admin.ausencias_list'))
+    destino = _destino_por_rol(current_user)
+    if destino:
+        return redirect(destino)
     logout_user()
     flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
     return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/entrar-alta')
+@limiter.limit('10 per minute; 30 per hour')
+def entrar_alta():
+    """
+    Tras crear la cuenta en el host de marketing, el navegador salta al
+    subdominio del tenant. Aquí consumimos un token firmado y dejamos al
+    admin dentro, sin pedirle otra vez correo y contraseña.
+    """
+    from app.services.signup_service import SignupError, leer_token_entrada_post_alta
+
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        flash('Accede desde la URL de tu empresa.', 'warning')
+        return redirect(url_for('main.dashboard'))
+
+    token = request.args.get('t') or ''
+    try:
+        email = leer_token_entrada_post_alta(token, g.current_tenant)
+    except SignupError as exc:
+        flash(str(exc), 'warning')
+        return redirect(url_for('auth.login'))
+
+    user = User.query.filter_by(email=email, is_deleted=False).first()
+    if user is None or not user.is_active:
+        flash('No se ha podido abrir la sesión. Entra con tu correo y contraseña.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    if current_user.is_authenticated:
+        logout_user()
+
+    login_user(user, remember=True)
+    session['tenant_id'] = g.current_tenant.id
+    try:
+        from app.utils import register_log
+        register_log(
+            user_id=user.id,
+            category='accesos',
+            action='Entrada post-alta',
+            detail=f"Login automático tras crear cuenta. IP: {request.remote_addr or 'Desconocida'}",
+        )
+    except Exception:
+        pass
+
+    destino = _destino_por_rol(user)
+    return redirect(destino or url_for('admin.panel'))
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -56,7 +145,7 @@ def login():
         user = User.query.filter_by(email=email).first()
 
         if user and check_password_hash(user.password_hash, password):
-            if user.role in LOGIN_BLOCKED_ROLES:
+            if user.role in _login_blocked_roles():
                 from app.utils import register_log
                 register_log(
                     user_id=user.id,
@@ -88,12 +177,9 @@ def login():
             )
             flash('Inicio de sesión exitoso', 'success')
 
-            if user.role == 'admin':
-                return redirect(url_for('admin.panel'))
-            if user.role == 'jefe_obra':
-                return redirect(url_for('jefe.obras_detailed', selected_date=date.today()))
-            if user.role == ROLE_LABORAL:
-                return redirect(url_for('admin.ausencias_list'))
+            destino = _destino_por_rol(user)
+            if destino:
+                return redirect(destino)
 
             logout_user()
             flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
@@ -120,44 +206,86 @@ def logout():
     return redirect(url_for('auth.login'))
 
 
-@auth_bp.route('/register', methods=['GET', 'POST'])
-def register():
+@auth_bp.route('/recuperar', methods=['GET', 'POST'])
+@limiter.limit('5 per minute; 20 per hour', methods=['POST'])
+def recuperar():
+    """Pide el correo y, si existe, envía el enlace de restablecimiento."""
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de tu empresa para registrarte.', 'warning')
-        return redirect('http://localhost/superadmin/')
+        flash('Accede desde la URL de tu empresa para recuperar la contraseña.', 'info')
+        return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
-        name = request.form.get('name')
-        lastname = request.form.get('lastname')
-        dni = request.form.get('dni')
+        from app.services.password_reset_service import PasswordResetError, solicitar_reset
+
         email = request.form.get('email')
-        password = request.form.get('password')
-        company_code_input = request.form.get('company_code')
-
-        company = Company.query.filter_by(code=company_code_input).first()
-        if not company:
-            flash('El código de empresa (subcontrata) no es válido.', 'danger')
-            return redirect(url_for('auth.register'))
-
-        new_user = User(
-            email=email,
-            password_hash=generate_password_hash(password),
-            role=ROLE_OPERARIO,
-            name=name,
-            lastname=lastname,
-            dni=dni,
-            company_id=company.id,
-            active=False,
-        )
-        db.session.add(new_user)
         try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            flash('Ya existe un usuario con ese email o DNI.', 'danger')
-            return redirect(url_for('auth.register'))
-
-        flash('Registro exitoso, espera aprobación de RRHH', 'success')
+            solicitar_reset(
+                email,
+                g.current_tenant,
+                reset_url_builder=lambda token: url_for(
+                    'auth.recuperar_token', token=token, _external=True
+                ),
+            )
+        except PasswordResetError as exc:
+            flash(str(exc), 'danger')
+            return render_template(
+                'auth_recuperar.html',
+                tenant_name=g.current_tenant.nombre,
+            )
+        # Mensaje único: no delata si el correo existe.
+        flash(
+            'Si el correo está registrado, recibirás un enlace para restablecer la contraseña.',
+            'info',
+        )
         return redirect(url_for('auth.login'))
 
-    return render_template('register.html', tenant_name=g.current_tenant.nombre)
+    return render_template(
+        'auth_recuperar.html',
+        tenant_name=g.current_tenant.nombre,
+    )
+
+
+@auth_bp.route('/recuperar/<token>', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 30 per hour', methods=['POST'])
+def recuperar_token(token):
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        flash('Accede desde la URL de tu empresa.', 'warning')
+        return redirect(url_for('main.dashboard'))
+
+    from app.services.password_reset_service import (
+        PasswordResetError,
+        aplicar_nueva_password,
+        leer_token,
+    )
+
+    try:
+        leer_token(token, g.current_tenant)
+    except PasswordResetError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('auth.recuperar'))
+
+    if request.method == 'POST':
+        try:
+            aplicar_nueva_password(
+                token,
+                g.current_tenant,
+                request.form.get('password'),
+                request.form.get('password2'),
+            )
+            flash('Contraseña actualizada. Ya puedes iniciar sesión.', 'success')
+            return redirect(url_for('auth.login'))
+        except PasswordResetError as exc:
+            flash(str(exc), 'danger')
+
+    return render_template(
+        'auth_recuperar_nueva.html',
+        tenant_name=g.current_tenant.nombre,
+        token=token,
+    )
+
+
+# Aquí vivía /auth/register, un alta pública en la que cualquiera que supiese el
+# código de una subcontrata podía crearse una cuenta en el tenant de esa empresa.
+# Llevaba roto desde que se borró su plantilla y nadie lo echó de menos: las
+# personas entran por la sincronización del ERP o las da de alta administración.
+# El alta de empresa (crear tenant) está en signaplan.com/alta.

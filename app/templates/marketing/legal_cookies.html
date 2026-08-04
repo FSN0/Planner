@@ -1,0 +1,20 @@
+{% extends "marketing/legal_base.html" %}
+{% block legal_content %}
+<h2>1. Qué son las cookies</h2>
+<p>
+    Las cookies son pequeños archivos que el navegador guarda para que el sitio funcione
+    (sesión, seguridad) o para medir uso.
+</p>
+<h2>2. Cookies que usamos</h2>
+<ul>
+    <li><strong>Esenciales:</strong> sesión de usuario, token CSRF y preferencias técnicas.
+        Necesarias para el servicio; no requieren consentimiento.</li>
+    <li><strong>Analítica / marketing:</strong> hoy no están activas por defecto. Si se
+        incorporan, se pedirá consentimiento previo.</li>
+</ul>
+<h2>3. Cómo gestionarlas</h2>
+<p>
+    Puedes borrar o bloquear cookies desde la configuración de tu navegador. Si bloqueas las
+    esenciales, es posible que no puedas iniciar sesión.
+</p>
+{% endblock %}

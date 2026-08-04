@@ -3,10 +3,13 @@
 # =============================================================================
 
 # --- Entornos y secretos ---
+# Se ignora cualquier .env y se rescatan solo los de ejemplo. Antes se listaban
+# uno a uno y .env.SAS, con credenciales reales, se coló en el repositorio por
+# no coincidir con ninguno de los nombres previstos.
 .env
-.env.test
-.env.production
-.env.local
+.env.*
+!.env.example
+!.env.*.example
 
 # --- Python ---
 __pycache__/

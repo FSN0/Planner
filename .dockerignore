@@ -1,0 +1,41 @@
+# El Dockerfile hace `COPY . .`, así que todo lo que no se excluya aquí acaba
+# dentro de la imagen. Sin este fichero se colaban los .env con credenciales
+# reales y el directorio .git entero.
+
+# --- Secretos ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# --- Historia y metadatos del repositorio ---
+.git
+.gitignore
+.github
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+venv/
+.venv/
+
+# --- Datos locales que no pintan nada en la imagen ---
+backups/
+uploads/
+app/static/uploads/
+celerybeat-schedule*
+
+# --- Herramientas de desarrollo ---
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.vscode/
+.idea/
+*.swp
+
+# --- Sistema ---
+.DS_Store
+Thumbs.db

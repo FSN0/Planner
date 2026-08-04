@@ -7,7 +7,10 @@
 
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
     restart: unless-stopped
     command: python run.py
     expose:
@@ -71,7 +74,10 @@ services:
       retries: 5
 
   celery_worker:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
     restart: unless-stopped
     command: celery -A app.celery_worker.celery worker --loglevel=info
     volumes:
@@ -99,7 +105,10 @@ services:
         condition: service_healthy
 
   celery_beat:
-    build: .
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
     restart: unless-stopped
     command: celery -A app.celery_worker.celery beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     volumes:
@@ -123,6 +132,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # Acceso desde el móvil en la misma WiFi (Windows/WSL suele no
+      # publicar bien el :80 en la LAN; el :8080 suele llegar).
+      - "8080:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data

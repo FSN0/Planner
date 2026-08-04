@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Registro de jornada · {{ informe.tenant_nombre or 'SignaPlan' }}</title>
+  <style>
+    @page { size: A4; margin: 14mm 12mm; }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 11pt;
+      color: #0f172a;
+      line-height: 1.4;
+      margin: 0;
+      padding: {% if para_pdf %}0{% else %}16px{% endif %};
+    }
+    h1 { font-size: 18pt; margin: 0 0 4px; }
+    h2 { font-size: 13pt; margin: 22px 0 8px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+    .meta { color: #475569; font-size: 10pt; margin-bottom: 14px; }
+    .seal {
+      border: 1.5pt solid {% if informe.cadena_integra %}#15803d{% else %}#b91c1c{% endif %};
+      background: {% if informe.cadena_integra %}#f0fdf4{% else %}#fef2f2{% endif %};
+      padding: 10px 12px;
+      margin: 12px 0 18px;
+    }
+    .seal strong { display: block; margin-bottom: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    th, td {
+      border-bottom: 0.5pt solid #cbd5e1;
+      padding: 5px 6px;
+      text-align: left;
+      font-size: 9.5pt;
+      vertical-align: top;
+    }
+    th {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #475569;
+    }
+    .worker-head {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 16px;
+      margin-bottom: 4px;
+    }
+    .muted { color: #64748b; font-size: 9pt; }
+    .hash {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 8pt;
+      word-break: break-all;
+    }
+    .footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid #cbd5e1;
+      font-size: 9pt;
+      color: #475569;
+    }
+    .no-print { margin-bottom: 16px; }
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 0; }
+      .worker-block { break-inside: avoid; page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  {% if not para_pdf %}
+  <div class="no-print">
+    <button type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
+    <a href="{{ url_for('admin.registro_jornada', desde=informe.desde, hasta=informe.hasta, user_id=informe.filtro_user_id or '', company_id=informe.filtro_company_id or '', generar=1) }}">Volver</a>
+  </div>
+  {% endif %}
+
+  <header>
+    <h1>Registro de jornada</h1>
+    <div class="meta">
+      <strong>{{ informe.empresa.nombre or informe.tenant_nombre or 'Empresa' }}</strong>
+      {% if informe.empresa.nif %} · NIF {{ informe.empresa.nif }}{% endif %}<br>
+      Periodo: {{ informe.desde.strftime('%d/%m/%Y') }} — {{ informe.hasta.strftime('%d/%m/%Y') }}<br>
+      Documento generado el {{ informe.generado_en.strftime('%d/%m/%Y %H:%M:%S') }} UTC
+    </div>
+  </header>
+
+  <div class="seal">
+    {% if informe.cadena_integra %}
+      <strong>Verificación de integridad: CADENA ÍNTEGRA</strong>
+      Se ha recalculado la cadena de hashes del libro de eventos de jornada.
+      No se ha detectado manipulación en ninguno de los {{ informe.eventos_en_libro }} eventos registrados.
+    {% else %}
+      <strong>Verificación de integridad: INCIDENCIAS DETECTADAS</strong>
+      {{ informe.incidencias_cadena|length }} incidencia(s) en la cadena de hashes.
+      Este documento no debe presentarse como registro íntegro.
+    {% endif %}
+  </div>
+
+  <p>
+    Trabajadores: <strong>{{ informe.trabajadores_count }}</strong> ·
+    Días con registro: <strong>{{ informe.dias_con_registro }}</strong> ·
+    Horas totales: <strong>{{ formatear_horas(informe.minutos_totales) }}</strong>
+    {% if informe.dias_con_correccion %}
+      · Días con corrección anotada: <strong>{{ informe.dias_con_correccion }}</strong>
+    {% endif %}
+  </p>
+
+  {% for t in informe.trabajadores %}
+    <section class="worker-block">
+      <div class="worker-head">
+        <div>
+          <strong>{{ t.nombre }}</strong>
+          <div class="muted">
+            DNI {{ t.dni or '—' }}{% if t.empresa %} · {{ t.empresa }}{% endif %}
+          </div>
+        </div>
+        <div>
+          <strong>{{ formatear_horas(t.minutos) }}</strong>
+          <div class="muted">{{ t.dias_trabajados }} día{{ '' if t.dias_trabajados == 1 else 's' }}</div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Entrada</th>
+            <th>Salida</th>
+            <th>Horas</th>
+            <th>Obra</th>
+            <th>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in t.dias %}
+            <tr>
+              <td>{{ d.fecha.strftime('%d/%m/%Y') }}</td>
+              <td>{{ d.entrada|format_time if d.entrada else '—' }}</td>
+              <td>{{ d.salida|format_time if d.salida else '—' }}</td>
+              <td>{{ formatear_horas(d.minutos) }}</td>
+              <td>{{ d.obra_nombre or '—' }}</td>
+              <td>
+                {% if d.tiene_correcciones %}
+                  {% for c in d.correcciones %}
+                    {{ etiquetar_tipo(c.tipo) }}{% if c.motivo %}: {{ c.motivo }}{% endif %}{% if not loop.last %}; {% endif %}
+                  {% endfor %}
+                {% elif d.sin_salida %}
+                  Sin hora de salida
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% else %}
+    <p>No hay registros de jornada en este periodo.</p>
+  {% endfor %}
+
+  <footer class="footer">
+    <p>
+      Este documento se genera a partir del libro de eventos de jornada (append-only
+      con cadena de hashes). Las correcciones no borran el dato original: quedan
+      anotadas como eventos posteriores con su motivo.
+    </p>
+    <p>
+      Huella del informe:<br>
+      <span class="hash">{{ informe.huella }}</span>
+    </p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{% extends 'operario/base.html' %}
+{% set activo = 'fichar' %}
+{% block title %}Fichaje no disponible{% endblock %}
+
+{% block contenido %}
+<div class="vacio">
+    <h1 class="titulo">El fichaje desde el móvil no está activado</h1>
+    <p>
+        {{ g.current_tenant.nombre }} todavía no ha habilitado el registro de jornada
+        desde el móvil. Si crees que debería estarlo, coméntaselo a tu responsable.
+    </p>
+    <a class="boton boton--secundario boton--bloque"
+       href="{{ url_for('operarios.registros') }}">
+        Ver mis horas registradas
+    </a>
+</div>
+{% endblock %}

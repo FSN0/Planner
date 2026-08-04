@@ -64,6 +64,7 @@
                 <th>Acceso SignaPlan</th>
                 <th>Dominio propio</th>
                 <th>Esquema (Postgres)</th>
+                <th>Plan</th>
                 <th>Módulos (Addons)</th> 
                 <th>Estado</th>
                 <th>Fecha Alta</th>
@@ -88,6 +89,25 @@
                     </button>
                 </td>
                 <td class="align-middle"><code>{{ t.schema_name }}</code></td>
+
+                <td class="align-middle">
+                    {% if t.plan == 'paid' %}
+                        <span class="badge badge-primary">Pago</span>
+                    {% else %}
+                        <span class="badge badge-secondary">Gratis</span>
+                    {% endif %}
+                    {% if t.billing_exempt %}
+                        <span class="badge badge-info">Sin cobro</span>
+                    {% endif %}
+                    {% if t.limite_empleados %}
+                        <small class="text-muted d-block">máx. {{ t.limite_empleados }}</small>
+                    {% elif t.plan == 'paid' or t.billing_exempt %}
+                        <small class="text-muted d-block">sin límite</small>
+                    {% endif %}
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-1" data-toggle="modal" data-target="#modalPlan_{{ t.id }}">
+                        Plan
+                    </button>
+                </td>
                 
                 <td class="align-middle">
                     <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#modalModulos_{{ t.id }}">
@@ -106,7 +126,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
+                <td colspan="9" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -114,6 +134,48 @@
 </div>
 
 {% for t in tenants %}
+<div class="modal fade" id="modalPlan_{{ t.id }}" tabindex="-1" role="dialog" aria-labelledby="modalPlanLabel_{{ t.id }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="modalPlanLabel_{{ t.id }}">Plan — {{ t.nombre }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form action="{{ url_for('superadmin.configurar_plan_tenant', id_tenant=t.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body p-4">
+          <label class="font-weight-bold">Plan</label>
+          <select name="plan" class="form-control mb-3">
+            <option value="free" {% if t.plan != 'paid' %}selected{% endif %}>Gratis (hasta 10 trabajadores)</option>
+            <option value="paid" {% if t.plan == 'paid' %}selected{% endif %}>Pago (geo + plantilla amplia)</option>
+          </select>
+          <label class="font-weight-bold">Límite de trabajadores (opcional)</label>
+          <input type="number" min="1" name="limite_empleados" class="form-control"
+                 value="{{ t.limite_empleados if t.limite_empleados is not none else '' }}"
+                 placeholder="Vacío = según plan (10 en gratis, ilimitado en pago)">
+          <div class="custom-control custom-checkbox mt-3">
+            <input type="checkbox" class="custom-control-input" name="billing_exempt" value="1"
+                   id="billingExempt_{{ t.id }}" {% if t.billing_exempt %}checked{% endif %}>
+            <label class="custom-control-label" for="billingExempt_{{ t.id }}">
+              Premium sin cobro (demos, Soltec, cortesías)
+            </label>
+          </div>
+          <small class="text-muted d-block mt-2">
+            Cuentan operarios y jefes de obra activos. Con «sin cobro» tienen geolocalización
+            y plantilla amplia aunque no pase por la pasarela. El fichaje móvil está en el gratis.
+          </small>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn btn-primary">Guardar plan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="modalDominio_{{ t.id }}" tabindex="-1" role="dialog" aria-labelledby="modalDominioLabel_{{ t.id }}" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content border-0 shadow-lg">
@@ -167,6 +229,9 @@
             
             {% for key, nombre in modulos.items() %}
                 {% set activo = t.modulos_activos and t.modulos_activos.get(key) %}
+                {% if key == 'registro_jornada' and (not t.modulos_activos or t.modulos_activos.get(key) is none) %}
+                    {% set activo = True %}
+                {% endif %}
                 
                 <div class="custom-control custom-switch mb-3">
                     <input type="checkbox" class="custom-control-input odoo-switch" data-tenant="{{ t.id }}" data-modulo="{{ key }}" name="modulos" value="{{ key }}" id="modModal_{{ t.id }}_{{ key }}" {% if activo %}checked{% endif %}>
@@ -174,6 +239,13 @@
                         {{ nombre }}
                     </label>
                 </div>
+                {% if key == 'onboarding' %}
+                    <small class="text-muted d-block ml-4 mb-3">Actívalo para altas self-serve. En tenants creados por ti normalmente va apagado.</small>
+                {% elif key == 'fichaje_operario' %}
+                    <small class="text-muted d-block ml-4 mb-3">Muestra <code>/mi</code> y sus ajustes (PIN, geolocalización, Oficina como obra). Para clientes ERP puros puedes dejarlo apagado.</small>
+                {% elif key == 'registro_jornada' %}
+                    <small class="text-muted d-block ml-4 mb-3">Visible por defecto. Apágalo si no quieres enseñar el módulo de Inspección en este cliente.</small>
+                {% endif %}
                 
                 {% if key == 'odoo' %}
                     <div id="config_odoo_{{ t.id }}" class="mb-4 ml-4 bg-light p-3 rounded border border-info" style="{% if not activo %}display: none;{% endif %}">

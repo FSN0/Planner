@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Primeros pasos{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .onb-wrap { max-width: 720px; margin: 0 auto; }
+  .onb-intro { margin-bottom: 1.25rem; }
+  .onb-intro p { color: #64748b; font-size: 0.9rem; margin: 0.35rem 0 0; }
+  .onb-step {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+    margin-bottom: 0.85rem;
+  }
+  .onb-step.is-done { border-color: #bbf7d0; background: #f0fdf4; }
+  .onb-step-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.65rem;
+  }
+  .onb-badge {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    background: #e2e8f0;
+    color: #334155;
+  }
+  .onb-step.is-done .onb-badge { background: #16a34a; color: #fff; }
+  .onb-step h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0;
+    color: #0f172a;
+  }
+  .onb-step .hint { font-size: 0.8rem; color: #64748b; margin: 0.2rem 0 0; }
+  .onb-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+  }
+  @media (max-width: 560px) {
+    .onb-form-row { grid-template-columns: 1fr; }
+  }
+  .onb-form-row label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 0.2rem;
+  }
+  .onb-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .onb-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: space-between;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e2e8f0;
+  }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main admin-main--compact">
+    <div class="onb-wrap">
+      <div class="page-toolbar">
+        <div class="page-toolbar-left">
+          <h1 class="page-toolbar-title">Primeros pasos</h1>
+          <span class="page-toolbar-count">
+            {% if onboarding.pendientes %}{{ onboarding.pendientes }} pendientes{% else %}Listo{% endif %}
+          </span>
+        </div>
+      </div>
+
+      <div class="onb-intro">
+        <p>
+          En pocos minutos tienes obra, un trabajador con PIN, fichaje móvil
+          y el informe de jornada listo.
+        </p>
+      </div>
+
+      {# —— Paso obra —— #}
+      {% set paso_obra = onboarding.pasos[0] %}
+      <section class="onb-step {% if paso_obra.hecho %}is-done{% endif %}">
+        <div class="onb-step-head">
+          <span class="onb-badge">{% if paso_obra.hecho %}<i class="fas fa-check"></i>{% else %}1{% endif %}</span>
+          <div>
+            <h2>{{ paso_obra.titulo }}</h2>
+            <p class="hint">{{ paso_obra.hint }}</p>
+          </div>
+        </div>
+        {% if not paso_obra.hecho %}
+        <div class="onb-actions">
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="oficina">
+            <button type="submit" class="btn-admin btn-admin-primary">
+              Activar obra Oficina
+            </button>
+          </form>
+        </div>
+        <form method="post" class="mt-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="obra">
+          <div class="onb-form-row">
+            <div>
+              <label for="nombre_obra">O crea una obra de tajo</label>
+              <input class="form-control form-control-sm" id="nombre_obra" name="nombre_obra"
+                     placeholder="Ej. Reforma calle Mayor" required minlength="2">
+            </div>
+            <div>
+              <label for="codigo_obra">Código (opcional)</label>
+              <input class="form-control form-control-sm" id="codigo_obra" name="codigo_obra"
+                     placeholder="OB-001">
+            </div>
+          </div>
+          <div class="onb-actions">
+            <button type="submit" class="btn-admin btn-admin-ghost">Crear obra</button>
+          </div>
+        </form>
+        {% else %}
+        <p class="hint mb-0">
+          {{ onboarding.obras }} obra(s)
+          {% if onboarding.oficina_activa %}· Oficina activa{% endif %}
+        </p>
+        {% endif %}
+      </section>
+
+      {# —— Paso gente —— #}
+      {% set paso_gente = onboarding.pasos[1] %}
+      <section class="onb-step {% if paso_gente.hecho %}is-done{% endif %}">
+        <div class="onb-step-head">
+          <span class="onb-badge">{% if paso_gente.hecho %}<i class="fas fa-check"></i>{% else %}2{% endif %}</span>
+          <div>
+            <h2>{{ paso_gente.titulo }}</h2>
+            <p class="hint">{{ paso_gente.hint }}</p>
+          </div>
+        </div>
+        {% if not paso_gente.hecho %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="operario">
+          <div class="onb-form-row">
+            <div>
+              <label for="name">Nombre</label>
+              <input class="form-control form-control-sm" id="name" name="name" required>
+            </div>
+            <div>
+              <label for="lastname">Apellidos</label>
+              <input class="form-control form-control-sm" id="lastname" name="lastname" required>
+            </div>
+            <div>
+              <label for="dni">DNI / NIE</label>
+              <input class="form-control form-control-sm" id="dni" name="dni" required
+                     autocomplete="off">
+            </div>
+            <div>
+              <label for="pin">PIN (4–6 dígitos)</label>
+              <input class="form-control form-control-sm" id="pin" name="pin" required
+                     inputmode="numeric" pattern="\d{4,6}" autocomplete="off"
+                     placeholder="••••">
+            </div>
+          </div>
+          <div class="onb-actions">
+            <button type="submit" class="btn-admin btn-admin-primary">Dar de alta</button>
+          </div>
+        </form>
+        {% else %}
+        <p class="hint mb-0">
+          {{ onboarding.operarios }} trabajador(es) · {{ onboarding.con_pin }} con PIN
+        </p>
+        {% endif %}
+      </section>
+
+      {# —— Paso fichaje —— #}
+      {% set paso_fichaje = onboarding.pasos[2] %}
+      <section class="onb-step {% if paso_fichaje.hecho %}is-done{% endif %}">
+        <div class="onb-step-head">
+          <span class="onb-badge">{% if paso_fichaje.hecho %}<i class="fas fa-check"></i>{% else %}3{% endif %}</span>
+          <div>
+            <h2>{{ paso_fichaje.titulo }}</h2>
+            <p class="hint">{{ paso_fichaje.hint }}</p>
+          </div>
+        </div>
+        {% if not paso_fichaje.hecho %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="fichaje">
+          <div class="onb-actions">
+            <button type="submit" class="btn-admin btn-admin-primary">
+              Activar fichaje en /mi
+            </button>
+          </div>
+        </form>
+        {% else %}
+        <p class="hint mb-0">Fichaje móvil activo. Los operarios entran en <code>/mi</code> con DNI y PIN.</p>
+        {% endif %}
+      </section>
+
+      {# —— Paso informe Inspección —— #}
+      {% set paso_informe = onboarding.pasos[3] %}
+      <section class="onb-step {% if paso_informe.hecho %}is-done{% endif %}">
+        <div class="onb-step-head">
+          <span class="onb-badge">{% if paso_informe.hecho %}<i class="fas fa-check"></i>{% else %}4{% endif %}</span>
+          <div>
+            <h2>{{ paso_informe.titulo }}</h2>
+            <p class="hint">{{ paso_informe.hint }}</p>
+          </div>
+        </div>
+        {% if not paso_informe.hecho %}
+        <div class="onb-actions">
+          <a href="{{ url_for('admin.registro_jornada', generar=1, desde_onboarding=1) }}"
+             class="btn-admin btn-admin-primary">
+            Abrir registro de jornada
+          </a>
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="informe">
+            <button type="submit" class="btn-admin btn-admin-ghost">
+              Ya lo he visto
+            </button>
+          </form>
+        </div>
+        <p class="hint mt-2 mb-0">
+          Tip: pide al trabajador de prueba que fiche entrada y salida en
+          <code>/mi</code> y vuelve a generar el PDF — verás el sello de cadena íntegra.
+        </p>
+        {% else %}
+        <p class="hint mb-0">
+          Informe listo.
+          <a href="{{ url_for('admin.registro_jornada', generar=1) }}">Abrir de nuevo</a>
+        </p>
+        {% endif %}
+      </section>
+
+      <div class="onb-footer">
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="saltar">
+          <button type="submit" class="btn-admin btn-admin-ghost">Más tarde</button>
+        </form>
+        {% if onboarding.pendientes == 0 %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="listo">
+          <button type="submit" class="btn-admin btn-admin-primary">
+            Ir al panel
+          </button>
+        </form>
+        {% else %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="listo">
+          <button type="submit" class="btn-admin btn-admin-ghost">
+            Marcar como listo e ir al panel
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+</div>
+{% endblock %}

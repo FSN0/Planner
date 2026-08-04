@@ -129,7 +129,7 @@
           <div class="config-block-icon config-block-icon--amber"><i class="fas fa-user-clock"></i></div>
           <div>
             <h2>Fichajes</h2>
-            <p>Comportamiento de la auditoría cuando alguien ficha sin estar planificado</p>
+            <p>Auditoría de fichajes sin plan y registro de jornada desde el móvil</p>
           </div>
         </header>
         <div class="config-block-body">
@@ -150,6 +150,71 @@
                 </p>
               </div>
             </div>
+
+            {% if tenant_has_fichaje_operario %}
+            <hr class="my-4">
+            <div class="config-switch-box">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="fichaje_operario_activo" name="fichaje_operario_activo"
+                       {% if configs.get('fichaje_operario_activo', 'False') == 'True' %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">Fichaje desde el móvil del trabajador</p>
+                <p class="admin-form-switch-hint mb-0">
+                  Habilita <code>/mi</code>, la aplicación de fichaje que el operario
+                  puede instalar en su móvil. Incluido en el plan gratuito.
+                  Al activarlo, <strong>los usuarios con rol operario podrán iniciar
+                  sesión</strong>: revisa antes que tengan PIN o contraseña usable.
+                </p>
+              </div>
+            </div>
+
+            <div class="config-field mt-3">
+              <label for="fichaje_geolocalizacion">Ubicación al fichar</label>
+              <select id="fichaje_geolocalizacion" name="fichaje_geolocalizacion"
+                      class="form-control form-control-sm custom-select">
+                {% set geo_actual = configs.get('fichaje_geolocalizacion', 'desactivada') %}
+                <option value="desactivada" {% if geo_actual == 'desactivada' %}selected{% endif %}>
+                  No registrar la ubicación
+                </option>
+                <option value="opcional" {% if geo_actual == 'opcional' %}selected{% endif %}>
+                  Registrarla si el trabajador la autoriza{% if monetizacion_activa %} (plan de pago){% endif %}
+                </option>
+                <option value="obligatoria" {% if geo_actual == 'obligatoria' %}selected{% endif %}>
+                  Exigirla para poder fichar{% if monetizacion_activa %} (plan de pago){% endif %}
+                </option>
+              </select>
+              <p class="config-field-hint">
+                Solo se guarda la coordenada del instante del fichaje, nunca un
+                seguimiento continuo.
+                {% if monetizacion_activa %}
+                En el plan gratuito la ubicación queda desactivada;
+                opcional/obligatoria requieren plan de pago o cortesía.
+                {% else %}
+                De momento puedes activarla sin cobro (fase previa a Stripe).
+                {% endif %}
+              </p>
+            </div>
+
+            <div class="config-switch-box mt-4">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="obra_oficina_activa" name="obra_oficina_activa"
+                       {% if configs.get('obra_oficina_activa', 'False') == 'True' %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">Oficina como obra</p>
+                <p class="admin-form-switch-hint mb-0">
+                  Crea la obra <strong>Oficina</strong> en el planificador y la ofrece
+                  al fichar desde el móvil. Útil si alguien trabaja en sede o si aún
+                  no tenéis obras de tajo dadas de alta: siempre habrá dónde fichar.
+                  Se puede planificar quién está en oficina igual que en cualquier obra.
+                </p>
+              </div>
+            </div>
+            {% endif %}
+
             <div class="config-block-actions">
               <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar fichajes</button>
             </div>

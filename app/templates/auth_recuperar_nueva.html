@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nueva contraseña - {{ tenant_name }}</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body class="layout-auth d-flex align-items-center justify-content-center" style="min-height: 100vh; background-color: #f4f6f9;">
+    <div class="auth-card p-4 shadow-sm bg-white rounded" style="width: 100%; max-width: 400px; border-top: 4px solid #007bff;">
+        <h1 class="h4 text-center mb-2">Nueva contraseña</h1>
+        <p class="text-center text-muted small mb-4">{{ tenant_name }}</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} p-2 small">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group mb-3">
+                <label class="small font-weight-bold" for="password">Contraseña nueva</label>
+                <input type="password" name="password" id="password" class="form-control" required minlength="8" autocomplete="new-password">
+            </div>
+            <div class="form-group mb-4">
+                <label class="small font-weight-bold" for="password2">Repite la contraseña</label>
+                <input type="password" name="password2" id="password2" class="form-control" required minlength="8" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Guardar</button>
+        </form>
+    </div>
+</body>
+</html>

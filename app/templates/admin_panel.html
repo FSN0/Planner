@@ -38,6 +38,23 @@
       </div>
     </div>
 
+    {% if mostrar_onboarding %}
+    <section class="admin-panel" style="margin-bottom:1rem;border-color:#93c5fd;background:#eff6ff;">
+      <div class="dashboard-panel-head" style="margin-bottom:0.35rem;">
+        <h2 class="admin-panel-title" style="font-size:0.95rem;">
+          <i class="fas fa-rocket text-primary mr-1"></i> Termina de configurar SignaPlan
+        </h2>
+        <a href="{{ url_for('admin.primeros_pasos') }}" class="btn-admin btn-admin-primary" style="font-size:0.72rem;">
+          Primeros pasos
+        </a>
+      </div>
+      <p class="mb-0" style="font-size:0.82rem;color:#334155;">
+        Faltan {{ onboarding.pendientes }} paso(s): obra, PIN, fichaje móvil o informe de Inspección.
+        Mientras tanto tienes todas las funciones disponibles.
+      </p>
+    </section>
+    {% endif %}
+
     {# —— KPIs principales —— #}
     <section class="dashboard-kpi-grid">
       <article class="dashboard-kpi dashboard-kpi--primary">
@@ -248,6 +265,66 @@
         {% endif %}
       </section>
     </div>
+
+    {# —— Hoy: planificado vs fichado —— #}
+    {% if hoy_en_obra %}
+    <section class="admin-panel dashboard-panel" style="margin-top:1rem;">
+      <div class="dashboard-panel-head">
+        <div>
+          <h2 class="admin-panel-title">Hoy en obra</h2>
+          <span class="admin-panel-subtitle">
+            Planificado vs fichado ·
+            {{ hoy_en_obra.fichados }} fichados ·
+            {{ hoy_en_obra.sin_fichar }} sin fichar
+            {% if hoy_en_obra.otra_obra %} · {{ hoy_en_obra.otra_obra }} en otra obra{% endif %}
+          </span>
+        </div>
+        <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">
+          Auditoría
+        </a>
+      </div>
+      {% if hoy_en_obra.filas %}
+      <div class="table-responsive">
+        <table class="table table-sm mb-0" style="font-size:0.8rem;">
+          <thead>
+            <tr>
+              <th>Trabajador</th>
+              <th>Planificado</th>
+              <th>Fichado en</th>
+              <th>Entrada</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in hoy_en_obra.filas %}
+            <tr>
+              <td>{{ f.user.name }} {{ f.user.lastname }}</td>
+              <td>{{ f.obra_planificada.nombre if f.obra_planificada else '—' }}</td>
+              <td>{{ f.obra_real.nombre if f.obra_real else '—' }}</td>
+              <td>
+                {% if f.check_in %}{{ f.check_in.strftime('%H:%M') }}{% else %}—{% endif %}
+              </td>
+              <td>
+                {% if f.estado == 'ok' %}
+                  <span class="badge-soft badge-soft-green">OK</span>
+                {% elif f.estado == 'otra_obra' %}
+                  <span class="badge-soft badge-soft-amber">Otra obra</span>
+                {% else %}
+                  <span class="badge-soft badge-soft-red">Sin fichar</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted small mb-0 px-3 pb-3">
+        Nadie planificado hoy. Asigna gente en el tablero o en el planificador.
+      </p>
+      {% endif %}
+    </section>
+    {% endif %}
 
     {# —— Alertas auditoría + actividad —— #}
     <div class="dashboard-bottom-grid">

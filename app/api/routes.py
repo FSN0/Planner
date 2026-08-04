@@ -189,6 +189,11 @@ def get_universal_calendar_events():
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
 
         # Vehículo siempre como evento propio (también si hay obra ese día)
+        from app.services.vehicle_availability_service import (
+            VEHICLE_COLOR_EFECTIVO,
+            VEHICLE_COLOR_PLAN_MUERTO,
+            VEHICLE_COLOR_PLAN_OK,
+        )
         raw_veh = []
         for d, v_label in vehicle_by_date.items():
             v_meta = vehicle_meta_by_date.get(d) or {}
@@ -198,12 +203,21 @@ def get_universal_calendar_events():
                     title = f"{title} · {int(v_meta['km'])} km"
                 except (TypeError, ValueError):
                     pass
+            if v_meta.get('en_ausencia') and v_meta.get('ausencia_tipo'):
+                title = f"{title} · {v_meta['ausencia_tipo']}"
+            elif v_meta.get('mismatch') and v_meta.get('effective_other'):
+                title = f"{title} · lo usó {v_meta['effective_other']}"
+
+            plan_status = v_meta.get('plan_status') or 'ok'
             source = v_meta.get('source') or 'planificado'
-            if source == 'odoo':
-                color = '#64748b'
+            if plan_status == 'muerto':
+                color = VEHICLE_COLOR_PLAN_MUERTO
+                ev_type = 'vehiculo'
+            elif plan_status == 'efectivo' or source == 'odoo':
+                color = VEHICLE_COLOR_EFECTIVO
                 ev_type = 'vehiculo_odoo'
             else:
-                color = '#0ea5e9'
+                color = VEHICLE_COLOR_PLAN_OK
                 ev_type = 'vehiculo'
             raw_veh.append({
                 'title': title,
@@ -213,9 +227,12 @@ def get_universal_calendar_events():
                 'extendedProps': {
                     'type': ev_type,
                     'source': source,
+                    'plan_status': plan_status,
                     'vehiculo_label': v_label,
                     'vehiculo_id': v_meta.get('vehiculo_id'),
                     'km': v_meta.get('km'),
+                    'en_ausencia': bool(v_meta.get('en_ausencia')),
+                    'mismatch': bool(v_meta.get('mismatch')),
                 }
             })
         if raw_veh:
@@ -645,8 +662,26 @@ def get_universal_calendar_events():
         ).order_by(RegistroOdometro.fecha).all()
         odo_by_date = {r.fecha: r for r in odo_regs}
 
+        from app.services.leave_service import (
+            build_leaves_by_user,
+            leave_covering,
+        )
+        from app.services.vehicle_availability_service import (
+            VEHICLE_COLOR_EFECTIVO,
+            VEHICLE_COLOR_ODOO_SOLO,
+            VEHICLE_COLOR_PLAN_MUERTO,
+            VEHICLE_COLOR_PLAN_OK,
+        )
+        from app.models import LEAVE_STATUS_APROBADA
+
         users_by_odoo, users_by_name = _build_user_indexes()
         raw_events = []
+
+        planned_user_ids = {av.user_id for av in asig_veh if av.user_id}
+        range_end_inclusive = end_date - timedelta(days=1) if end_date > start_date else end_date
+        leaves_idx = build_leaves_by_user(
+            list(planned_user_ids), start_date, range_end_inclusive
+        ) if planned_user_ids else {}
 
         def _obra_for_user_day(user_id, fecha):
             if not user_id:
@@ -671,6 +706,17 @@ def get_universal_calendar_events():
             if name:
                 return None, f"{name} (no está en el programa)", True
             return None, "Uso Odoo (sin conductor)", True
+
+        def _company_color(worker, fallback):
+            if worker and getattr(worker, 'company_rel', None) and worker.company_rel.color:
+                return worker.company_rel.color
+            return fallback
+
+        def _leave_for(user_id, fecha):
+            leave = leave_covering(leaves_idx.get(user_id, []), fecha)
+            if leave and leave.estado == LEAVE_STATUS_APROBADA:
+                return leave
+            return None
 
         all_dates = sorted(set(planned_by_date.keys()) | set(odo_by_date.keys()))
         for fecha in all_dates:
@@ -699,15 +745,22 @@ def get_universal_calendar_events():
             if has_odoo_usage:
                 odoo_worker, odoo_title, odoo_external = _resolve_odoo_driver(reg)
 
+            leave = _leave_for(av.user_id, fecha) if av else None
+            on_leave = bool(leave)
+
             # Caso 1: solo planificación
             if av and not has_odoo_usage:
                 obra = _obra_for_user_day(av.user_id, fecha)
                 title = planned_name
-                if obra:
+                if on_leave:
+                    tipo = (leave.tipo or 'Ausencia').strip() or 'Ausencia'
+                    title = f"{planned_name} · {tipo}"
+                elif obra:
                     title = f"{planned_name} · {_obra_label(obra)}"
-                color = "#0ea5e9"
-                if planned_worker and getattr(planned_worker, 'company_rel', None) and planned_worker.company_rel.color:
-                    color = planned_worker.company_rel.color
+                color = (
+                    VEHICLE_COLOR_PLAN_MUERTO if on_leave
+                    else _company_color(planned_worker, VEHICLE_COLOR_PLAN_OK)
+                )
                 raw_events.append({
                     'title': title,
                     'start_date': fecha,
@@ -716,9 +769,12 @@ def get_universal_calendar_events():
                     'extendedProps': {
                         'type': 'vehiculo',
                         'source': 'planificado',
+                        'plan_status': 'muerto' if on_leave else 'ok',
                         'worker_id': av.user_id,
                         'vehiculo_id': entity_id,
                         'obra_id': obra.id if obra else None,
+                        'en_ausencia': on_leave,
+                        'ausencia_tipo': leave.tipo if leave else None,
                     },
                 })
                 continue
@@ -731,11 +787,7 @@ def get_universal_calendar_events():
                     title = f"{title} · {int(reg.valor)} km"
                 if obra:
                     title = f"{title} · {_obra_label(obra)}"
-                color = "#94a3b8" if odoo_external else (
-                    odoo_worker.company_rel.color
-                    if odoo_worker and getattr(odoo_worker, 'company_rel', None) and odoo_worker.company_rel.color
-                    else "#64748b"
-                )
+                color = VEHICLE_COLOR_ODOO_SOLO if odoo_external else VEHICLE_COLOR_EFECTIVO
                 raw_events.append({
                     'title': title,
                     'start_date': fecha,
@@ -744,6 +796,7 @@ def get_universal_calendar_events():
                     'extendedProps': {
                         'type': 'vehiculo_odoo',
                         'source': 'odoo',
+                        'plan_status': 'efectivo',
                         'worker_id': odoo_worker.id if odoo_worker else None,
                         'vehiculo_id': entity_id,
                         'obra_id': obra.id if obra else None,
@@ -758,34 +811,104 @@ def get_universal_calendar_events():
                 same_person = bool(
                     odoo_worker and av.user_id and odoo_worker.id == av.user_id
                 )
-                obra = _obra_for_user_day(av.user_id, fecha)
-                title = planned_name
-                if obra:
-                    title = f"{planned_name} · {_obra_label(obra)}"
-                if reg and reg.valor is not None:
-                    title = f"{title} · {int(reg.valor)} km"
-                if not same_person and odoo_title:
-                    title = f"{title} | Odoo: {odoo_title}"
-                color = "#0ea5e9"
-                if planned_worker and getattr(planned_worker, 'company_rel', None) and planned_worker.company_rel.color:
-                    color = planned_worker.company_rel.color
-                if not same_person:
-                    color = "#f59e0b"  # mismatch planificado vs Odoo
-                raw_events.append({
-                    'title': title,
-                    'start_date': fecha,
-                    'end_date': fecha,
-                    'color': color,
-                    'extendedProps': {
-                        'type': 'vehiculo',
-                        'source': 'ambos',
-                        'worker_id': av.user_id,
-                        'vehiculo_id': entity_id,
-                        'obra_id': obra.id if obra else None,
-                        'odoo_external': odoo_external,
-                        'km': reg.valor if reg else None,
-                    },
-                })
+                obra_planned = _obra_for_user_day(av.user_id, fecha)
+                km_bit = f" · {int(reg.valor)} km" if reg and reg.valor is not None else ""
+
+                if same_person and not on_leave:
+                    title = planned_name
+                    if obra_planned:
+                        title = f"{planned_name} · {_obra_label(obra_planned)}"
+                    title = f"{title}{km_bit}"
+                    color = _company_color(planned_worker, VEHICLE_COLOR_PLAN_OK)
+                    raw_events.append({
+                        'title': title,
+                        'start_date': fecha,
+                        'end_date': fecha,
+                        'color': color,
+                        'extendedProps': {
+                            'type': 'vehiculo',
+                            'source': 'ambos',
+                            'plan_status': 'ok',
+                            'worker_id': av.user_id,
+                            'vehiculo_id': entity_id,
+                            'obra_id': obra_planned.id if obra_planned else None,
+                            'km': reg.valor if reg else None,
+                        },
+                    })
+                elif same_person and on_leave:
+                    tipo = (leave.tipo or 'Ausencia').strip() or 'Ausencia'
+                    title = f"{planned_name} · {tipo}{km_bit}"
+                    raw_events.append({
+                        'title': title,
+                        'start_date': fecha,
+                        'end_date': fecha,
+                        'color': VEHICLE_COLOR_PLAN_MUERTO,
+                        'extendedProps': {
+                            'type': 'vehiculo',
+                            'source': 'ambos',
+                            'plan_status': 'muerto',
+                            'worker_id': av.user_id,
+                            'vehiculo_id': entity_id,
+                            'obra_id': obra_planned.id if obra_planned else None,
+                            'en_ausencia': True,
+                            'ausencia_tipo': leave.tipo if leave else None,
+                            'km': reg.valor if reg else None,
+                        },
+                    })
+                else:
+                    # Plan muerto (otro conductor Odoo y/o ausencia): etiqueta roja
+                    dead_title = planned_name
+                    if on_leave:
+                        tipo = (leave.tipo or 'Ausencia').strip() or 'Ausencia'
+                        dead_title = f"{planned_name} · {tipo}"
+                    elif obra_planned:
+                        dead_title = f"{planned_name} · {_obra_label(obra_planned)}"
+                    raw_events.append({
+                        'title': dead_title,
+                        'start_date': fecha,
+                        'end_date': fecha,
+                        'color': VEHICLE_COLOR_PLAN_MUERTO,
+                        'extendedProps': {
+                            'type': 'vehiculo',
+                            'source': 'planificado',
+                            'plan_status': 'muerto',
+                            'worker_id': av.user_id,
+                            'vehiculo_id': entity_id,
+                            'obra_id': obra_planned.id if obra_planned else None,
+                            'en_ausencia': on_leave,
+                            'ausencia_tipo': leave.tipo if leave else None,
+                            'mismatch': not same_person,
+                        },
+                    })
+                    # Conductor efectivo (Odoo): etiqueta verde aparte
+                    obra_odoo = (
+                        _obra_for_user_day(odoo_worker.id, fecha) if odoo_worker else None
+                    )
+                    effective_title = odoo_title or 'Conductor Odoo'
+                    if km_bit:
+                        effective_title = f"{effective_title}{km_bit}"
+                    if obra_odoo:
+                        effective_title = f"{effective_title} · {_obra_label(obra_odoo)}"
+                    raw_events.append({
+                        'title': effective_title,
+                        'start_date': fecha,
+                        'end_date': fecha,
+                        'color': (
+                            VEHICLE_COLOR_ODOO_SOLO if odoo_external
+                            else VEHICLE_COLOR_EFECTIVO
+                        ),
+                        'extendedProps': {
+                            'type': 'vehiculo_odoo',
+                            'source': 'odoo',
+                            'plan_status': 'efectivo',
+                            'worker_id': odoo_worker.id if odoo_worker else None,
+                            'vehiculo_id': entity_id,
+                            'obra_id': obra_odoo.id if obra_odoo else None,
+                            'external': odoo_external,
+                            'km': reg.valor if reg else None,
+                            'mismatch': not same_person,
+                        },
+                    })
 
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
 

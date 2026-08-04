@@ -3,7 +3,7 @@ Tests de Autenticación y Autorización
 
 Estos tests verifican:
 - Login correcto e incorrecto
-- Registro de usuarios
+- Que no exista alta pública de usuarios
 - Control de acceso por roles
 - Protección de rutas
 """
@@ -12,7 +12,6 @@ import pytest
 from flask import session
 from sqlalchemy import text
 from app.models import User
-from werkzeug.security import check_password_hash
 
 
 class TestLogin:
@@ -112,64 +111,50 @@ class TestLogin:
 
 
 class TestRegistro:
-    """Tests del proceso de registro de nuevos usuarios"""
-    
-    def test_register_page_loads(self, tenant_client):
-        """Verifica que la página de registro carga"""
-        response = tenant_client.get('/auth/register')
-        assert response.status_code == 200
-        assert b'registr' in response.data.lower() or b'email' in response.data.lower()
-    
-    
-    def test_register_new_user(self, tenant_client, tenant_soltec, company_internal, session):
-        """
-        Test: Registro exitoso de un nuevo usuario
-        """
+    """
+    El auto-registro público se eliminó.
+
+    Permitía que cualquiera con el código de una subcontrata se creara una
+    cuenta en el tenant de esa empresa, sin autenticarse y sin límite de
+    peticiones. Las personas entran por la sincronización del ERP o las da de
+    alta administración. Estos tests están para que no vuelva sin querer.
+    """
+
+    def test_no_existe_alta_publica(self, tenant_client, tenant_soltec, session):
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+        assert tenant_client.get('/auth/register').status_code == 404
+
+    def test_no_se_pueden_crear_usuarios_sin_autenticarse(
+        self, tenant_client, tenant_soltec, company_internal, session
+    ):
         session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
         session.commit()
-        
-        response = tenant_client.post('/auth/register', data={
-            'email': 'nuevo@test.com',
+
+        respuesta = tenant_client.post('/auth/register', data={
+            'email': 'intruso@test.com',
             'password': 'password123',
-            'name': 'Nuevo',
-            'lastname': 'Usuario',
+            'name': 'Intruso',
+            'lastname': 'Anónimo',
             'dni': '55555555E',
             'company_code': company_internal.code,
-            'categoria_profesional': 'Oficial 2ª'
-        }, follow_redirects=True)
-        
-        assert response.status_code == 200
-        
+        })
+
+        assert respuesta.status_code == 404
+
         session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
-        nuevo_user = User.query.filter_by(email='nuevo@test.com').first()
-        assert nuevo_user is not None
-        assert nuevo_user.name == 'Nuevo'
-        assert nuevo_user.lastname == 'Usuario'
-        assert nuevo_user.dni == '55555555E'
-        
-        assert nuevo_user.password_hash != 'password123'
-        assert check_password_hash(nuevo_user.password_hash, 'password123')
-    
-    
-    def test_register_duplicate_email(self, tenant_client, user_admin, tenant_soltec, company_internal, session):
-        """
-        Test: No permite registrar email duplicado
-        """
+        assert User.query.filter_by(email='intruso@test.com').first() is None
+
+    def test_la_pantalla_de_login_no_ofrece_registrarse(
+        self, tenant_client, tenant_soltec, session
+    ):
+        """El enlace apuntaba a una plantilla borrada y devolvía un error 500."""
         session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
-        session.commit()
-        
-        response = tenant_client.post('/auth/register', data={
-            'email': 'admin@test.com',
-            'password': 'password123',
-            'name': 'Otro',
-            'lastname': 'Usuario',
-            'dni': '66666666F',
-            'company_code': company_internal.code,
-            'categoria_profesional': 'Peón'
-        }, follow_redirects=True)
-        
-        assert response.status_code == 200
-        assert b'existe' in response.data.lower() or b'ya' in response.data.lower() or b'danger' in response.data.lower()
+
+        html = tenant_client.get('/auth/login').get_data(as_text=True)
+
+        assert 'Regístrate aquí' not in html
+        assert '/auth/register' not in html
 
 
 class TestAutorizacion:

@@ -1,13 +1,11 @@
 # Dependencias específicas para testing
-# Instalar con: pip install -r requirements-test.txt
+# Se instalan dentro de la imagen de desarrollo (ARG INSTALL_DEV=true en el
+# Dockerfile). No hace falta instalarlas a mano.
 
 # Framework de testing
 pytest==7.4.3
 pytest-flask==1.3.0
 pytest-cov==4.1.0
-
-# Para tests de base de datos
-pytest-postgresql==5.0.0
 
 # Para mockear llamadas externas (APIs, emails, etc.)
 pytest-mock==3.12.0
@@ -22,5 +20,7 @@ freezegun==1.4.0
 # Para generar datos fake en tests
 Faker==22.0.0
 
-# Para limpiar base de datos entre tests
-Flask-Testing==0.8.1
+# NO añadir pytest-postgresql: su plugin se autocarga e importa psycopg (v3),
+# que necesita libpq en el sistema. La aplicación usa psycopg2-binary y los
+# tests se conectan a un PostgreSQL real vía TEST_DATABASE_URL, así que ese
+# paquete solo rompía el arranque de pytest sin aportar nada.

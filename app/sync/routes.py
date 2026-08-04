@@ -450,7 +450,18 @@ def commit_subcontratas():
         # 3. NUEVOS EMPLEADOS (Seguro Anti-Colisiones DNI + Memoria de Transacción)
         dnis_en_transaccion = set() # Memoria temporal por si en el mismo guardado vienen varios repetidos
 
-        for obj in data.get('empleados', {}).get('nuevos', []):
+        from app.services.plan_service import PlanLimitError, exigir_cupo, rol_cuenta_como_empleado
+
+        nuevos_empleados = data.get('empleados', {}).get('nuevos', [])
+        plazas = sum(1 for obj in nuevos_empleados if rol_cuenta_como_empleado(obj.get('role')))
+        try:
+            if plazas:
+                exigir_cupo(plazas)
+        except PlanLimitError as exc:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(exc)}), 403
+
+        for obj in nuevos_empleados:
             # --- CORRECCIÓN: Búsqueda dinámica de la empresa ---
             odoo_c_id = obj.get('odoo_company_id')
             local_comp_id = mapa_empresas.get(odoo_c_id)
@@ -512,6 +523,37 @@ def commit_empleados():
         default_company_id = default_company.id if default_company else None
         dnis_en_transaccion = set()
         emails_en_transaccion = set()
+
+        from app.services.plan_service import (
+            PlanLimitError,
+            cuenta_como_empleado,
+            exigir_cupo,
+            rol_cuenta_como_empleado,
+        )
+
+        plazas_nuevas = 0
+        for obj in data.get('actualizados', []):
+            user = User.query.get(obj['local_id'])
+            if not user:
+                continue
+            ocupar_antes = cuenta_como_empleado(user)
+            ocupar_despues = cuenta_como_empleado(
+                role=obj.get('role') or user.role,
+                active=True,
+                is_deleted=False,
+            )
+            if ocupar_despues and not ocupar_antes:
+                plazas_nuevas += 1
+        plazas_nuevas += sum(
+            1 for obj in data.get('nuevos', [])
+            if rol_cuenta_como_empleado(obj.get('role'))
+        )
+        try:
+            if plazas_nuevas:
+                exigir_cupo(plazas_nuevas)
+        except PlanLimitError as exc:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(exc)}), 403
 
         for obj in data.get('actualizados', []):
             user = User.query.get(obj['local_id'])

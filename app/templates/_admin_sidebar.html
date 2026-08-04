@@ -18,15 +18,21 @@
   </div>
 
   <nav class="sidebar-nav-wrap" aria-label="Navegación principal">
+
+    {# —— Inicio —— #}
     <ul class="sidebar-nav">
       <li>
-        <a href="{% if current_user.role == 'jefe_obra' %}{{ url_for('jefe.panel') }}{% elif current_user.role == 'admin' %}{{ url_for('admin.panel') }}{% elif current_user.role == 'laboral' %}{{ url_for('admin.ausencias_list') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" class="sidebar-link {% if request.endpoint in ['main.dashboard', 'admin.panel', 'jefe.panel', 'admin.ausencias_list'] and current_user.role == 'laboral' %}is-active{% elif request.endpoint in ['main.dashboard', 'admin.panel', 'jefe.panel'] and current_user.role != 'laboral' %}is-active{% endif %}">
+        <a href="{% if current_user.role == 'jefe_obra' %}{{ url_for('jefe.panel') }}{% elif current_user.role == 'admin' %}{{ url_for('admin.panel') }}{% elif current_user.role == 'laboral' %}{{ url_for('admin.ausencias_list') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" class="sidebar-link {% if request.endpoint in ['main.dashboard', 'admin.panel', 'jefe.panel'] %}is-active{% endif %}">
           <i class="fas fa-home fa-fw"></i><span>Inicio</span>
         </a>
       </li>
     </ul>
 
+    {# ================================================================
+       ADMIN / JEFE
+       ================================================================ #}
     {% if current_user.role in ['admin', 'jefe_obra'] %}
+
     <div class="sidebar-section-title">Planificación</div>
     <ul class="sidebar-nav">
       {% if current_user.role == 'admin' %}
@@ -52,55 +58,7 @@
         </a>
       </li>
     </ul>
-    {% endif %}
 
-    {% if current_user.role == 'laboral' %}
-    <div class="sidebar-section-title">Planificación</div>
-    <ul class="sidebar-nav">
-      <li>
-        <a href="{{ url_for('admin.obras_detailed') }}" class="sidebar-link {% if request.endpoint == 'admin.obras_detailed' %}is-active{% endif %}">
-          <i class="fas fa-th-large fa-fw"></i><span>Tablero</span>
-        </a>
-      </li>
-      <li>
-        <a href="{{ url_for('admin.ausencias_list') }}" class="sidebar-link {% if 'ausencias' in request.endpoint %}is-active{% endif %}">
-          <i class="fas fa-umbrella-beach fa-fw"></i><span>Ausencias</span>
-        </a>
-      </li>
-    </ul>
-
-    <div class="sidebar-section-title">Control</div>
-    <ul class="sidebar-nav">
-      <li>
-        <a href="{{ url_for('admin.system_logs', category='solicitud') }}" class="sidebar-link {% if 'system_logs' in request.endpoint %}is-active{% endif %}">
-          <i class="fas fa-history fa-fw"></i>
-          <span>Logs</span>
-          {% if unread_laboral_count and unread_laboral_count > 0 %}
-          <span class="sidebar-badge sidebar-badge--laboral" title="Logs laborales sin acusar">{{ unread_laboral_count }}</span>
-          {% endif %}
-        </a>
-      </li>
-      <li>
-        <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_fichajes' %}is-active{% endif %}">
-          <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
-        </a>
-      </li>
-      <li>
-        <a href="{{ url_for('admin.vehiculos') }}" class="sidebar-link {% if request.endpoint in ['admin.vehiculos', 'admin.vehicle_panel'] %}is-active{% endif %}">
-          <i class="fas fa-car fa-fw"></i><span>Vehículos</span>
-        </a>
-      </li>
-      {% if tenant_has_odoo %}
-      <li>
-        <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_vehiculos' %}is-active{% endif %}">
-          <i class="fas fa-clipboard-check fa-fw"></i><span>Auditoría vehículos</span>
-        </a>
-      </li>
-      {% endif %}
-    </ul>
-    {% endif %}
-
-    {% if current_user.role in ['admin', 'jefe_obra'] %}
     <div class="sidebar-section-title">Personal</div>
     <ul class="sidebar-nav">
       {% if current_user.role == 'admin' %}
@@ -116,11 +74,6 @@
       </li>
       {% endif %}
       <li>
-        <a href="{{ url_for('admin.vehiculos') }}" class="sidebar-link {% if request.endpoint in ['admin.vehiculos', 'admin.vehicle_panel'] %}is-active{% endif %}">
-          <i class="fas fa-car fa-fw"></i><span>Vehículos</span>
-        </a>
-      </li>
-      <li>
         <a href="{{ url_for('admin.solicitudes_list') }}" class="sidebar-link {% if 'solicitud' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-user-plus fa-fw"></i>
           <span>Solicitudes</span>
@@ -131,31 +84,53 @@
       </li>
       <li>
         <a href="{{ url_for('admin.ausencias_list') }}" class="sidebar-link {% if 'ausencias' in request.endpoint %}is-active{% endif %}">
-          <i class="fas fa-umbrella-beach fa-fw"></i>
-          <span>Ausencias</span>
+          <i class="fas fa-umbrella-beach fa-fw"></i><span>Ausencias</span>
         </a>
       </li>
     </ul>
-    {% endif %}
 
-    {% if current_user.role in ['admin', 'jefe_obra'] %}
-    {% set show_integrations_nav = (current_user.role == 'admin' and tenant_has_integrations) or (current_user.role == 'jefe_obra' and tenant_has_odoo_alta) %}
-    {% set integrations_nav_open = request.endpoint in ('sync.panel', 'sync.odoo_panel') %}
-    <div class="sidebar-section-title">Control</div>
+    <div class="sidebar-section-title">Vehículos</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('admin.vehiculos') }}" class="sidebar-link {% if request.endpoint in ['admin.vehiculos', 'admin.vehicle_panel'] %}is-active{% endif %}">
+          <i class="fas fa-car fa-fw"></i><span>Flota</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('admin.vehiculos_libres') }}" class="sidebar-link {% if request.endpoint == 'admin.vehiculos_libres' %}is-active{% endif %}">
+          <i class="fas fa-car-side fa-fw"></i><span>Coches libres</span>
+        </a>
+      </li>
+      {% if current_user.role == 'admin' and tenant_has_odoo %}
+      <li>
+        <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_vehiculos' %}is-active{% endif %}">
+          <i class="fas fa-clipboard-check fa-fw"></i><span>Auditoría</span>
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+
+    <div class="sidebar-section-title">Jornada</div>
     <ul class="sidebar-nav">
       <li>
         <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_fichajes' %}is-active{% endif %}">
           <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
         </a>
       </li>
-      {% if current_user.role == 'admin' and tenant_has_odoo %}
+      {% if tenant_has_registro_jornada %}
       <li>
-        <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_vehiculos' %}is-active{% endif %}">
-          <i class="fas fa-car fa-fw"></i><span>Auditoría vehículos</span>
+        <a href="{{ url_for('admin.registro_jornada') }}" class="sidebar-link {% if 'registro_jornada' in request.endpoint %}is-active{% endif %}">
+          <i class="fas fa-file-signature fa-fw"></i><span>Registro jornada</span>
         </a>
       </li>
       {% endif %}
+    </ul>
 
+    {% set show_integrations_nav = (current_user.role == 'admin' and tenant_has_integrations) or (current_user.role == 'jefe_obra' and tenant_has_odoo_alta) %}
+    {% set integrations_nav_open = request.endpoint in ('sync.panel', 'sync.odoo_panel') %}
+    {% if current_user.role == 'admin' or show_integrations_nav %}
+    <div class="sidebar-section-title">Sistema</div>
+    <ul class="sidebar-nav">
       {% if show_integrations_nav %}
       <li class="sidebar-nav-group{% if integrations_nav_open %} is-open{% endif %}">
         <button type="button" class="sidebar-link sidebar-link--parent{% if integrations_nav_open %} is-active{% endif %}" data-sidebar-subtoggle aria-expanded="{{ 'true' if integrations_nav_open else 'false' }}">
@@ -189,8 +164,14 @@
         </ul>
       </li>
       {% endif %}
-
       {% if current_user.role == 'admin' %}
+      {% if mostrar_onboarding %}
+      <li>
+        <a href="{{ url_for('admin.primeros_pasos') }}" class="sidebar-link {% if request.endpoint == 'admin.primeros_pasos' %}is-active{% endif %}">
+          <i class="fas fa-rocket fa-fw"></i><span>Primeros pasos</span>
+        </a>
+      </li>
+      {% endif %}
       <li>
         <a href="{{ url_for('admin.configuracion_global') }}" class="sidebar-link {% if 'configuracion' in request.endpoint %}is-active{% endif %}">
           <i class="fas fa-sliders-h fa-fw"></i><span>Configuración</span>
@@ -217,6 +198,84 @@
       {% endif %}
     </ul>
     {% endif %}
+
+    {% endif %}{# admin / jefe #}
+
+    {# ================================================================
+       LABORAL
+       ================================================================ #}
+    {% if current_user.role == 'laboral' %}
+
+    <div class="sidebar-section-title">Planificación</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('admin.obras_detailed') }}" class="sidebar-link {% if request.endpoint == 'admin.obras_detailed' %}is-active{% endif %}">
+          <i class="fas fa-th-large fa-fw"></i><span>Tablero</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-title">Personal</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('admin.ausencias_list') }}" class="sidebar-link {% if 'ausencias' in request.endpoint %}is-active{% endif %}">
+          <i class="fas fa-umbrella-beach fa-fw"></i><span>Ausencias</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-title">Vehículos</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('admin.vehiculos') }}" class="sidebar-link {% if request.endpoint in ['admin.vehiculos', 'admin.vehicle_panel'] %}is-active{% endif %}">
+          <i class="fas fa-car fa-fw"></i><span>Flota</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('admin.vehiculos_libres') }}" class="sidebar-link {% if request.endpoint == 'admin.vehiculos_libres' %}is-active{% endif %}">
+          <i class="fas fa-car-side fa-fw"></i><span>Coches libres</span>
+        </a>
+      </li>
+      {% if tenant_has_odoo %}
+      <li>
+        <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_vehiculos' %}is-active{% endif %}">
+          <i class="fas fa-clipboard-check fa-fw"></i><span>Auditoría</span>
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+
+    <div class="sidebar-section-title">Jornada</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('sync.auditoria_fichajes') }}" class="sidebar-link {% if request.endpoint == 'sync.auditoria_fichajes' %}is-active{% endif %}">
+          <i class="fas fa-user-clock fa-fw"></i><span>Auditoría fichajes</span>
+        </a>
+      </li>
+      {% if tenant_has_registro_jornada %}
+      <li>
+        <a href="{{ url_for('admin.registro_jornada') }}" class="sidebar-link {% if 'registro_jornada' in request.endpoint %}is-active{% endif %}">
+          <i class="fas fa-file-signature fa-fw"></i><span>Registro jornada</span>
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+
+    <div class="sidebar-section-title">Sistema</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('admin.system_logs', category='solicitud') }}" class="sidebar-link {% if 'system_logs' in request.endpoint %}is-active{% endif %}">
+          <i class="fas fa-history fa-fw"></i>
+          <span>Logs</span>
+          {% if unread_laboral_count and unread_laboral_count > 0 %}
+          <span class="sidebar-badge sidebar-badge--laboral" title="Logs laborales sin acusar">{{ unread_laboral_count }}</span>
+          {% endif %}
+        </a>
+      </li>
+    </ul>
+
+    {% endif %}{# laboral #}
+
   </nav>
 
   <div class="sidebar-spacer"></div>

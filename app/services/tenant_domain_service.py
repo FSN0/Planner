@@ -7,6 +7,7 @@ _CUSTOM_DOMAIN_RE = re.compile(
 )
 _RESERVED_SUBDOMAINS = frozenset({'www', 'admin', 'superadmin', 'signaplan'})
 _MARKETING_HOSTS = frozenset({'signaplan.com', 'www.signaplan.com'})
+_LOCAL_MARKETING_HOSTS = frozenset({'localhost', '127.0.0.1', 'web'})
 
 
 def normalize_host(host):
@@ -48,8 +49,27 @@ def assert_custom_domain_available(domain, tenant_id=None):
 
 
 def is_marketing_host(host):
-    """True en el dominio raíz público (escaparate comercial)."""
-    return normalize_host(host) in _MARKETING_HOSTS
+    """
+    True en el escaparate comercial (signaplan.com) y en local (localhost).
+
+    En desarrollo el panel SaaS sigue en /superadmin; la raíz y /alta sirven
+    la web pública para poder probar el alta sin DNS de producción.
+    """
+    host = normalize_host(host)
+    if host in _MARKETING_HOSTS:
+        return True
+    if host in _LOCAL_MARKETING_HOSTS:
+        return True
+    # DOMAIN=localhost en .env de desarrollo
+    try:
+        from flask import current_app, has_app_context
+        if has_app_context():
+            domain = normalize_host(current_app.config.get('DOMAIN') or '')
+            if domain and host == domain and domain in _LOCAL_MARKETING_HOSTS:
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def is_signaplan_host(host):

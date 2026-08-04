@@ -1,0 +1,67 @@
+{% extends 'operario/base.html' %}
+{% set activo = 'registros' %}
+{% block title %}Mis horas{% endblock %}
+
+{% block contenido %}
+<h1 class="titulo">Mis horas</h1>
+
+<form class="filtro" method="get" action="{{ url_for('operarios.registros') }}">
+    <div class="filtro__campo">
+        <label for="desde">Desde</label>
+        <input type="date" id="desde" name="desde" value="{{ desde }}">
+    </div>
+    <div class="filtro__campo">
+        <label for="hasta">Hasta</label>
+        <input type="date" id="hasta" name="hasta" value="{{ hasta }}">
+    </div>
+    <button class="boton boton--secundario" type="submit">Ver</button>
+</form>
+
+<div class="resumen">
+    <div class="resumen__cifra">
+        {{ '%d h %02d min' | format(minutos_totales // 60, minutos_totales % 60) }}
+    </div>
+    <div class="resumen__detalle">
+        {{ dias | length }} día{{ '' if dias | length == 1 else 's' }} con registro
+    </div>
+</div>
+
+<a class="boton boton--secundario boton--bloque"
+   href="{{ url_for('operarios.registros_csv', desde=desde, hasta=hasta) }}">
+    Descargar mis registros
+</a>
+
+<ul class="dias">
+    {% for dia in dias %}
+        <li class="dia">
+            <div class="dia__cabecera">
+                <span class="dia__fecha">{{ dia.fecha.strftime('%d/%m/%Y') }}</span>
+                <span class="dia__horas">
+                    {{ '%d h %02d min' | format(dia.minutos // 60, dia.minutos % 60) }}
+                </span>
+            </div>
+            <div class="dia__cuerpo">
+                <span class="dia__tramo">
+                    {{ dia.entrada | format_time if dia.entrada else '—' }}
+                    &rarr;
+                    {{ dia.salida | format_time if dia.salida else '—' }}
+                </span>
+                {% if dia.obra %}
+                    <span class="dia__obra">{{ dia.obra.nombre }}</span>
+                {% endif %}
+            </div>
+            {% if not dia.salida %}
+                <div class="dia__aviso">Sin hora de salida registrada</div>
+            {% endif %}
+        </li>
+    {% else %}
+        <li class="dias__vacio">No hay registros en este periodo.</li>
+    {% endfor %}
+</ul>
+
+<p class="nota-legal">
+    Este es tu registro de jornada. Si algo no cuadra, díselo a tu responsable:
+    los fichajes no se borran, las correcciones se anotan aparte dejando constancia
+    de quién las hizo y por qué.
+</p>
+{% endblock %}

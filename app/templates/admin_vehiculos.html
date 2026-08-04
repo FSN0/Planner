@@ -18,6 +18,9 @@
         <span class="page-toolbar-count">{{ vehicles|length }} vehículos</span>
       </div>
       <div class="page-toolbar-actions">
+        <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-car-side"></i> Coches libres
+        </a>
         {% if current_user.role == 'admin' %}
         <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-clipboard-check"></i> Auditoría

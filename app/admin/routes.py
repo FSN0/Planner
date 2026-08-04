@@ -640,6 +640,56 @@ def vehiculos():
     return render_template("admin_vehiculos.html", vehicles=vehicles)
 
 
+@admin_bp.route("/vehiculos/libres", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+def vehiculos_libres():
+    """Coches libres a futuro: sin plan o conductor de ausencia."""
+    from app.services.vehicle_availability_service import (
+        DEFAULT_HORIZON_MONTHS,
+        HORIZON_MONTHS_ALLOWED,
+        MOTIVO_AUSENCIA,
+        MOTIVO_MIXTO,
+        MOTIVO_SIN_PLAN,
+        free_vehicle_summary,
+        horizon_end,
+        list_free_vehicle_stretches,
+        parse_horizon_months,
+    )
+    from app.utils.timezone_utils import today_local
+
+    months = parse_horizon_months(request.args.get('meses'), DEFAULT_HORIZON_MONTHS)
+    motivo_filtro = (request.args.get('motivo') or '').strip()
+    if motivo_filtro not in (MOTIVO_SIN_PLAN, MOTIVO_AUSENCIA, MOTIVO_MIXTO, ''):
+        motivo_filtro = ''
+    q = (request.args.get('q') or '').strip()
+
+    today = today_local()
+    hasta = horizon_end(today, months)
+    stretches = list_free_vehicle_stretches(fecha_desde=today, fecha_hasta=hasta)
+    if motivo_filtro:
+        stretches = [s for s in stretches if s['motivo'] == motivo_filtro]
+    if q:
+        q_low = q.lower()
+        stretches = [
+            s for s in stretches
+            if q_low in (s.get('vehiculo_label') or '').lower()
+        ]
+    summary = free_vehicle_summary(stretches)
+
+    return render_template(
+        "admin_vehiculos_libres.html",
+        stretches=stretches,
+        summary=summary,
+        months=months,
+        months_allowed=HORIZON_MONTHS_ALLOWED,
+        motivo_filtro=motivo_filtro,
+        q=q,
+        fecha_desde=today,
+        fecha_hasta=hasta,
+    )
+
+
 @admin_bp.route("/vehicle_panel/<int:vehiculo_id>", methods=["GET"])
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
@@ -1032,6 +1082,9 @@ def personal():
     # Para el dropdown de filtros en la vista
     companies = Company.query.filter_by(is_internal=False).all()
 
+    from app.services.plan_service import resumen_cupo
+    cupo = resumen_cupo()
+
     return render_template(
         "gestion_personal_unificado.html",
         view_mode="admin",
@@ -1042,7 +1095,8 @@ def personal():
         pending_count=len(operarios_pendientes),
         companies=companies, # Pasamos objetos, no strings
         company_filter=company_filter_id,
-        next_url=request.path
+        next_url=request.path,
+        cupo=cupo,
     )
 
 
@@ -1102,15 +1156,27 @@ def edit_operario(user_id):
 
        # --- 3. SI PASA LAS VALIDACIONES, ACTUALIZAMOS ---
         try:
+            from app.services.plan_service import (
+                PlanLimitError,
+                cuenta_como_empleado,
+                exigir_cambio_cupo,
+            )
+
+            nuevo_rol = request.form.get("role") or user.role
+            nuevo_active = True if request.form.get("active") == "on" else False
+            ocupar_antes = cuenta_como_empleado(user)
+            ocupar_despues = cuenta_como_empleado(
+                role=nuevo_rol,
+                active=nuevo_active,
+                is_deleted=user.is_deleted,
+            )
+            exigir_cambio_cupo(ocupar_antes, ocupar_despues)
+
             user.name = request.form.get("name")
             user.lastname = request.form.get("lastname")
             user.dni = new_dni
             user.email = new_email
-            
-            # AÑADE ESTO PARA QUE SE GUARDE EL ROL:
-            nuevo_rol = request.form.get("role")
-            if nuevo_rol:
-                user.role = nuevo_rol
+            user.role = nuevo_rol
         
             
             # Gestión del Company ID (mejorado para aceptar vacíos)
@@ -1121,7 +1187,7 @@ def edit_operario(user_id):
                 user.company_id = None # Permite dejar al usuario sin empresa si es necesario
             
             # Checkboxes (Tu lógica original)
-            user.active = True if request.form.get("active") == "on" else False
+            user.active = nuevo_active
             user.receive_emails = True if request.form.get("receive_emails") == "on" else False
             
             user.categoria_profesional = request.form.get("categoria_profesional")
@@ -1131,6 +1197,9 @@ def edit_operario(user_id):
             flash("Datos del Operario actualizados correctamente", "success")
             return redirect(url_for("admin.personal"))
 
+        except PlanLimitError as e:
+            db.session.rollback()
+            flash(str(e), "danger")
         except Exception as e:
             db.session.rollback()
             flash(f"Error inesperado al guardar: {str(e)}", "danger")
@@ -1153,7 +1222,121 @@ def edit_operario(user_id):
 @roles_required(ROLE_ADMIN)
 def panel():
     from app.services.panel_service import get_admin_panel_context
-    return render_template("admin_panel.html", **get_admin_panel_context())
+    from app.services.onboarding_service import necesita_onboarding, estado_onboarding
+    ctx = get_admin_panel_context()
+    ctx['mostrar_onboarding'] = necesita_onboarding()
+    ctx['onboarding'] = estado_onboarding() if ctx['mostrar_onboarding'] else None
+    return render_template("admin_panel.html", **ctx)
+
+
+@admin_bp.route("/primeros-pasos", methods=["GET", "POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def primeros_pasos():
+    """
+    Wizard post-alta: obra → trabajador+PIN → fichaje móvil.
+    """
+    from werkzeug.security import generate_password_hash
+    from app.services.onboarding_service import (
+        estado_onboarding,
+        marcar_onboarding_completo,
+        necesita_onboarding,
+        tenant_tiene_onboarding,
+    )
+    from app.services.oficina_obra_service import (
+        CONFIG_OBRA_OFICINA,
+        sincronizar_obra_oficina,
+    )
+    from app.services.fichaje_operario_service import CONFIG_FICHAJE_OPERARIO
+    from app.services.pin_auth_service import PinAuthError, asignar_pin
+    from app.services.config_service import set_tenant_config
+    from app.models import Company
+
+    if not tenant_tiene_onboarding():
+        return redirect(url_for("admin.panel"))
+
+    if request.method == "POST":
+        accion = (request.form.get("accion") or "").strip()
+        try:
+            if accion == "oficina":
+                set_tenant_config(CONFIG_OBRA_OFICINA, "True")
+                sincronizar_obra_oficina(True)
+                db.session.commit()
+                flash("Obra Oficina lista. Ya puedes planificar y fichar ahí.", "success")
+            elif accion == "obra":
+                nombre = (request.form.get("nombre_obra") or "").strip()
+                if len(nombre) < 2:
+                    raise ValueError("Indica un nombre de obra.")
+                db.session.add(Obra(
+                    nombre=nombre,
+                    codigo=(request.form.get("codigo_obra") or "").strip() or None,
+                    estado="En Curso",
+                ))
+                db.session.commit()
+                flash(f"Obra «{nombre}» creada.", "success")
+            elif accion == "operario":
+                company = Company.query.filter_by(is_internal=True).first() or Company.query.first()
+                name = (request.form.get("name") or "").strip()
+                lastname = (request.form.get("lastname") or "").strip()
+                dni = (request.form.get("dni") or "").strip().upper()
+                pin = request.form.get("pin")
+                email = (request.form.get("email") or "").strip().lower()
+                if not all([name, lastname, dni, pin]):
+                    raise ValueError("Nombre, apellidos, DNI y PIN son obligatorios.")
+                if not email:
+                    email = f"{dni.lower().replace(' ', '')}@local.signaplan"
+                user = User(
+                    name=name,
+                    lastname=lastname,
+                    dni=dni,
+                    email=email,
+                    role=ROLE_OPERARIO,
+                    active=True,
+                    company_id=company.id if company else None,
+                    password_hash=generate_password_hash(pin),
+                )
+                db.session.add(user)
+                db.session.flush()
+                asignar_pin(user, pin)
+                db.session.commit()
+                flash(
+                    f"{name} dado de alta. Entrará en /mi con DNI {dni} y su PIN.",
+                    "success",
+                )
+            elif accion == "fichaje":
+                set_tenant_config(CONFIG_FICHAJE_OPERARIO, "True")
+                flash("Fichaje móvil activado. Los operarios ya pueden entrar en /mi.", "success")
+            elif accion == "informe":
+                from app.services.onboarding_service import marcar_informe_visto
+                marcar_informe_visto()
+                flash("Paso de informe marcado. Puedes volver al registro de jornada cuando quieras.", "success")
+            elif accion == "listo":
+                marcar_onboarding_completo()
+                flash("Listo. Ya puedes usar el planificador y el registro de jornada.", "success")
+                return redirect(url_for("admin.panel"))
+            elif accion == "saltar":
+                flash("Puedes volver a Primeros pasos desde el panel cuando quieras.", "info")
+                return redirect(url_for("admin.panel"))
+            else:
+                raise ValueError("Acción no reconocida.")
+        except (ValueError, PinAuthError) as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+        except Exception as exc:
+            db.session.rollback()
+            flash(f"No se ha podido completar el paso: {exc}", "danger")
+
+        return redirect(url_for("admin.primeros_pasos"))
+
+    estado = estado_onboarding()
+    if estado["completo"] and not necesita_onboarding():
+        return redirect(url_for("admin.panel"))
+
+    return render_template(
+        "admin_primeros_pasos.html",
+        onboarding=estado,
+    )
+
 
 @admin_bp.route("/create_obra", methods=["GET", "POST"])
 @login_required
@@ -1445,6 +1628,41 @@ def reset_password(user_id):
     return redirect(url_for("admin.personal"))
 
 
+@admin_bp.route("/reset_pin/<int:user_id>", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def reset_pin(user_id):
+    """
+    Asigna o cambia el PIN de fichaje de un trabajador.
+
+    El PIN solo se muestra al guardarlo aquí: después queda hasheado y no se
+    puede recuperar, igual que una contraseña.
+    """
+    from app.services.pin_auth_service import PinAuthError, asignar_pin, quitar_pin
+
+    user = User.query.get_or_404(user_id)
+    accion = (request.form.get('accion') or 'asignar').strip()
+
+    try:
+        if accion == 'quitar':
+            quitar_pin(user)
+            db.session.commit()
+            flash(f'PIN de fichaje eliminado para {user.name} {user.lastname}.', 'success')
+        else:
+            asignar_pin(user, request.form.get('nuevo_pin'))
+            db.session.commit()
+            flash(
+                f'PIN de fichaje actualizado para {user.name} {user.lastname}. '
+                f'Entrará en /mi con su DNI y este PIN.',
+                'success',
+            )
+    except PinAuthError as exc:
+        db.session.rollback()
+        flash(str(exc), 'danger')
+
+    return redirect(url_for('admin.personal'))
+
+
 @admin_bp.route("/delete_user/<int:user_id>", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -1478,6 +1696,13 @@ def create_user():
         active = True if request.form.get("active") == "on" else False
         categoria = request.form.get("categoria_profesional")
         especialidad = request.form.get("especialidad")
+
+        from app.services.plan_service import PlanLimitError, exigir_alta_empleado
+        try:
+            exigir_alta_empleado(role=role, active=active)
+        except PlanLimitError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("admin.create_user"))
         
         new_user = User(
             email=email,
@@ -1518,9 +1743,21 @@ def create_user():
 def approve_operario(user_id):
     user = User.query.get_or_404(user_id)
     if user.role == ROLE_OPERARIO:
-        user.active = True
-        db.session.commit()
-        flash("Operario activado", "success")
+        from app.services.plan_service import (
+            PlanLimitError,
+            cuenta_como_empleado,
+            exigir_cambio_cupo,
+        )
+        try:
+            exigir_cambio_cupo(
+                cuenta_como_empleado(user),
+                cuenta_como_empleado(role=user.role, active=True, is_deleted=user.is_deleted),
+            )
+            user.active = True
+            db.session.commit()
+            flash("Operario activado", "success")
+        except PlanLimitError as exc:
+            flash(str(exc), "danger")
     else:
         flash("El usuario no es un operario", "danger")
     return redirect(url_for("admin.personal", tab="operarios"))
@@ -1993,6 +2230,7 @@ def configuracion_global():
         return redirect(url_for('main.dashboard'))
         
     from app.models import Festivo, ConfiguracionGlobal
+    from app.services.plan_service import monetizacion_activa
     festivos = Festivo.query.order_by(Festivo.fecha.asc()).all()
     
     # Cargamos TODAS las configuraciones en un diccionario
@@ -2002,7 +2240,16 @@ def configuracion_global():
     # Extraemos el límite de custodia (o le damos 15 por defecto)
     limite_custodia = int(configs_dict.get('limite_custodia', 15))
     
-    return render_template('admin_configuracion.html', festivos=festivos, limite_custodia=limite_custodia, configs=configs_dict)
+    tenant_modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
+
+    return render_template(
+        'admin_configuracion.html',
+        festivos=festivos,
+        limite_custodia=limite_custodia,
+        configs=configs_dict,
+        monetizacion_activa=monetizacion_activa(),
+        tenant_has_fichaje_operario=bool(tenant_modulos.get('fichaje_operario')),
+    )
 
 
 @admin_bp.route('/configuracion/update', methods=['POST'])
@@ -2054,6 +2301,41 @@ def update_config():
     if 'fichajes' in section_keys:
         primer_fichaje_val = 'True' if request.form.get('aceptar_primer_fichaje') else 'False'
         _upsert('aceptar_primer_fichaje', primer_fichaje_val)
+
+        from app.services.fichaje_operario_service import (
+            CONFIG_FICHAJE_GEO,
+            CONFIG_FICHAJE_OPERARIO,
+            GEO_DESACTIVADA,
+            GEO_OPCIONES,
+            tenant_tiene_fichaje_operario_module,
+        )
+
+        # Activar esto abre el login a los operarios, que hasta ahora no
+        # entraban. Se avisa en la plantilla porque tiene consecuencias.
+        # El fichaje móvil está en el plan gratuito; la geolocalización no.
+        from app.services.plan_service import PlanLimitError, exigir_geolocalizacion
+        if tenant_tiene_fichaje_operario_module():
+            operario_activo = 'True' if request.form.get('fichaje_operario_activo') else 'False'
+            _upsert(CONFIG_FICHAJE_OPERARIO, operario_activo)
+
+            modo_geo = (request.form.get('fichaje_geolocalizacion') or '').strip()
+            if modo_geo not in GEO_OPCIONES:
+                modo_geo = GEO_DESACTIVADA
+            if modo_geo != GEO_DESACTIVADA:
+                try:
+                    exigir_geolocalizacion()
+                except PlanLimitError as exc:
+                    flash(str(exc), 'danger')
+                    modo_geo = GEO_DESACTIVADA
+            _upsert(CONFIG_FICHAJE_GEO, modo_geo)
+
+            from app.services.oficina_obra_service import (
+                CONFIG_OBRA_OFICINA,
+                sincronizar_obra_oficina,
+            )
+            oficina_on = bool(request.form.get('obra_oficina_activa'))
+            _upsert(CONFIG_OBRA_OFICINA, 'True' if oficina_on else 'False')
+            sincronizar_obra_oficina(oficina_on)
 
     if 'ausencias' in section_keys:
         jefe_resuelve = 'True' if request.form.get('ausencias_jefe_puede_resolver') else 'False'
@@ -2616,4 +2898,205 @@ def ausencias_resolver_conflicto(conflict_id):
         flash(f'Error al resolver: {exc}', 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
+
+# ---------------------------------------------------------------------------
+# Registro de jornada (informe para la Inspección)
+# ---------------------------------------------------------------------------
+
+def _parametros_informe():
+    from app.services.fichaje_informe_service import (
+        FichajeInformeError,
+        generar_informe,
+        periodo_por_defecto,
+    )
+
+    desde_def, hasta_def = periodo_por_defecto()
+    desde = request.args.get('desde') or desde_def.isoformat()
+    hasta = request.args.get('hasta') or hasta_def.isoformat()
+    user_id = request.args.get('user_id') or None
+    company_id = request.args.get('company_id') or None
+
+    if user_id in ('', '0'):
+        user_id = None
+    if company_id in ('', '0'):
+        company_id = None
+
+    tenant_nombre = g.current_tenant.nombre if getattr(g, 'current_tenant', None) else None
+    try:
+        return generar_informe(
+            desde=desde,
+            hasta=hasta,
+            user_id=user_id,
+            company_id=company_id,
+            tenant_nombre=tenant_nombre,
+        )
+    except FichajeInformeError as exc:
+        flash(str(exc), 'warning')
+        return None
+
+
+@admin_bp.route('/registro-jornada')
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def registro_jornada():
+    """
+    Pantalla de consulta y descarga del registro de jornada.
+
+    Es lo que se enseña a la Inspección: detalle por trabajador y verificación
+    de que el libro de eventos no ha sido manipulado.
+    """
+    from app.services.fichaje_informe_service import (
+        formatear_horas,
+        listar_empresas_para_filtro,
+        listar_trabajadores_para_filtro,
+        periodo_por_defecto,
+    )
+    from app.services.onboarding_service import tenant_tiene_registro_jornada
+
+    if not tenant_tiene_registro_jornada():
+        flash('El registro de jornada no está activo en este tenant.', 'warning')
+        return redirect(url_for('admin.panel'))
+
+    desde_def, hasta_def = periodo_por_defecto()
+    hay_filtros = any(
+        request.args.get(k) for k in ('desde', 'hasta', 'user_id', 'company_id')
+    )
+    informe = _parametros_informe() if hay_filtros or request.args.get('generar') else None
+
+    if informe is not None:
+        from app.services.onboarding_service import marcar_informe_visto
+        try:
+            marcar_informe_visto()
+        except Exception:
+            pass
+
+    return render_template(
+        'admin_registro_jornada.html',
+        informe=informe,
+        trabajadores=listar_trabajadores_para_filtro(),
+        empresas=listar_empresas_para_filtro(),
+        desde=request.args.get('desde') or desde_def.isoformat(),
+        hasta=request.args.get('hasta') or hasta_def.isoformat(),
+        user_id=request.args.get('user_id') or '',
+        company_id=request.args.get('company_id') or '',
+        formatear_horas=formatear_horas,
+        desde_onboarding=bool(request.args.get('desde_onboarding')),
+    )
+
+
+@admin_bp.route('/registro-jornada/imprimir')
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def registro_jornada_imprimir():
+    from app.services.fichaje_informe_service import etiquetar_tipo, formatear_horas
+    from app.services.onboarding_service import tenant_tiene_registro_jornada
+
+    if not tenant_tiene_registro_jornada():
+        flash('El registro de jornada no está activo en este tenant.', 'warning')
+        return redirect(url_for('admin.panel'))
+
+    informe = _parametros_informe()
+    if informe is None:
+        return redirect(url_for('admin.registro_jornada'))
+
+    return render_template(
+        'admin_registro_jornada_print.html',
+        informe=informe,
+        formatear_horas=formatear_horas,
+        etiquetar_tipo=etiquetar_tipo,
+    )
+
+
+@admin_bp.route('/registro-jornada.csv')
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def registro_jornada_csv():
+    from flask import Response
+    from app.services.fichaje_informe_service import informe_a_csv
+    from app.services.onboarding_service import tenant_tiene_registro_jornada
+
+    if not tenant_tiene_registro_jornada():
+        flash('El registro de jornada no está activo en este tenant.', 'warning')
+        return redirect(url_for('admin.panel'))
+
+    informe = _parametros_informe()
+    if informe is None:
+        return redirect(url_for('admin.registro_jornada'))
+
+    archivo = (
+        f"registro_jornada_{informe['desde']}_{informe['hasta']}.csv"
+    )
+    return Response(
+        informe_a_csv(informe),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename="{archivo}"'},
+    )
+
+
+@admin_bp.route('/registro-jornada.pdf')
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def registro_jornada_pdf():
+    """
+    PDF generado con wkhtmltopdf a partir de la misma plantilla de impresión.
+
+    Si el binario no está disponible, se redirige a la vista imprimible: el
+    navegador puede guardar como PDF sin perder el contenido.
+    """
+    from flask import make_response
+    from app.services.fichaje_informe_service import etiquetar_tipo, formatear_horas
+    from app.services.onboarding_service import tenant_tiene_registro_jornada
+
+    if not tenant_tiene_registro_jornada():
+        flash('El registro de jornada no está activo en este tenant.', 'warning')
+        return redirect(url_for('admin.panel'))
+
+    informe = _parametros_informe()
+    if informe is None:
+        return redirect(url_for('admin.registro_jornada'))
+
+    html = render_template(
+        'admin_registro_jornada_print.html',
+        informe=informe,
+        formatear_horas=formatear_horas,
+        etiquetar_tipo=etiquetar_tipo,
+        para_pdf=True,
+    )
+
+    try:
+        import pdfkit
+        pdf = pdfkit.from_string(
+            html,
+            False,
+            options={
+                'page-size': 'A4',
+                'encoding': 'UTF-8',
+                'margin-top': '12mm',
+                'margin-bottom': '14mm',
+                'margin-left': '12mm',
+                'margin-right': '12mm',
+                'print-media-type': None,
+                'quiet': '',
+            },
+        )
+    except Exception as exc:
+        current_app.logger.warning('No se pudo generar el PDF del registro: %s', exc)
+        flash(
+            'No se ha podido generar el PDF en el servidor. '
+            'Usa «Versión para imprimir» y guárdalo como PDF desde el navegador.',
+            'warning',
+        )
+        return redirect(url_for(
+            'admin.registro_jornada_imprimir',
+            desde=request.args.get('desde'),
+            hasta=request.args.get('hasta'),
+            user_id=request.args.get('user_id') or '',
+            company_id=request.args.get('company_id') or '',
+        ))
+
+    archivo = f"registro_jornada_{informe['desde']}_{informe['hasta']}.pdf"
+    respuesta = make_response(pdf)
+    respuesta.headers['Content-Type'] = 'application/pdf'
+    respuesta.headers['Content-Disposition'] = f'attachment; filename="{archivo}"'
+    return respuesta
 

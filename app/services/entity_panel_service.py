@@ -106,9 +106,16 @@ def _odometer_regs_for_worker(worker, start_date, end_date, end_exclusive=True):
 def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True):
     """
     Días con vehículo para un operario: planificación local ∪ uso Odoo.
-    Devuelve {fecha: {label, vehiculo_id, km, source}}.
+    Devuelve {fecha: {label, vehiculo_id, km, source, plan_status, ...}}.
+
+    plan_status:
+      - ok: plan vigente (o ambos coinciden)
+      - muerto: planificado pero no lo usó / está de ausencia
+      - efectivo: uso real Odoo (sin plan propio o reasignación de facto)
     """
-    from app.models import AsignacionVehiculo, Vehiculo
+    from app.models import AsignacionVehiculo, LEAVE_STATUS_APROBADA, RegistroOdometro, Vehiculo
+    from app.services.leave_service import build_leaves_by_user, leave_covering
+    from app.services.vehicle_sync_service import _build_user_indexes, _match_driver_user
 
     day_map = {}
 
@@ -130,35 +137,103 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
     except Exception:
         odo_regs = []
 
+    # Odómetros de los vehículos planificados (cualquier conductor) para detectar mismatch
+    planned_veh_dates = {(a.vehiculo_id, a.fecha) for a in planned}
+    odo_on_planned = {}
+    if planned_veh_dates:
+        p_veh_ids = {vid for vid, _ in planned_veh_dates}
+        p_fechas = {f for _, f in planned_veh_dates}
+        try:
+            for r in RegistroOdometro.query.filter(
+                RegistroOdometro.vehiculo_id.in_(p_veh_ids),
+                RegistroOdometro.fecha.in_(p_fechas),
+            ).all():
+                if (r.vehiculo_id, r.fecha) in planned_veh_dates:
+                    odo_on_planned[(r.vehiculo_id, r.fecha)] = r
+                    veh_ids.add(r.vehiculo_id)
+        except Exception:
+            odo_on_planned = {}
+
     vehiculos = {
         v.id: v for v in Vehiculo.query.filter(Vehiculo.id.in_(veh_ids)).all()
     } if veh_ids else {}
 
-    odo_by_veh_date = {(r.vehiculo_id, r.fecha): r for r in odo_regs}
+    range_end = (end_date - timedelta(days=1)) if end_exclusive and end_date > start_date else end_date
+    leaves_idx = build_leaves_by_user([worker.id], start_date, range_end)
+    user_leaves = leaves_idx.get(worker.id, [])
+
+    users_by_odoo, users_by_name = _build_user_indexes()
 
     for a in planned:
         v = vehiculos.get(a.vehiculo_id)
         label = v.label() if v else f"Vehículo #{a.vehiculo_id}"
-        odo = odo_by_veh_date.get((a.vehiculo_id, a.fecha))
+        odo = odo_on_planned.get((a.vehiculo_id, a.fecha))
         km = None
         if odo:
             if odo.qty_km is not None:
                 km = odo.qty_km
             elif odo.valor is not None:
                 km = odo.valor
+
+        leave = leave_covering(user_leaves, a.fecha)
+        on_leave = bool(leave and leave.estado == LEAVE_STATUS_APROBADA)
+
+        effective_other = None
+        mismatch = False
+        if odo and (
+            odo.odoo_driver_partner_id
+            or (odo.odoo_driver_name or '').strip()
+            or odo.valor is not None
+            or odo.qty_km is not None
+        ):
+            matched = _match_driver_user(
+                odo.odoo_driver_partner_id,
+                odo.odoo_driver_name,
+                users_by_odoo,
+                users_by_name,
+            )
+            if matched and matched.id != worker.id:
+                mismatch = True
+                effective_other = f"{matched.name} {matched.lastname}".strip()
+            elif not matched and (odo.odoo_driver_name or '').strip():
+                # Hay conductor Odoo distinto (no matcheado) → plan muerto
+                mismatch = True
+                effective_other = (odo.odoo_driver_name or '').strip()
+
+        if on_leave or mismatch:
+            plan_status = 'muerto'
+            source = 'planificado'
+        elif odo:
+            plan_status = 'ok'
+            source = 'ambos'
+        else:
+            plan_status = 'ok'
+            source = 'planificado'
+
         day_map[a.fecha] = {
             'label': label,
             'vehiculo_id': a.vehiculo_id,
             'km': km,
-            'source': 'ambos' if odo else 'planificado',
+            'source': source,
+            'plan_status': plan_status,
+            'en_ausencia': on_leave,
+            'ausencia_tipo': leave.tipo if on_leave else None,
+            'mismatch': mismatch,
+            'effective_other': effective_other,
             'conductor': (odo.odoo_driver_name if odo else None) or (v.odoo_driver_name if v else None),
         }
 
     for r in odo_regs:
         if r.fecha in day_map and day_map[r.fecha]['vehiculo_id'] == r.vehiculo_id:
             continue
+        if r.fecha in day_map and day_map[r.fecha].get('plan_status') == 'muerto':
+            # Ya hay plan propio muerto ese día: el uso Odoo de ESTE worker
+            # en otro (o mismo) coche se añade como entrada efectiva aparte
+            # solo si es otro vehículo; si es el mismo, el mapa 1:1 no basta.
+            pass
         if r.fecha in day_map:
-            # Otro vehículo el mismo día: priorizar lo ya planificado
+            # Otro vehículo el mismo día: priorizar lo ya planificado en el mapa
+            # (el calendario del worker puede pintar ambos si extendemos; por ahora 1/día)
             continue
         v = vehiculos.get(r.vehiculo_id)
         label = v.label() if v else f"Vehículo #{r.vehiculo_id}"
@@ -168,6 +243,11 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
             'vehiculo_id': r.vehiculo_id,
             'km': km,
             'source': 'odoo',
+            'plan_status': 'efectivo',
+            'en_ausencia': False,
+            'ausencia_tipo': None,
+            'mismatch': False,
+            'effective_other': None,
             'conductor': r.odoo_driver_name or (v.odoo_driver_name if v else None),
         }
 

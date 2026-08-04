@@ -1,0 +1,76 @@
+{# Plantilla del área de fichaje. No hereda de base.html a propósito: aquella
+   está pensada para un escritorio con barra lateral y aquí sobra todo. #}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Fichaje">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}Fichaje{% endblock %}</title>
+
+    <link rel="manifest" href="{{ url_for('operarios.manifest') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/fichaje-icon.svg') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/fichaje-icon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/operario.css') }}">
+</head>
+<body>
+    <header class="cabecera">
+        <div class="cabecera__empresa">
+            {% if g.get('current_tenant') %}{{ g.current_tenant.nombre }}{% else %}Fichaje{% endif %}
+        </div>
+        {% if current_user.is_authenticated %}
+            <div class="cabecera__persona">
+                {{ current_user.name }} {{ current_user.lastname }}
+            </div>
+        {% endif %}
+    </header>
+
+    <main class="contenido">
+        {% with mensajes = get_flashed_messages(with_categories=true) %}
+            {% if mensajes %}
+                <div class="avisos">
+                    {% for categoria, texto in mensajes %}
+                        <div class="aviso aviso--{{ categoria }}">{{ texto }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block contenido %}{% endblock %}
+    </main>
+
+    {% if current_user.is_authenticated %}
+    <nav class="barra-inferior">
+        <a href="{{ url_for('operarios.inicio') }}"
+           class="barra-inferior__item {% if activo == 'fichar' %}es-activo{% endif %}">
+            <span class="barra-inferior__icono" aria-hidden="true">&#9679;</span>
+            Fichar
+        </a>
+        <a href="{{ url_for('operarios.registros') }}"
+           class="barra-inferior__item {% if activo == 'registros' %}es-activo{% endif %}">
+            <span class="barra-inferior__icono" aria-hidden="true">&#9776;</span>
+            Mis horas
+        </a>
+        <a href="{{ url_for('operarios.salir') }}" class="barra-inferior__item">
+            <span class="barra-inferior__icono" aria-hidden="true">&#8677;</span>
+            Salir
+        </a>
+    </nav>
+    {% endif %}
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker
+                    .register('{{ url_for("operarios.service_worker") }}', { scope: '/mi/' })
+                    .catch(function () { /* Sin service worker la app sigue funcionando online. */ });
+            });
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -12,6 +12,9 @@ from sqlalchemy import text
 # CATÁLOGO DE MÓDULOS Y ADAPTADORES
 # ==========================================
 MODULOS_DISPONIBLES = {
+    'fichaje_operario': 'Fichaje móvil del trabajador',
+    'registro_jornada': 'Registro de jornada / Inspección',
+    'onboarding': 'Onboarding de primeros pasos',
     'odoo': 'Integración Odoo (ERP / Sincronización)',
     'odoo_alta': 'Alta Odoo (Fichajes Soltec / SSO)',
     'chat': 'Chat de Comunicación (Próximamente)'
@@ -87,6 +90,11 @@ def create_tenant():
             admin_email,
             admin_password,
             custom_domain=custom_domain,
+            modulos_activos={
+                'fichaje_operario': False,
+                'registro_jornada': True,
+                'onboarding': False,
+            },
         )
         flash(f"Inquilino '{nombre}' creado. El administrador ya puede iniciar sesión.", "success")
     except Exception as e:
@@ -151,4 +159,28 @@ def configurar_modulos_tenant(id_tenant):
     db.session.execute(text("SET search_path TO public"))
     
     flash(f"Módulos actualizados correctamente para {tenant.nombre}.", "success")
+    return redirect(url_for('superadmin.dashboard'))
+
+
+@superadmin_bp.route('/tenant/<int:id_tenant>/plan', methods=['POST'])
+def configurar_plan_tenant(id_tenant):
+    from app.services.plan_service import PLANES, asignar_plan
+
+    tenant = Tenant.query.get_or_404(id_tenant)
+    plan = request.form.get('plan')
+    limite_raw = request.form.get('limite_empleados')
+    try:
+        limite = None
+        if limite_raw is not None and str(limite_raw).strip() != '':
+            limite = int(limite_raw)
+            if limite < 1:
+                raise ValueError('El límite tiene que ser al menos 1.')
+        if plan not in PLANES:
+            raise ValueError('Plan no válido.')
+        asignar_plan(tenant, plan, limite=limite, billing_exempt=bool(request.form.get('billing_exempt')))
+        db.session.commit()
+        flash(f"Plan de {tenant.nombre} actualizado a '{plan}'.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error al actualizar el plan: {e}", "danger")
     return redirect(url_for('superadmin.dashboard'))

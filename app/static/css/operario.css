@@ -1,0 +1,446 @@
+/* Área de fichaje del trabajador.
+ *
+ * Se usa a una mano, en la calle, con el móvil a contraluz y a veces con
+ * guantes. De ahí el fondo oscuro, el contraste alto y que ningún objetivo
+ * táctil baje de 56 px. No hay hojas compartidas con el panel de escritorio:
+ * cualquier cambio de estilo allí no debe poder romper esto.
+ */
+
+:root {
+    --fondo: #0f172a;
+    --superficie: #1e293b;
+    --superficie-alta: #334155;
+    --borde: #475569;
+    --texto: #f1f5f9;
+    --texto-suave: #94a3b8;
+    --entrar: #16a34a;
+    --entrar-activo: #15803d;
+    --salir: #dc2626;
+    --salir-activo: #b91c1c;
+    --pausa: #d97706;
+    --pausa-activo: #b45309;
+    --acento: #38bdf8;
+    --alto-toque: 56px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 17px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+/* --- Cabecera ---------------------------------------------------------- */
+
+.cabecera {
+    padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+    background: var(--superficie);
+    border-bottom: 1px solid var(--borde);
+}
+
+.cabecera__empresa {
+    font-size: 13px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--texto-suave);
+}
+
+.cabecera__persona {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* --- Contenido --------------------------------------------------------- */
+
+.contenido {
+    flex: 1;
+    padding: 16px 16px 96px;
+    max-width: 560px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.titulo {
+    font-size: 22px;
+    margin: 0 0 16px;
+}
+
+/* --- Avisos ------------------------------------------------------------ */
+
+.avisos { margin-bottom: 16px; }
+
+.aviso {
+    padding: 12px 14px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: var(--superficie);
+    border-left: 4px solid var(--acento);
+    font-size: 15px;
+}
+
+.aviso--danger  { border-left-color: var(--salir); }
+.aviso--warning { border-left-color: var(--pausa); }
+.aviso--success { border-left-color: var(--entrar); }
+
+/* --- Reloj y estado ---------------------------------------------------- */
+
+.reloj { text-align: center; margin: 8px 0 20px; }
+
+.reloj__hora {
+    font-size: 56px;
+    font-weight: 200;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
+    line-height: 1;
+}
+
+.reloj__fecha {
+    color: var(--texto-suave);
+    font-size: 15px;
+    margin-top: 6px;
+}
+
+.estado {
+    background: var(--superficie);
+    border-radius: 16px;
+    padding: 18px;
+    text-align: center;
+    border: 2px solid var(--borde);
+    margin-bottom: 20px;
+    transition: border-color .2s;
+}
+
+.estado--dentro { border-color: var(--entrar); }
+.estado--pausa  { border-color: var(--pausa); }
+
+.estado__etiqueta {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--texto-suave);
+}
+
+.estado__obra {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 6px 0;
+    overflow-wrap: anywhere;
+}
+
+.estado__acumulado {
+    font-size: 15px;
+    color: var(--texto-suave);
+}
+
+.estado__acumulado strong {
+    color: var(--texto);
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Mensaje de respuesta ---------------------------------------------- */
+
+.mensaje {
+    padding: 14px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    font-size: 15px;
+    background: var(--superficie-alta);
+}
+
+.mensaje--error {
+    background: #7f1d1d;
+    color: #fee2e2;
+}
+
+.mensaje--ok {
+    background: #14532d;
+    color: #dcfce7;
+}
+
+/* --- Formulario -------------------------------------------------------- */
+
+.campo { margin-bottom: 16px; }
+
+.campo__etiqueta {
+    display: block;
+    font-size: 15px;
+    margin-bottom: 8px;
+    color: var(--texto-suave);
+}
+
+.campo__control {
+    width: 100%;
+    min-height: var(--alto-toque);
+    padding: 0 14px;
+    font-size: 17px;
+    color: var(--texto);
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    appearance: none;
+}
+
+.campo__ayuda {
+    font-size: 14px;
+    color: var(--texto-suave);
+    margin: 8px 0 0;
+}
+
+/* --- Botones ----------------------------------------------------------- */
+
+.boton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 72px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    border: none;
+    border-radius: 16px;
+    cursor: pointer;
+    /* El móvil interpreta como scroll cualquier arrastre mínimo sobre un
+       botón grande; sin esto se pierden pulsaciones con guantes. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform .08s, background-color .15s;
+}
+
+.boton:active { transform: scale(.97); }
+
+.boton[disabled] {
+    opacity: .55;
+    cursor: default;
+    transform: none;
+}
+
+.boton--entrar   { background: var(--entrar); }
+.boton--entrar:active   { background: var(--entrar-activo); }
+.boton--salir    { background: var(--salir); }
+.boton--salir:active    { background: var(--salir-activo); }
+.boton--pausa,
+.boton--reanudar { background: var(--pausa); }
+.boton--pausa:active,
+.boton--reanudar:active { background: var(--pausa-activo); }
+
+.boton--secundario {
+    min-height: var(--alto-toque);
+    font-size: 16px;
+    font-weight: 600;
+    background: var(--superficie-alta);
+    color: var(--texto);
+}
+
+.boton--bloque { margin: 12px 0 20px; text-decoration: none; }
+
+.botonera {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+/* --- Movimientos del día ----------------------------------------------- */
+
+.jornada { margin-top: 28px; }
+
+.jornada__titulo {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--texto-suave);
+    margin: 0 0 10px;
+}
+
+.jornada__lista { list-style: none; margin: 0; padding: 0; }
+
+.jornada__item {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 4px 12px;
+    padding: 12px 14px;
+    background: var(--superficie);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border-left: 4px solid var(--borde);
+}
+
+.jornada__item--entrada      { border-left-color: var(--entrar); }
+.jornada__item--salida       { border-left-color: var(--salir); }
+.jornada__item--pausa_inicio,
+.jornada__item--pausa_fin    { border-left-color: var(--pausa); }
+
+.jornada__hora {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.jornada__obra {
+    grid-column: 2;
+    font-size: 14px;
+    color: var(--texto-suave);
+}
+
+.jornada__vacio,
+.dias__vacio {
+    padding: 24px 14px;
+    text-align: center;
+    color: var(--texto-suave);
+    background: var(--superficie);
+    border-radius: 10px;
+    list-style: none;
+}
+
+/* --- Historial --------------------------------------------------------- */
+
+.filtro {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.filtro__campo { display: flex; flex-direction: column; gap: 6px; }
+
+.filtro__campo label {
+    font-size: 13px;
+    color: var(--texto-suave);
+}
+
+.filtro__campo input {
+    min-height: var(--alto-toque);
+    padding: 0 12px;
+    font-size: 16px;
+    color: var(--texto);
+    background: var(--superficie);
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+}
+
+.filtro .boton { grid-column: 1 / -1; }
+
+.resumen {
+    background: var(--superficie);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.resumen__cifra {
+    font-size: 34px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.resumen__detalle { color: var(--texto-suave); font-size: 15px; }
+
+.dias { list-style: none; margin: 0; padding: 0; }
+
+.dia {
+    background: var(--superficie);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 8px;
+}
+
+.dia__cabecera {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+}
+
+.dia__horas { font-variant-numeric: tabular-nums; color: var(--acento); }
+
+.dia__cuerpo {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 6px;
+    font-size: 15px;
+    color: var(--texto-suave);
+}
+
+.dia__tramo { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.dia__obra { text-align: right; overflow-wrap: anywhere; }
+
+.dia__aviso {
+    margin-top: 8px;
+    font-size: 14px;
+    color: #fbbf24;
+}
+
+/* --- Notas y estados vacíos -------------------------------------------- */
+
+.nota-legal {
+    margin-top: 24px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--texto-suave);
+}
+
+.vacio { text-align: center; padding-top: 32px; }
+
+/* --- Barra inferior ---------------------------------------------------- */
+
+.barra-inferior {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    background: var(--superficie);
+    border-top: 1px solid var(--borde);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.barra-inferior__item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: var(--alto-toque);
+    padding: 8px 4px;
+    font-size: 12px;
+    color: var(--texto-suave);
+    text-decoration: none;
+}
+
+.barra-inferior__item.es-activo { color: var(--acento); }
+
+.barra-inferior__icono { font-size: 18px; line-height: 1; }
+
+.entrar__ayuda {
+    color: var(--texto-suave);
+    margin: 0 0 20px;
+}
+
+.campo__control--pin {
+    letter-spacing: 0.4em;
+    font-size: 28px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Quien haya configurado el sistema para reducir animaciones no quiere que
+   los botones reboten al pulsarlos. */
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+    .boton:active { transform: none; }
+}

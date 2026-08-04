@@ -2,6 +2,7 @@
 from . import db, login_manager
 from flask_login import UserMixin
 from datetime import datetime, date, timezone
+import hashlib
 import random
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -41,6 +42,16 @@ class Tenant(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     modulos_activos = db.Column(db.JSON, nullable=False, server_default='{}')
+
+    # Freemium: free hasta N trabajadores; paid sin límite (salvo trato a medida).
+    plan = db.Column(db.String(20), nullable=False, server_default='free')
+    limite_empleados = db.Column(db.Integer, nullable=True)
+
+    # Facturación: exempt = premium sin pasarela (demos, Soltec, cortesías).
+    # stripe_* se rellenarán cuando exista cuenta Stripe real.
+    billing_exempt = db.Column(db.Boolean, nullable=False, server_default='false', default=False)
+    stripe_customer_id = db.Column(db.String(120), nullable=True)
+    stripe_subscription_id = db.Column(db.String(120), nullable=True)
     
     def __repr__(self):
         return f'<Tenant {self.nombre} - Subdominio: {self.subdominio}>'
@@ -93,6 +104,9 @@ class User(UserMixin, db.Model):
     # Autenticación
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
+    # PIN numérico para entrar a la PWA de fichaje (DNI + PIN). Nullable:
+    # sin PIN el trabajador sigue pudiendo usar correo y contraseña si los tiene.
+    pin_hash = db.Column(db.String(255), nullable=True)
     role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, operario
     
     # Datos Personales
@@ -420,7 +434,166 @@ class RegistroFichaje(db.Model):
     obra_planificada = db.relationship('Obra', foreign_keys=[obra_planificada_id])
     obra_real = db.relationship('Obra', foreign_keys=[obra_real_id])
     resuelto_por = db.relationship('User', foreign_keys=[resuelto_por_id])
-    
+
+
+# --- TIPOS DE EVENTO DE FICHAJE ---
+EVENTO_ENTRADA = 'entrada'
+EVENTO_SALIDA = 'salida'
+EVENTO_PAUSA_INICIO = 'pausa_inicio'
+EVENTO_PAUSA_FIN = 'pausa_fin'
+EVENTO_ANULACION = 'anulacion'
+
+# Cambiar la obra a la que se imputan unas horas no es rectificar la jornada:
+# el art. 34.9 ET obliga a registrar el horario de inicio y fin, no el destino
+# de esas horas, que es contabilidad de costes. Por eso tiene evento propio y no
+# se resuelve anulando la entrada: si cada corrección de obra anulase marcas de
+# tiempo, el libro parecería lleno de jornadas rectificadas cuando en realidad
+# ninguna hora se ha tocado, y eso es justo lo contrario de lo que debe probar.
+EVENTO_REASIGNACION_OBRA = 'reasignacion_obra'
+
+TIPOS_EVENTO_FICHAJE = (
+    EVENTO_ENTRADA,
+    EVENTO_SALIDA,
+    EVENTO_PAUSA_INICIO,
+    EVENTO_PAUSA_FIN,
+    EVENTO_ANULACION,
+    EVENTO_REASIGNACION_OBRA,
+)
+
+# Tipos que representan una marca de tiempo real de la persona. El resto son
+# anotaciones sobre esas marcas y no computan jornada.
+TIPOS_MARCA_DE_TIEMPO = (
+    EVENTO_ENTRADA,
+    EVENTO_SALIDA,
+    EVENTO_PAUSA_INICIO,
+    EVENTO_PAUSA_FIN,
+)
+
+# --- ORÍGENES DE UN EVENTO ---
+ORIGEN_PWA = 'pwa'
+ORIGEN_KIOSCO = 'kiosco'
+ORIGEN_ERP = 'erp'
+ORIGEN_ADMIN = 'admin'
+ORIGEN_IMPORTACION = 'importacion'
+ORIGEN_MIGRACION = 'migracion'
+
+ORIGENES_EVENTO_FICHAJE = (
+    ORIGEN_PWA,
+    ORIGEN_KIOSCO,
+    ORIGEN_ERP,
+    ORIGEN_ADMIN,
+    ORIGEN_IMPORTACION,
+    ORIGEN_MIGRACION,
+)
+
+# Orígenes que exigen motivo documentado: no los genera el trabajador.
+ORIGENES_REQUIEREN_MOTIVO = (ORIGEN_ADMIN, ORIGEN_IMPORTACION)
+
+# Años de conservación exigidos por el art. 34.9 ET / art. 21.5 LISOS.
+ANIOS_CONSERVACION_FICHAJES = 4
+
+
+class FichajeEvento(db.Model):
+    """
+    Libro de eventos de jornada. Solo admite inserciones: la base de datos
+    rechaza UPDATE y DELETE mediante disparador, y cada fila va encadenada por
+    hash con la anterior, de forma que cualquier manipulación posterior es
+    detectable aunque se haga por fuera de la aplicación.
+
+    Una corrección nunca modifica el evento original: se añade un evento de
+    tipo 'anulacion' que lo referencia, y a continuación el evento correcto.
+    """
+    __tablename__ = 'fichajes_eventos'
+    __table_args__ = (
+        db.UniqueConstraint('secuencia', name='uq_fichajes_eventos_secuencia'),
+        db.Index('ix_fichajes_eventos_user_fecha', 'user_id', 'fecha_laboral'),
+        db.Index('ix_fichajes_eventos_ocurrido', 'ocurrido_en'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Posición en la cadena del tenant. Empieza en 1 y no admite huecos.
+    secuencia = db.Column(db.BigInteger, nullable=False)
+
+    # Trabajador al que se imputa la jornada.
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
+    tipo = db.Column(db.String(20), nullable=False)
+    origen = db.Column(db.String(20), nullable=False)
+
+    # Jornada a la que se imputa. Se separa de 'ocurrido_en' porque un turno
+    # de noche cruza la medianoche y sigue perteneciendo al día anterior.
+    fecha_laboral = db.Column(db.Date, nullable=False)
+
+    # Momento real del fichaje (UTC) y momento en que entró en el sistema.
+    ocurrido_en = db.Column(db.DateTime, nullable=False)
+    registrado_en = db.Column(db.DateTime, nullable=False, default=_utc_now)
+    zona_horaria = db.Column(db.String(64), nullable=True)
+
+    # Quién lo registra: normalmente el propio trabajador, salvo altas manuales.
+    autor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Obra declarada en el momento de fichar.
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
+
+    # Posición en el momento del fichaje. Finalidad declarada: verificar la
+    # presencia en obra. Solo se rellena si el tenant lo tiene activado.
+    latitud = db.Column(db.Float, nullable=True)
+    longitud = db.Column(db.Float, nullable=True)
+    precision_metros = db.Column(db.Float, nullable=True)
+
+    dispositivo = db.Column(db.String(255), nullable=True)
+    ip = db.Column(db.String(45), nullable=True)
+
+    # Obligatorio en altas manuales y en anulaciones: el "por qué" que exige
+    # la trazabilidad.
+    motivo = db.Column(db.Text, nullable=True)
+    evento_anulado_id = db.Column(db.Integer, db.ForeignKey('fichajes_eventos.id'), nullable=True)
+
+    # Referencia al sistema externo del que proviene, si aplica.
+    external_ids = db.Column(JSONB, nullable=True)
+
+    hash_previo = db.Column(db.String(64), nullable=True)
+    hash = db.Column(db.String(64), nullable=False)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    autor = db.relationship('User', foreign_keys=[autor_id])
+    obra = db.relationship('Obra', foreign_keys=[obra_id])
+    evento_anulado = db.relationship('FichajeEvento', remote_side=[id])
+
+    def payload_canonico(self):
+        """
+        Representación determinista del contenido del evento. Es lo que se
+        firma: si cambia un solo carácter, el hash deja de cuadrar.
+        """
+        def val(v):
+            if v is None:
+                return ''
+            if isinstance(v, datetime):
+                return v.replace(microsecond=0).isoformat()
+            if isinstance(v, date):
+                return v.isoformat()
+            if isinstance(v, float):
+                return f'{v:.6f}'
+            return str(v)
+
+        campos = (
+            self.secuencia, self.user_id, self.tipo, self.origen,
+            self.fecha_laboral, self.ocurrido_en, self.registrado_en,
+            self.zona_horaria, self.autor_id, self.obra_id,
+            self.latitud, self.longitud, self.precision_metros,
+            self.dispositivo, self.ip, self.motivo, self.evento_anulado_id,
+            self.hash_previo,
+        )
+        return '|'.join(val(c) for c in campos)
+
+    def calcular_hash(self):
+        return hashlib.sha256(self.payload_canonico().encode('utf-8')).hexdigest()
+
+    def __repr__(self):
+        return f'<FichajeEvento #{self.secuencia} {self.tipo} user={self.user_id}>'
+
+
 class Solicitud(db.Model):
     """
     Petición de recursos (Personal) realizada por Jefes de Obra a Administración.

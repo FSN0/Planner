@@ -37,7 +37,14 @@ class BaseSyncAdapter(ABC):
     def get_fichajes_diarios(self) -> list:
         """
         Debe devolver una lista de diccionarios:
-        [{'empleado_external_id': '99', 'fecha': '2026-06-02', 'check_in': '08:00', 'check_out': '17:30', 'obra_external_id': '123', 'note': 'opcional'}]
+        [{'empleado_external_id': '99', 'fecha': '2026-06-02', 'check_in': '08:00',
+          'check_out': '17:30', 'obra_external_id': '123', 'note': 'opcional',
+          'registro_external_id': '4471', 'origen_modelo': 'hr.attendance'}]
+
+        'registro_external_id' identifica el apunte en el sistema de origen y
+        debe ser estable entre sincronizaciones. Sin él, el libro de eventos no
+        puede distinguir un fichaje nuevo de una corrección de uno anterior y
+        acaba duplicando registros en cada pasada.
         """
         pass
 

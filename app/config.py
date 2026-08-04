@@ -59,6 +59,20 @@ class Config:
     # Ej: soltec,planner.soltecgrupo.es  → planner.soltecgrupo.es resuelve al tenant soltec.
     TENANT_HOST_ALIASES = (os.environ.get('TENANT_HOST_ALIASES') or '').strip()
 
+    # Dominio raíz del producto (subdominios {cliente}.signaplan.com).
+    SIGNAPLAN_BASE_DOMAIN = (os.environ.get('SIGNAPLAN_BASE_DOMAIN') or 'signaplan.com').strip()
+    # Host comercial / DOMAIN del compose (localhost en dev, signaplan.com en prod).
+    DOMAIN = (os.environ.get('DOMAIN') or '').strip() or None
+
+    # Stripe (opcional). Sin clave, la pasarela no está activa.
+    STRIPE_SECRET_KEY = (os.environ.get('STRIPE_SECRET_KEY') or '').strip() or None
+    STRIPE_WEBHOOK_SECRET = (os.environ.get('STRIPE_WEBHOOK_SECRET') or '').strip() or None
+    STRIPE_PRICE_ID = (os.environ.get('STRIPE_PRICE_ID') or '').strip() or None
+
+    # Cobro freemium (cupo 10, geo de pago, etc.). Mientras no haya autónomo/Stripe,
+    # déjalo en false: todo el mundo usa el producto sin bloqueos de plan.
+    BILLING_ENFORCED = _env_bool('BILLING_ENFORCED', default=False)
+
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 20,
         'max_overflow': 40,

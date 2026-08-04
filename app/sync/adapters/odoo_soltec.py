@@ -62,6 +62,11 @@ class Adapter(BaseSyncAdapter):
                     obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
                     fichajes_estandarizados.append({
+                        # Identidad estable del apunte en Odoo. El libro de eventos
+                        # la necesita para distinguir un fichaje nuevo de uno que
+                        # ya tenía y que alguien ha modificado allí.
+                        'registro_external_id': str(a['id']),
+                        'origen_modelo': 'hr.attendance',
                         'empleado_external_id': str(a['employee_id'][0]),
                         'obra_external_id': str(obra_id) if obra_id else None,
                         'fecha': fecha_str,
@@ -92,6 +97,8 @@ class Adapter(BaseSyncAdapter):
                     obra_id = a.get('project_id')[0] if a.get('project_id') else None
                     modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
                     fichajes_estandarizados.append({
+                        'registro_external_id': str(a['id']),
+                        'origen_modelo': 'partner.attendance',
                         'empleado_external_id': str(a['partner_id'][0]),
                         'obra_external_id': str(obra_id) if obra_id else None,
                         'fecha': fecha_str,

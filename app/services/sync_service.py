@@ -91,6 +91,14 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
         logger.error(f"Error obteniendo fichajes del adaptador: {e}")
         return
 
+    # El libro de eventos se escribe con los apuntes tal cual llegan, antes de
+    # fusionarlos por obra. Lo de abajo agrupa y reinterpreta para la auditoría;
+    # el libro tiene que guardar el hecho en bruto, no la interpretación.
+    from app.services.fichaje_erp_ledger_service import (
+        reflejar_sin_romper_la_sincronizacion,
+    )
+    reflejar_sin_romper_la_sincronizacion(fecha_obj, datos_crudos)
+
     fichajes_crudos = []
     for d in datos_crudos:
         empleado_id = d.get('empleado_external_id')

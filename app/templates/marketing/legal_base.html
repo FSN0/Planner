@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} — SignaPlan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+    <style>
+        .legal-body { max-width: 720px; margin: 2rem auto; padding: 0 1.25rem 3rem; line-height: 1.6; color: #1f2937; }
+        .legal-body h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+        .legal-body h2 { font-size: 1.15rem; margin-top: 1.75rem; }
+        .legal-body p, .legal-body li { color: #374151; }
+        .legal-note { background: #f3f4f6; border-radius: 8px; padding: 0.85rem 1rem; font-size: 0.9rem; margin: 1rem 0; }
+    </style>
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="{{ url_for('main.dashboard') }}"><span>SignaPlan</span></a>
+        <nav class="mkt-nav-links">
+            <a href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
+        </nav>
+    </header>
+    <article class="legal-body">
+        <h1>{{ page_title }}</h1>
+        <p class="legal-note">
+            Texto orientativo pendiente de revisión jurídica. Sustituye los datos del responsable
+            cuando firmes el alta fiscal. Última actualización: julio 2026.
+        </p>
+        {% block legal_content %}{% endblock %}
+    </article>
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+        <span>
+            <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">Aviso legal</a> ·
+            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a> ·
+            <a href="{{ url_for('marketing.legal', slug='cookies') }}">Cookies</a> ·
+            <a href="{{ url_for('marketing.legal', slug='encargado') }}">Encargo de tratamiento</a>
+        </span>
+    </footer>
+</body>
+</html>

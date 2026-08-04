@@ -16,6 +16,61 @@ from app.models import (
 from app.utils.timezone_utils import today_local
 
 
+def resumen_hoy_plan_vs_ficha(fecha=None, limite=40):
+    """
+    Quién está planificado hoy y si ha fichado (y dónde).
+
+    Es la vista que el dueño mira a media mañana: planificado vs realidad.
+    """
+    fecha = fecha or today_local()
+    asignaciones = (
+        Asignacion.query.options(
+            joinedload(Asignacion.user),
+            joinedload(Asignacion.obra),
+        )
+        .filter(Asignacion.fecha == fecha)
+        .order_by(Asignacion.obra_id, Asignacion.user_id)
+        .all()
+    )
+    fichajes = {
+        f.user_id: f
+        for f in RegistroFichaje.query.options(
+            joinedload(RegistroFichaje.obra_real),
+        ).filter_by(fecha=fecha).all()
+    }
+
+    filas = []
+    for a in asignaciones[:limite]:
+        user = a.user
+        if not user or user.is_deleted:
+            continue
+        fichaje = fichajes.get(user.id)
+        obra_plan = a.obra
+        obra_real = fichaje.obra_real if fichaje else None
+        if not fichaje or not fichaje.check_in:
+            estado = 'sin_fichar'
+        elif obra_real and obra_plan and obra_real.id != obra_plan.id:
+            estado = 'otra_obra'
+        else:
+            estado = 'ok'
+        filas.append({
+            'user': user,
+            'obra_planificada': obra_plan,
+            'obra_real': obra_real,
+            'check_in': fichaje.check_in if fichaje else None,
+            'check_out': fichaje.check_out if fichaje else None,
+            'estado': estado,
+        })
+
+    return {
+        'filas': filas,
+        'planificados': len(filas),
+        'fichados': sum(1 for f in filas if f['estado'] in ('ok', 'otra_obra')),
+        'sin_fichar': sum(1 for f in filas if f['estado'] == 'sin_fichar'),
+        'otra_obra': sum(1 for f in filas if f['estado'] == 'otra_obra'),
+    }
+
+
 def _obra_ids_del_jefe(user_id):
     return [
         o.id for o in Obra.query.filter(
@@ -211,9 +266,11 @@ def get_admin_panel_context():
     )
     last_sync = SyncLog.query.order_by(SyncLog.fecha.desc()).first()
     sync_error_lines = _parse_sync_errores_detail(last_sync)
+    hoy_en_obra = resumen_hoy_plan_vs_ficha(today)
 
     return {
         'today': today,
+        'hoy_en_obra': hoy_en_obra,
         'total_operarios': total_operarios,
         'operarios_activos': operarios_activos,
         'operarios_inactivos': operarios_inactivos,

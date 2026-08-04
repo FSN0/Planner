@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="SignaPlan — Planificación de obras, equipos y fichajes integrados con Odoo.">
-    <title>SignaPlan — Planificación inteligente para construcción</title>
+    <meta name="description" content="SignaPlan — Planificación de obras, fichaje móvil y registro de jornada listo para Inspección.">
+    <title>SignaPlan — Planificación y fichaje para construcción</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,51 +13,51 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="{{ url_for('main.dashboard') }}">
+        <a class="mkt-brand" href="/">
             <i class="fas fa-hard-hat"></i>
             <span>SignaPlan</span>
         </a>
         <nav class="mkt-nav-links">
             <a href="#funciones">Funciones</a>
             <a href="#acceso">Acceso clientes</a>
-            <a href="#contacto">Contacto</a>
-            <a class="mkt-btn mkt-btn-primary" href="mailto:info@signaplan.com">Solicitar demo</a>
+            <a href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
+            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
         </nav>
     </header>
 
     <section class="mkt-hero">
         <div>
-            <span class="mkt-hero-badge">SaaS para empresas de construcción</span>
-            <h1>Planifica obras, equipos y fichajes en un solo lugar</h1>
+            <span class="mkt-hero-badge">Sin tarjeta</span>
+            <h1>Planifica obras y ficha en obra con trazabilidad legal</h1>
             <p>
-                SignaPlan centraliza la planificación diaria, la gestión de personal y subcontratas,
-                y la sincronización con Odoo. Cada cliente trabaja en su espacio aislado y seguro.
+                SignaPlan une el planificador diario, el fichaje desde el móvil del trabajador
+                y el registro de jornada inalterable — listo si viene Inspección.
             </p>
             <div class="mkt-hero-actions">
-                <a class="mkt-btn mkt-btn-primary" href="mailto:info@signaplan.com">
-                    <i class="fas fa-calendar-check"></i> Pedir una demo
+                <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">
+                    <i class="fas fa-rocket"></i> Crear cuenta gratuita
                 </a>
                 <a class="mkt-btn mkt-btn-ghost" href="#funciones">Ver funciones</a>
             </div>
         </div>
         <div class="mkt-hero-card">
-            <h3>Todo lo que tu equipo necesita en obra</h3>
+            <h3>Listo en una tarde</h3>
             <div class="mkt-stat-grid">
                 <div class="mkt-stat">
                     <strong>Planificador</strong>
-                    <span>Asignación visual por obra y fecha</span>
+                    <span>Quién va a cada obra cada día</span>
                 </div>
                 <div class="mkt-stat">
-                    <strong>Multi-empresa</strong>
-                    <span>Internos y subcontratas</span>
+                    <strong>Fichaje móvil</strong>
+                    <span>DNI + PIN en el móvil del operario</span>
                 </div>
                 <div class="mkt-stat">
-                    <strong>Odoo</strong>
-                    <span>Sincronización de empleados y fichajes</span>
+                    <strong>Inspección</strong>
+                    <span>Informe PDF con cadena de hashes</span>
                 </div>
                 <div class="mkt-stat">
-                    <strong>Multi-cliente</strong>
-                    <span>Cada empresa con su propio entorno</span>
+                    <strong>Sin tarjeta</strong>
+                    <span>Crea tu espacio y empieza ya</span>
                 </div>
             </div>
         </div>
@@ -73,6 +73,16 @@
         </div>
         <div class="mkt-features">
             <article class="mkt-feature">
+                <i class="fas fa-mobile-alt"></i>
+                <h3>Fichaje desde el móvil</h3>
+                <p>El operario ficha entrada y salida en obra con DNI y PIN. Sin instalar apps de tienda.</p>
+            </article>
+            <article class="mkt-feature">
+                <i class="fas fa-balance-scale"></i>
+                <h3>Registro para Inspección</h3>
+                <p>Libro de jornada inalterable con cadena de hashes e informe PDF/CSV listo para enseñar.</p>
+            </article>
+            <article class="mkt-feature">
                 <i class="fas fa-th-large"></i>
                 <h3>Planificador visual</h3>
                 <p>Organiza operarios y recursos por obra con una vista clara del día y de la semana.</p>
@@ -85,22 +95,12 @@
             <article class="mkt-feature">
                 <i class="fas fa-sync-alt"></i>
                 <h3>Integración Odoo</h3>
-                <p>Sincroniza empleados, obras y fichajes con tu ERP sin duplicar trabajo administrativo.</p>
+                <p>Si ya tienes ERP, sincroniza empleados, obras y fichajes sin duplicar trabajo (plan avanzado).</p>
             </article>
             <article class="mkt-feature">
                 <i class="fas fa-shield-alt"></i>
                 <h3>Entornos aislados</h3>
                 <p>Arquitectura multi-tenant: cada cliente con sus datos separados y su propia URL de acceso.</p>
-            </article>
-            <article class="mkt-feature">
-                <i class="fas fa-globe"></i>
-                <h3>Dominio propio</h3>
-                <p>Tus clientes pueden trabajar desde su subdominio SignaPlan o desde su dominio corporativo.</p>
-            </article>
-            <article class="mkt-feature">
-                <i class="fas fa-clipboard-list"></i>
-                <h3>Solicitudes y auditoría</h3>
-                <p>Control de incidencias, notas y registros para mantener el seguimiento bajo control.</p>
             </article>
         </div>
     </section>
@@ -130,17 +130,25 @@
 
     <section class="mkt-cta" id="contacto">
         <div>
-            <h2>¿Quieres implantar SignaPlan en tu empresa?</h2>
-            <p>Cuéntanos cómo trabajáis hoy y te preparamos una demo adaptada a vuestro caso.</p>
+            <h2>Empieza en minutos</h2>
+            <p>Crea tu cuenta sin tarjeta. Si necesitas una demo guiada, escríbenos.</p>
         </div>
-        <a class="mkt-btn mkt-btn-ghost" href="mailto:info@signaplan.com">
-            <i class="fas fa-envelope"></i> info@signaplan.com
-        </a>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
+            <a class="mkt-btn mkt-btn-ghost" href="mailto:info@signaplan.com">
+                <i class="fas fa-envelope"></i> info@signaplan.com
+            </a>
+        </div>
     </section>
 
     <footer class="mkt-footer">
-        <span>© {{ current_year }} SignaPlan · SOCTEC</span>
-        <span>Planificación y gestión de obra</span>
+        <span>© {{ current_year }} SignaPlan</span>
+        <span>
+            <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">Aviso legal</a> ·
+            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a> ·
+            <a href="{{ url_for('marketing.legal', slug='cookies') }}">Cookies</a> ·
+            <a href="{{ url_for('marketing.legal', slug='encargado') }}">Encargo de tratamiento</a>
+        </span>
     </footer>
 </body>
 </html>

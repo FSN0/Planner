@@ -37,10 +37,24 @@ def database_url():
     Esta base de datos se limpiará completamente durante los tests.
     """
     # Puedes configurar esto con variables de entorno
-    return os.environ.get(
+    url = os.environ.get(
         'TEST_DATABASE_URL',
         'postgresql://postgres:postgres@localhost:5432/gestion_obra_test'
     )
+
+    # Los fixtures hacen DROP SCHEMA y drop_all(). Apuntar esto por descuido a
+    # la base de datos de desarrollo o producción borraría datos reales, así
+    # que se exige que el nombre delate que es una base de datos de usar y tirar.
+    nombre_bd = url.rsplit('/', 1)[-1].split('?')[0]
+    if 'test' not in nombre_bd.lower():
+        pytest.exit(
+            f"TEST_DATABASE_URL apunta a la base de datos '{nombre_bd}', que no "
+            f"parece de test. Los tests borran esquemas y tablas: se aborta para "
+            f"no destruir datos reales.",
+            returncode=1,
+        )
+
+    return url
 
 
 @pytest.fixture(scope='session')
@@ -137,6 +151,30 @@ def session(db, app):
 # FIXTURES DE DATOS - Tenants
 # ============================================================================
 
+def _limpiar_esquema_tenant(session, schema, subdominio):
+    """
+    Vacía las tablas de un tenant entre tests.
+
+    El libro de fichajes lleva un disparador que rechaza TRUNCATE, y el CASCADE
+    desde 'users' lo alcanza. Se desactiva únicamente aquí, en el arnés de
+    tests; la aplicación no hace esto en ningún caso. Como ALTER TABLE es
+    transaccional en PostgreSQL, si algo falla el disparador vuelve solo.
+    """
+    session.rollback()
+    session.execute(text(f"ALTER TABLE {schema}.fichajes_eventos DISABLE TRIGGER USER"))
+    session.execute(text(f"TRUNCATE TABLE {schema}.users CASCADE"))
+    session.execute(text(f"TRUNCATE TABLE {schema}.companies CASCADE"))
+    session.execute(text(f"TRUNCATE TABLE {schema}.obras CASCADE"))
+    # Si no se vacía, un test que active un módulo se lo deja activado al
+    # siguiente y los fallos aparecen según el orden de ejecución.
+    session.execute(text(f"TRUNCATE TABLE {schema}.configuracion_global CASCADE"))
+    session.execute(text(f"ALTER TABLE {schema}.fichajes_eventos ENABLE TRIGGER USER"))
+    session.execute(
+        text("DELETE FROM public.tenants WHERE subdominio = :sub"),
+        {'sub': subdominio},
+    )
+    session.commit()
+
 @pytest.fixture(scope='session')
 def _tenant_schemas(db):
     """
@@ -163,6 +201,14 @@ def _tenant_schemas(db):
                 table.to_metadata(metadata, schema=schema_name)
         
         metadata.create_all(bind=db.engine)
+
+        # Los disparadores de inmutabilidad no los crea create_all: vienen de
+        # la migración. Se aplican aquí con el mismo DDL que en producción para
+        # que los tests prueben la protección real y no una imitación.
+        from app.ddl import proteger_libro_fichajes
+        proteger_libro_fichajes(
+            lambda sql: db.session.execute(text(sql)), schema_name
+        )
     
     # Volver a public
     db.session.execute(text("SET search_path TO public"))
@@ -186,6 +232,9 @@ def tenant_soltec(session, db, _tenant_schemas):
         subdominio="soltec",
         schema_name="tenant_soltec",
         is_active=True,
+        plan='paid',
+        limite_empleados=None,
+        billing_exempt=True,
         modulos_activos={
             "sync": True,
             "fichajes": True,
@@ -198,11 +247,7 @@ def tenant_soltec(session, db, _tenant_schemas):
     yield tenant
     
     # Limpieza después del test
-    session.execute(text(f"TRUNCATE TABLE {tenant.schema_name}.users CASCADE"))
-    session.execute(text(f"TRUNCATE TABLE {tenant.schema_name}.companies CASCADE"))
-    session.execute(text(f"TRUNCATE TABLE {tenant.schema_name}.obras CASCADE"))
-    session.execute(text("DELETE FROM public.tenants WHERE subdominio = 'soltec'"))
-    session.commit()
+    _limpiar_esquema_tenant(session, 'tenant_soltec', 'soltec')
 
 
 @pytest.fixture
@@ -217,6 +262,9 @@ def tenant_acme(session, db, _tenant_schemas):
         subdominio="acme",
         schema_name="tenant_acme",
         is_active=True,
+        plan='paid',
+        limite_empleados=None,
+        billing_exempt=True,
         modulos_activos={}
     )
     session.add(tenant)
@@ -225,11 +273,7 @@ def tenant_acme(session, db, _tenant_schemas):
     yield tenant
     
     # Limpieza después del test
-    session.execute(text(f"TRUNCATE TABLE {tenant.schema_name}.users CASCADE"))
-    session.execute(text(f"TRUNCATE TABLE {tenant.schema_name}.companies CASCADE"))
-    session.execute(text(f"TRUNCATE TABLE {tenant.schema_name}.obras CASCADE"))
-    session.execute(text("DELETE FROM public.tenants WHERE subdominio = 'acme'"))
-    session.commit()
+    _limpiar_esquema_tenant(session, 'tenant_acme', 'acme')
 
 
 # ============================================================================

@@ -16,6 +16,16 @@
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title">Personal</h1>
         <span class="page-toolbar-count">{{ internos|length }} int. · {{ (operarios_activos|length) + (operarios_pendientes|length) }} ext.</span>
+        {% if cupo and cupo.monetizacion_activa %}
+        <span class="page-toolbar-count" title="Operarios y jefes de obra activos">
+          Plantilla {{ cupo.usados }}{% if cupo.limite is not none %}/{{ cupo.limite }}{% endif %}
+          · {{ 'pago' if cupo.plan == 'paid' else 'gratis' }}
+        </span>
+        {% elif cupo %}
+        <span class="page-toolbar-count" title="Plantilla activa (sin límite de cobro de momento)">
+          Plantilla {{ cupo.usados }} · acceso completo
+        </span>
+        {% endif %}
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.create_user', tab='internos') }}" class="btn-admin btn-admin-primary">
@@ -130,6 +140,7 @@
                   <td class="col-actions">
                     <div class="table-actions">
                       <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="Contraseña"><i class="fas fa-key"></i></button>
+                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="PIN de fichaje"><i class="fas fa-mobile-alt"></i></button>
                       <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="Editar"><i class="fas fa-pencil-alt"></i></a>
                       <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar usuario?');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -211,6 +222,7 @@
                   <td class="col-actions">
                     <div class="table-actions">
                       <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="Contraseña"><i class="fas fa-key"></i></button>
+                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="PIN de fichaje"><i class="fas fa-mobile-alt"></i></button>
                       <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="Editar"><i class="fas fa-pencil-alt"></i></a>
                       {% if view_mode == 'admin' %}
                       <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
@@ -262,6 +274,45 @@
   </div>
 </div>
 
+<div class="modal fade" id="resetPinModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form id="resetPinForm" method="POST" action="">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">PIN de fichaje</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <p class="small mb-2">Trabajador: <strong id="resetPinUsernameDisplay"></strong></p>
+          <p class="small text-muted">
+            Con este PIN entrará en <code>/mi</code> usando su DNI.
+            Entre 4 y 6 dígitos. No uses el mismo dígito repetido.
+          </p>
+          <label class="admin-form-label">Nuevo PIN</label>
+          <input type="password" name="nuevo_pin" id="nuevoPinInput" class="form-control"
+                 inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                 required placeholder="••••">
+        </div>
+        <div class="modal-footer justify-content-between">
+          <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
+                  formnovalidate
+                  onclick="document.getElementById('nuevoPinInput').required = false;">
+            Quitar PIN
+          </button>
+          <div>
+            <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+            <button type="submit" name="accion" value="asignar" class="btn-admin btn-admin-primary"
+                    onclick="document.getElementById('nuevoPinInput').required = true;">
+              Guardar PIN
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="modal fade" id="scheduleModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <form id="scheduleForm" autocomplete="off">
@@ -303,6 +354,13 @@ document.addEventListener("DOMContentLoaded", function() {
         $('#resetUsernameDisplay').text($(this).data('username'));
         $('#resetPasswordForm').attr('action', '/admin/reset_password/' + $(this).data('userid'));
         $('#resetPasswordModal').modal('show');
+    });
+
+    $(document).on('click', '.reset-pin-btn', function() {
+        $('#resetPinUsernameDisplay').text($(this).data('username'));
+        $('#resetPinForm').attr('action', '/admin/reset_pin/' + $(this).data('userid'));
+        $('#nuevoPinInput').val('').prop('required', true);
+        $('#resetPinModal').modal('show');
     });
 
     var hash = window.location.hash;
