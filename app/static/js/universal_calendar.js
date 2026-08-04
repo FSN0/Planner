@@ -311,7 +311,12 @@ class UniversalCalendarManager {
                         tippy(info.el, { content: info.event.extendedProps.tooltipContent, allowHTML: true, placement: 'top', theme: 'light-border' });
                     } else if (typeof $ !== 'undefined' && $.fn.tooltip) {
                         $(info.el).tooltip({ title: info.event.extendedProps.tooltipContent, html: true, sanitize: false, placement: 'top', container: 'body' });
+                    } else {
+                        info.el.title = info.event.extendedProps.tooltipText
+                            || String(info.event.extendedProps.tooltipContent).replace(/<br\s*\/?>/gi, ' · ').replace(/<[^>]+>/g, '');
                     }
+                } else if (info.event.extendedProps && info.event.extendedProps.tooltipText) {
+                    info.el.title = info.event.extendedProps.tooltipText;
                 }
 
                 info.el.addEventListener('dblclick', function(e) {
