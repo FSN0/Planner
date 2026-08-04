@@ -216,6 +216,9 @@ class UniversalCalendarManager {
                 if ((evType === 'vehiculo' || evType === 'vehiculo_odoo') && !eventData.classNames.includes('fc-event-vehiculo')) {
                     eventData.classNames.push('fc-event-vehiculo');
                 }
+                if ((evType === 'asignacion' || evType === 'obra') && !eventData.classNames.includes('fc-event-obra')) {
+                    eventData.classNames.push('fc-event-obra');
+                }
                 eventData.borderColor = bgColor;
 
                 if (bgColor.toLowerCase() === '#ffffff' || bgColor.toLowerCase() === '#fff' || bgColor.toLowerCase() === 'white') {
@@ -250,19 +253,23 @@ class UniversalCalendarManager {
                 if (props.estado_fichaje) {
                     let estado = props.estado_fichaje;
                     let dotClass = '#94a3b8'; let titleMsg = 'Sin Registro';
-                    if (estado === 'Correcto') { dotClass = '#10b981'; titleMsg = 'Fichaje Correcto'; }
+                    if (estado === 'Correcto' || estado === 'Correcto_Automatico') { dotClass = '#10b981'; titleMsg = 'Fichaje Correcto'; }
                     else if (estado === 'Ausencia') { dotClass = '#f59e0b'; titleMsg = 'Ausencia Pendiente'; }
                     else if (estado === 'Resuelto_Ausencia' || estado === 'Conflicto' || estado === 'Paracaidista') { dotClass = '#ef4444'; titleMsg = 'Conflicto/Desviación'; }
-                    else if (estado.startsWith('Resuelto')) { dotClass = '#3b82f6'; titleMsg = 'Resuelto Manual'; }
+                    else if (estado.startsWith('Resuelto')) { dotClass = '#10b981'; titleMsg = 'Fichaje resuelto'; }
 
                     innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background-color:${dotClass}; margin-right:3px; flex-shrink:0;"></span>`;
                 }
-                if (props.type === 'vehiculo' || props.type === 'vehiculo_odoo' || props.vehiculo_label) {
+                if (props.type === 'vehiculo' || props.type === 'vehiculo_odoo') {
                     const tip = props.vehiculo_label
                         ? `Vehículo: ${props.vehiculo_label}${props.km != null ? ' · ' + Math.round(props.km) + ' km' : ''}`
                         : 'Vehículo';
                     innerHtml += `<i class="fas fa-car" title="${tip}" style="margin-right:3px; flex-shrink:0; opacity:0.95;"></i>`;
+                    const evPadVeh = _this.compact ? '0 1px' : '2px 4px';
+                    const evFontVeh = _this.compact ? '0.52rem' : '0.72rem';
+                    return { html: `<div class="d-flex align-items-center fc-event-vehiculo-inner" style="font-size:${evFontVeh}; line-height:1.1; overflow:hidden; width:100%; padding:${evPadVeh}; color:${arg.event.textColor || 'inherit'}; opacity:0.92;">${innerHtml}<span class="text-truncate">${arg.event.title}</span></div>` };
                 }
+                // Obras: sin icono de coche aunque lleven vehiculo_label en props
                 innerHtml += `<span class="text-truncate">${arg.event.title}</span>`;
                 return { html: `<div class="d-flex align-items-center" style="font-size:${evFont}; line-height:${evLine}; overflow:hidden; width:100%; padding:${evPad}; color:${arg.event.textColor || 'inherit'};">${innerHtml}</div>` };
             },
@@ -306,6 +313,16 @@ class UniversalCalendarManager {
                 }
 
                 // 2. LOGICA NORMAL DE OBRAS (Tooltips y Doble Clic)
+                const evTypeMount = (info.event.extendedProps && info.event.extendedProps.type) || '';
+                if (evTypeMount === 'vehiculo' || evTypeMount === 'vehiculo_odoo') {
+                    // Más compacto y con borde discontinuo para no confundir con obras
+                    info.el.style.fontSize = '0.72rem';
+                    info.el.style.opacity = '0.95';
+                    info.el.style.borderStyle = 'dashed';
+                    info.el.style.borderWidth = '1.5px';
+                    info.el.title = info.el.title || (info.event.title || 'Vehículo');
+                }
+
                 if (info.event.extendedProps && info.event.extendedProps.tooltipContent) {
                     if (typeof tippy !== 'undefined') {
                         tippy(info.el, { content: info.event.extendedProps.tooltipContent, allowHTML: true, placement: 'top', theme: 'light-border' });

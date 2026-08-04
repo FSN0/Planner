@@ -332,27 +332,82 @@ def get_universal_calendar_events():
                     tooltip_html = f"<div style='text-align:left;'><strong>{fecha.strftime('%d/%m/%Y')}:</strong><br>⚪ Sin Registro (Aún no ha fichado)</div>"
                 else:
                     estados = [f.estado for f in lista_fichajes]
-                    
-                    # Matriz de prioridades
-                    if any(est in ['Conflicto', 'Paracaidista', 'Resuelto_Ausencia'] for est in estados):
-                        color_final = "#ef4444" # 🔴 Rojo
-                    elif any(est in ['Ausencia', 'Pendiente', 'Retraso'] for est in estados) or len(set(estados)) > 1:
-                        color_final = "#f59e0b" # 🟠 Naranja
-                    elif any(est.startswith('Resuelto') for est in estados):
-                        color_final = "#3b82f6" # 🔵 Azul
+
+                    # Estados finales OK (admin validó o el fichaje cuadra solo).
+                    # Importante: NO usar len(set(estados))>1 — Correcto + Resuelto_Asignado
+                    # es multi-obra resuelta y debe ser verde, no naranja.
+                    FICHAJE_OK = {
+                        'Correcto', 'Correcto_Automatico',
+                        'Resuelto_Movido', 'Resuelto_Asignado', 'Resuelto_Dividido',
+                        'Resuelto_Ignorado', 'Resuelto_Falta',
+                    }
+                    FICHAJE_ROJO = {'Conflicto', 'Paracaidista', 'Resuelto_Ausencia'}
+                    FICHAJE_NARANJA = {'Ausencia', 'Pendiente', 'Retraso'}
+
+                    def _label_estado_fichaje(estado):
+                        return {
+                            'Correcto': 'Correcto',
+                            'Correcto_Automatico': 'Correcto (automático)',
+                            'Resuelto_Asignado': 'Correcto (asignado por admin)',
+                            'Resuelto_Movido': 'Correcto (movido por admin)',
+                            'Resuelto_Dividido': 'Correcto (dividido por admin)',
+                            'Resuelto_Ignorado': 'Ignorado por admin',
+                            'Resuelto_Falta': 'Correcto (falta resuelta)',
+                            'Resuelto_Ausencia': 'Ausencia resuelta',
+                            'Conflicto': 'Conflicto (pendiente)',
+                            'Paracaidista': 'Paracaidista (pendiente)',
+                            'Ausencia': 'Ausencia (pendiente)',
+                            'Pendiente': 'Pendiente',
+                            'Retraso': 'Retraso',
+                        }.get(estado, (estado or '').replace('_', ' '))
+
+                    if any(est in FICHAJE_ROJO for est in estados):
+                        color_final = "#ef4444"  # 🔴 abierto grave
+                    elif any(est in FICHAJE_NARANJA for est in estados):
+                        color_final = "#f59e0b"  # 🟠 pendiente real
+                    elif all(est in FICHAJE_OK for est in estados):
+                        color_final = "#10b981"  # 🟢 todo OK / resuelto
+                    elif any(
+                        (est or '').startswith('Resuelto') for est in estados
+                    ) and not any(
+                        est in FICHAJE_ROJO or est in FICHAJE_NARANJA for est in estados
+                    ):
+                        color_final = "#10b981"  # 🟢 resuelto
                     else:
-                        color_final = "#10b981" # 🟢 Verde
+                        color_final = "#f59e0b"  # 🟠 desconocido / mezcla rara
 
                     html_items = []
                     for f in lista_fichajes:
-                        icono = "🔴" if f.estado in ['Conflicto', 'Paracaidista', 'Resuelto_Ausencia'] else \
-                                "🟠" if f.estado in ['Ausencia', 'Pendiente', 'Retraso'] else \
-                                "🔵" if f.estado.startswith('Resuelto') else \
-                                "⚪" if f.estado == 'Sin_Registro' else "🟢"
-                        nom_obra = _obra_label(f.obra_planificada, fallback='Obra Externa')
-                        html_items.append(f"<li>{icono} <b>{nom_obra}</b>: {f.estado.replace('_', ' ')}</li>")
+                        est = f.estado or ''
+                        if est in FICHAJE_ROJO:
+                            icono = "🔴"
+                        elif est in FICHAJE_NARANJA:
+                            icono = "🟠"
+                        elif est in FICHAJE_OK or est.startswith('Resuelto'):
+                            icono = "🟢"
+                        else:
+                            icono = "⚪"
+                        nom_obra = _obra_label(f.obra_planificada, fallback=None)
+                        if not nom_obra and getattr(f, 'obra_real', None):
+                            nom_obra = _obra_label(f.obra_real, fallback=None)
+                        if not nom_obra:
+                            nom_obra = 'Sin obra en plan'
+                        elif getattr(f, 'obra_real', None):
+                            nom_real = _obra_label(f.obra_real, fallback=None)
+                            if nom_real and nom_real != nom_obra:
+                                nom_obra = f"{nom_obra} → {nom_real}"
+                        html_items.append(
+                            f"<li>{icono} <b>{nom_obra}</b>: {_label_estado_fichaje(est)}</li>"
+                        )
 
-                    tooltip_html = f"<div style='text-align:left;'><strong style='border-bottom:1px solid #ccc; padding-bottom:3px; display:block; margin-bottom:5px;'>Fichajes ({fecha.strftime('%d/%m/%Y')}):</strong><ul style='padding-left:15px; margin-bottom:0; font-size:0.85em; list-style:none;'>{''.join(html_items)}</ul></div>"
+                    tooltip_html = (
+                        f"<div style='text-align:left;'>"
+                        f"<strong style='border-bottom:1px solid #ccc; padding-bottom:3px; "
+                        f"display:block; margin-bottom:5px;'>"
+                        f"Fichajes ({fecha.strftime('%d/%m/%Y')}):</strong>"
+                        f"<ul style='padding-left:15px; margin-bottom:0; font-size:0.85em; "
+                        f"list-style:none;'>{''.join(html_items)}</ul></div>"
+                    )
 
                 events.append({
                     "start": fecha.strftime("%Y-%m-%d"),
