@@ -18,6 +18,9 @@
         <span class="page-toolbar-count">{{ companies|length }} {{ _('empresas') }}</span>
       </div>
       <div class="page-toolbar-actions">
+        <a href="{{ url_for('admin.import_companies') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-file-import"></i> {{ _('Importar') }}
+        </a>
         <a href="{{ url_for('admin.create_company') }}" class="btn-admin btn-admin-primary">
           <i class="fas fa-plus"></i> {{ _('Nueva') }}
         </a>

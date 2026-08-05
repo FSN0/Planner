@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Ficha: {{ vehiculo.label() }}{% endblock %}
+{% block title %}{{ _('Ficha') }}: {{ vehiculo.label() }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -112,14 +112,14 @@
       <header class="entity-panel-card-top">
         <div class="entity-panel-toolbar-start">
           <a href="{{ url_for('admin.vehiculos') }}" class="entity-panel-back">
-            <i class="fas fa-arrow-left"></i> Vehículos
+            <i class="fas fa-arrow-left"></i> {{ _('Vehículos') }}
           </a>
-          <span class="entity-type-marker"><i class="fas fa-car"></i> Vehículo</span>
+          <span class="entity-type-marker"><i class="fas fa-car"></i> {{ _('Vehículo') }}</span>
         </div>
         <div class="entity-panel-actions">
           {% if current_user.role == 'admin' and tenant_has_odoo %}
           <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
-            <i class="fas fa-clipboard-check"></i> Auditoría
+            <i class="fas fa-clipboard-check"></i> {{ _('Auditoría') }}
           </a>
           {% endif %}
         </div>
@@ -141,12 +141,12 @@
                 {% if marca_modelo %}
                   <span>{{ marca_modelo }}</span>
                 {% else %}
-                  <span class="text-muted">Sin marca/modelo</span>
+                  <span class="text-muted">{{ _('Sin marca/modelo') }}</span>
                 {% endif %}
                 {% if vehiculo.active %}
-                  <span class="entity-status-badge entity-status-badge--active">Activo</span>
+                  <span class="entity-status-badge entity-status-badge--active">{{ _('Activo') }}</span>
                 {% else %}
-                  <span class="entity-status-badge entity-status-badge--inactive">Inactivo</span>
+                  <span class="entity-status-badge entity-status-badge--inactive">{{ _('Inactivo') }}</span>
                 {% endif %}
               </p>
             </div>
@@ -154,29 +154,29 @@
 
           <div class="entity-meta-grid">
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Matrícula</span>
+              <span class="entity-meta-item-label">{{ _('Matrícula') }}</span>
               <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not vehiculo.matricula }}">
                 {{ vehiculo.matricula or '—' }}
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Marca / Modelo</span>
+              <span class="entity-meta-item-label">{{ _('Marca / Modelo') }}</span>
               <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not marca_modelo }}">
                 {{ marca_modelo or '—' }}
               </span>
             </div>
             {% if tenant_has_odoo %}
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Conductor Odoo</span>
+              <span class="entity-meta-item-label">{{ _('Conductor Odoo') }}</span>
               <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not vehiculo.odoo_driver_name }}">
                 {{ vehiculo.odoo_driver_name or '—' }}
               </span>
             </div>
             {% endif %}
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Estado</span>
+              <span class="entity-meta-item-label">{{ _('Estado') }}</span>
               <span class="entity-meta-item-value">
-                {{ 'Activo' if vehiculo.active else 'Inactivo' }}
+                {{ _('Activo') if vehiculo.active else _('Inactivo') }}
               </span>
             </div>
           </div>
@@ -187,30 +187,30 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row">
               <div class="col-md-3 mb-2">
-                <label class="small font-weight-bold text-secondary">Nombre *</label>
+                <label class="small font-weight-bold text-secondary">{{ _('Nombre') }} *</label>
                 <input type="text" name="nombre" class="form-control form-control-sm" required
                        value="{{ vehiculo.nombre }}" maxlength="120">
               </div>
               <div class="col-md-2 mb-2">
-                <label class="small font-weight-bold text-secondary">Matrícula</label>
+                <label class="small font-weight-bold text-secondary">{{ _('Matrícula') }}</label>
                 <input type="text" name="matricula" class="form-control form-control-sm"
                        value="{{ vehiculo.matricula or '' }}" maxlength="40">
               </div>
               <div class="col-md-2 mb-2">
-                <label class="small font-weight-bold text-secondary">Marca</label>
+                <label class="small font-weight-bold text-secondary">{{ _('Marca') }}</label>
                 <input type="text" name="marca" class="form-control form-control-sm"
                        value="{{ vehiculo.marca or '' }}" maxlength="80">
               </div>
               <div class="col-md-2 mb-2">
-                <label class="small font-weight-bold text-secondary">Modelo</label>
+                <label class="small font-weight-bold text-secondary">{{ _('Modelo') }}</label>
                 <input type="text" name="modelo" class="form-control form-control-sm"
                        value="{{ vehiculo.modelo or '' }}" maxlength="80">
               </div>
               <div class="col-md-3 mb-2 d-flex align-items-end">
-                <button type="submit" class="btn-admin btn-admin-primary mr-2"><i class="fas fa-save"></i> Guardar</button>
+                <button type="submit" class="btn-admin btn-admin-primary mr-2"><i class="fas fa-save"></i> {{ _('Guardar') }}</button>
                 <button type="submit" formaction="{{ url_for('admin.vehiculos_toggle', vehiculo_id=vehiculo.id) }}"
                         class="btn-admin btn-admin-ghost">
-                  {{ 'Desactivar' if vehiculo.active else 'Activar' }}
+                  {{ _('Desactivar') if vehiculo.active else _('Activar') }}
                 </button>
               </div>
             </div>
@@ -227,34 +227,34 @@
         <button type="button" class="vehicle-history-toggle" id="vehicleHistoryToggle" aria-expanded="{{ 'true' if history_open else 'false' }}">
           <span class="vehicle-history-icon"><i class="fas fa-history"></i></span>
           <span class="vehicle-history-text">
-            <span class="vehicle-history-title">Historial de uso</span>
-            <span class="vehicle-history-sub">{% if tenant_has_odoo %}Planificado + odómetros Odoo{% else %}Asignaciones planificadas{% endif %} · despliega para consultar</span>
+            <span class="vehicle-history-title">{{ _('Historial de uso') }}</span>
+            <span class="vehicle-history-sub">{% if tenant_has_odoo %}{{ _('Planificado + odómetros Odoo') }}{% else %}{{ _('Asignaciones planificadas') }}{% endif %} · {{ _('despliega para consultar') }}</span>
           </span>
           <i class="fas fa-chevron-down vehicle-history-chevron"></i>
         </button>
         <div class="vehicle-history-body" id="vehicleHistoryBody">
           <div class="vehicle-history-controls">
             <div class="config-field">
-              <label for="historyDaysPreset">Periodo</label>
+              <label for="historyDaysPreset">{{ _('Periodo') }}</label>
               <select id="historyDaysPreset" class="form-control form-control-sm">
-                <option value="7" {% if history_days == 7 %}selected{% endif %}>7 días</option>
-                <option value="30" {% if history_days == 30 %}selected{% endif %}>30 días</option>
-                <option value="90" {% if history_days == 90 %}selected{% endif %}>90 días</option>
-                <option value="180" {% if history_days == 180 %}selected{% endif %}>180 días</option>
-                <option value="365" {% if history_days == 365 %}selected{% endif %}>365 días</option>
-                <option value="730" {% if history_days == 730 %}selected{% endif %}>730 días</option>
-                <option value="custom" {% if history_days not in [7, 30, 90, 180, 365, 730] %}selected{% endif %}>Personalizado</option>
+                <option value="7" {% if history_days == 7 %}selected{% endif %}>7 {{ _('días') }}</option>
+                <option value="30" {% if history_days == 30 %}selected{% endif %}>30 {{ _('días') }}</option>
+                <option value="90" {% if history_days == 90 %}selected{% endif %}>90 {{ _('días') }}</option>
+                <option value="180" {% if history_days == 180 %}selected{% endif %}>180 {{ _('días') }}</option>
+                <option value="365" {% if history_days == 365 %}selected{% endif %}>365 {{ _('días') }}</option>
+                <option value="730" {% if history_days == 730 %}selected{% endif %}>730 {{ _('días') }}</option>
+                <option value="custom" {% if history_days not in [7, 30, 90, 180, 365, 730] %}selected{% endif %}>{{ _('Personalizado') }}</option>
               </select>
             </div>
             <div class="config-field" id="historyDaysCustomWrap" style="{% if history_days in [7, 30, 90, 180, 365, 730] %}display:none;{% endif %}">
-              <label for="historyDaysCustom">Días</label>
+              <label for="historyDaysCustom">{{ _('Días') }}</label>
               <input type="number" id="historyDaysCustom" class="form-control form-control-sm"
                      min="1" max="730" value="{{ history_days }}" placeholder="1–730">
             </div>
             <div class="config-field">
               <label>&nbsp;</label>
               <button type="button" class="btn-admin btn-admin-primary btn-admin-sm" id="historyDaysApply">
-                <i class="fas fa-search"></i> Consultar
+                <i class="fas fa-search"></i> {{ _('Consultar') }}
               </button>
             </div>
           </div>
@@ -262,7 +262,7 @@
             {% if history_open %}
               {% include "components/_vehicle_history_table.html" %}
             {% else %}
-              <p class="vehicle-history-loading mb-0">Abre el historial o pulsa Consultar para cargar datos.</p>
+              <p class="vehicle-history-loading mb-0">{{ _('Abre el historial o pulsa Consultar para cargar datos.') }}</p>
             {% endif %}
           </div>
         </div>
@@ -270,7 +270,7 @@
     </section>
 
     <section class="entity-calendar-zone">
-      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Uso y planificación</h2>
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> {{ _('Uso y planificación') }}</h2>
       <div id="vehicle-calendar" class="univ-calendar-root" style="min-height: 500px;"></div>
     </section>
 
@@ -325,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadHistory(days, force) {
         if (!force && hasLoaded && days === loadedDays) return Promise.resolve();
-        content.innerHTML = '<p class="vehicle-history-loading mb-0"><i class="fas fa-spinner fa-spin"></i> Cargando historial…</p>';
+        content.innerHTML = '<p class="vehicle-history-loading mb-0"><i class="fas fa-spinner fa-spin"></i> ' + {{ _('Cargando historial…')|tojson }} + '</p>';
         return fetch(historialUrl + '?days=' + encodeURIComponent(days), {
             credentials: 'same-origin',
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -343,7 +343,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.history.replaceState({}, '', url.toString());
             } catch (e) {}
         }).catch(function() {
-            content.innerHTML = '<p class="text-danger mb-0" style="padding:0.75rem 0;">No se pudo cargar el historial.</p>';
+            content.innerHTML = '<p class="text-danger mb-0" style="padding:0.75rem 0;">' + {{ _('No se pudo cargar el historial.')|tojson }} + '</p>';
         });
     }
 

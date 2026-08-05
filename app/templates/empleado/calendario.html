@@ -1,0 +1,29 @@
+{% extends "empleado/base.html" %}
+{% block title %}{{ _('Mi calendario') }}{% endblock %}
+
+{% block content %}
+<section class="empleado-card">
+  <h2>{{ _('Mi calendario') }}</h2>
+  <p class="empleado-muted">{{ _('Solo lectura: tus asignaciones.') }}</p>
+  <div id="empleado-calendar"></div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/locales-all.global.min.js"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  window.empleadoCalendar = new UniversalCalendarManager('empleado-calendar', {
+    context: 'worker',
+    id: {{ worker.id }},
+    mode: 'obras',
+    entityName: {{ (worker.name ~ ' ' ~ worker.lastname)|tojson }},
+    showFichajes: {{ 'true' if tenant_has_fichaje_operario else 'false' }},
+    hideTitle: true,
+    readonly: true
+  });
+});
+</script>
+{% endblock %}

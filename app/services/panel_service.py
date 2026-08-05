@@ -10,7 +10,8 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.models import (
     User, Obra, Asignacion, Solicitud, Company, RegistroFichaje,
-    SystemLog, SyncLog,
+    SystemLog, SyncLog, AusenciaPlanificada, AusenciaConflicto,
+    CONFLICT_PENDING, LEAVE_STATUS_PENDIENTE, LEAVE_STATUS_APROBADA,
     ROLE_OPERARIO, ROLE_JEFE, ROLE_RRHH, ROLE_ADMIN,
 )
 from app.utils.timezone_utils import today_local
@@ -306,6 +307,55 @@ def get_admin_panel_context():
         'sync_error_lines': sync_error_lines,
         'chart_solicitud_labels': list(solicitudes_por_estado.keys()),
         'chart_solicitud_values': list(solicitudes_por_estado.values()),
+    }
+
+
+def get_laboral_panel_context(user, *, puede_ver_auditoria=True, horizon_days=14):
+    """
+    Panel de inicio para ROLE_LABORAL / ROLE_RRHH (y admin si entra).
+    KPIs de ausencias, conflictos y auditoría de fichajes.
+    """
+    today = today_local()
+    horizon = today + timedelta(days=horizon_days)
+
+    ausencias_pendientes = (
+        AusenciaPlanificada.query.filter_by(estado=LEAVE_STATUS_PENDIENTE).count()
+    )
+    conflictos_pendientes = (
+        AusenciaConflicto.query.filter_by(estado=CONFLICT_PENDING).count()
+    )
+
+    audit_conflictos = audit_paracaidistas = audit_ausencias = 0
+    audit_pendientes_total = 0
+    if puede_ver_auditoria:
+        audit_conflictos = RegistroFichaje.query.filter_by(estado='Conflicto').count()
+        audit_paracaidistas = RegistroFichaje.query.filter_by(estado='Paracaidista').count()
+        audit_ausencias = RegistroFichaje.query.filter_by(estado='Ausencia').count()
+        audit_pendientes_total = audit_conflictos + audit_paracaidistas + audit_ausencias
+
+    proximas_ausencias = (
+        AusenciaPlanificada.query.options(joinedload(AusenciaPlanificada.user))
+        .filter(
+            AusenciaPlanificada.estado == LEAVE_STATUS_APROBADA,
+            AusenciaPlanificada.fecha_fin >= today,
+            AusenciaPlanificada.fecha_inicio <= horizon,
+        )
+        .order_by(AusenciaPlanificada.fecha_inicio.asc(), AusenciaPlanificada.id.asc())
+        .limit(12)
+        .all()
+    )
+
+    return {
+        'today': today,
+        'horizon_days': horizon_days,
+        'ausencias_pendientes': ausencias_pendientes,
+        'conflictos_pendientes': conflictos_pendientes,
+        'audit_conflictos': audit_conflictos,
+        'audit_paracaidistas': audit_paracaidistas,
+        'audit_ausencias': audit_ausencias,
+        'audit_pendientes_total': audit_pendientes_total,
+        'puede_ver_auditoria': puede_ver_auditoria,
+        'proximas_ausencias': proximas_ausencias,
     }
 
 

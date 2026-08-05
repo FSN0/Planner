@@ -111,8 +111,7 @@ class User(UserMixin, db.Model):
     # Autenticación
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
-    # PIN numérico para entrar a la PWA de fichaje (DNI + PIN). Nullable:
-    # sin PIN el trabajador sigue pudiendo usar correo y contraseña si los tiene.
+    # PIN numérico para la PWA de fichaje (DNI + PIN). Independiente del login web.
     pin_hash = db.Column(db.String(255), nullable=True)
     role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, operario
     
@@ -133,6 +132,10 @@ class User(UserMixin, db.Model):
     is_deleted = db.Column(db.Boolean, default=False)  # Soft delete
     # Alta autoservicio: False hasta confirmar el enlace del correo.
     email_verified = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='false'
+    )
+    # Login web (email/contraseña) para operarios. El PIN de /mi es independiente.
+    web_access = db.Column(
         db.Boolean, nullable=False, default=False, server_default='false'
     )
     

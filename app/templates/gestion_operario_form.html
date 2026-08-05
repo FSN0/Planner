@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if edit_mode %}Editar Usuario{% else %}Nuevo Usuario{% endif %}{% endblock %}
+{% block title %}{% if edit_mode %}{{ _('Editar Usuario') }}{% else %}{{ _('Nuevo Usuario') }}{% endif %}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -17,7 +17,7 @@
         <a href="{{ cancel_url }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
           <i class="fas fa-arrow-left"></i>
         </a>
-        <h1 class="page-toolbar-title">{% if edit_mode %}Editar persona{% else %}Nueva persona{% endif %}</h1>
+        <h1 class="page-toolbar-title">{% if edit_mode %}{{ _('Editar persona') }}{% else %}{{ _('Nueva persona') }}{% endif %}</h1>
       </div>
     </div>
 
@@ -27,73 +27,73 @@
           <h2 class="admin-panel-title">{{ user.name }} {{ user.lastname }}</h2>
           <span class="admin-panel-subtitle">{{ user.email }}</span>
         {% else %}
-          <h2 class="admin-panel-title">Nuevo usuario</h2>
-          <span class="admin-panel-subtitle">Complete la información del personal</span>
+          <h2 class="admin-panel-title">{{ _('Nuevo usuario') }}</h2>
+          <span class="admin-panel-subtitle">{{ _('Complete la información del personal') }}</span>
         {% endif %}
       </div>
 
       <form action="{{ action_url }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-        <div class="admin-form-section">Datos de cuenta</div>
+        <div class="admin-form-section">{{ _('Datos de cuenta') }}</div>
         <div class="form-row">
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Email</label>
+            <label class="admin-form-label">{{ _('Email') }}</label>
             <input type="email" name="email" class="form-control" value="{{ user.email if edit_mode else '' }}" required>
           </div>
           {% if not edit_mode %}
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Contraseña</label>
+            <label class="admin-form-label">{{ _('Contraseña') }}</label>
             <input type="password" name="password" class="form-control" required>
           </div>
           {% endif %}
         </div>
 
         <div class="form-group">
-          <label class="admin-form-label">Rol de sistema</label>
+          <label class="admin-form-label">{{ _('Rol de sistema') }}</label>
           <select name="role" class="form-control custom-select" required>
-            <option value="operario" {% if edit_mode and user.role == 'operario' %}selected{% endif %}>Operario</option>
-            <option value="jefe_obra" {% if edit_mode and user.role == 'jefe_obra' %}selected{% endif %}>Jefe de obra</option>
-            <option value="rrhh" {% if edit_mode and user.role == 'rrhh' %}selected{% endif %}>RRHH / Administrativo</option>
-            <option value="laboral" {% if edit_mode and user.role == 'laboral' %}selected{% endif %}>Laboral</option>
-            <option value="admin" {% if edit_mode and user.role == 'admin' %}selected{% endif %}>Administrador</option>
+            <option value="operario" {% if edit_mode and user.role == 'operario' %}selected{% endif %}>{{ _('Operario') }}</option>
+            <option value="jefe_obra" {% if edit_mode and user.role == 'jefe_obra' %}selected{% endif %}>{{ _('Jefe de obra') }}</option>
+            <option value="rrhh" {% if edit_mode and user.role == 'rrhh' %}selected{% endif %}>{{ _('RRHH / Administrativo') }}</option>
+            <option value="laboral" {% if edit_mode and user.role == 'laboral' %}selected{% endif %}>{{ _('Laboral') }}</option>
+            <option value="admin" {% if edit_mode and user.role == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
           </select>
-          <small class="form-text text-muted" style="font-size: 0.72rem;">Define los permisos de acceso a la plataforma.</small>
+          <small class="form-text text-muted" style="font-size: 0.72rem;">{{ _('Define los permisos de acceso a la plataforma.') }}</small>
         </div>
 
-        <div class="admin-form-section">Información personal</div>
+        <div class="admin-form-section">{{ _('Información personal') }}</div>
         <div class="form-row">
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Nombre</label>
+            <label class="admin-form-label">{{ _('Nombre') }}</label>
             <input type="text" name="name" class="form-control" value="{% if edit_mode %}{{ user.name }}{% endif %}" required>
           </div>
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Apellidos</label>
+            <label class="admin-form-label">{{ _('Apellidos') }}</label>
             <input type="text" name="lastname" class="form-control" value="{% if edit_mode %}{{ user.lastname }}{% endif %}" required>
           </div>
         </div>
         <div class="form-group" style="max-width: 220px;">
-          <label class="admin-form-label">DNI / NIE</label>
+          <label class="admin-form-label">{{ _('DNI / NIE') }}</label>
           <input type="text" name="dni" class="form-control" value="{% if edit_mode %}{{ user.dni }}{% endif %}" required>
         </div>
 
-        <div class="admin-form-section">Perfil profesional</div>
+        <div class="admin-form-section">{{ _('Perfil profesional') }}</div>
         <div class="form-row">
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Categoría (nómina)</label>
-            <input type="text" name="categoria_profesional" class="form-control" placeholder="Ej: Oficial 1ª" value="{{ user.categoria_profesional or '' }}">
+            <label class="admin-form-label">{{ _('Categoría (nómina)') }}</label>
+            <input type="text" name="categoria_profesional" class="form-control" placeholder="{{ _('Ej: Oficial 1ª') }}" value="{{ user.categoria_profesional or '' }}">
           </div>
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Especialidad (oficio)</label>
-            <input type="text" name="especialidad" class="form-control" placeholder="Ej: Electricista" value="{{ user.especialidad or '' }}">
+            <label class="admin-form-label">{{ _('Especialidad (oficio)') }}</label>
+            <input type="text" name="especialidad" class="form-control" placeholder="{{ _('Ej: Electricista') }}" value="{{ user.especialidad or '' }}">
           </div>
         </div>
 
-        <div class="admin-form-section">Afiliación</div>
+        <div class="admin-form-section">{{ _('Afiliación') }}</div>
         <div class="form-group">
-          <label class="admin-form-label">Empresa</label>
+          <label class="admin-form-label">{{ _('Empresa') }}</label>
           <select name="company_id" class="form-control custom-select" required>
-            <option value="">— Seleccione empresa —</option>
+            <option value="">{{ _('— Seleccione empresa —') }}</option>
             {% for company in companies %}
               <option value="{{ company.id }}" {% if edit_mode and user.company_id == company.id %}selected{% endif %}>
                 {{ company.nombre }}
@@ -109,9 +109,29 @@
               <span class="slider"></span>
             </label>
             <div>
-              <p class="admin-form-switch-label">Usuario activo</p>
-              <p class="admin-form-switch-hint">Puede ser asignado a obras</p>
+              <p class="admin-form-switch-label">{{ _('Usuario activo') }}</p>
+              <p class="admin-form-switch-hint">{{ _('Puede ser asignado a obras') }}</p>
             </div>
+          </div>
+          <div class="admin-form-switch-row mb-2">
+            <label class="admin-form-switch">
+              <input type="checkbox" id="webAccessCheck" name="web_access"
+                {% if edit_mode and user.web_access %}checked{% elif not edit_mode %}{% endif %}>
+              <span class="slider"></span>
+            </label>
+            <div>
+              <p class="admin-form-switch-label">{{ _('Acceso a la plataforma (email y contraseña)') }}</p>
+              <p class="admin-form-switch-hint">{{ _('Solo para operarios: portal web aparte del fichaje con PIN. Los demás roles ya tienen acceso.') }}</p>
+            </div>
+          </div>
+          <div class="form-group" id="webPasswordGroup" style="max-width: 280px; display: none;">
+            <label class="admin-form-label">{{ _('Contraseña de plataforma') }}</label>
+            <input type="password" name="web_password" id="webPassword" class="form-control"
+                   autocomplete="new-password"
+                   placeholder="{% if edit_mode %}{{ _('Obligatoria al activar') }}{% else %}{{ _('Opcional si ya hay contraseña arriba') }}{% endif %}">
+            <small class="form-text text-muted" style="font-size: 0.72rem;">
+              {{ _('Mínimo 8 caracteres. El PIN de fichaje (/mi) no cambia.') }}
+            </small>
           </div>
           <div class="admin-form-switch-row">
             <label class="admin-form-switch">
@@ -120,8 +140,8 @@
               <span class="slider"></span>
             </label>
             <div>
-              <p class="admin-form-switch-label">Notificaciones por email</p>
-              <p class="admin-form-switch-hint">Recibir avisos de asignaciones y cambios</p>
+              <p class="admin-form-switch-label">{{ _('Notificaciones por email') }}</p>
+              <p class="admin-form-switch-hint">{{ _('Recibir avisos de asignaciones y cambios') }}</p>
             </div>
           </div>
         </div>
@@ -129,10 +149,10 @@
         <div class="admin-form-actions">
           <div></div>
           <div class="admin-form-actions-right">
-            <a href="{{ cancel_url }}" class="btn-admin-link">Cancelar</a>
+            <a href="{{ cancel_url }}" class="btn-admin-link">{{ _('Cancelar') }}</a>
             <button type="submit" class="btn-admin btn-admin-primary">
               <i class="fas fa-save"></i>
-              {% if edit_mode %}Guardar{% else %}Crear usuario{% endif %}
+              {% if edit_mode %}{{ _('Guardar') }}{% else %}{{ _('Crear usuario') }}{% endif %}
             </button>
           </div>
         </div>
@@ -140,4 +160,31 @@
     </section>
   </main>
 </div>
+<script>
+(function () {
+  var roleSelect = document.querySelector('select[name="role"]');
+  var webCheck = document.getElementById('webAccessCheck');
+  var pwdGroup = document.getElementById('webPasswordGroup');
+  var hadWeb = {{ (edit_mode and user.web_access)|tojson }};
+
+  function syncWebAccessUi() {
+    var isOperario = roleSelect && roleSelect.value === 'operario';
+    if (!webCheck || !pwdGroup) return;
+    var row = webCheck.closest('.admin-form-switch-row');
+    if (row) row.style.display = isOperario ? '' : 'none';
+    if (!isOperario) {
+      pwdGroup.style.display = 'none';
+      return;
+    }
+    pwdGroup.style.display = webCheck.checked ? '' : 'none';
+    var input = document.getElementById('webPassword');
+    if (input) {
+      input.required = webCheck.checked && !hadWeb;
+    }
+  }
+  if (roleSelect) roleSelect.addEventListener('change', syncWebAccessUi);
+  if (webCheck) webCheck.addEventListener('change', syncWebAccessUi);
+  syncWebAccessUi();
+})();
+</script>
 {% endblock %}

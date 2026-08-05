@@ -15,25 +15,20 @@ auth_bp = Blueprint('auth', __name__)
 LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO,)
 
 
-def _login_blocked_roles():
+def _puede_login_web(user):
     """
-    Roles sin acceso en este tenant.
-
-    Los operarios solo pueden entrar si la empresa ha activado el fichaje desde
-    el móvil. Esto no es una comodidad: en instalaciones que importan la
-    plantilla desde un ERP hay cuentas creadas en masa, y abrirles el login sin
-    que nadie lo haya pedido convertiría esas cuentas en superficie de ataque.
-    Ante cualquier duda al leer la configuración, se deniega.
-
-    RRHH entra con el mismo acceso que laboral.
+    El operario solo entra al portal web si administración le activó web_access.
+    El módulo de fichaje (/mi con DNI+PIN) NO desbloquea el login de oficina.
     """
-    try:
-        from app.services.fichaje_operario_service import fichaje_operario_activo
-        if fichaje_operario_activo():
-            return ()
-    except Exception:
-        pass
-    return LOGIN_BLOCKED_ROLES
+    if user.role == ROLE_OPERARIO:
+        return bool(getattr(user, 'web_access', False))
+    return user.role not in LOGIN_BLOCKED_ROLES
+
+
+def _marcar_email_pendiente(user):
+    pending = hasattr(user, 'email_verified') and not user.email_verified
+    session['email_pending_verification'] = pending
+    return pending
 
 
 def _login_page_context():
@@ -46,6 +41,7 @@ def _login_page_context():
     return {
         'tenant_name': g.current_tenant.nombre,
         'fichaje_activo': fichaje_activo,
+        'show_resend_verification': session.pop('show_resend_verification', False),
     }
 
 
@@ -62,9 +58,11 @@ def _destino_por_rol(user):
     if user.role == 'jefe_obra':
         return url_for('jefe.obras_detailed', selected_date=date.today())
     if user.role in (ROLE_LABORAL, ROLE_RRHH):
-        return url_for('admin.ausencias_list')
+        return url_for('admin.panel_laboral')
     if user.role == ROLE_OPERARIO:
-        return url_for('operarios.inicio')
+        if getattr(user, 'web_access', False):
+            return url_for('empleado.inicio')
+        return None
     return None
 
 
@@ -82,7 +80,8 @@ def _redirect_authenticated_user():
 def entrar_alta():
     """
     Compatibilidad con enlaces antiguos de auto-login post-alta.
-    El flujo actual pide verificación de correo (/auth/verificar-email).
+    El flujo actual pide verificación de correo (/auth/verificar-email),
+    pero permite entrar con email pendiente (banner de verificación).
     """
     from app.services.signup_service import SignupError, leer_token_entrada_post_alta
 
@@ -102,18 +101,17 @@ def entrar_alta():
         flash('No se ha podido abrir la sesión. Entra con tu correo y contraseña.', 'warning')
         return redirect(url_for('auth.login'))
 
-    if hasattr(user, 'email_verified') and not user.email_verified:
-        flash(
-            'Debes verificar tu correo electrónico antes de entrar. Revisa tu bandeja de entrada.',
-            'warning',
-        )
-        return redirect(url_for('auth.login'))
-
     if current_user.is_authenticated:
         logout_user()
 
     login_user(user, remember=True)
     session['tenant_id'] = g.current_tenant.id
+    if _marcar_email_pendiente(user):
+        flash(
+            'Has entrado. Verifica tu correo cuando puedas; hasta entonces '
+            'algunas acciones sensibles están limitadas.',
+            'info',
+        )
     try:
         from app.utils import register_log
         register_log(
@@ -147,6 +145,7 @@ def verificar_email():
         user = confirmar_email(token, g.current_tenant)
     except EmailVerificationError as exc:
         flash(str(exc), 'danger')
+        session['show_resend_verification'] = True
         return redirect(url_for('auth.login'))
 
     if current_user.is_authenticated:
@@ -164,6 +163,7 @@ def verificar_email():
 
     login_user(user, remember=True)
     session['tenant_id'] = g.current_tenant.id
+    session['email_pending_verification'] = False
     try:
         from app.utils import register_log
         register_log(
@@ -180,6 +180,39 @@ def verificar_email():
     flash('Correo verificado. Bienvenido a SignaPlan.', 'success')
     destino = _destino_por_rol(user)
     return redirect(destino or url_for('admin.panel'))
+
+
+@auth_bp.route('/reenviar-verificacion', methods=['POST'])
+@limiter.limit('3 per minute; 10 per hour')
+def reenviar_verificacion():
+    """Reenvía el correo de verificación (logueado o con email en el formulario)."""
+    from app.services.email_verification_service import (
+        EmailVerificationError,
+        reenviar_verificacion as _reenviar,
+    )
+    from app.services.i18n_service import translate
+
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        flash('Accede desde la URL de tu empresa.', 'warning')
+        return redirect(url_for('main.dashboard'))
+
+    try:
+        if current_user.is_authenticated:
+            _reenviar(g.current_tenant, user=current_user)
+        else:
+            _reenviar(g.current_tenant, email=request.form.get('email'))
+        flash(
+            translate(
+                'Si el correo está pendiente de verificación, te hemos enviado un nuevo enlace.'
+            ),
+            'info',
+        )
+    except EmailVerificationError as exc:
+        flash(str(exc), 'danger')
+
+    if current_user.is_authenticated:
+        return redirect(request.referrer or url_for('admin.panel'))
+    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -208,30 +241,20 @@ def login():
         user = User.query.filter_by(email=email).first()
 
         if user and check_password_hash(user.password_hash, password):
-            if user.role in _login_blocked_roles():
+            if not _puede_login_web(user):
                 from app.utils import register_log
                 register_log(
                     user_id=user.id,
                     category='accesos',
                     action='Acceso denegado',
                     detail=(
-                        f"Intento de login con rol sin acceso ({user.role}). "
+                        f"Intento de login con rol sin acceso web ({user.role}). "
                         f"IP: {request.remote_addr or 'Desconocida'}"
                     ),
                 )
                 flash(
                     translate(
                         'Tu perfil no tiene acceso a la aplicación. Contacta con administración.'
-                    ),
-                    'warning',
-                )
-                return render_template('login.html', **_login_page_context())
-
-            if hasattr(user, 'email_verified') and not user.email_verified:
-                flash(
-                    translate(
-                        'Debes verificar tu correo electrónico antes de entrar. '
-                        'Revisa tu bandeja de entrada.'
                     ),
                     'warning',
                 )
@@ -248,6 +271,7 @@ def login():
 
             login_user(user, remember=remember)
             session['tenant_id'] = g.current_tenant.id
+            pending = _marcar_email_pendiente(user)
             from app.utils import register_log
             register_log(
                 user_id=user.id,
@@ -255,7 +279,15 @@ def login():
                 action='Inicio de Sesión',
                 detail=f"Login exitoso desde IP: {request.remote_addr or 'Desconocida'}",
             )
-            flash(translate('Inicio de sesión exitoso'), 'success')
+            if pending:
+                flash(
+                    translate(
+                        'Inicio de sesión correcto. Verifica tu correo cuando puedas.'
+                    ),
+                    'info',
+                )
+            else:
+                flash(translate('Inicio de sesión exitoso'), 'success')
 
             destino = _destino_por_rol(user)
             if destino:
@@ -282,6 +314,7 @@ def login():
 @login_required
 def logout():
     logout_user()
+    session.pop('email_pending_verification', None)
     from app.services.i18n_service import translate
     flash(translate('Sesión cerrada'), 'info')
     return redirect(url_for('auth.login'))

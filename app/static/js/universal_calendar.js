@@ -658,6 +658,7 @@ class UniversalCalendarManager {
         const container = document.getElementById(`${this.panelId}-vehicle-container`);
         if (!row || !container) return;
 
+        // En obra nueva la flota va por fila multi-trabajador; aquí solo worker context.
         const show = !!showForNew && this.context === 'worker';
         row.style.display = show ? 'flex' : 'none';
         if (!show) {
@@ -694,11 +695,31 @@ class UniversalCalendarManager {
         }, 150);
     }
 
+    _destroySelect2In(container) {
+        if (!container || typeof $ === 'undefined') return;
+        $(container).find('select').each(function () {
+            const $s = $(this);
+            if ($s.data('select2')) $s.select2('destroy');
+        });
+    }
+
     _renderResourceSelect(container, prefill) {
+        // Nueva asignación en obra: varias filas trabajador + vehículo opcional
+        if (this.context === 'obra' && !prefill) {
+            this._renderMultiWorkerSelect(container);
+            return;
+        }
+
+        if (container && container.parentElement) {
+            container.parentElement.classList.add('col-md-5');
+            container.parentElement.classList.remove('col-md-12', 'mb-2');
+        }
+
         let selectLabel = (this.context === 'obra' || this.context === 'vehiculo')
             ? 'Trabajador a asignar'
             : 'Obra destino';
 
+        this._destroySelect2In(container);
         const existingSelect = $(`#${this.panelId}-select`);
         if (existingSelect.length && existingSelect.data('select2')) {
             existingSelect.select2('destroy');
@@ -761,6 +782,176 @@ class UniversalCalendarManager {
                 });
             }
         }, 150);
+    }
+
+    _renderMultiWorkerSelect(container) {
+        this._destroySelect2In(container);
+        if (container && container.parentElement) {
+            container.parentElement.classList.remove('col-md-5');
+            container.parentElement.classList.add('col-md-12', 'mb-2');
+        }
+        container.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <label class="small font-weight-bold mb-0 text-secondary">${t('Trabajadores a asignar')}</label>
+                <button type="button" class="btn btn-link btn-sm p-0" id="${this.panelId}-add-worker">
+                    <i class="fas fa-plus mr-1"></i>${t('Añadir trabajador')}
+                </button>
+            </div>
+            <div id="${this.panelId}-workers-list"></div>
+            <select id="${this.panelId}-select" class="d-none" aria-hidden="true"><option></option></select>
+        `;
+        const list = document.getElementById(`${this.panelId}-workers-list`);
+        this._addWorkerRow(list, { allowGenerico: true });
+        const addBtn = document.getElementById(`${this.panelId}-add-worker`);
+        if (addBtn) {
+            addBtn.addEventListener('click', () => {
+                this._addWorkerRow(list, { allowGenerico: false });
+            });
+        }
+    }
+
+    _addWorkerRow(listEl, opts) {
+        if (!listEl) return;
+        opts = opts || {};
+        const rowId = `${this.panelId}-wrow-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const row = document.createElement('div');
+        row.className = 'univ-worker-row border rounded bg-white p-2 mb-2';
+        row.dataset.rowId = rowId;
+        row.innerHTML = `
+            <div class="row align-items-end">
+                <div class="col-md-6 mb-1 mb-md-0">
+                    <label class="small text-muted mb-0">${t('Trabajador')}</label>
+                    <select class="form-control form-control-sm univ-worker-select" style="width:100%;">
+                        <option></option>
+                    </select>
+                </div>
+                <div class="col-md-5 mb-1 mb-md-0">
+                    <label class="small text-muted mb-0"><i class="fas fa-car mr-1"></i>${t('Vehículo')}</label>
+                    <select class="form-control form-control-sm univ-vehicle-select" style="width:100%;">
+                        <option></option>
+                    </select>
+                </div>
+                <div class="col-md-1 text-right">
+                    <button type="button" class="btn btn-sm btn-outline-danger univ-worker-remove" title="${t('Quitar')}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+        listEl.appendChild(row);
+
+        const allowGenerico = !!opts.allowGenerico;
+        setTimeout(() => {
+            const $w = $(row).find('.univ-worker-select');
+            const $v = $(row).find('.univ-vehicle-select');
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                this.initPanelSelect2($w, {
+                    placeholder: allowGenerico
+                        ? t("Escribe o elige 'CUALQUIERA'...")
+                        : t('Selecciona un trabajador...'),
+                    allowClear: true,
+                    ajax: {
+                        url: '/admin/api/planificador/search_workers',
+                        dataType: 'json', delay: 250,
+                        data: (p) => ({ q: p.term }),
+                        processResults: (d) => ({
+                            results: allowGenerico
+                                ? (d.results || [])
+                                : (d.results || []).filter((r) => String(r.id) !== 'GENERICO'),
+                        }),
+                    },
+                }).on('change', (e) => {
+                    const gRow = document.getElementById(`${this.panelId}-generic-options`);
+                    const rows = listEl.querySelectorAll('.univ-worker-row');
+                    const onlyOne = rows.length === 1;
+                    if (gRow && onlyOne) {
+                        e.target.value === 'GENERICO' ? $(gRow).slideDown(150) : $(gRow).slideUp(150);
+                    }
+                    // Sync hidden #select for single/GENERICO legacy path
+                    const hidden = document.getElementById(`${this.panelId}-select`);
+                    if (hidden && onlyOne) hidden.value = e.target.value || '';
+                });
+                this.initPanelSelect2($v, {
+                    placeholder: t('Opcional'),
+                    allowClear: true,
+                    ajax: {
+                        url: '/api/v6/vehicles',
+                        dataType: 'json',
+                        delay: 250,
+                        data: (p) => ({ q: p.term }),
+                        processResults: (d) => ({ results: d.results || [] }),
+                    },
+                });
+            }
+        }, 50);
+
+        const removeBtn = row.querySelector('.univ-worker-remove');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', () => {
+                const rows = listEl.querySelectorAll('.univ-worker-row');
+                if (rows.length <= 1) {
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire(t('Atención'), t('Debe quedar al menos un trabajador.'), 'info');
+                    }
+                    return;
+                }
+                this._destroySelect2In(row);
+                row.remove();
+                const gRow = document.getElementById(`${this.panelId}-generic-options`);
+                if (gRow) $(gRow).slideUp(150);
+            });
+        }
+    }
+
+    _collectMultiWorkers() {
+        const list = document.getElementById(`${this.panelId}-workers-list`);
+        if (!list) return null;
+        const workers = [];
+        list.querySelectorAll('.univ-worker-row').forEach((row, index) => {
+            const wSel = row.querySelector('.univ-worker-select');
+            const vSel = row.querySelector('.univ-vehicle-select');
+            const wid = wSel ? wSel.value : null;
+            if (!wid) return;
+            const entry = { worker_id: wid, index };
+            const vid = vSel ? vSel.value : null;
+            if (vid) entry.vehicle_id = vid;
+            workers.push(entry);
+        });
+        return workers;
+    }
+
+    _showBatchAssignResult(res) {
+        const results = (res && res.results) || [];
+        const failed = results.filter((r) => !r.success);
+        const ok = results.filter((r) => r.success);
+        if (!failed.length) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true, position: 'top-end', icon: 'success',
+                    title: res.message || t('Guardado'),
+                    showConfirmButton: false, timer: 2000,
+                });
+            }
+            return;
+        }
+        let html = `<p class="mb-2 text-left">${res.message || ''}</p><ul class="text-left small mb-0">`;
+        failed.forEach((r) => {
+            const name = r.worker_name || (`#${r.worker_id}`);
+            const reason = r.message || r.error || t('Error');
+            const leaveTag = r.conflict_type === 'leave'
+                ? ` <span class="badge badge-warning">${t('Ausencia')}</span>`
+                : '';
+            html += `<li><b>${name}</b>${leaveTag}: ${reason}</li>`;
+        });
+        html += '</ul>';
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: ok.length ? t('Asignación parcial') : t('No se pudo asignar'),
+                html,
+                icon: ok.length ? 'warning' : 'error',
+                confirmButtonText: t('Entendido'),
+            });
+        }
     }
 
     updatePanelDatesFromEvent(event) {
@@ -933,7 +1124,69 @@ class UniversalCalendarManager {
                         Swal.fire('Atención', 'Selecciona una obra y/o un vehículo, o usa «Marcar vacaciones».', 'warning');
                         return;
                     }
-                } else if (!selVal) {
+                }
+
+                // Obra: multi-trabajador (nueva asignación)
+                const multiWorkers = (this.context === 'obra') ? this._collectMultiWorkers() : null;
+                if (this.context === 'obra' && multiWorkers !== null) {
+                    if (!multiWorkers.length) {
+                        Swal.fire(t('Atención'), t('Debes seleccionar al menos un trabajador.'), 'warning');
+                        return;
+                    }
+                    // Un solo GENERICO → flujo legacy de solicitud genérica
+                    if (multiWorkers.length === 1 && String(multiWorkers[0].worker_id) === 'GENERICO') {
+                        selVal = 'GENERICO';
+                    } else {
+                        const realWorkers = multiWorkers.filter((w) => String(w.worker_id) !== 'GENERICO');
+                        if (!realWorkers.length) {
+                            Swal.fire(t('Atención'), t('Debes seleccionar trabajadores concretos.'), 'warning');
+                            return;
+                        }
+                        // Un solo trabajador: legacy (conflictos interactivos) + vehículo de la fila
+                        if (realWorkers.length === 1) {
+                            selVal = String(realWorkers[0].worker_id);
+                            if (realWorkers[0].vehicle_id) {
+                                // Reutilizar runVehicleSave más abajo inyectando worker de la fila
+                                vehicleVal = realWorkers[0].vehicle_id;
+                                // Marcar worker para vehículo post-obra
+                                this._pendingObraVehicleWorkerId = selVal;
+                            }
+                        } else {
+                            let payload = {
+                                start_date: startVal,
+                                end_date: endVal,
+                                original_start: null,
+                                original_end: null,
+                                overwrite_mode: 'check',
+                                include_weekends: includeWeekends,
+                                target_obra_id: this.entityId,
+                                old_obra_id: (this.kanbanSourceObraId !== undefined && this.kanbanSourceObraId !== null)
+                                    ? this.kanbanSourceObraId : this.entityId,
+                                workers: realWorkers,
+                            };
+                            if (notasVal) payload.notas = notasVal;
+                            this.executeSave(payload, (obraRes) => {
+                                if (!obraRes) return;
+                                if (obraRes.batch) {
+                                    this._showBatchAssignResult(obraRes);
+                                    if (obraRes.ok_count > 0) {
+                                        this.calendar.refetchEvents();
+                                        this.hidePanel();
+                                        if (window.loadTimelineData) window.loadTimelineData();
+                                    }
+                                    return;
+                                }
+                                if (!obraRes.success) return;
+                                this.calendar.refetchEvents();
+                                this.hidePanel();
+                                if (window.loadTimelineData) window.loadTimelineData();
+                            }, { skipHideOnSuccess: true, skipSuccessToast: true });
+                            return;
+                        }
+                    }
+                }
+
+                if (this.context !== 'worker' && !selVal) {
                     Swal.fire('Atención', 'Debes seleccionar un destino/trabajador.', 'warning');
                     return;
                 }
@@ -947,12 +1200,16 @@ class UniversalCalendarManager {
                 };
 
                 const runVehicleSave = (onDone) => {
-                    if (!vehicleVal) {
+                    const vWorker = this._pendingObraVehicleWorkerId || (
+                        this.context === 'worker' ? this.entityId : null
+                    );
+                    this._pendingObraVehicleWorkerId = null;
+                    if (!vehicleVal || !vWorker) {
                         if (onDone) onDone({ success: true });
                         return;
                     }
                     const vPayload = {
-                        worker_id: this.entityId,
+                        worker_id: vWorker,
                         vehicle_id: vehicleVal,
                         start: startVal,
                         end: endVal,
@@ -982,6 +1239,10 @@ class UniversalCalendarManager {
                             ? this.kanbanSourceObraId : selVal;
                     }
 
+                    if (this.context === 'obra' && vehicleVal && !this._pendingObraVehicleWorkerId) {
+                        this._pendingObraVehicleWorkerId = selVal;
+                    }
+
                     this.executeSave(payload, (obraRes) => {
                         // Solo continuar con vehículo si la obra se guardó (cancelar conflicto no pasa success)
                         if (!obraRes || !obraRes.success) return;
@@ -989,7 +1250,7 @@ class UniversalCalendarManager {
                             if (!vres || !vres.success) return;
                             afterSave();
                         });
-                    }, { skipHideOnSuccess: !!vehicleVal });
+                    }, { skipHideOnSuccess: !!vehicleVal && (this.context === 'worker' || this.context === 'obra') });
                 } else {
                     // Solo vehículo (contexto worker)
                     runVehicleSave((vres) => {
@@ -1254,6 +1515,8 @@ class UniversalCalendarManager {
         if (notasRow) notasRow.style.display = 'none';
         let notasInput = document.getElementById(`${this.panelId}-notas`);
         if (notasInput) notasInput.value = '';
+        const workersList = document.getElementById(`${this.panelId}-workers-list`);
+        if (workersList) this._destroySelect2In(workersList);
         this._toggleVehicleRow(false);
     }
 
@@ -1411,13 +1674,18 @@ class UniversalCalendarManager {
             success: (res) => {
                 if (res.success) {
                     if (!options.skipHideOnSuccess) {
-                        if(typeof Swal !== 'undefined') Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                        if (!options.skipSuccessToast && typeof Swal !== 'undefined') {
+                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                        }
                         this.calendar.refetchEvents();
                         this.hidePanel();
                     }
                     if (this.callbacks.onAfterSave) this.callbacks.onAfterSave(res);
                     if(revertFunc) revertFunc(res);
                     
+                } else if (res.batch) {
+                    // Lote parcial o total fallido: el callback muestra detalle por fila
+                    if (revertFunc) revertFunc(res);
                 } else if (res.conflict || res.action === 'confirm_overwrite') {
                     if (typeof window.resolverConflictoAsignacion === 'function') {
                         window.resolverConflictoAsignacion(

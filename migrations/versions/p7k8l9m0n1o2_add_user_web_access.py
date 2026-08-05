@@ -1,7 +1,9 @@
-"""Verificación de correo (users) y consentimiento legal (tenants)
+"""web_access, email_verified y locale en users + legal_* en tenants
 
-User.email_verified: el admin del alta pública no entra hasta confirmar el enlace.
-Tenant.legal_*: guarda cuándo y qué versión de privacidad/condiciones aceptó.
+web_access     → login web del operario (independiente del PIN /mi).
+email_verified → confirmación de correo en el alta autoservicio.
+locale         → preferencia de idioma (es/en/pt/fr).
+legal_*        → registro de consentimiento RGPD en la tabla pública de tenants.
 
 Revision ID: p7k8l9m0n1o2
 Revises: q8l9m0n1o2p3
@@ -34,7 +36,7 @@ def _column_exists(bind, table_name, column_name, schema):
 def upgrade():
     bind = op.get_bind()
 
-    # --- public.tenants: consentimiento legal del alta ---
+    # --- public.tenants: registro de consentimiento legal del alta ---
     tenant_cols = {c['name'] for c in inspect(bind).get_columns('tenants', schema='public')}
     if 'legal_aceptado_at' not in tenant_cols:
         op.add_column(
@@ -59,42 +61,53 @@ def upgrade():
     schema = _current_schema(bind)
     if not schema or not _table_exists(bind, 'users', schema):
         return
-    if _column_exists(bind, 'users', 'email_verified', schema):
-        return
 
-    op.add_column(
-        'users',
-        sa.Column(
-            'email_verified',
-            sa.Boolean(),
-            nullable=False,
-            server_default='false',
-        ),
-        schema=schema,
-    )
-    # Cuentas ya en producción se consideran verificadas (no pasaron por el alta).
-    # El alta pública crea el admin con email_verified=False vía provision.
-    bind.execute(text(
-        f'UPDATE "{schema}".users SET email_verified = true'
-    ))
+    if not _column_exists(bind, 'users', 'web_access', schema):
+        op.add_column(
+            'users',
+            sa.Column(
+                'web_access',
+                sa.Boolean(),
+                nullable=False,
+                server_default='false',
+            ),
+            schema=schema,
+        )
+
+    if not _column_exists(bind, 'users', 'email_verified', schema):
+        op.add_column(
+            'users',
+            sa.Column(
+                'email_verified',
+                sa.Boolean(),
+                nullable=False,
+                server_default='false',
+            ),
+            schema=schema,
+        )
+        # Cuentas existentes se consideran verificadas (no pasaron por el alta pública).
+        bind.execute(text(f'UPDATE "{schema}".users SET email_verified = true'))
+
+    if not _column_exists(bind, 'users', 'locale', schema):
+        op.add_column(
+            'users',
+            sa.Column('locale', sa.String(length=8), nullable=True),
+            schema=schema,
+        )
 
 
 def downgrade():
     bind = op.get_bind()
 
     tenant_cols = {c['name'] for c in inspect(bind).get_columns('tenants', schema='public')}
-    for col in (
-        'legal_condiciones_version',
-        'legal_privacidad_version',
-        'legal_aceptado_at',
-    ):
+    for col in ('legal_condiciones_version', 'legal_privacidad_version', 'legal_aceptado_at'):
         if col in tenant_cols:
             op.drop_column('tenants', col, schema='public')
 
     schema = _current_schema(bind)
     if not schema or not _table_exists(bind, 'users', schema):
         return
-    if not _column_exists(bind, 'users', 'email_verified', schema):
-        return
 
-    op.drop_column('users', 'email_verified', schema=schema)
+    for col in ('locale', 'email_verified', 'web_access'):
+        if _column_exists(bind, 'users', col, schema):
+            op.drop_column('users', col, schema=schema)

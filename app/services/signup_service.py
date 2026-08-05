@@ -2,7 +2,8 @@
 #
 # Alta autoservicio: una empresa se crea su propio tenant desde signaplan.com/alta.
 # Reutiliza provision_new_tenant; añade validaciones de producto (reservados,
-# contraseña mínima, aceptación legal) y deja la cuenta pendiente de verificar correo.
+# contraseña mínima, aceptación legal). El admin queda active=True con
+# email_verified=False (puede entrar; la verificación refuerza confianza).
 
 import re
 import unicodedata
@@ -97,7 +98,8 @@ def registrar_empresa(
 ):
     """
     Crea el tenant en plan free, guarda el consentimiento legal y deja al
-    admin inactivo hasta verificar el correo.
+    admin activo con email_verified=False (puede entrar; la verificación
+    refuerza la confianza, no bloquea el acceso).
 
     Devuelve (tenant, email_enviado).
     """
@@ -126,7 +128,7 @@ def registrar_empresa(
                 'onboarding': True,
             },
             email_verified=False,
-            active=False,
+            active=True,
         )
     except ValueError as exc:
         raise SignupError(str(exc)) from exc

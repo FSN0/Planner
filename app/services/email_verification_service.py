@@ -1,20 +1,23 @@
 # app/services/email_verification_service.py
 #
-# Tras el alta en signaplan.com, el admin confirma el correo con un enlace
-# firmado (mismo patrón que la recuperación de contraseña).
+# Verificación de correo tras el alta autoservicio. El token lleva tenant_id +
+# user_id para no cruzar esquemas multi-tenant. Confirmar solo marca
+# email_verified; el acceso (active) ya está permitido tras el alta.
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from sqlalchemy import text
+from urllib.parse import quote
 
 from app import db
 from app.models import User
 from app.services.email_service import send_email
 
-TOKEN_MAX_AGE = 48 * 3600  # 48 horas
-_SALT = 'signaplan-email-verification'
+TOKEN_MAX_AGE = 86400 * 3  # 3 días
+_SALT = 'signaplan-email-verify'
 
 
 class EmailVerificationError(Exception):
-    """Token inválido, caducado o usuario no encontrado."""
+    pass
 
 
 def _serializer():
@@ -38,7 +41,7 @@ def leer_token(token, tenant_esperado):
         data = _serializer().loads(token, max_age=TOKEN_MAX_AGE)
     except SignatureExpired as exc:
         raise EmailVerificationError(
-            'El enlace de verificación ha caducado. Solicita uno nuevo o contacta con soporte.'
+            'El enlace de verificación ha caducado. Solicita uno nuevo.'
         ) from exc
     except BadSignature as exc:
         raise EmailVerificationError('El enlace de verificación no es válido.') from exc
@@ -48,12 +51,8 @@ def leer_token(token, tenant_esperado):
     return data
 
 
-def url_verificacion(tenant, token):
-    """URL absoluta en el host del tenant."""
-    from urllib.parse import quote
-
+def _url_verificacion(tenant, token):
     from app.services.signup_service import url_acceso_tenant
-
     return url_acceso_tenant(
         tenant, path=f'/auth/verificar-email?t={quote(token, safe="")}'
     )
@@ -61,79 +60,69 @@ def url_verificacion(tenant, token):
 
 def enviar_email_verificacion(tenant, user):
     """
-    Envía el correo con el enlace. Devuelve True si salió.
-
-    Si MAIL_PASSWORD está vacío (dev sin SMTP), no intenta enviar: deja la URL
-    en el log para poder probar el flujo a mano.
+    Envía el enlace de verificación. Devuelve True si el correo salió;
+    False si falló el envío (la cuenta sigue creada).
     """
-    from flask import current_app
+    if not user or not user.email:
+        return False
+    if getattr(user, 'email_verified', False):
+        return True
 
     token = generar_token(user, tenant)
-    url = url_verificacion(tenant, token)
-
-    if not (current_app.config.get('MAIL_PASSWORD') or '').strip():
-        current_app.logger.warning(
-            'MAIL_PASSWORD vacío: no se envía verificación a %s. '
-            'URL de depuración: %s',
-            user.email,
-            url,
-        )
-        return False
-
+    url = _url_verificacion(tenant, token)
     texto = (
         f'Hola {user.name},\n\n'
-        f'Has creado el espacio {tenant.nombre} en SignaPlan.\n'
-        f'Confirma tu correo en las próximas 48 horas abriendo este enlace:\n\n'
-        f'{url}\n\n'
-        f'Si no has sido tú, ignora este mensaje.\n'
+        f'Confirma tu correo para SignaPlan ({tenant.nombre}):\n\n{url}\n\n'
+        f'El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.\n'
     )
     html = (
         f'<p>Hola {user.name},</p>'
-        f'<p>Has creado el espacio <strong>{tenant.nombre}</strong> en SignaPlan.</p>'
-        f'<p>Confirma tu correo en las próximas 48 horas:</p>'
-        f'<p><a href="{url}">Verificar correo y entrar</a></p>'
-        f'<p>Si no has sido tú, ignora este mensaje.</p>'
+        f'<p>Confirma tu correo para <strong>SignaPlan</strong> ({tenant.nombre}).</p>'
+        f'<p><a href="{url}">Verificar correo</a></p>'
+        f'<p>El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.</p>'
     )
-    ok = send_email(
+    return bool(send_email(
         f'Verifica tu correo — {tenant.nombre}',
         [user.email],
         texto,
         html_body=html,
-    )
-    if not ok:
-        current_app.logger.warning(
-            'Falló el envío de verificación a %s. URL de depuración: %s',
-            user.email,
-            url,
-        )
-    return ok
+    ))
 
 
 def confirmar_email(token, tenant):
     """
-    Marca email_verified y active, y devuelve el User listo para login_user.
-
-    Tras el commit hay que volver a fijar search_path y recargar el usuario:
-    el pool de Postgres puede devolver una conexión sin el schema del tenant,
-    y Flask-Login al leer is_active dispara un ObjectDeletedError.
+    Marca email_verified=True. No toca active (el admin ya puede entrar).
+    Devuelve el User en el esquema del tenant.
     """
-    from sqlalchemy import text
-
     data = leer_token(token, tenant)
-    schema = tenant.schema_name
-    db.session.execute(text(f'SET search_path TO {schema}, public'))
 
+    db.session.execute(text(f'SET search_path TO {tenant.schema_name}, public'))
     user = User.query.filter_by(id=data['uid'], is_deleted=False).first()
-    if not user or (user.email or '').lower() != (data.get('email') or '').lower():
-        raise EmailVerificationError('No se ha podido verificar la cuenta.')
+    if not user or (user.email or '').strip().lower() != (data.get('email') or '').lower():
+        raise EmailVerificationError('No se ha podido verificar el correo.')
 
     user.email_verified = True
-    user.active = True
-    user_id = user.id
     db.session.commit()
-
-    db.session.execute(text(f'SET search_path TO {schema}, public'))
-    user = User.query.get(user_id)
-    if user is None:
-        raise EmailVerificationError('No se ha podido verificar la cuenta.')
     return user
+
+
+def reenviar_verificacion(tenant, email=None, user=None):
+    """
+    Reenvía el correo de verificación. Si ya está verificado, no hace nada
+    (sin delatar el estado hacia fuera cuando se llama solo con email).
+    """
+    if user is None:
+        email = (email or '').strip().lower()
+        if not email:
+            raise EmailVerificationError('Indica tu correo.')
+        user = User.query.filter_by(email=email, is_deleted=False).first()
+
+    if not user:
+        return False
+    if getattr(user, 'email_verified', False):
+        return True
+    if not enviar_email_verificacion(tenant, user):
+        raise EmailVerificationError(
+            'No se ha podido enviar el correo. Prueba más tarde o contacta con soporte.'
+        )
+    return True

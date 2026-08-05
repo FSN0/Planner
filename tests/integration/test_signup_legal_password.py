@@ -84,7 +84,7 @@ class TestSignupValidacion:
         from app.models import User
         admin = User.query.filter_by(email='admin@demofirma.test').first()
         assert admin is not None
-        assert admin.active is False
+        assert admin.active is True
         assert admin.email_verified is False
         session.execute(text('SET search_path TO public'))
 

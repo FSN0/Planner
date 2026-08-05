@@ -46,10 +46,17 @@ def _legal_entity():
     """Datos del titular. Sobreescribibles por env sin tocar plantillas."""
     import os
     return {
-        'razon_social': (os.environ.get('LEGAL_RAZON_SOCIAL') or 'SignaPlan').strip(),
-        'nif': (os.environ.get('LEGAL_NIF') or '').strip(),
-        'domicilio': (os.environ.get('LEGAL_DOMICILIO') or '').strip(),
-        'email': (os.environ.get('LEGAL_EMAIL') or 'info@signaplan.com').strip(),
+        'razon_social': (
+            os.environ.get('LEGAL_RAZON_SOCIAL') or 'Francisco Navarro Hernández'
+        ).strip(),
+        'nif': (os.environ.get('LEGAL_NIF') or '18461268L').strip(),
+        'domicilio': (
+            os.environ.get('LEGAL_DOMICILIO') or 'Calle La Hermita 23, Teruel'
+        ).strip(),
+        'email': (
+            os.environ.get('LEGAL_EMAIL')
+            or 'paconavarro.fsn@gmail.com'
+        ).strip(),
     }
 
 

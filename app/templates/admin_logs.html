@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Logs del Sistema{% endblock %}
+{% block title %}{{ _('Logs del Sistema') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -14,20 +14,20 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Logs del sistema</h1>
-        <span class="page-toolbar-count">Auditoría y trazabilidad</span>
+        <h1 class="page-toolbar-title">{{ _('Logs del sistema') }}</h1>
+        <span class="page-toolbar-count">{{ _('Auditoría y trazabilidad') }}</span>
       </div>
       <div class="page-toolbar-actions">
         {% if unread_laboral_count and unread_laboral_count > 0 and current_user.role == 'admin' %}
         <button type="button" class="btn-admin btn-admin-ghost" id="btnAckAllLaboral"
-                title="Marca como leídos los avisos laborales de todos (admin + laboral)">
-          <i class="fas fa-check-double"></i> Leer todas
+                title="{{ _('Marca como leídos los avisos laborales de todos (admin + laboral)') }}">
+          <i class="fas fa-check-double"></i> {{ _('Leer todas') }}
           <span class="page-toolbar-count" style="margin-left:0.25rem;">{{ unread_laboral_count }}</span>
         </button>
         {% endif %}
         {% if can_manage_log_prefs %}
         <button type="button" class="btn-admin btn-admin-ghost" id="btnEditNotifs">
-          <i class="fas fa-bell"></i> Avisos
+          <i class="fas fa-bell"></i> {{ _('Avisos') }}
         </button>
         {% endif %}
       </div>
@@ -39,23 +39,23 @@
       <form action="{{ url_for('admin.save_log_preferences') }}" method="POST" id="formPrefs" style="display: none;" class="logs-prefs-panel">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="current_category" value="{{ current_category }}">
-        <h3><i class="fas fa-bell text-primary mr-1"></i> Notificaciones visuales en sidebar</h3>
+        <h3><i class="fas fa-bell text-primary mr-1"></i> {{ _('Notificaciones visuales en sidebar') }}</h3>
         <div class="logs-prefs-checks">
-          <label><input type="checkbox" name="pref_accesos" {% if 'accesos' in active_prefs %}checked{% endif %}> Accesos</label>
-          <label><input type="checkbox" name="pref_valoraciones" {% if 'valoraciones' in active_prefs %}checked{% endif %}> Valoraciones</label>
-          <label><input type="checkbox" name="pref_planificacion" {% if 'planificacion' in active_prefs %}checked{% endif %}> Planificación</label>
-          <label><input type="checkbox" name="pref_solicitud" {% if 'solicitud' in active_prefs %}checked{% endif %}> Solicitud</label>
-          <label><input type="checkbox" name="pref_obras" {% if 'obras' in active_prefs %}checked{% endif %}> Obras</label>
-          <label><input type="checkbox" name="pref_fichajes" {% if 'fichajes' in active_prefs %}checked{% endif %}> Fichajes</label>
+          <label><input type="checkbox" name="pref_accesos" {% if 'accesos' in active_prefs %}checked{% endif %}> {{ _('Accesos') }}</label>
+          <label><input type="checkbox" name="pref_valoraciones" {% if 'valoraciones' in active_prefs %}checked{% endif %}> {{ _('Valoraciones') }}</label>
+          <label><input type="checkbox" name="pref_planificacion" {% if 'planificacion' in active_prefs %}checked{% endif %}> {{ _('Planificación') }}</label>
+          <label><input type="checkbox" name="pref_solicitud" {% if 'solicitud' in active_prefs %}checked{% endif %}> {{ _('Solicitud') }}</label>
+          <label><input type="checkbox" name="pref_obras" {% if 'obras' in active_prefs %}checked{% endif %}> {{ _('Obras') }}</label>
+          <label><input type="checkbox" name="pref_fichajes" {% if 'fichajes' in active_prefs %}checked{% endif %}> {{ _('Fichajes') }}</label>
         </div>
         <div class="d-flex justify-content-end mt-2" style="gap:0.4rem;">
-          <button type="button" class="btn-admin btn-admin-ghost" id="btnCancelNotifs">Cancelar</button>
-          <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar</button>
+          <button type="button" class="btn-admin btn-admin-ghost" id="btnCancelNotifs">{{ _('Cancelar') }}</button>
+          <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar') }}</button>
         </div>
       </form>
       {% endif %}
 
-      <nav class="admin-logs-tabs" aria-label="Categorías de logs">
+      <nav class="admin-logs-tabs" aria-label="{{ _('Categorías de logs') }}">
         {% set log_tabs_meta = [
           ('accesos', 'fa-sign-in-alt', 'Accesos'),
           ('valoraciones', 'fa-star', 'Valoraciones'),
@@ -68,9 +68,9 @@
         {% for cat_key, cat_icon, cat_label in log_tabs_meta if cat_key in log_tabs %}
         <a class="{% if current_category == cat_key %}is-active{% endif %}"
            href="{{ url_for('admin.system_logs', category=cat_key) }}">
-          <i class="fas {{ cat_icon }}"></i> {{ cat_label }}
+          <i class="fas {{ cat_icon }}"></i> {{ _(cat_label) }}
           {% if log_unread_by_category.get(cat_key) %}
-          <span class="logs-tab-badge" title="{{ log_unread_by_category[cat_key] }} sin leer">{{ log_unread_by_category[cat_key] }}</span>
+          <span class="logs-tab-badge" title="{{ log_unread_by_category[cat_key] }} {{ _('sin leer') }}">{{ log_unread_by_category[cat_key] }}</span>
           {% endif %}
         </a>
         {% endfor %}
@@ -86,16 +86,16 @@
           <table class="filterable-table admin-data-table mb-0" id="logsTable">
             <thead>
               <tr class="header-row">
-                <th style="width:15%;">Fecha / hora</th>
-                <th style="width:20%;">Autor</th>
-                <th style="width:18%;">Acción</th>
-                <th style="width:47%;">Detalle</th>
+                <th style="width:15%;">{{ _('Fecha / hora') }}</th>
+                <th style="width:20%;">{{ _('Autor') }}</th>
+                <th style="width:18%;">{{ _('Acción') }}</th>
+                <th style="width:47%;">{{ _('Detalle') }}</th>
               </tr>
               <tr class="filter-row">
-                <th><input class="table-filter-input filter-input" data-col="0" placeholder="Filtrar…"></th>
-                <th><input class="table-filter-input filter-input" data-col="1" placeholder="Filtrar…"></th>
-                <th><input class="table-filter-input filter-input" data-col="2" placeholder="Filtrar…"></th>
-                <th><input class="table-filter-input filter-input" data-col="3" placeholder="Filtrar…"></th>
+                <th><input class="table-filter-input filter-input" data-col="0" placeholder="{{ _('Filtrar…') }}"></th>
+                <th><input class="table-filter-input filter-input" data-col="1" placeholder="{{ _('Filtrar…') }}"></th>
+                <th><input class="table-filter-input filter-input" data-col="2" placeholder="{{ _('Filtrar…') }}"></th>
+                <th><input class="table-filter-input filter-input" data-col="3" placeholder="{{ _('Filtrar…') }}"></th>
               </tr>
             </thead>
             <tbody id="logsTableBody">
@@ -114,7 +114,7 @@
                       <span class="badge-soft badge-soft-gray">{{ log.user.role|upper }}</span>
                     </span>
                   {% else %}
-                    <span class="badge-soft badge-soft-slate">Sistema</span>
+                    <span class="badge-soft badge-soft-slate">{{ _('Sistema') }}</span>
                   {% endif %}
                 </td>
                 <td data-sort-value="{{ log.action|lower }}" style="font-weight:600; color:#0369a1;">{{ log.action }}</td>
@@ -124,14 +124,14 @@
               <tr id="emptyStateRow">
                 <td colspan="4" class="table-empty-state">
                   <i class="fas fa-folder-open"></i>
-                  No hay registros en esta categoría.
+                  {{ _('No hay registros en esta categoría.') }}
                 </td>
               </tr>
               {% endfor %}
               <tr id="emptySearchRow" style="display: none;">
                 <td colspan="4" class="table-empty-state">
                   <i class="fas fa-search"></i>
-                  No hay resultados para tu búsqueda.
+                  {{ _('No hay resultados para tu búsqueda.') }}
                 </td>
               </tr>
             </tbody>

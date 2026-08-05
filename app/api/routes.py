@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, url_for
 from flask_login import login_required, current_user
 # IMPORTAMOS db AQUÍ
 from app import db 
-from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_RRHH
+from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_OPERARIO
 from app.services.permission_service import is_laboral
 from app.decorators import roles_required_api
 from datetime import datetime, timedelta
@@ -48,9 +48,18 @@ def _jefe_puede_ver_worker(user_id):
 
 def _autorizar_calendario(context, entity_id):
     """
-    Solo perfiles de oficina. El operario con PIN no puede enumerar
-    calendarios ajenos (RGPD). El jefe queda acotado a sus obras.
+    Perfiles de oficina + operario con web_access solo sobre sí mismo.
+    El PIN del operario no abre calendarios ajenos (RGPD).
     """
+    if current_user.role == ROLE_OPERARIO:
+        if (
+            getattr(current_user, 'web_access', False)
+            and context == 'worker'
+            and entity_id == current_user.id
+        ):
+            return None
+        return jsonify({'success': False, 'error': 'Acceso no autorizado'}), 403
+
     if current_user.role not in _ROLES_OFICINA:
         return jsonify({'success': False, 'error': 'Acceso no autorizado'}), 403
 
@@ -922,15 +931,29 @@ def get_universal_calendar_events():
                     color = VEHICLE_COLOR_AUSENCIA
                     status = 'ausencia'
                 elif fecha < hoy:
-                    if obra:
-                        title = f"{planned_name} · {_obra_label(obra)}"
-                    title = f"{title} · sin km"
-                    tip_h, tip_p = _veh_tip(
-                        'Naranja · Conflicto',
-                        f'{planned_name} estaba planificado pero no hay kilómetros reportados en Odoo.',
-                    )
-                    color = VEHICLE_COLOR_CONFLICTO
-                    status = 'conflicto'
+                    from flask import g as _g
+                    _tenant = getattr(_g, 'current_tenant', None)
+                    _mods = getattr(_tenant, 'modulos_activos', None) or {} if _tenant else {}
+                    if _mods.get('odoo'):
+                        if obra:
+                            title = f"{planned_name} · {_obra_label(obra)}"
+                        title = f"{title} · sin km"
+                        tip_h, tip_p = _veh_tip(
+                            'Naranja · Conflicto',
+                            f'{planned_name} estaba planificado pero no hay kilómetros reportados en Odoo.',
+                        )
+                        color = VEHICLE_COLOR_CONFLICTO
+                        status = 'conflicto'
+                    else:
+                        if obra:
+                            title = f"{planned_name} · {_obra_label(obra)}"
+                        tip_h, tip_p = _veh_tip(
+                            'Azul · Planificado',
+                            f'{planned_name} estaba asignado a este coche.',
+                            'Sin integración ERP no hay contraste con km reales.',
+                        )
+                        color = VEHICLE_COLOR_PLAN
+                        status = 'plan'
                 else:
                     if obra:
                         title = f"{planned_name} · {_obra_label(obra)}"

@@ -1,0 +1,51 @@
+{% extends "empleado/base.html" %}
+{% block title %}{{ _('Inicio') }}{% endblock %}
+
+{% block content %}
+<section class="empleado-card">
+  <h2>{{ _('Hoy') }} — {{ hoy.strftime('%d/%m/%Y') }}</h2>
+  {% if hoy_asigs %}
+    <ul class="list-unstyled mb-0">
+      {% for a in hoy_asigs %}
+        <li class="mb-1">
+          <i class="fas fa-map-marker-alt text-muted mr-1"></i>
+          {% if a.codigo %}<span class="text-muted">{{ a.codigo }} — </span>{% endif %}
+          {{ a.obra }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empleado-muted mb-0">{{ _('Sin asignaciones para hoy.') }}</p>
+  {% endif %}
+</section>
+
+<section class="empleado-card">
+  <h2>{{ _('Esta semana') }}
+    <span class="empleado-muted font-weight-normal">
+      ({{ hoy.strftime('%d/%m') }} – {{ fin_semana.strftime('%d/%m') }})
+    </span>
+  </h2>
+  {% if semana %}
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>{{ _('Fecha') }}</th>
+            <th>{{ _('Obra') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in semana %}
+          <tr>
+            <td>{{ row.fecha.strftime('%a %d/%m') }}</td>
+            <td>{% if row.codigo %}{{ row.codigo }} — {% endif %}{{ row.obra }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empleado-muted mb-0">{{ _('No hay asignaciones en los próximos 7 días.') }}</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -404,3 +404,37 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                 if not reg.check_in:
                     reg.estado = 'Sin_Registro'
                     reg.notas_resolucion = None
+
+        # Multi-obra: si el día ya tiene fichaje/resolución real, las semillas
+        # Sin_Registro dejan de ensuciar la pelotita (artefacto de planificación).
+        from app.services.fichaje_estado_service import (
+            FICHAJE_INTERVENCION,
+            FICHAJE_OK,
+            FICHAJE_ROJO,
+        )
+        semillas = RegistroFichaje.query.filter_by(
+            fecha=fecha_obj, estado='Sin_Registro'
+        ).all()
+        if semillas:
+            by_user = {}
+            for s in semillas:
+                by_user.setdefault(s.user_id, []).append(s)
+            for uid, seeds in by_user.items():
+                hermanos = RegistroFichaje.query.filter(
+                    RegistroFichaje.user_id == uid,
+                    RegistroFichaje.fecha == fecha_obj,
+                    RegistroFichaje.id.notin_([s.id for s in seeds]),
+                ).all()
+                if any(
+                    (h.estado in FICHAJE_OK)
+                    or (h.estado in FICHAJE_INTERVENCION)
+                    or (h.estado in FICHAJE_ROJO)
+                    or (h.estado or '').startswith('Resuelto')
+                    for h in hermanos
+                ):
+                    for s in seeds:
+                        s.estado = 'Cerrado_Multiobra'
+                        s.notas_resolucion = (
+                            'Cerrado automáticamente: el trabajador fichó u '
+                            'obtuvo resolución en otra obra el mismo día.'
+                        )

@@ -3,11 +3,11 @@
   <table class="filterable-table admin-data-table mb-0" id="vehicleHistoryTable">
     <thead>
       <tr class="header-row">
-        <th>Fecha</th>
-        <th>Operario / Conductor</th>
-        <th>Obra</th>
-        <th>Km Odoo</th>
-        <th>Conductor Odoo</th>
+        <th>{{ _('Fecha') }}</th>
+        <th>{{ _('Operario / Conductor') }}</th>
+        <th>{{ _('Obra') }}</th>
+        <th>{{ _('Km Odoo') }}</th>
+        <th>{{ _('Conductor Odoo') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -40,11 +40,11 @@
   </table>
 </div>
 <p class="vehicle-history-meta text-muted mb-0">
-  {{ history_rows|length }} registro{{ 's' if history_rows|length != 1 else '' }}
-  · últimos {{ history_days }} días
+  {{ history_rows|length }} {{ _('registro') }}{{ 's' if history_rows|length != 1 else '' }}
+  · {{ _('últimos') }} {{ history_days }} {{ _('días') }}
 </p>
 {% else %}
 <p class="text-muted mb-0" style="padding:0.75rem 0;">
-  Sin uso planificado ni odómetros Odoo en los últimos {{ history_days }} días.
+  {{ _('Sin uso planificado ni odómetros Odoo en los últimos') }} {{ history_days }} {{ _('días') }}.
 </p>
 {% endif %}

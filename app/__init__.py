@@ -227,6 +227,7 @@ def create_app():
     from app.api.ausencias import ausencias_api
     from app.superadmin import superadmin_bp
     from app.operarios import operarios_bp
+    from app.empleado import empleado_bp
     from app.marketing.routes import marketing_bp
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN!
@@ -246,6 +247,7 @@ def create_app():
     # El prefijo lo declara el propio blueprint: la PWA lo necesita fijo en /mi
     # porque el alcance del service worker se registra contra esa ruta.
     app.register_blueprint(operarios_bp)
+    app.register_blueprint(empleado_bp)
 
     from app.cli import register_cli
     register_cli(app)
@@ -375,8 +377,10 @@ def create_app():
         elif user.role == ROLE_JEFE:
             return redirect(url_for('jefe.panel'))
         elif user.role in (ROLE_LABORAL, ROLE_RRHH):
-            return redirect(url_for('admin.ausencias_list'))
+            return redirect(url_for('admin.panel_laboral'))
         elif user.role == ROLE_OPERARIO:
+            if getattr(user, 'web_access', False):
+                return redirect(url_for('empleado.inicio'))
             from flask_login import logout_user
             logout_user()
             from flask import flash

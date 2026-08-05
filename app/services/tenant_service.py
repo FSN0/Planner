@@ -20,8 +20,8 @@ def provision_new_tenant(
     """
     Registra un nuevo cliente, construye su esquema aislado, crea su empresa matriz y su primer administrador.
 
-    email_verified/active: True en superadmin y demos; el alta pública pasa False
-    hasta que el admin confirme el correo.
+    email_verified/active: True en superadmin y demos; el alta pública deja
+    active=True y email_verified=False (entrar sí; verificar refuerza confianza).
     """
     subdominio = (subdominio or '').lower().strip()
     # Validación estricta: solo letras minúsculas, números y guiones.

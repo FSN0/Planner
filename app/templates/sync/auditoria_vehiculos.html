@@ -180,8 +180,8 @@
             <label for="filtroEstado">Estado</label>
             <select id="filtroEstado" name="estado" class="form-control custom-select">
               <option value="all" {% if filtros.estado == 'all' %}selected{% endif %}>Todos</option>
-              <option value="salto_km" {% if filtros.estado == 'salto_km' %}selected{% endif %}>Saltos de odómetro</option>
-              <option value="desvio" {% if filtros.estado == 'desvio' %}selected{% endif %}>Desvío km previsto</option>
+              <option value="salto_km" {% if filtros.estado == 'salto_km' %}selected{% endif %}>{{ _('Saltos de odómetro') }}</option>
+              <option value="desvio" {% if filtros.estado == 'desvio' %}selected{% endif %}>{{ _('Desvío km previsto') }}</option>
               <option value="en_ausencia" {% if filtros.estado == 'en_ausencia' %}selected{% endif %}>Vehículo en ausencia</option>
               <option value="vehiculo_distinto" {% if filtros.estado == 'vehiculo_distinto' %}selected{% endif %}>Vehículo distinto al plan</option>
               <option value="mismatch_driver" {% if filtros.estado == 'mismatch_driver' %}selected{% endif %}>Conductor distinto</option>
@@ -221,11 +221,11 @@
     </form>
 
     <div class="auditoria-stats">
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSaltos" title="Saltos de odómetro pendientes">
-        <i class="fas fa-bolt"></i> {{ saltos|length }} saltos km
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSaltos" title="{{ _('Saltos de odómetro pendientes') }}">
+        <i class="fas fa-bolt"></i> {{ saltos|length }} {{ _('saltos km') }}
       </span>
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseDesvios" title="Desvío vs km previsto del viaje">
-        <i class="fas fa-percentage"></i> {{ desvios|length }} desvío
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseDesvios" title="{{ _('Desvío vs km previsto del viaje') }}">
+        <i class="fas fa-percentage"></i> {{ desvios|length }} {{ _('desvío') }}
       </span>
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseEnAusencia" title="Vehículo planificado o reportado en día de ausencia aprobada">
         <i class="fas fa-umbrella-beach"></i> {{ vehiculo_en_ausencia|length }} en ausencia
@@ -264,7 +264,7 @@
         <div class="auditoria-section-header card-header {% if not saltos %}collapsed{% endif %}" data-target="#collapseSaltos" role="button" aria-expanded="{{ 'true' if saltos else 'false' }}">
           <h6 class="auditoria-section-title text-danger mb-0">
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-bolt"></i></span>
-            Saltos de odómetro
+            {{ _('Saltos de odómetro') }}
             <span class="badge-count badge-count-danger">{{ saltos|length }}</span>
             {% if saltos_visto %}<span class="badge-count text-muted" title="Vistos">+{{ saltos_visto|length }} hist.</span>{% endif %}
           </h6>
@@ -365,7 +365,7 @@
         <div class="auditoria-section-header card-header {% if not desvios %}collapsed{% endif %}" data-target="#collapseDesvios" role="button" aria-expanded="{{ 'true' if desvios else 'false' }}">
           <h6 class="auditoria-section-title text-danger mb-0">
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-percentage"></i></span>
-            Desvío vs km previsto
+            {{ _('Desvío vs km previsto') }}
             <span class="badge-count badge-count-danger">{{ desvios|length }}</span>
             {% if desvios_visto %}<span class="badge-count text-muted">+{{ desvios_visto|length }} hist.</span>{% endif %}
           </h6>

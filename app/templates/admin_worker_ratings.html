@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Historial: {{ worker.name }}{% endblock %}
+{% block title %}{{ _('Historial') }}: {{ worker.name }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -12,17 +12,17 @@
   <main class="admin-main admin-main--compact ratings-history-page">
 
     <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" class="ratings-history-back">
-      <i class="fas fa-arrow-left"></i> Volver a la ficha
+      <i class="fas fa-arrow-left"></i> {{ _('Volver a la ficha') }}
     </a>
 
     <article class="ratings-history-card">
       <header class="ratings-history-hero">
         <div>
-          <h1 class="ratings-history-hero-title">Historial de valoraciones</h1>
+          <h1 class="ratings-history-hero-title">{{ _('Historial de valoraciones') }}</h1>
           <p class="ratings-history-hero-sub">{{ worker.name }} {{ worker.lastname }}</p>
         </div>
         <div class="ratings-history-score">
-          <span class="ratings-history-score-label">Reputación actual</span>
+          <span class="ratings-history-score-label">{{ _('Reputación actual') }}</span>
           <span class="ratings-history-score-value {% if worker.reputation_score > 0 %}ratings-history-score-value--pos{% elif worker.reputation_score < 0 %}ratings-history-score-value--neg{% else %}ratings-history-score-value--zero{% endif %}">
             {{ '+' if worker.reputation_score > 0 }}{{ worker.reputation_score }}
           </span>
@@ -33,12 +33,12 @@
         <table class="ratings-table">
           <thead>
             <tr>
-              <th style="width: 140px;">Fecha</th>
-              <th style="width: 80px;" class="text-center">Puntos</th>
-              <th style="width: 90px;" class="text-center">Estado</th>
-              <th>Motivo</th>
-              <th style="width: 180px;">Evaluador</th>
-              <th style="width: 90px;" class="text-right">Acciones</th>
+              <th style="width: 140px;">{{ _('Fecha') }}</th>
+              <th style="width: 80px;" class="text-center">{{ _('Puntos') }}</th>
+              <th style="width: 90px;" class="text-center">{{ _('Estado') }}</th>
+              <th>{{ _('Motivo') }}</th>
+              <th style="width: 180px;">{{ _('Evaluador') }}</th>
+              <th style="width: 90px;" class="text-right">{{ _('Acciones') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -57,16 +57,16 @@
               </td>
               <td class="text-center">
                 {% if rating.is_active %}
-                  <span class="badge-soft">Activo</span>
+                  <span class="badge-soft">{{ _('Activo') }}</span>
                 {% else %}
-                  <span class="badge-soft" style="opacity:0.7;">Archivado</span>
+                  <span class="badge-soft" style="opacity:0.7;">{{ _('Archivado') }}</span>
                 {% endif %}
               </td>
               <td class="col-reason rating-reason-cell">
                 {% if rating.reason %}
                   {{ rating.reason }}
                 {% else %}
-                  <span class="text-muted font-italic small">Sin motivo especificado</span>
+                  <span class="text-muted font-italic small">{{ _('Sin motivo especificado') }}</span>
                 {% endif %}
               </td>
               <td>
@@ -78,11 +78,11 @@
                 <div class="ratings-row-actions">
                   <button type="button" class="btn btn-light border btn-sm btn-icon"
                           onclick="openEditRating({{ rating.id }}, {{ rating.score }}, {{ rating.reason|tojson }})"
-                          title="Editar">
+                          title="{{ _('Editar') }}">
                     <i class="fas fa-edit text-primary"></i>
                   </button>
                   <button type="button" class="btn btn-light border btn-sm btn-icon"
-                          onclick="deleteRating({{ rating.id }})" title="Eliminar">
+                          onclick="deleteRating({{ rating.id }})" title="{{ _('Eliminar') }}">
                     <i class="fas fa-trash-alt text-danger"></i>
                   </button>
                 </div>
@@ -96,7 +96,7 @@
               <td colspan="6">
                 <div class="ratings-empty">
                   <i class="far fa-folder-open d-block"></i>
-                  Aún no hay valoraciones registradas para este trabajador.
+                  {{ _('Aún no hay valoraciones registradas para este trabajador.') }}
                 </div>
               </td>
             </tr>
@@ -113,12 +113,12 @@
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title mb-0"><i class="fas fa-edit mr-1"></i> Editar valoración</h5>
+        <h5 class="modal-title mb-0"><i class="fas fa-edit mr-1"></i> {{ _('Editar valoración') }}</h5>
         <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="editRatingId">
-        <p class="rating-intro text-center mb-0">Modifica la puntuación (-3 a +3)</p>
+        <p class="rating-intro text-center mb-0">{{ _('Modifica la puntuación (-3 a +3)') }}</p>
         <div class="entity-rating-score-grid">
           <div class="entity-rating-score-group">
             <button type="button" class="entity-rating-btn entity-rating-btn--neg edit-rating-btn" data-score="-3">-3</button>
@@ -131,10 +131,10 @@
             <button type="button" class="entity-rating-btn entity-rating-btn--pos edit-rating-btn" data-score="3">+3</button>
           </div>
         </div>
-        <label class="form-label-sm" for="editRatingReason">Motivo</label>
-        <textarea id="editRatingReason" class="form-control mb-3" rows="3" placeholder="Motivo…"></textarea>
+        <label class="form-label-sm" for="editRatingReason">{{ _('Motivo') }}</label>
+        <textarea id="editRatingReason" class="form-control mb-3" rows="3" placeholder="{{ _('Motivo…') }}"></textarea>
         <button type="button" class="btn-admin btn-admin-primary btn-block" onclick="saveEditRating()">
-          <i class="fas fa-save mr-1"></i> Guardar cambios
+          <i class="fas fa-save"></i> {{ _('Guardar cambios') }}
         </button>
       </div>
     </div>
@@ -163,7 +163,7 @@ $(document).on('click', '.edit-rating-btn', function() {
 });
 
 function saveEditRating() {
-  if (!editSelectedScore) { alert('Selecciona una puntuación.'); return; }
+  if (!editSelectedScore) { alert({{ _('Selecciona una puntuación.')|tojson }}); return; }
   var id = $('#editRatingId').val();
   $.ajax({
     url: '/admin/api/rating/' + id,
@@ -179,14 +179,14 @@ function saveEditRating() {
 
 function deleteRating(id) {
   Swal.fire({
-    title: '¿Eliminar valoración?',
-    text: 'Se archivará y dejará de contar para la reputación.',
+    title: {{ _('¿Eliminar valoración?')|tojson }},
+    text: {{ _('Se archivará y dejará de contar para la reputación.')|tojson }},
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#dc2626',
     cancelButtonColor: '#64748b',
-    confirmButtonText: 'Sí, eliminar',
-    cancelButtonText: 'Cancelar'
+    confirmButtonText: {{ _('Sí, eliminar')|tojson }},
+    cancelButtonText: {{ _('Cancelar')|tojson }}
   }).then(function(result) {
     if (result.isConfirmed) {
       $.ajax({

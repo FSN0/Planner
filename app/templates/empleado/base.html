@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="{{ current_locale|default('es') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}Mi espacio{% endblock %} — SignaPlan</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/design-tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/universal_calendar.css') }}">
+  <style>
+    .empleado-shell { max-width: 960px; margin: 0 auto; padding: 1rem 1rem 2.5rem; }
+    .empleado-nav { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1.25rem; }
+    .empleado-nav a {
+      font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.75rem;
+      border-radius: 6px; color: #334155; text-decoration: none; background: #f1f5f9;
+    }
+    .empleado-nav a.is-active, .empleado-nav a:hover { background: #e2e8f0; color: #0f172a; }
+    .empleado-card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 1.1rem 1.25rem; margin-bottom: 1rem;
+    }
+    .empleado-card h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 0.75rem; }
+    .empleado-muted { color: #64748b; font-size: 0.85rem; }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body class="preload" style="background: #f8fafc;">
+  <div class="container-fluid mt-2">
+    {% include "components/_flashes.html" %}
+  </div>
+  <div class="empleado-shell">
+    <header class="d-flex justify-content-between align-items-center mb-3 flex-wrap" style="gap: 0.5rem;">
+      <div>
+        <div class="text-muted small font-weight-bold text-uppercase" style="letter-spacing: .04em;">SignaPlan</div>
+        <h1 class="h4 mb-0 font-weight-bold">{{ current_user.name }} {{ current_user.lastname }}</h1>
+      </div>
+      <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-sign-out-alt"></i> {{ _('Salir') }}
+      </a>
+    </header>
+
+    <nav class="empleado-nav" aria-label="{{ _('Navegación') }}">
+      <a href="{{ url_for('empleado.inicio') }}"
+         class="{% if request.endpoint == 'empleado.inicio' %}is-active{% endif %}">{{ _('Inicio') }}</a>
+      <a href="{{ url_for('empleado.calendario') }}"
+         class="{% if request.endpoint == 'empleado.calendario' %}is-active{% endif %}">{{ _('Mi calendario') }}</a>
+      {% if tenant_has_fichaje_operario %}
+      <a href="{{ url_for('empleado.fichajes') }}"
+         class="{% if request.endpoint == 'empleado.fichajes' %}is-active{% endif %}">{{ _('Mis fichajes') }}</a>
+      {% endif %}
+      <a href="{{ url_for('empleado.ausencias') }}"
+         class="{% if request.endpoint == 'empleado.ausencias' %}is-active{% endif %}">{{ _('Mis ausencias') }}</a>
+    </nav>
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

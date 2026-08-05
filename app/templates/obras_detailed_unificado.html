@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Tablero de Planificación{% endblock %}
+{% block title %}{{ _('Tablero de Planificación') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -29,7 +29,7 @@
         <input type="text" id="kanbanFilterInput" placeholder="{{ _('Obra, código o operario — Enter para añadir') }}">
       </div>
       <button type="button" class="btn-admin btn-admin-ghost kanban-filter-clear" onclick="clearKanbanFilters()" id="btnClearFilters" style="display:none;">
-        Limpiar
+        {{ _('Limpiar') }}
       </button>
     </div>
     </div>
@@ -63,7 +63,7 @@
     <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
         <div class="modal-content">
             <div class="modal-header py-2 bg-light">
-                <h6 class="modal-title font-weight-bold text-uppercase text-dark" id="modalStaffTitle">Cambiar Responsable</h6>
+                <h6 class="modal-title font-weight-bold text-uppercase text-dark" id="modalStaffTitle">{{ _('Cambiar Responsable') }}</h6>
                 <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
             </div>
             {# AÑADIDO: class text-dark para asegurar legibilidad #}
@@ -73,18 +73,18 @@
                 
                 {# AÑADIDO: Mostrar nombre de la obra #}
                 <div class="mb-3 p-2 bg-light border rounded text-center">
-                    <small class="text-muted text-uppercase d-block mb-1" style="font-size:0.7rem;">Editando obra</small>
+                    <small class="text-muted text-uppercase d-block mb-1" style="font-size:0.7rem;">{{ _('Editando obra') }}</small>
                     <strong class="text-primary" id="staffObraNameDisplay"></strong>
                 </div>
   
                 <div class="form-group mb-3">
-                    <label class="small text-muted mb-1">Selecciona nuevo usuario:</label>
+                    <label class="small text-muted mb-1">{{ _('Selecciona nuevo usuario:') }}</label>
                     <select id="staffSelect" class="form-control form-control-sm" style="width:100%">
                     </select>
                 </div>
                 
                 <button type="button" class="btn btn-primary btn-sm btn-block" onclick="submitStaffChange()">
-                    Guardar Cambios
+                    {{ _('Guardar Cambios') }}
                 </button>
             </div>
         </div>
@@ -95,12 +95,12 @@
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title mb-0"><i class="fas fa-star mr-1"></i> Valorar a <span id="ratingWorkerName"></span></h5>
+                <h5 class="modal-title mb-0"><i class="fas fa-star mr-1"></i> {{ _('Valorar a') }} <span id="ratingWorkerName"></span></h5>
                 <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
                 <input type="hidden" id="ratingWorkerId">
-                <p class="rating-intro text-center mb-0">Selecciona una puntuación entre -3 y +3</p>
+                <p class="rating-intro text-center mb-0">{{ _('Selecciona una puntuación entre -3 y +3') }}</p>
                 <div class="entity-rating-score-grid">
                     <div class="entity-rating-score-group">
                         <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-3">-3</button>
@@ -113,13 +113,13 @@
                         <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="3">+3</button>
                     </div>
                 </div>
-                <label class="form-label-sm" for="ratingReason">Motivo (opcional)</label>
-                <textarea id="ratingReason" class="form-control mb-0" rows="2" placeholder="Motivo…"></textarea>
+                <label class="form-label-sm" for="ratingReason">{{ _('Motivo (opcional)') }}</label>
+                <textarea id="ratingReason" class="form-control mb-0" rows="2" placeholder="{{ _('Motivo…') }}"></textarea>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cancelar') }}</button>
                 <button type="button" class="btn-admin btn-admin-primary" onclick="submitRating()">
-                    <i class="fas fa-save mr-1"></i> Guardar
+                    <i class="fas fa-save mr-1"></i> {{ _('Guardar') }}
                 </button>
             </div>
         </div>
@@ -131,7 +131,7 @@
       <div class="modal-header bg-dark text-white">
         <h5 class="modal-title">
             <i class="fas fa-calendar-times mr-2 text-danger"></i>
-            Desasignar a: <span id="libresWorkerName" class="text-warning font-weight-bold"></span>
+            {{ _('Desasignar a:') }} <span id="libresWorkerName" class="text-warning font-weight-bold"></span>
         </h5>
         <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
           <span aria-hidden="true">&times;</span>
@@ -140,7 +140,7 @@
       
       <div class="modal-body bg-light p-4">
         <div class="alert alert-info py-2 small mb-3 shadow-sm border-0" style="border-left: 4px solid #f59e0b;">
-            Estás viendo la agenda de este trabajador. <strong>Haz clic en un bloque de la obra <span id="libresSourceName"></span></strong> en el calendario para acortarlo o borrarlo.
+            {{ _('Estás viendo la agenda de este trabajador.') }} <strong>{{ _('Haz clic en un bloque de la obra') }} <span id="libresSourceName"></span></strong> {{ _('en el calendario para acortarlo o borrarlo.') }}
         </div>
         
         <div id="libres-calendar-container" class="univ-calendar-root" style="min-height: 480px;"></div>
@@ -152,10 +152,10 @@
             <div class="custom-control custom-switch d-inline-block mr-3">
                 <input type="checkbox" class="custom-control-input" id="chk-libres-all">
                 <label class="custom-control-label text-danger font-weight-bold" for="chk-libres-all" style="cursor:pointer;">
-                    Baja Total (Desasignar de toda la obra)
+                    {{ _('Baja Total (Desasignar de toda la obra)') }}
                 </label>
             </div>
-            <button type="button" class="btn btn-primary" onclick="submitUnassignFromLibres()">Confirmar Baja Total</button>
+            <button type="button" class="btn btn-primary" onclick="submitUnassignFromLibres()">{{ _('Confirmar Baja Total') }}</button>
         </div>
       </div>
     </div>
@@ -165,14 +165,14 @@
 
 <script>
   var LISTA_JEFES = [
-      {id: "", text: "-- Sin Jefe --"},
+      {id: "", text: {{ _('-- Sin Jefe --')|tojson }}},
       {% for u in jefes %}
       {id: "{{ u.id }}", text: "{{ u.name }} {{ u.lastname }}"},
       {% endfor %}
   ];
   
   var LISTA_ENCARGADOS = [
-      {id: "", text: "-- Sin Encargado --"},
+      {id: "", text: {{ _('-- Sin Encargado --')|tojson }}},
       {% for u in encargados %}
       {id: "{{ u.id }}", text: "{{ u.name }} {{ u.lastname }}"},
       {% endfor %}
@@ -221,7 +221,7 @@
     });
 
     function submitRating() {
-        if (!window.selectedRatingScore) { alert("Selecciona puntuación"); return; }
+        if (!window.selectedRatingScore) { alert({{ _('Selecciona puntuación')|tojson }}); return; }
         $.ajax({
             url: "/admin/api/rate_worker",
             type: "POST",
@@ -232,7 +232,7 @@
                 reason: $('#ratingReason').val() 
             }),
             success: function() { location.reload(); },
-            error: function(e) { alert("Error: " + e.responseJSON.message); }
+            error: function(e) { alert({{ _('Error')|tojson }} + ': ' + e.responseJSON.message); }
         });
     }
   </script>

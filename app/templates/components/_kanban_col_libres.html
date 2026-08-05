@@ -5,7 +5,7 @@
 
     <div class="kanban-libres-head">
         <div class="kanban-libres-title">
-            <i class="fas fa-users"></i> Operarios
+            <i class="fas fa-users"></i> {{ _('Operarios') }}
         </div>
         <div class="kanban-libres-search-wrap">
             <i class="fas fa-search"></i>
@@ -14,22 +14,22 @@
         </div>
         <div class="kanban-libres-stats">
             <span class="kanban-libres-stat kanban-libres-stat--free">
-                <strong>{{ free_workers|length }}</strong> libres
+                <strong>{{ free_workers|length }}</strong> {{ _('libres') }}
             </span>
             <span class="kanban-libres-stat">
-                {{ free_workers|length + busy_workers|length }} total
+                {{ free_workers|length + busy_workers|length }} {{ _('total') }}
             </span>
         </div>
     </div>
 
-    <div class="worker-list-body kanban-libres-body" id="list-libres-body" data-obra-id="0" data-obra-name="Libres">
+    <div class="worker-list-body kanban-libres-body" id="list-libres-body" data-obra-id="0" data-obra-name="{{ _('Libres') }}">
         
         {# --- BLOQUE A: OPERARIOS LIBRES --- #}
         {% for worker in free_workers %}
             {% set comp = worker.empresa_obj if worker.empresa_obj else worker.company_rel %}
             {% set border_color = comp.color if comp else '#cbd5e1' %}
             {% set comp_code = comp.code if comp else 'Ext' %}
-            {% set comp_name = comp.nombre if comp else 'Sin Empresa' %}
+            {% set comp_name = comp.nombre if comp else _('Sin Empresa') %}
             
             {# CAMBIO: AÑADIDOS DATOS DE EMPRESA AL DATASET #}
             <div class="worker-chip filterable-worker bg-white shadow-sm mb-2 p-2 rounded" 
@@ -46,17 +46,19 @@
                         {% if current_user.role == 'admin' and worker.temp_estado_fichaje %}
                             {% set st = worker.temp_estado_fichaje %}
                             {% if st == 'Correcto' %}
-                                <span class="status-dot-kanban dot-success" title="Correcto"></span>
+                                <span class="status-dot-kanban dot-success" title="{{ _('Correcto') }}"></span>
                             {% elif st == 'Correcto_Automatico' %}
-                                <span class="status-dot-kanban dot-auto" title="Auto-Asignado"></span>
-                            {% elif st == 'Ausencia' %}
-                                <span class="status-dot-kanban dot-warning" title="Ausencia"></span>
+                                <span class="status-dot-kanban dot-auto" title="{{ _('Auto-Asignado') }}"></span>
+                            {% elif st == 'Exento_Ausencia' or st == 'Sobreescrito_RRHH' %}
+                                <span class="status-dot-kanban" style="background:#7c3aed;" title="{{ _('Intervención / exento') }}"></span>
+                            {% elif st == 'Ausencia' or st == 'Pendiente' or st == 'Retraso' %}
+                                <span class="status-dot-kanban dot-warning" title="{{ _(st) }}"></span>
                             {% elif st == 'Conflicto' or st == 'Paracaidista' %}
-                                <span class="status-dot-kanban dot-danger" title="Conflicto"></span>
-                            {% elif st.startswith('Resuelto') %}
-                                <span class="status-dot-kanban dot-success" title="Resuelto / correcto"></span>
+                                <span class="status-dot-kanban dot-danger" title="{{ _('Conflicto') }}"></span>
+                            {% elif st.startswith('Resuelto') or st == 'Cerrado_Multiobra' %}
+                                <span class="status-dot-kanban dot-success" title="{{ _('Resuelto / correcto') }}"></span>
                             {% else %}
-                                <span class="status-dot-kanban dot-secondary" title="Sin Registro"></span>
+                                <span class="status-dot-kanban dot-secondary" title="{{ _('Sin Registro') }}"></span>
                             {% endif %}
                         {% endif %}
                         
@@ -95,14 +97,14 @@
         {% if busy_workers %}
             <div class="text-uppercase font-weight-bold text-muted mt-4 mb-2 pl-1" 
                  style="font-size: 0.65rem; border-top: 1px solid #e2e8f0; padding-top: 10px; letter-spacing: 0.5px;">
-                Ocupados hoy ({{ busy_workers|length }})
+                {{ _('Ocupados hoy') }} ({{ busy_workers|length }})
             </div>
 
             {% for worker in busy_workers %}
                 {% set comp = worker.empresa_obj if worker.empresa_obj else worker.company_rel %}
                 {% set border_color = comp.color if comp else '#cbd5e1' %}
                 {% set comp_code = comp.code if comp else 'Ext' %}
-                {% set comp_name = comp.nombre if comp else 'Sin Empresa' %}
+                {% set comp_name = comp.nombre if comp else _('Sin Empresa') %}
                 
                 {# CAMBIO: AÑADIDOS DATOS DE EMPRESA AL DATASET TAMBIÉN AQUÍ #}
                 <div class="worker-chip filterable-worker mb-2 p-2 rounded" 
@@ -116,7 +118,7 @@
                         <span class="worker-name text-truncate text-muted" style="max-width: 160px; font-size: 0.85rem;">
                             {{ worker.name }} {{ worker.lastname }}
                         </span>
-                        <i class="fas fa-briefcase text-muted" style="font-size: 0.7rem;" title="Ocupado en otra obra"></i>
+                        <i class="fas fa-briefcase text-muted" style="font-size: 0.7rem;" title="{{ _('Ocupado en otra obra') }}"></i>
                     </div>
                     
                     <div class="worker-meta d-flex justify-content-between align-items-center mt-1" style="opacity: 0.7;">
@@ -137,12 +139,12 @@
         {% if not free_workers and not busy_workers %}
             <div class="text-center text-muted small mt-5">
                 <i class="fas fa-users mb-2" style="font-size: 1.5rem; opacity: 0.3;"></i><br>
-                No hay operarios.
+                {{ _('No hay operarios.') }}
             </div>
         {% endif %}
 
         <div id="libres-no-match" class="text-center text-muted small mt-4 d-none">
-            No se encontraron coincidencias.
+            {{ _('No se encontraron coincidencias.') }}
         </div>
     </div>
 </div>

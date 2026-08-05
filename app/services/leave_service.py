@@ -434,11 +434,14 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO)
                     descripcion=item.get('descripcion'),
                     updated_at=utc_now(),
                 )
-                # De Odoo solo importamos aprobadas
-                if origen == LEAVE_SOURCE_ODOO and payload['estado'] != LEAVE_STATUS_APROBADA:
-                    stats['omitidos'] += 1
-                    nested.commit()
-                    continue
+                # De Odoo solo importamos aprobadas; forzamos estado por si el
+                # adaptador devolviera otra cosa o hubiera filas huérfanas.
+                if origen == LEAVE_SOURCE_ODOO:
+                    if payload['estado'] != LEAVE_STATUS_APROBADA:
+                        stats['omitidos'] += 1
+                        nested.commit()
+                        continue
+                    payload['estado'] = LEAVE_STATUS_APROBADA
                 is_update = row is not None
                 if row:
                     for k, v in payload.items():
@@ -459,6 +462,15 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO)
             logger.exception('Error syncing leave %s: %s', item, exc)
             stats['errores'] += 1
 
+    # Sana filas Odoo que quedaron en pendiente (defaults viejos / sync parcial).
+    healed = (
+        AusenciaPlanificada.query
+        .filter_by(origen=LEAVE_SOURCE_ODOO, estado=LEAVE_STATUS_PENDIENTE)
+        .update({AusenciaPlanificada.estado: LEAVE_STATUS_APROBADA}, synchronize_session=False)
+    )
+    if healed:
+        stats['actualizados'] += healed
+
     try:
         detect_and_upsert_conflicts(date_from=range_from, date_to=range_to)
         db.session.add(SyncLog(
@@ -471,6 +483,7 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO)
             detalles=(
                 f"omitidos_sin_usuario={stats['omitidos']}; "
                 f"errores={stats['errores']}"
+                + (f"; sanadas_pendientes_odoo={healed}" if healed else '')
             ),
             estado='ok' if stats['errores'] == 0 else 'parcial',
         ))
@@ -718,16 +731,34 @@ def create_manual_leave(
     return leave
 
 
+def heal_odoo_pending_leaves():
+    """Marca como aprobadas las ausencias Odoo que quedaron en pendiente."""
+    n = (
+        AusenciaPlanificada.query
+        .filter_by(origen=LEAVE_SOURCE_ODOO, estado=LEAVE_STATUS_PENDIENTE)
+        .update({AusenciaPlanificada.estado: LEAVE_STATUS_APROBADA}, synchronize_session=False)
+    )
+    if n:
+        db.session.commit()
+    return n
+
+
 def get_pending_manual_leaves(actor_user, limit=100):
-    """Ausencias pendientes de validar (alta manual / jefe)."""
-    return get_leaves_scoped(actor_user, estado=LEAVE_STATUS_PENDIENTE, limit=limit)
+    """Ausencias pendientes de validar: solo altas manuales (no Odoo/ERP)."""
+    leaves = get_leaves_scoped(actor_user, estado=LEAVE_STATUS_PENDIENTE, limit=limit)
+    return [leaf for leaf in leaves if leaf.origen == LEAVE_SOURCE_MANUAL]
 
 
 def set_leave_estado(leave_id, nuevo_estado, resolved_by_id=None):
-    """Aprueba o rechaza una ausencia pendiente."""
+    """Aprueba o rechaza una ausencia pendiente (solo origen manual)."""
     leave = AusenciaPlanificada.query.get(leave_id)
     if not leave:
         raise ValueError('Ausencia no encontrada.')
+    if leave.origen != LEAVE_SOURCE_MANUAL:
+        raise ValueError(
+            'Esta ausencia viene del ERP/Odoo y ya está validada allí; '
+            'no se aprueba ni rechaza en SignaPlan.'
+        )
     if nuevo_estado not in (LEAVE_STATUS_APROBADA, LEAVE_STATUS_RECHAZADA, LEAVE_STATUS_PENDIENTE):
         raise ValueError('Estado no válido.')
     leave.estado = nuevo_estado

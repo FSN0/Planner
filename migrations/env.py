@@ -71,7 +71,7 @@ def run_migrations_online():
 
         # 2. OBTENER INQUILINOS Y MIGRAR CADA UNO (Solo ocurre al hacer Upgrade)
         try:
-            result = connection.execute(text("SELECT schema_name FROM tenants WHERE is_active = true"))
+            result = connection.execute(text("SELECT schema_name FROM tenants"))
             tenant_schemas = [row[0] for row in result]
         except Exception:
             tenant_schemas = []

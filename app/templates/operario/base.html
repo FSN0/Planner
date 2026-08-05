@@ -1,16 +1,16 @@
 {# Plantilla del área de fichaje. No hereda de base.html a propósito: aquella
    está pensada para un escritorio con barra lateral y aquí sobra todo. #}
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale or 'es' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Fichaje">
+    <meta name="apple-mobile-web-app-title" content="{{ _('Fichaje') }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}Fichaje{% endblock %}</title>
+    <title>{% block title %}{{ _('Fichaje') }}{% endblock %}</title>
 
     <link rel="manifest" href="{{ url_for('operarios.manifest') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/fichaje-icon.svg') }}">
@@ -20,7 +20,7 @@
 <body>
     <header class="cabecera">
         <div class="cabecera__empresa">
-            {% if g.get('current_tenant') %}{{ g.current_tenant.nombre }}{% else %}Fichaje{% endif %}
+            {% if g.get('current_tenant') %}{{ g.current_tenant.nombre }}{% else %}{{ _('Fichaje') }}{% endif %}
         </div>
         {% if current_user.is_authenticated %}
             <div class="cabecera__persona">
@@ -48,21 +48,27 @@
         <a href="{{ url_for('operarios.inicio') }}"
            class="barra-inferior__item {% if activo == 'fichar' %}es-activo{% endif %}">
             <span class="barra-inferior__icono" aria-hidden="true">&#9679;</span>
-            Fichar
+            {{ _('Fichar') }}
         </a>
         <a href="{{ url_for('operarios.registros') }}"
            class="barra-inferior__item {% if activo == 'registros' %}es-activo{% endif %}">
             <span class="barra-inferior__icono" aria-hidden="true">&#9776;</span>
-            Mis horas
+            {{ _('Mis horas') }}
         </a>
         <a href="{{ url_for('operarios.salir') }}" class="barra-inferior__item">
             <span class="barra-inferior__icono" aria-hidden="true">&#8677;</span>
-            Salir
+            {{ _('Salir') }}
         </a>
     </nav>
     {% endif %}
 
     <script>
+        window.SP_LOCALE = {{ (current_locale or 'es')|tojson }};
+        window.SP_I18N = {{ frontend_i18n|tojson }};
+        window.SP_T = function (key) {
+            if (!key) { return ''; }
+            return (window.SP_I18N && window.SP_I18N[key]) || key;
+        };
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker

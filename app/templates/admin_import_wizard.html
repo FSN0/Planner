@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.title }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .import-stepper { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .import-step {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .8rem; color: #94a3b8; font-weight: 600;
+  }
+  .import-step .badge-step {
+    width: 1.5rem; height: 1.5rem; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #e2e8f0; color: #64748b; font-size: .75rem;
+  }
+  .import-step.is-active { color: #0f172a; }
+  .import-step.is-active .badge-step { background: #2563eb; color: #fff; }
+  .import-step.is-done { color: #059669; }
+  .import-step.is-done .badge-step { background: #059669; color: #fff; }
+  .import-map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem 1rem; }
+  .import-status-new, .import-status-created { color: #059669; font-weight: 600; }
+  .import-status-duplicate { color: #d97706; font-weight: 600; }
+  .import-status-error, .import-status-skip { color: #dc2626; font-weight: 600; }
+  .import-preview-table { font-size: .85rem; }
+  .import-preview-table td, .import-preview-table th { vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    <div class="row justify-content-center">
+      <div class="col-lg-10 col-xl-9">
+
+        <div class="d-flex align-items-center mb-3">
+          <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-sm btn-link text-muted pl-0">
+            <i class="fas fa-arrow-left"></i> {{ cfg.back_label }}
+          </a>
+        </div>
+
+        <div class="import-stepper">
+          <div class="import-step {% if step == 1 %}is-active{% elif step > 1 %}is-done{% endif %}">
+            <span class="badge-step">1</span> Subir archivo
+          </div>
+          <div class="import-step {% if step == 2 %}is-active{% elif step > 2 %}is-done{% endif %}">
+            <span class="badge-step">2</span> Mapear y previsualizar
+          </div>
+          <div class="import-step {% if step == 3 %}is-active{% endif %}">
+            <span class="badge-step">3</span> Resultado
+          </div>
+        </div>
+
+        <div class="admin-panel">
+          <div class="admin-panel-header border-bottom pb-3 mb-4">
+            <h2 class="admin-panel-title" style="font-size: 1.1rem;">
+              <i class="fas {{ cfg.icon }} mr-2"></i>{{ cfg.title }}
+            </h2>
+            <p class="admin-panel-subtitle mb-0">{{ cfg.subtitle }}</p>
+          </div>
+
+          {# ---------- Paso 1: subida ---------- #}
+          {% if step == 1 %}
+          <div class="alert alert-info mb-4" style="font-size: 0.9rem;">
+            <i class="fas fa-info-circle mr-2"></i>
+            <strong>Columnas:</strong> {{ cfg.required_hint }}
+          </div>
+
+          <form action="{{ url_for(cfg.upload_endpoint) }}" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-group text-center p-5 border rounded bg-light mb-4"
+                 style="border-style: dashed !important; border-color: #cbd5e1 !important;">
+              <i class="fas {{ cfg.icon }} fa-3x text-primary mb-3"></i>
+              <p class="text-muted mb-3">Excel (.xlsx) o CSV (.csv)</p>
+              <div class="custom-file" style="max-width: 320px; margin: 0 auto;">
+                <input type="file" class="custom-file-input" id="file" name="file"
+                       accept=".xlsx,.xls,.csv" required onchange="updateImportFileName(this)">
+                <label class="custom-file-label text-left" for="file" id="file-label">Seleccionar archivo…</label>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+              <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-link text-muted mr-2">Cancelar</a>
+              <button type="submit" class="btn btn-primary px-4">
+                <i class="fas fa-upload mr-2"></i> Continuar
+              </button>
+            </div>
+          </form>
+          {% endif %}
+
+          {# ---------- Paso 2: mapeo + preview ---------- #}
+          {% if step == 2 %}
+          {% set summary = preview.summary or {} %}
+          {% if original_name %}
+          <p class="text-muted small mb-3">
+            <i class="fas fa-file mr-1"></i> {{ original_name }}
+          </p>
+          {% endif %}
+
+          <div class="d-flex flex-wrap mb-3" style="gap: .5rem;">
+            <span class="badge badge-light border">Total: {{ (preview.rows or [])|length }}</span>
+            <span class="badge badge-success">Nuevos: {{ summary.get('new', 0) }}</span>
+            <span class="badge badge-warning">Duplicados: {{ summary.get('duplicate', 0) }}</span>
+            <span class="badge badge-danger">Errores: {{ summary.get('error', 0) }}</span>
+          </div>
+
+          <form method="post" action="{{ url_for(cfg.preview_endpoint) }}" class="mb-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <h3 class="h6 text-uppercase text-muted mb-3">Correspondencia de columnas</h3>
+            <div class="import-map-grid mb-3">
+              {% for field in fields %}
+              <div>
+                <label class="small font-weight-bold mb-1" for="map_{{ field.key }}">
+                  {{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
+                </label>
+                <select class="form-control form-control-sm" name="map_{{ field.key }}" id="map_{{ field.key }}">
+                  <option value="__none__">— No mapear —</option>
+                  {% for col in columns %}
+                  <option value="{{ col }}"
+                    {% if column_map.get(field.key) == col %}selected{% endif %}>
+                    {{ col }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-outline-primary btn-sm">
+              <i class="fas fa-sync-alt mr-1"></i> Actualizar previsualización
+            </button>
+          </form>
+
+          <h3 class="h6 text-uppercase text-muted mb-2">Vista previa</h3>
+          <div class="table-responsive mb-4">
+            <table class="table table-sm table-bordered import-preview-table mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th style="width:4rem;">Fila</th>
+                  <th style="width:7rem;">Estado</th>
+                  <th>Mensajes</th>
+                  {% for field in fields %}
+                  <th>{{ field.label }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% set rows_show = preview.sample_rows or preview.rows or [] %}
+                {% for row in rows_show %}
+                <tr>
+                  <td>{{ row.row_number }}</td>
+                  <td class="import-status-{{ row.status }}">{{ row.status }}</td>
+                  <td class="small text-muted">{{ (row.messages or [])|join('; ') }}</td>
+                  {% for field in fields %}
+                  <td>{{ (row.data or {}).get(field.key, '') }}</td>
+                  {% endfor %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ 3 + fields|length }}" class="text-center text-muted">Sin filas</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if (preview.rows or [])|length > (preview.sample_rows or [])|length %}
+          <p class="small text-muted mb-3">
+            Mostrando {{ (preview.sample_rows or [])|length }} de {{ (preview.rows or [])|length }} filas.
+          </p>
+          {% endif %}
+
+          <form method="post" action="{{ url_for(cfg.confirm_endpoint) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% for field in fields %}
+            <input type="hidden" name="map_{{ field.key }}" value="{{ column_map.get(field.key) or '__none__' }}">
+            {% endfor %}
+            <div class="d-flex justify-content-between">
+              <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-link text-muted">
+                <i class="fas fa-arrow-left mr-1"></i> Otro archivo
+              </a>
+              <button type="submit" class="btn btn-primary px-4"
+                      {% if summary.get('new', 0) == 0 %}disabled title="No hay filas nuevas para importar"{% endif %}>
+                <i class="fas fa-check mr-2"></i>
+                Confirmar importación ({{ summary.get('new', 0) }})
+              </button>
+            </div>
+          </form>
+          {% endif %}
+
+          {# ---------- Paso 3: resultados ---------- #}
+          {% if step == 3 %}
+          {% set summary = summary or {} %}
+          <div class="alert alert-success mb-4">
+            <i class="fas fa-check-circle mr-2"></i>
+            {{ result.message if result else 'Importación finalizada.' }}
+          </div>
+
+          <div class="d-flex flex-wrap mb-4" style="gap: .5rem;">
+            <span class="badge badge-success">Creados: {{ summary.get('created', 0) }}</span>
+            <span class="badge badge-warning">Duplicados: {{ summary.get('duplicate', 0) }}</span>
+            <span class="badge badge-danger">Errores: {{ summary.get('error', 0) }}</span>
+          </div>
+
+          {% if created_companies %}
+          <div class="mb-4">
+            <h3 class="h6">Empresas creadas automáticamente</h3>
+            <ul class="mb-0">
+              {% for name in created_companies %}
+              <li>{{ name }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          <div class="table-responsive mb-4">
+            <table class="table table-sm table-striped import-preview-table mb-0">
+              <thead>
+                <tr>
+                  <th>Fila</th>
+                  <th>Estado</th>
+                  <th>Detalle</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td>{{ row.row_number }}</td>
+                  <td class="import-status-{{ row.status }}">{{ row.status }}</td>
+                  <td class="small">{{ (row.messages or [])|join('; ') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="text-muted text-center">Sin detalle</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          {% if imported %}
+          <details class="mb-4">
+            <summary class="mb-2" style="cursor:pointer;">Usuarios importados ({{ imported|length }})</summary>
+            <div class="table-responsive">
+              <table class="table table-sm table-bordered">
+                <thead>
+                  <tr>
+                    <th>Email</th><th>Rol</th><th>Nombre</th><th>DNI</th><th>Empresa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for u in imported %}
+                  <tr>
+                    <td>{{ u.email }}</td>
+                    <td>{{ u.role }}</td>
+                    <td>{{ u.name }} {{ u.lastname }}</td>
+                    <td>{{ u.dni }}</td>
+                    <td>{{ u.empresa }}{% if u.company_created %} <span class="badge badge-info">nueva</span>{% endif %}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          {% endif %}
+
+          <div class="d-flex justify-content-end">
+            <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-outline-secondary mr-2">
+              Importar otro
+            </a>
+            <a href="{{ url_for(cfg.success_endpoint) }}" class="btn btn-primary">
+              {{ cfg.success_label }}
+            </a>
+          </div>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+function updateImportFileName(input) {
+  var label = document.getElementById('file-label');
+  if (label && input.files && input.files[0]) {
+    label.innerText = input.files[0].name;
+  }
+}
+</script>
+{% endblock %}

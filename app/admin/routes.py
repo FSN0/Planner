@@ -1,5 +1,5 @@
 # app/admin/routes.py
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, g
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, g, session
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_, func
 from app.models import (
@@ -27,8 +27,15 @@ from app.services.core_assignment_service import CoreAssignmentService
 from app.decorators import roles_required
 from itsdangerous import URLSafeTimedSerializer
 import os
-# Añadir en la zona de imports de app/admin/routes.py
-from app.services.import_service import process_obras_import, process_users_import
+from app.services.import_service import (
+    allowed_import_file,
+    save_import_upload,
+    resolve_import_path,
+    cleanup_import_file,
+    preview_import,
+    commit_import,
+    ENTITY_LABELS,
+)
 from app.models import Rating
 
 
@@ -51,19 +58,235 @@ from app.services.permission_service import (
 from app.services.email_service import notificar_resolucion_solicitud, notificar_movimiento_admin_a_jo
 # Definición del blueprint de admin
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
-ALLOWED_EXTENSIONS = {"xlsx"}
+ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
+
+IMPORT_WIZARD_CONFIG = {
+    "obras": {
+        "title": "Importar Obras",
+        "subtitle": "Carga un Excel o CSV para crear varias obras a la vez.",
+        "required_hint": "Código, Nombre, Cliente, Dirección, Fecha de inicio. Opcional: Fecha de fin.",
+        "icon": "fa-hard-hat",
+        "upload_endpoint": "admin.import_obras",
+        "preview_endpoint": "admin.import_obras_preview",
+        "confirm_endpoint": "admin.import_obras_confirm",
+        "back_endpoint": "admin.obras_list",
+        "back_label": "Volver al listado",
+        "success_endpoint": "admin.obras_detailed",
+        "success_label": "Ir a obras",
+    },
+    "users": {
+        "title": "Importar Personal",
+        "subtitle": "Carga un Excel o CSV para dar de alta usuarios.",
+        "required_hint": "Email, Rol, Nombre, Apellidos, DNI, Empresa. Opcional: Contraseña, Activo.",
+        "icon": "fa-users",
+        "upload_endpoint": "admin.import_users",
+        "preview_endpoint": "admin.import_users_preview",
+        "confirm_endpoint": "admin.import_users_confirm",
+        "back_endpoint": "admin.personal",
+        "back_label": "Volver a personal",
+        "success_endpoint": "admin.personal",
+        "success_label": "Ir a personal",
+    },
+    "companies": {
+        "title": "Importar Subcontratas",
+        "subtitle": "Carga un Excel o CSV para dar de alta empresas subcontratadas.",
+        "required_hint": "Nombre. Opcional: NIF, Código, Gremio, Email, Descripción, Interna.",
+        "icon": "fa-building",
+        "upload_endpoint": "admin.import_companies",
+        "preview_endpoint": "admin.import_companies_preview",
+        "confirm_endpoint": "admin.import_companies_confirm",
+        "back_endpoint": "admin.companies",
+        "back_label": "Volver a subcontratas",
+        "success_endpoint": "admin.companies",
+        "success_label": "Ir a subcontratas",
+    },
+}
 
 
 @admin_bp.before_request
 def _bloquear_operario_en_admin():
-    """El PIN del operario es sesión completa: no debe llegar al panel de oficina."""
+    """El operario no entra al panel de oficina (ni por PIN ni por portal web)."""
     if current_user.is_authenticated and current_user.role == ROLE_OPERARIO:
         flash('Tu perfil no tiene acceso al panel de administración.', 'warning')
+        if getattr(current_user, 'web_access', False):
+            return redirect(url_for('empleado.inicio'))
         return redirect(url_for('operarios.inicio'))
 
 
+def _exige_email_verificado_para_usuarios():
+    """Hasta verificar el correo del admin no se pueden crear/invitar usuarios."""
+    if (
+        current_user.is_authenticated
+        and current_user.role == ROLE_ADMIN
+        and hasattr(current_user, 'email_verified')
+        and not current_user.email_verified
+    ):
+        flash(
+            'Verifica tu correo electrónico antes de dar de alta o invitar usuarios. '
+            'Puedes reenviar el enlace desde el aviso de la parte superior.',
+            'warning',
+        )
+        return False
+    return True
+
+
 def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+    return allowed_import_file(filename)
+
+
+def _import_session_key(entity_type):
+    return f"import_{entity_type}"
+
+
+def _clear_import_session(entity_type):
+    data = session.pop(_import_session_key(entity_type), None)
+    if data:
+        cleanup_import_file(data.get("token", ""), data.get("ext", "xlsx"))
+
+
+def _store_import_upload(entity_type, file_storage):
+    token, ext = save_import_upload(file_storage)
+    session[_import_session_key(entity_type)] = {
+        "token": token,
+        "ext": ext,
+        "original_name": file_storage.filename,
+        "column_map": None,
+    }
+    session.modified = True
+    return token, ext
+
+
+def _load_import_path(entity_type):
+    data = session.get(_import_session_key(entity_type))
+    if not data or not data.get("token"):
+        return None, None
+    path = resolve_import_path(data["token"], data.get("ext", "xlsx"))
+    return path, data
+
+
+def _column_map_from_form(_entity_type=None):
+    """Lee map[campo]=columna desde el formulario de remapeo."""
+    prefix = "map_"
+    column_map = {}
+    for key, value in request.form.items():
+        if key.startswith(prefix):
+            field_key = key[len(prefix):]
+            column_map[field_key] = value if value and value != "__none__" else None
+    return column_map or None
+
+
+def _render_import_upload(entity_type):
+    cfg = IMPORT_WIZARD_CONFIG[entity_type]
+    # Nuevo ciclo: no reutilizar un fichero de un intento anterior.
+    _clear_import_session(entity_type)
+    return render_template(
+        "admin_import_wizard.html",
+        entity_type=entity_type,
+        entity_label=ENTITY_LABELS.get(entity_type, entity_type),
+        cfg=cfg,
+        step=1,
+    )
+
+
+def _render_import_preview(entity_type, preview, column_map=None):
+    cfg = IMPORT_WIZARD_CONFIG[entity_type]
+    data = session.get(_import_session_key(entity_type)) or {}
+    return render_template(
+        "admin_import_wizard.html",
+        entity_type=entity_type,
+        entity_label=ENTITY_LABELS.get(entity_type, entity_type),
+        cfg=cfg,
+        preview=preview,
+        column_map=column_map or preview.get("column_map") or {},
+        columns=preview.get("columns") or [],
+        fields=preview.get("fields") or [],
+        original_name=data.get("original_name"),
+        step=2,
+    )
+
+
+def _handle_import_upload_post(entity_type):
+    file = request.files.get("file")
+    if not file or not allowed_file(file.filename):
+        flash("Sube un archivo Excel (.xlsx) o CSV (.csv) válido.", "danger")
+        return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["upload_endpoint"]))
+
+    _clear_import_session(entity_type)
+    try:
+        _store_import_upload(entity_type, file)
+    except Exception as exc:
+        flash(f"No se pudo guardar el archivo: {exc}", "danger")
+        return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["upload_endpoint"]))
+
+    return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["preview_endpoint"]))
+
+
+def _handle_import_preview(entity_type):
+    cfg = IMPORT_WIZARD_CONFIG[entity_type]
+    try:
+        path, data = _load_import_path(entity_type)
+    except (ValueError, FileNotFoundError) as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for(cfg["upload_endpoint"]))
+
+    if not path:
+        flash("Primero sube un archivo para previsualizar.", "warning")
+        return redirect(url_for(cfg["upload_endpoint"]))
+
+    column_map = None
+    if request.method == "POST":
+        column_map = _column_map_from_form(entity_type)
+        data["column_map"] = column_map
+        session[_import_session_key(entity_type)] = data
+        session.modified = True
+    else:
+        column_map = data.get("column_map")
+
+    preview = preview_import(path, entity_type, column_map)
+    if not preview.get("success"):
+        flash(preview.get("message") or "Error al leer el archivo", "danger")
+        _clear_import_session(entity_type)
+        return redirect(url_for(cfg["upload_endpoint"]))
+
+    data["column_map"] = preview.get("column_map")
+    session[_import_session_key(entity_type)] = data
+    session.modified = True
+
+    return _render_import_preview(entity_type, preview)
+
+
+def _handle_import_confirm(entity_type):
+    cfg = IMPORT_WIZARD_CONFIG[entity_type]
+    try:
+        path, data = _load_import_path(entity_type)
+    except (ValueError, FileNotFoundError) as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for(cfg["upload_endpoint"]))
+
+    if not path:
+        flash("No hay archivo pendiente de importar.", "warning")
+        return redirect(url_for(cfg["upload_endpoint"]))
+
+    column_map = _column_map_from_form(entity_type) or data.get("column_map")
+    result = commit_import(path, entity_type, column_map)
+    _clear_import_session(entity_type)
+
+    if not result.get("success"):
+        flash(result.get("message") or "Error en la importación", "danger")
+        return redirect(url_for(cfg["upload_endpoint"]))
+
+    return render_template(
+        "admin_import_wizard.html",
+        entity_type=entity_type,
+        entity_label=ENTITY_LABELS.get(entity_type, entity_type),
+        cfg=cfg,
+        result=result,
+        summary=result.get("summary") or {},
+        rows=result.get("rows") or [],
+        imported=result.get("imported") or [],
+        created_companies=result.get("created_companies") or [],
+        step=3,
+    )
 
 
 @admin_bp.route("/import_obras", methods=["GET", "POST"])
@@ -71,22 +294,22 @@ def allowed_file(filename):
 @roles_required(ROLE_ADMIN)
 def import_obras():
     if request.method == "POST":
-        file = request.files.get("file")
-        if not file or not allowed_file(file.filename):
-            flash("Por favor, sube un archivo .xlsx válido.", "danger")
-            return redirect(request.url)
+        return _handle_import_upload_post("obras")
+    return _render_import_upload("obras")
 
-        # Llamada al servicio
-        success, message, count = process_obras_import(file)
 
-        if success:
-            flash(message, "success")
-            return redirect(url_for("admin.obras_detailed"))
-        else:
-            flash(message, "danger")
-            return redirect(request.url)
+@admin_bp.route("/import_obras/preview", methods=["GET", "POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def import_obras_preview():
+    return _handle_import_preview("obras")
 
-    return render_template("import_obras.html")
+
+@admin_bp.route("/import_obras/confirm", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def import_obras_confirm():
+    return _handle_import_confirm("obras")
 
 @admin_bp.route('/solicitudes')
 @login_required
@@ -1283,6 +1506,44 @@ def edit_operario(user_id):
             
             user.categoria_profesional = request.form.get("categoria_profesional")
             user.especialidad = request.form.get("especialidad")
+
+            # Acceso web (email/contraseña) — independiente del PIN de /mi
+            quiere_web = request.form.get("web_access") == "on"
+            web_password = (request.form.get("web_password") or "").strip()
+            if nuevo_rol == ROLE_OPERARIO:
+                if quiere_web:
+                    if not user.web_access and len(web_password) < 8:
+                        flash(
+                            "Para activar el acceso a la plataforma indica una "
+                            "contraseña de al menos 8 caracteres.",
+                            "danger",
+                        )
+                        return render_template(
+                            "gestion_operario_form.html",
+                            edit_mode=True,
+                            user=user,
+                            action_url=url_for("admin.edit_operario", user_id=user.id),
+                            cancel_url=url_for("admin.personal"),
+                            companies=companies,
+                        )
+                    if web_password:
+                        if len(web_password) < 8:
+                            flash("La contraseña web debe tener al menos 8 caracteres.", "danger")
+                            return render_template(
+                                "gestion_operario_form.html",
+                                edit_mode=True,
+                                user=user,
+                                action_url=url_for("admin.edit_operario", user_id=user.id),
+                                cancel_url=url_for("admin.personal"),
+                                companies=companies,
+                            )
+                        user.password_hash = generate_password_hash(web_password)
+                    user.web_access = True
+                else:
+                    user.web_access = False
+            else:
+                # Perfiles de oficina siempre tienen login web
+                user.web_access = True
             
             db.session.commit()
             flash("Datos del Operario actualizados correctamente", "success")
@@ -1318,6 +1579,20 @@ def panel():
     ctx['mostrar_onboarding'] = necesita_onboarding()
     ctx['onboarding'] = estado_onboarding() if ctx['mostrar_onboarding'] else None
     return render_template("admin_panel.html", **ctx)
+
+
+@admin_bp.route("/panel-laboral", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def panel_laboral():
+    """Landing de inicio para perfiles laboral / RRHH."""
+    from app.services.panel_service import get_laboral_panel_context
+    ctx = get_laboral_panel_context(
+        current_user,
+        puede_ver_auditoria=user_can(current_user, 'auditoria_fichajes', 'r'),
+        horizon_days=14,
+    )
+    return render_template("admin_panel_laboral.html", **ctx)
 
 
 @admin_bp.route("/primeros-pasos", methods=["GET", "POST"])
@@ -1366,6 +1641,8 @@ def primeros_pasos():
                 db.session.commit()
                 flash(f"Obra «{nombre}» creada.", "success")
             elif accion == "operario":
+                if not _exige_email_verificado_para_usuarios():
+                    return redirect(url_for("admin.primeros_pasos"))
                 company = Company.query.filter_by(is_internal=True).first() or Company.query.first()
                 name = (request.form.get("name") or "").strip()
                 lastname = (request.form.get("lastname") or "").strip()
@@ -1776,6 +2053,9 @@ def delete_user(user_id):
 @login_required
 @roles_required(ROLE_ADMIN)
 def create_user():
+    if not _exige_email_verificado_para_usuarios():
+        return redirect(url_for("admin.personal"))
+
     if request.method == "POST":
         # ... (Mantén toda tu lógica POST igual) ...
         email = request.form.get("email")
@@ -1788,6 +2068,9 @@ def create_user():
         active = True if request.form.get("active") == "on" else False
         categoria = request.form.get("categoria_profesional")
         especialidad = request.form.get("especialidad")
+        web_access = True if request.form.get("web_access") == "on" else False
+        if role != ROLE_OPERARIO:
+            web_access = True
 
         from app.services.plan_service import PlanLimitError, exigir_alta_empleado
         try:
@@ -1806,6 +2089,7 @@ def create_user():
             company_id=int(company_id) if company_id else None,
             active=active,
             email_verified=True,
+            web_access=web_access,
             categoria_profesional=categoria,
             especialidad=especialidad,
         )
@@ -1901,25 +2185,52 @@ def delete_obra(obra_id):
 @roles_required(ROLE_ADMIN)
 def import_users():
     if request.method == "POST":
-        file = request.files.get("file")
-        if not file or not file.filename.lower().endswith(".xlsx"):
-            flash("Por favor, seleccione un archivo Excel (.xlsx) válido.", "danger")
+        if not _exige_email_verificado_para_usuarios():
             return redirect(url_for("admin.import_users"))
-        
-        # Llamada al servicio
-        success, message, data = process_users_import(file)
+        return _handle_import_upload_post("users")
+    return _render_import_upload("users")
 
-        if success:
-            return render_template(
-                "admin_import_results.html",
-                imported=data.get('imported', []),
-                created_companies=data.get('created_companies', [])
-            )
-        else:
-            flash(message, "danger")
-            return redirect(url_for("admin.import_users"))
 
-    return render_template("admin_import_users.html")
+@admin_bp.route("/import_users/preview", methods=["GET", "POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def import_users_preview():
+    if not _exige_email_verificado_para_usuarios():
+        return redirect(url_for("admin.import_users"))
+    return _handle_import_preview("users")
+
+
+@admin_bp.route("/import_users/confirm", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def import_users_confirm():
+    if not _exige_email_verificado_para_usuarios():
+        return redirect(url_for("admin.import_users"))
+    return _handle_import_confirm("users")
+
+
+@admin_bp.route("/import_companies", methods=["GET", "POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def import_companies():
+    if request.method == "POST":
+        return _handle_import_upload_post("companies")
+    return _render_import_upload("companies")
+
+
+@admin_bp.route("/import_companies/preview", methods=["GET", "POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def import_companies_preview():
+    return _handle_import_preview("companies")
+
+
+@admin_bp.route("/import_companies/confirm", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def import_companies_confirm():
+    return _handle_import_confirm("companies")
+
 
 @admin_bp.route("/active_obras", methods=["GET"])
 @login_required
@@ -2862,7 +3173,11 @@ def ausencias_list():
         get_leaves_scoped,
         obras_for_leave,
         auto_resolucion_ausencias,
+        heal_odoo_pending_leaves,
     )
+
+    # Vacaciones de Odoo no pasan por validación local.
+    heal_odoo_pending_leaves()
 
     estado = request.args.get('estado') or ''
     puede_resolver = current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH) or (

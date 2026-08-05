@@ -14,6 +14,7 @@
     var panel = document.querySelector('.fichaje');
     if (!panel) { return; }
 
+    var t = (typeof window.SP_T === 'function') ? window.SP_T : function (k) { return k; };
     var urlFichar = panel.dataset.urlFichar;
     var urlConformar = panel.dataset.urlConformar;
     var modoGeo = panel.dataset.modoGeo;
@@ -103,14 +104,14 @@
 
         var selector = document.getElementById('obra');
         if (tipo === 'entrada' && selector && !selector.value) {
-            mostrar('Elige primero en qué obra vas a trabajar.', 'error');
+            mostrar(t('Elige primero en qué obra vas a trabajar.'), 'error');
             return;
         }
 
         bloquear(true);
         ocultar();
         if (modoGeo !== 'desactivada') {
-            mostrar('Obteniendo tu ubicación…', 'ok');
+            mostrar(t('Obteniendo tu ubicación…'), 'ok');
         }
 
         ubicacion().then(function (coordenadas) {
@@ -135,20 +136,19 @@
             });
         }).then(function (resultado) {
             if (!resultado.ok || !resultado.datos.ok) {
-                mostrar(resultado.datos.error || 'No se ha podido fichar.', 'error');
+                mostrar(resultado.datos.error || t('No se ha podido fichar.'), 'error');
                 bloquear(false);
                 return;
             }
 
-            mostrar('Fichaje registrado.', 'ok');
+            mostrar(t('Fichaje registrado.'), 'ok');
             if (navigator.vibrate) { navigator.vibrate(60); }
             /* Se recarga en lugar de repintar a mano: así los botones que se
              * ofrecen los sigue decidiendo el servidor en un único sitio. */
             window.location.reload();
         }).catch(function () {
             mostrar(
-                'Sin conexión: el fichaje NO ha quedado registrado. ' +
-                'Busca cobertura y vuelve a intentarlo.',
+                t('Sin conexión: el fichaje NO ha quedado registrado. Busca cobertura y vuelve a intentarlo.'),
                 'error'
             );
             bloquear(false);
@@ -165,7 +165,7 @@
         btnConformar.addEventListener('click', function () {
             if (enCurso) { return; }
             if (!window.confirm(
-                '¿Confirmas que el registro de hoy (entrada, pausas y salida) es correcto?'
+                t('¿Confirmas que el registro de hoy (entrada, pausas y salida) es correcto?')
             )) {
                 return;
             }
@@ -187,18 +187,17 @@
                 });
             }).then(function (resultado) {
                 if (!resultado.ok || !resultado.datos.ok) {
-                    mostrar(resultado.datos.error || 'No se ha podido firmar.', 'error');
+                    mostrar(resultado.datos.error || t('No se ha podido firmar.'), 'error');
                     bloquear(false);
                     if (btnConformar) { btnConformar.disabled = false; }
                     return;
                 }
-                mostrar('Jornada firmada.', 'ok');
+                mostrar(t('Jornada firmada.'), 'ok');
                 if (navigator.vibrate) { navigator.vibrate(60); }
                 window.location.reload();
             }).catch(function () {
                 mostrar(
-                    'Sin conexión: la firma NO ha quedado registrada. ' +
-                    'Busca cobertura y vuelve a intentarlo.',
+                    t('Sin conexión: la firma NO ha quedado registrada. Busca cobertura y vuelve a intentarlo.'),
                     'error'
                 );
                 bloquear(false);

@@ -22,7 +22,7 @@
     {# —— Inicio —— #}
     <ul class="sidebar-nav">
       <li>
-        <a href="{% if current_user.role == 'jefe_obra' %}{{ url_for('jefe.panel') }}{% elif current_user.role == 'admin' %}{{ url_for('admin.panel') }}{% elif is_laboral(current_user) %}{{ url_for('admin.ausencias_list') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" class="sidebar-link {% if request.endpoint in ['main.dashboard', 'admin.panel', 'jefe.panel'] %}is-active{% endif %}">
+        <a href="{% if current_user.role == 'jefe_obra' %}{{ url_for('jefe.panel') }}{% elif current_user.role == 'admin' %}{{ url_for('admin.panel') }}{% elif is_laboral(current_user) %}{{ url_for('admin.panel_laboral') }}{% else %}{{ url_for('main.dashboard') }}{% endif %}" class="sidebar-link {% if request.endpoint in ['main.dashboard', 'admin.panel', 'admin.panel_laboral', 'jefe.panel'] %}is-active{% endif %}">
           <i class="fas fa-home fa-fw"></i><span>{{ _('Inicio') }}</span>
         </a>
       </li>
@@ -287,15 +287,6 @@
   <div class="sidebar-spacer"></div>
 
   <div class="sidebar-footer-block">
-    <form action="{{ url_for('main.update_user_locale') }}" method="POST" class="sidebar-tz-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="sidebar-tz-label" for="sidebar-locale"><i class="fas fa-language"></i> {{ _('Idioma') }}</label>
-      <select id="sidebar-locale" name="locale" class="sidebar-tz-select" onchange="this.form.submit()">
-        {% for code in supported_locales %}
-        <option value="{{ code }}" {% if current_locale == code %}selected{% endif %}>{{ locale_labels[code] }}</option>
-        {% endfor %}
-      </select>
-    </form>
     <form action="{{ url_for('main.update_user_timezone') }}" method="POST" class="sidebar-tz-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label class="sidebar-tz-label" for="sidebar-timezone"><i class="fas fa-globe-europe"></i> {{ _('Zona horaria') }}</label>

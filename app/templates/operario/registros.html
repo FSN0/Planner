@@ -1,20 +1,20 @@
 {% extends 'operario/base.html' %}
 {% set activo = 'registros' %}
-{% block title %}Mis horas{% endblock %}
+{% block title %}{{ _('Mis horas') }}{% endblock %}
 
 {% block contenido %}
-<h1 class="titulo">Mis horas</h1>
+<h1 class="titulo">{{ _('Mis horas') }}</h1>
 
 <form class="filtro" method="get" action="{{ url_for('operarios.registros') }}">
     <div class="filtro__campo">
-        <label for="desde">Desde</label>
+        <label for="desde">{{ _('Desde') }}</label>
         <input type="date" id="desde" name="desde" value="{{ desde }}">
     </div>
     <div class="filtro__campo">
-        <label for="hasta">Hasta</label>
+        <label for="hasta">{{ _('Hasta') }}</label>
         <input type="date" id="hasta" name="hasta" value="{{ hasta }}">
     </div>
-    <button class="boton boton--secundario" type="submit">Ver</button>
+    <button class="boton boton--secundario" type="submit">{{ _('Ver') }}</button>
 </form>
 
 <div class="resumen">
@@ -22,13 +22,13 @@
         {{ '%d h %02d min' | format(minutos_totales // 60, minutos_totales % 60) }}
     </div>
     <div class="resumen__detalle">
-        {{ dias | length }} día{{ '' if dias | length == 1 else 's' }} con registro
+        {{ dias | length }} {{ _('días con registro') if dias | length != 1 else _('día con registro') }}
     </div>
 </div>
 
 <a class="boton boton--secundario boton--bloque"
    href="{{ url_for('operarios.registros_csv', desde=desde, hasta=hasta) }}">
-    Descargar mis registros
+    {{ _('Descargar mis registros') }}
 </a>
 
 <ul class="dias">
@@ -51,19 +51,17 @@
                 {% endif %}
             </div>
             {% if dia.conforme %}
-                <div class="dia__aviso" style="color:#0f766e;">Firmada{% if dia.conforme_en %} · {{ dia.conforme_en | format_time }}{% endif %}</div>
+                <div class="dia__aviso" style="color:#0f766e;">{{ _('Firmada') }}{% if dia.conforme_en %} · {{ dia.conforme_en | format_time }}{% endif %}</div>
             {% elif not dia.salida %}
-                <div class="dia__aviso">Sin hora de salida registrada</div>
+                <div class="dia__aviso">{{ _('Sin hora de salida registrada') }}</div>
             {% endif %}
         </li>
     {% else %}
-        <li class="dias__vacio">No hay registros en este periodo.</li>
+        <li class="dias__vacio">{{ _('No hay registros en este periodo.') }}</li>
     {% endfor %}
 </ul>
 
 <p class="nota-legal">
-    Este es tu registro de jornada. Si algo no cuadra, díselo a tu responsable:
-    los fichajes no se borran, las correcciones se anotan aparte dejando constancia
-    de quién las hizo y por qué.
+    {{ _('Este es tu registro de jornada. Si algo no cuadra, díselo a tu responsable: los fichajes no se borran, las correcciones se anotan aparte dejando constancia de quién las hizo y por qué.') }}
 </p>
 {% endblock %}

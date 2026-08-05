@@ -1,12 +1,11 @@
 {% extends 'operario/base.html' %}
 {% set activo = 'fichar' %}
-{% block title %}Fichar{% endblock %}
+{% block title %}{{ _('Fichar') }}{% endblock %}
 
-{# strftime devolvería los nombres en inglés salvo que el contenedor tenga la
-   locale española instalada, cosa que no se puede dar por hecha. #}
-{% set dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] %}
-{% set meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
-                'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'] %}
+{# Días/meses vía _() para que cambien con el idioma activo. #}
+{% set dias_semana = [_('Lunes'), _('Martes'), _('Miércoles'), _('Jueves'), _('Viernes'), _('Sábado'), _('Domingo')] %}
+{% set meses = [_('enero'), _('febrero'), _('marzo'), _('abril'), _('mayo'), _('junio'), _('julio'),
+                _('agosto'), _('septiembre'), _('octubre'), _('noviembre'), _('diciembre')] %}
 
 {% block contenido %}
 <div class="fichaje"
@@ -18,21 +17,21 @@
     <div class="reloj">
         <div class="reloj__hora" id="reloj-hora">--:--</div>
         <div class="reloj__fecha">
-            {{ dias_semana[fecha.weekday()] }}, {{ fecha.day }} de {{ meses[fecha.month - 1] }}
+            {{ dias_semana[fecha.weekday()] }}, {{ fecha.day }} {{ _('de') }} {{ meses[fecha.month - 1] }}
         </div>
     </div>
 
     <div class="estado estado--{{ estado }}" id="tarjeta-estado">
         <div class="estado__etiqueta" id="estado-etiqueta">
-            {% if estado == 'dentro' %}Jornada iniciada
-            {% elif estado == 'pausa' %}En pausa
-            {% else %}Fuera de jornada{% endif %}
+            {% if estado == 'dentro' %}{{ _('Jornada iniciada') }}
+            {% elif estado == 'pausa' %}{{ _('En pausa') }}
+            {% else %}{{ _('Fuera de jornada') }}{% endif %}
         </div>
         <div class="estado__obra" id="estado-obra">
             {% if obra_actual %}{{ obra_actual.nombre }}{% else %}&mdash;{% endif %}
         </div>
         <div class="estado__acumulado">
-            Hoy llevas <strong id="estado-minutos">{{ '%d h %02d min' | format(minutos // 60, minutos % 60) }}</strong>
+            {{ _('Hoy llevas') }} <strong id="estado-minutos">{{ '%d h %02d min' | format(minutos // 60, minutos % 60) }}</strong>
         </div>
     </div>
 
@@ -40,20 +39,20 @@
 
     {% if estado == 'fuera' %}
         <div class="campo">
-            <label class="campo__etiqueta" for="obra">¿Dónde vas a trabajar?</label>
+            <label class="campo__etiqueta" for="obra">{{ _('¿Dónde vas a trabajar?') }}</label>
             <select class="campo__control" id="obra" name="obra">
                 {% if not obras_planificadas and not otras_obras %}
-                    <option value="">No hay obras disponibles</option>
+                    <option value="">{{ _('No hay obras disponibles') }}</option>
                 {% endif %}
                 {% if obras_planificadas %}
-                    <optgroup label="Tu planificación de hoy">
+                    <optgroup label="{{ _('Tu planificación de hoy') }}">
                         {% for obra in obras_planificadas %}
                             <option value="{{ obra.id }}">{{ obra.nombre }}</option>
                         {% endfor %}
                     </optgroup>
                 {% endif %}
                 {% if otras_obras %}
-                    <optgroup label="Otras obras">
+                    <optgroup label="{{ _('Otras obras') }}">
                         {% for obra in otras_obras %}
                             <option value="{{ obra.id }}">{{ obra.nombre }}</option>
                         {% endfor %}
@@ -61,77 +60,74 @@
                 {% endif %}
             </select>
             {% if not obras_planificadas and otras_obras %}
-                <p class="campo__ayuda">Hoy no tienes obra planificada. Elige dónde estás (puedes usar Oficina).</p>
+                <p class="campo__ayuda">{{ _('Hoy no tienes obra planificada. Elige dónde estás (puedes usar Oficina).') }}</p>
             {% elif not obras_planificadas %}
-                <p class="campo__ayuda">Hoy no tienes obra planificada. Elige dónde estás.</p>
+                <p class="campo__ayuda">{{ _('Hoy no tienes obra planificada. Elige dónde estás.') }}</p>
             {% endif %}
         </div>
 
         <button class="boton boton--entrar" type="button" data-tipo="entrada">
-            Entrar
+            {{ _('Entrar') }}
         </button>
     {% else %}
         <div class="botonera">
             {% if estado == 'dentro' %}
                 <button class="boton boton--pausa" type="button" data-tipo="pausa_inicio">
-                    Pausa
+                    {{ _('Pausa') }}
                 </button>
             {% else %}
                 <button class="boton boton--reanudar" type="button" data-tipo="pausa_fin">
-                    Reanudar
+                    {{ _('Reanudar') }}
                 </button>
             {% endif %}
             <button class="boton boton--salir" type="button" data-tipo="salida">
-                Salir
+                {{ _('Salir') }}
             </button>
         </div>
     {% endif %}
 
     {% if puede_conformar %}
         <button class="boton boton--conforme" type="button" id="btn-conformar" data-tipo="conforme">
-            Firmar jornada de hoy
+            {{ _('Firmar jornada de hoy') }}
         </button>
         <p class="nota-legal">
-            Al firmar confirmas que el registro de entrada, pausas y salida de hoy es correcto.
-            Queda anotado en el libro inalterable de tu empresa.
+            {{ _('Al firmar confirmas que el registro de entrada, pausas y salida de hoy es correcto. Queda anotado en el libro inalterable de tu empresa.') }}
         </p>
     {% elif conforme %}
         <p class="nota-legal" id="conforme-ok">
-            Jornada de hoy firmada. Gracias.
+            {{ _('Jornada de hoy firmada. Gracias.') }}
         </p>
     {% endif %}
 
     {% if modo_geo != 'desactivada' %}
         <p class="nota-legal">
             {% if modo_geo == 'obligatoria' %}
-                Tu empresa registra la ubicación en el momento de fichar para acreditar
-                la presencia en obra. No se te localiza en ningún otro momento.
+                {{ _('Tu empresa registra la ubicación en el momento de fichar para acreditar la presencia en obra. No se te localiza en ningún otro momento.') }}
             {% else %}
-                Si lo permites, se guardará la ubicación del momento del fichaje para
-                acreditar la presencia en obra. Puedes fichar igualmente sin darla.
+                {{ _('Si lo permites, se guardará la ubicación del momento del fichaje para acreditar la presencia en obra. Puedes fichar igualmente sin darla.') }}
             {% endif %}
         </p>
     {% endif %}
 
     <section class="jornada">
-        <h2 class="jornada__titulo">Movimientos de hoy</h2>
+        <h2 class="jornada__titulo">{{ _('Movimientos de hoy') }}</h2>
         <ul class="jornada__lista" id="lista-eventos">
             {% for evento in eventos %}
                 <li class="jornada__item jornada__item--{{ evento.tipo }}">
                     <span class="jornada__hora">{{ evento.ocurrido_en | format_time }}</span>
                     <span class="jornada__tipo">
-                        {% if evento.tipo == 'entrada' %}Entrada
-                        {% elif evento.tipo == 'salida' %}Salida
-                        {% elif evento.tipo == 'pausa_inicio' %}Inicio de pausa
-                        {% elif evento.tipo == 'pausa_fin' %}Fin de pausa
-                        {% elif evento.tipo == 'reasignacion_obra' %}Cambio de obra
-                        {% elif evento.tipo == 'conforme_jornada' %}Conforme / firma
+                        {% if evento.tipo == 'entrada' %}{{ _('Entrada') }}
+                        {% elif evento.tipo == 'salida' %}{{ _('Salida') }}
+                        {% elif evento.tipo == 'pausa_inicio' %}{{ _('Inicio de pausa') }}
+                        {% elif evento.tipo == 'pausa_fin' %}{{ _('Fin de pausa') }}
+                        {% elif evento.tipo == 'reasignacion_obra' %}{{ _('Cambio de obra') }}
+                        {% elif evento.tipo == 'conforme_jornada' %}{{ _('Conforme / firma') }}
                         {% else %}{{ evento.tipo }}{% endif %}
                     </span>
                     <span class="jornada__obra">{{ evento.obra.nombre if evento.obra else '' }}</span>
                 </li>
             {% else %}
-                <li class="jornada__vacio">Todavía no has fichado hoy.</li>
+                <li class="jornada__vacio">{{ _('Todavía no has fichado hoy.') }}</li>
             {% endfor %}
         </ul>
     </section>

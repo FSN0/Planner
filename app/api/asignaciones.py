@@ -27,6 +27,176 @@ from app.services.permission_service import is_laboral
 
 asignaciones_api = Blueprint('asignaciones_api', __name__)
 
+
+def _parse_workers_payload(data):
+    """
+    Normaliza multi-trabajador desde el planificador.
+    Acepta:
+      - workers: [{worker_id, vehicle_id?}, ...]
+      - worker_ids: [id, ...]
+    Devuelve lista de dicts, o None si el payload es single worker_id (legacy).
+    Lista vacía = clave presente pero sin trabajadores válidos.
+    """
+    if not data:
+        return None
+
+    has_batch_key = False
+    raw_workers = data.get('workers')
+    if isinstance(raw_workers, list):
+        has_batch_key = True
+        out = []
+        for idx, item in enumerate(raw_workers):
+            if isinstance(item, dict):
+                wid = item.get('worker_id')
+                vid = item.get('vehicle_id')
+            else:
+                wid = item
+                vid = None
+            if wid is None or str(wid) in ('', 'GENERICO'):
+                continue
+            try:
+                entry = {'worker_id': int(wid), 'index': idx}
+            except (TypeError, ValueError):
+                continue
+            if vid not in (None, '', 'null'):
+                try:
+                    entry['vehicle_id'] = int(vid)
+                except (TypeError, ValueError):
+                    pass
+            out.append(entry)
+        return out
+
+    raw_ids = data.get('worker_ids')
+    if isinstance(raw_ids, list):
+        has_batch_key = True
+        out = []
+        for idx, wid in enumerate(raw_ids):
+            if wid is None or str(wid) in ('', 'GENERICO'):
+                continue
+            try:
+                out.append({'worker_id': int(wid), 'index': idx})
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    return None if not has_batch_key else []
+
+
+def _process_batch_planificador_assignments(
+    *,
+    actor_user,
+    workers,
+    target_obra_id,
+    fechas_a_procesar,
+    overwrite_mode,
+    notas,
+):
+    """
+    Asigna varios trabajadores al mismo rango de obra.
+    Conflictos de ausencia (y otros) se reportan por fila sin abortar el lote.
+    """
+    from app.services.vehicle_assignment_service import process_vehicle_assignment_action
+
+    results = []
+    ok_count = 0
+    fail_count = 0
+    leave_fail_count = 0
+
+    for entry in workers:
+        wid = entry['worker_id']
+        row = {
+            'index': entry.get('index', 0),
+            'worker_id': wid,
+            'vehicle_id': entry.get('vehicle_id'),
+            'success': False,
+        }
+        worker = User.query.get(wid)
+        if worker:
+            row['worker_name'] = f"{worker.name} {worker.lastname}".strip()
+        else:
+            row['worker_name'] = f'ID {wid}'
+
+        try:
+            result = process_assignment_action(
+                actor_user=actor_user,
+                worker_id=wid,
+                target_obra_id=target_obra_id,
+                date_list=list(fechas_a_procesar),
+                mode=overwrite_mode,
+                notas=notas,
+            )
+        except Exception as exc:
+            db.session.rollback()
+            row['success'] = False
+            row['error'] = str(exc)
+            fail_count += 1
+            results.append(row)
+            continue
+
+        if result.get('success'):
+            row['success'] = True
+            row['message'] = result.get('message')
+            row['action'] = result.get('action')
+            ok_count += 1
+
+            if actor_user.role == ROLE_ADMIN and fechas_a_procesar:
+                fechas_str = (
+                    f"Desde {fechas_a_procesar[0].strftime('%d/%m/%Y')} "
+                    f"hasta {fechas_a_procesar[-1].strftime('%d/%m/%Y')}"
+                )
+                notificar_movimiento_admin_a_jo(
+                    target_obra_id, row['worker_name'], "Asignar (Planificador)",
+                    fechas_str, actor_user.name,
+                )
+
+            vehicle_id = entry.get('vehicle_id')
+            if vehicle_id:
+                vres = process_vehicle_assignment_action(
+                    actor_user, wid, vehicle_id, list(fechas_a_procesar),
+                    notas=notas, overwrite_mode=overwrite_mode, accion='ASIGNAR',
+                )
+                row['vehicle_result'] = {
+                    'success': bool(vres.get('success')),
+                    'message': vres.get('message') or vres.get('error'),
+                    'conflict': bool(vres.get('conflict')),
+                }
+                if not vres.get('success'):
+                    row['vehicle_ok'] = False
+                else:
+                    row['vehicle_ok'] = True
+        else:
+            row['success'] = False
+            row['message'] = result.get('message') or result.get('error')
+            row['conflict'] = bool(result.get('conflict'))
+            row['conflict_type'] = result.get('conflict_type')
+            row['conflict_details'] = result.get('conflict_details')
+            row['leave_dates'] = result.get('leave_dates')
+            fail_count += 1
+            if result.get('conflict_type') == 'leave':
+                leave_fail_count += 1
+
+        results.append(row)
+
+    any_ok = ok_count > 0
+    parts = [f'{ok_count} asignado(s)']
+    if fail_count:
+        parts.append(f'{fail_count} con error')
+    if leave_fail_count:
+        parts.append(f'{leave_fail_count} por ausencia')
+
+    return {
+        'success': any_ok,
+        'batch': True,
+        'message': '; '.join(parts) + '.',
+        'ok_count': ok_count,
+        'fail_count': fail_count,
+        'leave_fail_count': leave_fail_count,
+        'results': results,
+        # Compat: no disparar modal de conflicto global en lote
+        'conflict': False,
+    }
+
+
 @asignaciones_api.route("/v6/assign", methods=["POST"])
 @login_required
 def api_assign_worker():
@@ -372,6 +542,20 @@ def api_planificador_action():
             if sol_baja_creada:
                 return jsonify({"success": True, "action": "requested", "message": msg_baja})
             return jsonify({"success": True, "message": "No hubo cambios."})
+
+        batch_workers = _parse_workers_payload(data)
+        if batch_workers is not None:
+            if not batch_workers:
+                return jsonify({"success": False, "error": "No hay trabajadores válidos en la lista."})
+            batch_result = _process_batch_planificador_assignments(
+                actor_user=current_user,
+                workers=batch_workers,
+                target_obra_id=target_obra_id,
+                fechas_a_procesar=fechas_a_procesar,
+                overwrite_mode=overwrite_mode,
+                notas=notas,
+            )
+            return jsonify(batch_result)
 
         if str(worker_id) == 'GENERICO':
             detalles = data.get('detalles', 'Personal Genérico')

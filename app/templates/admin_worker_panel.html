@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Ficha: {{ worker.name }}{% endblock %}
+{% block title %}{{ _('Ficha') }}: {{ worker.name }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -17,14 +17,14 @@
       <header class="entity-panel-card-top">
         <div class="entity-panel-toolbar-start">
           <a href="{{ url_for('admin.personal') if current_user.role == 'admin' else url_for('admin.obras_detailed') }}" class="entity-panel-back">
-            <i class="fas fa-arrow-left"></i> {{ 'Personal' if current_user.role == 'admin' else 'Tablero' }}
+            <i class="fas fa-arrow-left"></i> {{ _('Personal') if current_user.role == 'admin' else _('Tablero') }}
           </a>
-          <span class="entity-type-marker"><i class="fas fa-hard-hat"></i> Empleado</span>
+          <span class="entity-type-marker"><i class="fas fa-hard-hat"></i> {{ _('Empleado') }}</span>
         </div>
         <div class="entity-panel-actions">
           {% if current_user.role == 'admin' %}
           <a href="{{ url_for('admin.edit_operario', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
-            <i class="fas fa-pencil-alt"></i> Editar
+            <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
           </a>
           {% endif %}
         </div>
@@ -38,7 +38,7 @@
               <div class="entity-hero-icon entity-hero-icon--avatar">
                 <i class="fas fa-user"></i>
                 <div class="entity-rep-badge {{ 'entity-rep-badge--pos' if score > 0 else 'entity-rep-badge--neg' if score < 0 else 'entity-rep-badge--neu' }}"
-                     title="Reputación actual">{{ score }}</div>
+                     title="{{ _('Reputación actual') }}">{{ score }}</div>
               </div>
             </div>
             <div class="entity-hero-title-text">
@@ -49,7 +49,7 @@
                     {{ worker.company_rel.nombre }}
                   </span>
                 {% else %}
-                  <span class="entity-code-badge">Externo</span>
+                  <span class="entity-code-badge">{{ _('Externo') }}</span>
                 {% endif %}
                 {% if worker.dni %}
                   <span>{{ worker.dni }}</span>
@@ -63,43 +63,50 @@
 
           <div class="entity-meta-grid">
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Empresa</span>
+              <span class="entity-meta-item-label">{{ _('Empresa') }}</span>
               <span class="entity-meta-item-value">
                 {% if worker.company_rel %}
                   {{ worker.company_rel.nombre }}
                 {% else %}
-                  <span class="entity-meta-item-value--muted">Sin empresa</span>
+                  <span class="entity-meta-item-value--muted">{{ _('Sin empresa') }}</span>
                 {% endif %}
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Categoría</span>
+              <span class="entity-meta-item-label">{{ _('Categoría') }}</span>
               <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not worker.categoria_profesional }}">
-                {{ worker.categoria_profesional or 'Sin categoría' }}
+                {{ worker.categoria_profesional or _('Sin categoría') }}
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Especialidad</span>
+              <span class="entity-meta-item-label">{{ _('Especialidad') }}</span>
               <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not worker.especialidad }}">
                 {{ worker.especialidad or '—' }}
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Estado</span>
+              <span class="entity-meta-item-label">{{ _('Estado') }}</span>
               <span class="entity-meta-item-value">
                 {% if worker.active %}
-                  <span class="entity-status-badge entity-status-badge--active">Activo</span>
+                  <span class="entity-status-badge entity-status-badge--active">{{ _('Activo') }}</span>
                 {% else %}
-                  <span class="entity-status-badge entity-status-badge--inactive">Inactivo</span>
+                  <span class="entity-status-badge entity-status-badge--inactive">{{ _('Inactivo') }}</span>
                 {% endif %}
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Rol</span>
-              <span class="entity-meta-item-value">{{ worker.role|replace('_', ' ')|title if worker.role else '—' }}</span>
+              <span class="entity-meta-item-label">{{ _('Rol') }}</span>
+              <span class="entity-meta-item-value">
+                {% if worker.role == 'operario' %}{{ _('Operario') }}
+                {% elif worker.role == 'jefe_obra' %}{{ _('Jefe de obra') }}
+                {% elif worker.role == 'rrhh' %}{{ _('RRHH / Administrativo') }}
+                {% elif worker.role == 'laboral' %}{{ _('Laboral') }}
+                {% elif worker.role == 'admin' %}{{ _('Administrador') }}
+                {% else %}{{ worker.role or '—' }}{% endif %}
+              </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Reputación</span>
+              <span class="entity-meta-item-label">{{ _('Reputación') }}</span>
               <span class="entity-meta-item-value">{% if score > 0 %}+{% endif %}{{ score }}</span>
             </div>
           </div>
@@ -107,16 +114,16 @@
           <div class="entity-hero-actions">
             {% if current_user.role in ['admin', 'jefe_obra'] %}
             <button type="button" class="btn-admin btn-admin-ghost" onclick="openRatingModal()">
-              <i class="far fa-star"></i> Puntuar
+              <i class="far fa-star"></i> {{ _('Puntuar') }}
             </button>
             <a href="{{ url_for('admin.worker_ratings_history', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
-              <i class="fas fa-history"></i> Historial
+              <i class="fas fa-history"></i> {{ _('Historial') }}
             </a>
             {% endif %}
             {% if current_user.role == 'admin' and score != 0 %}
             <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline"
-                  onsubmit="return confirm('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.');">
-              <button type="submit" class="btn-admin btn-admin-ghost" title="Resetear contador">
+                  onsubmit="return confirm({{ _('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.')|tojson }});">
+              <button type="submit" class="btn-admin btn-admin-ghost" title="{{ _('Resetear contador') }}">
                 <i class="fas fa-sync-alt"></i>
               </button>
             </form>
@@ -129,12 +136,12 @@
     </article>
 
     <section class="entity-calendar-zone entity-vehicles-zone">
-      <h2 class="entity-calendar-zone-heading"><i class="fas fa-car"></i> Vehículos</h2>
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-car"></i> {{ _('Vehículos') }}</h2>
       {% if vehicle_rows %}
       <div class="admin-table-scroll">
         <table class="filterable-table admin-data-table mb-0">
           <thead><tr class="header-row">
-            <th>Fecha</th><th>Vehículo</th><th>Km Odoo</th><th>Conductor Odoo</th>
+            <th>{{ _('Fecha') }}</th><th>{{ _('Vehículo') }}</th><th>{{ _('Km Odoo') }}</th><th>{{ _('Conductor Odoo') }}</th>
           </tr></thead>
           <tbody>
           {% for row in vehicle_rows %}
@@ -155,12 +162,12 @@
         </table>
       </div>
       {% else %}
-      <p class="text-muted mb-0" style="padding:0.75rem 0;">Sin vehículos planificados ni uso Odoo en los últimos 30 días.</p>
+      <p class="text-muted mb-0" style="padding:0.75rem 0;">{{ _('Sin vehículos planificados ni uso Odoo en los últimos 30 días.') }}</p>
       {% endif %}
     </section>
 
     <section class="entity-calendar-zone">
-      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Planificación</h2>
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> {{ _('Planificación') }}</h2>
       <div id="worker-calendar" class="univ-calendar-root" style="min-height: 500px;"></div>
     </section>
 
@@ -172,12 +179,12 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title mb-0">
-          <i class="fas fa-star mr-1"></i> Valorar a {{ worker.name }}
+          <i class="fas fa-star mr-1"></i> {{ _('Valorar a') }} {{ worker.name }}
         </h5>
         <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
       </div>
       <div class="modal-body">
-        <p class="rating-intro text-center mb-0">Selecciona una puntuación entre -3 y +3</p>
+        <p class="rating-intro text-center mb-0">{{ _('Selecciona una puntuación entre -3 y +3') }}</p>
         <div class="entity-rating-score-grid">
           <div class="entity-rating-score-group">
             <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-3">-3</button>
@@ -190,10 +197,10 @@
             <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="3">+3</button>
           </div>
         </div>
-        <label class="form-label-sm" for="ratingReason">Motivo (opcional)</label>
-        <textarea id="ratingReason" class="form-control mb-3" rows="3" placeholder="Describe brevemente el motivo de la valoración…"></textarea>
+        <label class="form-label-sm" for="ratingReason">{{ _('Motivo (opcional)') }}</label>
+        <textarea id="ratingReason" class="form-control mb-3" rows="3" placeholder="{{ _('Describe brevemente el motivo de la valoración…') }}"></textarea>
         <button type="button" class="btn-admin btn-admin-primary btn-block" onclick="submitRating()">
-          <i class="fas fa-save mr-1"></i> Guardar valoración
+          <i class="fas fa-save mr-1"></i> {{ _('Guardar valoración') }}
         </button>
       </div>
     </div>
@@ -232,17 +239,17 @@ document.addEventListener('DOMContentLoaded', function() {
             data: JSON.stringify(payload),
             success: function(res) {
                 if (res.success) {
-                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: {{ _('Guardado')|tojson }}, showConfirmButton: false, timer: 1500});
                     setTimeout(() => location.reload(), 500);
                 } else if (res.conflict) {
                     window.resolverConflictoAsignacion(res, payload, (nuevoPayload) => { enviarAccionPerfil(nuevoPayload, revertFunc); }, revertFunc);
                 } else {
-                    Swal.fire('Error', res.error || res.message, 'error');
+                    Swal.fire({{ _('Error')|tojson }}, res.error || res.message, 'error');
                     if (revertFunc) revertFunc();
                 }
             },
             error: function() {
-                Swal.fire('Error', 'Fallo de conexión', 'error');
+                Swal.fire({{ _('Error')|tojson }}, {{ _('Fallo de conexión')|tojson }}, 'error');
                 if (revertFunc) revertFunc();
             }
         });
@@ -261,7 +268,7 @@ $(document).on('click', '.rating-btn', function() {
     selectedScore = $(this).data('score');
 });
 function submitRating() {
-    if (!selectedScore) { alert("Selecciona una puntuación."); return; }
+    if (!selectedScore) { alert({{ _('Selecciona una puntuación.')|tojson }}); return; }
     var reason = $('#ratingReason').val();
     $.ajax({
         url: "/admin/api/rate_worker",
@@ -269,7 +276,7 @@ function submitRating() {
         contentType: "application/json",
         data: JSON.stringify({ worker_id: {{ worker.id }}, score: selectedScore, reason: reason }),
         success: function() { window.location.reload(); },
-        error: function(xhr) { alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.message : "Error")); }
+        error: function(xhr) { alert({{ _('Error')|tojson }} + ": " + (xhr.responseJSON ? xhr.responseJSON.message : {{ _('Error')|tojson }})); }
     });
 }
 </script>

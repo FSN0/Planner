@@ -1,4 +1,8 @@
-"""Idioma preferido del usuario (locale)
+"""users.locale (stub)
+
+Esta revisión existió como migración aparte y algunas BDs quedaron
+stampadas en r9s0t1u2v3w4. El contenido real (columna locale) ya está en
+p7k8l9m0n1o2; este archivo solo mantiene la cadena de Alembic y es no-op.
 
 Revision ID: r9s0t1u2v3w4
 Revises: p7k8l9m0n1o2
@@ -35,7 +39,6 @@ def upgrade():
         return
     if _column_exists(bind, 'users', 'locale', schema):
         return
-
     op.add_column(
         'users',
         sa.Column('locale', sa.String(length=8), nullable=True),
@@ -44,11 +47,5 @@ def upgrade():
 
 
 def downgrade():
-    bind = op.get_bind()
-    schema = _current_schema(bind)
-    if not schema or not _table_exists(bind, 'users', schema):
-        return
-    if not _column_exists(bind, 'users', 'locale', schema):
-        return
-
-    op.drop_column('users', 'locale', schema=schema)
+    # No borrar locale: la columna “oficial” sigue siendo responsabilidad de p7.
+    pass

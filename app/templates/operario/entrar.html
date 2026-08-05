@@ -1,19 +1,19 @@
 {% extends 'operario/base.html' %}
 {% set activo = 'fichar' %}
-{% block title %}Entrar{% endblock %}
+{% block title %}{{ _('Entrar') }}{% endblock %}
 
 {% block contenido %}
 <div class="entrar">
-    <h1 class="titulo">Fichar</h1>
+    <h1 class="titulo">{{ _('Fichar') }}</h1>
     <p class="entrar__ayuda">
-        Introduce tu DNI y el PIN que te ha dado tu empresa.
+        {{ _('Introduce tu DNI y el PIN que te ha dado tu empresa.') }}
     </p>
 
     <form method="POST" action="{{ url_for('operarios.entrar') }}" class="entrar__formulario">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="campo">
-            <label class="campo__etiqueta" for="dni">DNI / NIE</label>
+            <label class="campo__etiqueta" for="dni">{{ _('DNI / NIE') }}</label>
             <input class="campo__control" type="text" id="dni" name="dni"
                    required autocomplete="username"
                    inputmode="text" autocapitalize="characters"
@@ -22,7 +22,7 @@
         </div>
 
         <div class="campo">
-            <label class="campo__etiqueta" for="pin">PIN</label>
+            <label class="campo__etiqueta" for="pin">{{ _('PIN') }}</label>
             <input class="campo__control campo__control--pin" type="password"
                    id="pin" name="pin" required
                    inputmode="numeric" pattern="[0-9]{4,6}"
@@ -30,13 +30,11 @@
                    placeholder="••••">
         </div>
 
-        <button class="boton boton--entrar" type="submit">Entrar</button>
+        <button class="boton boton--entrar" type="submit">{{ _('Entrar') }}</button>
     </form>
 
     <p class="nota-legal">
-        Si no tienes PIN, pídeselo a administración. El acceso con correo y
-        contraseña sigue disponible para el personal de oficina en la pantalla
-        de inicio de sesión habitual.
+        {{ _('Si no tienes PIN, pídeselo a administración. El acceso con correo y contraseña sigue disponible para el personal de oficina en la pantalla de inicio de sesión habitual.') }}
     </p>
 </div>
 {% endblock %}

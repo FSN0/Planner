@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Mi panel{% endblock %}
+{% block title %}{{ _('Mi panel') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -15,19 +15,19 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Mi panel</h1>
+        <h1 class="page-toolbar-title">{{ _('Mi panel') }}</h1>
         <span class="page-toolbar-count">{{ today.strftime('%d/%m/%Y') }}</span>
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-primary">
-          <i class="fas fa-th-large"></i> Tablero
+          <i class="fas fa-th-large"></i> {{ _('Tablero') }}
         </a>
         <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-user-plus"></i> Solicitudes
+          <i class="fas fa-user-plus"></i> {{ _('Solicitudes') }}
           {% if solicitudes_abiertas %}<span class="badge-soft badge-soft-amber ml-1">{{ solicitudes_abiertas }}</span>{% endif %}
         </a>
         <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-user-clock"></i> Auditoría
+          <i class="fas fa-user-clock"></i> {{ _('Auditoría') }}
           {% if audit_pendientes_total %}<span class="badge-soft badge-soft-red ml-1">{{ audit_pendientes_total }}</span>{% endif %}
         </a>
       </div>
@@ -37,41 +37,41 @@
       <article class="dashboard-kpi dashboard-kpi--primary">
         <div class="dashboard-kpi-icon"><i class="fas fa-building"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Mis obras en curso</span>
+          <span class="dashboard-kpi-label">{{ _('Mis obras en curso') }}</span>
           <span class="dashboard-kpi-value">{{ obras_en_curso }}</span>
-          <span class="dashboard-kpi-meta">{{ total_obras }} asignadas en total</span>
+          <span class="dashboard-kpi-meta">{{ total_obras }} {{ _('asignadas en total') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--blue"><i class="fas fa-users"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Personal hoy</span>
+          <span class="dashboard-kpi-label">{{ _('Personal hoy') }}</span>
           <span class="dashboard-kpi-value">{{ planificados_hoy }}</span>
-          <span class="dashboard-kpi-meta">{{ asignaciones_hoy }} asignaciones en mis obras</span>
+          <span class="dashboard-kpi-meta">{{ asignaciones_hoy }} {{ _('asignaciones en mis obras') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--amber"><i class="fas fa-clipboard-list"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Solicitudes abiertas</span>
+          <span class="dashboard-kpi-label">{{ _('Solicitudes abiertas') }}</span>
           <span class="dashboard-kpi-value">{{ solicitudes_abiertas }}</span>
-          <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} pendientes · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} en proceso</span>
+          <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} {{ _('pendientes') }} · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} {{ _('en proceso') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Auditoría pendiente</span>
+          <span class="dashboard-kpi-label">{{ _('Auditoría pendiente') }}</span>
           <span class="dashboard-kpi-value">{{ audit_pendientes_total }}</span>
-          <span class="dashboard-kpi-meta">{{ audit_conflictos }} desv. · {{ audit_paracaidistas }} sin plan. · {{ audit_ausencias }} aus.</span>
+          <span class="dashboard-kpi-meta">{{ audit_conflictos }} {{ _('desv.') }} · {{ audit_paracaidistas }} {{ _('sin plan.') }} · {{ audit_ausencias }} {{ _('aus.') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--green"><i class="fas fa-fingerprint"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Fichajes hoy</span>
+          <span class="dashboard-kpi-label">{{ _('Fichajes hoy') }}</span>
           <span class="dashboard-kpi-value">{{ fichajes_total_hoy }}</span>
-          <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} incidencias</span>{% endif %}</span>
+          <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} {{ _('incidencias') }}</span>{% endif %}</span>
         </div>
       </article>
     </section>
@@ -79,8 +79,8 @@
     <div class="dashboard-main-grid">
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title">Planificación · 14 días</h2>
-          <span class="admin-panel-subtitle">Asignaciones en mis obras</span>
+          <h2 class="admin-panel-title">{{ _('Planificación · 14 días') }}</h2>
+          <span class="admin-panel-subtitle">{{ _('Asignaciones en mis obras') }}</span>
         </div>
         <div class="dashboard-chart-wrap">
           <canvas id="chartPlanificacion" height="120"></canvas>
@@ -89,7 +89,7 @@
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title">Solicitudes por estado</h2>
+          <h2 class="admin-panel-title">{{ _('Solicitudes por estado') }}</h2>
         </div>
         <div class="dashboard-chart-row">
           <div class="dashboard-chart-donut">
@@ -99,11 +99,11 @@
             {% for est, cnt in solicitudes_por_estado.items() %}
             <li>
               <span class="dashboard-legend-dot dashboard-legend-dot--{{ est|lower }}"></span>
-              <span>{{ est|replace('_', ' ')|title }}</span>
+              <span>{{ _( {'PENDIENTE':'Pendiente','EN_PROCESO':'En proceso','CUMPLIDA':'Cumplida','CERRADA_PARCIAL':'Cerrada P.','DENEGADA':'Denegada'}.get(est, est) ) }}</span>
               <strong>{{ cnt }}</strong>
             </li>
             {% else %}
-            <li class="text-muted small">Sin solicitudes en tus obras</li>
+            <li class="text-muted small">{{ _('Sin solicitudes en tus obras') }}</li>
             {% endfor %}
           </ul>
         </div>
@@ -111,7 +111,7 @@
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title">Mis obras en curso</h2>
+          <h2 class="admin-panel-title">{{ _('Mis obras en curso') }}</h2>
         </div>
         {% if recent_obras %}
         <ul class="dashboard-activity-list" style="margin-top:0.25rem;">
@@ -120,14 +120,14 @@
             <span class="cell-code">{{ obra.codigo or obra.id }}</span>
             <span class="dashboard-activity-body">
               <strong>{{ obra.nombre|truncate(36) }}</strong>
-              <span class="text-muted">— {{ obra.ubicacion or 'Sin ubicación' }}</span>
+              <span class="text-muted">— {{ obra.ubicacion or _('Sin ubicación') }}</span>
             </span>
-            <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.62rem;padding:0.15rem 0.4rem;">Gestionar</a>
+            <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.62rem;padding:0.15rem 0.4rem;">{{ _('Gestionar') }}</a>
           </li>
           {% endfor %}
         </ul>
         {% else %}
-        <p class="text-muted small mb-0">No tienes obras en curso asignadas.</p>
+        <p class="text-muted small mb-0">{{ _('No tienes obras en curso asignadas.') }}</p>
         {% endif %}
       </section>
     </div>
@@ -135,18 +135,18 @@
     <div class="dashboard-tables-grid">
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
-          <h2 class="admin-panel-title"><i class="fas fa-user-plus text-primary mr-1"></i> Solicitudes recientes</h2>
-          <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Ver todas</a>
+          <h2 class="admin-panel-title"><i class="fas fa-user-plus text-primary mr-1"></i> {{ _('Solicitudes recientes') }}</h2>
+          <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">{{ _('Ver todas') }}</a>
         </div>
         {% if recent_solicitudes %}
         <table class="filterable-table admin-data-table mb-0 dashboard-table">
           <thead>
             <tr class="header-row">
               <th>#</th>
-              <th>Obra</th>
-              <th>Tipo</th>
-              <th>Periodo</th>
-              <th>Estado</th>
+              <th>{{ _('Obra') }}</th>
+              <th>{{ _('Tipo') }}</th>
+              <th>{{ _('Periodo') }}</th>
+              <th>{{ _('Estado') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -160,19 +160,19 @@
                 {% else %}—{% endif %}
               </td>
               <td>
-                {% if s.tipo|lower == 'generica' %}<span class="badge-soft badge-soft-gray">Genérica</span>
-                {% else %}<span class="badge-soft badge-soft-blue">Concreta</span>{% endif %}
+                {% if s.tipo|lower == 'generica' %}<span class="badge-soft badge-soft-gray">{{ _('Genérica') }}</span>
+                {% else %}<span class="badge-soft badge-soft-blue">{{ _('Concreta') }}</span>{% endif %}
               </td>
               <td class="text-nowrap" style="font-size:0.72rem;">
                 {{ s.fecha_inicio.strftime('%d/%m') }}–{{ s.fecha_fin.strftime('%d/%m/%y') }}
               </td>
               <td>
                 {% set est = s.estado %}
-                {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
-                {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
-                {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
-                {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
-                {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+                {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
+                {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
+                {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
+                {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
+                {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
                 {% else %}<span class="badge-soft badge-soft-gray">{{ est }}</span>{% endif %}
               </td>
             </tr>
@@ -180,21 +180,21 @@
           </tbody>
         </table>
         {% else %}
-        <p class="table-empty-state"><i class="fas fa-inbox"></i>Sin solicitudes en tus obras</p>
+        <p class="table-empty-state"><i class="fas fa-inbox"></i>{{ _('Sin solicitudes en tus obras') }}</p>
         {% endif %}
       </section>
 
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
-          <h2 class="admin-panel-title"><i class="fas fa-users text-primary mr-1"></i> Personal por obra hoy</h2>
-          <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Tablero</a>
+          <h2 class="admin-panel-title"><i class="fas fa-users text-primary mr-1"></i> {{ _('Personal por obra hoy') }}</h2>
+          <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">{{ _('Tablero') }}</a>
         </div>
         {% if obras_hoy_rows %}
         <table class="filterable-table admin-data-table mb-0 dashboard-table">
           <thead>
             <tr class="header-row">
-              <th>Obra</th>
-              <th class="text-center">Hoy</th>
+              <th>{{ _('Obra') }}</th>
+              <th class="text-center">{{ _('Hoy') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -210,7 +210,7 @@
           </tbody>
         </table>
         {% else %}
-        <p class="table-empty-state"><i class="fas fa-calendar-day"></i>Sin asignaciones hoy en tus obras</p>
+        <p class="table-empty-state"><i class="fas fa-calendar-day"></i>{{ _('Sin asignaciones hoy en tus obras') }}</p>
         {% endif %}
       </section>
     </div>
@@ -218,15 +218,15 @@
     <div class="dashboard-bottom-grid">
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
-          <h2 class="admin-panel-title"><i class="fas fa-user-clock text-danger mr-1"></i> Incidencias de fichaje</h2>
-          <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Ir a auditoría</a>
+          <h2 class="admin-panel-title"><i class="fas fa-user-clock text-danger mr-1"></i> {{ _('Incidencias de fichaje') }}</h2>
+          <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">{{ _('Ir a auditoría') }}</a>
         </div>
         {% include 'components/_dashboard_incidencias.html' %}
       </section>
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title"><i class="fas fa-history mr-1"></i> Actividad reciente</h2>
+          <h2 class="admin-panel-title"><i class="fas fa-history mr-1"></i> {{ _('Actividad reciente') }}</h2>
         </div>
         {% if recent_logs %}
         <ul class="dashboard-activity-list">
@@ -244,7 +244,7 @@
           {% endfor %}
         </ul>
         {% else %}
-        <p class="text-muted small mb-0">Sin actividad reciente.</p>
+        <p class="text-muted small mb-0">{{ _('Sin actividad reciente.') }}</p>
         {% endif %}
       </section>
     </div>

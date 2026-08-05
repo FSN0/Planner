@@ -78,6 +78,7 @@
       <a href="#cfg-vehiculos">Vehículos</a>
       <a href="#cfg-festivos">Festivos</a>
       <a href="#cfg-emails">Correos</a>
+      <a href="#cfg-idioma">Idioma</a>
     </nav>
 
     <div class="config-layout">
@@ -487,6 +488,36 @@
             </div>
             <div class="config-block-actions">
               <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> Guardar correos</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {# —— Idioma de interfaz (preferencia del usuario) —— #}
+      <section class="config-block" id="cfg-idioma">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--violet"><i class="fas fa-language"></i></div>
+          <div>
+            <h2>{{ _('Idioma') }}</h2>
+            <p>{{ _('Idioma de la interfaz para tu usuario. El resto de la empresa no cambia.') }}</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('main.update_user_locale') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="config-fields-grid">
+              <div class="config-field">
+                <label for="cfg-locale">{{ _('Idioma de la plataforma') }}</label>
+                <select id="cfg-locale" name="locale" class="form-control form-control-sm custom-select">
+                  {% for code in supported_locales %}
+                  <option value="{{ code }}" {% if current_locale == code %}selected{% endif %}>{{ locale_labels[code] }}</option>
+                  {% endfor %}
+                </select>
+                <p class="config-field-hint">{{ _('Disponible por si operáis en varios países. Por defecto Español.') }}</p>
+              </div>
+            </div>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar idioma') }}</button>
             </div>
           </form>
         </div>

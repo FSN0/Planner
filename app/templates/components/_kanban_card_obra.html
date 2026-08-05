@@ -73,11 +73,13 @@
                             <span class="status-dot-kanban dot-auto" title="Auto-Asignado"></span>
                         {% elif st == 'Exento_Ausencia' %}
                             <span class="status-dot-kanban" style="background:#7c3aed;" title="Exento (ausencia planificada)"></span>
-                        {% elif st == 'Ausencia' %}
-                            <span class="status-dot-kanban dot-warning" title="Ausencia"></span>
+                        {% elif st == 'Sobreescrito_RRHH' %}
+                            <span class="status-dot-kanban" style="background:#7c3aed;" title="Corregido por RRHH / ERP"></span>
+                        {% elif st == 'Ausencia' or st == 'Pendiente' or st == 'Retraso' %}
+                            <span class="status-dot-kanban dot-warning" title="{{ st }}"></span>
                         {% elif st == 'Conflicto' or st == 'Paracaidista' %}
                             <span class="status-dot-kanban dot-danger" title="Conflicto"></span>
-                        {% elif st.startswith('Resuelto') %}
+                        {% elif st.startswith('Resuelto') or st == 'Cerrado_Multiobra' %}
                             <span class="status-dot-kanban dot-success" title="Resuelto / correcto"></span>
                         {% else %}
                             <span class="status-dot-kanban dot-secondary" title="Sin Registro"></span>

@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.title }} — Previsualizar{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .import-steps { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .import-step {
+    flex: 1; min-width: 120px; text-align: center; padding: 0.6rem 0.75rem;
+    border-radius: 8px; background: #f1f5f9; color: #64748b; font-size: 0.85rem; font-weight: 600;
+  }
+  .import-step.is-active { background: #e0f2fe; color: #0369a1; }
+  .import-step.is-done { background: #dcfce7; color: #166534; }
+  .import-map-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem 1rem; margin-bottom: 1.25rem;
+  }
+  .import-map-grid label { font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem; display: block; }
+  .import-status-new { color: #166534; font-weight: 600; }
+  .import-status-duplicate { color: #a16207; font-weight: 600; }
+  .import-status-error { color: #b91c1c; font-weight: 600; }
+  .import-status-skip { color: #64748b; }
+  .import-summary-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+  .import-chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.35rem 0.7rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600;
+    background: #f1f5f9; color: #334155;
+  }
+  .import-chip--ok { background: #dcfce7; color: #166534; }
+  .import-chip--dup { background: #fef9c3; color: #854d0e; }
+  .import-chip--err { background: #fee2e2; color: #991b1b; }
+  .import-preview-table { font-size: 0.82rem; }
+  .import-preview-table th { white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main">
+    <div class="row justify-content-center">
+      <div class="col-lg-11">
+
+        <div class="d-flex align-items-center mb-3">
+          <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-sm btn-link text-muted pl-0">
+            <i class="fas fa-arrow-left"></i> Cambiar archivo
+          </a>
+        </div>
+
+        <div class="import-steps">
+          <div class="import-step is-done">1. Subir archivo</div>
+          <div class="import-step is-active">2. Mapear columnas</div>
+          <div class="import-step">3. Resultados</div>
+        </div>
+
+        <div class="admin-panel mb-4">
+          <div class="admin-panel-header border-bottom pb-3 mb-3">
+            <h2 class="admin-panel-title" style="font-size: 1.1rem;">Mapeo de columnas</h2>
+            <p class="admin-panel-subtitle mb-0">
+              Archivo: <strong>{{ original_name or 'importación' }}</strong>.
+              Ajusta el mapeo si la detección automática no es correcta y vuelve a previsualizar.
+            </p>
+          </div>
+
+          {% set summary = preview.summary or {} %}
+          <div class="import-summary-chips">
+            <span class="import-chip import-chip--ok">
+              <i class="fas fa-plus-circle"></i> {{ summary.get('new', 0) }} nuevos
+            </span>
+            <span class="import-chip import-chip--dup">
+              <i class="fas fa-copy"></i> {{ summary.get('duplicate', 0) }} duplicados
+            </span>
+            <span class="import-chip import-chip--err">
+              <i class="fas fa-exclamation-circle"></i> {{ summary.get('error', 0) }} errores
+            </span>
+            {% if summary.get('skip') %}
+            <span class="import-chip">
+              <i class="fas fa-minus-circle"></i> {{ summary.get('skip', 0) }} vacíos
+            </span>
+            {% endif %}
+          </div>
+
+          <form id="remap-form" action="{{ url_for(cfg.preview_endpoint) }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="import-map-grid">
+              {% for field in fields %}
+              <div>
+                <label for="map_{{ field.key }}">
+                  {{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
+                </label>
+                <select class="form-control form-control-sm" name="map_{{ field.key }}" id="map_{{ field.key }}">
+                  <option value="__none__">— No mapear —</option>
+                  {% for col in columns %}
+                  <option value="{{ col }}" {% if column_map.get(field.key) == col %}selected{% endif %}>
+                    {{ col }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+              <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-sync-alt mr-1"></i> Actualizar previsualización
+              </button>
+              <span class="text-muted small">
+                Mostrando {{ preview.sample_rows|length }} de {{ preview.rows|length }} filas
+              </span>
+            </div>
+          </form>
+        </div>
+
+        <div class="admin-panel mb-4">
+          <div class="admin-panel-header border-bottom pb-3 mb-3">
+            <h2 class="admin-panel-title" style="font-size: 1.05rem;">Previsualización</h2>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm table-hover import-preview-table mb-0">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Estado</th>
+                  {% for field in fields if field.key in column_map and column_map[field.key] %}
+                  <th>{{ field.label }}</th>
+                  {% endfor %}
+                  <th>Mensaje</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in preview.sample_rows %}
+                <tr>
+                  <td>{{ row.row_number }}</td>
+                  <td class="import-status-{{ row.status }}">
+                    {% if row.status == 'new' %}Nuevo
+                    {% elif row.status == 'duplicate' %}Duplicado
+                    {% elif row.status == 'error' %}Error
+                    {% else %}Omitido{% endif %}
+                  </td>
+                  {% for field in fields if field.key in column_map and column_map[field.key] %}
+                  <td>{{ row.data.get(field.key, '') }}</td>
+                  {% endfor %}
+                  <td class="text-muted">{{ row.messages|join('; ') }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="10" class="text-center text-muted py-4">No hay filas en el archivo.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <form action="{{ url_for(cfg.confirm_endpoint) }}" method="post" id="confirm-form"
+              onsubmit="return confirm('Se crearán {{ summary.get('new', 0) }} registros. ¿Continuar?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% for field in fields %}
+          <input type="hidden" name="map_{{ field.key }}" value="{{ column_map.get(field.key) or '__none__' }}" class="confirm-map">
+          {% endfor %}
+
+          <div class="d-flex justify-content-between">
+            <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-link text-muted">Cancelar</a>
+            <button type="submit" class="btn btn-primary px-4"
+                    {% if summary.get('new', 0) == 0 %}disabled title="No hay filas nuevas para importar"{% endif %}>
+              <i class="fas fa-check mr-2"></i>
+              Confirmar importación ({{ summary.get('new', 0) }})
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // Mantener el mapeo del confirm sincronizado con los selects al confirmar
+  document.getElementById('confirm-form').addEventListener('submit', function () {
+    document.querySelectorAll('#remap-form select[name^="map_"]').forEach(function (sel) {
+      var hidden = document.querySelector('#confirm-form input[name="' + sel.name + '"]');
+      if (hidden) hidden.value = sel.value;
+    });
+  });
+</script>
+{% endblock %}

@@ -28,8 +28,10 @@ def dashboard():
     if current_user.role == 'admin':
         return redirect(url_for('admin.panel'))
     if current_user.role in (ROLE_LABORAL, ROLE_RRHH):
-        return redirect(url_for('admin.ausencias_list'))
+        return redirect(url_for('admin.panel_laboral'))
     if current_user.role == ROLE_OPERARIO:
+        if getattr(current_user, 'web_access', False):
+            return redirect(url_for('empleado.inicio'))
         logout_user()
         flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
         return redirect(url_for('auth.login'))

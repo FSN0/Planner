@@ -50,7 +50,23 @@ def authenticate():
 
 @superadmin_bp.before_request
 def require_basic_auth():
-    """Intercepta todas las peticiones a /superadmin y exige autenticación."""
+    """Intercepta todas las peticiones a /superadmin y exige autenticación.
+
+    Solo en hosts de marketing / apex (no en subdominios de cliente), para
+    reducir superficie de ataque del panel de control.
+    """
+    from app.services.tenant_domain_service import is_marketing_host, normalize_host
+    host = normalize_host(request.host)
+    # Permitir también localhost / IP en desarrollo
+    es_ip = bool(host) and all(p.isdigit() for p in host.split('.')) and host.count('.') == 3
+    if not (
+        is_marketing_host(host)
+        or host in ('localhost', '127.0.0.1', 'web')
+        or es_ip
+        or host.endswith('.localhost')
+    ):
+        return Response('No encontrado.\n', 404)
+
     auth = request.authorization
     if not auth or not auth.type == 'basic' or not check_auth(auth.username, auth.password):
         return authenticate()

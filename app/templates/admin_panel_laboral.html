@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Inicio · Laboral') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main admin-main--compact dashboard-page">
+
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">{{ _('Inicio laboral') }}</h1>
+        <span class="page-toolbar-count">{{ today.strftime('%d/%m/%Y') }}</span>
+      </div>
+      <div class="page-toolbar-actions">
+        <a href="{{ url_for('admin.ausencias_list') }}" class="btn-admin btn-admin-primary">
+          <i class="fas fa-umbrella-beach"></i> {{ _('Ausencias') }}
+          {% if ausencias_pendientes %}<span class="badge-soft badge-soft-amber ml-1">{{ ausencias_pendientes }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin.obras_detailed') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-th-large"></i> {{ _('Tablero') }}
+        </a>
+        {% if puede_ver_auditoria %}
+        <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-user-clock"></i> {{ _('Auditoría') }}
+          {% if audit_pendientes_total %}<span class="badge-soft badge-soft-red ml-1">{{ audit_pendientes_total }}</span>{% endif %}
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <section class="dashboard-kpi-grid">
+      <article class="dashboard-kpi {% if ausencias_pendientes %}dashboard-kpi--alert{% endif %}">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--amber"><i class="fas fa-hourglass-half"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">{{ _('Ausencias pendientes') }}</span>
+          <span class="dashboard-kpi-value">{{ ausencias_pendientes }}</span>
+          <span class="dashboard-kpi-meta">{{ _('por aprobar / validar') }}</span>
+        </div>
+      </article>
+      <article class="dashboard-kpi {% if conflictos_pendientes %}dashboard-kpi--alert{% endif %}">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">{{ _('Conflictos ausencia↔obra') }}</span>
+          <span class="dashboard-kpi-value">{{ conflictos_pendientes }}</span>
+          <span class="dashboard-kpi-meta">{{ _('pendientes de resolver') }}</span>
+        </div>
+      </article>
+      {% if puede_ver_auditoria %}
+      <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--slate"><i class="fas fa-fingerprint"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">{{ _('Fichajes pendientes') }}</span>
+          <span class="dashboard-kpi-value">{{ audit_pendientes_total }}</span>
+          <span class="dashboard-kpi-meta">{{ audit_conflictos }} {{ _('desv.') }} · {{ audit_paracaidistas }} {{ _('sin plan.') }} · {{ audit_ausencias }} {{ _('aus.') }}</span>
+        </div>
+      </article>
+      {% endif %}
+      <article class="dashboard-kpi">
+        <div class="dashboard-kpi-icon dashboard-kpi-icon--blue"><i class="fas fa-calendar-alt"></i></div>
+        <div>
+          <span class="dashboard-kpi-label">{{ _('Próximas ausencias') }}</span>
+          <span class="dashboard-kpi-value">{{ proximas_ausencias|length }}</span>
+          <span class="dashboard-kpi-meta">{{ _('próximos') }} {{ horizon_days }} {{ _('días') }}</span>
+        </div>
+      </article>
+    </section>
+
+    <div class="dashboard-main-grid" style="grid-template-columns: 1.4fr 1fr;">
+      <section class="admin-panel dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2 class="admin-panel-title">{{ _('Próximas ausencias') }}</h2>
+          <a href="{{ url_for('admin.ausencias_list') }}" class="btn-admin btn-admin-ghost" style="font-size:0.72rem;">
+            {{ _('Ver todas') }}
+          </a>
+        </div>
+        {% if proximas_ausencias %}
+        <div class="table-responsive">
+          <table class="admin-data-table mb-0">
+            <thead>
+              <tr class="header-row">
+                <th>{{ _('Empleado') }}</th>
+                <th>{{ _('Periodo') }}</th>
+                <th>{{ _('Tipo') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for leave in proximas_ausencias %}
+              <tr class="data-row">
+                <td>
+                  {% if leave.user %}
+                  <a href="{{ url_for('admin.worker_panel', user_id=leave.user_id) }}">
+                    {{ leave.user.name }} {{ leave.user.lastname }}
+                  </a>
+                  {% else %}
+                  #{{ leave.user_id }}
+                  {% endif %}
+                </td>
+                <td>{{ leave.fecha_inicio.strftime('%d/%m/%Y') }} — {{ leave.fecha_fin.strftime('%d/%m/%Y') }}</td>
+                <td><span class="badge-soft badge-soft-blue">{{ _(leave.tipo) }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0">{{ _('No hay ausencias aprobadas en los próximos') }} {{ horizon_days }} {{ _('días.') }}</p>
+        {% endif %}
+      </section>
+
+      <section class="admin-panel dashboard-panel">
+        <div class="dashboard-panel-head">
+          <h2 class="admin-panel-title">{{ _('Accesos rápidos') }}</h2>
+        </div>
+        <ul class="dashboard-legend" style="gap:0.65rem;">
+          <li>
+            <a href="{{ url_for('admin.ausencias_list') }}" class="btn-admin btn-admin-ghost w-100 justify-content-start">
+              <i class="fas fa-umbrella-beach fa-fw mr-2"></i> {{ _('Ausencias') }}
+            </a>
+          </li>
+          <li>
+            <a href="{{ url_for('admin.obras_detailed') }}" class="btn-admin btn-admin-ghost w-100 justify-content-start">
+              <i class="fas fa-th-large fa-fw mr-2"></i> {{ _('Tablero') }} <span class="text-muted ml-1">({{ _('solo lectura') }})</span>
+            </a>
+          </li>
+          {% if puede_ver_auditoria %}
+          <li>
+            <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost w-100 justify-content-start">
+              <i class="fas fa-user-clock fa-fw mr-2"></i> {{ _('Auditoría fichajes') }}
+            </a>
+          </li>
+          {% endif %}
+          {% if tenant_has_registro_jornada %}
+          <li>
+            <a href="{{ url_for('admin.registro_jornada') }}" class="btn-admin btn-admin-ghost w-100 justify-content-start">
+              <i class="fas fa-file-signature fa-fw mr-2"></i> {{ _('Registro jornada') }}
+            </a>
+          </li>
+          {% endif %}
+          <li>
+            <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost w-100 justify-content-start">
+              <i class="fas fa-car-side fa-fw mr-2"></i> {{ _('Coches libres') }}
+            </a>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+  </main>
+</div>
+{% endblock %}

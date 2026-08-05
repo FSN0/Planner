@@ -225,8 +225,16 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
             plan_status = 'cumplido'
             source = 'ambos'
         elif a.fecha < hoy:
-            plan_status = 'conflicto'
-            source = 'planificado'
+            # Sin ERP no hay km: el pasado planificado no es un conflicto.
+            from flask import g
+            tenant = getattr(g, 'current_tenant', None)
+            mods = getattr(tenant, 'modulos_activos', None) or {} if tenant else {}
+            if mods.get('odoo'):
+                plan_status = 'conflicto'
+                source = 'planificado'
+            else:
+                plan_status = 'plan'
+                source = 'planificado'
         else:
             plan_status = 'plan'
             source = 'planificado'

@@ -698,7 +698,9 @@ def _cerrar_hermanos_placeholder(registro, accion):
     semillas de sync o incidencias ya cubiertas por la resolución principal.
     Así el día queda verde si el admin ya resolvió el caso.
     """
-    if accion not in ('anadir', 'mover', 'borrar_planificacion', 'ignorar'):
+    if accion not in (
+        'anadir', 'mover', 'borrar_planificacion', 'ignorar', 'confirmar_ausencia',
+    ):
         return
     hermanos = RegistroFichaje.query.filter(
         RegistroFichaje.user_id == registro.user_id,
@@ -711,6 +713,7 @@ def _cerrar_hermanos_placeholder(registro, accion):
         'mover': 'Cerrado: el fichaje se movió a otra obra.',
         'borrar_planificacion': 'Cerrado: se eliminó la planificación asociada.',
         'ignorar': 'Cerrado junto con la incidencia ignorada.',
+        'confirmar_ausencia': 'Cerrado: ausencia confirmada para el día.',
     }.get(accion, 'Cerrado tras resolución de auditoría.')
     for h in hermanos:
         h.estado = 'Resuelto_Ignorado'
@@ -879,6 +882,35 @@ def resolver_fichaje():
         )
 
         _cerrar_hermanos_placeholder(registro, accion)
+
+        # Libro legal: la conciliación admin debe quedar en fichajes_eventos
+        # para que el informe de Inspección refleje reimputaciones.
+        try:
+            from app.models import EVENTO_REASIGNACION_OBRA, ORIGEN_ADMIN
+            from app.services.fichaje_ledger_service import (
+                FichajeLedgerError,
+                registrar_evento,
+            )
+            obra_ledger = registro.obra_real_id or registro.obra_planificada_id
+            if obra_ledger and accion in (
+                'mover', 'anadir', 'ignorar',
+                'borrar_planificacion', 'confirmar_ausencia',
+            ):
+                registrar_evento(
+                    user_id=registro.user_id,
+                    tipo=EVENTO_REASIGNACION_OBRA,
+                    origen=ORIGEN_ADMIN,
+                    fecha_laboral=registro.fecha,
+                    autor_id=current_user.id,
+                    obra_id=obra_ledger,
+                    motivo=registro.notas_resolucion or f'Resolución auditoría: {accion}',
+                )
+        except FichajeLedgerError as ledger_err:
+            from flask import current_app
+            current_app.logger.warning(
+                'Ledger no registró resolución fichaje %s: %s',
+                registro.id, ledger_err,
+            )
 
         from app.utils import register_log
         accion_titulo = ACCION_RESOLUCION_TITULOS.get(
