@@ -172,7 +172,7 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
     only_future: fecha_inicio > hoy (aún no han empezado).
     Admin: todas. Jefe: personal con asignación en sus obras en el periodo.
     """
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, Obra
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, Obra
 
     today = today_local()
     horizon = today + timedelta(days=horizon_days)
@@ -208,7 +208,7 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
         if not user_ids:
             return []
         q = q.filter(AusenciaPlanificada.user_id.in_(user_ids))
-    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
+    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return []
 
     return (
@@ -220,7 +220,7 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
 
 def get_leaves_scoped(actor_user, estado=None, limit=200):
     """Listado histórico / filtro, acotado al ámbito del rol. Default: solo aprobadas."""
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, Obra
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, Obra
 
     today = today_local()
     q = AusenciaPlanificada.query
@@ -249,7 +249,7 @@ def get_leaves_scoped(actor_user, estado=None, limit=200):
         if not user_ids:
             return []
         q = q.filter(AusenciaPlanificada.user_id.in_(user_ids))
-    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
+    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return []
 
     return q.order_by(AusenciaPlanificada.fecha_inicio.desc()).limit(limit).all()
@@ -288,11 +288,90 @@ def jefe_puede_resolver_ausencias() -> bool:
 
 def auto_resolucion_ausencias() -> str:
     """overlay (default) | none | prefer_leave | prefer_assignment"""
-    raw = get_tenant_config('ausencias_auto_resolucion', default='overlay') or 'overlay'
-    # Legacy: prefer_leave desasignaba; ahora equivale a overlay (mantener asignación)
-    if raw == 'prefer_leave':
+    raw = (get_tenant_config('ausencias_auto_resolucion', default='overlay') or 'overlay').strip()
+    if raw not in ('overlay', 'none', 'prefer_leave', 'prefer_assignment'):
         return 'overlay'
     return raw
+
+
+def release_assignments_blocked_by_leave(
+    date_from=None,
+    date_to=None,
+    *,
+    user_id=None,
+    autor_id=None,
+):
+    """
+    Quita Asignacion de días con ausencia aprobada (modo prefer_leave).
+    Misma idea que liberar vehículos: de vacaciones no figura en obra.
+    """
+    from app.services.core_assignment_service import CoreAssignmentService
+
+    if not date_from:
+        date_from = today_local() - timedelta(days=7)
+    if not date_to:
+        date_to = today_local() + timedelta(days=120)
+
+    date_from = _parse_date(date_from)
+    date_to = _parse_date(date_to)
+    if not date_from or not date_to:
+        return 0
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+
+    q = Asignacion.query.filter(
+        Asignacion.fecha >= date_from,
+        Asignacion.fecha <= date_to,
+    )
+    if user_id is not None:
+        q = q.filter(Asignacion.user_id == int(user_id))
+
+    pendientes = [
+        (a.user_id, a.obra_id, a.fecha)
+        for a in q.all()
+        if user_has_approved_leave(a.user_id, a.fecha)
+    ]
+    if not pendientes:
+        return 0
+
+    liberados = 0
+    for uid, obra_id, fecha in pendientes:
+        if CoreAssignmentService.desasignar(
+            uid,
+            obra_id,
+            fecha,
+            autor_id,
+            'Desasignado por ausencia planificada',
+            detalle_extra=(
+                'El trabajador tiene ausencia aprobada; '
+                'queda libre en el cuadrante (como los vehículos).'
+            ),
+            registrar_log=False,
+        ):
+            liberados += 1
+
+    if liberados:
+        por_persona = {}
+        for uid, obra_id, fecha in pendientes:
+            por_persona.setdefault(uid, []).append((obra_id, fecha))
+        for uid, items in por_persona.items():
+            fechas = [f for _, f in items]
+            CoreAssignmentService.registrar_log_rango(
+                uid,
+                items[0][0],
+                min(fechas),
+                max(fechas),
+                len(items),
+                autor_id,
+                'Desasignado por ausencia planificada',
+                False,
+                detalle_extra=(
+                    f'{len(items)} día(s) liberados automáticamente '
+                    f'por ausencia aprobada.'
+                ),
+            )
+
+    return liberados
 
 
 def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO):
@@ -532,6 +611,10 @@ def detect_and_upsert_conflicts(date_from=None, date_to=None):
                             resolve_conflict(
                                 existing.id, CONFLICT_KEEP_ASSIGNMENT, resolved_by_id=None
                             )
+                        elif auto == 'prefer_leave':
+                            resolve_conflict(
+                                existing.id, CONFLICT_KEEP_LEAVE, resolved_by_id=None
+                            )
                     continue
 
                 conflict = AusenciaConflicto(
@@ -551,11 +634,16 @@ def detect_and_upsert_conflicts(date_from=None, date_to=None):
                     conflict.resolved_at = utc_now()
                 elif auto == 'prefer_assignment':
                     resolve_conflict(conflict.id, CONFLICT_KEEP_ASSIGNMENT, resolved_by_id=None)
+                elif auto == 'prefer_leave':
+                    resolve_conflict(conflict.id, CONFLICT_KEEP_LEAVE, resolved_by_id=None)
 
             day = day + timedelta(days=1)
 
     # Vehículos: a diferencia de obra, la ausencia libera el coche sin pedir OK.
     release_vehicles_blocked_by_leave(date_from=date_from, date_to=date_to)
+    # Personal: solo si el tenant eligió «liberar asignación» (prefer_leave).
+    if auto_resolucion_ausencias() == 'prefer_leave':
+        release_assignments_blocked_by_leave(date_from=date_from, date_to=date_to)
 
     return created
 
@@ -653,21 +741,23 @@ def set_leave_estado(leave_id, nuevo_estado, resolved_by_id=None):
 
 
 def actor_puede_crear_ausencia(actor_user):
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
-    return getattr(actor_user, 'role', None) in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
+    return getattr(actor_user, 'role', None) in (
+        ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH,
+    )
 
 
 def estado_alta_por_rol(actor_user, solicitado=None):
     """
-    Admin/laboral pueden aprobar al crear.
+    Admin/laboral/rrhh pueden aprobar al crear.
     Jefe siempre deja pendiente (el admin valida).
     """
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
 
     if actor_user.role == ROLE_JEFE:
         return LEAVE_STATUS_PENDIENTE
     if solicitado in (LEAVE_STATUS_APROBADA, LEAVE_STATUS_PENDIENTE):
         return solicitado
-    if actor_user.role in (ROLE_ADMIN, ROLE_LABORAL):
+    if actor_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return LEAVE_STATUS_APROBADA
     return LEAVE_STATUS_PENDIENTE

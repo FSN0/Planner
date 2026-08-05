@@ -3,6 +3,7 @@
  */
 window.PersonDayTimeline = (function () {
     const DEFAULT_API = '/api/v6/person-day-timeline';
+    const t = window.SP_T || function (key) { return key; };
 
     function escapeHtml(text) {
         const div = document.createElement('div');
@@ -18,7 +19,7 @@ window.PersonDayTimeline = (function () {
 
     function applyEstadoBadge(el, estado) {
         if (!el) return;
-        const value = (estado || 'Sin registro').replace(/_/g, ' ');
+        const value = t((estado || 'Sin registro').replace(/_/g, ' '));
         el.textContent = value;
         el.className = 'badge-soft person-day-timeline-estado badge-soft-gray';
         if (value.includes('Correcto') || value.startsWith('Resuelto')) el.className = 'badge-soft person-day-timeline-estado badge-soft-green';
@@ -83,7 +84,7 @@ window.PersonDayTimeline = (function () {
         const hitos = data.hitos || data;
 
         if (isEmptyHitos(hitos)) {
-            return '<div class="person-day-timeline-empty person-day-timeline-empty--compact"><i class="fas fa-ghost fa-lg mb-2 d-block"></i><p class="mb-0">Sin actividad</p></div>';
+            return `<div class="person-day-timeline-empty person-day-timeline-empty--compact"><i class="fas fa-ghost fa-lg mb-2 d-block"></i><p class="mb-0">${escapeHtml(t('Sin actividad'))}</p></div>`;
         }
 
         return hitos.map(renderHitoCard).join('');
@@ -116,7 +117,7 @@ window.PersonDayTimeline = (function () {
 
     function renderDaysHTML(days) {
         if (!days || !days.length) {
-            return '<div class="person-day-timeline-empty"><i class="fas fa-ghost fa-lg mb-2 d-block"></i><p class="mb-0">Sin eventos en el periodo.</p></div>';
+            return `<div class="person-day-timeline-empty"><i class="fas fa-ghost fa-lg mb-2 d-block"></i><p class="mb-0">${escapeHtml(t('Sin eventos en el periodo.'))}</p></div>`;
         }
         return days.map(renderDaySection).join('');
     }
@@ -161,7 +162,7 @@ window.PersonDayTimeline = (function () {
         content.innerHTML = `
             <div class="person-day-timeline-loading">
                 <i class="fas fa-spinner fa-spin fa-lg"></i>
-                <p class="mt-2 small mb-0">${escapeHtml(message || 'Cargando historial...')}</p>
+                <p class="mt-2 small mb-0">${escapeHtml(message || t('Cargando historial...'))}</p>
             </div>
         `;
     }
@@ -169,7 +170,7 @@ window.PersonDayTimeline = (function () {
     function showError(container, message) {
         if (!container) return;
         const content = container.querySelector('[data-timeline-content]') || container;
-        content.innerHTML = `<div class="person-day-timeline-error">${escapeHtml(message || 'No se pudo cargar el historial.')}</div>`;
+        content.innerHTML = `<div class="person-day-timeline-error">${escapeHtml(message || t('No se pudo cargar el historial.'))}</div>`;
     }
 
     function fetchTimeline(userId, fechaStr, apiBase) {
@@ -192,7 +193,7 @@ window.PersonDayTimeline = (function () {
         return fetchTimeline(userId, fechaStr, opts.apiBase)
             .then(data => {
                 if (!data.success) {
-                    showError(container, data.error || 'No se pudo cargar el historial.');
+                    showError(container, data.error || t('No se pudo cargar el historial.'));
                     return data;
                 }
                 renderInto(container, data);
@@ -200,7 +201,7 @@ window.PersonDayTimeline = (function () {
                 return data;
             })
             .catch(() => {
-                showError(container, 'Error de conexión al servidor.');
+                showError(container, t('Error de conexión al servidor.'));
                 return { success: false };
             });
     }
@@ -212,7 +213,7 @@ window.PersonDayTimeline = (function () {
         return fetchTimelineRange(userId, fromStr, toStr, opts.apiBase)
             .then(data => {
                 if (!data.success) {
-                    showError(container, data.error || 'No se pudo cargar el historial.');
+                    showError(container, data.error || t('No se pudo cargar el historial.'));
                     return data;
                 }
                 renderInto(container, data);
@@ -220,7 +221,7 @@ window.PersonDayTimeline = (function () {
                 return data;
             })
             .catch(() => {
-                showError(container, 'Error de conexión al servidor.');
+                showError(container, t('Error de conexión al servidor.'));
                 return { success: false };
             });
     }

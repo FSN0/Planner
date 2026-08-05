@@ -15,24 +15,24 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Panel de control</h1>
+        <h1 class="page-toolbar-title">{{ _('Panel de control') }}</h1>
         <span class="page-toolbar-count">{{ today.strftime('%d/%m/%Y') }}</span>
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-primary">
-          <i class="fas fa-th-large"></i> Tablero
+          <i class="fas fa-th-large"></i> {{ _('Tablero') }}
         </a>
         <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-user-plus"></i> Solicitudes
+          <i class="fas fa-user-plus"></i> {{ _('Solicitudes') }}
           {% if solicitudes_abiertas %}<span class="badge-soft badge-soft-amber ml-1">{{ solicitudes_abiertas }}</span>{% endif %}
         </a>
         <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-user-clock"></i> Auditoría
+          <i class="fas fa-user-clock"></i> {{ _('Auditoría') }}
           {% if audit_pendientes_total %}<span class="badge-soft badge-soft-red ml-1">{{ audit_pendientes_total }}</span>{% endif %}
         </a>
         {% if tenant_has_integrations %}
         <a href="{{ url_for('sync.panel') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-plug"></i> Integraciones
+          <i class="fas fa-plug"></i> {{ _('Integraciones') }}
         </a>
         {% endif %}
       </div>
@@ -42,15 +42,15 @@
     <section class="admin-panel" style="margin-bottom:1rem;border-color:#93c5fd;background:#eff6ff;">
       <div class="dashboard-panel-head" style="margin-bottom:0.35rem;">
         <h2 class="admin-panel-title" style="font-size:0.95rem;">
-          <i class="fas fa-rocket text-primary mr-1"></i> Termina de configurar SignaPlan
+          <i class="fas fa-rocket text-primary mr-1"></i> {{ _('Termina de configurar SignaPlan') }}
         </h2>
         <a href="{{ url_for('admin.primeros_pasos') }}" class="btn-admin btn-admin-primary" style="font-size:0.72rem;">
-          Primeros pasos
+          {{ _('Primeros pasos') }}
         </a>
       </div>
       <p class="mb-0" style="font-size:0.82rem;color:#334155;">
-        Faltan {{ onboarding.pendientes }} paso(s): obra, PIN, fichaje móvil o informe de Inspección.
-        Mientras tanto tienes todas las funciones disponibles.
+        {{ _('Faltan') }} {{ onboarding.pendientes }} {{ _('paso(s): obra, PIN, fichaje móvil o informe de Inspección.') }}
+        {{ _('Mientras tanto tienes todas las funciones disponibles.') }}
       </p>
     </section>
     {% endif %}
@@ -60,49 +60,49 @@
       <article class="dashboard-kpi dashboard-kpi--primary">
         <div class="dashboard-kpi-icon"><i class="fas fa-hard-hat"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Operarios activos</span>
+          <span class="dashboard-kpi-label">{{ _('Operarios activos') }}</span>
           <span class="dashboard-kpi-value">{{ operarios_activos }}</span>
-          <span class="dashboard-kpi-meta">{{ planificados_hoy }} planificados hoy · {{ libres_hoy }} libres</span>
+          <span class="dashboard-kpi-meta">{{ planificados_hoy }} {{ _('planificados hoy') }} · {{ libres_hoy }} {{ _('libres') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--blue"><i class="fas fa-building"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Obras en curso</span>
+          <span class="dashboard-kpi-label">{{ _('Obras en curso') }}</span>
           <span class="dashboard-kpi-value">{{ obras_en_curso }}</span>
-          <span class="dashboard-kpi-meta">{{ total_obras }} totales{% if obras_sin_jefe %} · <span class="text-warning">{{ obras_sin_jefe }} sin jefe</span>{% endif %}</span>
+          <span class="dashboard-kpi-meta">{{ total_obras }} {{ _('totales') }}{% if obras_sin_jefe %} · <span class="text-warning">{{ obras_sin_jefe }} {{ _('sin jefe') }}</span>{% endif %}</span>
         </div>
       </article>
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--amber"><i class="fas fa-clipboard-list"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Solicitudes abiertas</span>
+          <span class="dashboard-kpi-label">{{ _('Solicitudes abiertas') }}</span>
           <span class="dashboard-kpi-value">{{ solicitudes_abiertas }}</span>
-          <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} pendientes · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} en proceso</span>
+          <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} {{ _('pendientes') }} · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} {{ _('en proceso') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Auditoría pendiente</span>
+          <span class="dashboard-kpi-label">{{ _('Auditoría pendiente') }}</span>
           <span class="dashboard-kpi-value">{{ audit_pendientes_total }}</span>
-          <span class="dashboard-kpi-meta">{{ audit_conflictos }} desv. · {{ audit_paracaidistas }} sin plan. · {{ audit_ausencias }} aus.</span>
+          <span class="dashboard-kpi-meta">{{ audit_conflictos }} {{ _('desv.') }} · {{ audit_paracaidistas }} {{ _('sin plan.') }} · {{ audit_ausencias }} {{ _('aus.') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--green"><i class="fas fa-calendar-day"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Hoy en obra</span>
+          <span class="dashboard-kpi-label">{{ _('Hoy en obra') }}</span>
           <span class="dashboard-kpi-value">{{ asignaciones_hoy }}</span>
-          <span class="dashboard-kpi-meta">asignaciones · {{ ocupacion_pct }}% plantilla ocupada</span>
+          <span class="dashboard-kpi-meta">{{ _('asignaciones') }} · {{ ocupacion_pct }}% {{ _('plantilla ocupada') }}</span>
         </div>
       </article>
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--slate"><i class="fas fa-fingerprint"></i></div>
         <div>
-          <span class="dashboard-kpi-label">Fichajes hoy</span>
+          <span class="dashboard-kpi-label">{{ _('Fichajes hoy') }}</span>
           <span class="dashboard-kpi-value">{{ fichajes_total_hoy }}</span>
-          <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} incidencias</span>{% endif %}</span>
+          <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} {{ _('incidencias') }}</span>{% endif %}</span>
         </div>
       </article>
     </section>
@@ -111,8 +111,8 @@
     <div class="dashboard-main-grid">
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title">Planificación · 14 días</h2>
-          <span class="admin-panel-subtitle">Asignaciones por día</span>
+          <h2 class="admin-panel-title">{{ _('Planificación · 14 días') }}</h2>
+          <span class="admin-panel-subtitle">{{ _('Asignaciones por día') }}</span>
         </div>
         <div class="dashboard-chart-wrap">
           <canvas id="chartPlanificacion" height="120"></canvas>
@@ -121,7 +121,7 @@
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title">Solicitudes por estado</h2>
+          <h2 class="admin-panel-title">{{ _('Solicitudes por estado') }}</h2>
         </div>
         <div class="dashboard-chart-row">
           <div class="dashboard-chart-donut">
@@ -131,11 +131,11 @@
             {% for est, cnt in solicitudes_por_estado.items() %}
             <li>
               <span class="dashboard-legend-dot dashboard-legend-dot--{{ est|lower }}"></span>
-              <span>{{ est|replace('_', ' ')|title }}</span>
+              <span>{{ _( {'PENDIENTE':'Pendiente','EN_PROCESO':'En proceso','CUMPLIDA':'Cumplida','CERRADA_PARCIAL':'Cerrada P.','DENEGADA':'Denegada'}.get(est, est) ) }}</span>
               <strong>{{ cnt }}</strong>
             </li>
             {% else %}
-            <li class="text-muted small">Sin solicitudes registradas</li>
+            <li class="text-muted small">{{ _('Sin solicitudes registradas') }}</li>
             {% endfor %}
           </ul>
         </div>
@@ -143,33 +143,33 @@
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title">Ocupación hoy</h2>
+          <h2 class="admin-panel-title">{{ _('Ocupación hoy') }}</h2>
         </div>
         <div class="dashboard-occupancy">
           <div class="dashboard-occupancy-bar">
             <div class="dashboard-occupancy-fill" style="width: {{ ocupacion_pct }}%;"></div>
           </div>
           <div class="dashboard-occupancy-stats">
-            <div><strong>{{ planificados_hoy }}</strong><span>ocupados</span></div>
-            <div><strong>{{ libres_hoy }}</strong><span>libres</span></div>
-            <div><strong>{{ operarios_activos }}</strong><span>activos</span></div>
+            <div><strong>{{ planificados_hoy }}</strong><span>{{ _('ocupados') }}</span></div>
+            <div><strong>{{ libres_hoy }}</strong><span>{{ _('libres') }}</span></div>
+            <div><strong>{{ operarios_activos }}</strong><span>{{ _('activos') }}</span></div>
           </div>
         </div>
         <div class="dashboard-mini-stats">
           <div class="dashboard-mini-stat">
-            <span class="dashboard-mini-label">Internos</span>
+            <span class="dashboard-mini-label">{{ _('Internos') }}</span>
             <span class="dashboard-mini-value">{{ total_internos }}</span>
           </div>
           <div class="dashboard-mini-stat">
-            <span class="dashboard-mini-label">Externos</span>
+            <span class="dashboard-mini-label">{{ _('Externos') }}</span>
             <span class="dashboard-mini-value">{{ total_externos }}</span>
           </div>
           <div class="dashboard-mini-stat">
-            <span class="dashboard-mini-label">Jefes</span>
+            <span class="dashboard-mini-label">{{ _('Jefes') }}</span>
             <span class="dashboard-mini-value">{{ total_jefes }}</span>
           </div>
           <div class="dashboard-mini-stat">
-            <span class="dashboard-mini-label">Subcontratas</span>
+            <span class="dashboard-mini-label">{{ _('Subcontratas') }}</span>
             <span class="dashboard-mini-value">{{ total_companies }}</span>
           </div>
         </div>
@@ -180,18 +180,18 @@
     <div class="dashboard-tables-grid">
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
-          <h2 class="admin-panel-title"><i class="fas fa-user-plus text-primary mr-1"></i> Solicitudes recientes</h2>
-          <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Ver todas</a>
+          <h2 class="admin-panel-title"><i class="fas fa-user-plus text-primary mr-1"></i> {{ _('Solicitudes recientes') }}</h2>
+          <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">{{ _('Ver todas') }}</a>
         </div>
         {% if recent_solicitudes %}
         <table class="filterable-table admin-data-table mb-0 dashboard-table">
           <thead>
             <tr class="header-row">
               <th>#</th>
-              <th>Obra</th>
-              <th>Tipo</th>
-              <th>Periodo</th>
-              <th>Estado</th>
+              <th>{{ _('Obra') }}</th>
+              <th>{{ _('Tipo') }}</th>
+              <th>{{ _('Periodo') }}</th>
+              <th>{{ _('Estado') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -207,19 +207,19 @@
                 {% else %}—{% endif %}
               </td>
               <td>
-                {% if s.tipo|lower == 'generica' %}<span class="badge-soft badge-soft-gray">Genérica</span>
-                {% else %}<span class="badge-soft badge-soft-blue">Concreta</span>{% endif %}
+                {% if s.tipo|lower == 'generica' %}<span class="badge-soft badge-soft-gray">{{ _('Genérica') }}</span>
+                {% else %}<span class="badge-soft badge-soft-blue">{{ _('Concreta') }}</span>{% endif %}
               </td>
               <td class="text-nowrap" style="font-size:0.72rem;">
                 {{ s.fecha_inicio.strftime('%d/%m') }}–{{ s.fecha_fin.strftime('%d/%m/%y') }}
               </td>
               <td>
                 {% set est = s.estado %}
-                {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
-                {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
-                {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
-                {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
-                {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+                {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
+                {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
+                {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
+                {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
+                {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
                 {% else %}<span class="badge-soft badge-soft-gray">{{ est }}</span>{% endif %}
               </td>
             </tr>
@@ -227,22 +227,22 @@
           </tbody>
         </table>
         {% else %}
-        <p class="table-empty-state"><i class="fas fa-inbox"></i>Sin solicitudes</p>
+        <p class="table-empty-state"><i class="fas fa-inbox"></i>{{ _('Sin solicitudes') }}</p>
         {% endif %}
       </section>
 
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
-          <h2 class="admin-panel-title"><i class="fas fa-users text-primary mr-1"></i> Obras con más personal hoy</h2>
-          <a href="{{ url_for('admin.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Tablero</a>
+          <h2 class="admin-panel-title"><i class="fas fa-users text-primary mr-1"></i> {{ _('Obras con más personal hoy') }}</h2>
+          <a href="{{ url_for('admin.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">{{ _('Tablero') }}</a>
         </div>
         {% if obras_hoy_rows %}
         <table class="filterable-table admin-data-table mb-0 dashboard-table">
           <thead>
             <tr class="header-row">
-              <th>Obra</th>
-              <th>Jefe</th>
-              <th class="text-center">Hoy</th>
+              <th>{{ _('Obra') }}</th>
+              <th>{{ _('Jefe') }}</th>
+              <th class="text-center">{{ _('Hoy') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -261,7 +261,7 @@
           </tbody>
         </table>
         {% else %}
-        <p class="table-empty-state"><i class="fas fa-calendar-day"></i>Sin asignaciones hoy</p>
+        <p class="table-empty-state"><i class="fas fa-calendar-day"></i>{{ _('Sin asignaciones hoy') }}</p>
         {% endif %}
       </section>
     </div>
@@ -271,16 +271,16 @@
     <section class="admin-panel dashboard-panel" style="margin-top:1rem;">
       <div class="dashboard-panel-head">
         <div>
-          <h2 class="admin-panel-title">Hoy en obra</h2>
+          <h2 class="admin-panel-title">{{ _('Hoy en obra') }}</h2>
           <span class="admin-panel-subtitle">
-            Planificado vs fichado ·
-            {{ hoy_en_obra.fichados }} fichados ·
-            {{ hoy_en_obra.sin_fichar }} sin fichar
-            {% if hoy_en_obra.otra_obra %} · {{ hoy_en_obra.otra_obra }} en otra obra{% endif %}
+            {{ _('Planificado vs fichado') }} ·
+            {{ hoy_en_obra.fichados }} {{ _('fichados') }} ·
+            {{ hoy_en_obra.sin_fichar }} {{ _('sin fichar') }}
+            {% if hoy_en_obra.otra_obra %} · {{ hoy_en_obra.otra_obra }} {{ _('en otra obra') }}{% endif %}
           </span>
         </div>
         <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">
-          Auditoría
+          {{ _('Auditoría') }}
         </a>
       </div>
       {% if hoy_en_obra.filas %}
@@ -288,11 +288,11 @@
         <table class="table table-sm mb-0" style="font-size:0.8rem;">
           <thead>
             <tr>
-              <th>Trabajador</th>
-              <th>Planificado</th>
-              <th>Fichado en</th>
-              <th>Entrada</th>
-              <th>Estado</th>
+              <th>{{ _('Trabajador') }}</th>
+              <th>{{ _('Planificado') }}</th>
+              <th>{{ _('Fichado en') }}</th>
+              <th>{{ _('Entrada') }}</th>
+              <th>{{ _('Estado') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -308,9 +308,9 @@
                 {% if f.estado == 'ok' %}
                   <span class="badge-soft badge-soft-green">OK</span>
                 {% elif f.estado == 'otra_obra' %}
-                  <span class="badge-soft badge-soft-amber">Otra obra</span>
+                  <span class="badge-soft badge-soft-amber">{{ _('Otra obra') }}</span>
                 {% else %}
-                  <span class="badge-soft badge-soft-red">Sin fichar</span>
+                  <span class="badge-soft badge-soft-red">{{ _('Sin fichar') }}</span>
                 {% endif %}
               </td>
             </tr>
@@ -320,7 +320,7 @@
       </div>
       {% else %}
       <p class="text-muted small mb-0 px-3 pb-3">
-        Nadie planificado hoy. Asigna gente en el tablero o en el planificador.
+        {{ _('Nadie planificado hoy. Asigna gente en el tablero o en el planificador.') }}
       </p>
       {% endif %}
     </section>
@@ -330,16 +330,16 @@
     <div class="dashboard-bottom-grid">
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
-          <h2 class="admin-panel-title"><i class="fas fa-user-clock text-danger mr-1"></i> Incidencias de fichaje</h2>
-          <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Ir a auditoría</a>
+          <h2 class="admin-panel-title"><i class="fas fa-user-clock text-danger mr-1"></i> {{ _('Incidencias de fichaje') }}</h2>
+          <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">{{ _('Ir a auditoría') }}</a>
         </div>
         {% include 'components/_dashboard_incidencias.html' %}
       </section>
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
-          <h2 class="admin-panel-title"><i class="fas fa-history mr-1"></i> Actividad reciente</h2>
-          <a href="{{ url_for('admin.system_logs') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">Logs</a>
+          <h2 class="admin-panel-title"><i class="fas fa-history mr-1"></i> {{ _('Actividad reciente') }}</h2>
+          <a href="{{ url_for('admin.system_logs') }}" class="btn-admin btn-admin-ghost" style="font-size:0.68rem;padding:0.2rem 0.5rem;">{{ _('Logs') }}</a>
         </div>
         {% if recent_logs %}
         <ul class="dashboard-activity-list">
@@ -357,18 +357,18 @@
           {% endfor %}
         </ul>
         {% else %}
-        <p class="text-muted small mb-0">Sin actividad reciente.</p>
+        <p class="text-muted small mb-0">{{ _('Sin actividad reciente.') }}</p>
         {% endif %}
         {% if last_sync %}
         <div class="dashboard-sync-foot">
           <i class="fas fa-sync-alt text-muted"></i>
-          Última sync <strong>{{ last_sync.tipo }}</strong>
+          {{ _('Última sync') }} <strong>{{ last_sync.tipo }}</strong>
           · {{ last_sync.fecha|format_dt }}
           {% if last_sync.errores %}
           <span class="dashboard-sync-errors-wrap ml-1" tabindex="0">
-            <span class="badge-soft badge-soft-red dashboard-sync-errors-badge">{{ last_sync.errores }} errores</span>
+            <span class="badge-soft badge-soft-red dashboard-sync-errors-badge">{{ last_sync.errores }} {{ _('errores') }}</span>
             <span class="dashboard-sync-errors-popover" role="tooltip">
-              <strong>Detalle de errores</strong>
+              <strong>{{ _('Detalle de errores') }}</strong>
               {% if sync_error_lines %}
               <ul>
                 {% for line in sync_error_lines %}
@@ -376,7 +376,7 @@
                 {% endfor %}
               </ul>
               {% else %}
-              <p class="mb-0 mt-1">Sin detalle guardado para esta sincronización.</p>
+              <p class="mb-0 mt-1">{{ _('Sin detalle guardado para esta sincronización.') }}</p>
               {% endif %}
             </span>
           </span>
@@ -389,7 +389,7 @@
   </main>
 </div>
 
-{% with modal_id='modalTimelineFichaje', modal_title='Historial del Fichaje' %}
+{% with modal_id='modalTimelineFichaje', modal_title=_('Historial del Fichaje') %}
   {% include 'components/_person_day_timeline_modal.html' %}
 {% endwith %}
 {% endblock %}
@@ -439,7 +439,7 @@ document.addEventListener('DOMContentLoaded', function() {
     PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
       modalId: 'modalTimelineFichaje',
       apiBase: '/sync/timeline_dia',
-      loadingMessage: 'Recopilando el día completo del operario...',
+      loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
     });
   }
   document.querySelectorAll('tr.row-clickable[data-href]').forEach(function(row) {
@@ -453,6 +453,13 @@ document.addEventListener('DOMContentLoaded', function() {
   const planValues = {{ chart_plan_values|tojson }};
   const solLabels = {{ chart_solicitud_labels|tojson }};
   const solValues = {{ chart_solicitud_values|tojson }};
+  const solLabelMap = {
+    'PENDIENTE': {{ _('Pendiente')|tojson }},
+    'EN_PROCESO': {{ _('En proceso')|tojson }},
+    'CUMPLIDA': {{ _('Cumplida')|tojson }},
+    'CERRADA_PARCIAL': {{ _('Cerrada P.')|tojson }},
+    'DENEGADA': {{ _('Denegada')|tojson }},
+  };
 
   const chartColors = {
     primary: '#22c55e',
@@ -472,7 +479,7 @@ document.addEventListener('DOMContentLoaded', function() {
       data: {
         labels: planLabels,
         datasets: [{
-          label: 'Asignaciones',
+          label: {{ _('Asignaciones')|tojson }},
           data: planValues,
           backgroundColor: chartColors.primaryLight,
           borderColor: chartColors.primary,
@@ -504,7 +511,7 @@ document.addEventListener('DOMContentLoaded', function() {
     new Chart(solCtx, {
       type: 'doughnut',
       data: {
-        labels: solLabels,
+        labels: solLabels.map(function(l) { return solLabelMap[l] || l; }),
         datasets: [{
           data: solValues,
           backgroundColor: solLabels.map(l => estadoColors[l] || chartColors.slate),

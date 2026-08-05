@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Cuaderno de Bitácora{% endblock %}
+{% block title %}{{ _('Cuaderno de Bitácora') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -17,12 +17,12 @@
     <div class="bitacora-toolbar">
       <div>
         <h1 class="bitacora-toolbar-title">
-          <i class="fas fa-book"></i>Cuaderno de Bitácora
+          <i class="fas fa-book"></i>{{ _('Cuaderno de Bitácora') }}
         </h1>
-        <p class="bitacora-toolbar-sub">Registro de reuniones, notas operativas e incidencias.</p>
+        <p class="bitacora-toolbar-sub">{{ _('Registro de reuniones, notas operativas e incidencias.') }}</p>
       </div>
       <button class="btn-admin btn-admin-primary" onclick="$('#modalNuevaNota').modal('show')">
-        <i class="fas fa-plus mr-1"></i> Nueva nota / reunión
+        <i class="fas fa-plus mr-1"></i> {{ _('Nueva nota / reunión') }}
       </button>
     </div>
 
@@ -31,12 +31,12 @@
         <table id="notasTable" class="table bitacora-table table-hover w-100 mb-0">
           <thead>
             <tr>
-              <th style="width: 10%;">Fecha</th>
-              <th style="width: 25%;">Asunto / Resumen</th>
-              <th style="width: 20%;">Obras</th>
-              <th style="width: 20%;">Implicados</th>
-              <th style="width: 10%; text-align: center;">Acceso</th>
-              <th style="width: 15%; text-align: right;">Acciones</th>
+              <th style="width: 10%;">{{ _('Fecha') }}</th>
+              <th style="width: 25%;">{{ _('Asunto / Resumen') }}</th>
+              <th style="width: 20%;">{{ _('Obras') }}</th>
+              <th style="width: 20%;">{{ _('Implicados') }}</th>
+              <th style="width: 10%; text-align: center;">{{ _('Acceso') }}</th>
+              <th style="width: 15%; text-align: right;">{{ _('Acciones') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -65,18 +65,18 @@
               </td>
               <td class="text-center">
                 {% if nota.es_privada %}
-                  <span class="badge-soft"><i class="fas fa-lock text-warning"></i> Privada</span>
+                  <span class="badge-soft"><i class="fas fa-lock text-warning"></i> {{ _('Privada') }}</span>
                 {% else %}
-                  <span class="badge-soft"><i class="fas fa-globe text-info"></i> Pública</span>
+                  <span class="badge-soft"><i class="fas fa-globe text-info"></i> {{ _('Pública') }}</span>
                 {% endif %}
                 <div class="text-muted" style="font-size: 0.7rem; margin-top: 2px;">{{ nota.autor.name }}</div>
               </td>
               <td>
                 <div class="bitacora-actions">
-                  <button class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="Ver / editar">
+                  <button class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="{{ _('Ver / editar') }}">
                     <i class="fas fa-edit text-success"></i>
                   </button>
-                  <button class="btn btn-light border btn-icon" onclick="eliminarNota({{ nota.id }})" title="Eliminar">
+                  <button class="btn btn-light border btn-icon" onclick="eliminarNota({{ nota.id }})" title="{{ _('Eliminar') }}">
                     <i class="fas fa-trash-alt text-danger"></i>
                   </button>
                 </div>
@@ -99,7 +99,7 @@
 
         <div class="modal-header">
           <i class="fas fa-book-open mr-2" style="color:#22c55e;font-size:1.2rem;"></i>
-          <input type="text" id="verNotaTitulo" name="titulo" class="note-title-input" placeholder="Título de la nota o reunión…" required>
+          <input type="text" id="verNotaTitulo" name="titulo" class="note-title-input" placeholder="{{ _('Título de la nota o reunión…') }}" required>
           <button type="button" class="close ml-2" data-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
@@ -109,21 +109,21 @@
           <div id="notaMetadataSection" class="note-meta-section">
             <div class="row mb-3 pb-3 border-bottom">
               <div class="col-md-4">
-                <label class="form-label-sm" for="verNotaFecha"><i class="fas fa-calendar-alt mr-1"></i> Fecha</label>
+                <label class="form-label-sm" for="verNotaFecha"><i class="fas fa-calendar-alt mr-1"></i> {{ _('Fecha') }}</label>
                 <input type="date" id="verNotaFecha" name="fecha" class="form-control" required>
               </div>
               <div class="col-md-4">
-                <label class="form-label-sm"><i class="fas fa-shield-alt mr-1"></i> Privacidad</label>
+                <label class="form-label-sm"><i class="fas fa-shield-alt mr-1"></i> {{ _('Privacidad') }}</label>
                 <div class="custom-control custom-switch mt-1">
                   <input type="checkbox" class="custom-control-input" id="verNotaPrivacidad" name="es_privada">
-                  <label class="custom-control-label privacy-switch-label" for="verNotaPrivacidad" id="verNotaPrivacidadLabel">Cargando…</label>
+                  <label class="custom-control-label privacy-switch-label" for="verNotaPrivacidad" id="verNotaPrivacidadLabel">{{ _('Cargando…') }}</label>
                 </div>
               </div>
             </div>
 
             <div class="row mb-3">
               <div class="col-md-6">
-                <label class="form-label-sm" for="verNotaObras"><i class="fas fa-hard-hat mr-1"></i> Obras implicadas</label>
+                <label class="form-label-sm" for="verNotaObras"><i class="fas fa-hard-hat mr-1"></i> {{ _('Obras implicadas') }}</label>
                 <select id="verNotaObras" name="obras_ids[]" class="select2-modal" multiple style="width: 100%;">
                   {% for obra in obras %}
                     <option value="{{ obra.id }}">{{ obra.nombre }}</option>
@@ -131,7 +131,7 @@
                 </select>
               </div>
               <div class="col-md-6">
-                <label class="form-label-sm" for="verNotaUsuarios"><i class="fas fa-users mr-1"></i> Usuarios implicados</label>
+                <label class="form-label-sm" for="verNotaUsuarios"><i class="fas fa-users mr-1"></i> {{ _('Usuarios implicados') }}</label>
                 <select id="verNotaUsuarios" name="users_ids[]" class="select2-modal" multiple style="width: 100%;">
                   {% for usuario in usuarios %}
                     <option value="{{ usuario.id }}">{{ usuario.name }} {{ usuario.lastname }}</option>
@@ -142,22 +142,22 @@
           </div>
 
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <label class="form-label-sm mb-0" for="verNotaContenido"><i class="fas fa-align-left mr-1"></i> Contenido</label>
+            <label class="form-label-sm mb-0" for="verNotaContenido"><i class="fas fa-align-left mr-1"></i> {{ _('Contenido') }}</label>
             <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="btnExpandirContenido" onclick="toggleExpandirContenido()">
-              <i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar contenido
+              <i class="fas fa-expand-arrows-alt mr-1"></i> {{ _('Ampliar contenido') }}
             </button>
           </div>
 
-          <textarea id="verNotaContenido" name="contenido" class="note-content-area w-100" placeholder="Escribe el cuerpo de la nota o acta de reunión…" required></textarea>
+          <textarea id="verNotaContenido" name="contenido" class="note-content-area w-100" placeholder="{{ _('Escribe el cuerpo de la nota o acta de reunión…') }}" required></textarea>
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn-admin btn-admin-danger mr-auto" id="btnVerEliminar" onclick="">
-            <i class="fas fa-trash-alt mr-1"></i> Eliminar
+            <i class="fas fa-trash-alt mr-1"></i> {{ _('Eliminar') }}
           </button>
-          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cerrar</button>
+          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cerrar') }}</button>
           <button type="submit" class="btn-admin btn-admin-primary">
-            <i class="fas fa-save mr-1"></i> Guardar cambios
+            <i class="fas fa-save mr-1"></i> {{ _('Guardar cambios') }}
           </button>
         </div>
       </form>
@@ -175,10 +175,11 @@
 
 <script>
 $(document).ready(function() {
+    var dtLang = {es:'es-ES', en:'en-GB', pt:'pt-PT', fr:'fr-FR'}[window.SP_LOCALE || 'es'] || 'es-ES';
     $('#notasTable').DataTable({
         "order": [[ 0, "desc" ]],
         "language": {
-            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json"
+            "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/" + dtLang + ".json"
         },
         "pageLength": 25,
         "lengthMenu": [[10, 25, 50, 100], [10, 25, 50, 100]],

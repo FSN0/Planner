@@ -16,13 +16,13 @@
       <header class="entity-panel-card-top">
         <div class="entity-panel-toolbar-start">
           <a href="{{ url_for('admin.companies') }}" class="entity-panel-back">
-            <i class="fas fa-arrow-left"></i> Empresas
+            <i class="fas fa-arrow-left"></i> {{ _('Empresas') }}
           </a>
-          <span class="entity-type-marker"><i class="fas fa-briefcase"></i> Empresa</span>
+          <span class="entity-type-marker"><i class="fas fa-briefcase"></i> {{ _('Empresa') }}</span>
         </div>
         <div class="entity-panel-actions">
           <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn-admin btn-admin-ghost">
-            <i class="fas fa-pencil-alt"></i> Editar
+            <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
           </a>
         </div>
       </header>
@@ -30,6 +30,8 @@
       <div class="entity-hero-accent" aria-hidden="true"></div>
       <div class="entity-hero-body entity-hero-body--full">
         <div class="entity-hero-main">
+          {% set nif_val = (company.nif or '')|string|trim %}
+          {% set nif_ok = nif_val and nif_val|lower not in ['none', 'null', 'nan'] %}
           <div class="entity-hero-title-row">
             <div class="entity-hero-icon-wrap">
               <div class="entity-hero-icon">
@@ -40,13 +42,13 @@
               <h1 class="entity-hero-name">{{ company.nombre }}</h1>
               <p class="entity-hero-subtitle">
                 <span class="entity-code-badge">{{ company.code }}</span>
-                {% if company.nif %}
-                  <span>{{ company.nif }}</span>
+                {% if nif_ok %}
+                  <span>{{ nif_val }}</span>
                 {% else %}
-                  <span class="text-muted">Sin NIF</span>
+                  <span class="text-muted">{{ _('Sin NIF') }}</span>
                 {% endif %}
                 {% if company.is_internal %}
-                  <span class="badge-soft badge-soft-green">Interna</span>
+                  <span class="badge-soft badge-soft-green">{{ _('Interna') }}</span>
                 {% endif %}
               </p>
             </div>
@@ -54,27 +56,27 @@
 
           <div class="entity-meta-grid">
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Código</span>
+              <span class="entity-meta-item-label">{{ _('Código') }}</span>
               <span class="entity-meta-item-value">{{ company.code }}</span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">NIF</span>
-              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not company.nif }}">
-                {{ company.nif or 'Sin NIF' }}
+              <span class="entity-meta-item-label">{{ _('NIF') }}</span>
+              <span class="entity-meta-item-value {{ 'entity-meta-item-value--muted' if not nif_ok }}">
+                {% if nif_ok %}{{ nif_val }}{% else %}{{ _('Sin NIF') }}{% endif %}
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Tipo</span>
+              <span class="entity-meta-item-label">{{ _('Tipo') }}</span>
               <span class="entity-meta-item-value">
                 {% if company.is_internal %}
-                  Empresa interna
+                  {{ _('Empresa interna') }}
                 {% else %}
-                  Subcontrata / externa
+                  {{ _('Subcontrata / externa') }}
                 {% endif %}
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">Color identificativo</span>
+              <span class="entity-meta-item-label">{{ _('Color identificativo') }}</span>
               <span class="entity-meta-item-value">
                 <span class="entity-color-swatch" style="background:{{ company.color or '#6366f1' }};"></span>
                 {{ company.color or '—' }}
@@ -88,7 +90,7 @@
     </article>
 
     <section class="entity-calendar-zone">
-      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> Planificación</h2>
+      <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> {{ _('Planificación') }}</h2>
       <div id="company-timeline" class="univ-calendar-root"></div>
     </section>
 

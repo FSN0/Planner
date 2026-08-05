@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Coches libres{% endblock %}
+{% block title %}{{ _('Coches libres') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -109,66 +109,62 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Coches libres</h1>
+        <h1 class="page-toolbar-title">{{ _('Coches libres') }}</h1>
         <span class="page-toolbar-count">
           {{ fecha_desde.strftime('%d/%m/%Y') }} – {{ fecha_hasta.strftime('%d/%m/%Y') }}
         </span>
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.vehiculos') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-car"></i> Flota
+          <i class="fas fa-car"></i> {{ _('Flota') }}
         </a>
       </div>
     </div>
 
-    <p class="vl-hint">
-      Libre = sin conductor planificado, o el planificado de ausencia.
-      Los tramos del mismo coche van juntos. Si no hay más plan hasta el horizonte,
-      solo verás «Desde … en adelante» (sin hasta inventado).
-    </p>
+    <p class="vl-hint">{{ _('Libre = sin conductor planificado, o el planificado de ausencia. Los tramos del mismo coche van juntos. Si no hay más plan hasta el horizonte, solo verás «Desde … en adelante» (sin hasta inventado).') }}</p>
 
     <div class="vl-kpis">
       <div class="vl-kpi vl-kpi--free">
-        <span class="vl-kpi-label">Tramos libres</span>
+        <span class="vl-kpi-label">{{ _('Tramos libres') }}</span>
         <span class="vl-kpi-value">{{ summary.tramos }}</span>
       </div>
       <div class="vl-kpi">
-        <span class="vl-kpi-label">Vehículos</span>
+        <span class="vl-kpi-label">{{ _('Vehículos') }}</span>
         <span class="vl-kpi-value">{{ summary.vehiculos }}</span>
       </div>
       <div class="vl-kpi vl-kpi--leave">
-        <span class="vl-kpi-label">Por ausencia</span>
+        <span class="vl-kpi-label">{{ _('Por ausencia') }}</span>
         <span class="vl-kpi-value">{{ summary.por_ausencia }}</span>
       </div>
       <div class="vl-kpi vl-kpi--plan">
-        <span class="vl-kpi-label">Sin planificar</span>
+        <span class="vl-kpi-label">{{ _('Sin planificar') }}</span>
         <span class="vl-kpi-value">{{ summary.sin_plan }}</span>
       </div>
     </div>
 
     <div class="vl-filters">
       <form method="get" action="{{ url_for('admin.vehiculos_libres') }}">
-        <label class="sr-only" for="q">Buscar coche</label>
+        <label class="sr-only" for="q">{{ _('Buscar coche') }}</label>
         <input type="search" name="q" id="q" value="{{ q or '' }}"
                class="form-control form-control-sm" style="width: auto; min-width: 14rem;"
-               placeholder="Matrícula o nombre…" autocomplete="off">
-        <label class="sr-only" for="meses">Horizonte</label>
+               placeholder="{{ _('Matrícula o nombre…') }}" autocomplete="off">
+        <label class="sr-only" for="meses">{{ _('Horizonte') }}</label>
         <select name="meses" id="meses" class="form-control form-control-sm" style="width: auto; min-width: 9rem;">
           {% for m in months_allowed %}
           <option value="{{ m }}" {% if months == m %}selected{% endif %}>
-            {{ m }} mes{% if m != 1 %}es{% endif %}
+            {{ m }} {% if m == 1 %}{{ _('mes') }}{% else %}{{ _('meses') }}{% endif %}
           </option>
           {% endfor %}
         </select>
-        <label class="sr-only" for="motivo">Motivo</label>
+        <label class="sr-only" for="motivo">{{ _('Motivo') }}</label>
         <select name="motivo" id="motivo" class="form-control form-control-sm" style="width: auto; min-width: 11rem;">
-          <option value="" {% if not motivo_filtro %}selected{% endif %}>Todos los motivos</option>
-          <option value="ausencia" {% if motivo_filtro == 'ausencia' %}selected{% endif %}>Ausencia</option>
-          <option value="sin_plan" {% if motivo_filtro == 'sin_plan' %}selected{% endif %}>Sin planificar</option>
-          <option value="mixto" {% if motivo_filtro == 'mixto' %}selected{% endif %}>Sin plan / Ausencia</option>
+          <option value="" {% if not motivo_filtro %}selected{% endif %}>{{ _('Todos los motivos') }}</option>
+          <option value="ausencia" {% if motivo_filtro == 'ausencia' %}selected{% endif %}>{{ _('Ausencia') }}</option>
+          <option value="sin_plan" {% if motivo_filtro == 'sin_plan' %}selected{% endif %}>{{ _('Sin planificar') }}</option>
+          <option value="mixto" {% if motivo_filtro == 'mixto' %}selected{% endif %}>{{ _('Sin plan / Ausencia') }}</option>
         </select>
         <button type="submit" class="btn-admin btn-admin-primary btn-sm">
-          <i class="fas fa-search"></i> Filtrar
+          <i class="fas fa-search"></i> {{ _('Filtrar') }}
         </button>
       </form>
     </div>
@@ -188,22 +184,22 @@
           <thead>
             <tr class="header-row">
               <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)">
-                <span class="sortable-label">Coche</span><i class="fas fa-sort sort-icon"></i>
+                <span class="sortable-label">{{ _('Coche') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="sortable-col" data-col-index="1" data-sort="asc" data-sort-type="date" onclick="sortAdminTable(this)">
-                <span class="sortable-label">Desde</span><i class="fas fa-sort-up sort-icon"></i>
+                <span class="sortable-label">{{ _('Desde') }}</span><i class="fas fa-sort-up sort-icon"></i>
               </th>
               <th class="sortable-col" data-col-index="2" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                <span class="sortable-label">Hasta</span><i class="fas fa-sort sort-icon"></i>
+                <span class="sortable-label">{{ _('Hasta') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="sortable-col" data-col-index="3" data-sort="none" data-sort-type="num" onclick="sortAdminTable(this)">
-                <span class="sortable-label">Días</span><i class="fas fa-sort sort-icon"></i>
+                <span class="sortable-label">{{ _('Días') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)">
-                <span class="sortable-label">Motivo</span><i class="fas fa-sort sort-icon"></i>
+                <span class="sortable-label">{{ _('Motivo') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)">
-                <span class="sortable-label">Conductor (ausencia)</span><i class="fas fa-sort sort-icon"></i>
+                <span class="sortable-label">{{ _('Conductor (ausencia)') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="col-actions"></th>
             </tr>
@@ -217,7 +213,7 @@
               <td data-sort-value="{{ s.fecha_inicio.isoformat() }}">{{ s.fecha_inicio.strftime('%d/%m/%Y') }}</td>
               <td data-sort-value="{% if s.abierto %}9999-12-31{% else %}{{ s.fecha_fin.isoformat() }}{% endif %}">
                 {% if s.abierto %}
-                <span class="vl-abierto-label">en adelante</span>
+                <span class="vl-abierto-label">{{ _('en adelante') }}</span>
                 {% else %}
                 {{ s.fecha_fin.strftime('%d/%m/%Y') }}
                 {% endif %}
@@ -230,13 +226,13 @@
                 {% endif %}
               </td>
               <td data-sort-value="{{ s.motivo_label|lower }}{% if s.abierto %} sin mas plan{% endif %}">
-                <span class="vl-chip vl-chip--{{ s.motivo }}">{{ s.motivo_label }}</span>
+                <span class="vl-chip vl-chip--{{ s.motivo }}">{{ _(s.motivo_label) }}</span>
                 {% if s.abierto %}
-                <span class="vl-chip vl-chip--abierto">Sin más plan</span>
+                <span class="vl-chip vl-chip--abierto">{{ _('Sin más plan') }}</span>
                 {% endif %}
                 {% if s.ausencia_tipos %}
                 <span class="text-muted" style="font-size:0.75rem; margin-left:0.35rem;">
-                  {{ s.ausencia_tipos|join(', ') }}
+                  {% for t in s.ausencia_tipos %}{% if not loop.first %}, {% endif %}{{ _(t) }}{% endfor %}
                 </span>
                 {% endif %}
               </td>
@@ -266,8 +262,7 @@
             <tr>
               <td colspan="7" class="table-empty-state">
                 <i class="fas fa-car"></i>
-                No hay tramos libres en este horizonte
-                {% if motivo_filtro or q %}con el filtro elegido{% endif %}.
+                {{ _('No hay tramos libres en este horizonte') }}{% if motivo_filtro or q %} {{ _('con el filtro elegido') }}{% endif %}.
               </td>
             </tr>
             {% endfor %}

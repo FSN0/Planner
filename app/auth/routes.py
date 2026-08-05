@@ -6,13 +6,13 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash
 
-from app import limiter
+from app import limiter, db
 from app.models import User, ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 auth_bp = Blueprint('auth', __name__)
 
-LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO, ROLE_RRHH)
+LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO,)
 
 
 def _login_blocked_roles():
@@ -24,11 +24,13 @@ def _login_blocked_roles():
     plantilla desde un ERP hay cuentas creadas en masa, y abrirles el login sin
     que nadie lo haya pedido convertiría esas cuentas en superficie de ataque.
     Ante cualquier duda al leer la configuración, se deniega.
+
+    RRHH entra con el mismo acceso que laboral.
     """
     try:
         from app.services.fichaje_operario_service import fichaje_operario_activo
         if fichaje_operario_activo():
-            return tuple(r for r in LOGIN_BLOCKED_ROLES if r != ROLE_OPERARIO)
+            return ()
     except Exception:
         pass
     return LOGIN_BLOCKED_ROLES
@@ -59,7 +61,7 @@ def _destino_por_rol(user):
         return url_for('admin.panel')
     if user.role == 'jefe_obra':
         return url_for('jefe.obras_detailed', selected_date=date.today())
-    if user.role == ROLE_LABORAL:
+    if user.role in (ROLE_LABORAL, ROLE_RRHH):
         return url_for('admin.ausencias_list')
     if user.role == ROLE_OPERARIO:
         return url_for('operarios.inicio')
@@ -79,9 +81,8 @@ def _redirect_authenticated_user():
 @limiter.limit('10 per minute; 30 per hour')
 def entrar_alta():
     """
-    Tras crear la cuenta en el host de marketing, el navegador salta al
-    subdominio del tenant. Aquí consumimos un token firmado y dejamos al
-    admin dentro, sin pedirle otra vez correo y contraseña.
+    Compatibilidad con enlaces antiguos de auto-login post-alta.
+    El flujo actual pide verificación de correo (/auth/verificar-email).
     """
     from app.services.signup_service import SignupError, leer_token_entrada_post_alta
 
@@ -99,6 +100,13 @@ def entrar_alta():
     user = User.query.filter_by(email=email, is_deleted=False).first()
     if user is None or not user.is_active:
         flash('No se ha podido abrir la sesión. Entra con tu correo y contraseña.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    if hasattr(user, 'email_verified') and not user.email_verified:
+        flash(
+            'Debes verificar tu correo electrónico antes de entrar. Revisa tu bandeja de entrada.',
+            'warning',
+        )
         return redirect(url_for('auth.login'))
 
     if current_user.is_authenticated:
@@ -121,9 +129,64 @@ def entrar_alta():
     return redirect(destino or url_for('admin.panel'))
 
 
+@auth_bp.route('/verificar-email')
+@limiter.limit('10 per minute; 30 per hour')
+def verificar_email():
+    """Confirma el correo del admin tras el alta y abre sesión en el tenant."""
+    from app.services.email_verification_service import (
+        EmailVerificationError,
+        confirmar_email,
+    )
+
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        flash('Accede desde la URL de tu empresa.', 'warning')
+        return redirect(url_for('main.dashboard'))
+
+    token = request.args.get('t') or ''
+    try:
+        user = confirmar_email(token, g.current_tenant)
+    except EmailVerificationError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('auth.login'))
+
+    if current_user.is_authenticated:
+        logout_user()
+
+    # login_user lee is_active; el User debe estar fresco en el schema del tenant
+    from sqlalchemy import text
+    db.session.execute(
+        text(f'SET search_path TO {g.current_tenant.schema_name}, public')
+    )
+    user = User.query.get(user.id)
+    if user is None:
+        flash('No se ha podido abrir la sesión. Entra con tu correo y contraseña.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    login_user(user, remember=True)
+    session['tenant_id'] = g.current_tenant.id
+    try:
+        from app.utils import register_log
+        register_log(
+            user_id=user.id,
+            category='accesos',
+            action='Verificación de correo',
+            detail=(
+                f'Correo verificado tras alta. IP: {request.remote_addr or "Desconocida"}'
+            ),
+        )
+    except Exception:
+        pass
+
+    flash('Correo verificado. Bienvenido a SignaPlan.', 'success')
+    destino = _destino_por_rol(user)
+    return redirect(destino or url_for('admin.panel'))
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit('10 per minute; 50 per hour', methods=['POST'])
 def login():
+    from app.services.i18n_service import translate
+
     if current_user.is_authenticated:
         return _redirect_authenticated_user()
 
@@ -157,13 +220,30 @@ def login():
                     ),
                 )
                 flash(
-                    'Tu perfil no tiene acceso a la aplicación. Contacta con administración.',
+                    translate(
+                        'Tu perfil no tiene acceso a la aplicación. Contacta con administración.'
+                    ),
+                    'warning',
+                )
+                return render_template('login.html', **_login_page_context())
+
+            if hasattr(user, 'email_verified') and not user.email_verified:
+                flash(
+                    translate(
+                        'Debes verificar tu correo electrónico antes de entrar. '
+                        'Revisa tu bandeja de entrada.'
+                    ),
                     'warning',
                 )
                 return render_template('login.html', **_login_page_context())
 
             if not user.is_active:
-                flash('Tu cuenta aún no está activa. Espera la aprobación de RRHH.', 'warning')
+                flash(
+                    translate(
+                        'Tu cuenta aún no está activa. Espera la aprobación de RRHH.'
+                    ),
+                    'warning',
+                )
                 return render_template('login.html', **_login_page_context())
 
             login_user(user, remember=remember)
@@ -175,14 +255,14 @@ def login():
                 action='Inicio de Sesión',
                 detail=f"Login exitoso desde IP: {request.remote_addr or 'Desconocida'}",
             )
-            flash('Inicio de sesión exitoso', 'success')
+            flash(translate('Inicio de sesión exitoso'), 'success')
 
             destino = _destino_por_rol(user)
             if destino:
                 return redirect(destino)
 
             logout_user()
-            flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
+            flash(translate('Tu perfil no tiene acceso a la aplicación.'), 'warning')
             return render_template('login.html', **_login_page_context())
 
         if user:
@@ -193,7 +273,7 @@ def login():
                 action='Intento fallido de login',
                 detail=f"Contraseña incorrecta. IP: {request.remote_addr or 'Desconocida'}",
             )
-        flash('Credenciales inválidas', 'danger')
+        flash(translate('Credenciales inválidas'), 'danger')
 
     return render_template('login.html', **_login_page_context())
 
@@ -202,7 +282,8 @@ def login():
 @login_required
 def logout():
     logout_user()
-    flash('Sesión cerrada', 'info')
+    from app.services.i18n_service import translate
+    flash(translate('Sesión cerrada'), 'info')
     return redirect(url_for('auth.login'))
 
 

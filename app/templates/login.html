@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale|default('es') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iniciar Sesión - {{ tenant_name if tenant_name else 'SaaS' }}</title>
+    <title>{{ _('Iniciar Sesión') }} - {{ tenant_name if tenant_name else 'SignaPlan' }}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
@@ -14,56 +14,66 @@
         <div class="auth-logo text-center mb-4" style="font-size: 3rem; color: #007bff;">
             <i class="fas fa-hard-hat"></i>
         </div>
-        <h1 class="auth-title text-center h3 mb-2 font-weight-bold">Bienvenido</h1>
+        <h1 class="auth-title text-center h3 mb-2 font-weight-bold">{{ _('Bienvenido') }}</h1>
         <p class="auth-subtitle text-center text-muted small mb-4">
             {% if g.current_tenant %}
-                Panel de Gestión - <strong>{{ g.current_tenant.nombre }}</strong>
+                {{ _('Panel de Gestión') }} - <strong>{{ g.current_tenant.nombre }}</strong>
             {% else %}
-                Introduce tus credenciales para entrar
+                {{ _('Introduce tus credenciales para entrar') }}
             {% endif %}
         </p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
-              <div class="alert alert-{{ category if category != 'error' else 'danger' }} p-2 small text-center">{{ message }}</div>
+              <div class="alert alert-{{ category if category != 'error' else 'danger' }} p-2 small text-center">{{ _(message) }}</div>
             {% endfor %}
           {% endif %}
         {% endwith %}
 
+        <div class="mb-3 text-center">
+            <label class="small text-muted d-block mb-1" for="login-lang">{{ _('Idioma') }}</label>
+            <select id="login-lang" class="form-control form-control-sm d-inline-block" style="max-width: 12rem;"
+                    onchange="window.location.href=this.value">
+                {% for code in supported_locales %}
+                <option value="{{ url_for('main.update_user_locale', lang=code, next=request.path) }}"
+                        {% if code == current_locale %}selected{% endif %}>
+                    {{ locale_labels[code] }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            {# autocapitalize y spellcheck en off: el teclado del móvil pone
-               mayúscula a la primera letra del correo y luego el login falla
-               sin que se vea por qué. #}
             <div class="form-group mb-3">
-                <label for="email" class="form-label font-weight-bold small text-secondary">Correo Electrónico</label>
+                <label for="email" class="form-label font-weight-bold small text-secondary">{{ _('Correo Electrónico') }}</label>
                 <input type="email" name="email" id="email" class="form-control"
                        placeholder="nombre@empresa.com" required
                        autocomplete="username" inputmode="email"
                        autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
             <div class="form-group mb-4">
-                <label for="password" class="form-label font-weight-bold small text-secondary">Contraseña</label>
+                <label for="password" class="form-label font-weight-bold small text-secondary">{{ _('Contraseña') }}</label>
                 <input type="password" name="password" id="password" class="form-control"
                        placeholder="••••••••" required autocomplete="current-password">
             </div>
-            
+
             <div class="form-group form-check mb-4 text-left">
                 <input type="checkbox" name="remember" class="form-check-input" id="rememberCheck">
-                <label class="form-check-label small text-muted" for="rememberCheck">Recordarme</label>
+                <label class="form-check-label small text-muted" for="rememberCheck">{{ _('Recordarme') }}</label>
             </div>
 
-            <button type="submit" class="btn btn-primary w-100 font-weight-bold text-white shadow-sm" style="background-color: #007bff; border: none; padding: 10px;">Iniciar Sesión</button>
+            <button type="submit" class="btn btn-primary w-100 font-weight-bold text-white shadow-sm" style="background-color: #007bff; border: none; padding: 10px;">{{ _('Iniciar Sesión') }}</button>
         </form>
 
         <div class="auth-footer text-center mt-4 small text-muted">
-            <a href="{{ url_for('auth.recuperar') }}">¿Has olvidado la contraseña?</a>
-            <div class="mt-2">¿No tienes cuenta? Las altas de personal las gestiona la administración de tu empresa.</div>
+            <a href="{{ url_for('auth.recuperar') }}">{{ _('¿Has olvidado la contraseña?') }}</a>
+            <div class="mt-2">{{ _('¿No tienes cuenta? Las altas de personal las gestiona la administración de tu empresa.') }}</div>
             {% if fichaje_activo %}
                 <div class="mt-2">
                     <a href="{{ url_for('operarios.entrar') }}" class="text-primary font-weight-bold">
-                        Acceso de fichaje (DNI y PIN)
+                        {{ _('Acceso de fichaje (DNI y PIN)') }}
                     </a>
                 </div>
             {% endif %}

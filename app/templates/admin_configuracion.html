@@ -108,7 +108,7 @@
               <div class="config-field">
                 <label for="hora_limite_entrada">Hora límite de entrada</label>
                 <input type="time" id="hora_limite_entrada" name="hora_limite_entrada" class="form-control form-control-sm font-weight-bold" value="{{ configs.get('hora_limite_entrada', '08:30') }}" required>
-                <p class="config-field-hint">Corte para el resumen diario de ausencias / entradas</p>
+                <p class="config-field-hint">Corte para marcar ausencias y enviar el resumen diario (se comprueba cada 5 minutos durante todo el día)</p>
               </div>
               <div class="config-field">
                 <label for="limite_custodia">Custodia del jefe (días)</label>
@@ -238,7 +238,8 @@
             <div class="config-field">
               <label for="ausencias_auto_resolucion">Cuando hay ausencia y asignación el mismo día</label>
               <select id="ausencias_auto_resolucion" name="ausencias_auto_resolucion" class="form-control form-control-sm custom-select">
-                <option value="overlay" {% if configs.get('ausencias_auto_resolucion', 'overlay') in ['overlay', 'prefer_leave'] %}selected{% endif %}>Mantener la asignación y marcar vacaciones en el calendario (recomendado)</option>
+                <option value="overlay" {% if configs.get('ausencias_auto_resolucion', 'overlay') == 'overlay' %}selected{% endif %}>Mantener la asignación y marcar vacaciones en el calendario (recomendado con Odoo)</option>
+                <option value="prefer_leave" {% if configs.get('ausencias_auto_resolucion') == 'prefer_leave' %}selected{% endif %}>Liberar la asignación (como con vehículos): el trabajador queda libre esos días</option>
                 <option value="none" {% if configs.get('ausencias_auto_resolucion') == 'none' %}selected{% endif %}>Manual: crear conflicto para confirmar a mano</option>
                 <option value="prefer_assignment" {% if configs.get('ausencias_auto_resolucion') == 'prefer_assignment' %}selected{% endif %}>Ignorar la ausencia ese día (no marcar en calendario)</option>
               </select>
@@ -436,6 +437,7 @@
                       {% for clave, nombre in [
                         ('email_sol_generica', 'Nueva solicitud genérica'),
                         ('email_sol_concreta', 'Nueva solicitud concreta'),
+                        ('email_sol_vehiculo', 'Nueva solicitud de vehículo'),
                         ('email_sol_resuelta', 'Solicitud resuelta')
                       ] %}
                       <tr>

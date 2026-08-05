@@ -343,6 +343,10 @@ class TestObras:
     def test_fichar_mueve_si_ya_estaba_en_otra_obra(
         self, pwa, operario_conectado, obra_activa, user_operario
     ):
+        """
+        Plan en obra A + fichaje en obra B → se mueve la asignación y el
+        estado de auditoría es Conflicto (desviación), no Paracaidista.
+        """
         otra = Obra(
             nombre='Otra obra test',
             estado='En Curso',
@@ -365,6 +369,13 @@ class TestObras:
         assert Asignacion.query.filter_by(
             user_id=user_operario.id, obra_id=otra.id, fecha=date.today()
         ).first() is None
+
+        registro = RegistroFichaje.query.filter_by(
+            user_id=user_operario.id, fecha=date.today()
+        ).one()
+        assert registro.estado == 'Conflicto'
+        assert registro.obra_planificada_id == otra.id
+        assert registro.obra_real_id == obra_activa.id
 
     def test_una_obra_que_no_existe_se_rechaza(self, operario_conectado):
         respuesta = _fichar(operario_conectado, EVENTO_ENTRADA, obra_id=999999)

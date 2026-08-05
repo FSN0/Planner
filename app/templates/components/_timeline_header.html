@@ -2,13 +2,13 @@
 
   <div class="timeline-header-top">
     <div class="timeline-header-nav">
-      <a href="{{ prev_month_url }}" class="timeline-nav-btn" title="Mes anterior">
+      <a href="{{ prev_month_url }}" class="timeline-nav-btn" title="{{ _('Mes anterior') }}">
         <i class="fas fa-chevron-left"></i>
       </a>
       <h2 class="timeline-month-title">
         {{ calendar_info.month_name if calendar_info else month_name }} {{ year }}
       </h2>
-      <a href="{{ next_month_url }}" class="timeline-nav-btn" title="Mes siguiente">
+      <a href="{{ next_month_url }}" class="timeline-nav-btn" title="{{ _('Mes siguiente') }}">
         <i class="fas fa-chevron-right"></i>
       </a>
     </div>
@@ -16,7 +16,7 @@
     <div class="timeline-header-date">
       <a href="{{ url_for(request.endpoint, selected_date=today_local.strftime('%Y-%m-%d')) }}"
          class="btn-admin btn-admin-primary timeline-today-btn{% if selected_date == today_local %} is-current{% endif %}">
-        <i class="fas fa-calendar-day"></i> Hoy
+        <i class="fas fa-calendar-day"></i> {{ _('Hoy') }}
       </a>
       <form action="{{ url_for(request.endpoint) }}" method="GET" class="timeline-date-form">
         <label class="timeline-date-label" for="timeline-selected-date">
@@ -39,13 +39,13 @@
       <span class="day-number">{{ day_info.day_num }}</span>
       <div class="day-indicators">
         {% if day_info.free_count > 0 %}
-        <div class="indicator-dot dot-free" title="{{ day_info.free_count }} libres"></div>
+        <div class="indicator-dot dot-free" title="{{ day_info.free_count }} {{ _('libres') }}"></div>
         {% endif %}
         {% if day_info.ins > 0 %}
-        <div class="indicator-dot dot-in" title="{{ day_info.ins }} entradas"></div>
+        <div class="indicator-dot dot-in" title="{{ day_info.ins }} {{ _('entradas') }}"></div>
         {% endif %}
         {% if day_info.outs > 0 %}
-        <div class="indicator-dot dot-out" title="{{ day_info.outs }} salidas"></div>
+        <div class="indicator-dot dot-out" title="{{ day_info.outs }} {{ _('salidas') }}"></div>
         {% endif %}
       </div>
     </a>

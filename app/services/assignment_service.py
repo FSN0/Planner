@@ -40,6 +40,25 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
     if not valid_dates:
         return {'success': False, 'error': 'No hay fechas válidas'}
 
+    # Bloqueo duro: no asignar a obra si hay ausencia aprobada (igual que flota).
+    from app.services.leave_service import user_has_approved_leave
+    leave_dates = [d for d in valid_dates if user_has_approved_leave(worker.id, d)]
+    if leave_dates:
+        sample = ', '.join(d.strftime('%d/%m') for d in leave_dates[:5])
+        extra = f' (+{len(leave_dates) - 5} más)' if len(leave_dates) > 5 else ''
+        return {
+            'success': False,
+            'conflict': True,
+            'conflict_type': 'leave',
+            'message': (
+                f'El trabajador tiene ausencia aprobada el/los día(s) {sample}{extra}. '
+                'No se puede asignar a obra (igual que con vehículos). '
+                'Cancela la ausencia o elige otras fechas.'
+            ),
+            'leave_dates': [d.isoformat() for d in leave_dates],
+            'req_count': len(leave_dates),
+        }
+
     # ==========================================
     # LÓGICA DE ADMINISTRADOR (Modo Dios)
     # ==========================================

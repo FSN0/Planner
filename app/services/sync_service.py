@@ -256,6 +256,14 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             nuevo_estado = 'Correcto'
             nuevo_plan_id = local_obra.id
         else:
+            # ¿Tenía plan en otra obra hoy? → desviación (Conflicto).
+            # Sin plan en todo el día → Paracaidista (o inercia Correcto_Automatico).
+            plan_otro_hoy = Asignacion.query.filter(
+                Asignacion.user_id == local_user.id,
+                Asignacion.fecha == fecha_obj,
+                Asignacion.obra_id != local_obra.id,
+            ).first()
+
             ultimo_reg = RegistroFichaje.query.filter(
                 RegistroFichaje.user_id == local_user.id,
                 RegistroFichaje.fecha < fecha_obj,
@@ -267,7 +275,12 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
 
             ultima_obra_id = ultimo_reg.obra_real_id if ultimo_reg else None
 
-            if ultima_obra_id == local_obra.id:
+            if plan_otro_hoy:
+                # Había cuadrante en otra obra: es desviación, no "sin planificar".
+                nuevo_estado = 'Conflicto'
+                nuevo_plan_id = plan_otro_hoy.obra_id
+                crear_asignacion_magica = False
+            elif ultima_obra_id == local_obra.id:
                 nuevo_estado = 'Correcto_Automatico'
                 nuevo_plan_id = local_obra.id
                 crear_asignacion_magica = True

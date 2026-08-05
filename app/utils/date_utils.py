@@ -8,13 +8,17 @@ def get_calendar_info(selected_date):
       - year: año de la fecha
       - month: mes de la fecha
       - last_day: último día del mes
-      - month_name: nombre del mes
+      - month_name: nombre del mes (idioma activo)
     """
     year = selected_date.year
     month = selected_date.month
     last_day = calendar.monthrange(year, month)[1]
-    month_name = calendar.month_name[month]
-    return {"year": year, "month": month, "last_day": last_day, "month_name": month_name}
+    try:
+        from app.services.i18n_service import month_name as i18n_month_name
+        name = i18n_month_name(month)
+    except Exception:
+        name = calendar.month_name[month]
+    return {"year": year, "month": month, "last_day": last_day, "month_name": name}
 
 def parse_date(date_str, default=None):
     """

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Vehículos{% endblock %}
+{% block title %}{{ _('Vehículos') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -45,16 +45,16 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Vehículos</h1>
-        <span class="page-toolbar-count">{{ vehicles|length }} vehículos</span>
+        <h1 class="page-toolbar-title">{{ _('Vehículos') }}</h1>
+        <span class="page-toolbar-count">{{ vehicles|length }} {{ _('vehículos') }}</span>
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-car-side"></i> Coches libres
+          <i class="fas fa-car-side"></i> {{ _('Coches libres') }}
         </a>
         {% if current_user.role == 'admin' and tenant_has_odoo %}
         <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-clipboard-check"></i> Auditoría
+          <i class="fas fa-clipboard-check"></i> {{ _('Auditoría') }}
         </a>
         {% endif %}
       </div>
@@ -62,31 +62,31 @@
 
     {% if current_user.role == 'admin' %}
     <section class="veh-alta">
-      <h2><i class="fas fa-plus-circle text-primary mr-1"></i> Añadir vehículo</h2>
+      <h2><i class="fas fa-plus-circle text-primary mr-1"></i> {{ _('Añadir vehículo') }}</h2>
       <form method="POST" action="{{ url_for('admin.vehiculos_crear') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="veh-alta-grid">
           <div>
-            <label for="veh-nombre">Nombre *</label>
+            <label for="veh-nombre">{{ _('Nombre') }} *</label>
             <input type="text" id="veh-nombre" name="nombre" class="form-control form-control-sm" required
-                   placeholder="Ej. Furgoneta 1" maxlength="120">
+                   placeholder="{{ _('Ej. Furgoneta 1') }}" maxlength="120">
           </div>
           <div>
-            <label for="veh-matricula">Matrícula</label>
+            <label for="veh-matricula">{{ _('Matrícula') }}</label>
             <input type="text" id="veh-matricula" name="matricula" class="form-control form-control-sm"
                    placeholder="1234 ABC" maxlength="40">
           </div>
           <div>
-            <label for="veh-marca">Marca</label>
+            <label for="veh-marca">{{ _('Marca') }}</label>
             <input type="text" id="veh-marca" name="marca" class="form-control form-control-sm" maxlength="80">
           </div>
           <div>
-            <label for="veh-modelo">Modelo</label>
+            <label for="veh-modelo">{{ _('Modelo') }}</label>
             <input type="text" id="veh-modelo" name="modelo" class="form-control form-control-sm" maxlength="80">
           </div>
           <div>
             <button type="submit" class="btn-admin btn-admin-primary">
-              <i class="fas fa-plus"></i> Crear
+              <i class="fas fa-plus"></i> {{ _('Crear') }}
             </button>
           </div>
         </div>
@@ -111,11 +111,11 @@
           </colgroup>
           <thead>
             <tr class="header-row">
-              <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Matrícula</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Nombre</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Marca</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Modelo</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Activo</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Matrícula') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Marca') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Modelo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Activo') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% if tenant_has_odoo %}
               <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Conductor Odoo</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="num" onclick="sortAdminTable(this)"><span class="sortable-label">Km</span><i class="fas fa-sort sort-icon"></i></th>

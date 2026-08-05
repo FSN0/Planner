@@ -2,13 +2,13 @@
    Espera: stats (lista de dicts), chart_14d (opcional), chart_14d_max (opcional)
 #}
 {% if stats %}
-<section class="entity-stats-section" aria-label="Indicadores">
+<section class="entity-stats-section" aria-label="{{ _('Indicadores') }}">
   <div class="entity-stats-section-head">
     <h2 class="entity-stats-heading">
-      <i class="fas fa-chart-bar"></i> Indicadores
+      <i class="fas fa-chart-bar"></i> {{ _('Indicadores') }}
     </h2>
     {% if chart_14d %}
-    <div class="entity-mini-chart" title="Actividad últimos 14 días">
+    <div class="entity-mini-chart" title="{{ _('Actividad últimos 14 días') }}">
       {% set mx = chart_14d_max or 1 %}
       {% for v in chart_14d %}
       <span class="entity-mini-chart-bar" style="height: {{ ((v / mx) * 100)|int }}%;" title="{{ v }}"></span>
@@ -22,14 +22,15 @@
     <{{ card_tag }}
       class="entity-stat-card entity-stat-card--{{ s.tone or 'slate' }}"
       {% if s.href %}href="{{ s.href }}"{% endif %}
-      {% if s.sub %}title="{{ s.label }}: {{ s.value }} — {{ s.sub }}"{% endif %}
+      {% if s.sub %}title="{{ _(s.label) }}: {{ s.value }} — {{ _(s.sub) }}"{% endif %}
     >
       <div class="entity-stat-card-icon"><i class="fas {{ s.icon or 'fa-circle' }}"></i></div>
       <div class="entity-stat-card-body">
-        <span class="entity-stat-card-label">{{ s.label }}</span>
+        <span class="entity-stat-card-label">{{ _(s.label) }}</span>
         <span class="entity-stat-card-value">{{ s.value }}</span>
         {% if s.sub %}
-        <span class="entity-stat-card-sub">{{ s.sub }}</span>
+        {# Subs may be pre-formatted ("84 activos"); translate exact catalog hits only. #}
+        <span class="entity-stat-card-sub">{{ _(s.sub) }}</span>
         {% endif %}
         {% if s.progress is not none %}
         <div class="entity-stat-progress" aria-hidden="true">

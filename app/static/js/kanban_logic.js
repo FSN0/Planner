@@ -1,6 +1,7 @@
 // app/static/js/kanban_logic.js
 
 $(document).ready(function() {
+    const t = window.SP_T || function (key) { return key; };
 
     // =========================================================================
     // 0. CONFIGURACIÓN CENTRALIZADA Y VARIABLES GLOBALES
@@ -137,7 +138,7 @@ $(document).ready(function() {
             data: JSON.stringify(payload),
             success: function(data) {
                 if (data.success) {
-                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: t('Guardado'), showConfirmButton: false, timer: 1500});
                     $('#assignmentModal').modal('hide');
 
                     let chip = $(`.worker-chip[data-worker-id="${payload.worker_id}"]`);
@@ -157,12 +158,12 @@ $(document).ready(function() {
                         revertFunc
                     );
                 } else {
-                    Swal.fire('Error', data.error || data.message || 'Error desconocido', 'error');
+                    Swal.fire(t('Error'), data.error || data.message || t('Error desconocido'), 'error');
                     if (revertFunc) revertFunc();
                 }
             },
             error: function() {
-                Swal.fire('Error', 'Fallo de conexión', 'error');
+                Swal.fire(t('Error'), t('Fallo de conexión'), 'error');
                 if (revertFunc) revertFunc();
             }
         });
@@ -175,7 +176,7 @@ $(document).ready(function() {
         $('#libresWorkerId').val(workerId);
         $('#libresSourceObraId').val(sourceObraId);
         $('#libresWorkerName').text(workerName);
-        $('#libresSourceName').text(sourceObraName || 'Obra desconocida');
+        $('#libresSourceName').text(sourceObraName || t('Obra desconocida'));
         
         $('#chk-libres-all').prop('checked', false);
         $('#btn-toggle-container').removeClass('active-state');
@@ -207,7 +208,7 @@ $(document).ready(function() {
         var deleteAll = $('#chk-libres-all').is(':checked');
 
         if (!deleteAll) {
-            Swal.fire('Atención', "Para desasignar días sueltos usa el calendario directamente. Este botón es exclusivo para procesar la 'Baja Total'.", 'info');
+            Swal.fire(t('Atención'), t("Para desasignar días sueltos usa el calendario directamente. Este botón es exclusivo para procesar la 'Baja Total'."), 'info');
             return;
         }
 
@@ -215,7 +216,7 @@ $(document).ready(function() {
         var obraId = $('#libresSourceObraId').val();
         var $btn = $('#modalMoveToLibres .btn-primary');
         
-        $btn.prop('disabled', true).text('Procesando...');
+        $btn.prop('disabled', true).text(t('Procesando...'));
 
         $.ajax({
             url: "/api/v6/unassign_worker", // URL NUEVA UNIFICADA
@@ -224,11 +225,11 @@ $(document).ready(function() {
             data: JSON.stringify({ worker_id: workerId, obra_id: obraId, mode: 'all_obra', dates: [] }),
             success: function(res) {
                 if (res.success) { location.reload(); } 
-                else { alert("Error: " + res.message); $btn.prop('disabled', false).text('Confirmar'); }
+                else { alert(t('Error') + ': ' + res.message); $btn.prop('disabled', false).text(t('Confirmar')); }
             },
             error: function() {
-                alert("Error de conexión");
-                $btn.prop('disabled', false).text('Confirmar');
+                alert(t('Error de conexión'));
+                $btn.prop('disabled', false).text(t('Confirmar'));
             }
         });
     };
@@ -246,12 +247,12 @@ $(document).ready(function() {
         
         var $span = $(this); 
         $('#staffObraId').val(obraId); $('#staffRoleType').val(role);
-        $('#modalStaffTitle').text(role === 'jefe' ? 'Cambiar Jefe de Obra' : 'Cambiar Encargado');
-        $('#staffObraNameDisplay').text(obraName ? obraName : 'Obra sin nombre');
+        $('#modalStaffTitle').text(role === 'jefe' ? t('Cambiar Jefe de Obra') : t('Cambiar Encargado'));
+        $('#staffObraNameDisplay').text(obraName ? obraName : t('Obra sin nombre'));
         
         var $select = $('#staffSelect').empty();
         var dataList = (role === 'jefe') ? (window.LISTA_JEFES || []) : (window.LISTA_ENCARGADOS || []);
-        $select.append(new Option("-- Sin Asignar --", "", false, !currentId));
+        $select.append(new Option(t("-- Sin Asignar --"), "", false, !currentId));
         dataList.forEach(item => {
             $select.append(new Option(item.text, item.id, false, String(item.id) === String(currentId)));
         });
@@ -274,15 +275,15 @@ $(document).ready(function() {
                     var $span = $('#modalEditStaff').data('trigger-element');
                     $span.data('current-id', userId); 
                     if (!userId) {
-                        $span.html('<span class="text-muted font-italic">' + ((role === 'jefe') ? 'Sin jefe' : 'Sin encargado') + '</span>');
+                        $span.html('<span class="text-muted font-italic">' + ((role === 'jefe') ? t('Sin jefe') : t('Sin encargado')) + '</span>');
                     } else {
                         $span.text(res.new_name);
                     }
                     $span.css('background-color', '#d4edda');
                     setTimeout(() => $span.css('background-color', 'transparent'), 1000);
-                } else alert("Error: " + res.error);
+                } else alert(t('Error') + ': ' + res.error);
             },
-            complete: () => $btn.prop('disabled', false).text('Guardar Cambios')
+            complete: () => $btn.prop('disabled', false).text(t('Guardar Cambios'))
         });
     };
 
@@ -348,7 +349,7 @@ $(document).ready(function() {
             },
             error: function(xhr) {
                 console.error("Error pinning:", xhr.responseText);
-                alert("Error al guardar preferencia.");
+                alert(t("Error al guardar preferencia."));
                 $icon.toggleClass('text-primary text-muted-light');
             }
         });

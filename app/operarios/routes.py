@@ -33,6 +33,7 @@ from app.services.fichaje_operario_service import (
     fichaje_operario_activo,
     fichar,
     historial,
+    conformar_jornada,
 )
 from app.services.pin_auth_service import PinAuthError, autenticar_por_pin
 from app.utils.timezone_utils import format_datetime, format_time, today_local
@@ -192,6 +193,44 @@ def api_fichar():
         'desde': format_time(estado['desde']) if estado['desde'] else None,
         'minutos': estado['minutos'],
         'obra': estado['obra_actual'].nombre if estado['obra_actual'] else None,
+        'conforme': estado.get('conforme'),
+        'puede_conformar': estado.get('puede_conformar'),
+        'eventos': [
+            {
+                'tipo': e.tipo,
+                'hora': format_time(e.ocurrido_en),
+                'obra': e.obra.nombre if e.obra else None,
+            }
+            for e in estado['eventos']
+        ],
+    })
+
+
+@operarios_bp.route('/conformar', methods=['POST'])
+@limiter.limit('20 per minute; 100 per hour')
+def api_conformar():
+    """Conforme digital del trabajador sobre la jornada del día (firma en el libro)."""
+    try:
+        estado = conformar_jornada(
+            user=current_user,
+            ip=_ip(),
+            dispositivo=_dispositivo(),
+        )
+    except FichajeLedgerError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    except Exception:
+        current_app.logger.exception('Fallo al registrar conforme de jornada')
+        return jsonify({
+            'ok': False,
+            'error': 'No se ha podido registrar el conforme. Inténtalo de nuevo.',
+        }), 500
+
+    return jsonify({
+        'ok': True,
+        'conforme': True,
+        'puede_conformar': False,
+        'estado': estado['estado'],
+        'minutos': estado['minutos'],
         'eventos': [
             {
                 'tipo': e.tipo,

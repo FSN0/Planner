@@ -16,6 +16,7 @@ from app.models import (
     EVENTO_PAUSA_FIN,
     EVENTO_PAUSA_INICIO,
     EVENTO_SALIDA,
+    EVENTO_CONFORME_JORNADA,
     ORIGEN_PWA,
     Asignacion,
     Obra,
@@ -166,6 +167,8 @@ def estado_para_pantalla(user, fecha=None):
         'otras_obras': otras,
         'modo_geo': modo_geolocalizacion(),
         'eventos': eventos_del_dia(user.id, fecha),
+        'conforme': dia_tiene_conforme(user.id, fecha),
+        'puede_conformar': puede_conformar_jornada(user.id, fecha),
     }
 
 
@@ -272,12 +275,17 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
     )
 
     if tipo == EVENTO_ENTRADA and obra is not None:
-        # ¿Ya estaba en el cuadrante de esa obra? Si no, es un fichaje
-        # «sin planificar»: lo asignamos al tablero pero lo dejamos en
-        # auditoría (Paracaidista) para que administración lo vea.
+        # ¿Ya estaba en el cuadrante de esa obra? Si no:
+        # - plan en otra obra hoy → Conflicto (desviación)
+        # - sin plan en todo el día → Paracaidista (sin planificar)
         ya_planificado = Asignacion.query.filter_by(
             user_id=user.id, obra_id=obra.id, fecha=fecha,
         ).first() is not None
+        plan_otro = Asignacion.query.filter(
+            Asignacion.user_id == user.id,
+            Asignacion.fecha == fecha,
+            Asignacion.obra_id != obra.id,
+        ).first()
         asegurar_asignacion_por_fichaje(user, obra.id, fecha)
         proyectar_dia(user.id, fecha)
         registro = RegistroFichaje.query.filter_by(
@@ -287,6 +295,10 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
             if ya_planificado:
                 registro.estado = 'Correcto'
                 registro.obra_planificada_id = obra.id
+            elif plan_otro:
+                registro.estado = 'Conflicto'
+                registro.obra_planificada_id = plan_otro.obra_id
+                registro.obra_real_id = obra.id
             else:
                 registro.estado = 'Paracaidista'
                 # El cuadrante ya tiene la asignación; en auditoría sigue
@@ -299,6 +311,60 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
     proyectar_dia(user.id, fecha)
     db.session.commit()
 
+    return estado_para_pantalla(user, fecha)
+
+
+def dia_tiene_conforme(user_id, fecha):
+    """¿El trabajador ya firmó/confirmó esa jornada en el libro?"""
+    from app.services.fichaje_ledger_service import eventos_del_dia
+    return any(e.tipo == EVENTO_CONFORME_JORNADA for e in eventos_del_dia(user_id, fecha))
+
+
+def puede_conformar_jornada(user_id, fecha):
+    """
+    Solo se puede conformar un día cerrado (con salida) y sin conforme previo.
+    Así el informe puede mostrar la aceptación del interesado.
+    """
+    if dia_tiene_conforme(user_id, fecha):
+        return False
+    estado = jornada_abierta(user_id, fecha)
+    if estado['estado'] != 'fuera':
+        return False
+    eventos = eventos_del_dia(user_id, fecha)
+    tiene_entrada = any(e.tipo == EVENTO_ENTRADA for e in eventos)
+    tiene_salida = any(e.tipo == EVENTO_SALIDA for e in eventos)
+    return bool(tiene_entrada and tiene_salida)
+
+
+def conformar_jornada(user, fecha=None, ip=None, dispositivo=None):
+    """
+    Registra el conforme del trabajador sobre su jornada del día.
+
+    Queda en el libro inalterable (append-only + hash). Es la pieza que
+    sustituye la firma manuscrita en el informe de inspección.
+    """
+    if not fichaje_operario_activo():
+        raise FichajeLedgerError('El fichaje desde el móvil no está activado en tu empresa.')
+
+    fecha = fecha or today_local()
+    if not puede_conformar_jornada(user.id, fecha):
+        if dia_tiene_conforme(user.id, fecha):
+            raise FichajeLedgerError('Esta jornada ya está firmada.')
+        raise FichajeLedgerError(
+            'Solo puedes firmar la jornada cuando hayas fichado entrada y salida.'
+        )
+
+    registrar_evento(
+        user_id=user.id,
+        tipo=EVENTO_CONFORME_JORNADA,
+        origen=ORIGEN_PWA,
+        fecha_laboral=fecha,
+        autor_id=user.id,
+        ip=ip,
+        dispositivo=dispositivo,
+        motivo='Conforme del trabajador con el registro de jornada del día.',
+    )
+    db.session.commit()
     return estado_para_pantalla(user, fecha)
 
 
@@ -319,6 +385,7 @@ def historial(user_id, desde=None, hasta=None):
         eventos = por_dia[fecha]
         entradas = [e for e in eventos if e.tipo == EVENTO_ENTRADA]
         salidas = [e for e in eventos if e.tipo == EVENTO_SALIDA]
+        conformes = [e for e in eventos if e.tipo == EVENTO_CONFORME_JORNADA]
         dias.append({
             'fecha': fecha,
             'entrada': entradas[0].ocurrido_en if entradas else None,
@@ -326,6 +393,13 @@ def historial(user_id, desde=None, hasta=None):
             'obra': entradas[0].obra if entradas else None,
             'minutos': minutos_de(eventos),
             'eventos': eventos,
+            'conforme': bool(conformes),
+            'conforme_en': conformes[-1].ocurrido_en if conformes else None,
+            'puede_conformar': (
+                bool(entradas and salidas)
+                and not conformes
+                and fecha == today_local()
+            ),
         })
 
     return {

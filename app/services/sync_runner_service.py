@@ -101,7 +101,7 @@ def run_auto_sync_empleados():
             name=obj['name'], lastname=obj['lastname'],
             dni=obj['dni'], email=obj['email'], role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
-            company_id=default_company_id, active=True,
+            company_id=default_company_id, active=True, email_verified=True,
             password_hash=generate_password_hash("123456"),
         ))
 
@@ -182,7 +182,7 @@ def run_auto_sync_subcontratas():
             name=obj['name'], lastname=obj['lastname'],
             dni=dni, email=obj['email'], role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional'),
-            company_id=local_comp_id, active=True,
+            company_id=local_comp_id, active=True, email_verified=True,
             password_hash=generate_password_hash("123456"),
         ))
 

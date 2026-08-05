@@ -11,6 +11,7 @@
 {% block contenido %}
 <div class="fichaje"
      data-url-fichar="{{ url_for('operarios.api_fichar') }}"
+     data-url-conformar="{{ url_for('operarios.api_conformar') }}"
      data-modo-geo="{{ modo_geo }}"
      data-estado="{{ estado }}">
 
@@ -86,6 +87,20 @@
         </div>
     {% endif %}
 
+    {% if puede_conformar %}
+        <button class="boton boton--conforme" type="button" id="btn-conformar" data-tipo="conforme">
+            Firmar jornada de hoy
+        </button>
+        <p class="nota-legal">
+            Al firmar confirmas que el registro de entrada, pausas y salida de hoy es correcto.
+            Queda anotado en el libro inalterable de tu empresa.
+        </p>
+    {% elif conforme %}
+        <p class="nota-legal" id="conforme-ok">
+            Jornada de hoy firmada. Gracias.
+        </p>
+    {% endif %}
+
     {% if modo_geo != 'desactivada' %}
         <p class="nota-legal">
             {% if modo_geo == 'obligatoria' %}
@@ -110,6 +125,7 @@
                         {% elif evento.tipo == 'pausa_inicio' %}Inicio de pausa
                         {% elif evento.tipo == 'pausa_fin' %}Fin de pausa
                         {% elif evento.tipo == 'reasignacion_obra' %}Cambio de obra
+                        {% elif evento.tipo == 'conforme_jornada' %}Conforme / firma
                         {% else %}{{ evento.tipo }}{% endif %}
                     </span>
                     <span class="jornada__obra">{{ evento.obra.nombre if evento.obra else '' }}</span>

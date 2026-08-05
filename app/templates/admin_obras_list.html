@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Obras{% endblock %}
+{% block title %}{{ _('Obras') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -16,32 +16,32 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Obras</h1>
-        <span class="page-toolbar-count">{{ obras|length }} registros</span>
+        <h1 class="page-toolbar-title">{{ _('Obras') }}</h1>
+        <span class="page-toolbar-count">{{ obras|length }} {{ _('registros') }}</span>
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.import_obras') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-file-import"></i> Importar
+          <i class="fas fa-file-import"></i> {{ _('Importar') }}
         </a>
         <a href="{{ url_for('admin.create_obra') }}" class="btn-admin btn-admin-primary">
-          <i class="fas fa-plus"></i> Nueva
+          <i class="fas fa-plus"></i> {{ _('Nueva') }}
         </a>
       </div>
     </div>
 
     <div id="bulk-actions-toolbar" class="bulk-toolbar d-none">
       <span class="bulk-toolbar-count">
-        <span id="selected-count">0</span> seleccionadas
+        <span id="selected-count">0</span> {{ _('seleccionadas') }}
       </span>
       <div class="bulk-toolbar-actions">
         <button type="button" class="btn-bulk btn-bulk-warning" onclick="changeBulkStatus('Pendiente')">
-          <i class="fas fa-pause"></i> Pendiente
+          <i class="fas fa-pause"></i> {{ _('Pendiente') }}
         </button>
         <button type="button" class="btn-bulk btn-bulk-success" onclick="changeBulkStatus('En Curso')">
-          <i class="fas fa-play"></i> En curso
+          <i class="fas fa-play"></i> {{ _('En curso') }}
         </button>
         <button type="button" class="btn-bulk btn-bulk-danger" onclick="changeBulkStatus('Finalizada')">
-          <i class="fas fa-flag-checkered"></i> Finalizar
+          <i class="fas fa-flag-checkered"></i> {{ _('Finalizar') }}
         </button>
       </div>
     </div>
@@ -65,34 +65,34 @@
           <thead>
             <tr class="header-row">
               <th class="col-check">
-                <input type="checkbox" id="selectAllObras" title="Seleccionar todas">
+                <input type="checkbox" id="selectAllObras" title="{{ _('Seleccionar todas') }}">
               </th>
-              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Código</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Código') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Nombre</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Cliente</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Cliente') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Jefe</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Jefe') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Inicio</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Inicio') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="7" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Fin</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="7" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Fin') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Import.</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Import.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col col-check" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)" title="Ordenar">
-                <span class="sortable-label">Sols.</span><i class="fas fa-sort sort-icon"></i>
+              <th class="sortable-col col-check" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+                <span class="sortable-label">{{ _('Sols.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="col-actions"></th>
             </tr>
@@ -131,7 +131,7 @@
                       <i class="fas fa-user-tie jefe-trigger-icon"></i>
                       <span class="jefe-name-text">{{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}</span>
                     {% else %}
-                      <span class="jefe-unassigned">Sin asignar</span>
+                      <span class="jefe-unassigned">{{ _('Sin asignar') }}</span>
                     {% endif %}
                     <i class="fas fa-chevron-down jefe-trigger-caret"></i>
                   </button>
@@ -140,15 +140,15 @@
                 <td data-sort-value="{{ obra.estado|lower }}">
                   {% if obra.estado == 'En Curso' %}
                     <span class="badge-soft badge-soft-green">
-                      <span class="status-dot green"></span> En curso
+                      <span class="status-dot green"></span> {{ _('En curso') }}
                     </span>
                   {% elif obra.estado == 'Finalizada' %}
                     <span class="badge-soft badge-soft-slate">
-                      <span class="status-dot gray"></span> Finalizada
+                      <span class="status-dot gray"></span> {{ _('Finalizada') }}
                     </span>
                   {% else %}
                     <span class="badge-soft badge-soft-amber">
-                      <span class="status-dot" style="background:#f59e0b;"></span> {{ obra.estado }}
+                      <span class="status-dot" style="background:#f59e0b;"></span> {{ _(obra.estado) }}
                     </span>
                   {% endif %}
                 </td>
@@ -163,7 +163,7 @@
                     </span>
                   {% else %}
                     <span class="badge-soft badge-soft-gray">
-                      <i class="fas fa-keyboard"></i> Manual
+                      <i class="fas fa-keyboard"></i> {{ _('Manual') }}
                     </span>
                   {% endif %}
                 </td>

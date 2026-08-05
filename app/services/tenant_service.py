@@ -14,9 +14,14 @@ def provision_new_tenant(
     admin_password,
     custom_domain=None,
     modulos_activos=None,
+    email_verified=True,
+    active=True,
 ):
     """
     Registra un nuevo cliente, construye su esquema aislado, crea su empresa matriz y su primer administrador.
+
+    email_verified/active: True en superadmin y demos; el alta pública pasa False
+    hasta que el admin confirme el correo.
     """
     subdominio = (subdominio or '').lower().strip()
     # Validación estricta: solo letras minúsculas, números y guiones.
@@ -97,9 +102,10 @@ def provision_new_tenant(
             role=ROLE_ADMIN,
             name="Administrador",
             lastname=nombre_empresa,
-            dni=f"ADMIN-{tenant_id}", 
-            active=True,
-            company_id=empresa_interna.id # <--- VINCULAMOS AL ADMIN CON LA EMPRESA
+            dni=f"ADMIN-{tenant_id}",
+            active=bool(active),
+            email_verified=bool(email_verified),
+            company_id=empresa_interna.id,  # vinculamos al admin con la empresa
         )
         db.session.add(admin_user)
         db.session.commit()

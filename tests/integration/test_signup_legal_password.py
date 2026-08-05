@@ -63,18 +63,30 @@ class TestSignupValidacion:
             },
             follow_redirects=False,
         )
-        assert resp.status_code in (302, 303)
-        location = resp.headers.get('Location', '')
-        assert 'demofirma.' in location
-        assert '/auth/entrar-alta' in location
-        assert 't=' in location
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        assert 'Revisa tu correo' in html
+        assert 'admin@demofirma.test' in html
+        assert 'demofirma' in html
+
         tenant = Tenant.query.filter_by(subdominio='demofirma').first()
         assert tenant is not None
         assert tenant.plan == 'free'
         assert tenant.billing_exempt is False
+        assert tenant.legal_aceptado_at is not None
+        assert tenant.legal_privacidad_version == '2026-08'
+        assert tenant.legal_condiciones_version == '2026-08'
         assert (tenant.modulos_activos or {}).get('fichaje_operario') is True
         assert (tenant.modulos_activos or {}).get('onboarding') is True
         assert (tenant.modulos_activos or {}).get('registro_jornada') is True
+
+        session.execute(text(f'SET search_path TO {tenant.schema_name}'))
+        from app.models import User
+        admin = User.query.filter_by(email='admin@demofirma.test').first()
+        assert admin is not None
+        assert admin.active is False
+        assert admin.email_verified is False
+        session.execute(text('SET search_path TO public'))
 
         # Limpieza del esquema creado por el alta
         session.execute(text('DROP SCHEMA IF EXISTS tenant_demofirma CASCADE'))

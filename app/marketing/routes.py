@@ -8,7 +8,6 @@ from flask import (
     Blueprint,
     abort,
     flash,
-    redirect,
     render_template,
     request,
     url_for,
@@ -70,16 +69,12 @@ def render_landing():
 @limiter.limit('5 per minute; 20 per hour', methods=['POST'])
 def alta():
     _require_marketing()
-    from app.services.signup_service import (
-        SignupError,
-        registrar_empresa,
-        url_entrada_automatica,
-    )
+    from app.services.signup_service import SignupError, registrar_empresa
 
     if request.method == 'POST':
         try:
-            admin_email = request.form.get('admin_email')
-            tenant = registrar_empresa(
+            admin_email = (request.form.get('admin_email') or '').strip().lower()
+            tenant, email_enviado = registrar_empresa(
                 nombre_empresa=request.form.get('nombre_empresa'),
                 subdominio=request.form.get('subdominio'),
                 admin_email=admin_email,
@@ -88,8 +83,20 @@ def alta():
                 acepta_privacidad=bool(request.form.get('acepta_privacidad')),
                 acepta_condiciones=bool(request.form.get('acepta_condiciones')),
             )
-            # Salto al subdominio ya autenticado (la cookie de marketing no vale allí).
-            return redirect(url_entrada_automatica(tenant, admin_email))
+            if not email_enviado:
+                flash(
+                    'Tu espacio se ha creado, pero no hemos podido enviar el correo '
+                    'de verificación. Revisa la configuración de correo del servidor '
+                    'o contacta con soporte.',
+                    'warning',
+                )
+            return render_template(
+                'marketing/alta_pendiente.html',
+                current_year=datetime.utcnow().year,
+                email=admin_email,
+                subdomain=tenant.subdominio,
+                base_domain=_alta_base_domain(),
+            )
         except SignupError as exc:
             flash(str(exc), 'danger')
         except Exception:

@@ -1,11 +1,11 @@
-"""ACL helpers for ROLE_LABORAL (and shared admin checks)."""
+"""ACL helpers for ROLE_LABORAL / ROLE_RRHH (and shared admin checks)."""
 from __future__ import annotations
 
-from app.models import ROLE_ADMIN, ROLE_LABORAL
+from app.models import ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH, ROLES_LABORAL_LIKE
 from app.services.config_service import get_tenant_config
 from app.services.log_notification_service import LABORAL_LOG_CATEGORIES
 
-# Modules → allowed actions for laboral (r/w/x). Admin bypasses via user_can.
+# Modules → allowed actions for laboral/rrhh (r/w/x). Admin bypasses via user_can.
 LABORAL_ACL = {
     'ausencias': frozenset('rwx'),
     'auditoria_fichajes': frozenset('rwx'),  # resolve gated by config; sections limited
@@ -33,7 +33,20 @@ def is_admin(user) -> bool:
 
 
 def is_laboral(user) -> bool:
-    return bool(user and getattr(user, 'is_authenticated', False) and user.role == ROLE_LABORAL)
+    """Laboral y RRHH comparten ACL hasta que RRHH tenga permisos propios."""
+    return bool(
+        user
+        and getattr(user, 'is_authenticated', False)
+        and getattr(user, 'role', None) in ROLES_LABORAL_LIKE
+    )
+
+
+def expand_laboral_roles(*roles):
+    """Si el conjunto incluye laboral, añade RRHH."""
+    allowed = tuple(roles)
+    if ROLE_LABORAL in allowed and ROLE_RRHH not in allowed:
+        return allowed + (ROLE_RRHH,)
+    return allowed
 
 
 def laboral_puede_resolver_fichajes() -> bool:
@@ -77,7 +90,7 @@ def laboral_log_categories(user) -> list:
 def user_can(user, module: str, action: str) -> bool:
     """
     Check module permission. action in 'r','w','x'.
-    Admin: always True. Laboral: LABORAL_ACL. Others: False for these modules
+    Admin: always True. Laboral/RRHH: LABORAL_ACL. Others: False for these modules
     (callers still use roles_required for jefe/admin routes).
     """
     if not user or not getattr(user, 'is_authenticated', False):

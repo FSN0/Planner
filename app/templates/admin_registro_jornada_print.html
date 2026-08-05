@@ -101,6 +101,9 @@
     {% if informe.dias_con_correccion %}
       · Días con corrección anotada: <strong>{{ informe.dias_con_correccion }}</strong>
     {% endif %}
+    {% if informe.dias_con_conforme is defined %}
+      · Días con conforme del trabajador: <strong>{{ informe.dias_con_conforme }}</strong>
+    {% endif %}
   </p>
 
   {% for t in informe.trabajadores %}
@@ -123,8 +126,10 @@
             <th>Fecha</th>
             <th>Entrada</th>
             <th>Salida</th>
-            <th>Horas</th>
+            <th>Horas netas</th>
+            <th>Pausas</th>
             <th>Obra</th>
+            <th>Conforme</th>
             <th>Observaciones</th>
           </tr>
         </thead>
@@ -135,7 +140,31 @@
               <td>{{ d.entrada|format_time if d.entrada else '—' }}</td>
               <td>{{ d.salida|format_time if d.salida else '—' }}</td>
               <td>{{ formatear_horas(d.minutos) }}</td>
+              <td>
+                {% if d.tiene_pausas %}
+                  {{ formatear_horas(d.minutos_pausas) }}
+                  {% if d.pausas %}
+                    <div class="muted" style="font-size:0.8em;">
+                      {% for p in d.pausas %}
+                        {{ p.inicio|format_time }}–{{ p.fin|format_time }}{% if not loop.last %}; {% endif %}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {% if d.pausa_abierta %}
+                    <div class="muted" style="font-size:0.8em;">Abierta desde {{ d.pausa_abierta|format_time }}</div>
+                  {% endif %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
               <td>{{ d.obra_nombre or '—' }}</td>
+              <td>
+                {% if d.conforme %}
+                  Sí{% if d.conforme_en %} · {{ d.conforme_en|format_time }}{% endif %}
+                {% else %}
+                  Pendiente
+                {% endif %}
+              </td>
               <td>
                 {% if d.tiene_correcciones %}
                   {% for c in d.correcciones %}
@@ -151,6 +180,23 @@
           {% endfor %}
         </tbody>
       </table>
+      <div class="firma-block" style="margin:14px 0 8px; display:flex; gap:24px; justify-content:space-between;">
+        <div style="flex:1;">
+          <div class="muted" style="margin-bottom:28px;">Firma del trabajador (si se imprime en papel)</div>
+          <div style="border-bottom:1px solid #94a3b8; height:1px;"></div>
+          <div class="muted" style="margin-top:4px;">{{ t.nombre }} · DNI {{ t.dni or '—' }}</div>
+        </div>
+        <div style="flex:1;">
+          <div class="muted" style="margin-bottom:28px;">Sello / firma de la empresa</div>
+          <div style="border-bottom:1px solid #94a3b8; height:1px;"></div>
+        </div>
+      </div>
+      {% if t.dias_conformados is defined %}
+      <p class="muted">
+        Conforme digital en el libro: {{ t.dias_conformados }} de {{ t.dias_trabajados }} día(s).
+        El conforme se registra con DNI+PIN en el móvil del trabajador y queda encadenado por hash.
+      </p>
+      {% endif %}
     </section>
   {% else %}
     <p>No hay registros de jornada en este periodo.</p>
@@ -159,8 +205,11 @@
   <footer class="footer">
     <p>
       Este documento se genera a partir del libro de eventos de jornada (append-only
-      con cadena de hashes). Las correcciones no borran el dato original: quedan
-      anotadas como eventos posteriores con su motivo.
+      con cadena de hashes). Las horas netas descuentan las pausas registradas.
+      Las correcciones no borran el dato original: quedan anotadas como eventos
+      posteriores con su motivo. El conforme del trabajador acredita que revisó
+      y aceptó el registro del día (vía PWA con autenticación DNI+PIN); si el
+      documento se imprime, puede añadirse además la firma manuscrita.
     </p>
     <p>
       Huella del informe:<br>

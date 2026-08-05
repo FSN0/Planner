@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
+    const t = window.SP_T || function (key) { return key; };
     
     window.hiddenGroups = new Set();
     window.allGroupsMaster = [];
@@ -197,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
         editable: { add: false, updateTime: true, updateGroup: true, remove: false },
         zoomMin: 1000 * 60 * 60 * 24 * 7,
         zoomMax: 1000 * 60 * 60 * 24 * 365,
-        locale: 'es',
+        locale: (typeof window.SP_LOCALE === 'string' && window.SP_LOCALE) ? window.SP_LOCALE : (document.documentElement.lang || 'es').slice(0, 2),
 
         order: function(a, b) {
             let empA = a.empresa_nombre || "ZZ_Sin_Empresa";
@@ -273,7 +274,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var btn = document.createElement('div');
             btn.className = 'btn-ojo-magico';
             btn.setAttribute('data-group-id', group.id);
-            btn.title = 'Mostrar / Ocultar operarios';
+            btn.title = t('Mostrar / Ocultar operarios');
             btn.style.position = 'absolute';
             btn.style.right = '4px';
             btn.style.top = '50%';
@@ -299,7 +300,7 @@ document.addEventListener('DOMContentLoaded', function() {
             var btnCostes = document.createElement('a');
             btnCostes.href = window.location.protocol + '//' + window.location.hostname + ':4999/obra/' + group.id;
             btnCostes.target = '_blank';
-            btnCostes.title = 'Ver Hoja de Costes (BIM)';
+            btnCostes.title = t('Ver Hoja de Costes (BIM)');
             btnCostes.style.position = 'absolute';
             // Lo ponemos a 28px de la derecha para que quede justo a la izquierda del ojo mágico
             btnCostes.style.right = '28px'; 
@@ -430,7 +431,7 @@ document.addEventListener('DOMContentLoaded', function() {
             let oldEnd = oldItem ? moment(oldItem.end).subtract(1, 'days') : endReal;
 
             if (endReal.isBefore(hoy)) {
-                Swal.fire('Acción inválida', 'La fecha de fin de la asignación debe ser al menos hoy.', 'warning');
+                Swal.fire(t('Acción inválida'), t('La fecha de fin de la asignación debe ser al menos hoy.'), 'warning');
                 callback(null);
                 return;
             }
@@ -453,11 +454,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (oldGroup !== item.group) {
                 Swal.fire({ 
-                    title: '¿Trasladar a otra Obra?', 
+                    title: t('¿Trasladar a otra Obra?'),
                     text: `Vas a reasignar al operario del ${moment(startStr).format('DD/MM')} al ${moment(endStr).format('DD/MM')}.`, 
                     icon: 'question', 
                     showCancelButton: true, 
-                    confirmButtonText: 'Sí, mover'
+                    confirmButtonText: t('Sí, mover')
                 }).then((result) => { 
                     if (result.isConfirmed) ejecutarAccionAPI(pendingRevert, function() { callback(item); }); 
                     else callback(null); 
@@ -469,7 +470,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     function formatEmpresaLabel(nombre) {
-        if (!nombre || nombre === 'ZZ_Sin_Empresa') return 'Sin empresa';
+        if (!nombre || nombre === 'ZZ_Sin_Empresa') return t('Sin empresa');
         return nombre;
     }
 
@@ -546,12 +547,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('wp-name').href = `/admin/solicitudes/${item.solicitud_id}`;
                 
                 let compEl = document.getElementById('wp-company');
-                compEl.textContent = 'Solicitud de Personal';
+                compEl.textContent = t('Solicitud de Personal');
                 compEl.href = '#';
                 compEl.style.pointerEvents = 'none';
                 compEl.className = 'text-muted';
                 
-                document.getElementById('wp-role').textContent = 'Haz clic en el botón inferior para gestionarla.';
+                document.getElementById('wp-role').textContent = t('Haz clic en el botón inferior para gestionarla.');
                 document.getElementById('wp-rating').innerHTML = '';
 
                 // 2. Ocultamos automáticamente los botones de "Desasignar" (¡SIN usar la palabra button!)
@@ -599,7 +600,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     compEl.classList.add('text-muted');
                 }
                 
-                let roleText = item.categoria || 'Sin categoría especificada';
+                let roleText = item.categoria || t('Sin categoría especificada');
                 if (item.especialidad) roleText += ` (${item.especialidad})`;
                 document.getElementById('wp-role').textContent = roleText;
                 
@@ -990,12 +991,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         revertFunc
                     );
                 } else {
-                    Swal.fire('Error', data.error || data.message, 'error');
+                    Swal.fire(t('Error'), data.error || data.message, 'error');
                     if (revertFunc) revertFunc();
                 }
             },
             error: function(xhr) {
-                Swal.fire('Error', 'Error de conexión', 'error');
+                Swal.fire(t('Error'), t('Error de conexión'), 'error');
                 if (revertFunc) revertFunc();
             }
         });
@@ -1162,12 +1163,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         Swal.fire('Completado', data.message, 'success');
                         window.loadTimelineData(); 
                     } else {
-                        Swal.fire('Error', data.message || 'Ocurrió un error', 'error');
+                        Swal.fire(t('Error'), data.message || t('Ocurrió un error'), 'error');
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    Swal.fire('Error', 'Fallo de conexión.', 'error');
+                    Swal.fire(t('Error'), t('Fallo de conexión.'), 'error');
                 });
             }
         });

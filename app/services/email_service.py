@@ -117,6 +117,95 @@ def notificar_resolucion_solicitud(solicitud, admin_name, worker_id=None):
     
     send_email(asunto, destinatarios, texto)
 
+
+def _clave_email_solicitud_vehiculo():
+    """Config dedicada email_sol_vehiculo; si no existe, reutiliza email_sol_concreta."""
+    conf = ConfiguracionGlobal.query.filter_by(clave='email_sol_vehiculo').first()
+    if conf and conf.valor:
+        return 'email_sol_vehiculo'
+    return 'email_sol_concreta'
+
+
+def notificar_nueva_solicitud_vehiculo(solicitud, solicitante_name):
+    """Notifica la creación de una SolicitudVehiculo (espejo de personal concreta)."""
+    clave = _clave_email_solicitud_vehiculo()
+    destinatarios = _obtener_destinatarios(clave, worker_id=solicitud.empleado_id)
+    if not destinatarios:
+        return
+
+    jefe = User.query.get(solicitud.requested_by_id)
+    nombre_jefe = f"{jefe.name} {jefe.lastname}" if jefe else solicitante_name
+    tipo_solic = (
+        "baja de vehículo" if getattr(solicitud, 'accion', '') == 'DESASIGNAR'
+        else "vehículo"
+    )
+
+    from app.models import Vehiculo
+    veh = getattr(solicitud, 'vehiculo', None)
+    if veh is None and solicitud.vehiculo_id:
+        veh = Vehiculo.query.get(solicitud.vehiculo_id)
+    veh_txt = veh.label() if veh else (
+        f"vehículo #{solicitud.vehiculo_id}" if solicitud.vehiculo_id else "cualquier"
+    )
+
+    asunto = f"NUEVA SOLICITUD DE {tipo_solic.upper()} - {veh_txt}"
+    texto = (
+        f"El usuario {nombre_jefe} ha creado una nueva solicitud de {tipo_solic}.\n\n"
+        f"Vehículo: {veh_txt}\n"
+    )
+    worker = User.query.get(solicitud.empleado_id)
+    if worker:
+        texto += f"Trabajador: {worker.name} {worker.lastname}\n"
+    texto += (
+        f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
+        f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n"
+    )
+    notas = (getattr(solicitud, 'notas', None) or '').strip()
+    if notas:
+        texto += f"\nNotas del solicitante:\n{notas}\n"
+    texto += "\nPor favor, entra en la plataforma para revisarla y gestionarla."
+    send_email(asunto, destinatarios, texto)
+
+
+def notificar_resolucion_solicitud_vehiculo(solicitud, admin_name):
+    """Notifica resolución de SolicitudVehiculo (aceptar/denegar)."""
+    destinatarios = _obtener_destinatarios(
+        'email_sol_resuelta', worker_id=solicitud.empleado_id
+    )
+    # Sin obra: si 'jefe' está suscrito, avisar al solicitante
+    conf = ConfiguracionGlobal.query.filter_by(clave='email_sol_resuelta').first()
+    if conf and conf.valor and 'jefe' in conf.valor.split(','):
+        requester = User.query.get(solicitud.requested_by_id)
+        if requester and requester.email:
+            destinatarios = list(set(destinatarios + [requester.email]))
+    if not destinatarios:
+        return
+
+    from app.models import Vehiculo
+    veh = getattr(solicitud, 'vehiculo', None)
+    if veh is None and solicitud.vehiculo_id:
+        veh = Vehiculo.query.get(solicitud.vehiculo_id)
+    veh_txt = veh.label() if veh else (
+        f"vehículo #{solicitud.vehiculo_id}" if solicitud.vehiculo_id else "—"
+    )
+
+    asunto = f"Resolución de solicitud de vehículo #{solicitud.id} - {veh_txt}"
+    texto = (
+        f"La solicitud de vehículo ha sido resuelta por {admin_name}.\n\n"
+        f"Estado: {solicitud.estado}\n"
+        f"Acción solicitada: {getattr(solicitud, 'accion', 'ASIGNAR')}\n"
+        f"Vehículo: {veh_txt}\n"
+    )
+    worker = User.query.get(solicitud.empleado_id)
+    if worker:
+        texto += f"Trabajador: {worker.name} {worker.lastname}\n"
+    texto += (
+        f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
+        f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n\n"
+        f"Revisa la plataforma para más detalles."
+    )
+    send_email(asunto, destinatarios, texto)
+
 def notificar_traslado_interno(jefe_name, worker, target_obra, dates, obras_origen=None):
     """Notifica cuando un Jefe mueve a un operario por custodia entre sus obras"""
     destinatarios = _obtener_destinatarios('email_traslado', obra_id=target_obra.id, worker_id=worker.id)

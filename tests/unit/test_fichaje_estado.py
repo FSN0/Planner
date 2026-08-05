@@ -25,7 +25,12 @@ def test_ausencia_pendiente_es_naranja():
     assert color_fichaje_agregado(['Correcto', 'Ausencia']) == '#f59e0b'
 
 
-def test_todo_resuelto_es_verde():
+def test_conflicto_es_rojo():
+    assert estado_fichaje_agregado(['Correcto', 'Conflicto']) == 'Conflicto'
+    assert color_fichaje_agregado(['Correcto', 'Conflicto']) == '#ef4444'
+
+
+def test_resuelto_tras_cerrar_hermanos_es_verde():
     assert color_fichaje_agregado(
         ['Resuelto_Asignado', 'Resuelto_Ignorado']
     ) == '#10b981'

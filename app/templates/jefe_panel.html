@@ -252,7 +252,7 @@
   </main>
 </div>
 
-{% with modal_id='modalTimelineFichaje', modal_title='Historial del Fichaje' %}
+{% with modal_id='modalTimelineFichaje', modal_title=_('Historial del Fichaje') %}
   {% include 'components/_person_day_timeline_modal.html' %}
 {% endwith %}
 {% endblock %}
@@ -282,7 +282,7 @@ function dashboardResolverFichaje(id, accion) {
           if (!restantes.length) window.location.reload();
         }, 300);
       } else {
-        alert('Error: ' + data.error);
+        alert({{ _('Error')|tojson }} + ': ' + data.error);
         if (row) {
           row.style.opacity = '1';
           row.style.pointerEvents = 'auto';
@@ -302,7 +302,7 @@ document.addEventListener('DOMContentLoaded', function() {
     PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
       modalId: 'modalTimelineFichaje',
       apiBase: '/sync/timeline_dia',
-      loadingMessage: 'Recopilando el día completo del operario...',
+      loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
     });
   }
 
@@ -336,7 +336,7 @@ document.addEventListener('DOMContentLoaded', function() {
       data: {
         labels: planLabels,
         datasets: [{
-          label: 'Asignaciones',
+          label: {{ _('Asignaciones')|tojson }},
           data: planValues,
           backgroundColor: chartColors.primaryLight,
           borderColor: chartColors.primary,

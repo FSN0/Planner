@@ -120,7 +120,9 @@ celery.conf.beat_schedule = {
     },
     'verificador-corte-dinamico': {
         'task': 'app.celery_worker.verificar_hora_corte',
-        'schedule': crontab(minute='2,7,12,17,22,27,32,37,42,47,52,57', hour='6-12'),
+        # Cada 5 min, todo el día: la hora de corte es configurable por tenant
+        # (p. ej. 14:00). Antes solo cubría 6–12 y un corte tarde no se ejecutaba.
+        'schedule': crontab(minute='2,7,12,17,22,27,32,37,42,47,52,57'),
     }
 }
 

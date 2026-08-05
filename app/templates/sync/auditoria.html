@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Auditoría de Fichajes{% endblock %}
+{% block title %}{{ _('Auditoría de Fichajes') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% macro audit_sort_th(col, label, width='', align='', sort_type='') %}
-<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ label }}</span><i class="fas fa-sort sort-icon"></i></th>
+<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
 {% endmacro %}
 
 {% macro celda_notas(reg) %}
@@ -33,23 +33,23 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Auditoría de fichajes</h1>
-        <span class="page-toolbar-count">Odoo vs planificación</span>
+        <h1 class="page-toolbar-title">{{ _('Auditoría de fichajes') }}</h1>
+        <span class="page-toolbar-count">{{ _('Odoo vs planificación') }}</span>
       </div>
       <div class="page-toolbar-actions">
         {% if current_user.role != 'laboral' %}
         <select id="diasSync" class="form-control custom-select mr-2">
-          <option value="0">Solo hoy</option>
-          <option value="7" selected>Últimos 7 días</option>
-          <option value="15">Últimos 15 días</option>
-          <option value="30">Último mes</option>
-          <option value="60">Dos meses</option>
+          <option value="0">{{ _('Solo hoy') }}</option>
+          <option value="7" selected>{{ _('Últimos 7 días') }}</option>
+          <option value="15">{{ _('Últimos 15 días') }}</option>
+          <option value="30">{{ _('Último mes') }}</option>
+          <option value="60">{{ _('Dos meses') }}</option>
         </select>
         <button onclick="forzarSyncFichajes()" class="btn-admin btn-admin-primary">
-          <i class="fas fa-sync-alt"></i> Sincronizar
+          <i class="fas fa-sync-alt"></i> {{ _('Sincronizar') }}
         </button>
         <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-arrow-left"></i> Sync
+          <i class="fas fa-arrow-left"></i> {{ _('Sincronización Odoo') }}
         </a>
         {% endif %}
       </div>
@@ -61,30 +61,30 @@
 
     <div class="auditoria-stats">
       {% if 'conflictos' in visible_sections and var_conflictos %}
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseConflictos" title="Ir a desviaciones">
-        <i class="fas fa-random"></i> {{ var_conflictos|length }} desviaciones
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseConflictos" title="{{ _('Ir a desviaciones') }}">
+        <i class="fas fa-random"></i> {{ var_conflictos|length }} {{ _('desviaciones') }}
       </span>
       {% endif %}
       {% if 'paracaidistas' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseParacaidistas" title="Ir a sin planificar">
-        <i class="fas fa-parachute-box"></i> {{ var_paracaidistas|length }} sin planificar
+      <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseParacaidistas" title="{{ _('Ir a sin planificar') }}">
+        <i class="fas fa-parachute-box"></i> {{ var_paracaidistas|length }} {{ _('sin planificar') }}
       </span>
       {% endif %}
       {% if 'ausencias' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseAusencias" title="Ir a ausencias">
-        <i class="fas fa-user-slash"></i> {{ var_ausencias|length }} ausencias
+      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseAusencias" title="{{ _('Ir a ausencias') }}">
+        <i class="fas fa-user-slash"></i> {{ var_ausencias|length }} {{ _('ausencias') }}
       </span>
       {% endif %}
       {% if correcciones and 'modificacion_odoo' in visible_sections %}
       {% if correcciones %}
-      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseCorrecciones" title="Ir a modificaciones Odoo">
-        <i class="fas fa-pen"></i> {{ correcciones|length }} cambios Odoo
+      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseCorrecciones" title="{{ _('Ir a modificaciones Odoo') }}">
+        <i class="fas fa-pen"></i> {{ correcciones|length }} {{ _('cambios Odoo') }}
       </span>
       {% endif %}
       {% endif %}
       {% if 'historico_global' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseHistorial" title="Ir al histórico">
-        <i class="fas fa-archive"></i> {{ historial|length }} en histórico
+      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseHistorial" title="{{ _('Ir al histórico') }}">
+        <i class="fas fa-archive"></i> {{ historial|length }} {{ _('en histórico') }}
       </span>
       {% endif %}
     </div>
@@ -96,7 +96,7 @@
             <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
                 <h6 class="auditoria-section-title text-danger mb-0">
                     <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-random"></i></span>
-                    Desviaciones de plan
+                    {{ _('Desviaciones de plan') }}
                     <span class="badge-count badge-count-danger">{{ var_conflictos|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
@@ -160,7 +160,7 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> No hay desviaciones pendientes</div>
+                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> {{ _('No hay desviaciones pendientes') }}</div>
                 {% endif %}
             </div>
         </div>
@@ -171,7 +171,7 @@
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title text-info mb-0">
                     <span class="section-icon-wrap section-icon-wrap--info"><i class="fas fa-parachute-box"></i></span>
-                    Fichajes sin planificar
+                    {{ _('Fichajes sin planificar') }}
                     <span class="badge-count badge-count-info">{{ var_paracaidistas|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
@@ -228,7 +228,7 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> No hay fichajes sin planificar</div>
+                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> {{ _('No hay fichajes sin planificar') }}</div>
                 {% endif %}
             </div>
         </div>
@@ -239,7 +239,7 @@
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title mb-0" style="color: #d97706;">
                     <span class="section-icon-wrap section-icon-wrap--warning"><i class="fas fa-user-slash"></i></span>
-                    Ausencias
+                    {{ _('Ausencias') }}
                     <span class="badge-count badge-count-warning">{{ var_ausencias|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
@@ -290,7 +290,7 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> No hay ausencias registradas</div>
+                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> {{ _('No hay ausencias registradas') }}</div>
                 {% endif %}
             </div>
         </div>
@@ -302,7 +302,7 @@
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseCorrecciones" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title mb-0" style="color: #c2410c;">
                     <span class="section-icon-wrap section-icon-wrap--odoo"><i class="fas fa-pen-fancy"></i></span>
-                    Modificaciones Odoo (RRHH)
+                    {{ _('Modificaciones Odoo (RRHH)') }}
                     <span class="badge-count badge-count-odoo">{{ correcciones|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
@@ -371,7 +371,7 @@
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseHistorial" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title mb-0 text-secondary">
                     <span class="section-icon-wrap section-icon-wrap--archive"><i class="fas fa-history"></i></span>
-                    Histórico global
+                    {{ _('Histórico global') }}
                     <span class="badge-count badge-count-muted">{{ historial|length }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
@@ -509,11 +509,12 @@ function initAuditDataTable(tableId, options) {
     var $el = $('#' + tableId);
     if (!$el.length || $.fn.DataTable.isDataTable($el)) return;
     $el.find('thead th[onclick]').removeAttr('onclick');
+    var dtLang = {es:'es-ES', en:'en-GB', pt:'pt-PT', fr:'fr-FR'}[window.SP_LOCALE || 'es'] || 'es-ES';
     var defaults = {
         order: [[0, 'desc']],
         ordering: true,
         columnDefs: [{ targets: 0, type: 'num' }],
-        language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/es-ES.json' }
+        language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/' + dtLang + '.json' }
     };
     if (tableId === 'historialTable') {
         defaults.columnDefs.push({ targets: 8, type: 'num' });

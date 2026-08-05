@@ -15,9 +15,11 @@
     if (!panel) { return; }
 
     var urlFichar = panel.dataset.urlFichar;
+    var urlConformar = panel.dataset.urlConformar;
     var modoGeo = panel.dataset.modoGeo;
     var mensaje = document.getElementById('mensaje');
-    var botones = panel.querySelectorAll('.boton[data-tipo]');
+    var botones = panel.querySelectorAll('.boton[data-tipo]:not([data-tipo="conforme"])');
+    var btnConformar = document.getElementById('btn-conformar');
     var enCurso = false;
 
     /* --- Reloj ---------------------------------------------------------- */
@@ -158,4 +160,50 @@
             enviar(boton.dataset.tipo);
         });
     });
+
+    if (btnConformar && urlConformar) {
+        btnConformar.addEventListener('click', function () {
+            if (enCurso) { return; }
+            if (!window.confirm(
+                '¿Confirmas que el registro de hoy (entrada, pausas y salida) es correcto?'
+            )) {
+                return;
+            }
+            bloquear(true);
+            if (btnConformar) { btnConformar.disabled = true; }
+            ocultar();
+            fetch(urlConformar, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': token(),
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin',
+                body: '{}'
+            }).then(function (respuesta) {
+                return respuesta.json().then(function (datos) {
+                    return { ok: respuesta.ok, datos: datos };
+                });
+            }).then(function (resultado) {
+                if (!resultado.ok || !resultado.datos.ok) {
+                    mostrar(resultado.datos.error || 'No se ha podido firmar.', 'error');
+                    bloquear(false);
+                    if (btnConformar) { btnConformar.disabled = false; }
+                    return;
+                }
+                mostrar('Jornada firmada.', 'ok');
+                if (navigator.vibrate) { navigator.vibrate(60); }
+                window.location.reload();
+            }).catch(function () {
+                mostrar(
+                    'Sin conexión: la firma NO ha quedado registrada. ' +
+                    'Busca cobertura y vuelve a intentarlo.',
+                    'error'
+                );
+                bloquear(false);
+                if (btnConformar) { btnConformar.disabled = false; }
+            });
+        });
+    }
 })();

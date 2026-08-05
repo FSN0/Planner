@@ -6,6 +6,10 @@ from app import db
 from app.utils.timezone_utils import utc_now
 from app.models import SolicitudVehiculo, Vehiculo, User, ROLE_ADMIN
 from app.services.core_vehicle_assignment_service import CoreVehicleAssignmentService
+from app.services.email_service import (
+    notificar_nueva_solicitud_vehiculo,
+    notificar_resolucion_solicitud_vehiculo,
+)
 from app.services.solicitud_service import merge_notas
 
 
@@ -113,6 +117,10 @@ class VehicleSolicitudService:
         db.session.add(sol)
         db.session.commit()
         log_nueva_solicitud_vehiculo(sol)
+        requester = User.query.get(requested_by_id)
+        notificar_nueva_solicitud_vehiculo(
+            sol, requester.name if requester else 'Sistema'
+        )
         return sol, "new"
 
     @staticmethod
@@ -142,6 +150,9 @@ class VehicleSolicitudService:
             solicitud.resolved_at = utc_now()
             solicitud.resolved_by_id = actor.id
             db.session.commit()
+            notificar_resolucion_solicitud_vehiculo(
+                solicitud, f"{actor.name} {actor.lastname}".strip() or actor.name
+            )
             return "Solicitud de vehículo denegada."
 
         if decision not in ('aceptar', 'approve', 'aprobar'):
@@ -196,6 +207,9 @@ class VehicleSolicitudService:
         solicitud.resolved_at = utc_now()
         solicitud.resolved_by_id = actor.id
         db.session.commit()
+        notificar_resolucion_solicitud_vehiculo(
+            solicitud, f"{actor.name} {actor.lastname}".strip() or actor.name
+        )
         msg = f"Solicitud de vehículo aceptada ({count} día(s))."
         if omitidos_ausencia:
             msg += f" Omitidos {omitidos_ausencia} d. con ausencia aprobada."

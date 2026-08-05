@@ -131,6 +131,7 @@ def process_users_import(file):
                 dni=dni,
                 company_id=comp.id if comp else None,
                 active=active_flag,
+                email_verified=True,
                 receive_emails=email_flag,
             )
             db.session.add(new_user)

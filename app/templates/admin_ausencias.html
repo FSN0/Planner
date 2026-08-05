@@ -193,22 +193,22 @@
   <main class="admin-main admin-main--compact aus-page">
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Ausencias</h1>
+        <h1 class="page-toolbar-title">{{ _('Ausencias') }}</h1>
         <span class="page-toolbar-count">
-          {% if current_user.role in ['admin', 'laboral'] %}Todas las obras{% else %}Tu personal{% endif %}
-          {% if tenant_has_odoo %}· Sync ERP disponible{% else %}· Gestión manual{% endif %}
+          {% if current_user.role in ['admin', 'laboral'] %}{{ _('Todas las obras') }}{% else %}{{ _('Tu personal') }}{% endif %}
+          {% if tenant_has_odoo %}· {{ _('Sincronización ERP disponible') }}{% else %}· {{ _('Gestión manual') }}{% endif %}
         </span>
       </div>
       <div class="page-toolbar-right" style="display:flex;gap:.5rem;flex-wrap:wrap;">
         {% if tenant_has_odoo and current_user.role == 'admin' %}
         <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-plug"></i> Integración Odoo
+          <i class="fas fa-plug"></i> {{ _('Integración Odoo') }}
         </a>
         {% endif %}
         {% if tenant_has_odoo and current_user.role in ['admin', 'laboral'] %}
         <form method="POST" action="{{ url_for('admin.ausencias_sync') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn-admin btn-admin-ghost"><i class="fas fa-sync"></i> Sync ERP</button>
+          <button type="submit" class="btn-admin btn-admin-ghost"><i class="fas fa-sync"></i> {{ _('Sincronizar ERP') }}</button>
         </form>
         {% endif %}
       </div>
@@ -227,15 +227,15 @@
 
     <div class="aus-kpis">
       <div class="aus-kpi aus-kpi--now">
-        <span class="aus-kpi-label">En curso hoy</span>
+        <span class="aus-kpi-label">{{ _('En curso hoy') }}</span>
         <span class="aus-kpi-value">{{ en_curso_rows|length }}</span>
       </div>
       <div class="aus-kpi aus-kpi--next">
-        <span class="aus-kpi-label">Próximas ({{ horizon_days }}d)</span>
+        <span class="aus-kpi-label">{{ _('Próximas') }} ({{ horizon_days }}d)</span>
         <span class="aus-kpi-value">{{ proximas_rows|length }}</span>
       </div>
       <div class="aus-kpi {% if conflictos %}aus-kpi--warn{% endif %}">
-        <span class="aus-kpi-label">Conflictos</span>
+        <span class="aus-kpi-label">{{ _('Conflictos') }}</span>
         <span class="aus-kpi-value">{{ conflictos|length }}</span>
       </div>
     </div>
@@ -245,8 +245,8 @@
       <button type="button" class="aus-acc-toggle" aria-expanded="true">
         <span class="aus-acc-icon aus-acc-icon--amber" style="background:#fef3c7;color:#b45309;"><i class="fas fa-hourglass-half"></i></span>
         <span class="aus-acc-text">
-          <span class="aus-acc-title">Pendientes de validar</span>
-          <span class="aus-acc-sub">{% if puede_validar_pendientes %}Solicitudes de jefe / altas pendientes{% else %}Tus solicitudes en espera{% endif %}</span>
+          <span class="aus-acc-title">{{ _('Pendientes de validar') }}</span>
+          <span class="aus-acc-sub">{% if puede_validar_pendientes %}{{ _('Solicitudes de jefe / altas pendientes') }}{% else %}{{ _('Tus solicitudes en espera') }}{% endif %}</span>
         </span>
         <span class="aus-acc-count is-alert">{{ pendientes|length }}</span>
         <i class="fas fa-chevron-down aus-acc-chevron"></i>
@@ -256,9 +256,9 @@
           <table class="admin-data-table mb-0">
             <thead>
               <tr class="header-row">
-                <th>Empleado</th>
-                <th>Periodo</th>
-                <th>Tipo</th>
+                <th>{{ _('Empleado') }}</th>
+                <th>{{ _('Periodo') }}</th>
+                <th>{{ _('Tipo') }}</th>
                 <th></th>
               </tr>
             </thead>
@@ -271,19 +271,19 @@
                   </a>
                 </td>
                 <td>{{ leave.fecha_inicio.strftime('%d/%m/%Y') }} — {{ leave.fecha_fin.strftime('%d/%m/%Y') }}</td>
-                <td><span class="badge-soft badge-soft-blue">{{ leave.tipo }}</span></td>
+                <td><span class="badge-soft badge-soft-blue">{{ _(leave.tipo) }}</span></td>
                 <td class="text-right">
                   {% if puede_validar_pendientes %}
                   <form method="POST" action="{{ url_for('admin.ausencias_aprobar', leave_id=leave.id) }}" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-primary">Aprobar</button>
+                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-primary">{{ _('Aprobar') }}</button>
                   </form>
                   <form method="POST" action="{{ url_for('admin.ausencias_rechazar', leave_id=leave.id) }}" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-ghost">Rechazar</button>
+                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-ghost">{{ _('Rechazar') }}</button>
                   </form>
                   {% else %}
-                  <span class="text-muted small">Pendiente de admin</span>
+                  <span class="text-muted small">{{ _('Pendiente de admin') }}</span>
                   {% endif %}
                 </td>
               </tr>
@@ -367,8 +367,8 @@
       <button type="button" class="aus-acc-toggle" aria-expanded="false">
         <span class="aus-acc-icon aus-acc-icon--violet"><i class="fas fa-umbrella-beach"></i></span>
         <span class="aus-acc-text">
-          <span class="aus-acc-title">En curso ahora</span>
-          <span class="aus-acc-sub">Quien está de vacaciones / baja / permiso hoy</span>
+          <span class="aus-acc-title">{{ _('En curso ahora') }}</span>
+          <span class="aus-acc-sub">{{ _('Quien está de vacaciones / baja / permiso hoy') }}</span>
         </span>
         <span class="aus-acc-count">{{ en_curso_rows|length }}</span>
         <i class="fas fa-chevron-down aus-acc-chevron"></i>
@@ -446,8 +446,8 @@
       <button type="button" class="aus-acc-toggle" aria-expanded="false">
         <span class="aus-acc-icon aus-acc-icon--blue"><i class="fas fa-calendar-alt"></i></span>
         <span class="aus-acc-text">
-          <span class="aus-acc-title">Próximas ausencias</span>
-          <span class="aus-acc-sub">Empiezan en los próximos {{ horizon_days }} días (aún no han empezado)</span>
+          <span class="aus-acc-title">{{ _('Próximas ausencias') }}</span>
+          <span class="aus-acc-sub">{{ _('Empiezan en los próximos') }} {{ horizon_days }} {{ _('días (aún no han empezado)') }}</span>
         </span>
         <span class="aus-acc-count">{{ proximas_rows|length }}</span>
         <i class="fas fa-chevron-down aus-acc-chevron"></i>
@@ -531,14 +531,14 @@
       <button type="button" class="aus-acc-toggle" aria-expanded="{{ 'true' if not tenant_has_odoo else 'false' }}">
         <span class="aus-acc-icon aus-acc-icon--green"><i class="fas fa-plus"></i></span>
         <span class="aus-acc-text">
-          <span class="aus-acc-title">{% if current_user.role == 'jefe_obra' %}Solicitar ausencia{% else %}Alta de ausencia{% endif %}</span>
+          <span class="aus-acc-title">{% if current_user.role == 'jefe_obra' %}{{ _('Solicitar ausencia') }}{% else %}{{ _('Alta de ausencia') }}{% endif %}</span>
           <span class="aus-acc-sub">
             {% if current_user.role == 'jefe_obra' %}
-            Quedará pendiente hasta que administración la valide
+            {{ _('Quedará pendiente hasta que administración la valide') }}
             {% elif tenant_has_odoo %}
-            Crear ausencia manual (además del sync ERP)
+            {{ _('Crear ausencia manual (además del sync ERP)') }}
             {% else %}
-            Vacaciones, bajas y permisos de tu plantilla
+            {{ _('Vacaciones, bajas y permisos de tu plantilla') }}
             {% endif %}
           </span>
         </span>
@@ -597,8 +597,8 @@
       <button type="button" class="aus-acc-toggle" aria-expanded="false">
         <span class="aus-acc-icon aus-acc-icon--slate"><i class="fas fa-list"></i></span>
         <span class="aus-acc-text">
-          <span class="aus-acc-title">Listado / historial</span>
-          <span class="aus-acc-sub">Consulta y filtros · {% if current_user.role == 'jefe_obra' %}tu personal{% else %}global{% endif %}</span>
+          <span class="aus-acc-title">{{ _('Listado / historial') }}</span>
+          <span class="aus-acc-sub">{{ _('Consulta y filtros · global') if current_user.role != 'jefe_obra' else _('Consulta y filtros · tu personal') }}</span>
         </span>
         <span class="aus-acc-count">{{ ausencias|length }}</span>
         <i class="fas fa-chevron-down aus-acc-chevron"></i>

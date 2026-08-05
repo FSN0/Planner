@@ -109,7 +109,14 @@ class TestFichajeHermanos:
             obra_planificada_id=None,
             obra_real_id=None,
         )
-        session.add_all([seed, para])
+        conflicto = RegistroFichaje(
+            user_id=op.id,
+            fecha=dia,
+            estado='Conflicto',
+            obra_planificada_id=None,
+            obra_real_id=None,
+        )
+        session.add_all([seed, para, conflicto])
         session.flush()
 
         para.estado = 'Resuelto_Asignado'
@@ -119,7 +126,9 @@ class TestFichajeHermanos:
         session.commit()
 
         seed = RegistroFichaje.query.get(seed.id)
+        conflicto = RegistroFichaje.query.get(conflicto.id)
         assert seed.estado == 'Resuelto_Ignorado'
+        assert conflicto.estado == 'Resuelto_Ignorado'
 
 
 class TestOnboardingPin:

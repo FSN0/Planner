@@ -50,7 +50,9 @@
                     <span class="dia__obra">{{ dia.obra.nombre }}</span>
                 {% endif %}
             </div>
-            {% if not dia.salida %}
+            {% if dia.conforme %}
+                <div class="dia__aviso" style="color:#0f766e;">Firmada{% if dia.conforme_en %} · {{ dia.conforme_en | format_time }}{% endif %}</div>
+            {% elif not dia.salida %}
                 <div class="dia__aviso">Sin hora de salida registrada</div>
             {% endif %}
         </li>

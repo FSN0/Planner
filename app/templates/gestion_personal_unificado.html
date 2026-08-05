@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Gestión de Personal{% endblock %}
+{% block title %}{{ _('Gestión de Personal') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -14,49 +14,49 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Personal</h1>
+        <h1 class="page-toolbar-title">{{ _('Personal') }}</h1>
         <span class="page-toolbar-count">{{ internos|length }} int. · {{ (operarios_activos|length) + (operarios_pendientes|length) }} ext.</span>
         {% if cupo and cupo.monetizacion_activa %}
-        <span class="page-toolbar-count" title="Operarios y jefes de obra activos">
-          Plantilla {{ cupo.usados }}{% if cupo.limite is not none %}/{{ cupo.limite }}{% endif %}
-          · {{ 'pago' if cupo.plan == 'paid' else 'gratis' }}
+        <span class="page-toolbar-count" title="{{ _('Operarios y jefes de obra activos') }}">
+          {{ _('Plantilla') }} {{ cupo.usados }}{% if cupo.limite is not none %}/{{ cupo.limite }}{% endif %}
+          · {{ _('pago') if cupo.plan == 'paid' else _('gratis') }}
         </span>
         {% elif cupo %}
-        <span class="page-toolbar-count" title="Plantilla activa (sin límite de cobro de momento)">
-          Plantilla {{ cupo.usados }} · acceso completo
+        <span class="page-toolbar-count" title="{{ _('Plantilla activa (sin límite de cobro de momento)') }}">
+          {{ _('Plantilla') }} {{ cupo.usados }} · {{ _('acceso completo') }}
         </span>
         {% endif %}
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.create_user', tab='internos') }}" class="btn-admin btn-admin-primary">
-          <i class="fas fa-plus"></i> Nuevo
+          <i class="fas fa-plus"></i> {{ _('Nuevo') }}
         </a>
         <a href="{{ url_for('admin.import_users') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-file-import"></i> Importar
+          <i class="fas fa-file-import"></i> {{ _('Importar') }}
         </a>
       </div>
     </div>
 
     <div id="bulk-internos" class="bulk-toolbar d-none">
-      <span class="bulk-toolbar-count"><span id="count-internos">0</span> seleccionados</span>
+      <span class="bulk-toolbar-count"><span id="count-internos">0</span> {{ _('seleccionados') }}</span>
       <div class="bulk-toolbar-actions">
         <button type="button" class="btn-bulk btn-bulk-danger" onclick="bulkDeleteUsers('tableInternos', 'interno-checkbox')">
-          <i class="fas fa-trash"></i> Eliminar
+          <i class="fas fa-trash"></i> {{ _('Eliminar') }}
         </button>
       </div>
     </div>
 
     <div id="bulk-externos" class="bulk-toolbar d-none">
-      <span class="bulk-toolbar-count"><span id="count-externos">0</span> seleccionados</span>
+      <span class="bulk-toolbar-count"><span id="count-externos">0</span> {{ _('seleccionados') }}</span>
       <div class="bulk-toolbar-actions">
         {% if view_mode == 'admin' %}
         <button type="button" class="btn-bulk btn-bulk-warning" onclick="bulkDeactivateUsers('tableExternos', 'externo-checkbox')">
-          <i class="fas fa-ban"></i> Desactivar
+          <i class="fas fa-ban"></i> {{ _('Desactivar') }}
         </button>
         {% endif %}
         {% if current_user.role == 'admin' %}
         <button type="button" class="btn-bulk btn-bulk-danger" onclick="bulkDeleteUsers('tableExternos', 'externo-checkbox')">
-          <i class="fas fa-trash"></i> Eliminar
+          <i class="fas fa-trash"></i> {{ _('Eliminar') }}
         </button>
         {% endif %}
       </div>
@@ -66,12 +66,12 @@
       <ul class="nav admin-tabs-compact" id="personalTab" role="tablist">
         <li class="nav-item">
           <a class="nav-link active" id="internos-tab" data-toggle="tab" href="#internos" role="tab">
-            Internos <span class="tab-count">{{ internos|length }}</span>
+            {{ _('Internos') }} <span class="tab-count">{{ internos|length }}</span>
           </a>
         </li>
         <li class="nav-item">
           <a class="nav-link" id="operarios-tab" data-toggle="tab" href="#operarios" role="tab">
-            Externos <span class="tab-count">{{ (operarios_activos|length) + (operarios_pendientes|length) }}</span>
+            {{ _('Externos') }} <span class="tab-count">{{ (operarios_activos|length) + (operarios_pendientes|length) }}</span>
           </a>
         </li>
       </ul>
@@ -92,13 +92,13 @@
               </colgroup>
               <thead>
                 <tr class="header-row">
-                  <th class="col-check"><input type="checkbox" id="selectAllInternos" title="Seleccionar todos"></th>
-                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Nombre</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Email</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Rol</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Categoría</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">Valor.</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="col-check"><input type="checkbox" id="selectAllInternos" title="{{ _('Seleccionar todos') }}"></th>
+                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Rol') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="col-actions"></th>
                 </tr>
                 <tr class="filter-row">
@@ -134,23 +134,23 @@
                     </a>
                   </td>
                   <td data-sort-value="{{ 'activo' if user.active else 'inactivo' }}">
-                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> Activo</span>
-                    {% else %}<span class="badge-soft badge-soft-slate"><span class="status-dot gray"></span> Inactivo</span>{% endif %}
+                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
+                    {% else %}<span class="badge-soft badge-soft-slate"><span class="status-dot gray"></span> {{ _('Inactivo') }}</span>{% endif %}
                   </td>
                   <td class="col-actions">
                     <div class="table-actions">
-                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="Contraseña"><i class="fas fa-key"></i></button>
-                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="PIN de fichaje"><i class="fas fa-mobile-alt"></i></button>
-                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="Editar"><i class="fas fa-pencil-alt"></i></a>
-                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar usuario?');">
+                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
+                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
+                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
+                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar usuario?')|tojson }});">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn-table-action btn-table-action--danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                        <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>
                       </form>
                     </div>
                   </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="table-empty-state"><i class="fas fa-users"></i>Sin registros internos.</td></tr>
+                <tr><td colspan="8" class="table-empty-state"><i class="fas fa-users"></i>{{ _('Sin registros internos.') }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -172,13 +172,13 @@
               </colgroup>
               <thead>
                 <tr class="header-row">
-                  <th class="col-check"><input type="checkbox" id="selectAllExternos" title="Seleccionar todos"></th>
-                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Nombre</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Empresa</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">DNI</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Categoría</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">Valor.</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="col-check"><input type="checkbox" id="selectAllExternos" title="{{ _('Seleccionar todos') }}"></th>
+                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('DNI') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="col-actions"></th>
                 </tr>
                 <tr class="filter-row">
@@ -200,7 +200,7 @@
                     <span class="font-weight-bold">{{ user.name }} {{ user.lastname }}</span>
                   </td>
                   <td data-sort-value="{{ (user.company_rel.nombre if user.company_rel else 'sin asignar')|lower }}">
-                    {% if user.company_rel %}{{ user.company_rel.nombre }}{% else %}<span class="text-danger">Sin asignar</span>{% endif %}
+                    {% if user.company_rel %}{{ user.company_rel.nombre }}{% else %}<span class="text-danger">{{ _('Sin asignar') }}</span>{% endif %}
                   </td>
                   <td data-sort-value="{{ user.dni or '' }}">{{ user.dni or '—' }}</td>
                   <td data-sort-value="{{ (user.categoria_profesional or '')|lower }}">
@@ -216,30 +216,30 @@
                     </a>
                   </td>
                   <td data-sort-value="{{ 'activo' if user.active else 'pendiente' }}">
-                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> Activo</span>
-                    {% else %}<span class="badge-soft badge-soft-amber"><span class="status-dot" style="background:#f59e0b;"></span> Pendiente</span>{% endif %}
+                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
+                    {% else %}<span class="badge-soft badge-soft-amber"><span class="status-dot" style="background:#f59e0b;"></span> {{ _('Pendiente') }}</span>{% endif %}
                   </td>
                   <td class="col-actions">
                     <div class="table-actions">
-                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="Contraseña"><i class="fas fa-key"></i></button>
-                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="PIN de fichaje"><i class="fas fa-mobile-alt"></i></button>
-                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="Editar"><i class="fas fa-pencil-alt"></i></a>
+                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
+                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
+                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
                       {% if view_mode == 'admin' %}
                       <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
-                        <button type="submit" class="btn-table-action btn-table-action--warn" title="Desactivar"><i class="fas fa-ban"></i></button>
+                        <button type="submit" class="btn-table-action btn-table-action--warn" title="{{ _('Desactivar') }}"><i class="fas fa-ban"></i></button>
                       </form>
                       {% endif %}
-                      <button type="button" class="btn-table-action btn-table-action--info schedule-btn" data-user-id="{{ user.id }}" data-action="deactivate" title="Programar baja"><i class="far fa-clock"></i></button>
+                      <button type="button" class="btn-table-action btn-table-action--info schedule-btn" data-user-id="{{ user.id }}" data-action="deactivate" title="{{ _('Programar baja') }}"><i class="far fa-clock"></i></button>
                       {% if current_user.role == 'admin' %}
-                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm('¿Eliminar definitivamente?');">
-                        <button type="submit" class="btn-table-action btn-table-action--danger" title="Eliminar"><i class="fas fa-trash"></i></button>
+                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar definitivamente?')|tojson }});">
+                        <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>
                       </form>
                       {% endif %}
                     </div>
                   </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="table-empty-state"><i class="fas fa-hard-hat"></i>Sin operarios externos.</td></tr>
+                <tr><td colspan="8" class="table-empty-state"><i class="fas fa-hard-hat"></i>{{ _('Sin operarios externos.') }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -257,17 +257,17 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Restablecer contraseña</h5>
+          <h5 class="modal-title">{{ _('Restablecer contraseña') }}</h5>
           <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
         </div>
         <div class="modal-body">
-          <p class="small mb-2">Usuario: <strong id="resetUsernameDisplay"></strong></p>
-          <label class="admin-form-label">Nueva contraseña</label>
-          <input type="password" name="new_password" class="form-control" required placeholder="Nueva clave…">
+          <p class="small mb-2">{{ _('Usuario:') }} <strong id="resetUsernameDisplay"></strong></p>
+          <label class="admin-form-label">{{ _('Nueva contraseña') }}</label>
+          <input type="password" name="new_password" class="form-control" required placeholder="{{ _('Nueva clave…') }}">
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn-admin btn-admin-primary">Guardar</button>
+          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cancelar') }}</button>
+          <button type="submit" class="btn-admin btn-admin-primary">{{ _('Guardar') }}</button>
         </div>
       </div>
     </form>
@@ -280,16 +280,16 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">PIN de fichaje</h5>
+          <h5 class="modal-title">{{ _('PIN de fichaje') }}</h5>
           <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
         </div>
         <div class="modal-body">
-          <p class="small mb-2">Trabajador: <strong id="resetPinUsernameDisplay"></strong></p>
+          <p class="small mb-2">{{ _('Trabajador:') }} <strong id="resetPinUsernameDisplay"></strong></p>
           <p class="small text-muted">
-            Con este PIN entrará en <code>/mi</code> usando su DNI.
-            Entre 4 y 6 dígitos. No uses el mismo dígito repetido.
+            {{ _('Con este PIN entrará en /mi usando su DNI.') }}
+            {{ _('Entre 4 y 6 dígitos. No uses el mismo dígito repetido.') }}
           </p>
-          <label class="admin-form-label">Nuevo PIN</label>
+          <label class="admin-form-label">{{ _('Nuevo PIN') }}</label>
           <input type="password" name="nuevo_pin" id="nuevoPinInput" class="form-control"
                  inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
                  required placeholder="••••">
@@ -298,13 +298,13 @@
           <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
                   formnovalidate
                   onclick="document.getElementById('nuevoPinInput').required = false;">
-            Quitar PIN
+            {{ _('Quitar PIN') }}
           </button>
           <div>
-            <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+            <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cancelar') }}</button>
             <button type="submit" name="accion" value="asignar" class="btn-admin btn-admin-primary"
                     onclick="document.getElementById('nuevoPinInput').required = true;">
-              Guardar PIN
+              {{ _('Guardar PIN') }}
             </button>
           </div>
         </div>
@@ -318,18 +318,18 @@
     <form id="scheduleForm" autocomplete="off">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="scheduleModalLabel">Programar</h5>
+          <h5 class="modal-title" id="scheduleModalLabel">{{ _('Programar') }}</h5>
           <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
         </div>
         <div class="modal-body">
-          <label class="admin-form-label">Fecha</label>
+          <label class="admin-form-label">{{ _('Fecha') }}</label>
           <input type="date" id="scheduledDate" name="scheduledDate" class="form-control" required>
           <input type="hidden" id="scheduleUserId" name="userId">
           <input type="hidden" id="scheduleAction" name="action">
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn-admin btn-admin-primary">Guardar</button>
+          <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cancelar') }}</button>
+          <button type="submit" class="btn-admin btn-admin-primary">{{ _('Guardar') }}</button>
         </div>
       </div>
     </form>

@@ -8,7 +8,7 @@ from flask import url_for
 
 from app import db
 # IMPORTANTE: Añadido RegistroFichaje a los imports
-from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN, ROLE_LABORAL, UserObraConfig, RegistroFichaje
+from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH, UserObraConfig, RegistroFichaje
 from app.utils.timezone_utils import today_local
 
 def parse_date(date_str):
@@ -42,9 +42,8 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     else:
         next_date = date(year, month + 1, 1)
 
-    meses = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
-             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    month_name = meses[month]
+    from app.services.i18n_service import month_name as i18n_month_name
+    month_name = i18n_month_name(month)
 
     # 2. Query de Obras
     query = Obra.query.options(
@@ -70,7 +69,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     # Precargar fichajes del día para admin / laboral (estado final del día,
     # misma precedencia que las pelotitas del calendario del trabajador).
     fichajes_dict = {}
-    if user.role in (ROLE_ADMIN, ROLE_LABORAL):
+    if user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         from collections import defaultdict
         from app.services.fichaje_estado_service import estado_fichaje_agregado
 
@@ -96,7 +95,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
                     # Inyectamos estado de fichaje al usuario (admin y laboral)
                     u.temp_estado_fichaje = (
                         fichajes_dict.get(u.id, 'Sin_Registro')
-                        if user.role in (ROLE_ADMIN, ROLE_LABORAL)
+                        if user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
                         else None
                     )
                     mapa_asig[a.obra_id].append(u)

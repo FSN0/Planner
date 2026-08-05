@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="{{ current_locale|default('es') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verifica tu correo — SignaPlan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            <span class="mkt-brand-mark" aria-hidden="true"></span>
+            <span>SignaPlan</span>
+        </a>
+    </header>
+    <section class="mkt-form-wrap">
+        <h1>Revisa tu correo</h1>
+        <p>
+            Hemos creado el espacio <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
+            Te hemos enviado un enlace de verificación a <strong>{{ email }}</strong>.
+        </p>
+        <p>
+            Abre el mensaje y confirma el correo para entrar. Si no lo ves, revisa spam
+            o la carpeta de promociones.
+        </p>
+        <p style="margin-top:1.5rem;">
+            <a class="mkt-btn mkt-btn-primary" href="https://{{ subdomain }}.{{ base_domain }}/auth/login">
+                Ir al acceso de tu empresa
+            </a>
+        </p>
+    </section>
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+    </footer>
+</body>
+</html>

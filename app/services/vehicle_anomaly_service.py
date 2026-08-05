@@ -411,3 +411,145 @@ def detect_viaje_desvios(fecha_desde, fecha_hasta, thresholds=None):
 
     alerts.sort(key=lambda a: (abs(a['desvio']), a['fecha']), reverse=True)
     return alerts
+
+
+# ---------------------------------------------------------------------------
+# Acuses informativos ("Visto") — no alteran la detección
+# ---------------------------------------------------------------------------
+
+ANOMALIA_KINDS = frozenset({
+    'salto', 'cross', 'leave', 'desvio', 'mismatch', 'sin_km', 'sin_plan',
+})
+
+
+def _fecha_iso(val):
+    if val is None:
+        return ''
+    if hasattr(val, 'isoformat'):
+        return val.isoformat()
+    return str(val)
+
+
+def build_anomaly_clave(kind, item):
+    """
+    Clave estable para acuse. Preferencia: reg_id del RegistroOdometro.
+    Formato: {kind}:reg:{id} | leave:asig:{id} | leave:{user}:{fecha}:{veh} | …
+    """
+    kind = (kind or '').strip().lower()
+    if isinstance(item, dict):
+        reg_id = item.get('reg_id')
+        if reg_id:
+            return f'{kind}:reg:{reg_id}'
+        if kind == 'leave':
+            asig = item.get('asignacion_id')
+            if asig:
+                return f'leave:asig:{asig}'
+            return (
+                f"leave:{item.get('user_id')}:{_fecha_iso(item.get('fecha'))}"
+                f":{item.get('vehiculo_id')}"
+            )
+        if kind == 'salto':
+            return (
+                f"salto:{item.get('vehiculo_id')}:{_fecha_iso(item.get('fecha_anterior'))}"
+                f":{_fecha_iso(item.get('fecha_actual'))}"
+            )
+        if kind == 'cross':
+            return (
+                f"cross:{item.get('user_id')}:{_fecha_iso(item.get('fecha'))}"
+                f":{item.get('vehiculo_planificado_id')}:{item.get('vehiculo_reportado_id')}"
+            )
+        if kind == 'desvio':
+            viaje = item.get('viaje_odoo_id')
+            if viaje:
+                return f'desvio:viaje:{viaje}'
+            return (
+                f"desvio:{item.get('vehiculo_id')}:{_fecha_iso(item.get('fecha'))}"
+                f":{item.get('viaje_code') or ''}"
+            )
+        return f'{kind}:fallback:{item.get("vehiculo_id") or item.get("user_id") or "x"}:{_fecha_iso(item.get("fecha") or item.get("fecha_actual"))}'
+
+    # RegistroOdometro u objeto con .id
+    oid = getattr(item, 'id', None)
+    if oid is not None:
+        return f'{kind}:reg:{oid}'
+    raise ValueError(f'No se puede construir clave para kind={kind!r}')
+
+
+def annotate_anomaly_clave(kind, item):
+    """Añade anomalia_kind / anomalia_clave al dict o al objeto ORM."""
+    clave = build_anomaly_clave(kind, item)
+    if isinstance(item, dict):
+        out = dict(item)
+        out['anomalia_kind'] = kind
+        out['anomalia_clave'] = clave
+        return out
+    try:
+        item.anomalia_kind = kind
+        item.anomalia_clave = clave
+    except Exception:
+        pass
+    return item
+
+
+def get_vistos_claves(kinds=None):
+    """Set de (kind, clave) vistas; si kinds, filtra por esos kinds."""
+    from app.models import AnomaliaVehiculoVista
+
+    q = AnomaliaVehiculoVista.query
+    if kinds:
+        q = q.filter(AnomaliaVehiculoVista.kind.in_(list(kinds)))
+    return set(
+        q.with_entities(
+            AnomaliaVehiculoVista.kind, AnomaliaVehiculoVista.clave
+        ).all()
+    )
+
+
+def partition_anomalias(kind, items, vistos_set=None):
+    """
+    Anota claves y parte en (pendientes, vistos).
+    vistos_set: set[(kind, clave)] precargado opcional.
+    """
+    if vistos_set is None:
+        vistos_set = get_vistos_claves([kind])
+    pendientes, vistos = [], []
+    for raw in items:
+        item = annotate_anomaly_clave(kind, raw)
+        clave = item['anomalia_clave'] if isinstance(item, dict) else item.anomalia_clave
+        if (kind, clave) in vistos_set:
+            vistos.append(item)
+        else:
+            pendientes.append(item)
+    return pendientes, vistos
+
+
+def marcar_anomalia_vista(kind, clave, user_id, payload=None):
+    """Upsert acuse informativo. Retorna la fila."""
+    from app.models import AnomaliaVehiculoVista
+    from app import db
+    from app.utils.timezone_utils import utc_now
+
+    kind = (kind or '').strip().lower()
+    clave = (clave or '').strip()
+    if kind not in ANOMALIA_KINDS:
+        raise ValueError(f'kind no válido: {kind}')
+    if not clave or len(clave) > 160:
+        raise ValueError('clave inválida')
+
+    row = AnomaliaVehiculoVista.query.filter_by(kind=kind, clave=clave).first()
+    if row:
+        row.visto_por_id = user_id
+        row.visto_en = utc_now()
+        if payload is not None:
+            row.payload = payload
+    else:
+        row = AnomaliaVehiculoVista(
+            kind=kind,
+            clave=clave,
+            visto_por_id=user_id,
+            visto_en=utc_now(),
+            payload=payload,
+        )
+        db.session.add(row)
+    db.session.commit()
+    return row

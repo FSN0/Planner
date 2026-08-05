@@ -50,5 +50,9 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
+# --- Basura / dumps accidentales ---
+salida.txyt
+*.txyt
+
 # --- Docker (no ignorar compose files) ---
 # Los volúmenes de datos se manejan por Docker, no por el repo

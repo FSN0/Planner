@@ -21,12 +21,12 @@
 
     <div class="kanban-filter-bar">
       <div class="kanban-filter-label">
-        <i class="fas fa-filter"></i> Filtrar obras
+        <i class="fas fa-filter"></i> {{ _('Filtrar obras') }}
       </div>
       <div class="active-filters" id="activeFiltersList"></div>
       <div class="kanban-filter-input-wrap">
         <i class="fas fa-search kanban-filter-search-icon"></i>
-        <input type="text" id="kanbanFilterInput" placeholder="Obra, código o operario — Enter para añadir">
+        <input type="text" id="kanbanFilterInput" placeholder="{{ _('Obra, código o operario — Enter para añadir') }}">
       </div>
       <button type="button" class="btn-admin btn-admin-ghost kanban-filter-clear" onclick="clearKanbanFilters()" id="btnClearFilters" style="display:none;">
         Limpiar

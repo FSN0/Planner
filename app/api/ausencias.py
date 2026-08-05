@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
 from app.decorators import roles_required
-from app.services.permission_service import user_can
+from app.services.permission_service import user_can, is_laboral
 from app.services.leave_service import create_manual_leave, estado_alta_por_rol
 
 ausencias_api = Blueprint('ausencias_api', __name__)
@@ -22,7 +22,7 @@ def api_crear_ausencia():
     Alta rápida de ausencia (p. ej. desde el calendario de la persona).
     Jefe → pendiente; admin/laboral → aprobada por defecto.
     """
-    if current_user.role == ROLE_LABORAL and not user_can(current_user, 'ausencias', 'w'):
+    if is_laboral(current_user) and not user_can(current_user, 'ausencias', 'w'):
         return jsonify({'success': False, 'error': 'Sin permiso.'}), 403
 
     data = request.get_json(silent=True) or {}

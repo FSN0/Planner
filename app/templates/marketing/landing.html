@@ -1,154 +1,116 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="SignaPlan — Planificación de obras, fichaje móvil y registro de jornada con trazabilidad.">
-    <title>SignaPlan — Planificación y fichaje para construcción</title>
+    <meta name="description" content="{{ _('hero.sub') }}">
+    <title>SignaPlan — {{ _('hero.headline') }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
         <a class="mkt-brand" href="/">
-            <i class="fas fa-hard-hat"></i>
+            <span class="mkt-brand-mark" aria-hidden="true"></span>
             <span>SignaPlan</span>
         </a>
         <nav class="mkt-nav-links">
-            <a href="#funciones">Funciones</a>
-            <a href="#acceso">Acceso clientes</a>
-            <a href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
-            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
+            <a href="#suite">{{ _('nav.features') }}</a>
+            <a href="#acceso">{{ _('nav.access') }}</a>
+            <div class="mkt-lang">
+                <label class="visually-hidden" for="mkt-lang">{{ _('nav.lang') }}</label>
+                <select id="mkt-lang" onchange="window.location.href=this.value">
+                    {% for code in supported_locales %}
+                    <option value="{{ url_for('main.update_user_locale', lang=code, next=request.path) }}"
+                            {% if code == current_locale %}selected{% endif %}>
+                        {{ locale_labels[code] }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">{{ _('nav.cta') }}</a>
         </nav>
     </header>
 
     <section class="mkt-hero">
-        <div>
-            <span class="mkt-hero-badge">Sin tarjeta</span>
-            <h1>Planifica obras y ficha en obra con trazabilidad</h1>
-            <p>
-                SignaPlan une el planificador diario, el fichaje desde el móvil del trabajador
-                y un registro de jornada inalterable para ayudarte a preparar la documentación laboral.
-            </p>
+        <div class="mkt-hero-backdrop" aria-hidden="true"></div>
+        <div class="mkt-hero-inner">
+            <p class="mkt-hero-brand">{{ _('hero.brand') }}</p>
+            <h1>{{ _('hero.headline') }}</h1>
+            <p class="mkt-hero-sub">{{ _('hero.sub') }}</p>
             <div class="mkt-hero-actions">
-                <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">
-                    <i class="fas fa-rocket"></i> Crear cuenta gratuita
-                </a>
-                <a class="mkt-btn mkt-btn-ghost" href="#funciones">Ver funciones</a>
+                <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">{{ _('hero.cta_primary') }}</a>
+                <a class="mkt-btn mkt-btn-ghost" href="#suite">{{ _('hero.cta_secondary') }}</a>
             </div>
-        </div>
-        <div class="mkt-hero-card">
-            <h3>Listo en una tarde</h3>
-            <div class="mkt-stat-grid">
-                <div class="mkt-stat">
-                    <strong>Planificador</strong>
-                    <span>Quién va a cada obra cada día</span>
-                </div>
-                <div class="mkt-stat">
-                    <strong>Fichaje móvil</strong>
-                    <span>DNI + PIN en el móvil del operario</span>
-                </div>
-                <div class="mkt-stat">
-                    <strong>Informe de jornada</strong>
-                    <span>PDF/CSV con cadena de hashes para tu archivo</span>
-                </div>
-                <div class="mkt-stat">
-                    <strong>Sin tarjeta</strong>
-                    <span>Crea tu espacio y empieza ya</span>
-                </div>
-            </div>
+            <p class="mkt-hero-proof">{{ _('hero.proof') }}</p>
         </div>
     </section>
 
-    <section class="mkt-section" id="funciones">
+    <section class="mkt-section" id="suite">
         <div class="mkt-section-header">
-            <h2>Diseñado para el día a día en obra</h2>
-            <p>
-                Una plataforma pensada para administradores, jefes de obra y equipos de planificación
-                que necesitan claridad, trazabilidad y menos Excel.
-            </p>
+            <h2>{{ _('suite.title') }}</h2>
+            <p>{{ _('suite.sub') }}</p>
         </div>
-        <div class="mkt-features">
-            <article class="mkt-feature">
-                <i class="fas fa-mobile-alt"></i>
-                <h3>Fichaje desde el móvil</h3>
-                <p>El operario ficha entrada y salida en obra con DNI y PIN. Sin instalar apps de tienda.</p>
+        <div class="mkt-suite">
+            <article class="mkt-suite-item">
+                <span class="mkt-suite-num">01</span>
+                <h3>{{ _('suite.plan.title') }}</h3>
+                <p>{{ _('suite.plan.body') }}</p>
             </article>
-            <article class="mkt-feature">
-                <i class="fas fa-balance-scale"></i>
-                <h3>Registro de jornada</h3>
-                <p>Libro de eventos inalterable con cadena de hashes e informe PDF/CSV para tu archivo laboral.</p>
+            <article class="mkt-suite-item">
+                <span class="mkt-suite-num">02</span>
+                <h3>{{ _('suite.clock.title') }}</h3>
+                <p>{{ _('suite.clock.body') }}</p>
             </article>
-            <article class="mkt-feature">
-                <i class="fas fa-th-large"></i>
-                <h3>Planificador visual</h3>
-                <p>Organiza operarios y recursos por obra con una vista clara del día y de la semana.</p>
+            <article class="mkt-suite-item">
+                <span class="mkt-suite-num">03</span>
+                <h3>{{ _('suite.fleet.title') }}</h3>
+                <p>{{ _('suite.fleet.body') }}</p>
             </article>
-            <article class="mkt-feature">
-                <i class="fas fa-users"></i>
-                <h3>Gestión de personal</h3>
-                <p>Administra plantilla interna, subcontratas, solicitudes y disponibilidad desde un solo panel.</p>
-            </article>
-            <article class="mkt-feature">
-                <i class="fas fa-sync-alt"></i>
-                <h3>Integración Odoo</h3>
-                <p>Si ya tienes ERP, puedes sincronizar empleados, obras y fichajes (opcional; se activa por empresa).</p>
-            </article>
-            <article class="mkt-feature">
-                <i class="fas fa-shield-alt"></i>
-                <h3>Entornos aislados</h3>
-                <p>Arquitectura multi-tenant: cada cliente con sus datos separados y su propia URL de acceso.</p>
-            </article>
+        </div>
+    </section>
+
+    <section class="mkt-legal-band">
+        <div class="mkt-legal-inner">
+            <h2>{{ _('legal.title') }}</h2>
+            <p>{{ _('legal.body') }}</p>
         </div>
     </section>
 
     <section class="mkt-section" id="acceso">
         <div class="mkt-access">
             <div>
-                <h2>¿Ya eres cliente?</h2>
-                <p>
-                    El acceso a la aplicación no se realiza desde esta web pública.
-                    Cada empresa dispone de su propia URL de trabajo.
-                </p>
-                <code>tuempresa.signaplan.com</code>
-                <p style="margin-top: 1rem; color: var(--mkt-muted); font-size: 0.95rem;">
-                    Si tu empresa usa dominio propio, accede desde la dirección que te facilitó tu administrador.
-                </p>
+                <h2>{{ _('access.title') }}</h2>
+                <p>{{ _('access.body') }}</p>
+                <code>{{ _('access.example') }}</code>
             </div>
             <div>
-                <h3>Ejemplos de acceso</h3>
-                <p style="color: var(--mkt-muted); margin-bottom: 0.75rem;">
-                    Sustituye <strong>tuempresa</strong> por el identificador de tu organización:
-                </p>
-                <code>https://tuempresa.signaplan.com/auth/login</code>
+                <code>https://{{ _('access.example') }}/auth/login</code>
             </div>
         </div>
     </section>
 
     <section class="mkt-cta" id="contacto">
         <div>
-            <h2>Empieza en minutos</h2>
-            <p>Crea tu cuenta sin tarjeta. Si necesitas una demo guiada, escríbenos.</p>
+            <h2>{{ _('cta.title') }}</h2>
+            <p>{{ _('cta.body') }}</p>
         </div>
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
-            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
-            <a class="mkt-btn mkt-btn-ghost" href="mailto:info@signaplan.com">
-                <i class="fas fa-envelope"></i> info@signaplan.com
-            </a>
+        <div class="mkt-cta-actions">
+            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">{{ _('nav.signup') }}</a>
+            <a class="mkt-btn mkt-btn-ghost" href="mailto:info@signaplan.com">{{ _('cta.mail') }}</a>
         </div>
     </section>
 
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
         <span>
-            <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">Aviso legal</a> ·
-            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a> ·
-            <a href="{{ url_for('marketing.legal', slug='cookies') }}">Cookies</a> ·
-            <a href="{{ url_for('marketing.legal', slug='condiciones') }}">Condiciones</a> ·
-            <a href="{{ url_for('marketing.legal', slug='encargado') }}">Encargo de tratamiento</a>
+            <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">{{ _('footer.legal') }}</a> ·
+            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">{{ _('footer.privacy') }}</a> ·
+            <a href="{{ url_for('marketing.legal', slug='cookies') }}">{{ _('footer.cookies') }}</a> ·
+            <a href="{{ url_for('marketing.legal', slug='condiciones') }}">{{ _('footer.terms') }}</a> ·
+            <a href="{{ url_for('marketing.legal', slug='encargado') }}">{{ _('footer.dpa') }}</a>
         </span>
     </footer>
 </body>

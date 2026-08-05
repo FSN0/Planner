@@ -237,6 +237,12 @@ body {
 .boton--pausa:active,
 .boton--reanudar:active { background: var(--pausa-activo); }
 
+.boton--conforme {
+    background: #0f766e;
+    margin-top: 12px;
+}
+.boton--conforme:active { background: #0d9488; }
+
 .boton--secundario {
     min-height: var(--alto-toque);
     font-size: 16px;

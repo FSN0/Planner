@@ -6,8 +6,30 @@
 <th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ label }}</span><i class="fas fa-sort sort-icon"></i></th>
 {% endmacro %}
 
-{% macro fila_odometro(reg) %}
-<tr class="audit-data-row">
+{% macro btn_visto(kind, clave, es_visto=false) %}
+{% if es_visto %}
+  <span class="text-muted small"><i class="fas fa-eye"></i> Visto</span>
+{% else %}
+  <button type="button" class="btn-admin btn-admin-ghost btn-sm btn-anomalia-visto"
+          data-kind="{{ kind }}" data-clave="{{ clave }}" title="Marcar como visto">
+    <i class="fas fa-eye"></i> Visto
+  </button>
+{% endif %}
+{% endmacro %}
+
+{% macro historico_toggle(section_id, visto_count) %}
+{% if visto_count %}
+<div class="border-top px-3 py-2">
+  <button type="button" class="btn-admin btn-admin-ghost btn-sm btn-toggle-historico"
+          data-target="#{{ section_id }}Historico" aria-expanded="false">
+    <i class="fas fa-history"></i> Ver histórico ({{ visto_count }})
+  </button>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro fila_odometro(reg, es_visto=false) %}
+<tr class="audit-data-row {% if es_visto %}audit-row--visto{% endif %}">
   <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
   <td data-sort-value="{{ (reg.vehiculo.matricula or reg.vehiculo.nombre)|lower }}">
     <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=reg.vehiculo.id) }}" class="link-user">
@@ -57,26 +79,30 @@
       <span class="badge badge-success">OK</span>
     {% endif %}
   </td>
+  <td class="text-center">
+    {{ btn_visto(reg.anomalia_kind, reg.anomalia_clave, es_visto) }}
+  </td>
 </tr>
 {% endmacro %}
 
-{% macro tabla_odometros(table_id, rows) %}
+{% macro tabla_odometros(table_id, rows, es_visto=false) %}
 {% if rows %}
 <div class="audit-table-wrap">
   <table id="{{ table_id }}" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
     <thead>
       <tr>
-        {{ audit_sort_th(0, 'Fecha', '12%', '', 'date') }}
-        {{ audit_sort_th(1, 'Vehículo', '18%') }}
-        {{ audit_sort_th(2, 'Planificado', '20%') }}
-        {{ audit_sort_th(3, 'Conductor Odoo', '20%') }}
-        {{ audit_sort_th(4, 'Km', '12%', 'right', 'num') }}
-        {{ audit_sort_th(5, 'Estado', '18%') }}
+        {{ audit_sort_th(0, 'Fecha', '11%', '', 'date') }}
+        {{ audit_sort_th(1, 'Vehículo', '16%') }}
+        {{ audit_sort_th(2, 'Planificado', '18%') }}
+        {{ audit_sort_th(3, 'Conductor Odoo', '18%') }}
+        {{ audit_sort_th(4, 'Km', '10%', 'right', 'num') }}
+        {{ audit_sort_th(5, 'Estado', '14%') }}
+        <th style="width: 13%; text-align: center;">Acción</th>
       </tr>
     </thead>
     <tbody>
       {% for reg in rows %}
-      {{ fila_odometro(reg) }}
+      {{ fila_odometro(reg, es_visto) }}
       {% endfor %}
     </tbody>
   </table>
@@ -86,8 +112,36 @@
 {% endif %}
 {% endmacro %}
 
+{% macro seccion_odometros(collapse_id, title, icon, title_class, icon_mod, badge_class, rows, rows_visto, kind_label) %}
+<div class="auditoria-section card-modern card" style="overflow: hidden;">
+  <div class="auditoria-section-header card-header {% if not rows %}collapsed{% endif %}" data-target="#{{ collapse_id }}" role="button" aria-expanded="{{ 'true' if rows else 'false' }}">
+    <h6 class="auditoria-section-title {{ title_class }} mb-0">
+      <span class="section-icon-wrap {{ icon_mod }}"><i class="fas {{ icon }}"></i></span>
+      {{ title }}
+      <span class="badge-count {{ badge_class }}">{{ rows|length }}</span>
+      {% if rows_visto %}<span class="badge-count text-muted" title="Vistos en histórico">+{{ rows_visto|length }} hist.</span>{% endif %}
+    </h6>
+    <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+  </div>
+  <div id="{{ collapse_id }}" class="collapse {% if rows %}show{% endif %}">
+    {{ tabla_odometros(collapse_id ~ 'Table', rows, false) }}
+    {{ historico_toggle(collapse_id, rows_visto|length) }}
+    {% if rows_visto %}
+    <div id="{{ collapse_id }}Historico" class="collapse anomalia-historico">
+      <div class="px-3 pt-2 text-muted small">Histórico — {{ kind_label }} marcados como vistos</div>
+      {{ tabla_odometros(collapse_id ~ 'HistTable', rows_visto, true) }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .audit-row--visto { opacity: 0.72; }
+  .anomalia-historico { background: var(--color-bg-muted, #f8fafc); }
+</style>
 {% endblock %}
 
 {% block wrapper %}
@@ -114,7 +168,7 @@
             <i class="fas fa-broom"></i> Limpiar y resync
           </button>
           <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
-            <i class="fas fa-arrow-left"></i> Sync
+            <i class="fas fa-arrow-left"></i> {{ _('Sincronización Odoo') }}
           </a>
           {% endif %}
         </div>
@@ -159,7 +213,7 @@
             </button>
             <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">Limpiar</a>
             <span class="page-toolbar-count" title="Registros en el rango filtrado">
-              {{ total_filtrado }} reg. · {{ total_ok }} OK
+              {{ total_pendientes }} pend. · {{ total_filtrado }} reg. · {{ total_ok }} OK
             </span>
           </div>
         </div>
@@ -167,7 +221,7 @@
     </form>
 
     <div class="auditoria-stats">
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSaltos" title="Saltos de odómetro">
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSaltos" title="Saltos de odómetro pendientes">
         <i class="fas fa-bolt"></i> {{ saltos|length }} saltos km
       </span>
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseDesvios" title="Desvío vs km previsto del viaje">
@@ -212,6 +266,7 @@
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-bolt"></i></span>
             Saltos de odómetro
             <span class="badge-count badge-count-danger">{{ saltos|length }}</span>
+            {% if saltos_visto %}<span class="badge-count text-muted" title="Vistos">+{{ saltos_visto|length }} hist.</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -221,13 +276,14 @@
             <table id="auditSaltosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
-                  {{ audit_sort_th(0, 'Lectura', '11%', '', 'date') }}
-                  {{ audit_sort_th(1, 'Vehículo', '16%') }}
-                  {{ audit_sort_th(2, 'Anterior → actual', '16%') }}
-                  {{ audit_sort_th(3, 'Δ km', '10%', 'right', 'num') }}
-                  {{ audit_sort_th(4, 'km/día', '10%', 'right', 'num') }}
-                  {{ audit_sort_th(5, 'Conductor Odoo', '18%') }}
-                  {{ audit_sort_th(6, 'Motivo', '19%') }}
+                  {{ audit_sort_th(0, 'Lectura', '10%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Vehículo', '14%') }}
+                  {{ audit_sort_th(2, 'Anterior → actual', '14%') }}
+                  {{ audit_sort_th(3, 'Δ km', '9%', 'right', 'num') }}
+                  {{ audit_sort_th(4, 'km/día', '9%', 'right', 'num') }}
+                  {{ audit_sort_th(5, 'Conductor Odoo', '15%') }}
+                  {{ audit_sort_th(6, 'Motivo', '16%') }}
+                  <th style="width: 13%; text-align: center;">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -264,13 +320,43 @@
                       {% endif %}
                     {% endfor %}
                   </td>
+                  <td class="text-center">{{ btn_visto(j.anomalia_kind, j.anomalia_clave) }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin saltos anómalos en el rango</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin saltos anómalos pendientes</div>
+          {% endif %}
+          {{ historico_toggle('collapseSaltos', saltos_visto|length) }}
+          {% if saltos_visto %}
+          <div id="collapseSaltosHistorico" class="collapse anomalia-historico">
+            <div class="audit-table-wrap">
+              <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
+                <thead>
+                  <tr>
+                    <th style="width:12%;">Lectura</th>
+                    <th style="width:18%;">Vehículo</th>
+                    <th style="width:18%;">Δ km</th>
+                    <th style="width:20%;">Motivo</th>
+                    <th style="width:14%; text-align:center;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for j in saltos_visto %}
+                  <tr class="audit-data-row audit-row--visto">
+                    <td>{{ j.fecha_actual.strftime('%d/%m/%Y') }}</td>
+                    <td>{% if j.vehiculo %}{{ j.vehiculo.matricula or j.vehiculo.nombre }}{% else %}—{% endif %}</td>
+                    <td>{% if j.delta_km >= 0 %}+{% endif %}{{ '%.0f'|format(j.delta_km) }} ({{ '%.0f'|format(j.km_dia) }}/d)</td>
+                    <td>{{ j.motivos|join(', ') }}</td>
+                    <td class="text-center">{{ btn_visto(j.anomalia_kind, j.anomalia_clave, true) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
           {% endif %}
         </div>
       </div>
@@ -281,6 +367,7 @@
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-percentage"></i></span>
             Desvío vs km previsto
             <span class="badge-count badge-count-danger">{{ desvios|length }}</span>
+            {% if desvios_visto %}<span class="badge-count text-muted">+{{ desvios_visto|length }} hist.</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -290,14 +377,15 @@
             <table id="auditDesviosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
-                  {{ audit_sort_th(0, 'Fecha', '11%', '', 'date') }}
-                  {{ audit_sort_th(1, 'Vehículo', '16%') }}
-                  {{ audit_sort_th(2, 'Viaje', '12%') }}
-                  {{ audit_sort_th(3, 'Km real', '10%', 'right', 'num') }}
-                  {{ audit_sort_th(4, 'Previsto', '10%', 'right', 'num') }}
-                  {{ audit_sort_th(5, 'Desvío %', '10%', 'right', 'num') }}
-                  {{ audit_sort_th(6, 'Conductor', '16%') }}
-                  {{ audit_sort_th(7, 'Planificado', '15%') }}
+                  {{ audit_sort_th(0, 'Fecha', '10%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Vehículo', '14%') }}
+                  {{ audit_sort_th(2, 'Viaje', '11%') }}
+                  {{ audit_sort_th(3, 'Km real', '9%', 'right', 'num') }}
+                  {{ audit_sort_th(4, 'Previsto', '9%', 'right', 'num') }}
+                  {{ audit_sort_th(5, 'Desvío %', '9%', 'right', 'num') }}
+                  {{ audit_sort_th(6, 'Conductor', '14%') }}
+                  {{ audit_sort_th(7, 'Planificado', '12%') }}
+                  <th style="width: 12%; text-align: center;">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -335,13 +423,43 @@
                     </a>
                     {% else %}—{% endif %}
                   </td>
+                  <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave) }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin desvíos altos en el rango</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin desvíos altos pendientes</div>
+          {% endif %}
+          {{ historico_toggle('collapseDesvios', desvios_visto|length) }}
+          {% if desvios_visto %}
+          <div id="collapseDesviosHistorico" class="collapse anomalia-historico">
+            <div class="audit-table-wrap">
+              <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
+                <thead>
+                  <tr>
+                    <th style="width:12%;">Fecha</th>
+                    <th style="width:20%;">Vehículo</th>
+                    <th style="width:14%;">Viaje</th>
+                    <th style="width:14%;">Desvío</th>
+                    <th style="width:14%; text-align:center;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in desvios_visto %}
+                  <tr class="audit-data-row audit-row--visto">
+                    <td>{{ a.fecha.strftime('%d/%m/%Y') }}</td>
+                    <td>{% if a.vehiculo %}{{ a.vehiculo.matricula or a.vehiculo.nombre }}{% else %}—{% endif %}</td>
+                    <td>{{ a.viaje_code or '—' }}</td>
+                    <td>{% if a.desvio >= 0 %}+{% endif %}{{ '%.1f'|format(a.desvio) }}%</td>
+                    <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave, true) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
           {% endif %}
         </div>
       </div>
@@ -352,6 +470,7 @@
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-umbrella-beach"></i></span>
             Vehículo en día de ausencia
             <span class="badge-count badge-count-danger">{{ vehiculo_en_ausencia|length }}</span>
+            {% if vehiculo_en_ausencia_visto %}<span class="badge-count text-muted">+{{ vehiculo_en_ausencia_visto|length }} hist.</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -361,13 +480,14 @@
             <table id="auditEnAusenciaTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
-                  {{ audit_sort_th(0, 'Fecha', '11%', '', 'date') }}
-                  {{ audit_sort_th(1, 'Operario', '18%') }}
-                  {{ audit_sort_th(2, 'Vehículo', '18%') }}
-                  {{ audit_sort_th(3, 'Ausencia', '18%') }}
-                  {{ audit_sort_th(4, 'Origen', '12%') }}
-                  {{ audit_sort_th(5, 'Km', '10%', 'right', 'num') }}
-                  {{ audit_sort_th(6, 'Conductor Odoo', '13%') }}
+                  {{ audit_sort_th(0, 'Fecha', '10%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Operario', '16%') }}
+                  {{ audit_sort_th(2, 'Vehículo', '16%') }}
+                  {{ audit_sort_th(3, 'Ausencia', '16%') }}
+                  {{ audit_sort_th(4, 'Origen', '11%') }}
+                  {{ audit_sort_th(5, 'Km', '9%', 'right', 'num') }}
+                  {{ audit_sort_th(6, 'Conductor Odoo', '10%') }}
+                  <th style="width: 12%; text-align: center;">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -405,13 +525,43 @@
                     {% if a.km is not none %}{{ '%.0f'|format(a.km) }}{% else %}—{% endif %}
                   </td>
                   <td>{{ a.conductor_odoo or '—' }}</td>
+                  <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave) }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin vehículos en días de ausencia</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin vehículos en días de ausencia pendientes</div>
+          {% endif %}
+          {{ historico_toggle('collapseEnAusencia', vehiculo_en_ausencia_visto|length) }}
+          {% if vehiculo_en_ausencia_visto %}
+          <div id="collapseEnAusenciaHistorico" class="collapse anomalia-historico">
+            <div class="audit-table-wrap">
+              <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
+                <thead>
+                  <tr>
+                    <th style="width:12%;">Fecha</th>
+                    <th style="width:22%;">Operario</th>
+                    <th style="width:22%;">Vehículo</th>
+                    <th style="width:18%;">Ausencia</th>
+                    <th style="width:14%; text-align:center;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in vehiculo_en_ausencia_visto %}
+                  <tr class="audit-data-row audit-row--visto">
+                    <td>{{ a.fecha.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ a.user.name }} {{ a.user.lastname }}</td>
+                    <td>{% if a.vehiculo %}{{ a.vehiculo.label() }}{% else %}—{% endif %}</td>
+                    <td>{{ a.ausencia_tipo }}</td>
+                    <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave, true) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
           {% endif %}
         </div>
       </div>
@@ -422,6 +572,7 @@
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-exchange-alt"></i></span>
             Vehículo distinto al planificado
             <span class="badge-count badge-count-danger">{{ vehiculo_distinto|length }}</span>
+            {% if vehiculo_distinto_visto %}<span class="badge-count text-muted">+{{ vehiculo_distinto_visto|length }} hist.</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -431,12 +582,13 @@
             <table id="auditVehiculoDistintoTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
-                  {{ audit_sort_th(0, 'Fecha', '12%', '', 'date') }}
-                  {{ audit_sort_th(1, 'Operario', '20%') }}
-                  {{ audit_sort_th(2, 'Planificado', '24%') }}
-                  {{ audit_sort_th(3, 'Reportado Odoo', '24%') }}
-                  {{ audit_sort_th(4, 'Km', '10%', 'right', 'num') }}
+                  {{ audit_sort_th(0, 'Fecha', '11%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Operario', '18%') }}
+                  {{ audit_sort_th(2, 'Planificado', '20%') }}
+                  {{ audit_sort_th(3, 'Reportado Odoo', '20%') }}
+                  {{ audit_sort_th(4, 'Km', '9%', 'right', 'num') }}
                   {{ audit_sort_th(5, 'Conductor Odoo', '10%') }}
+                  <th style="width: 12%; text-align: center;">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -466,58 +618,50 @@
                     {% if a.km is not none %}{{ '%.0f'|format(a.km) }}{% else %}—{% endif %}
                   </td>
                   <td>{{ a.conductor_odoo or '—' }}</td>
+                  <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave) }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin cruces de vehículo en el rango</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin cruces de vehículo pendientes</div>
+          {% endif %}
+          {{ historico_toggle('collapseVehiculoDistinto', vehiculo_distinto_visto|length) }}
+          {% if vehiculo_distinto_visto %}
+          <div id="collapseVehiculoDistintoHistorico" class="collapse anomalia-historico">
+            <div class="audit-table-wrap">
+              <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
+                <thead>
+                  <tr>
+                    <th style="width:12%;">Fecha</th>
+                    <th style="width:22%;">Operario</th>
+                    <th style="width:22%;">Planificado</th>
+                    <th style="width:22%;">Reportado</th>
+                    <th style="width:14%; text-align:center;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in vehiculo_distinto_visto %}
+                  <tr class="audit-data-row audit-row--visto">
+                    <td>{{ a.fecha.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ a.user.name }} {{ a.user.lastname }}</td>
+                    <td>{% if a.vehiculo_planificado %}{{ a.vehiculo_planificado.label() }}{% else %}—{% endif %}</td>
+                    <td>{% if a.vehiculo_reportado %}{{ a.vehiculo_reportado.label() }}{% else %}—{% endif %}</td>
+                    <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave, true) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
           {% endif %}
         </div>
       </div>
 
-      <div class="auditoria-section card-modern card" style="overflow: hidden;">
-        <div class="auditoria-section-header card-header {% if not mismatch %}collapsed{% endif %}" data-target="#collapseMismatch" role="button" aria-expanded="{{ 'true' if mismatch else 'false' }}">
-          <h6 class="auditoria-section-title text-danger mb-0">
-            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-user-slash"></i></span>
-            Conductor distinto
-            <span class="badge-count badge-count-danger">{{ mismatch|length }}</span>
-          </h6>
-          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-        </div>
-        <div id="collapseMismatch" class="collapse {% if mismatch %}show{% endif %}">
-          {{ tabla_odometros('auditMismatchTable', mismatch) }}
-        </div>
-      </div>
-
-      <div class="auditoria-section card-modern card" style="overflow: hidden;">
-        <div class="auditoria-section-header card-header collapsed" data-target="#collapseSinKm" role="button" aria-expanded="false">
-          <h6 class="auditoria-section-title text-warning mb-0">
-            <span class="section-icon-wrap section-icon-wrap--warning"><i class="fas fa-tachometer-alt"></i></span>
-            Sin kilómetros
-            <span class="badge-count">{{ sin_km|length }}</span>
-          </h6>
-          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-        </div>
-        <div id="collapseSinKm" class="collapse">
-          {{ tabla_odometros('auditSinKmTable', sin_km) }}
-        </div>
-      </div>
-
-      <div class="auditoria-section card-modern card" style="overflow: hidden;">
-        <div class="auditoria-section-header card-header collapsed" data-target="#collapseSinPlan" role="button" aria-expanded="false">
-          <h6 class="auditoria-section-title text-info mb-0">
-            <span class="section-icon-wrap section-icon-wrap--info"><i class="fas fa-route"></i></span>
-            Sin planificar
-            <span class="badge-count">{{ sin_planificar|length }}</span>
-          </h6>
-          <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-        </div>
-        <div id="collapseSinPlan" class="collapse">
-          {{ tabla_odometros('auditSinPlanTable', sin_planificar) }}
-        </div>
-      </div>
+      {{ seccion_odometros('collapseMismatch', 'Conductor distinto', 'fa-user-slash', 'text-danger', 'section-icon-wrap--danger', 'badge-count-danger', mismatch, mismatch_visto, 'conductor distinto') }}
+      {{ seccion_odometros('collapseSinKm', 'Sin kilómetros', 'fa-tachometer-alt', 'text-warning', 'section-icon-wrap--warning', '', sin_km, sin_km_visto, 'sin km') }}
+      {{ seccion_odometros('collapseSinPlan', 'Sin planificar', 'fa-route', 'text-info', 'section-icon-wrap--info', '', sin_planificar, sin_planificar_visto, 'sin planificar') }}
 
       <div class="auditoria-section card-modern card" style="overflow: hidden;">
         <div class="auditoria-section-header card-header collapsed" data-target="#collapseOk" role="button" aria-expanded="false">
@@ -529,7 +673,51 @@
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
         <div id="collapseOk" class="collapse">
-          {{ tabla_odometros('auditOkTable', historial_ok) }}
+          {% if historial_ok %}
+          <div class="audit-table-wrap">
+            <table id="auditOkTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+              <thead>
+                <tr>
+                  {{ audit_sort_th(0, 'Fecha', '12%', '', 'date') }}
+                  {{ audit_sort_th(1, 'Vehículo', '18%') }}
+                  {{ audit_sort_th(2, 'Planificado', '20%') }}
+                  {{ audit_sort_th(3, 'Conductor Odoo', '20%') }}
+                  {{ audit_sort_th(4, 'Km', '12%', 'right', 'num') }}
+                  {{ audit_sort_th(5, 'Estado', '18%') }}
+                </tr>
+              </thead>
+              <tbody>
+                {% for reg in historial_ok %}
+                <tr class="audit-data-row">
+                  <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                  <td>
+                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=reg.vehiculo.id) }}" class="link-user">
+                      <strong>{{ reg.vehiculo.matricula or '—' }}</strong>
+                      <span class="d-block text-muted small">{{ reg.vehiculo.nombre }}</span>
+                    </a>
+                  </td>
+                  <td>
+                    {% if reg.planned_user %}
+                      <a href="{{ url_for('admin.worker_panel', user_id=reg.planned_user.id) }}" class="link-user">
+                        {{ reg.planned_user.name }} {{ reg.planned_user.lastname }}
+                      </a>
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>{{ reg.odoo_driver_name or '—' }}</td>
+                  <td class="text-right">
+                    {% if reg.qty_km is not none %}{{ '%.0f'|format(reg.qty_km) }} km
+                    {% elif reg.valor is not none %}{{ '%.0f'|format(reg.valor) }} km
+                    {% else %}—{% endif %}
+                  </td>
+                  <td><span class="badge badge-success">OK</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin registros en esta categoría</div>
+          {% endif %}
         </div>
       </div>
 
@@ -565,6 +753,67 @@ document.querySelectorAll('.auditoria-stat-link[data-audit-target]').forEach(fun
       }
       panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  });
+});
+
+document.querySelectorAll('.btn-toggle-historico').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var target = document.querySelector(btn.getAttribute('data-target'));
+    if (!target) return;
+    var open = target.classList.contains('show');
+    target.classList.toggle('show', !open);
+    btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+    var n = (btn.textContent.match(/\((\d+)\)/) || [])[1] || '';
+    btn.innerHTML = open
+      ? '<i class="fas fa-history"></i> Ver histórico' + (n ? ' (' + n + ')' : '')
+      : '<i class="fas fa-history"></i> Ocultar histórico' + (n ? ' (' + n + ')' : '');
+  });
+});
+
+function getCsrfTokenAuditoria() {
+  if (typeof window.getCsrfToken === 'function') return window.getCsrfToken();
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta) return meta.getAttribute('content');
+  var m = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.btn-anomalia-visto');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var kind = btn.getAttribute('data-kind');
+  var clave = btn.getAttribute('data-clave');
+  if (!kind || !clave) return;
+  btn.disabled = true;
+  fetch('{{ url_for("sync.auditoria_vehiculos_visto") }}', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCsrfTokenAuditoria()
+    },
+    body: JSON.stringify({ kind: kind, clave: clave })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.success) {
+      var row = btn.closest('tr');
+      if (row) {
+        row.style.transition = 'opacity 0.25s';
+        row.style.opacity = '0.35';
+        setTimeout(function() { row.remove(); }, 280);
+      }
+    } else {
+      btn.disabled = false;
+      Swal.fire('Error', res.error || 'No se pudo marcar como visto', 'error');
+    }
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    Swal.fire('Error', String(err), 'error');
   });
 });
 

@@ -251,6 +251,7 @@
                   <th>Salida</th>
                   <th>Horas</th>
                   <th>Obra</th>
+                  <th>Conforme</th>
                   <th></th>
                 </tr>
               </thead>
@@ -262,6 +263,13 @@
                     <td>{{ d.salida|format_time if d.salida else '—' }}</td>
                     <td>{{ formatear_horas(d.minutos) }}</td>
                     <td>{{ d.obra_nombre or '—' }}</td>
+                    <td>
+                      {% if d.conforme %}
+                        <span class="rj-flag" style="background:#ecfdf5;color:#065f46;">Firmada</span>
+                      {% else %}
+                        <span class="text-muted">Pendiente</span>
+                      {% endif %}
+                    </td>
                     <td>
                       {% if d.tiene_correcciones %}
                         <span class="rj-flag">Con corrección</span>

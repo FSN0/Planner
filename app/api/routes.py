@@ -2,8 +2,9 @@ from flask import Blueprint, request, jsonify, url_for
 from flask_login import login_required, current_user
 # IMPORTAMOS db AQUÍ
 from app import db 
-from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
+from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_RRHH
 from app.services.permission_service import is_laboral
+from app.decorators import roles_required_api
 from datetime import datetime, timedelta
 import json
 from collections import defaultdict # AÑADIDO PARA LA LÓGICA DE AGRUPACIÓN
@@ -11,6 +12,8 @@ from collections import defaultdict # AÑADIDO PARA LA LÓGICA DE AGRUPACIÓN
 
 
 api_bp = Blueprint('api_v6', __name__, url_prefix='/api/v6')
+
+_ROLES_OFICINA = (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH)
 
 
 def _obra_label(obra, fallback='Obra desconocida'):
@@ -22,8 +25,55 @@ def _obra_label(obra, fallback='Obra desconocida'):
     return obra.nombre or fallback
 
 
+def _jefe_obra_ids():
+    return [
+        o.id for o in Obra.query.filter_by(
+            is_deleted=False, jefe_obra_id=current_user.id
+        ).all()
+    ]
+
+
+def _jefe_puede_ver_worker(user_id):
+    """El jefe solo ve trabajadores ligados a sus obras (asignación o jefatura)."""
+    if user_id == current_user.id:
+        return True
+    obra_ids = _jefe_obra_ids()
+    if not obra_ids:
+        return False
+    return Asignacion.query.filter(
+        Asignacion.user_id == user_id,
+        Asignacion.obra_id.in_(obra_ids),
+    ).first() is not None
+
+
+def _autorizar_calendario(context, entity_id):
+    """
+    Solo perfiles de oficina. El operario con PIN no puede enumerar
+    calendarios ajenos (RGPD). El jefe queda acotado a sus obras.
+    """
+    if current_user.role not in _ROLES_OFICINA:
+        return jsonify({'success': False, 'error': 'Acceso no autorizado'}), 403
+
+    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
+        return None
+
+    # Jefe de obra: ámbito por obra / trabajador / vehículo de su círculo
+    if context == 'obra':
+        obra = Obra.query.get(entity_id)
+        if not obra or obra.jefe_obra_id != current_user.id:
+            return jsonify({'success': False, 'error': 'No tienes permiso sobre esta obra'}), 403
+    elif context == 'worker':
+        if not _jefe_puede_ver_worker(entity_id):
+            return jsonify({'success': False, 'error': 'No tienes permiso sobre este trabajador'}), 403
+    elif context == 'empresa':
+        return jsonify({'success': False, 'error': 'Acceso no autorizado'}), 403
+    # vehiculo / solicitud: el jefe puede consultar (planificación compartida)
+    return None
+
+
 @api_bp.route('/recursos_activos', methods=['GET'])
 @login_required
+@roles_required_api(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def recursos_activos():
     """Devuelve las obras y usuarios activos filtrados por el rol (Para selectores y modales)"""
     
@@ -31,15 +81,29 @@ def recursos_activos():
     if current_user.role == ROLE_ADMIN:
         obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
     elif current_user.role == ROLE_JEFE:
-        # MAGIA: Si es jefe, solo traemos las que tienen su ID
         obras = Obra.query.filter_by(is_deleted=False, jefe_obra_id=current_user.id).order_by(Obra.nombre).all()
-    elif current_user.role == ROLE_LABORAL:
+    elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
         obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
     else:
         obras = []
-        
-    # 2. Usuarios (Siguen saliendo todos de momento, a menos que quieras filtrarlos también)
-    users = User.query.filter_by(is_deleted=False).order_by(User.name).all()
+
+    # 2. Usuarios: nunca la plantilla completa a quien no sea admin/laboral
+    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
+        users = User.query.filter_by(is_deleted=False).order_by(User.name).all()
+    elif current_user.role == ROLE_JEFE:
+        obra_ids = [o.id for o in obras]
+        user_ids = {current_user.id}
+        if obra_ids:
+            for row in Asignacion.query.filter(Asignacion.obra_id.in_(obra_ids)).with_entities(Asignacion.user_id).distinct():
+                user_ids.add(row[0])
+        users = (
+            User.query.filter(User.id.in_(user_ids), User.is_deleted.is_(False))
+            .order_by(User.name)
+            .all()
+            if user_ids else []
+        )
+    else:
+        users = []
     
     return jsonify({
         'obras': [
@@ -108,6 +172,10 @@ def get_universal_calendar_events():
     end_str = request.args.get('end')
     show_fichajes = request.args.get('show_fichajes') == '1'
     if not start_str or not end_str: return jsonify([])
+
+    denied = _autorizar_calendario(context, entity_id)
+    if denied is not None:
+        return denied
 
     try:
         s_clean = start_str.replace('Z', '').split('T')[0]
@@ -305,7 +373,7 @@ def get_universal_calendar_events():
                 day = day + timedelta(days=1)
             flush_gap(gap_start, gap_end)
 
-        # --- MOTOR UNIVERSAL DE PRIORIDADES PARA FICHAJES MULTI-OBRA (Capa 2) ---
+            # --- MOTOR UNIVERSAL DE PRIORIDADES PARA FICHAJES MULTI-OBRA (Capa 2) ---
         if show_fichajes:
             from app.models import RegistroFichaje
             fichajes = RegistroFichaje.query.filter(
@@ -321,10 +389,11 @@ def get_universal_calendar_events():
                     fichajes_dict[f.fecha] = []
                 fichajes_dict[f.fecha].append(f)
 
-            # EXTRAEMOS TODAS LAS FECHAS ASIGNADAS (Para obligar a pintar la bola gris si no hay datos)
+            # Días con plan O con fichaje (paracaidista/conflicto sin asignación)
             fechas_asignadas = set(a.fecha for a in asignaciones)
+            fechas_a_pintar = fechas_asignadas | set(fichajes_dict.keys())
 
-            for fecha in fechas_asignadas:
+            for fecha in fechas_a_pintar:
                 lista_fichajes = fichajes_dict.get(fecha, [])
                 
                 if not lista_fichajes:
@@ -1215,7 +1284,7 @@ def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color
 def person_day_timeline(user_id, fecha_str):
     from app.services.person_day_timeline_service import build_person_day_timeline
 
-    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
+    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
 
     data = build_person_day_timeline(user_id, fecha_str)
@@ -1230,7 +1299,7 @@ def person_day_timeline_range(user_id):
     """Rango de fechas: ?from=YYYY-MM-DD&to=YYYY-MM-DD (uno solo = un día)."""
     from app.services.person_day_timeline_service import build_person_day_timeline_range
 
-    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL):
+    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
 
     fecha_from = request.args.get('from') or request.args.get('fecha_inicio')

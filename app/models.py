@@ -18,6 +18,8 @@ ROLE_JEFE = 'jefe_obra'
 ROLE_RRHH = 'rrhh'
 ROLE_ADMIN = 'admin'
 ROLE_LABORAL = 'laboral'
+# RRHH = mismos permisos que laboral (hasta definir un ACL propio).
+ROLES_LABORAL_LIKE = (ROLE_LABORAL, ROLE_RRHH)
 from sqlalchemy import event
 
 # Esta función se dispara cada vez que SQLAlchemy hace una consulta
@@ -52,6 +54,11 @@ class Tenant(db.Model):
     billing_exempt = db.Column(db.Boolean, nullable=False, server_default='false', default=False)
     stripe_customer_id = db.Column(db.String(120), nullable=True)
     stripe_subscription_id = db.Column(db.String(120), nullable=True)
+
+    # Consentimiento legal del alta autoservicio (versiones publicadas en /legal).
+    legal_aceptado_at = db.Column(db.DateTime, nullable=True)
+    legal_privacidad_version = db.Column(db.String(32), nullable=True)
+    legal_condiciones_version = db.Column(db.String(32), nullable=True)
     
     def __repr__(self):
         return f'<Tenant {self.nombre} - Subdominio: {self.subdominio}>'
@@ -124,10 +131,16 @@ class User(UserMixin, db.Model):
     # Estados y Ciclo de vida
     active = db.Column(db.Boolean, default=False)  # Aprobado por RRHH (para operarios)
     is_deleted = db.Column(db.Boolean, default=False)  # Soft delete
+    # Alta autoservicio: False hasta confirmar el enlace del correo.
+    email_verified = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='false'
+    )
     
     # Configuración
     receive_emails = db.Column(db.Boolean, default=True)
     timezone = db.Column(db.String(64), nullable=True)
+    # Idioma de interfaz (es, en, pt, fr). None → detección automática.
+    locale = db.Column(db.String(8), nullable=True)
     especialidad = db.Column(db.String(100), nullable=True) # Electricista, Fontanero, Albañil...
     
     # Programación de estados (Activación/Desactivación futura)
@@ -451,6 +464,10 @@ EVENTO_ANULACION = 'anulacion'
 # ninguna hora se ha tocado, y eso es justo lo contrario de lo que debe probar.
 EVENTO_REASIGNACION_OBRA = 'reasignacion_obra'
 
+# Conforme del trabajador sobre la jornada del día (art. 34.9 ET / inspección).
+# No es marca de tiempo: acredita que el interesado revisó y aceptó el registro.
+EVENTO_CONFORME_JORNADA = 'conforme_jornada'
+
 TIPOS_EVENTO_FICHAJE = (
     EVENTO_ENTRADA,
     EVENTO_SALIDA,
@@ -458,6 +475,7 @@ TIPOS_EVENTO_FICHAJE = (
     EVENTO_PAUSA_FIN,
     EVENTO_ANULACION,
     EVENTO_REASIGNACION_OBRA,
+    EVENTO_CONFORME_JORNADA,
 )
 
 # Tipos que representan una marca de tiempo real de la persona. El resto son
@@ -787,6 +805,27 @@ class SolicitudVehiculo(db.Model):
 
     def __repr__(self):
         return f'<SolicitudVehiculo {self.id} {self.accion} {self.estado}>'
+
+
+class AnomaliaVehiculoVista(db.Model):
+    """Acuse informativo de anomalía de flota (oculta de la vista por defecto)."""
+    __tablename__ = 'anomalias_vehiculo_vista'
+    __table_args__ = (
+        db.UniqueConstraint('kind', 'clave', name='uq_anomalia_vehiculo_vista_kind_clave'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    # salto | cross | leave | desvio | mismatch | sin_km | sin_plan
+    kind = db.Column(db.String(32), nullable=False, index=True)
+    clave = db.Column(db.String(160), nullable=False)
+    visto_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    visto_en = db.Column(db.DateTime, default=_utc_now, nullable=False)
+    payload = db.Column(db.JSON, nullable=True)
+
+    visto_por = db.relationship('User', foreign_keys=[visto_por_id])
+
+    def __repr__(self):
+        return f'<AnomaliaVehiculoVista {self.kind}:{self.clave}>'
 
 
 class Rating(db.Model):

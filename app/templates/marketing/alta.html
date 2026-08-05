@@ -11,12 +11,12 @@
 <body class="marketing-page">
     <header class="mkt-nav">
         <a class="mkt-brand" href="/">
-            <i class="fas fa-hard-hat"></i>
+            <span class="mkt-brand-mark" aria-hidden="true"></span>
             <span>SignaPlan</span>
         </a>
         <nav class="mkt-nav-links">
             <a href="/">Inicio</a>
-            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
+            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">{{ _('nav.signup') }}</a>
         </nav>
     </header>
 

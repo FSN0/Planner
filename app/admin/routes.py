@@ -10,6 +10,7 @@ from app.models import (
     ROLE_JEFE,
     ROLE_OPERARIO,
     ROLE_LABORAL,
+    ROLE_RRHH,
     Company,
     Solicitud,
     SolicitudVehiculo,
@@ -53,6 +54,14 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 ALLOWED_EXTENSIONS = {"xlsx"}
 
 
+@admin_bp.before_request
+def _bloquear_operario_en_admin():
+    """El PIN del operario es sesión completa: no debe llegar al panel de oficina."""
+    if current_user.is_authenticated and current_user.role == ROLE_OPERARIO:
+        flash('Tu perfil no tiene acceso al panel de administración.', 'warning')
+        return redirect(url_for('operarios.inicio'))
+
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -81,6 +90,7 @@ def import_obras():
 
 @admin_bp.route('/solicitudes')
 @login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def solicitudes_list():
     seccion = request.args.get('seccion', 'personal')
     if seccion not in ('personal', 'vehiculos'):
@@ -1373,6 +1383,7 @@ def primeros_pasos():
                     email=email,
                     role=ROLE_OPERARIO,
                     active=True,
+                    email_verified=True,
                     company_id=company.id if company else None,
                     password_hash=generate_password_hash(pin),
                 )
@@ -1794,6 +1805,7 @@ def create_user():
             dni=dni,
             company_id=int(company_id) if company_id else None,
             active=active,
+            email_verified=True,
             categoria_profesional=categoria,
             especialidad=especialidad,
         )
@@ -1950,7 +1962,7 @@ from app.services.assignment_service import process_assignment_action
 @admin_bp.route("/planificador")
 @login_required
 def planificador_jo():
-    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL]:
+    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]:
         flash("Acceso denegado.", "danger")
         return redirect(url_for('main.dashboard'))
     todas_obras = []
@@ -1961,7 +1973,7 @@ def planificador_jo():
     # reciban la lista de empresas y puedan usar el filtro.
     empresas = Company.query.order_by(Company.nombre).all()
     
-    if current_user.role in [ROLE_ADMIN, ROLE_LABORAL]:
+    if current_user.role in [ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH]:
         today = date.today()
         # Filtro blindado: Ni finalizadas, ni borradas lógicamente, ni pasadas de fecha
         todas_obras = Obra.query.filter(
@@ -1993,7 +2005,7 @@ def api_planificador_resources():
     
     if current_user.role == ROLE_JEFE:
         obras = Obra.query.filter(Obra.jefe_obra_id == current_user.id, *base_filters).all()
-    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL):
+    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         if jefe_id:
             obras = Obra.query.filter(Obra.jefe_obra_id == jefe_id, *base_filters).all()
         else:
@@ -2039,7 +2051,7 @@ def api_planificador_events():
     # Recopilamos IDs asegurándonos de aplicar los mismos filtros blindados
     if current_user.role == ROLE_JEFE:
         obras_ids = [o.id for o in Obra.query.filter(Obra.jefe_obra_id == current_user.id, *base_filters).all()]
-    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL):
+    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         if jefe_id:
             obras_ids = [o.id for o in Obra.query.filter(Obra.jefe_obra_id == jefe_id, *base_filters).all()]
         else:
@@ -2423,9 +2435,7 @@ def update_config():
         _upsert('ausencias_jefe_puede_resolver', jefe_resuelve)
 
         auto_res = request.form.get('ausencias_auto_resolucion') or 'overlay'
-        if auto_res == 'prefer_leave':
-            auto_res = 'overlay'
-        if auto_res not in ('overlay', 'none', 'prefer_assignment'):
+        if auto_res not in ('overlay', 'none', 'prefer_leave', 'prefer_assignment'):
             auto_res = 'overlay'
         _upsert('ausencias_auto_resolucion', auto_res)
 
@@ -2460,7 +2470,8 @@ def update_config():
 
     if 'emails' in section_keys:
         eventos_email = [
-            'email_sol_generica', 'email_sol_concreta', 'email_sol_resuelta',
+            'email_sol_generica', 'email_sol_concreta', 'email_sol_vehiculo',
+            'email_sol_resuelta',
             'email_asignacion', 'email_desasignacion', 'email_traslado',
         ]
         for evento in eventos_email:
@@ -2854,7 +2865,7 @@ def ausencias_list():
     )
 
     estado = request.args.get('estado') or ''
-    puede_resolver = current_user.role in (ROLE_ADMIN, ROLE_LABORAL) or (
+    puede_resolver = current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH) or (
         current_user.role == ROLE_JEFE and jefe_puede_resolver_ausencias()
     )
     obra_ids = None
@@ -2877,7 +2888,7 @@ def ausencias_list():
     ))
     ausencias = get_leaves_scoped(current_user, estado=estado or None, limit=200)
     pendientes = []
-    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL):
+    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         pendientes = get_pending_manual_leaves(current_user, limit=100)
     elif current_user.role == ROLE_JEFE:
         pendientes = get_pending_manual_leaves(current_user, limit=100)
@@ -2890,8 +2901,8 @@ def ausencias_list():
         proximas_rows=proximas_rows,
         conflictos=conflictos,
         puede_resolver=puede_resolver,
-        puede_validar_pendientes=current_user.role in (ROLE_ADMIN, ROLE_LABORAL),
-        puede_alta_manual=current_user.role in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL),
+        puede_validar_pendientes=current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH),
+        puede_alta_manual=current_user.role in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH),
         filtro_estado=estado,
         auto_mode=auto_mode,
         today=date_cls.today(),
@@ -2999,7 +3010,7 @@ def ausencias_resolver_conflicto(conflict_id):
     if current_user.role == ROLE_JEFE and not jefe_puede_resolver_ausencias():
         flash('No tienes permiso para resolver conflictos de ausencias.', 'danger')
         return redirect(url_for('admin.ausencias_list'))
-    if current_user.role == ROLE_LABORAL and not user_can(current_user, 'ausencias', 'x'):
+    if is_laboral(current_user) and not user_can(current_user, 'ausencias', 'x'):
         flash('No tienes permiso para resolver conflictos de ausencias.', 'danger')
         return redirect(url_for('admin.ausencias_list'))
 

@@ -336,7 +336,8 @@ def user_admin(session, tenant_soltec, company_internal, db):
         lastname="Test",
         dni="11111111A",
         company_id=company_internal.id,
-        active=True
+        active=True,
+        email_verified=True,
     )
     session.add(user)
     session.commit()  # Commit para que esté disponible
@@ -358,7 +359,8 @@ def user_jefe(session, tenant_soltec, company_internal, db):
         lastname="Jefe",
         dni="22222222B",
         company_id=company_internal.id,
-        active=True
+        active=True,
+        email_verified=True,
     )
     session.add(user)
     session.commit()  # Commit para que esté disponible
@@ -380,7 +382,8 @@ def user_rrhh(session, tenant_soltec, company_internal, db):
         lastname="RRHH",
         dni="33333333C",
         company_id=company_internal.id,
-        active=True
+        active=True,
+        email_verified=True,
     )
     session.add(user)
     session.commit()  # Commit para que esté disponible
@@ -403,7 +406,8 @@ def user_operario(session, tenant_soltec, company_internal, db):
         dni="44444444D",
         company_id=company_internal.id,
         categoria_profesional="Oficial 1ª",
-        active=True
+        active=True,
+        email_verified=True,
     )
     session.add(user)
     session.commit()  # Commit para que esté disponible

@@ -2,15 +2,23 @@
 #
 # Alta autoservicio: una empresa se crea su propio tenant desde signaplan.com/alta.
 # Reutiliza provision_new_tenant; añade validaciones de producto (reservados,
-# contraseña mínima, aceptación legal).
+# contraseña mínima, aceptación legal) y deja la cuenta pendiente de verificar correo.
 
 import re
 import unicodedata
+from datetime import datetime
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from sqlalchemy import text
 
+from app import db
+from app.models import User
 from app.services.tenant_domain_service import _RESERVED_SUBDOMAINS
 from app.services.tenant_service import provision_new_tenant
+
+# Versiones publicadas de los textos legales (coinciden con /legal).
+LEGAL_PRIVACIDAD_VERSION = '2026-08'
+LEGAL_CONDICIONES_VERSION = '2026-08'
 
 # Subdominios que no debe poder registrar un cliente.
 _SUBDOMINIOS_BLOQUEADOS = _RESERVED_SUBDOMAINS | frozenset({
@@ -65,6 +73,18 @@ def validar_password(password, password2):
     return password
 
 
+def _admin_del_tenant(tenant, admin_email):
+    """Localiza el admin recién creado en el esquema del tenant."""
+    db.session.execute(text(f'SET search_path TO {tenant.schema_name}'))
+    try:
+        return User.query.filter_by(
+            email=(admin_email or '').strip().lower(),
+            is_deleted=False,
+        ).first()
+    finally:
+        db.session.execute(text('SET search_path TO public'))
+
+
 def registrar_empresa(
     *,
     nombre_empresa,
@@ -76,7 +96,10 @@ def registrar_empresa(
     acepta_condiciones,
 ):
     """
-    Crea el tenant en plan free. Devuelve el Tenant.
+    Crea el tenant en plan free, guarda el consentimiento legal y deja al
+    admin inactivo hasta verificar el correo.
+
+    Devuelve (tenant, email_enviado).
     """
     nombre_empresa = (nombre_empresa or '').strip()
     admin_email = (admin_email or '').strip().lower()
@@ -92,7 +115,7 @@ def registrar_empresa(
     password = validar_password(admin_password, admin_password2)
 
     try:
-        return provision_new_tenant(
+        tenant = provision_new_tenant(
             nombre_empresa,
             subdominio,
             admin_email,
@@ -102,9 +125,26 @@ def registrar_empresa(
                 'registro_jornada': True,
                 'onboarding': True,
             },
+            email_verified=False,
+            active=False,
         )
     except ValueError as exc:
         raise SignupError(str(exc)) from exc
+
+    # Consentimiento: qué versiones aceptó y cuándo (UTC).
+    db.session.execute(text('SET search_path TO public'))
+    tenant.legal_aceptado_at = datetime.utcnow()
+    tenant.legal_privacidad_version = LEGAL_PRIVACIDAD_VERSION
+    tenant.legal_condiciones_version = LEGAL_CONDICIONES_VERSION
+    db.session.commit()
+
+    admin = _admin_del_tenant(tenant, admin_email)
+    email_enviado = False
+    if admin is not None:
+        from app.services.email_verification_service import enviar_email_verificacion
+        email_enviado = bool(enviar_email_verificacion(tenant, admin))
+
+    return tenant, email_enviado
 
 
 def url_acceso_tenant(tenant, path='/auth/login'):

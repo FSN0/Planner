@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 
 from app import db
-from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje, RegistroOdometro, ROLE_ADMIN, ROLE_LABORAL
+from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje, RegistroOdometro, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH
 from app.services.core_assignment_service import CoreAssignmentService
 from app.services.sync_dashboard_service import get_sync_panel_context, test_odoo_connection
 from app.services.sync_config_service import SyncConfigService
@@ -493,6 +493,7 @@ def commit_subcontratas():
                 categoria_profesional=obj.get('categoria_profesional'),
                 company_id=local_comp_id,
                 active=True,
+                email_verified=True,
                 password_hash=generate_password_hash(secrets.token_urlsafe(16)),
             )
             db.session.add(nuevo_user)
@@ -610,6 +611,7 @@ def commit_empleados():
                 role=obj['role'],
                 categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
                 active=True,
+                email_verified=True,
                 company_id=default_company_id,
                 password_hash=generate_password_hash(dni_limpio),
             ))
@@ -636,7 +638,7 @@ def commit_empleados():
 @sync_bp.route('/auditoria')
 @login_required
 def auditoria_fichajes():
-    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL]:
+    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
         flash("Acceso denegado. Solo Admin o Jefes de Obra pueden auditar fichajes.", "danger")
         return redirect(url_for('main.index'))
     
@@ -682,16 +684,19 @@ ACCION_RESOLUCION_TITULOS = {
 }
 
 # Placeholders / pendientes que dejan la pelotita naranja tras resolver otra fila.
+# Incluye Paracaidista/Conflicto hermanos: si el admin ya cerró el caso del día
+# (p. ej. aceptó multi-obra), no deben dejar la pelotita en rojo/naranja.
 _ESTADOS_HERMANO_PLACEHOLDER = (
     'Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso',
+    'Paracaidista', 'Conflicto',
 )
 
 
 def _cerrar_hermanos_placeholder(registro, accion):
     """
     Al aceptar/mover/borrar, cierra filas hermanas del mismo día que solo son
-    semillas de sync (Sin_Registro/Ausencia/…). Así el día queda verde si el
-    admin ya resolvió el caso (p. ej. multi-obra Resuelto_Asignado).
+    semillas de sync o incidencias ya cubiertas por la resolución principal.
+    Así el día queda verde si el admin ya resolvió el caso.
     """
     if accion not in ('anadir', 'mover', 'borrar_planificacion', 'ignorar'):
         return
@@ -744,8 +749,8 @@ def _detalle_resolucion_fichaje(registro, accion, estado_anterior=None):
         return "Reasignado a la obra real."
 
     if accion == 'anadir':
-        if estado_anterior == 'Paracaidista' and obra_real:
-            return f"Se acepta el fichaje sin planificar en '{obra_real}'."
+        if estado_anterior in ('Paracaidista', 'Conflicto') and obra_real:
+            return f"Se acepta el fichaje {'sin planificar' if estado_anterior == 'Paracaidista' else 'con desviación de plan'} en '{obra_real}'."
         if obra_real:
             return f"Añadida asignación en '{obra_real}' (pluriempleo)."
         return "Añadida multi-asignación (pluriempleo)."
@@ -775,7 +780,7 @@ def resolver_fichaje():
     from app.models import RegistroFichaje, Asignacion, Obra
     from datetime import datetime
     
-    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL]:
+    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
         return jsonify({'success': False, 'error': 'No autorizado'}), 403
     if not can_resolve_fichajes(current_user):
         return jsonify({'success': False, 'error': 'Resolución deshabilitada para este perfil.'}), 403
@@ -847,7 +852,7 @@ def resolver_fichaje():
                         None, "Actualización de Cuadrante (Auto)"
                     )
             
-            if estado_anterior == 'Paracaidista':
+            if estado_anterior in ('Paracaidista', 'Conflicto'):
                 registro.estado = 'Resuelto_Asignado'
             else:
                 registro.estado = 'Resuelto_Dividido'
@@ -1058,6 +1063,8 @@ def auditoria_vehiculos():
         detect_viaje_desvios,
         get_desvio_thresholds,
         get_odometer_jump_thresholds,
+        get_vistos_claves,
+        partition_anomalias,
     )
 
     thresholds = get_odometer_jump_thresholds()
@@ -1138,16 +1145,39 @@ def auditoria_vehiculos():
     elif estado in {'mismatch_driver', 'sin_km', 'sin_planificar', 'ok'}:
         saltos, vehiculo_distinto, vehiculo_en_ausencia, desvios = [], [], [], []
 
+    # Partición informativa pendientes vs visto (no altera detección)
+    vistos_set = get_vistos_claves([
+        'salto', 'cross', 'leave', 'desvio', 'mismatch', 'sin_km', 'sin_plan',
+    ])
+    saltos, saltos_visto = partition_anomalias('salto', saltos, vistos_set)
+    desvios, desvios_visto = partition_anomalias('desvio', desvios, vistos_set)
+    vehiculo_en_ausencia, vehiculo_en_ausencia_visto = partition_anomalias(
+        'leave', vehiculo_en_ausencia, vistos_set
+    )
+    vehiculo_distinto, vehiculo_distinto_visto = partition_anomalias(
+        'cross', vehiculo_distinto, vistos_set
+    )
+    mismatch, mismatch_visto = partition_anomalias('mismatch', mismatch, vistos_set)
+    sin_km, sin_km_visto = partition_anomalias('sin_km', sin_km, vistos_set)
+    sin_plan, sin_plan_visto = partition_anomalias('sin_plan', sin_plan, vistos_set)
+
     return render_template(
         'sync/auditoria_vehiculos.html',
         mismatch=mismatch,
+        mismatch_visto=mismatch_visto,
         sin_km=sin_km,
+        sin_km_visto=sin_km_visto,
         sin_planificar=sin_plan,
+        sin_planificar_visto=sin_plan_visto,
         historial_ok=ok_hist,
         saltos=saltos,
+        saltos_visto=saltos_visto,
         vehiculo_distinto=vehiculo_distinto,
+        vehiculo_distinto_visto=vehiculo_distinto_visto,
         vehiculo_en_ausencia=vehiculo_en_ausencia,
+        vehiculo_en_ausencia_visto=vehiculo_en_ausencia_visto,
         desvios=desvios,
+        desvios_visto=desvios_visto,
         umbrales_salto=thresholds,
         umbrales_desvio=umbrales_desvio,
         umbral_desvio=max(umbrales_desvio['max_pct'], umbrales_desvio['min_pct']),
@@ -1158,13 +1188,54 @@ def auditoria_vehiculos():
             'orden': orden,
             'q': request.args.get('q', '').strip(),
         },
-        total_filtrado=len(registros)
-            + (len(saltos) if estado in ('all', 'salto_km') else 0)
-            + (len(vehiculo_distinto) if estado in ('all', 'vehiculo_distinto') else 0)
-            + (len(vehiculo_en_ausencia) if estado in ('all', 'en_ausencia') else 0)
-            + (len(desvios) if estado in ('all', 'desvio') else 0),
+        total_filtrado=(
+            len(mismatch) + len(mismatch_visto)
+            + len(sin_km) + len(sin_km_visto)
+            + len(sin_plan) + len(sin_plan_visto)
+            + len(ok_hist)
+            + (len(saltos) + len(saltos_visto) if estado in ('all', 'salto_km') else 0)
+            + (len(vehiculo_distinto) + len(vehiculo_distinto_visto)
+               if estado in ('all', 'vehiculo_distinto') else 0)
+            + (len(vehiculo_en_ausencia) + len(vehiculo_en_ausencia_visto)
+               if estado in ('all', 'en_ausencia') else 0)
+            + (len(desvios) + len(desvios_visto) if estado in ('all', 'desvio') else 0)
+        ),
         total_ok=len(ok_hist),
+        total_pendientes=(
+            len(saltos) + len(desvios) + len(vehiculo_en_ausencia)
+            + len(vehiculo_distinto) + len(mismatch) + len(sin_km) + len(sin_plan)
+        ),
     )
+
+
+@sync_bp.route('/auditoria-vehiculos/visto', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+def auditoria_vehiculos_visto():
+    """Marca una anomalía de flota como vista (informativo; no resuelve)."""
+    if not _require_odoo_module():
+        return jsonify({'success': False, 'error': 'Módulo Odoo no habilitado'}), 403
+
+    data = request.get_json(silent=True) or {}
+    kind = (data.get('kind') or request.form.get('kind') or '').strip().lower()
+    clave = (data.get('clave') or request.form.get('clave') or '').strip()
+    if not kind or not clave:
+        return jsonify({'success': False, 'error': 'Faltan kind y clave'}), 400
+
+    try:
+        from app.services.vehicle_anomaly_service import marcar_anomalia_vista
+        row = marcar_anomalia_vista(kind, clave, current_user.id)
+        return jsonify({
+            'success': True,
+            'kind': row.kind,
+            'clave': row.clave,
+            'visto_en': row.visto_en.isoformat() if row.visto_en else None,
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @sync_bp.route('/vehiculos_manual', methods=['POST'])
@@ -1225,7 +1296,7 @@ def get_timeline_dia(user_id, fecha_str):
     """Compatibilidad con auditoría de fichajes. Delega en el servicio compartido."""
     from app.services.person_day_timeline_service import build_person_day_timeline
 
-    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL]:
+    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
         return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
 
     data = build_person_day_timeline(user_id, fecha_str)

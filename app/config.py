@@ -25,13 +25,16 @@ class Config:
 
     ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY')
 
-    # Configuración de correo (usa una cuenta Gmail configurada con app password)
-    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+    # Correo transaccional (alta, recuperar contraseña, avisos).
+    # Producción: info@signaplan.com vía SMTP IONOS.
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.ionos.es')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = True
-    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'no-reply@tusaas.com')
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')  # La contraseña o app password
-    MAIL_DEFAULT_SENDER = MAIL_USERNAME
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'info@signaplan.com')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
+    MAIL_DEFAULT_SENDER = (
+        os.environ.get('MAIL_DEFAULT_SENDER') or MAIL_USERNAME or 'info@signaplan.com'
+    )
 
     # Configuración de Celery.
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')

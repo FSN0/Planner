@@ -11,6 +11,7 @@ from app.models import (
     User, Asignacion, Solicitud, RegistroFichaje, Rating,
     ROLE_OPERARIO,
 )
+from app.services.i18n_service import translate as _
 from app.utils.timezone_utils import today_local
 
 OPEN_SOLICITUD = ('PENDIENTE', 'EN_PROCESO')
@@ -20,6 +21,11 @@ FICHAJE_OK = (
     'Resuelto_Movido', 'Resuelto_Asignado', 'Resuelto_Dividido',
     'Resuelto_Ignorado', 'Resuelto_Falta', 'Resuelto_Ausencia',
 )
+
+
+def _tf(msgid, **kwargs):
+    """Traduce msgid y aplica .format(**kwargs) sobre el resultado."""
+    return _(msgid).format(**kwargs)
 
 
 def _month_bounds(ref):
@@ -718,7 +724,7 @@ def get_obra_panel_stats(obra):
             'key': 'operarios_hoy',
             'label': 'Operarios hoy',
             'value': operarios_hoy,
-            'sub': f'Cupo {limite}' if limite else 'Sin límite definido',
+            'sub': _tf('Cupo {n}', n=limite) if limite else 'Sin límite definido',
             'icon': 'fa-users',
             'tone': 'green' if limite and operarios_hoy >= limite else ('amber' if limite and operarios_hoy >= limite * 0.85 else 'green'),
             'progress': min(100, ocupacion_pct) if ocupacion_pct is not None else None,
@@ -735,7 +741,7 @@ def get_obra_panel_stats(obra):
             'key': 'solicitudes',
             'label': 'Solicitudes abiertas',
             'value': len(solicitudes_abiertas),
-            'sub': f'{plazas_pendientes} plazas pendientes' if plazas_pendientes else 'Sin plazas genéricas',
+            'sub': _tf('{n} plazas pendientes', n=plazas_pendientes) if plazas_pendientes else 'Sin plazas genéricas',
             'icon': 'fa-clipboard-list',
             'tone': 'amber' if solicitudes_abiertas else 'slate',
             'href': url_for('admin.solicitudes_list', obra_id=obra_id) if solicitudes_abiertas else None,
@@ -744,7 +750,7 @@ def get_obra_panel_stats(obra):
             'key': 'dias_mes',
             'label': 'Días-persona mes',
             'value': dias_mes,
-            'sub': f'{operarios_unicos_mes} operarios distintos',
+            'sub': _tf('{n} operarios distintos', n=operarios_unicos_mes),
             'icon': 'fa-calendar-check',
             'tone': 'slate',
         },
@@ -760,7 +766,10 @@ def get_obra_panel_stats(obra):
             'key': 'fichajes',
             'label': 'Fichajes hoy',
             'value': f'{fichajes_ok}/{len(fichajes_hoy)}' if fichajes_hoy else '—',
-            'sub': f'{fichajes_alertas} incidencias' if fichajes_alertas else ('Sin registros' if not fichajes_hoy else 'Sin incidencias'),
+            'sub': (
+                _tf('{n} incidencias', n=fichajes_alertas) if fichajes_alertas
+                else ('Sin registros' if not fichajes_hoy else 'Sin incidencias')
+            ),
             'icon': 'fa-fingerprint',
             'tone': 'red' if fichajes_alertas else ('green' if fichajes_hoy else 'slate'),
         },
@@ -1025,7 +1034,7 @@ def get_company_panel_stats(company):
             'key': 'plantilla',
             'label': 'Plantilla',
             'value': workers_total,
-            'sub': f'{workers_active} activos',
+            'sub': _tf('{n} activos', n=workers_active),
             'icon': 'fa-users',
             'tone': 'green',
             'href': personal_url,
@@ -1034,7 +1043,7 @@ def get_company_panel_stats(company):
             'key': 'hoy',
             'label': 'En obra hoy',
             'value': planificados_hoy,
-            'sub': f'{ocupacion_pct}% de activos' if ocupacion_pct is not None else 'Sin activos',
+            'sub': _tf('{pct}% de activos', pct=ocupacion_pct) if ocupacion_pct is not None else 'Sin activos',
             'icon': 'fa-hard-hat',
             'tone': 'green',
             'progress': ocupacion_pct,
@@ -1051,7 +1060,7 @@ def get_company_panel_stats(company):
             'key': 'intervenciones',
             'label': 'Intervenciones 30d',
             'value': intervenciones_30,
-            'sub': f'{dias_mes} días-persona este mes',
+            'sub': _tf('{n} días-persona este mes', n=dias_mes),
             'icon': 'fa-calendar-check',
             'tone': 'slate',
         },
@@ -1059,7 +1068,7 @@ def get_company_panel_stats(company):
             'key': 'valoracion',
             'label': 'Valoración media',
             'value': avg_rating if avg_rating is not None else '—',
-            'sub': f'{ratings_count} valoraciones' if ratings_count else 'Sin valoraciones',
+            'sub': _tf('{n} valoraciones', n=ratings_count) if ratings_count else 'Sin valoraciones',
             'icon': 'fa-star',
             'tone': 'amber' if avg_rating else 'slate',
             'href': personal_url if ratings_count else None,

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Subcontratas{% endblock %}
+{% block title %}{{ _('Subcontratas') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -14,21 +14,21 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">Subcontratas</h1>
-        <span class="page-toolbar-count">{{ companies|length }} empresas</span>
+        <h1 class="page-toolbar-title">{{ _('Subcontratas') }}</h1>
+        <span class="page-toolbar-count">{{ companies|length }} {{ _('empresas') }}</span>
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.create_company') }}" class="btn-admin btn-admin-primary">
-          <i class="fas fa-plus"></i> Nueva
+          <i class="fas fa-plus"></i> {{ _('Nueva') }}
         </a>
       </div>
     </div>
 
     <div id="bulk-companies" class="bulk-toolbar d-none">
-      <span class="bulk-toolbar-count"><span id="count-companies">0</span> seleccionadas</span>
+      <span class="bulk-toolbar-count"><span id="count-companies">0</span> {{ _('seleccionadas') }}</span>
       <div class="bulk-toolbar-actions">
         <button type="button" class="btn-bulk btn-bulk-danger" onclick="bulkDeleteCompanies()">
-          <i class="fas fa-trash"></i> Eliminar
+          <i class="fas fa-trash"></i> {{ _('Eliminar') }}
         </button>
       </div>
     </div>
@@ -49,14 +49,14 @@
           </colgroup>
           <thead>
             <tr class="header-row">
-              <th class="col-check"><input type="checkbox" id="selectAllCompanies" title="Seleccionar todas"></th>
-              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Código</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Nombre</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">NIF</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Gremio</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Email</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Tipo</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="7" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">Valor.</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="col-check"><input type="checkbox" id="selectAllCompanies" title="{{ _('Seleccionar todas') }}"></th>
+              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Código') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('NIF') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Gremio') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="7" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="col-actions"></th>
             </tr>
             <tr class="filter-row">

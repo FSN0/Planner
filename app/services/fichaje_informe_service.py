@@ -13,7 +13,10 @@ from datetime import datetime
 
 from app.models import (
     EVENTO_ANULACION,
+    EVENTO_CONFORME_JORNADA,
     EVENTO_ENTRADA,
+    EVENTO_PAUSA_FIN,
+    EVENTO_PAUSA_INICIO,
     EVENTO_REASIGNACION_OBRA,
     EVENTO_SALIDA,
     Company,
@@ -36,6 +39,7 @@ _ETIQUETAS_TIPO = {
     'pausa_fin': 'Fin de pausa',
     EVENTO_ANULACION: 'Anulación',
     EVENTO_REASIGNACION_OBRA: 'Reimputación de obra',
+    EVENTO_CONFORME_JORNADA: 'Conforme del trabajador',
 }
 
 
@@ -84,13 +88,37 @@ def _obra_del_dia(eventos):
     return None
 
 
+def _pausas_del_dia(eventos):
+    """Pares inicio/fin de pausa vigentes, con minutos descontados."""
+    vigentes_dia = vigentes(eventos)
+    pares = []
+    abierta = None
+    for evento in vigentes_dia:
+        if evento.tipo == EVENTO_PAUSA_INICIO and abierta is None:
+            abierta = evento
+        elif evento.tipo == EVENTO_PAUSA_FIN and abierta is not None:
+            minutos = max(
+                int((evento.ocurrido_en - abierta.ocurrido_en).total_seconds() // 60),
+                0,
+            )
+            pares.append({
+                'inicio': abierta.ocurrido_en,
+                'fin': evento.ocurrido_en,
+                'minutos': minutos,
+            })
+            abierta = None
+    abierta_sin_cerrar = abierta.ocurrido_en if abierta is not None else None
+    minutos_pausas = sum(p['minutos'] for p in pares)
+    return pares, minutos_pausas, abierta_sin_cerrar
+
+
 def _dia_desde_eventos(fecha, eventos):
     """
     Resumen de un día a partir de todos los eventos del libro ese día.
 
     Las horas y la obra se calculan sobre las marcas vigentes. Las anulaciones
     y reimputaciones se listan aparte: son lo que la Inspección tiene que ver
-    si pregunta por correcciones.
+    si pregunta por correcciones. Las pausas se desglosan para el informe.
     """
     vigentes_dia = vigentes(eventos)
     entradas = [e for e in vigentes_dia if e.tipo == EVENTO_ENTRADA]
@@ -100,6 +128,9 @@ def _dia_desde_eventos(fecha, eventos):
         e for e in eventos
         if e.tipo in (EVENTO_ANULACION, EVENTO_REASIGNACION_OBRA)
     ]
+    pausas, minutos_pausas, pausa_abierta = _pausas_del_dia(eventos)
+    conformes = [e for e in vigentes_dia if e.tipo == EVENTO_CONFORME_JORNADA]
+    conforme = conformes[-1] if conformes else None
 
     return {
         'fecha': fecha,
@@ -112,6 +143,13 @@ def _dia_desde_eventos(fecha, eventos):
         'correcciones': correcciones,
         'tiene_correcciones': bool(correcciones),
         'sin_salida': bool(entradas) and not salidas,
+        'pausas': pausas,
+        'minutos_pausas': minutos_pausas,
+        'pausa_abierta': pausa_abierta,
+        'tiene_pausas': bool(pausas) or bool(pausa_abierta),
+        'conforme': conforme is not None,
+        'conforme_en': conforme.ocurrido_en if conforme else None,
+        'conforme_hash': conforme.hash if conforme else None,
     }
 
 
@@ -166,6 +204,7 @@ def generar_informe(desde, hasta, user_id=None, company_id=None, tenant_nombre=N
     minutos_totales = 0
     dias_con_registro = 0
     dias_con_correccion = 0
+    dias_con_conforme = 0
 
     usuarios = {
         u.id: u for u in User.query.filter(User.id.in_(por_usuario.keys())).all()
@@ -192,6 +231,8 @@ def generar_informe(desde, hasta, user_id=None, company_id=None, tenant_nombre=N
             dias_con_registro += 1
             if dia['tiene_correcciones']:
                 dias_con_correccion += 1
+            if dia.get('conforme'):
+                dias_con_conforme += 1
 
         minutos_totales += minutos_trabajador
         trabajadores.append({
@@ -202,6 +243,7 @@ def generar_informe(desde, hasta, user_id=None, company_id=None, tenant_nombre=N
             'dias': dias,
             'minutos': minutos_trabajador,
             'dias_trabajados': len(dias),
+            'dias_conformados': sum(1 for d in dias if d.get('conforme')),
         })
 
     incidencias = verificar_cadena()
@@ -228,6 +270,7 @@ def generar_informe(desde, hasta, user_id=None, company_id=None, tenant_nombre=N
         'minutos_totales': minutos_totales,
         'dias_con_registro': dias_con_registro,
         'dias_con_correccion': dias_con_correccion,
+        'dias_con_conforme': dias_con_conforme,
         'trabajadores_count': len(trabajadores),
         'cadena_integra': len(incidencias) == 0,
         'incidencias_cadena': incidencias,
@@ -254,7 +297,8 @@ def _huella_informe(*, tenant_nombre, desde, hasta, trabajadores, incidencias, g
                 f"{d['fecha'].isoformat()}|"
                 f"{d['entrada'].isoformat() if d['entrada'] else ''}|"
                 f"{d['salida'].isoformat() if d['salida'] else ''}|"
-                f"{d['minutos']}|{d['obra_nombre'] or ''}"
+                f"{d['minutos']}|{d['obra_nombre'] or ''}|"
+                f"{'1' if d.get('conforme') else '0'}"
             )
     return hashlib.sha256('\n'.join(trozos).encode('utf-8')).hexdigest()
 
@@ -274,7 +318,8 @@ def informe_a_csv(informe):
     escritor = csv.writer(buffer, delimiter=';')
     escritor.writerow([
         'Empresa', 'NIF empresa', 'Trabajador', 'DNI', 'Empresa del trabajador',
-        'Fecha', 'Entrada', 'Salida', 'Horas', 'Obra', 'Correcciones',
+        'Fecha', 'Entrada', 'Salida', 'Horas netas', 'Pausas (min)', 'Detalle pausas',
+        'Obra', 'Conforme trabajador', 'Fecha conforme', 'Correcciones',
     ])
 
     nombre_empresa = (
@@ -286,6 +331,15 @@ def informe_a_csv(informe):
 
     for t in informe['trabajadores']:
         for d in t['dias']:
+            detalle_pausas = '; '.join(
+                f"{format_time(p['inicio'])}-{format_time(p['fin'])} ({p['minutos']} min)"
+                for p in (d.get('pausas') or [])
+            )
+            if d.get('pausa_abierta'):
+                detalle_pausas = (
+                    (detalle_pausas + '; ' if detalle_pausas else '')
+                    + f"Abierta desde {format_time(d['pausa_abierta'])}"
+                )
             escritor.writerow([
                 nombre_empresa,
                 nif,
@@ -296,7 +350,11 @@ def informe_a_csv(informe):
                 format_time(d['entrada']) if d['entrada'] else '',
                 format_time(d['salida']) if d['salida'] else '',
                 f"{d['minutos'] / 60:.2f}".replace('.', ','),
+                str(d.get('minutos_pausas') or 0),
+                detalle_pausas,
                 d['obra_nombre'] or '',
+                'Sí' if d.get('conforme') else 'No',
+                format_time(d['conforme_en']) if d.get('conforme_en') else '',
                 'Sí' if d['tiene_correcciones'] else 'No',
             ])
 

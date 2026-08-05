@@ -16,10 +16,10 @@
     <div class="page-toolbar">
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title">
-          {% if seccion == 'vehiculos' %}Solicitudes de vehículos{% else %}Solicitudes de personal{% endif %}
+          {% if seccion == 'vehiculos' %}{{ _('Solicitudes de vehículos') }}{% else %}{{ _('Solicitudes de personal') }}{% endif %}
         </h1>
         <span class="page-toolbar-count">
-          {% if seccion == 'vehiculos' %}{{ solicitudes_vehiculo|length }}{% else %}{{ solicitudes|length }}{% endif %} registros
+          {% if seccion == 'vehiculos' %}{{ solicitudes_vehiculo|length }}{% else %}{{ solicitudes|length }}{% endif %} {{ _('registros') }}
         </span>
       </div>
     </div>
@@ -28,12 +28,12 @@
       <a href="{{ url_for('admin.solicitudes_list', seccion='personal') }}"
          class="btn-admin {% if seccion != 'vehiculos' %}btn-admin-primary{% else %}btn-admin-ghost{% endif %}"
          style="font-size: 0.78rem;">
-        <i class="fas fa-users mr-1"></i> Personal
+        <i class="fas fa-users mr-1"></i> {{ _('Personal') }}
       </a>
       <a href="{{ url_for('admin.solicitudes_list', seccion='vehiculos') }}"
          class="btn-admin {% if seccion == 'vehiculos' %}btn-admin-primary{% else %}btn-admin-ghost{% endif %}"
          style="font-size: 0.78rem;">
-        <i class="fas fa-car mr-1"></i> Vehículos
+        <i class="fas fa-car mr-1"></i> {{ _('Vehículos') }}
       </a>
     </div>
 
@@ -41,15 +41,15 @@
 
       {% if obra_filtro or date_filtro %}
       <div class="admin-filter-chips">
-        <span><i class="fas fa-filter mr-1"></i> Filtros activos:</span>
+        <span><i class="fas fa-filter mr-1"></i> {{ _('Filtros activos:') }}</span>
         {% if obra_filtro and seccion != 'vehiculos' %}
-          <span class="badge-soft badge-soft-blue">Obra: {{ obra_filtro.nombre }}</span>
+          <span class="badge-soft badge-soft-blue">{{ _('Obra') }}: {{ obra_filtro.nombre }}</span>
         {% endif %}
         {% if date_filtro %}
-          <span class="badge-soft badge-soft-blue">Fecha: {{ date_filtro.strftime('%d/%m/%Y') }}</span>
+          <span class="badge-soft badge-soft-blue">{{ _('Fecha') }}: {{ date_filtro.strftime('%d/%m/%Y') }}</span>
         {% endif %}
         <a href="{{ url_for('admin.solicitudes_list', seccion=seccion) }}" class="btn-admin btn-admin-ghost ml-auto" style="font-size: 0.72rem;">
-          <i class="fas fa-times"></i> Limpiar
+          <i class="fas fa-times"></i> {{ _('Limpiar') }}
         </a>
       </div>
       {% endif %}
@@ -60,32 +60,32 @@
           <input type="hidden" name="obra_id" value="{{ obra_filtro.id }}">
         {% endif %}
         <div class="admin-filter-group">
-          <label for="estado">Estado</label>
+          <label for="estado">{{ _('Estado') }}</label>
           <select id="estado" name="estado" class="form-control custom-select" onchange="this.form.submit()">
             {% for e in estados_posibles %}
               <option value="{{ e }}" {% if e == estado_filtro %}selected{% endif %}>
-                {{ "Todos" if e == "todas" else e }}
+                {{ _('Todos') if e == "todas" else _(e) }}
               </option>
             {% endfor %}
           </select>
         </div>
         {% if seccion != 'vehiculos' %}
         <div class="admin-filter-group">
-          <label for="tipo">Tipo</label>
+          <label for="tipo">{{ _('Tipo') }}</label>
           <select id="tipo" name="tipo" class="form-control custom-select" onchange="this.form.submit()">
             {% for t in tipos_posibles %}
               <option value="{{ t }}" {% if t == tipo_filtro %}selected{% endif %}>
-                {% if t == "todas" %}Todos
-                {% elif t == "generica" %}Asignación (genérica)
-                {% elif t == "concreta" %}Movimiento (concreta)
-                {% else %}{{ t }}
+                {% if t == "todas" %}{{ _('Todos') }}
+                {% elif t == "generica" %}{{ _('Asignación (genérica)') }}
+                {% elif t == "concreta" %}{{ _('Movimiento (concreta)') }}
+                {% else %}{{ _(t) }}
                 {% endif %}
               </option>
             {% endfor %}
           </select>
         </div>
         {% endif %}
-        <noscript><button type="submit" class="btn-admin btn-admin-primary">Filtrar</button></noscript>
+        <noscript><button type="submit" class="btn-admin btn-admin-primary">{{ _('Filtrar') }}</button></noscript>
       </form>
 
       {% if seccion == 'vehiculos' %}
@@ -95,14 +95,14 @@
             <thead>
               <tr class="header-row">
                 <th>ID</th>
-                <th>Acción</th>
-                <th>Vehículo</th>
-                <th>Operario</th>
-                <th>Solicitante</th>
-                <th>Petición</th>
-                <th>Periodo</th>
-                <th>Estado</th>
-                {% if can_resolve_vehiculo %}<th class="text-right">Acciones</th>{% endif %}
+                <th>{{ _('Acción') }}</th>
+                <th>{{ _('Vehículo') }}</th>
+                <th>{{ _('Operario') }}</th>
+                <th>{{ _('Solicitante') }}</th>
+                <th>{{ _('Petición') }}</th>
+                <th>{{ _('Periodo') }}</th>
+                <th>{{ _('Estado') }}</th>
+                {% if can_resolve_vehiculo %}<th class="text-right">{{ _('Acciones') }}</th>{% endif %}
               </tr>
             </thead>
             <tbody>
@@ -111,9 +111,9 @@
                 <td><span class="cell-code">#{{ s.id }}</span></td>
                 <td>
                   {% if s.accion == 'DESASIGNAR' %}
-                    <span class="badge-soft badge-soft-red">Desasignar</span>
+                    <span class="badge-soft badge-soft-red">{{ _('Desasignar') }}</span>
                   {% else %}
-                    <span class="badge-soft badge-soft-blue">Asignar</span>
+                    <span class="badge-soft badge-soft-blue">{{ _('Asignar') }}</span>
                   {% endif %}
                 </td>
                 <td>
@@ -141,11 +141,11 @@
                 </td>
                 <td>
                   {% set est = s.estado %}
-                  {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
-                  {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
-                  {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
-                  {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
-                  {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+                  {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
+                  {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
+                  {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
+                  {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
+                  {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
                   {% endif %}
                 </td>
                 {% if can_resolve_vehiculo %}
@@ -154,15 +154,15 @@
                   <form method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=s.id) }}" class="d-inline">
                     <input type="hidden" name="decision" value="aceptar">
                     <button type="submit" class="btn-admin btn-admin-primary" style="font-size: 0.7rem;"
-                            onclick="return confirm('¿Aprobar y crear asignaciones de vehículo?');">
-                      Aprobar
+                            onclick="return confirm({{ _('¿Aprobar y crear asignaciones de vehículo?')|tojson }});">
+                      {{ _('Aprobar') }}
                     </button>
                   </form>
                   <form method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=s.id) }}" class="d-inline">
                     <input type="hidden" name="decision" value="denegar">
                     <button type="submit" class="btn-admin btn-admin-ghost" style="font-size: 0.7rem;"
-                            onclick="return confirm('¿Denegar esta solicitud?');">
-                      Denegar
+                            onclick="return confirm({{ _('¿Denegar esta solicitud?')|tojson }});">
+                      {{ _('Denegar') }}
                     </button>
                   </form>
                   {% else %}
@@ -176,7 +176,7 @@
           </table>
         </div>
         {% else %}
-          <div class="p-3 text-muted" style="font-size: 0.8rem;">No hay solicitudes de vehículo con los filtros actuales.</div>
+          <div class="p-3 text-muted" style="font-size: 0.8rem;">{{ _('No hay solicitudes de vehículo con los filtros actuales.') }}</div>
         {% endif %}
 
       {% else %}
@@ -198,15 +198,15 @@
           <thead>
             <tr class="header-row">
               <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">ID</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Tipo</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Obra</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Jefe</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="4" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">Petición</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">Trabajo</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Perfil / Operario</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col text-center" data-col-index="7" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Cobertura</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col text-center" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Plazas</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Obra') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Jefe') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="4" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Petición') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Perfil / Operario') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col text-center" data-col-index="7" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Cobertura') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col text-center" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Plazas') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
             </tr>
             <tr class="filter-row">
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('solicitudesTable', 0, this.value)" placeholder="…"></th>
@@ -231,11 +231,11 @@
                 </td>
                 <td data-sort-value="{% if s.accion == 'DESASIGNAR' %}salida{% elif s.tipo == 'GENERICA' %}generica{% else %}concreta{% endif %}">
                   {% if s.accion == 'DESASIGNAR' %}
-                    <span class="badge-soft badge-soft-red">Salida</span>
+                    <span class="badge-soft badge-soft-red">{{ _('Salida') }}</span>
                   {% elif s.tipo == 'GENERICA' %}
-                    <span class="badge-soft badge-soft-gray">Genérica</span>
+                    <span class="badge-soft badge-soft-gray">{{ _('Genérica') }}</span>
                   {% else %}
-                    <span class="badge-soft badge-soft-blue">Concreta</span>
+                    <span class="badge-soft badge-soft-blue">{{ _('Concreta') }}</span>
                   {% endif %}
                 </td>
                 <td data-sort-value="{{ s.obra.nombre|lower if s.obra else '' }}">
@@ -300,11 +300,11 @@
                 </td>
                 <td data-sort-value="{{ s.estado }}">
                   {% set est = s.estado %}
-                  {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
-                  {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
-                  {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
-                  {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
-                  {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+                  {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
+                  {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
+                  {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
+                  {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
+                  {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
                   {% endif %}
                 </td>
               </tr>

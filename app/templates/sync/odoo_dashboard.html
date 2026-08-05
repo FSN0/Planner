@@ -216,7 +216,7 @@
             <i class="fas fa-list"></i> Ver ausencias
           </a>
           <button type="button" class="btn-admin btn-admin-primary btn-sm" onclick="runSyncNow('ausencias')">
-            <i class="fas fa-robot"></i> Sync ahora
+            <i class="fas fa-robot"></i> {{ _('Sincronizar ahora') }}
           </button>
           {% elif mod.key == 'fichajes' %}
           <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost btn-sm">
