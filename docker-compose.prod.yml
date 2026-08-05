@@ -35,6 +35,10 @@ services:
       - DOMAIN=${DOMAIN}
       - BEHIND_PROXY=${BEHIND_PROXY:-true}
       - TENANT_HOST_ALIASES=${TENANT_HOST_ALIASES:-soltec,planner.soltecgrupo.es}
+      - LEGAL_RAZON_SOCIAL=${LEGAL_RAZON_SOCIAL:-}
+      - LEGAL_NIF=${LEGAL_NIF:-}
+      - LEGAL_DOMICILIO=${LEGAL_DOMICILIO:-}
+      - LEGAL_EMAIL=${LEGAL_EMAIL:-}
     depends_on:
       db:
         condition: service_healthy

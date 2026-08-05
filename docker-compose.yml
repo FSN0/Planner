@@ -39,6 +39,10 @@ services:
       - ODOO_ALTA_APP_URL=${ODOO_ALTA_APP_URL:-}
       - ODOO_ALTA_TENANT_SLUG=${ODOO_ALTA_TENANT_SLUG:-soltec}
       - DOMAIN=${DOMAIN:-localhost}
+      - LEGAL_RAZON_SOCIAL=${LEGAL_RAZON_SOCIAL:-}
+      - LEGAL_NIF=${LEGAL_NIF:-}
+      - LEGAL_DOMICILIO=${LEGAL_DOMICILIO:-}
+      - LEGAL_EMAIL=${LEGAL_EMAIL:-}
     depends_on:
       db:
         condition: service_healthy

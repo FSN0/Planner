@@ -51,7 +51,7 @@ def _legal_entity():
         ).strip(),
         'nif': (os.environ.get('LEGAL_NIF') or '18461268L').strip(),
         'domicilio': (
-            os.environ.get('LEGAL_DOMICILIO') or 'Calle La Hermita 23, Teruel'
+            os.environ.get('LEGAL_DOMICILIO') or 'Calle La Ermita 23, Teruel'
         ).strip(),
         'email': (
             os.environ.get('LEGAL_EMAIL')
