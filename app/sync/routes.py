@@ -84,6 +84,11 @@ def odoo_panel():
             'external_auth_odoo_url',
             default=get_tenant_config('odoo_url', default=''),
         ),
+        'soltec_sso_enabled': get_tenant_config('soltec_sso_enabled', default='false'),
+        'soltec_sso_issuer': get_tenant_config('soltec_sso_issuer', default='soltec_satellite'),
+        'soltec_sso_has_secret': bool(
+            get_tenant_config('soltec_sso_shared_secret', default='')
+        ),
     }
     return render_template('sync/odoo_dashboard.html', **ctx)
 
@@ -116,6 +121,15 @@ def odoo_save_config():
             set_tenant_config('external_auth_odoo_url', external_auth_odoo_url)
         elif url:
             set_tenant_config('external_auth_odoo_url', url)
+        set_tenant_config(
+            'soltec_sso_enabled',
+            'true' if request.form.get('soltec_sso_enabled') == 'on' else 'false',
+        )
+        soltec_sso_issuer = (request.form.get('soltec_sso_issuer') or '').strip() or 'soltec_satellite'
+        set_tenant_config('soltec_sso_issuer', soltec_sso_issuer)
+        soltec_sso_secret = (request.form.get('soltec_sso_shared_secret') or '').strip()
+        if soltec_sso_secret:
+            set_tenant_config('soltec_sso_shared_secret', soltec_sso_secret, encriptar=True)
 
         modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
         motor = modulos.get('odoo_adapter') or 'odoo_soltec'

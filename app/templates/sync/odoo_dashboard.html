@@ -43,21 +43,18 @@
       </div>
     </header>
 
-    <div class="sync-conn-banner {{ 'sync-conn-banner--ok' if connection.connected else 'sync-conn-banner--err' }}" id="syncConnBanner">
-      <div class="sync-conn-banner-icon">
-        <i class="fas {{ 'fa-check-circle' if connection.connected else 'fa-exclamation-triangle' }}"></i>
-      </div>
-      <div class="sync-conn-banner-body">
-        <strong>{{ 'Conectado a Odoo' if connection.connected else 'Sin conexión con Odoo' }}</strong>
-        <span class="sync-conn-meta">{{ connection.url or 'ODOO_URL no configurada' }} · BD: {{ connection.db or '—' }}</span>
-        <span class="sync-conn-msg" id="syncConnMsg">{{ connection.message }}</span>
-      </div>
-      {% if connection.connected and connection.uid %}
-      <span class="sync-conn-uid badge-soft">UID {{ connection.uid }}</span>
-      {% endif %}
-    </div>
-
-    <section class="sync-credentials-card card-modern card mb-4">
+    <details class="sync-credentials-card card-modern card mb-4" {% if not connection.connected %}open{% endif %}>
+      <summary class="card-body d-flex flex-wrap align-items-center justify-content-between" style="cursor:pointer; gap:0.75rem; list-style:none;">
+        <div class="d-flex flex-wrap align-items-center" style="gap:0.75rem;">
+          <h2 class="sync-section-title mb-0" style="margin:0;"><i class="fas fa-key text-primary mr-1"></i> Conexión con Odoo</h2>
+          <span id="syncConnStatusBadge" class="badge-soft {{ 'text-success' if connection.connected else 'text-danger' }}">
+            <i class="fas {{ 'fa-check-circle' if connection.connected else 'fa-exclamation-triangle' }}"></i>
+            <span id="syncConnStatusText">{{ 'Conectado' if connection.connected else 'Sin conexión' }}</span>
+          </span>
+          <span class="text-muted small" id="syncConnMeta">{{ connection.url or 'ODOO_URL no configurada' }} · BD: {{ connection.db or '—' }}</span>
+        </div>
+        <span class="text-muted small" id="syncConnMsg">{{ connection.message }}</span>
+      </summary>
       <div class="card-body">
         <div class="d-flex flex-wrap align-items-start justify-content-between mb-3" style="gap:0.75rem;">
           <div>
@@ -109,6 +106,29 @@
               <small class="form-text text-muted">Si la dejas igual, reutiliza la URL base de Odoo del tenant.</small>
             </div>
           </div>
+          <hr>
+          <div class="row">
+            <div class="col-md-6 col-lg-3 form-group">
+              <div class="custom-control custom-switch mt-4">
+                <input type="checkbox" class="custom-control-input" id="soltecSsoEnabled" name="soltec_sso_enabled"
+                       {% if odoo_credentials.soltec_sso_enabled == 'true' %}checked{% endif %}>
+                <label class="custom-control-label" for="soltecSsoEnabled">SSO Soltec</label>
+              </div>
+              <small class="form-text text-muted">Entrada directa desde apps satélite firmando por email.</small>
+            </div>
+            <div class="col-md-6 col-lg-3 form-group">
+              <label class="form-label-sm">Issuer SSO</label>
+              <input type="text" class="form-control form-control-sm" name="soltec_sso_issuer"
+                     value="{{ odoo_credentials.soltec_sso_issuer or 'soltec_satellite' }}"
+                     placeholder="soltec_satellite">
+            </div>
+            <div class="col-md-6 col-lg-6 form-group">
+              <label class="form-label-sm">Clave compartida SSO</label>
+              <input type="text" class="form-control form-control-sm" name="soltec_sso_shared_secret"
+                     placeholder="{% if odoo_credentials.soltec_sso_has_secret %}•••••••• (dejar vacío para mantener){% else %}Pega aquí la clave compartida{% endif %}">
+              <small class="form-text text-muted">Se guarda cifrada. La misma clave debe configurarse también en la app emisora.</small>
+            </div>
+          </div>
           <div class="d-flex flex-wrap align-items-center" style="gap:0.5rem;">
             <button type="submit" class="btn-admin btn-admin-primary">
               <i class="fas fa-save"></i> Guardar credenciales
@@ -121,7 +141,7 @@
           </div>
         </form>
       </div>
-    </section>
+    </details>
 
     <div class="sync-kpi-grid">
       <div class="sync-kpi-card">
@@ -637,10 +657,13 @@ function testOdooConnection() {
   fetch('{{ url_for("sync.api_test_connection") }}', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
     .then(r => r.json())
     .then(data => {
-      const banner = document.getElementById('syncConnBanner');
       document.getElementById('syncConnMsg').textContent = data.message;
-      banner.classList.toggle('sync-conn-banner--ok', data.connected);
-      banner.classList.toggle('sync-conn-banner--err', !data.connected);
+      const badge = document.getElementById('syncConnStatusBadge');
+      badge.classList.toggle('text-success', !!data.connected);
+      badge.classList.toggle('text-danger', !data.connected);
+      badge.innerHTML = (data.connected
+        ? '<i class="fas fa-check-circle"></i> <span id="syncConnStatusText">Conectado</span>'
+        : '<i class="fas fa-exclamation-triangle"></i> <span id="syncConnStatusText">Sin conexión</span>');
       Swal.fire({
         icon: data.connected ? 'success' : 'error',
         title: data.connected ? 'Conexión OK' : 'Error de conexión',

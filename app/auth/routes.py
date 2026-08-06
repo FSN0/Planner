@@ -15,6 +15,7 @@ from app.services.external_auth_service import (
     log_external_auth_result,
     verify_external_password,
 )
+from app.services.soltec_sso_service import SoltecSsoError, verify_soltec_sso_token
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 auth_bp = Blueprint('auth', __name__)
@@ -399,6 +400,81 @@ def login():
         flash(translate('Credenciales inválidas'), 'danger')
 
     return render_template('login.html', **_login_page_context())
+
+
+@auth_bp.route('/sso/soltec', methods=['GET'])
+@limiter.limit('20 per minute; 100 per hour')
+def sso_soltec():
+    from app.services.i18n_service import translate
+    from app.utils import register_log
+
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        flash('Accede desde la URL de tu empresa.', 'warning')
+        return redirect(url_for('main.dashboard'))
+
+    token = request.args.get('t') or request.args.get('token') or ''
+    try:
+        claims = verify_soltec_sso_token(token)
+    except SoltecSsoError as exc:
+        register_log(
+            user_id=None,
+            category='accesos',
+            action='SSO Soltec rechazado',
+            detail=f"{str(exc)} IP: {request.remote_addr or 'Desconocida'}",
+        )
+        flash(translate('Credenciales inválidas'), 'danger')
+        return redirect(url_for('auth.login'))
+
+    user = User.query.filter_by(email=claims['email']).first()
+    if not user:
+        register_log(
+            user_id=None,
+            category='accesos',
+            action='SSO Soltec sin usuario',
+            detail=(
+                f"Email {claims['email']} no existe en Planner. "
+                f"IP: {request.remote_addr or 'Desconocida'}"
+            ),
+        )
+        flash(translate('Credenciales inválidas'), 'danger')
+        return redirect(url_for('auth.login'))
+
+    if not _puede_login_web(user):
+        register_log(
+            user_id=user.id,
+            category='accesos',
+            action='SSO Soltec denegado',
+            detail=(
+                f"Rol sin acceso web ({user.role}). "
+                f"IP: {request.remote_addr or 'Desconocida'}"
+            ),
+        )
+        flash(
+            translate(
+                'Tu perfil no tiene acceso a la aplicación. Contacta con administración.'
+            ),
+            'warning',
+        )
+        return redirect(url_for('auth.login'))
+
+    if not user.is_active:
+        flash(
+            translate(
+                'Tu cuenta aún no está activa. Espera la aprobación de RRHH.'
+            ),
+            'warning',
+        )
+        return redirect(url_for('auth.login'))
+
+    if current_user.is_authenticated:
+        logout_user()
+
+    return _complete_login(
+        user,
+        remember=True,
+        source='sso_soltec',
+        success_message=translate('Inicio de sesión exitoso'),
+    )
 
 
 @auth_bp.route('/logout')
