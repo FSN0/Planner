@@ -76,13 +76,79 @@ def require_basic_auth():
 # ==========================================
 @superadmin_bp.route('/')
 def dashboard():
-    # Obtenemos todos los inquilinos (clientes) del esquema public
-    tenants = Tenant.query.all()
-    # Pasamos también los adaptadores a la vista
-    return render_template('superadmin/dashboard.html', 
-                           tenants=tenants, 
-                           modulos=MODULOS_DISPONIBLES,
-                           adaptadores_odoo=ADAPTADORES_ODOO)
+    from app.services.superadmin_ops_service import (
+        DIAS_PURGA_TRAS_DESACTIVAR,
+        dias_para_purga,
+        enrich_tenants,
+    )
+    tenants = Tenant.query.order_by(Tenant.created_at.desc()).all()
+    rows = enrich_tenants(tenants)
+    for row in rows:
+        row['dias_purga'] = dias_para_purga(row['tenant'])
+    return render_template(
+        'superadmin/dashboard.html',
+        tenant_rows=rows,
+        tenants=tenants,
+        modulos=MODULOS_DISPONIBLES,
+        adaptadores_odoo=ADAPTADORES_ODOO,
+        dias_purga=DIAS_PURGA_TRAS_DESACTIVAR,
+    )
+
+
+@superadmin_bp.route('/tenant/<int:id_tenant>/desactivar', methods=['POST'])
+def desactivar_tenant(id_tenant):
+    from app.services.superadmin_ops_service import desactivar_tenant as _off
+    tenant = Tenant.query.get_or_404(id_tenant)
+    try:
+        _off(tenant)
+        flash(f'{tenant.nombre} desactivado. Ya no es accesible por su URL.', 'warning')
+    except Exception as e:
+        flash(str(e), 'danger')
+    return redirect(url_for('superadmin.dashboard'))
+
+
+@superadmin_bp.route('/tenant/<int:id_tenant>/reactivar', methods=['POST'])
+def reactivar_tenant(id_tenant):
+    from app.services.superadmin_ops_service import reactivar_tenant as _on
+    tenant = Tenant.query.get_or_404(id_tenant)
+    try:
+        _on(tenant)
+        flash(f'{tenant.nombre} reactivado.', 'success')
+    except Exception as e:
+        flash(str(e), 'danger')
+    return redirect(url_for('superadmin.dashboard'))
+
+
+@superadmin_bp.route('/tenant/<int:id_tenant>/purgar', methods=['POST'])
+def purgar_tenant(id_tenant):
+    from app.services.superadmin_ops_service import purgar_tenant as _purge
+    tenant = Tenant.query.get_or_404(id_tenant)
+    nombre = tenant.nombre
+    try:
+        _purge(tenant, request.form.get('confirm_subdominio'))
+        flash(f'Tenant {nombre} eliminado definitivamente.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(str(e), 'danger')
+    return redirect(url_for('superadmin.dashboard'))
+
+
+@superadmin_bp.route('/tenant/<int:id_tenant>/impersonar', methods=['POST'])
+def impersonar_tenant(id_tenant):
+    from urllib.parse import quote
+    from app.services.signup_service import url_acceso_tenant
+    from app.services.superadmin_ops_service import crear_token_impersonacion
+
+    tenant = Tenant.query.get_or_404(id_tenant)
+    try:
+        token = crear_token_impersonacion(tenant)
+        url = url_acceso_tenant(
+            tenant, path=f'/auth/impersonate?t={quote(token, safe="")}'
+        )
+        return redirect(url)
+    except Exception as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('superadmin.dashboard'))
 
 @superadmin_bp.route('/create_tenant', methods=['POST'])
 def create_tenant():

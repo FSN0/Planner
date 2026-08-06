@@ -117,7 +117,7 @@
   border-radius: 12px;
   background: var(--color-surface, #fff);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
-  overflow: hidden;
+  overflow: visible;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .univ-calendar-panel-head h6 .univ-calendar-icon,
@@ -140,6 +140,7 @@
 }
 .univ-calendar-panel-body {
   padding: 0.75rem;
+  overflow: visible;
 }
 .univ-calendar-panel label.small {
   font-size: 0.62rem !important;
@@ -312,7 +313,87 @@
 }
 .univ-calendar-embedded .modal-content {
   border-radius: 14px;
-  overflow: hidden;
+  overflow: visible;
+}
+.univ-worker-row {
+  padding: 0.35rem 0 0.55rem;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.univ-worker-row + .univ-worker-row {
+  border-top: 1px solid #eef2f7;
+  padding-top: 0.55rem;
+}
+.univ-worker-row-inner {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.55rem;
+  min-width: 0;
+}
+.univ-worker-row-main,
+.univ-worker-row-vehicle {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.univ-worker-row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  margin-bottom: 0;
+}
+.univ-worker-row .btn-outline-danger.univ-worker-remove {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 999px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: #fecaca;
+  color: #dc2626;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.univ-worker-row .btn-outline-danger.univ-worker-remove:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+@media (max-width: 767px) {
+  .univ-worker-row-inner {
+    flex-wrap: wrap;
+  }
+  .univ-worker-row-main,
+  .univ-worker-row-vehicle {
+    flex: 1 1 calc(100% - 2.4rem);
+  }
+  .univ-worker-row-actions {
+    align-self: flex-start;
+    margin-top: 1.1rem;
+  }
+}
+.univ-calendar-panel .btn-link[id$="-add-worker"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem !important;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid #dbeafe;
+  color: #0f172a !important;
+  text-decoration: none !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.univ-calendar-panel .btn-link[id$="-add-worker"]:hover,
+.univ-calendar-panel .btn-link[id$="-add-worker"]:focus {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #0f172a !important;
 }
 .univ-calendar-embedded .modal-body .close.univ-calendar-modal-close {
   position: absolute;

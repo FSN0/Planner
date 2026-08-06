@@ -633,6 +633,7 @@
                 <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)">
                   <span class="sortable-label">Origen</span><i class="fas fa-sort sort-icon"></i>
                 </th>
+                <th>Acciones</th>
               </tr>
               <tr class="filter-row">
                 <th><input type="text" class="table-filter-input" onkeyup="filterTable('ausListadoTable', 0, this.value)" placeholder="…"></th>
@@ -642,6 +643,7 @@
                 <th><input type="text" class="table-filter-input" onkeyup="filterTable('ausListadoTable', 4, this.value)" placeholder="…"></th>
                 <th><input type="text" class="table-filter-input" onkeyup="filterTable('ausListadoTable', 5, this.value)" placeholder="…"></th>
                 <th><input type="text" class="table-filter-input" onkeyup="filterTable('ausListadoTable', 6, this.value)" placeholder="…"></th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -666,10 +668,37 @@
                   {% endif %}
                 </td>
                 <td data-sort-value="{{ a.origen }}">{{ a.origen }}{% if a.external_id %} · {{ a.external_id }}{% endif %}</td>
+                <td style="white-space:nowrap;">
+                  {% if a.origen == 'manual' and current_user.role in ['admin', 'laboral', 'rrhh', 'jefe_obra'] %}
+                  <details>
+                    <summary class="btn-admin btn-admin-ghost" style="cursor:pointer;display:inline-block;padding:.2rem .5rem;font-size:.75rem;">Editar</summary>
+                    <form method="POST" action="{{ url_for('admin.ausencias_editar', leave_id=a.id) }}" class="p-2 border rounded bg-white mt-1" style="min-width:14rem;">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <label class="small d-block mb-1">Tipo
+                        <input class="form-control form-control-sm" name="tipo" value="{{ a.tipo }}">
+                      </label>
+                      <label class="small d-block mb-1">Desde
+                        <input class="form-control form-control-sm" type="date" name="fecha_inicio" value="{{ a.fecha_inicio.isoformat() }}">
+                      </label>
+                      <label class="small d-block mb-1">Hasta
+                        <input class="form-control form-control-sm" type="date" name="fecha_fin" value="{{ a.fecha_fin.isoformat() }}">
+                      </label>
+                      <button type="submit" class="btn-admin btn-admin-primary btn-sm mt-1">Guardar</button>
+                    </form>
+                  </details>
+                  <form method="POST" action="{{ url_for('admin.ausencias_borrar', leave_id=a.id) }}" style="display:inline;"
+                        onsubmit="return confirm('¿Eliminar esta ausencia?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-admin btn-admin-ghost" style="padding:.2rem .5rem;font-size:.75rem;color:#b91c1c;">Borrar</button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
               </tr>
               {% else %}
               <tr>
-                <td colspan="7" class="table-empty-state" style="padding:1.25rem;">
+                <td colspan="8" class="table-empty-state" style="padding:1.25rem;">
                   Sin ausencias en este filtro.
                 </td>
               </tr>

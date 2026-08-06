@@ -5,8 +5,9 @@ from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 
 from app import db
-from app.models import Vehiculo, Festivo, ROLE_ADMIN, ROLE_JEFE
+from app.models import AsignacionVehiculo, Vehiculo, Festivo, ROLE_ADMIN, ROLE_JEFE
 from app.decorators import roles_required
+from app.services.leave_service import user_has_approved_leave
 from app.services.permission_service import is_laboral
 from app.services.vehicle_assignment_service import process_vehicle_assignment_action
 from app.utils.timezone_utils import today_local
@@ -19,14 +20,52 @@ vehiculos_api = Blueprint('vehiculos_api', __name__)
 def api_list_vehicles():
     """Listado select2: {id, text: 'matricula — nombre'}."""
     q = (request.args.get('q') or '').strip().lower()
+    start_str = (request.args.get('start') or '').strip()
+    end_str = (request.args.get('end') or '').strip()
+    worker_id_raw = request.args.get('worker_id')
     query = Vehiculo.query.filter_by(active=True)
     vehicles = query.order_by(Vehiculo.matricula.asc().nullslast(), Vehiculo.nombre.asc()).all()
+
+    worker_id = None
+    try:
+        if worker_id_raw not in (None, '', 'null'):
+            worker_id = int(worker_id_raw)
+    except (TypeError, ValueError):
+        worker_id = None
+
+    fechas = []
+    if start_str and end_str:
+        try:
+            start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+            if end_date < start_date:
+                start_date, end_date = end_date, start_date
+            curr = start_date
+            while curr <= end_date:
+                fechas.append(curr)
+                curr += timedelta(days=1)
+        except ValueError:
+            fechas = []
 
     results = []
     for v in vehicles:
         text = v.label()
         if q and q not in text.lower() and q not in (v.marca or '').lower() and q not in (v.modelo or '').lower():
             continue
+        if fechas:
+            bloqueado = False
+            for fecha in fechas:
+                av = AsignacionVehiculo.query.filter_by(vehiculo_id=v.id, fecha=fecha).first()
+                if not av:
+                    continue
+                if worker_id is not None and av.user_id == worker_id:
+                    continue
+                if user_has_approved_leave(av.user_id, av.fecha):
+                    continue
+                bloqueado = True
+                break
+            if bloqueado:
+                continue
         results.append({'id': v.id, 'text': text})
 
     return jsonify({'results': results})

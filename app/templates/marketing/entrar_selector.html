@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elige empresa — SignaPlan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            <span class="mkt-brand-mark" aria-hidden="true"></span>
+            <span>SignaPlan</span>
+        </a>
+    </header>
+
+    <section class="mkt-section" style="padding-top: 4rem;">
+        <div class="mkt-section-header">
+            <h2>Varias empresas</h2>
+            <p>El correo <strong>{{ email }}</strong> está en más de una empresa. Elige a cuál quieres entrar.</p>
+        </div>
+
+        <ul style="list-style:none;padding:0;max-width:32rem;margin:0 auto;">
+            {% for item in matches %}
+            <li style="margin-bottom:.75rem;">
+                <a class="mkt-btn mkt-btn-primary" style="width:100%;display:block;text-align:center;"
+                   href="{{ item.login_url }}">
+                    {{ item.tenant.nombre }}
+                    <span style="opacity:.8;font-weight:500;font-size:.9rem;">
+                        — {{ item.tenant.subdominio }}.{{ base_domain }}
+                    </span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <p style="text-align:center;margin-top:1.5rem;">
+            <a href="{{ url_for('marketing.entrar') }}">Usar otro correo</a>
+        </p>
+    </section>
+</body>
+</html>

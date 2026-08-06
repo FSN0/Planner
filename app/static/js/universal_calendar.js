@@ -1,3 +1,5 @@
+const t = window.SP_T || function (key) { return key; };
+
 class UniversalCalendarManager {
     constructor(elementId, config) {
         this.element = document.getElementById(elementId);
@@ -31,8 +33,6 @@ class UniversalCalendarManager {
 
     init() {
         let _this = this;
-        const t = window.SP_T || function (key) { return key; };
-
         this.panelId = this.element.id + '-bottom-panel';
         let oldPanel = document.getElementById(this.panelId);
         if (oldPanel) oldPanel.remove();
@@ -144,21 +144,24 @@ class UniversalCalendarManager {
                 </div>
                 <div class="univ-calendar-panel-body">
                     <div class="row align-items-end">
-                        <div class="col-md-5" id="${this.panelId}-selector-container"></div>
-                        <div class="col-md-3">
+                        <div class="col-md-5">
                             <label class="small font-weight-bold mb-1 text-secondary">${t('Fecha Inicio')}</label>
                             <input type="date" id="${this.panelId}-start" class="form-control form-control-sm font-weight-bold">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-5">
                             <label class="small font-weight-bold mb-1 text-secondary">${t('Fecha Fin')}</label>
                             <input type="date" id="${this.panelId}-end" class="form-control form-control-sm font-weight-bold">
                         </div>
-                        <div class="col-md-1 pl-0">
+                        <div class="col-md-2">
+                            <label class="small font-weight-bold mb-1 text-secondary d-block">&nbsp;</label>
                             <button id="${this.panelId}-save" class="btn btn-sm btn-primary w-100" title="${t('Guardar cambios (Enter)')}"><i class="fas fa-check"></i></button>
                         </div>
                     </div>
+                    <div class="row mt-2">
+                        <div class="col-12" id="${this.panelId}-selector-container"></div>
+                    </div>
                     <div class="row mt-2" id="${this.panelId}-vehicle-row" style="display: none;">
-                        <div class="col-md-5" id="${this.panelId}-vehicle-container"></div>
+                        <div class="col-md-6" id="${this.panelId}-vehicle-container"></div>
                     </div>
                     <div class="row mt-2" id="${this.panelId}-generic-options" style="display: none;">
                         <div class="col-md-3">
@@ -577,7 +580,7 @@ class UniversalCalendarManager {
     showBottomPanel(event, isNew) {
         if (this.readonly) return; 
         
-        let isSameEvent = (this.activeEvent && this.activeEvent.id === event.id);
+        let isSameEvent = (this.activeEvent === event);
         this.activeEvent = event;
         
         let panel = document.getElementById(this.panelId);
@@ -653,6 +656,42 @@ class UniversalCalendarManager {
         }
     }
 
+    _currentPanelDateRange() {
+        const startInput = document.getElementById(`${this.panelId}-start`);
+        const endInput = document.getElementById(`${this.panelId}-end`);
+        const start = startInput ? startInput.value : '';
+        const end = endInput ? endInput.value : '';
+        return { start, end };
+    }
+
+    _vehicleAjaxData(term, workerId) {
+        const range = this._currentPanelDateRange();
+        return {
+            q: term,
+            start: range.start,
+            end: range.end,
+            worker_id: workerId || '',
+        };
+    }
+
+    _initVehicleSelect($select, workerId, placeholder) {
+        if (typeof $ === 'undefined' || !$.fn.select2) return $select;
+        return this.initPanelSelect2($select, {
+            placeholder: placeholder || t('Opcional: asignar vehículo...'),
+            allowClear: true,
+            ajax: {
+                url: '/api/v6/vehicles',
+                dataType: 'json',
+                delay: 250,
+                data: (p) => this._vehicleAjaxData(
+                    p.term,
+                    typeof workerId === 'function' ? workerId() : workerId
+                ),
+                processResults: (d) => ({ results: d.results || [] }),
+            }
+        });
+    }
+
     _toggleVehicleRow(showForNew) {
         const row = document.getElementById(`${this.panelId}-vehicle-row`);
         const container = document.getElementById(`${this.panelId}-vehicle-container`);
@@ -680,18 +719,7 @@ class UniversalCalendarManager {
         `;
         setTimeout(() => {
             const $select = $(`#${this.panelId}-vehicle-select`);
-            if (typeof $ === 'undefined' || !$.fn.select2) return;
-            this.initPanelSelect2($select, {
-                placeholder: t('Opcional: asignar vehículo...'),
-                allowClear: true,
-                ajax: {
-                    url: '/api/v6/vehicles',
-                    dataType: 'json',
-                    delay: 250,
-                    data: (p) => ({ q: p.term }),
-                    processResults: (d) => ({ results: d.results || [] })
-                }
-            });
+            this._initVehicleSelect($select, this.context === 'worker' ? this.entityId : null);
         }, 150);
     }
 
@@ -708,11 +736,6 @@ class UniversalCalendarManager {
         if (this.context === 'obra' && !prefill) {
             this._renderMultiWorkerSelect(container);
             return;
-        }
-
-        if (container && container.parentElement) {
-            container.parentElement.classList.add('col-md-5');
-            container.parentElement.classList.remove('col-md-12', 'mb-2');
         }
 
         let selectLabel = (this.context === 'obra' || this.context === 'vehiculo')
@@ -786,10 +809,6 @@ class UniversalCalendarManager {
 
     _renderMultiWorkerSelect(container) {
         this._destroySelect2In(container);
-        if (container && container.parentElement) {
-            container.parentElement.classList.remove('col-md-5');
-            container.parentElement.classList.add('col-md-12', 'mb-2');
-        }
         container.innerHTML = `
             <div class="d-flex align-items-center justify-content-between mb-1">
                 <label class="small font-weight-bold mb-0 text-secondary">${t('Trabajadores a asignar')}</label>
@@ -815,23 +834,30 @@ class UniversalCalendarManager {
         opts = opts || {};
         const rowId = `${this.panelId}-wrow-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const row = document.createElement('div');
-        row.className = 'univ-worker-row border rounded bg-white p-2 mb-2';
+        row.className = 'univ-worker-row';
         row.dataset.rowId = rowId;
         row.innerHTML = `
-            <div class="row align-items-end">
-                <div class="col-md-6 mb-1 mb-md-0">
+            <div class="univ-worker-row-inner">
+                <div class="univ-worker-row-main">
                     <label class="small text-muted mb-0">${t('Trabajador')}</label>
                     <select class="form-control form-control-sm univ-worker-select" style="width:100%;">
                         <option></option>
                     </select>
                 </div>
-                <div class="col-md-5 mb-1 mb-md-0">
-                    <label class="small text-muted mb-0"><i class="fas fa-car mr-1"></i>${t('Vehículo')}</label>
-                    <select class="form-control form-control-sm univ-vehicle-select" style="width:100%;">
-                        <option></option>
-                    </select>
+                <div class="univ-worker-row-vehicle">
+                    <div class="custom-control custom-switch mb-1">
+                        <input type="checkbox" class="custom-control-input univ-vehicle-toggle" id="${rowId}-vehicle-toggle">
+                        <label class="custom-control-label small text-muted" for="${rowId}-vehicle-toggle">
+                            <i class="fas fa-car mr-1"></i>${t('Asignar vehículo')}
+                        </label>
+                    </div>
+                    <div class="univ-vehicle-wrap" style="display:none;">
+                        <select class="form-control form-control-sm univ-vehicle-select" style="width:100%;">
+                            <option></option>
+                        </select>
+                    </div>
                 </div>
-                <div class="col-md-1 text-right">
+                <div class="univ-worker-row-actions">
                     <button type="button" class="btn btn-sm btn-outline-danger univ-worker-remove" title="${t('Quitar')}">
                         <i class="fas fa-times"></i>
                     </button>
@@ -844,6 +870,8 @@ class UniversalCalendarManager {
         setTimeout(() => {
             const $w = $(row).find('.univ-worker-select');
             const $v = $(row).find('.univ-vehicle-select');
+            const toggle = row.querySelector('.univ-vehicle-toggle');
+            const vehicleWrap = row.querySelector('.univ-vehicle-wrap');
             if (typeof $ !== 'undefined' && $.fn.select2) {
                 this.initPanelSelect2($w, {
                     placeholder: allowGenerico
@@ -871,17 +899,25 @@ class UniversalCalendarManager {
                     const hidden = document.getElementById(`${this.panelId}-select`);
                     if (hidden && onlyOne) hidden.value = e.target.value || '';
                 });
-                this.initPanelSelect2($v, {
-                    placeholder: t('Opcional'),
-                    allowClear: true,
-                    ajax: {
-                        url: '/api/v6/vehicles',
-                        dataType: 'json',
-                        delay: 250,
-                        data: (p) => ({ q: p.term }),
-                        processResults: (d) => ({ results: d.results || [] }),
-                    },
-                });
+                if (toggle) {
+                    toggle.addEventListener('change', () => {
+                        const showVehicle = !!toggle.checked;
+                        if (vehicleWrap) {
+                            vehicleWrap.style.display = showVehicle ? 'block' : 'none';
+                        }
+                        if (!showVehicle) {
+                            if ($v.data('select2')) $v.val(null).trigger('change');
+                            return;
+                        }
+                        if (!$v.data('select2')) {
+                            const workerId = () => {
+                                const workerSel = row.querySelector('.univ-worker-select');
+                                return workerSel ? workerSel.value : null;
+                            };
+                            this._initVehicleSelect($v, workerId, t('Selecciona vehículo...'));
+                        }
+                    });
+                }
             }
         }, 50);
 
@@ -910,10 +946,11 @@ class UniversalCalendarManager {
         list.querySelectorAll('.univ-worker-row').forEach((row, index) => {
             const wSel = row.querySelector('.univ-worker-select');
             const vSel = row.querySelector('.univ-vehicle-select');
+            const vToggle = row.querySelector('.univ-vehicle-toggle');
             const wid = wSel ? wSel.value : null;
             if (!wid) return;
             const entry = { worker_id: wid, index };
-            const vid = vSel ? vSel.value : null;
+            const vid = (vToggle && vToggle.checked && vSel) ? vSel.value : null;
             if (vid) entry.vehicle_id = vid;
             workers.push(entry);
         });
@@ -955,7 +992,7 @@ class UniversalCalendarManager {
     }
 
     updatePanelDatesFromEvent(event) {
-        if (!this.activeEvent || this.activeEvent.id !== event.id) return;
+        if (!this.activeEvent || this.activeEvent !== event) return;
         let startInput = document.getElementById(`${this.panelId}-start`);
         let endInput = document.getElementById(`${this.panelId}-end`);
         
@@ -1516,7 +1553,20 @@ class UniversalCalendarManager {
         let notasInput = document.getElementById(`${this.panelId}-notas`);
         if (notasInput) notasInput.value = '';
         const workersList = document.getElementById(`${this.panelId}-workers-list`);
-        if (workersList) this._destroySelect2In(workersList);
+        if (workersList) {
+            this._destroySelect2In(workersList);
+            workersList.innerHTML = '';
+        }
+        const selectorContainer = document.getElementById(`${this.panelId}-selector-container`);
+        if (selectorContainer) {
+            this._destroySelect2In(selectorContainer);
+            selectorContainer.innerHTML = '';
+        }
+        const hiddenSelect = document.getElementById(`${this.panelId}-select`);
+        if (hiddenSelect) hiddenSelect.value = '';
+        this._pendingPrefill = null;
+        this._pendingObraVehicleWorkerId = null;
+        this.activeEvent = null;
         this._toggleVehicleRow(false);
     }
 

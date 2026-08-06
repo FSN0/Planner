@@ -772,23 +772,103 @@ def set_leave_estado(leave_id, nuevo_estado, resolved_by_id=None):
 
 
 def actor_puede_crear_ausencia(actor_user):
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
     return getattr(actor_user, 'role', None) in (
-        ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH,
+        ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_OPERARIO,
     )
+
+
+def actor_puede_gestionar_ausencias(actor_user):
+    """Aprueba / edita / borra en firme sin pasar por pendiente."""
+    from app.models import ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH
+    return getattr(actor_user, 'role', None) in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
 
 
 def estado_alta_por_rol(actor_user, solicitado=None):
     """
     Admin/laboral/rrhh pueden aprobar al crear.
-    Jefe siempre deja pendiente (el admin valida).
+    Jefe y operario dejan pendiente.
     """
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
 
-    if actor_user.role == ROLE_JEFE:
+    if actor_user.role in (ROLE_JEFE, ROLE_OPERARIO):
         return LEAVE_STATUS_PENDIENTE
     if solicitado in (LEAVE_STATUS_APROBADA, LEAVE_STATUS_PENDIENTE):
         return solicitado
     if actor_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return LEAVE_STATUS_APROBADA
     return LEAVE_STATUS_PENDIENTE
+
+
+def update_manual_leave(
+    leave_id,
+    actor_user,
+    *,
+    fecha_inicio=None,
+    fecha_fin=None,
+    tipo=None,
+    descripcion=None,
+):
+    """
+    Edita una ausencia manual.
+    Admin/laboral: aplica al vuelo.
+    Otros: la dejan pendiente de re-aprobación.
+    """
+    leave = AusenciaPlanificada.query.get(leave_id)
+    if not leave:
+        raise ValueError('Ausencia no encontrada.')
+    if leave.origen != LEAVE_SOURCE_MANUAL:
+        raise ValueError(
+            'Esta ausencia viene del ERP/Odoo; no se edita en SignaPlan.'
+        )
+
+    if fecha_inicio is not None:
+        leave.fecha_inicio = _parse_date(fecha_inicio)
+    if fecha_fin is not None:
+        leave.fecha_fin = _parse_date(fecha_fin)
+    if leave.fecha_fin < leave.fecha_inicio:
+        leave.fecha_inicio, leave.fecha_fin = leave.fecha_fin, leave.fecha_inicio
+    leave.dias = (leave.fecha_fin - leave.fecha_inicio).days + 1
+    if tipo is not None:
+        leave.tipo = (tipo or leave.tipo)[:120]
+    if descripcion is not None:
+        leave.descripcion = descripcion
+
+    if actor_puede_gestionar_ausencias(actor_user):
+        # Mantener estado actual salvo que estuviera rechazada → aprobada implícita
+        if leave.estado == LEAVE_STATUS_RECHAZADA:
+            leave.estado = LEAVE_STATUS_APROBADA
+    else:
+        leave.estado = LEAVE_STATUS_PENDIENTE
+
+    db.session.flush()
+    if leave.estado == LEAVE_STATUS_APROBADA:
+        detect_and_upsert_conflicts(
+            date_from=leave.fecha_inicio, date_to=leave.fecha_fin
+        )
+    db.session.commit()
+    return leave
+
+
+def delete_manual_leave(leave_id, actor_user):
+    """
+    Borra ausencia manual.
+    Admin/laboral: borrado directo.
+    Otros: no pueden borrar aprobadas (deben pedir); pendientes sí.
+    """
+    leave = AusenciaPlanificada.query.get(leave_id)
+    if not leave:
+        raise ValueError('Ausencia no encontrada.')
+    if leave.origen != LEAVE_SOURCE_MANUAL:
+        raise ValueError(
+            'Esta ausencia viene del ERP/Odoo; no se borra en SignaPlan.'
+        )
+    if not actor_puede_gestionar_ausencias(actor_user):
+        if leave.estado == LEAVE_STATUS_APROBADA:
+            raise ValueError(
+                'No puedes borrar una ausencia ya aprobada. '
+                'Pide a administración que la anule.'
+            )
+    db.session.delete(leave)
+    db.session.commit()
+    return True

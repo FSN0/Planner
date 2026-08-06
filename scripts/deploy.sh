@@ -94,7 +94,7 @@ docker compose -f $COMPOSE_FILE ps
 
 # --- Smoke tests ---
 print_step "Ejecutando smoke tests..."
-COMPOSE_FILE=$COMPOSE_FILE bash scripts/smoke-test.sh "${DOMAIN:-signaplan.com}" || true
+COMPOSE_FILE=$COMPOSE_FILE bash scripts/smoke-test.sh "${DOMAIN:-signaplan.com}"
 
 echo ""
 echo -e "${GREEN}════════════════════════════════════════${NC}"

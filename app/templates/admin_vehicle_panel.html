@@ -100,6 +100,8 @@
     font-size: 0.82rem;
     color: #64748b;
   }
+  .vehicle-edit-card { display: none; }
+  .vehicle-edit-card.is-open { display: block; }
 </style>
 {% endblock %}
 
@@ -117,6 +119,11 @@
           <span class="entity-type-marker"><i class="fas fa-car"></i> {{ _('Vehículo') }}</span>
         </div>
         <div class="entity-panel-actions">
+          {% if current_user.role == 'admin' %}
+          <button type="button" class="btn-admin btn-admin-primary" id="vehicleEditToggle">
+            <i class="fas fa-pen"></i> {{ _('Editar') }}
+          </button>
+          {% endif %}
           {% if current_user.role == 'admin' and tenant_has_odoo %}
           <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-clipboard-check"></i> {{ _('Auditoría') }}
@@ -182,8 +189,9 @@
           </div>
 
           {% if current_user.role == 'admin' %}
+          <div id="vehicleEditCard" class="vehicle-edit-card mt-3">
           <form method="POST" action="{{ url_for('admin.vehiculos_editar', vehiculo_id=vehiculo.id) }}"
-                class="mt-3 p-3" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+                class="p-3" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row">
               <div class="col-md-3 mb-2">
@@ -215,6 +223,7 @@
               </div>
             </div>
           </form>
+          </div>
           {% endif %}
         </div>
       </div>
@@ -283,6 +292,20 @@
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    var editBtn = document.getElementById('vehicleEditToggle');
+    var editCard = document.getElementById('vehicleEditCard');
+    if (editBtn && editCard) {
+        editBtn.addEventListener('click', function() {
+            var open = !editCard.classList.contains('is-open');
+            editCard.classList.toggle('is-open', open);
+            editBtn.classList.toggle('btn-admin-primary', !open);
+            editBtn.classList.toggle('btn-admin-ghost', open);
+            editBtn.innerHTML = open
+                ? '<i class="fas fa-times"></i> ' + {{ _('Cerrar edición')|tojson }}
+                : '<i class="fas fa-pen"></i> ' + {{ _('Editar')|tojson }};
+        });
+    }
+
     window.vehicleCalendar = new UniversalCalendarManager('vehicle-calendar', {
         context: 'vehiculo',
         id: {{ vehiculo.id }},

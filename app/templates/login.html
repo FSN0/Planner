@@ -31,42 +31,13 @@
           {% endif %}
         {% endwith %}
 
-        {% if show_resend_verification %}
-        <div class="alert alert-light border p-3 small mb-3">
-          <p class="mb-2 text-center">{{ _('¿No has recibido el correo de verificación?') }}</p>
-          <form method="POST" action="{{ url_for('auth.reenviar_verificacion') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="form-group mb-2">
-              <input type="email" name="email" class="form-control form-control-sm"
-                     placeholder="{{ _('Tu correo') }}" required
-                     autocomplete="username">
-            </div>
-            <button type="submit" class="btn btn-sm btn-outline-primary btn-block">
-              {{ _('Reenviar verificación') }}
-            </button>
-          </form>
-        </div>
-        {% endif %}
-
-        <div class="mb-3 text-center">
-            <label class="small text-muted d-block mb-1" for="login-lang">{{ _('Idioma') }}</label>
-            <select id="login-lang" class="form-control form-control-sm d-inline-block" style="max-width: 12rem;"
-                    onchange="window.location.href=this.value">
-                {% for code in supported_locales %}
-                <option value="{{ url_for('main.update_user_locale', lang=code, next=request.path) }}"
-                        {% if code == current_locale %}selected{% endif %}>
-                    {{ locale_labels[code] }}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
-
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group mb-3">
                 <label for="email" class="form-label font-weight-bold small text-secondary">{{ _('Correo Electrónico') }}</label>
                 <input type="email" name="email" id="email" class="form-control"
                        placeholder="nombre@empresa.com" required
+                       value="{{ prefill_email or '' }}"
                        autocomplete="username" inputmode="email"
                        autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>

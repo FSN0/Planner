@@ -329,7 +329,29 @@ class SolicitudService:
 
     @staticmethod
     def create_or_merge_solicitud_baja(jefe_id, obra_id, empleado_id, date_objs, notas=None):
-        if not date_objs: return None, "none"
+        if not date_objs:
+            return None, "none"
+
+        # Solo tiene sentido pedir baja de días en los que el operario está asignado.
+        fechas_pedidas = []
+        for d in date_objs:
+            if isinstance(d, str):
+                d = datetime.strptime(d, '%Y-%m-%d').date()
+            fechas_pedidas.append(d)
+        fechas_pedidas = sorted(set(fechas_pedidas))
+
+        asignados = {
+            a.fecha
+            for a in Asignacion.query.filter(
+                Asignacion.obra_id == obra_id,
+                Asignacion.user_id == empleado_id,
+                Asignacion.fecha.in_(fechas_pedidas),
+            ).all()
+        }
+        date_objs = [d for d in fechas_pedidas if d in asignados]
+        if not date_objs:
+            return None, "none"
+
         start_date = min(date_objs)
         end_date = max(date_objs)
         dates_str = [d.strftime('%Y-%m-%d') for d in date_objs]

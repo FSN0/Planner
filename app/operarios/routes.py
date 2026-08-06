@@ -26,6 +26,7 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app import limiter
+from app import db
 from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO
 from app.services.fichaje_ledger_service import FichajeLedgerError
 from app.services.fichaje_operario_service import (
@@ -83,6 +84,14 @@ def _solo_perfiles_con_jornada():
     if current_user.role not in ROLES_CON_FICHAJE:
         flash('Tu perfil no tiene área de fichaje.', 'warning')
         return redirect(url_for('main.dashboard'))
+
+    # PIN provisional: solo puede cambiar PIN o salir.
+    from app.services.pin_auth_service import debe_cambiar_pin
+    if debe_cambiar_pin(current_user) and request.endpoint not in (
+        'operarios.cambiar_pin',
+        'operarios.salir',
+    ):
+        return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
     return None
 
 
@@ -132,6 +141,10 @@ def entrar():
             detail=f"Acceso a fichaje desde IP: {request.remote_addr or 'Desconocida'}",
         )
 
+        from app.services.pin_auth_service import debe_cambiar_pin
+        if debe_cambiar_pin(user):
+            return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
+
         destino = request.args.get('next') or url_for('operarios.inicio')
         if not destino.startswith('/mi'):
             destino = url_for('operarios.inicio')
@@ -152,8 +165,58 @@ def inicio():
     if not fichaje_operario_activo():
         abort(404)
 
+    from app.services.pin_auth_service import debe_cambiar_pin
+    if debe_cambiar_pin(current_user):
+        return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
+
     contexto = estado_para_pantalla(current_user)
     return render_template('operario/fichar.html', **contexto)
+
+
+@operarios_bp.route('/pin', methods=['GET', 'POST'])
+@limiter.limit('20 per minute; 60 per hour', methods=['POST'])
+def cambiar_pin():
+    """Cambio de PIN (voluntario) o primer cambio obligatorio tras PIN generado."""
+    from app.services.pin_auth_service import (
+        PinAuthError,
+        debe_cambiar_pin,
+        cambiar_pin_propio,
+        forzar_cambio_pin_primer_acceso,
+    )
+
+    obligatorio = bool(
+        request.args.get('obligatorio')
+        or request.form.get('obligatorio')
+        or debe_cambiar_pin(current_user)
+    )
+
+    if request.method == 'POST':
+        try:
+            if obligatorio or debe_cambiar_pin(current_user):
+                forzar_cambio_pin_primer_acceso(
+                    current_user,
+                    request.form.get('pin_nuevo'),
+                    request.form.get('pin_nuevo2'),
+                )
+            else:
+                cambiar_pin_propio(
+                    current_user,
+                    request.form.get('pin_actual'),
+                    request.form.get('pin_nuevo'),
+                    request.form.get('pin_nuevo2'),
+                )
+            db.session.commit()
+            flash('PIN actualizado.', 'success')
+            return redirect(url_for('operarios.inicio'))
+        except PinAuthError as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+
+    return render_template(
+        'operario/cambiar_pin.html',
+        obligatorio=obligatorio or debe_cambiar_pin(current_user),
+        activo='pin',
+    )
 
 
 @operarios_bp.route('/fichar', methods=['POST'])
@@ -165,6 +228,14 @@ def api_fichar():
     Responde siempre en JSON: la pantalla se refresca sola sin recargar, que
     en una obra con cobertura mala importa más de lo que parece.
     """
+    from app.services.pin_auth_service import debe_cambiar_pin
+    if debe_cambiar_pin(current_user):
+        return jsonify({
+            'ok': False,
+            'error': 'Debes cambiar el PIN antes de fichar.',
+            'must_change_pin': True,
+        }), 403
+
     datos = request.get_json(silent=True) or request.form
 
     try:

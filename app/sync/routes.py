@@ -79,6 +79,11 @@ def odoo_panel():
         'user': get_tenant_config('odoo_user', default=''),
         'password': '',
         'has_password': has_password,
+        'external_auth_provider': get_tenant_config('external_auth_provider', default=''),
+        'external_auth_odoo_url': get_tenant_config(
+            'external_auth_odoo_url',
+            default=get_tenant_config('odoo_url', default=''),
+        ),
     }
     return render_template('sync/odoo_dashboard.html', **ctx)
 
@@ -104,6 +109,13 @@ def odoo_save_config():
             set_tenant_config('odoo_user', user)
         if password:
             set_tenant_config('odoo_password', password, encriptar=True)
+        external_auth_provider = (request.form.get('external_auth_provider') or '').strip()
+        external_auth_odoo_url = (request.form.get('external_auth_odoo_url') or '').strip()
+        set_tenant_config('external_auth_provider', external_auth_provider)
+        if external_auth_odoo_url:
+            set_tenant_config('external_auth_odoo_url', external_auth_odoo_url)
+        elif url:
+            set_tenant_config('external_auth_odoo_url', url)
 
         modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
         motor = modulos.get('odoo_adapter') or 'odoo_soltec'

@@ -98,6 +98,32 @@
         </p>
       </div>
 
+      {% if empresa_vacia %}
+      <section class="onb-step" style="border-color:#93c5fd;background:#eff6ff;">
+        <div class="onb-step-head">
+          <span class="onb-badge">★</span>
+          <div>
+            <h2>¿Cómo quieres empezar?</h2>
+            <p class="hint">
+              Puedes preparar tu empresa real o explorar SignaPlan con datos de ejemplo
+              ({{ demo_cantidades.obras }} obras, {{ demo_cantidades.empleados }} trabajadores,
+              {{ demo_cantidades.vehiculos }} vehículos).
+            </p>
+          </div>
+        </div>
+        <div class="onb-actions">
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="accion" value="demo_generar">
+            <button type="submit" class="btn-admin btn-admin-primary">
+              Probar con datos de ejemplo
+            </button>
+          </form>
+          <span class="hint" style="align-self:center;">o completa los pasos de abajo con tu empresa</span>
+        </div>
+      </section>
+      {% endif %}
+
       {# —— Paso obra —— #}
       {% set paso_obra = onboarding.pasos[0] %}
       <section class="onb-step {% if paso_obra.hecho %}is-done{% endif %}">

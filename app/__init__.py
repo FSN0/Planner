@@ -349,6 +349,13 @@ def create_app():
                 mostrar_onboarding = necesita_onboarding()
             except Exception:
                 mostrar_onboarding = False
+        demo_data_activa = False
+        if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
+            try:
+                from app.services.demo_data_service import demo_activa
+                demo_data_activa = demo_activa()
+            except Exception:
+                demo_data_activa = False
         return dict(
             pending_notifications=pending_count,
             unread_logs_count=unread_logs_count,
@@ -360,6 +367,7 @@ def create_app():
             tenant_has_registro_jornada=tenant_has_registro_jornada,
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
             mostrar_onboarding=mostrar_onboarding,
+            demo_data_activa=demo_data_activa,
             user_can=user_can,
             is_laboral=is_laboral,
             is_admin=is_admin,

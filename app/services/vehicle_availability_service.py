@@ -217,11 +217,15 @@ def list_free_vehicle_stretches(fecha_desde=None, fecha_hasta=None, solo_activos
 def free_vehicle_summary(stretches):
     """KPIs ligeros sobre el listado."""
     vehiculos = {s['vehiculo_id'] for s in stretches}
+    por_ausencia = sum(
+        1 for s in stretches if s['motivo'] in (MOTIVO_AUSENCIA, MOTIVO_MIXTO)
+    )
+    sin_plan = sum(1 for s in stretches if s['motivo'] == MOTIVO_SIN_PLAN)
     return {
         'tramos': len(stretches),
         'vehiculos': len(vehiculos),
-        'por_ausencia': sum(1 for s in stretches if s['motivo'] == MOTIVO_AUSENCIA),
-        'sin_plan': sum(1 for s in stretches if s['motivo'] == MOTIVO_SIN_PLAN),
+        'por_ausencia': por_ausencia,
+        'sin_plan': sin_plan,
         'mixtos': sum(1 for s in stretches if s['motivo'] == MOTIVO_MIXTO),
         'dias_libres': sum(
             s['dias'] for s in stretches if not s.get('abierto')

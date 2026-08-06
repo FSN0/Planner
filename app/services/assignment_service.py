@@ -368,8 +368,19 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
         if not fechas_con_asignacion:
             return {'success': False, 'message': 'El trabajador no tiene asignaciones en este periodo.'}
             
-        sol, status = SolicitudService.create_or_merge_solicitud_baja(actor_user.id, target_obra_id, worker_id, fechas_con_asignacion)
-        msg = 'Se ha generado una solicitud de baja.' if status == 'new' else 'Se han añadido los días a una solicitud existente.'
+        sol, status = SolicitudService.create_or_merge_solicitud_baja(
+            actor_user.id, target_obra_id, worker_id, fechas_con_asignacion
+        )
+        if not sol or status == 'none':
+            return {
+                'success': False,
+                'message': 'No se puede solicitar la baja: no hay asignación en esos días.',
+            }
+        msg = (
+            'Se ha generado una solicitud de baja.'
+            if status == 'new'
+            else 'Se han añadido los días a una solicitud existente.'
+        )
         return {'success': True, 'action': 'requested', 'message': msg}
 
 

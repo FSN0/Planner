@@ -87,10 +87,12 @@ def provision_new_tenant(
         stamp(directory='migrations', revision='head')
 
         # >>> NUEVO: 7. Crear la Empresa Interna matriz <<<
+        from app.models import generate_random_color
         empresa_interna = Company(
             nombre=nombre_empresa,
             is_internal=True,      # Fundamental para que Odoo sepa dónde meter a la plantilla
-            code=subdominio[:15].upper() # Generamos un código corto basado en el subdominio
+            code=subdominio[:15].upper(),  # Generamos un código corto basado en el subdominio
+            color=generate_random_color(),
         )
         db.session.add(empresa_interna)
         db.session.flush() # Flush para que la base de datos le asigne un ID sin cerrar la transacción

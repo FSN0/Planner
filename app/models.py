@@ -41,6 +41,8 @@ class Tenant(db.Model):
     custom_domain = db.Column(db.String(255), unique=True, nullable=True)  # Ej: 'planner.empresa.com'
     schema_name = db.Column(db.String(50), unique=True, nullable=False) # Ej: 'tenant_soltec', 'tenant_acme'
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    # Soft-off: al desactivar se rellena; a +30 días se puede borrar el schema.
+    deactivated_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     modulos_activos = db.Column(db.JSON, nullable=False, server_default='{}')
@@ -88,7 +90,7 @@ class Company(db.Model):
     gremio = db.Column(db.String(100)) # Ej: Electricidad, Albañilería
     
     email = db.Column(db.String(120), nullable=True) # Email de contacto principal
-    color = db.Column(db.String(7), nullable=True, default='#ffffff')
+    color = db.Column(db.String(7), nullable=True, default=generate_random_color)
     
     # Flag clave para distinguir personal propio de subcontratado
     is_internal = db.Column(db.Boolean, nullable=False, default=False)
@@ -111,8 +113,18 @@ class User(UserMixin, db.Model):
     # Autenticación
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
+    auth_source_last = db.Column(db.String(20), nullable=True)
+    odoo_verified_at = db.Column(db.DateTime, nullable=True)
+    odoo_password_sig = db.Column(db.String(64), nullable=True)
+    odoo_fallback_disabled = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='false'
+    )
     # PIN numérico para la PWA de fichaje (DNI + PIN). Independiente del login web.
     pin_hash = db.Column(db.String(255), nullable=True)
+    # True si el PIN fue generado y aún no lo ha cambiado el trabajador en /mi.
+    pin_must_change = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='false'
+    )
     role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, operario
     
     # Datos Personales

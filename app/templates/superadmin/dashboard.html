@@ -55,85 +55,111 @@
         </div>
     </div>
 
-    <h4>Clientes Activos (Bases de datos aisladas)</h4>
-    <table class="table table-hover bg-white shadow-sm border align-middle">
+    <h4>Clientes</h4>
+    <table class="table table-hover bg-white shadow-sm border align-middle table-sm">
         <thead class="table-light">
             <tr>
                 <th>ID</th>
-                <th>Nombre Cliente</th>
-                <th>Acceso SignaPlan</th>
-                <th>Dominio propio</th>
-                <th>Esquema (Postgres)</th>
+                <th>Cliente</th>
+                <th>Acceso</th>
                 <th>Plan</th>
-                <th>Módulos (Addons)</th> 
+                <th>Uso</th>
+                <th>Módulos</th>
                 <th>Estado</th>
-                <th>Fecha Alta</th>
+                <th>Acciones</th>
             </tr>
         </thead>
         <tbody>
-            {% for t in tenants %}
-            <tr>
-                <td class="align-middle">{{ t.id }}</td>
-                <td class="align-middle"><strong>{{ t.nombre }}</strong></td>
-                <td class="align-middle">
-                    <code>{{ t.subdominio }}.signaplan.com</code>
+            {% for row in tenant_rows %}
+            {% set t = row.tenant %}
+            {% set k = row.kpis %}
+            <tr class="{% if not t.is_active %}table-secondary{% endif %}">
+                <td>{{ t.id }}</td>
+                <td>
+                    <strong>{{ t.nombre }}</strong><br>
+                    <code class="small">{{ t.subdominio }}.signaplan.com</code>
+                    {% if t.custom_domain %}<br><code class="small">{{ t.custom_domain }}</code>{% endif %}
+                    <div class="mt-1">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-toggle="modal" data-target="#modalDominio_{{ t.id }}">Dominio</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-toggle="modal" data-target="#modalPlan_{{ t.id }}">Plan</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#modalModulos_{{ t.id }}">Módulos</button>
+                    </div>
                 </td>
-                <td class="align-middle">
-                    {% if t.custom_domain %}
-                        <code>{{ t.custom_domain }}</code>
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                    <button type="button" class="btn btn-outline-secondary btn-sm ml-2" data-toggle="modal" data-target="#modalDominio_{{ t.id }}">
-                        <i class="fas fa-globe mr-1"></i> Dominio
-                    </button>
+                <td class="small">
+                    {% if k.admin_email %}<div>{{ k.admin_email }}</div>{% endif %}
+                    <div class="text-muted">Alta {{ t.created_at.strftime('%d/%m/%Y') if t.created_at else '—' }}</div>
                 </td>
-                <td class="align-middle"><code>{{ t.schema_name }}</code></td>
-
-                <td class="align-middle">
+                <td>
                     {% if t.plan == 'paid' %}
                         <span class="badge badge-primary">Pago</span>
                     {% else %}
                         <span class="badge badge-secondary">Gratis</span>
                     {% endif %}
-                    {% if t.billing_exempt %}
-                        <span class="badge badge-info">Sin cobro</span>
-                    {% endif %}
-                    {% if t.limite_empleados %}
-                        <small class="text-muted d-block">máx. {{ t.limite_empleados }}</small>
-                    {% elif t.plan == 'paid' or t.billing_exempt %}
-                        <small class="text-muted d-block">sin límite</small>
-                    {% endif %}
-                    <button type="button" class="btn btn-outline-secondary btn-sm mt-1" data-toggle="modal" data-target="#modalPlan_{{ t.id }}">
-                        Plan
-                    </button>
+                    {% if t.billing_exempt %}<span class="badge badge-info">Sin cobro</span>{% endif %}
                 </td>
-                
-                <td class="align-middle">
-                    <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#modalModulos_{{ t.id }}">
-                        <i class="fas fa-cubes mr-1"></i> Configurar Módulos
-                    </button>
+                <td class="small">
+                    <div>{{ k.usuarios }} usuarios · {{ k.obras }} obras</div>
+                    <div>{{ k.fichajes_7d }} fichajes / 7d</div>
+                    {% if k.dias_sin_uso is not none %}
+                        <div class="{% if k.dias_sin_uso >= 14 %}text-danger font-weight-bold{% else %}text-muted{% endif %}">
+                            {{ k.dias_sin_uso }} d sin uso
+                        </div>
+                    {% else %}
+                        <div class="text-muted">Sin actividad</div>
+                    {% endif %}
                 </td>
-                
-                <td class="align-middle">
+                <td class="small">
+                    {% for key, label in modulos.items() %}
+                        {% if t.modulos_activos and t.modulos_activos.get(key) %}
+                            <span class="badge badge-light border">{{ key }}</span>
+                        {% endif %}
+                    {% endfor %}
+                </td>
+                <td>
                     {% if t.is_active %}
                         <span class="badge badge-success">Activo</span>
                     {% else %}
                         <span class="badge badge-danger">Inactivo</span>
                     {% endif %}
                 </td>
-                <td class="align-middle">{{ t.created_at.strftime('%d/%m/%Y') }}</td>
+                <td style="min-width:14rem;">
+                    {% if t.is_active %}
+                    <form action="{{ url_for('superadmin.impersonar_tenant', id_tenant=t.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-warning mb-1">Entrar como admin</button>
+                    </form>
+                    <form action="{{ url_for('superadmin.desactivar_tenant', id_tenant=t.id) }}" method="POST" class="d-inline"
+                          onsubmit="return confirm('¿Desactivar {{ t.nombre }}? Dejará de ser accesible.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary mb-1">Desactivar</button>
+                    </form>
+                    {% else %}
+                    <form action="{{ url_for('superadmin.reactivar_tenant', id_tenant=t.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-success mb-1">Reactivar</button>
+                    </form>
+                    {% endif %}
+                    <form action="{{ url_for('superadmin.purgar_tenant', id_tenant=t.id) }}" method="POST" class="mt-2 p-2 border border-danger rounded"
+                          onsubmit="return confirm('Esto BORRA PARA SIEMPRE el tenant {{ t.nombre }} y su base ({{ t.schema_name }}). No se puede deshacer. ¿Continuar?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <label class="small text-danger font-weight-bold d-block mb-1">Eliminar permanentemente</label>
+                        <input type="text" name="confirm_subdominio" class="form-control form-control-sm mb-1"
+                               placeholder="Escribe: {{ t.subdominio }}" required autocomplete="off">
+                        <button type="submit" class="btn btn-sm btn-danger btn-block">Borrar tenant y base de datos</button>
+                    </form>
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="9" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
+                <td colspan="8" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 
-{% for t in tenants %}
+{% for row in tenant_rows %}
+{% set t = row.tenant %}
 <div class="modal fade" id="modalPlan_{{ t.id }}" tabindex="-1" role="dialog" aria-labelledby="modalPlanLabel_{{ t.id }}" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content border-0 shadow-lg">

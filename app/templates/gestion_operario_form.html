@@ -77,6 +77,18 @@
           <input type="text" name="dni" class="form-control" value="{% if edit_mode %}{{ user.dni }}{% endif %}" required>
         </div>
 
+        {% if not edit_mode %}
+        <div class="form-group" style="max-width: 220px;">
+          <label class="admin-form-label">{{ _('PIN de fichaje') }}</label>
+          <input type="password" name="pin" class="form-control"
+                 inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                 placeholder="{{ _('Vacío = se genera') }}">
+          <small class="form-text text-muted" style="font-size: 0.72rem;">
+            {{ _('Si lo dejas vacío se genera uno aleatorio y el trabajador deberá cambiarlo en /mi. Si tiene correo, se le avisa.') }}
+          </small>
+        </div>
+        {% endif %}
+
         <div class="admin-form-section">{{ _('Perfil profesional') }}</div>
         <div class="form-row">
           <div class="form-group col-md-6">
@@ -158,6 +170,63 @@
         </div>
       </form>
     </section>
+
+    {% if edit_mode and user.role in ['operario', 'jefe_obra', 'admin'] %}
+    <section class="admin-panel admin-form-panel mt-3">
+      <div class="admin-panel-header">
+        <h2 class="admin-panel-title">{{ _('PIN de fichaje') }}</h2>
+        <span class="admin-panel-subtitle">{{ _('Acceso a /mi con DNI + PIN') }}</span>
+      </div>
+      <div class="p-3">
+        <p class="small text-muted mb-3">
+          {% if user.pin_hash %}
+            {{ _('Este trabajador ya tiene PIN. Puedes cambiarlo o enviarle los datos de acceso por correo (se genera uno nuevo si no indicas PIN).') }}
+          {% else %}
+            {{ _('Todavía no tiene PIN de fichaje.') }}
+          {% endif %}
+        </p>
+        <div class="form-row">
+          <div class="col-md-6 mb-3">
+            <form method="POST" action="{{ url_for('admin.reset_pin', user_id=user.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ url_for('admin.edit_operario', user_id=user.id) }}">
+              <label class="admin-form-label">{{ _('Nuevo PIN') }}</label>
+              <input type="password" name="nuevo_pin" class="form-control mb-2"
+                     inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                     placeholder="••••" required>
+              <div class="d-flex flex-wrap" style="gap:.5rem;">
+                <button type="submit" name="accion" value="asignar" class="btn-admin btn-admin-primary">{{ _('Guardar PIN') }}</button>
+                <button type="submit" name="accion" value="generar" class="btn-admin btn-admin-ghost"
+                        formnovalidate
+                        onclick="this.form.nuevo_pin.required=false;">{{ _('Generar aleatorio') }}</button>
+                <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
+                        formnovalidate style="color:#b91c1c;"
+                        onclick="this.form.nuevo_pin.required=false;return confirm('¿Quitar el PIN?');">{{ _('Quitar') }}</button>
+              </div>
+            </form>
+          </div>
+          <div class="col-md-6 mb-3">
+            <form method="POST" action="{{ url_for('admin.enviar_acceso_fichaje', user_id=user.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="regenerar" value="1">
+              <label class="admin-form-label">{{ _('Enviar acceso por correo') }}</label>
+              <input type="password" name="nuevo_pin" class="form-control mb-2"
+                     inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                     placeholder="{{ _('Vacío = genera PIN nuevo') }}">
+              <p class="small text-muted mb-2">
+                {{ _('Envía a') }} <strong>{{ user.email }}</strong>
+                {{ _('la URL de fichaje, el DNI y el PIN. El PIN anterior no se puede recuperar: si dejas el campo vacío se genera uno nuevo.') }}
+              </p>
+              <button type="submit" class="btn-admin btn-admin-primary"
+                      {% if not user.email or '@demo.signaplan' in (user.email or '') or '@local.signaplan' in (user.email or '') %}disabled title="{{ _('Necesita un correo real') }}"{% endif %}>
+                <i class="fas fa-paper-plane"></i> {{ _('Enviar datos de acceso') }}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+    {% endif %}
   </main>
 </div>
 <script>

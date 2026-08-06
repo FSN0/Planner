@@ -130,8 +130,14 @@
 
     <p class="text-muted mb-3" style="max-width: 52rem;">
       Consulta del libro de eventos inalterable. Pensado para usarlo en el
-      ordenador: filtros, tabla y descarga CSV/PDF. El fichaje del trabajador
-      está en <code>/mi</code> (móvil).
+      ordenador: filtros, tabla y descarga CSV/PDF.
+      {% if url_fichaje_mi %}
+      El trabajador ficha en
+      <a href="{{ url_fichaje_mi }}" target="_blank" rel="noopener"><code>{{ url_fichaje_mi }}</code></a>
+      (móvil / PWA).
+      {% else %}
+      El fichaje del trabajador está en <code>/mi</code> (móvil).
+      {% endif %}
     </p>
 
     <form class="admin-panel rj-filters mb-3" method="get"

@@ -34,6 +34,29 @@
     color: #475569;
     margin-bottom: 0.2rem;
   }
+  .veh-toolbar-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .veh-name-cell {
+    white-space: normal;
+    line-height: 1.25;
+  }
+  /* Toolbar + formulario de alta + márgenes: el scroll debe caber en viewport */
+  .admin-main--compact.vehiculos-page {
+    padding-bottom: 1.5rem;
+  }
+  .admin-main--compact.vehiculos-page .admin-panel-flush {
+    overflow: visible;
+  }
+  .admin-main--compact.vehiculos-page .admin-table-scroll {
+    max-height: calc(100vh - 320px);
+    overflow-x: auto;
+    overflow-y: auto;
+    padding-bottom: 0.75rem;
+  }
 </style>
 {% endblock %}
 
@@ -41,12 +64,20 @@
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
-  <main class="admin-main admin-main--compact">
+  <main class="admin-main admin-main--compact vehiculos-page">
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title">{{ _('Vehículos') }}</h1>
         <span class="page-toolbar-count">{{ vehicles|length }} {{ _('vehículos') }}</span>
+        <form method="GET" class="veh-toolbar-filters">
+          <label class="admin-form-switch mb-0">
+            <input type="checkbox" name="show_inactive" value="1" onchange="this.form.submit()"
+                   {% if show_inactive %}checked{% endif %}>
+            <span class="slider"></span>
+          </label>
+          <span class="small text-muted">{{ _('Ver inactivos') }}</span>
+        </form>
       </div>
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost">
@@ -139,7 +170,7 @@
             {% for v in vehicles %}
             <tr class="data-row" data-row-href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}">
               <td data-sort-value="{{ (v.matricula or '')|lower }}"><span class="cell-code">{{ v.matricula or '—' }}</span></td>
-              <td data-sort-value="{{ v.nombre|lower }}"><span class="font-weight-bold">{{ v.nombre }}</span></td>
+              <td data-sort-value="{{ v.nombre|lower }}"><span class="font-weight-bold veh-name-cell">{{ v.nombre }}</span></td>
               <td data-sort-value="{{ (v.marca or '')|lower }}">{{ v.marca or '—' }}</td>
               <td data-sort-value="{{ (v.modelo or '')|lower }}">{{ v.modelo or '—' }}</td>
               <td data-sort-value="{{ 'activo' if v.active else 'inactivo' }}">
@@ -155,6 +186,7 @@
               <td class="col-actions">
                 <div class="table-actions">
                   <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="Ver ficha"><i class="fas fa-eye"></i></a>
+                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="Editar vehículo"><i class="fas fa-pen"></i></a>
                   {% if current_user.role == 'admin' %}
                   <form method="POST" action="{{ url_for('admin.vehiculos_toggle', vehiculo_id=v.id) }}" style="display:inline;" onclick="event.stopPropagation();">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

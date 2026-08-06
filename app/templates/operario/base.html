@@ -55,6 +55,11 @@
             <span class="barra-inferior__icono" aria-hidden="true">&#9776;</span>
             {{ _('Mis horas') }}
         </a>
+        <a href="{{ url_for('operarios.cambiar_pin') }}"
+           class="barra-inferior__item {% if activo == 'pin' %}es-activo{% endif %}">
+            <span class="barra-inferior__icono" aria-hidden="true">&#35;</span>
+            {{ _('PIN') }}
+        </a>
         <a href="{{ url_for('operarios.salir') }}" class="barra-inferior__item">
             <span class="barra-inferior__icono" aria-hidden="true">&#8677;</span>
             {{ _('Salir') }}

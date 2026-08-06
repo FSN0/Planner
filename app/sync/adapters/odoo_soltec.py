@@ -546,7 +546,7 @@ class Adapter(BaseSyncAdapter):
             odoo_vehicles = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd,
                 'fleet.vehicle', 'search_read',
-                [[]],
+                [[('active', '=', True)]],
                 {'fields': fields},
             )
         except Exception as e:
@@ -587,8 +587,10 @@ class Adapter(BaseSyncAdapter):
                         )
 
         diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'error': None}
+        active_odoo_ids = set()
 
         for veh in odoo_vehicles:
+            active_odoo_ids.add(str(veh['id']))
             model_id, modelo_name = self._m2o_id_name(veh.get('model_id'))
             marca = ''
             if 'brand_id' in fields:
@@ -640,6 +642,32 @@ class Adapter(BaseSyncAdapter):
                     diff['sin_cambios'].append(data)
             else:
                 diff['nuevos'].append(data)
+
+        # Si un vehículo enlazado a Odoo ya no aparece entre los activos,
+        # en Soltech lo tratamos como archivado y se desactiva localmente.
+        local_odoo_vehicles = Vehiculo.query.filter(
+            Vehiculo.external_ids['odoo'].astext.isnot(None)
+        ).all()
+        for local in local_odoo_vehicles:
+            odoo_id = str((local.external_ids or {}).get('odoo') or '').strip()
+            if not odoo_id or odoo_id in active_odoo_ids:
+                continue
+            if not bool(local.active):
+                continue
+            diff['actualizados'].append({
+                'local_id': local.id,
+                'odoo_id': int(odoo_id) if odoo_id.isdigit() else odoo_id,
+                'nombre': local.nombre,
+                'matricula': local.matricula,
+                'marca': local.marca,
+                'modelo': local.modelo,
+                'active': False,
+                'driver_partner_id': local.odoo_driver_partner_id,
+                'driver_name': local.odoo_driver_name,
+                'cambios': {
+                    'Activo': f"{local.active} ➔ False",
+                },
+            })
 
         return diff
 

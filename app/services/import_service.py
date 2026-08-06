@@ -140,6 +140,14 @@ ENTITY_FIELDS = {
             ],
         },
         {
+            "key": "pin",
+            "label": "PIN fichaje",
+            "required": False,
+            "aliases": [
+                "pin", "pin fichaje", "pin_fichaje", "clave fichaje", "codigo pin",
+            ],
+        },
+        {
             "key": "activo",
             "label": "Activo",
             "required": False,
@@ -547,6 +555,7 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
     dni = _cell_str(_mapped_value(row, column_map, "dni")).upper().replace(" ", "")
     empresa = _cell_str(_mapped_value(row, column_map, "empresa"))
     password = _cell_str(_mapped_value(row, column_map, "password"))
+    pin = _cell_str(_mapped_value(row, column_map, "pin"))
     activo = _parse_bool(_mapped_value(row, column_map, "activo"), default=False)
     recibir = _parse_bool(_mapped_value(row, column_map, "recibir_emails"), default=True)
 
@@ -557,6 +566,7 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
         "apellidos": apellidos,
         "dni": dni,
         "empresa": empresa,
+        "pin": "sí" if pin else "auto",
         "activo": "Sí" if activo else "No",
         "recibir_emails": "Sí" if recibir else "No",
     }
@@ -618,6 +628,7 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
             "dni": dni,
             "empresa": empresa,
             "password": password,
+            "pin": pin,
             "activo": activo,
             "recibir_emails": recibir,
         },
@@ -842,12 +853,20 @@ def _ensure_company_for_user(empresa_nombre: str) -> tuple[Optional[Company], bo
 
 
 def _commit_user(parsed: dict) -> dict:
+    from app.services.pin_auth_service import (
+        PinAuthError,
+        asignar_pin_explicito,
+        asignar_pin_generado,
+    )
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO
+
     comp, company_created = _ensure_company_for_user(parsed.get("empresa") or "")
     pwd = parsed.get("password") or secrets.token_urlsafe(16)
+    role = parsed.get("rol") or ROLE_OPERARIO
     new_user = User(
         email=parsed["email"],
         password_hash=generate_password_hash(pwd),
-        role=parsed.get("rol") or ROLE_OPERARIO,
+        role=role,
         name=parsed["nombre"],
         lastname=parsed["apellidos"],
         dni=parsed["dni"],
@@ -857,9 +876,28 @@ def _commit_user(parsed: dict) -> dict:
         receive_emails=bool(parsed.get("recibir_emails", True)),
     )
     db.session.add(new_user)
+    db.session.flush()
+
+    pin_plano = None
+    pin_mode = None
+    if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN):
+        pin_in = (parsed.get("pin") or "").strip()
+        try:
+            if pin_in:
+                asignar_pin_explicito(new_user, pin_in, notify=True)
+                pin_plano = pin_in
+                pin_mode = "explicit"
+            else:
+                _, pin_plano = asignar_pin_generado(new_user, notify=True)
+                pin_mode = "generated"
+        except PinAuthError:
+            # No abortamos toda la importación: el usuario queda sin PIN usable.
+            pin_plano = None
+            pin_mode = "error"
+
     return {
         "email": parsed["email"],
-        "role": parsed.get("rol"),
+        "role": role,
         "name": parsed["nombre"],
         "lastname": parsed["apellidos"],
         "dni": parsed["dni"],
@@ -867,6 +905,8 @@ def _commit_user(parsed: dict) -> dict:
         "company_created": company_created,
         "active": bool(parsed.get("activo")),
         "receive_emails": bool(parsed.get("recibir_emails", True)),
+        "pin": pin_plano,
+        "pin_mode": pin_mode,
     }
 
 

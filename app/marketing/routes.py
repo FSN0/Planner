@@ -8,6 +8,7 @@ from flask import (
     Blueprint,
     abort,
     flash,
+    redirect,
     render_template,
     request,
     url_for,
@@ -125,6 +126,71 @@ def _alta_base_domain():
     if host in ('localhost', '127.0.0.1', 'web') or host.endswith('.localhost'):
         return 'localhost'
     return 'signaplan.com'
+
+
+@marketing_bp.route('/entrar', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 40 per hour', methods=['POST'])
+def entrar():
+    """
+    Resolver de acceso: correo → tenant(s) con login web.
+    La contraseña se pide siempre en el host del tenant.
+    """
+    _require_marketing()
+    from app.services.signup_service import url_acceso_tenant
+    from app.services.tenant_email_lookup_service import buscar_tenants_por_email
+    from urllib.parse import quote
+
+    if request.method == 'GET':
+        return render_template(
+            'marketing/entrar.html',
+            current_year=datetime.utcnow().year,
+            email=request.args.get('email') or '',
+        )
+
+    email = (request.form.get('email') or '').strip().lower()
+    if not email or '@' not in email:
+        flash('Indica un correo válido.', 'danger')
+        return render_template(
+            'marketing/entrar.html',
+            current_year=datetime.utcnow().year,
+            email=email,
+        )
+
+    matches = buscar_tenants_por_email(email)
+    if not matches:
+        flash(
+            'No encontramos una empresa activa con acceso web para ese correo. '
+            'Si acabas de darte de alta, prueba el enlace del correo o contacta con soporte.',
+            'warning',
+        )
+        return render_template(
+            'marketing/entrar.html',
+            current_year=datetime.utcnow().year,
+            email=email,
+        )
+
+    def _login_url(tenant):
+        path = f'/auth/login?email={quote(email, safe="")}'
+        return url_acceso_tenant(tenant, path=path)
+
+    if len(matches) == 1:
+        return redirect(_login_url(matches[0]['tenant']))
+
+    items = [
+        {
+            'tenant': m['tenant'],
+            'user_name': m['user_name'],
+            'login_url': _login_url(m['tenant']),
+        }
+        for m in matches
+    ]
+    return render_template(
+        'marketing/entrar_selector.html',
+        current_year=datetime.utcnow().year,
+        email=email,
+        matches=items,
+        base_domain=_alta_base_domain(),
+    )
 
 
 @marketing_bp.route('/legal/<slug>')

@@ -865,12 +865,20 @@ def companies():
 @roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def vehiculos():
     """Listado de flota (alta manual y/o sync Odoo)."""
+    show_inactive = request.args.get('show_inactive') in ('1', 'true', 'on', 'yes')
+    query = Vehiculo.query
+    if not show_inactive:
+        query = query.filter(Vehiculo.active.is_(True))
     vehicles = (
-        Vehiculo.query
+        query
         .order_by(Vehiculo.active.desc(), Vehiculo.matricula.asc().nullslast(), Vehiculo.nombre.asc())
         .all()
     )
-    return render_template("admin_vehiculos.html", vehicles=vehicles)
+    return render_template(
+        "admin_vehiculos.html",
+        vehicles=vehicles,
+        show_inactive=show_inactive,
+    )
 
 
 @admin_bp.route("/vehiculos/crear", methods=["POST"])
@@ -1071,7 +1079,10 @@ def create_company():
         descripcion = request.form.get("descripcion")
         gremio = request.form.get("gremio")
         email = request.form.get("email")
-        color = request.form.get("color") or "#ffffff"
+        color = (request.form.get("color") or "").strip()
+        if not color or color.lower() in ("#ffffff", "#fff", "#cccccc", "#ccc"):
+            from app.models import generate_random_color
+            color = generate_random_color()
 
         # LEER CHECKBOX: Si está marcado viene 'on', si no, None.
         is_internal = True if request.form.get("is_internal") == "on" else False
@@ -1103,7 +1114,11 @@ def create_company():
             flash(f"Error en la base de datos: {str(e)}", "danger")
             return redirect(url_for("admin.create_company"))
 
-    return render_template("admin_create_company.html")
+    from app.models import generate_random_color
+    return render_template(
+        "admin_create_company.html",
+        color_sugerido=generate_random_color(),
+    )
 
 
 @admin_bp.route("/company/<int:company_id>/edit", methods=["GET", "POST"])
@@ -1666,7 +1681,7 @@ def primeros_pasos():
                 )
                 db.session.add(user)
                 db.session.flush()
-                asignar_pin(user, pin)
+                asignar_pin(user, pin, must_change=False, notify=True, actor=current_user)
                 db.session.commit()
                 flash(
                     f"{name} dado de alta. Entrará en /mi con DNI {dni} y su PIN.",
@@ -1686,6 +1701,28 @@ def primeros_pasos():
             elif accion == "saltar":
                 flash("Puedes volver a Primeros pasos desde el panel cuando quieras.", "info")
                 return redirect(url_for("admin.panel"))
+            elif accion == "demo_generar":
+                from app.services.demo_data_service import generar_datos_demo
+                qty = generar_datos_demo(actor_user=current_user)
+                marcar_onboarding_completo()
+                flash(
+                    f"Datos de ejemplo listos: {qty['obras']} obras, "
+                    f"{qty['empleados']} trabajadores, {qty['vehiculos']} vehículos. "
+                    f"Explora el panel; el banner te permite borrarlos cuando quieras.",
+                    "success",
+                )
+                return redirect(url_for("admin.panel"))
+            elif accion == "demo_borrar":
+                from app.services.demo_data_service import borrar_datos_demo
+                from app.services.config_service import set_tenant_config
+                from app.services.onboarding_service import CONFIG_ONBOARDING
+                borrar_datos_demo()
+                destino = (request.form.get("despues") or "panel").strip()
+                flash("Datos de ejemplo eliminados.", "success")
+                if destino == "wizard":
+                    set_tenant_config(CONFIG_ONBOARDING, "False")
+                    return redirect(url_for("admin.primeros_pasos"))
+                return redirect(url_for("admin.panel"))
             else:
                 raise ValueError("Acción no reconocida.")
         except (ValueError, PinAuthError) as exc:
@@ -1697,13 +1734,18 @@ def primeros_pasos():
 
         return redirect(url_for("admin.primeros_pasos"))
 
+    from app.services.demo_data_service import demo_cantidades
+
     estado = estado_onboarding()
     if estado["completo"] and not necesita_onboarding():
         return redirect(url_for("admin.panel"))
 
+    obra_hecha = any(p['id'] == 'obra' and p['hecho'] for p in estado['pasos'])
     return render_template(
         "admin_primeros_pasos.html",
         onboarding=estado,
+        demo_cantidades=demo_cantidades(),
+        empresa_vacia=not obra_hecha,
     )
 
 
@@ -1997,6 +2039,45 @@ def reset_password(user_id):
     return redirect(url_for("admin.personal"))
 
 
+@admin_bp.route("/enviar_acceso_fichaje/<int:user_id>", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def enviar_acceso_fichaje(user_id):
+    """Asigna/regenera PIN y envía DNI + PIN + URL /mi al correo del trabajador."""
+    from app.services.pin_auth_service import PinAuthError, enviar_acceso_fichaje as _enviar
+
+    user = User.query.get_or_404(user_id)
+    pin = (request.form.get('nuevo_pin') or '').strip()
+    regenerar = bool(request.form.get('regenerar'))
+    try:
+        ok, pin_usado = _enviar(
+            user,
+            pin_plano=pin or None,
+            actor=current_user,
+            regenerar=regenerar or not pin,
+        )
+        db.session.commit()
+        if ok:
+            flash(
+                f'Acceso enviado a {user.email}. PIN: {pin_usado}.',
+                'success',
+            )
+        else:
+            flash(
+                f'PIN actualizado ({pin_usado}), pero no se pudo enviar el correo. '
+                f'Revisa SMTP o cópiale el PIN a mano.',
+                'warning',
+            )
+    except PinAuthError as exc:
+        db.session.rollback()
+        flash(str(exc), 'danger')
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'No se ha podido enviar el acceso: {exc}', 'danger')
+
+    return redirect(url_for('admin.edit_operario', user_id=user.id))
+
+
 @admin_bp.route("/reset_pin/<int:user_id>", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -2011,14 +2092,29 @@ def reset_pin(user_id):
 
     user = User.query.get_or_404(user_id)
     accion = (request.form.get('accion') or 'asignar').strip()
+    next_url = (request.form.get('next') or '').strip()
 
     try:
         if accion == 'quitar':
             quitar_pin(user)
             db.session.commit()
             flash(f'PIN de fichaje eliminado para {user.name} {user.lastname}.', 'success')
+        elif accion == 'generar':
+            from app.services.pin_auth_service import asignar_pin_generado
+            _, pin_plano = asignar_pin_generado(
+                user, notify=True, actor=current_user
+            )
+            db.session.commit()
+            flash(
+                f'PIN generado para {user.name} {user.lastname}: {pin_plano}. '
+                f'Debe cambiarlo en el primer acceso a /mi.'
+                f'{" Se ha enviado por correo." if user.email else ""}',
+                'success',
+            )
         else:
-            asignar_pin(user, request.form.get('nuevo_pin'))
+            from app.services.pin_auth_service import asignar_pin_explicito
+            pin = request.form.get('nuevo_pin')
+            asignar_pin_explicito(user, pin, notify=True, actor=current_user)
             db.session.commit()
             flash(
                 f'PIN de fichaje actualizado para {user.name} {user.lastname}. '
@@ -2029,6 +2125,8 @@ def reset_pin(user_id):
         db.session.rollback()
         flash(str(exc), 'danger')
 
+    if next_url.startswith('/admin/'):
+        return redirect(next_url)
     return redirect(url_for('admin.personal'))
 
 
@@ -2094,8 +2192,36 @@ def create_user():
             especialidad=especialidad,
         )
         db.session.add(new_user)
+        db.session.flush()
+
+        pin_form = (request.form.get("pin") or "").strip()
+        pin_msg = ""
+        if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN):
+            from app.services.pin_auth_service import (
+                PinAuthError,
+                asignar_pin_explicito,
+                asignar_pin_generado,
+            )
+            try:
+                if pin_form:
+                    asignar_pin_explicito(
+                        new_user, pin_form, notify=True, actor=current_user
+                    )
+                    pin_msg = " PIN asignado."
+                else:
+                    _, pin_plano = asignar_pin_generado(
+                        new_user, notify=True, actor=current_user
+                    )
+                    pin_msg = (
+                        f" PIN generado ({pin_plano}): deberá cambiarlo en /mi."
+                    )
+            except PinAuthError as exc:
+                db.session.rollback()
+                flash(str(exc), "danger")
+                return redirect(url_for("admin.create_user"))
+
         db.session.commit()
-        flash("Usuario creado exitosamente", "success")
+        flash(f"Usuario creado exitosamente.{pin_msg}", "success")
         return redirect(url_for("admin.personal"))
 
     # --- LOGICA GET (CORREGIDA) ---
@@ -3247,7 +3373,7 @@ def ausencias_sync():
 
 @admin_bp.route('/ausencias/crear', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH)
 def ausencias_crear():
     from app.services.leave_service import (
         create_manual_leave,
@@ -3307,6 +3433,42 @@ def ausencias_rechazar(leave_id):
     try:
         set_leave_estado(leave_id, LEAVE_STATUS_RECHAZADA, resolved_by_id=current_user.id)
         flash('Ausencia rechazada.', 'info')
+    except Exception as exc:
+        flash(str(exc), 'danger')
+    return redirect(url_for('admin.ausencias_list'))
+
+
+@admin_bp.route('/ausencias/<int:leave_id>/editar', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH)
+def ausencias_editar(leave_id):
+    from app.services.leave_service import update_manual_leave
+    try:
+        leave = update_manual_leave(
+            leave_id,
+            current_user,
+            fecha_inicio=request.form.get('fecha_inicio') or None,
+            fecha_fin=request.form.get('fecha_fin') or None,
+            tipo=request.form.get('tipo'),
+            descripcion=request.form.get('descripcion'),
+        )
+        if leave.estado == 'pendiente':
+            flash('Ausencia actualizada y pendiente de validación.', 'info')
+        else:
+            flash('Ausencia actualizada.', 'success')
+    except Exception as exc:
+        flash(str(exc), 'danger')
+    return redirect(url_for('admin.ausencias_list'))
+
+
+@admin_bp.route('/ausencias/<int:leave_id>/borrar', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH)
+def ausencias_borrar(leave_id):
+    from app.services.leave_service import delete_manual_leave
+    try:
+        delete_manual_leave(leave_id, current_user)
+        flash('Ausencia eliminada.', 'success')
     except Exception as exc:
         flash(str(exc), 'danger')
     return redirect(url_for('admin.ausencias_list'))
@@ -3422,6 +3584,14 @@ def registro_jornada():
         except Exception:
             pass
 
+    url_fichaje_mi = None
+    try:
+        from app.services.signup_service import url_acceso_tenant
+        if getattr(g, 'current_tenant', None):
+            url_fichaje_mi = url_acceso_tenant(g.current_tenant, path='/mi')
+    except Exception:
+        url_fichaje_mi = None
+
     return render_template(
         'admin_registro_jornada.html',
         informe=informe,
@@ -3433,6 +3603,7 @@ def registro_jornada():
         company_id=request.args.get('company_id') or '',
         formatear_horas=formatear_horas,
         desde_onboarding=bool(request.args.get('desde_onboarding')),
+        url_fichaje_mi=url_fichaje_mi,
     )
 
 

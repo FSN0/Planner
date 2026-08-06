@@ -92,6 +92,23 @@
                      placeholder="{% if odoo_credentials.has_password %}•••••••• (dejar vacío para mantener){% else %}Contraseña API{% endif %}">
             </div>
           </div>
+          <div class="row">
+            <div class="col-md-6 col-lg-3 form-group">
+              <label class="form-label-sm">Login externo</label>
+              <select class="form-control form-control-sm" name="external_auth_provider">
+                <option value="" {% if not odoo_credentials.external_auth_provider %}selected{% endif %}>Desactivado</option>
+                <option value="odoo_soltec" {% if odoo_credentials.external_auth_provider == 'odoo_soltec' %}selected{% endif %}>Odoo Soltec</option>
+              </select>
+              <small class="form-text text-muted">Fallback de contraseña para jefes de obra con acceso Odoo.</small>
+            </div>
+            <div class="col-md-6 col-lg-5 form-group">
+              <label class="form-label-sm">URL login Odoo</label>
+              <input type="url" class="form-control form-control-sm" name="external_auth_odoo_url"
+                     value="{{ odoo_credentials.external_auth_odoo_url }}"
+                     placeholder="https://odoo.empresa.com">
+              <small class="form-text text-muted">Si la dejas igual, reutiliza la URL base de Odoo del tenant.</small>
+            </div>
+          </div>
           <div class="d-flex flex-wrap align-items-center" style="gap:0.5rem;">
             <button type="submit" class="btn-admin btn-admin-primary">
               <i class="fas fa-save"></i> Guardar credenciales

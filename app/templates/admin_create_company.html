@@ -64,8 +64,8 @@
         <div class="form-group">
           <label class="admin-form-label">Color identificativo</label>
           <div class="d-flex align-items-center">
-            <input type="color" name="color" class="form-control form-control-color mr-2" style="height: 32px; width: 48px; padding: 2px;" value="#cccccc">
-            <span class="text-muted" style="font-size: 0.72rem;">Usado en calendario y tablero</span>
+            <input type="color" name="color" class="form-control form-control-color mr-2" style="height: 32px; width: 48px; padding: 2px;" value="{{ color_sugerido|default('#5b8def') }}">
+            <span class="text-muted" style="font-size: 0.72rem;">Usado en calendario y tablero (sugerido al azar; cámbialo si quieres)</span>
           </div>
         </div>
 
