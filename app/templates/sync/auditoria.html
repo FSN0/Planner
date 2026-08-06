@@ -63,7 +63,7 @@
     {% set var_ausencias = pendientes | selectattr('estado', 'equalto', 'Ausencia') | list %}
 
     <div class="auditoria-stats">
-      {% if 'conflictos' in visible_sections and var_conflictos %}
+      {% if 'conflictos' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseConflictos" title="{{ _('Ir a desviaciones') }}">
         <i class="fas fa-random"></i> {{ var_conflictos|length }} {{ _('desviaciones') }}
       </span>
@@ -94,7 +94,7 @@
 
     <div class="accordion auditoria-accordion" id="accordionAuditoria">
 
-        {% if 'conflictos' in visible_sections and var_conflictos %}
+        {% if 'conflictos' in visible_sections %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;">
             <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
                 <h6 class="auditoria-section-title text-danger mb-0">
@@ -150,9 +150,9 @@
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')">Mover</button>
-                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')">+ Añadir</button>
-                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')">Ignorar</button>
+                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')" title="{{ _('Cambia la planificación a la obra donde fichó') }}">Mover</button>
+                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">+ Añadir</button>
+                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">Ignorar</button>
                                     {% else %}
                                     <span class="text-muted small">Solo lectura</span>
                                     {% endif %}

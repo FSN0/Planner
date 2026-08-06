@@ -425,7 +425,7 @@ def sso_soltec():
         flash(translate('Credenciales inválidas'), 'danger')
         return redirect(url_for('auth.login'))
 
-    user = User.query.filter_by(email=claims['email']).first()
+    user = User.query.filter(db.func.lower(User.email) == claims['email'].lower()).first()
     if not user:
         register_log(
             user_id=None,
