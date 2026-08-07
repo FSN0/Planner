@@ -46,14 +46,18 @@
     <nav class="empleado-nav" aria-label="{{ _('Navegación') }}">
       <a href="{{ url_for('empleado.inicio') }}"
          class="{% if request.endpoint == 'empleado.inicio' %}is-active{% endif %}">{{ _('Inicio') }}</a>
+      {% if user_can(current_user, 'operario_calendario', 'r') %}
       <a href="{{ url_for('empleado.calendario') }}"
          class="{% if request.endpoint == 'empleado.calendario' %}is-active{% endif %}">{{ _('Mi calendario') }}</a>
-      {% if tenant_has_fichaje_operario %}
+      {% endif %}
+      {% if tenant_has_fichaje_operario and user_can(current_user, 'operario_fichaje', 'r') %}
       <a href="{{ url_for('empleado.fichajes') }}"
          class="{% if request.endpoint == 'empleado.fichajes' %}is-active{% endif %}">{{ _('Mis fichajes') }}</a>
       {% endif %}
+      {% if user_can(current_user, 'operario_ausencias', 'r') %}
       <a href="{{ url_for('empleado.ausencias') }}"
          class="{% if request.endpoint == 'empleado.ausencias' %}is-active{% endif %}">{{ _('Mis ausencias') }}</a>
+      {% endif %}
     </nav>
 
     {% block content %}{% endblock %}

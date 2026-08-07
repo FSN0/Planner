@@ -20,6 +20,80 @@ $.ajaxSetup({
 console.log("Common JS loaded - AJAX Setup Complete");
 
 /**
+ * Select2 con dropdown en body + position:fixed anclado al campo.
+ * Evita que overflow/scroll de paneles/modales recorte o “cierre” el listado.
+ */
+window.SignaPlanSelect2 = window.SignaPlanSelect2 || {
+    _reposition($select) {
+        if (!$select || !$select.length || !$select.data('select2')) return;
+        const $dropdown = $select.data('select2').$dropdown;
+        const $container = $select.data('select2').$container;
+        if (!$dropdown || !$dropdown.length || !$container || !$container.length) return;
+        if (!$dropdown.parent().length) return;
+        const rect = $container[0].getBoundingClientRect();
+        const dropH = $dropdown.outerHeight() || 280;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openAbove = spaceBelow < Math.min(dropH, 220) && rect.top > spaceBelow;
+        const width = Math.max(rect.width, 220);
+        $dropdown.css({
+            position: 'fixed',
+            left: rect.left + 'px',
+            width: width + 'px',
+            top: openAbove ? 'auto' : (rect.bottom + 2) + 'px',
+            bottom: openAbove ? (window.innerHeight - rect.top + 2) + 'px' : 'auto',
+            zIndex: 20050,
+        });
+    },
+    bindFixedDropdown($select, scrollRoots) {
+        if (!$select || !$select.length || typeof $ === 'undefined' || !$.fn.select2) return;
+
+        // Re-bind limpio si el select se reutiliza tras destroy()
+        const prevCleanup = $select.data('signaplan-select2-cleanup');
+        if (typeof prevCleanup === 'function') prevCleanup();
+
+        const reposition = () => window.SignaPlanSelect2._reposition($select);
+        const onScrollOrResize = () => {
+            if ($select.data('select2') && $select.select2('isOpen')) reposition();
+        };
+        const roots = (scrollRoots || []).filter(Boolean);
+
+        const cleanup = () => {
+            roots.forEach((el) => {
+                el.removeEventListener('scroll', onScrollOrResize);
+            });
+            window.removeEventListener('scroll', onScrollOrResize, true);
+            window.removeEventListener('resize', onScrollOrResize);
+            $select.off('.signaplanFixed');
+            $select.removeData('signaplan-select2-fixed');
+            $select.removeData('signaplan-select2-cleanup');
+        };
+
+        $select.data('signaplan-select2-cleanup', cleanup);
+        $select.data('signaplan-select2-fixed', true);
+
+        $select.on('select2:open.signaplanFixed', function () {
+            requestAnimationFrame(reposition);
+            setTimeout(reposition, 0);
+            setTimeout(reposition, 50);
+        });
+        $select.on('select2:destroy.signaplanFixed', cleanup);
+
+        roots.forEach((el) => {
+            el.addEventListener('scroll', onScrollOrResize, { passive: true });
+        });
+        window.addEventListener('scroll', onScrollOrResize, true);
+        window.addEventListener('resize', onScrollOrResize);
+    },
+};
+
+// Bootstrap modal: no atrapar el foco del buscador Select2 (dropdown en body)
+$(document).on('focusin.bs.modal', function (e) {
+    if ($(e.target).closest('.select2-container, .select2-dropdown').length) {
+        e.stopImmediatePropagation();
+    }
+});
+
+/**
  * Función maestra para filtrar tablas.
  * Busca texto dentro de la celda o dentro de elementos específicos con clase .jefe-display (para tu listado de obras).
  * @param {string} tableId - ID de la tabla HTML.
@@ -343,8 +417,20 @@ window.adminSwalDefaults = function(overrides = {}) {
 // =========================================================================
 window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, onCancelCallback) {
     let detailsHtml = '<ul>';
-    if (data.conflict_details) {
+    // Ausencias: leave_dates (no conflict_details por obra)
+    if (data.conflict_type === 'leave' && Array.isArray(data.leave_dates) && data.leave_dates.length) {
+        const days = data.leave_dates.map((iso) => {
+            const parts = String(iso).split('-');
+            if (parts.length === 3) return `${parts[2]}/${parts[1]}`;
+            return iso;
+        });
+        const daysText = days.length > 10
+            ? `${days.slice(0, 10).join(', ')}... (+${days.length - 10})`
+            : days.join(', ');
+        detailsHtml += `<li><b>Ausencia aprobada</b>: ${daysText}</li>`;
+    } else if (data.conflict_details && typeof data.conflict_details === 'object') {
         for (const [obraName, days] of Object.entries(data.conflict_details)) {
+            if (!Array.isArray(days) || !days.length) continue;
             let daysText = days.length > 6 ? `${days.slice(0, 6).join(', ')}... (+${days.length - 6})` : days.join(', ');
             detailsHtml += `<li><b>${obraName}</b>: ${daysText}</li>`;
         }

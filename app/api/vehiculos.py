@@ -8,7 +8,7 @@ from app import db
 from app.models import AsignacionVehiculo, Vehiculo, Festivo, ROLE_ADMIN, ROLE_JEFE
 from app.decorators import roles_required
 from app.services.leave_service import user_has_approved_leave
-from app.services.permission_service import is_laboral
+from app.services.permission_service import is_laboral, user_can
 from app.services.vehicle_assignment_service import process_vehicle_assignment_action
 from app.utils.timezone_utils import today_local
 
@@ -77,6 +77,12 @@ def api_list_vehicles():
 def api_planificador_vehicle_action():
     if is_laboral(current_user):
         return jsonify({'success': False, 'error': 'Perfil laboral sin permisos de edición.'}), 403
+    if not user_can(current_user, 'vehiculos', 'w') and not user_can(current_user, 'planificador', 'w'):
+        return jsonify({
+            'success': False,
+            'error': 'No tienes permisos de escritura para asignar vehículos.',
+            'permission_denied': True,
+        }), 403
     data = request.get_json() or {}
     worker_id = data.get('worker_id')
     vehicle_id = data.get('vehicle_id')

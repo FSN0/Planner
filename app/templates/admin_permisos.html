@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Permisos por rol') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .perm-page .perm-role-tabs { display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem; }
+  .perm-page .perm-role-tabs a {
+    font-size:0.8rem; font-weight:600; padding:0.4rem 0.85rem; border-radius:999px;
+    border:1px solid #e2e8f0; background:#fff; color:#475569; text-decoration:none;
+  }
+  .perm-page .perm-role-tabs a.is-active { background:#0f172a; color:#fff; border-color:#0f172a; }
+  .perm-page .perm-hint { font-size:0.85rem; color:#64748b; margin-bottom:1rem; max-width:52rem; }
+  .perm-page .perm-table { width:100%; border-collapse:collapse; background:#fff; border-radius:0.75rem; overflow:hidden; border:1px solid #e2e8f0; }
+  .perm-page .perm-table th, .perm-page .perm-table td { padding:0.65rem 0.85rem; border-bottom:1px solid #f1f5f9; font-size:0.875rem; }
+  .perm-page .perm-table th { background:#f8fafc; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; }
+  .perm-page .perm-table th.perm-col, .perm-page .perm-table td.perm-col { text-align:center; width:4.5rem; }
+  .perm-page .perm-group { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#94a3b8; background:#f8fafc; }
+  .perm-page .perm-locked { opacity:0.65; }
+  .perm-page .perm-actions { margin-top:1rem; display:flex; gap:0.75rem; flex-wrap:wrap; }
+  .perm-page input[type=checkbox] { width:1.05rem; height:1.05rem; cursor:pointer; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact perm-page">
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">{{ _('Permisos por rol') }}</h1>
+        <span class="page-toolbar-count">{{ _('Qué puede ver y hacer cada perfil en este espacio') }}</span>
+      </div>
+    </div>
+
+    <p class="perm-hint">
+      <strong>R (Lectura)</strong> — ver el módulo (menú, listados, calendarios).<br>
+      <strong>W (Escritura)</strong> — crear, editar y mover (notas, asignaciones, arrastrar en planificador/tablero).<br>
+      <strong>X (Acción)</strong> — solo en módulos con acciones especiales (aprobar, resolver, reset contraseña/PIN, eliminar notas).
+      Si la columna X no tiene sentido en un módulo, déjala marcada igual que W o desmarcada; no cambia nada.
+    </p>
+    <p class="perm-hint">
+      {{ _('El jefe de obra sigue limitado a sus obras aunque tenga permiso de módulo.') }}
+      {{ _('Administrador no puede quitarse Configuración ni Permisos.') }}
+    </p>
+
+    <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">
+      {% for role_key, role_label_txt in roles %}
+      <a href="{{ url_for('admin.permisos_roles', role=role_key) }}" class="{% if role_key == active_role %}is-active{% endif %}">{{ role_label_txt }}</a>
+      {% endfor %}
+    </nav>
+
+    <form method="POST" action="{{ url_for('admin.permisos_roles_save') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="role" value="{{ active_role }}">
+      <table class="perm-table">
+        <thead>
+          <tr>
+            <th>{{ _('Módulo') }}</th>
+            <th class="perm-col" title="{{ _('Ver / listar') }}">R</th>
+            <th class="perm-col" title="{{ _('Crear / editar') }}">W</th>
+            <th class="perm-col" title="{{ _('Acciones') }}">X</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(prev_group='') %}
+          {% for module, label, group in modules %}
+            {% if group != ns.prev_group %}
+            <tr><td colspan="4" class="perm-group">{{ group }}</td></tr>
+            {% set ns.prev_group = group %}
+            {% endif %}
+            {% set locked = active_role == 'admin' and module in locked_modules %}
+            {% set flags = matrix.get(module, {}) %}
+            {% set x_hint = execute_hints.get(module) if execute_hints is defined else none %}
+            {% set w_hint = write_hints.get(module) if write_hints is defined else none %}
+            <tr class="{% if locked %}perm-locked{% endif %}">
+              <td>
+                {{ label }}
+                {% if w_hint or x_hint %}
+                <div class="text-muted" style="font-size:0.72rem;font-weight:500;margin-top:0.15rem;">
+                  {% if w_hint %}<span title="W">W: {{ w_hint }}</span>{% endif %}
+                  {% if w_hint and x_hint %} · {% endif %}
+                  {% if x_hint %}<span title="X">X: {{ x_hint }}</span>{% else %}<span class="text-muted">X: no aplica</span>{% endif %}
+                </div>
+                {% endif %}
+              </td>
+              <td class="perm-col">
+                <input type="checkbox" name="perm__{{ module }}__r" value="on" {% if flags.r %}checked{% endif %} {% if locked %}disabled{% endif %}>
+                {% if locked %}<input type="hidden" name="perm__{{ module }}__r" value="on">{% endif %}
+              </td>
+              <td class="perm-col">
+                <input type="checkbox" name="perm__{{ module }}__w" value="on" {% if flags.w %}checked{% endif %} {% if locked %}disabled{% endif %} title="{{ w_hint or 'Crear / editar' }}">
+                {% if locked %}<input type="hidden" name="perm__{{ module }}__w" value="on">{% endif %}
+              </td>
+              <td class="perm-col">
+                <input type="checkbox" name="perm__{{ module }}__x" value="on" {% if flags.x %}checked{% endif %} {% if locked %}disabled{% endif %}
+                       {% if not x_hint %}style="opacity:0.35"{% endif %}
+                       title="{{ x_hint or 'Sin acciones especiales en este módulo' }}">
+                {% if locked %}<input type="hidden" name="perm__{{ module }}__x" value="on">{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="perm-actions">
+        <button type="submit" class="btn-admin btn-admin-primary">{{ _('Guardar permisos') }}</button>
+        <button type="submit" name="reset_defaults" value="1" class="btn-admin btn-admin-ghost"
+                onclick="return confirm('{{ _('¿Restaurar todos los roles a los permisos por defecto de SignaPlan?') }}')">
+          {{ _('Restaurar defaults de todos los roles') }}
+        </button>
+      </div>
+    </form>
+  </main>
+</div>
+{% endblock %}

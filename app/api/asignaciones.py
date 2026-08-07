@@ -23,7 +23,7 @@ from app.services.email_service import (
     notificar_movimiento_admin_a_jo, 
     notificar_nueva_solicitud
 )
-from app.services.permission_service import is_laboral
+from app.services.permission_service import is_laboral, can_write_assignments, user_can
 
 asignaciones_api = Blueprint('asignaciones_api', __name__)
 
@@ -202,6 +202,12 @@ def _process_batch_planificador_assignments(
 def api_assign_worker():
     if is_laboral(current_user):
         return jsonify({"success": False, "message": "Modo solo lectura para perfil laboral."}), 403
+    if not can_write_assignments(current_user):
+        return jsonify({
+            "success": False,
+            "message": "No tienes permisos de escritura para asignar personal.",
+            "permission_denied": True,
+        }), 403
     data = request.get_json() or {}
     try:
         worker_id = int(data.get("worker_id"))
@@ -237,6 +243,12 @@ def api_assign_worker():
 def api_unassign_worker():
     if is_laboral(current_user):
         return jsonify({'success': False, 'message': 'Modo solo lectura para perfil laboral.'}), 403
+    if not can_write_assignments(current_user):
+        return jsonify({
+            'success': False,
+            'message': 'No tienes permisos de escritura para desasignar personal.',
+            'permission_denied': True,
+        }), 403
     data = request.get_json() or {}
     worker_id = data.get('worker_id')
     obra_id = data.get('obra_id')
@@ -410,10 +422,26 @@ def api_solicitud_asignar_parcial(solicitud_id):
 def api_planificador_action():
     if is_laboral(current_user):
         return jsonify({"success": False, "error": "Perfil laboral sin permisos de edición."}), 403
-    data = request.json
+    if not can_write_assignments(current_user):
+        return jsonify({
+            "success": False,
+            "error": "No tienes permisos de escritura para asignar o mover personal.",
+            "message": "No tienes permisos de escritura para asignar o mover personal.",
+            "permission_denied": True,
+        }), 403
+    data = request.json or {}
     worker_id = data.get('worker_id')
-    target_obra_id = data.get('target_obra_id')
-    old_obra_id = data.get('old_obra_id', target_obra_id)
+
+    def _as_int_id(raw, default=None):
+        if raw in (None, '', 'null', 'undefined'):
+            return default
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+
+    target_obra_id = _as_int_id(data.get('target_obra_id'))
+    old_obra_id = _as_int_id(data.get('old_obra_id'), target_obra_id)
     start_date_str = data.get('start_date')
     end_date_str = data.get('end_date')
     original_start_str = data.get('original_start')
@@ -421,6 +449,9 @@ def api_planificador_action():
     include_weekends = data.get('include_weekends', False)
     overwrite_mode = data.get('overwrite_mode', 'check')
     notas = (data.get('notas') or '').strip() or None
+
+    if target_obra_id is None:
+        return jsonify({"success": False, "error": "Obra destino no válida."})
     
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
@@ -530,18 +561,26 @@ def api_planificador_action():
             orig_start = datetime.strptime(original_start_str, "%Y-%m-%d").date()
             orig_end = datetime.strptime(original_end_str, "%Y-%m-%d").date()
 
+        # Traslado entre obras: hay que procesar TODOS los días del rango destino.
+        # El skip "ya estaba en este rango" solo aplica al redimensionar en la MISMA obra.
+        same_obra_move = old_obra_id == target_obra_id
         fechas_a_procesar = []
         for f in fechas:
             if f >= hoy:
-                if old_obra_id == target_obra_id and orig_start and orig_end:
+                if same_obra_move and orig_start and orig_end:
                     if orig_start <= f <= orig_end:
-                        continue 
+                        continue
                 fechas_a_procesar.append(f)
-        
+
         if not fechas_a_procesar:
             if sol_baja_creada:
                 return jsonify({"success": True, "action": "requested", "message": msg_baja})
-            return jsonify({"success": True, "message": "No hubo cambios."})
+            return jsonify({
+                "success": True,
+                "noop": True,
+                "unchanged": True,
+                "message": "No hubo cambios.",
+            })
 
         batch_workers = _parse_workers_payload(data)
         if batch_workers is not None:
@@ -580,11 +619,17 @@ def api_planificador_action():
                 result['action'] = 'partial_request'
         
         if result.get('success') and str(worker_id) != 'GENERICO' and fechas_a_procesar and current_user.role == ROLE_ADMIN:
-            worker = User.query.get(int(worker_id))
-            if worker:
-                worker_name = f"{worker.name} {worker.lastname}"
-                fechas_str = f"Desde {fechas_a_procesar[0].strftime('%d/%m/%Y')} hasta {fechas_a_procesar[-1].strftime('%d/%m/%Y')}"
-                notificar_movimiento_admin_a_jo(target_obra_id, worker_name, "Asignar (Planificador)", fechas_str, current_user.name)
+            try:
+                worker = User.query.get(int(worker_id))
+                if worker:
+                    worker_name = f"{worker.name} {worker.lastname}"
+                    fechas_str = f"Desde {fechas_a_procesar[0].strftime('%d/%m/%Y')} hasta {fechas_a_procesar[-1].strftime('%d/%m/%Y')}"
+                    notificar_movimiento_admin_a_jo(
+                        target_obra_id, worker_name, "Asignar (Planificador)",
+                        fechas_str, current_user.name,
+                    )
+            except Exception:
+                pass
         
         return jsonify(result)
 

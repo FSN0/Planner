@@ -34,6 +34,12 @@ from app.services.dashboard_service import get_dashboard_data, parse_date
 jefe_bp = Blueprint('jefe', __name__, url_prefix='/jefe')
 
 
+@jefe_bp.before_request
+def _enforce_jefe_module_permissions():
+    from app.services.permission_guard import enforce_jefe_permissions
+    return enforce_jefe_permissions()
+
+
 @jefe_bp.route('/panel', methods=['GET'])
 @login_required
 def panel():

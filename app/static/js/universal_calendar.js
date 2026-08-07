@@ -610,7 +610,10 @@ class UniversalCalendarManager {
                 if (notasRow) notasRow.style.display = 'block';
                 if (notasInput) notasInput.value = '';
 
-                this._renderResourceSelect(container, null);
+                // Kanban / drag: multi-trabajador (con vehículo) y prefill del operario
+                const dragPrefill = this._pendingPrefill || this.kanbanPrefill || null;
+                const hasPrefill = !!(dragPrefill && (dragPrefill.workerId || dragPrefill.obraId));
+                this._renderResourceSelect(container, hasPrefill ? dragPrefill : null);
                 this._toggleVehicleRow(true);
             } else {
                 titleEl.innerHTML = `<i class="fas fa-edit mr-2 univ-calendar-icon"></i>${t('Editar Asignación')}`;
@@ -730,13 +733,13 @@ class UniversalCalendarManager {
     }
 
     _renderResourceSelect(container, prefill) {
-        // Nueva asignación en obra: varias filas trabajador + vehículo opcional
-        if (this.context === 'obra' && !prefill) {
-            this._renderMultiWorkerSelect(container);
+        // Vista obra: siempre multi-fila (incluye toggle de vehículo). Prefill en la 1ª fila.
+        if (this.context === 'obra') {
+            this._renderMultiWorkerSelect(container, prefill);
             return;
         }
 
-        let selectLabel = (this.context === 'obra' || this.context === 'vehiculo')
+        let selectLabel = (this.context === 'vehiculo')
             ? 'Trabajador a asignar'
             : 'Obra destino';
 
@@ -757,24 +760,7 @@ class UniversalCalendarManager {
 
         setTimeout(() => {
             let $select = $(`#${this.panelId}-select`);
-            if (this.context === 'obra') {
-                if (typeof $ !== 'undefined' && $.fn.select2) {
-                    this.initPanelSelect2($select, {
-                        placeholder: t("Escribe o elige 'CUALQUIERA'..."),
-                        allowClear: true,
-                        ajax: {
-                            url: '/admin/api/planificador/search_workers',
-                            dataType: 'json', delay: 250,
-                            data: (p) => ({ q: p.term }),
-                            processResults: (d) => ({ results: d.results })
-                        }
-                    }).on('change', (e) => {
-                        let gRow = document.getElementById(`${this.panelId}-generic-options`);
-                        if(gRow) { e.target.value === 'GENERICO' ? $(gRow).slideDown(150) : $(gRow).slideUp(150); }
-                    });
-                    this._applyPendingPrefillToSelect($select);
-                }
-            } else if (this.context === 'vehiculo') {
+            if (this.context === 'vehiculo') {
                 if (typeof $ !== 'undefined' && $.fn.select2) {
                     this.initPanelSelect2($select, {
                         placeholder: t('Selecciona un operario...'),
@@ -805,7 +791,7 @@ class UniversalCalendarManager {
         }, 150);
     }
 
-    _renderMultiWorkerSelect(container) {
+    _renderMultiWorkerSelect(container, prefill) {
         this._destroySelect2In(container);
         container.innerHTML = `
             <div class="d-flex align-items-center justify-content-between mb-1">
@@ -818,7 +804,7 @@ class UniversalCalendarManager {
             <select id="${this.panelId}-select" class="d-none" aria-hidden="true"><option></option></select>
         `;
         const list = document.getElementById(`${this.panelId}-workers-list`);
-        this._addWorkerRow(list, { allowGenerico: true });
+        this._addWorkerRow(list, { allowGenerico: true, prefill: prefill || null });
         const addBtn = document.getElementById(`${this.panelId}-add-worker`);
         if (addBtn) {
             addBtn.addEventListener('click', () => {
@@ -897,6 +883,18 @@ class UniversalCalendarManager {
                     const hidden = document.getElementById(`${this.panelId}-select`);
                     if (hidden && onlyOne) hidden.value = e.target.value || '';
                 });
+
+                // Prefill kanban / drag: operario ya elegido, se puede cambiar
+                if (opts.prefill && opts.prefill.workerId) {
+                    const val = String(opts.prefill.workerId);
+                    const label = opts.prefill.workerName || t('Operario');
+                    if (!$w.find(`option[value="${val}"]`).length) {
+                        $w.append(new Option(label, val, true, true));
+                    }
+                    $w.val(val).trigger('change');
+                    this._pendingPrefill = null;
+                }
+
                 if (toggle) {
                     toggle.addEventListener('change', () => {
                         const showVehicle = !!toggle.checked;
@@ -1012,11 +1010,10 @@ class UniversalCalendarManager {
             $select.select2('destroy');
         }
         const panel = document.getElementById(this.panelId);
-        const modal = panel ? panel.closest('.modal.show, .modal') : null;
-        // Siempre body + position fixed anclado al campo (scroll en admin-main/modal).
-        const dropdownParent = $(document.body);
+        const modal = panel ? panel.closest('.modal') : null;
+        // Siempre body: fixed escapea transform del modal (si no, el listado queda bajo el FC).
         const opts = Object.assign({
-            dropdownParent: dropdownParent,
+            dropdownParent: $(document.body),
             dropdownCssClass: 'admin-select2-dropdown univ-calendar-select2-dropdown',
             width: '100%',
         }, extraOpts);
@@ -1028,6 +1025,7 @@ class UniversalCalendarManager {
                 modal ? modal.querySelector('.modal-body') : null,
                 modal,
                 panel,
+                document.querySelector('.fc'),
             ].filter(Boolean);
             window.SignaPlanSelect2.bindFixedDropdown($select, roots);
         }
@@ -1508,6 +1506,7 @@ class UniversalCalendarManager {
                         } else {
                             let wId = this.context === 'worker' ? this.entityId : this.activeEvent.extendedProps.worker_id;
                             let oId = this.context === 'obra' ? this.entityId : this.activeEvent.extendedProps.obra_id;
+                            if (!oId || oId === '0' || oId === 0) oId = null;
 
                             let csrf = "";
                             let parts = ("; " + document.cookie).split("; csrf_token=");
@@ -1827,6 +1826,9 @@ window.addEventListener('scroll', function(e) {
         if (t.classList.contains('select2-results__options')) return;
         if (t.closest('.select2-dropdown, .select2-container, .univ-calendar-panel, .modal')) return;
     }
+    // Con dropdown fijo no cerrar al scroll: SignaPlanSelect2 lo reposiciona.
+    // Cerrar aquí hacía que el listado "no abriera" (open → scroll → close).
+    if (document.querySelector('.select2-container--open')) return;
     if (typeof $ !== 'undefined' && $.fn.select2) { $('.select2-hidden-accessible').select2('close'); }
     if (typeof $ !== 'undefined') { $('.tooltip.show').remove(); }
     document.querySelectorAll('[data-tippy-root]').forEach(el => { if (el._tippy) el._tippy.hide(); });

@@ -28,12 +28,14 @@
         {% endif %}
       </div>
       <div class="page-toolbar-actions">
+        {% if user_can(current_user, 'trabajadores', 'w') %}
         <a href="{{ url_for('admin.create_user', tab='internos') }}" class="btn-admin btn-admin-primary">
           <i class="fas fa-plus"></i> {{ _('Nuevo') }}
         </a>
         <a href="{{ url_for('admin.import_users') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-file-import"></i> {{ _('Importar') }}
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -139,13 +141,19 @@
                   </td>
                   <td class="col-actions">
                     <div class="table-actions">
+                      {% if user_can(current_user, 'trabajadores', 'x') %}
                       <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
                       <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
+                      {% endif %}
+                      {% if user_can(current_user, 'trabajadores', 'w') %}
                       <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
+                      {% endif %}
+                      {% if current_user.role == 'admin' %}
                       <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar usuario?')|tojson }});">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>
                       </form>
+                      {% endif %}
                     </div>
                   </td>
                 </tr>
@@ -221,15 +229,21 @@
                   </td>
                   <td class="col-actions">
                     <div class="table-actions">
+                      {% if user_can(current_user, 'trabajadores', 'x') %}
                       <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
                       <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
+                      {% endif %}
+                      {% if user_can(current_user, 'trabajadores', 'w') %}
                       <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
+                      {% endif %}
                       {% if view_mode == 'admin' %}
                       <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
                         <button type="submit" class="btn-table-action btn-table-action--warn" title="{{ _('Desactivar') }}"><i class="fas fa-ban"></i></button>
                       </form>
                       {% endif %}
+                      {% if user_can(current_user, 'trabajadores', 'w') %}
                       <button type="button" class="btn-table-action btn-table-action--info schedule-btn" data-user-id="{{ user.id }}" data-action="deactivate" title="{{ _('Programar baja') }}"><i class="far fa-clock"></i></button>
+                      {% endif %}
                       {% if current_user.role == 'admin' %}
                       <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar definitivamente?')|tojson }});">
                         <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>

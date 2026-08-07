@@ -25,11 +25,19 @@ LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO,)
 
 def _puede_login_web(user):
     """
-    El operario solo entra al portal web si administración le activó web_access.
+    El operario solo entra al portal web si:
+    - el rol tiene permiso operario_web, y
+    - administración le activó web_access en su ficha.
     El módulo de fichaje (/mi con DNI+PIN) NO desbloquea el login de oficina.
     """
     if user.role == ROLE_OPERARIO:
-        return bool(getattr(user, 'web_access', False))
+        if not getattr(user, 'web_access', False):
+            return False
+        try:
+            from app.services.permission_service import user_can
+            return user_can(user, 'operario_web', 'r')
+        except Exception:
+            return False
     return user.role not in LOGIN_BLOCKED_ROLES
 
 
@@ -71,7 +79,12 @@ def _destino_por_rol(user):
         return url_for('admin.panel_laboral')
     if user.role == ROLE_OPERARIO:
         if getattr(user, 'web_access', False):
-            return url_for('empleado.inicio')
+            try:
+                from app.services.permission_service import user_can
+                if user_can(user, 'operario_web', 'r'):
+                    return url_for('empleado.inicio')
+            except Exception:
+                pass
         return None
     return None
 

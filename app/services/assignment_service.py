@@ -286,28 +286,41 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
     count = 0
     deleted_info = []
     assigned_dates = []
+    worker_id = int(worker.id)
+    obra_id = int(obra.id)
+    actor_id = int(actor.id)
+    company_id = getattr(worker, 'company_id', None)
 
     for d in dates:
-        same_obra_conflict = Asignacion.query.filter_by(
-            user_id=worker.id, fecha=d, obra_id=obra.id
-        ).first()
-
-        if same_obra_conflict:
-            continue
+        already_on_target = Asignacion.query.filter_by(
+            user_id=worker_id, fecha=d, obra_id=obra_id
+        ).first() is not None
 
         if overwrite:
-            existing_others = Asignacion.query.filter_by(user_id=worker.id, fecha=d).all()
-            for exist in existing_others:
-                deleted_info.append((exist.obra_id, exist.user_id, d))
+            # Capturar IDs antes de borrar: no reutilizar instancias borradas.
+            other_rows = (
+                Asignacion.query.filter(
+                    Asignacion.user_id == worker_id,
+                    Asignacion.fecha == d,
+                    Asignacion.obra_id != obra_id,
+                )
+                .with_entities(Asignacion.user_id, Asignacion.obra_id, Asignacion.fecha)
+                .all()
+            )
+            for uid, oid, day in other_rows:
+                deleted_info.append((oid, uid, day))
                 CoreAssignmentService.desasignar(
-                    exist.user_id, exist.obra_id, exist.fecha, actor.id,
+                    uid, oid, day, actor_id,
                     "Planificación Manual", "Sobreescritura de asignación previa.",
                     registrar_log=False,
                 )
 
+        if already_on_target:
+            continue
+
         CoreAssignmentService.asignar(
-            worker.id, obra.id, d, actor.id, "Planificación Manual",
-            company_id=worker.company_id, solicitud_id=solicitud_id,
+            worker_id, obra_id, d, actor_id, "Planificación Manual",
+            company_id=company_id, solicitud_id=solicitud_id,
             registrar_log=False,
         )
         assigned_dates.append(d)
@@ -315,31 +328,56 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
 
     if count:
         CoreAssignmentService.registrar_log_rango(
-            worker.id, obra.id,
+            worker_id, obra_id,
             min(assigned_dates), max(assigned_dates), count,
-            actor.id, "Planificación Manual", True,
+            actor_id, "Planificación Manual", True,
             detalle_extra=(
                 f"Incluye sobreescritura de {len(deleted_info)} día(s)."
                 if deleted_info else None
             ),
         )
+    elif deleted_info:
+        CoreAssignmentService.registrar_log_rango(
+            worker_id, obra_id,
+            min(d for _, _, d in deleted_info),
+            max(d for _, _, d in deleted_info),
+            len(deleted_info),
+            actor_id, "Planificación Manual", True,
+            detalle_extra=f"Limpieza de {len(deleted_info)} día(s) en otras obras.",
+        )
 
     for o_id, w_id, d_del in deleted_info:
-        update_solicitudes_for_assignment(o_id, w_id, d_del, resolved_by_id=actor.id)
+        update_solicitudes_for_assignment(o_id, w_id, d_del, resolved_by_id=actor_id)
 
     for d in dates:
-        update_solicitudes_for_assignment(obra.id, worker.id, d, resolved_by_id=actor.id)
+        update_solicitudes_for_assignment(obra_id, worker_id, d, resolved_by_id=actor_id)
 
     db.session.commit()
 
-    return {'success': True, 'action': 'assigned', 'message': f'Asignación realizada ({count} días).'}
+    if count == 0 and not deleted_info:
+        return {
+            'success': True,
+            'noop': True,
+            'unchanged': True,
+            'action': 'noop',
+            'message': 'Asignación realizada (0 días).',
+        }
+
+    return {
+        'success': True,
+        'action': 'assigned',
+        'message': f'Asignación realizada ({count} días).',
+    }
 
 def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mode='selected'):
     from app.services.solicitud_service import SolicitudService, update_solicitudes_for_assignment
     from app.services.email_service import notificar_movimiento_admin_a_jo
     
     worker_id = int(worker_id) if worker_id else None
-    target_obra_id = int(target_obra_id) if target_obra_id else None
+    try:
+        target_obra_id = int(target_obra_id) if target_obra_id not in (None, '', 0, '0') else None
+    except (TypeError, ValueError):
+        target_obra_id = None
 
     if not worker_id:
         return {'success': False, 'message': 'Falta ID trabajador'}
@@ -361,8 +399,10 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
 
     if not date_objs:
         return {'success': False, 'message': 'No hay fechas válidas.'}
-    
-    fechas_con_asignacion = [a.fecha for a in asignaciones]
+
+    # Snapshot ANTES de borrar: nunca usar asignaciones[i] tras desasignar.
+    rows = [(int(a.user_id), int(a.obra_id), a.fecha) for a in asignaciones]
+    fechas_con_asignacion = [fecha for _, _, fecha in rows]
     
     if actor_user.role == ROLE_JEFE:
         if not fechas_con_asignacion:
@@ -383,42 +423,51 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
         )
         return {'success': True, 'action': 'requested', 'message': msg}
 
+    count = len(rows)
+    fechas_borradas = [fecha.strftime('%d/%m/%Y') for _, _, fecha in rows]
+    fechas_objs = sorted({fecha for _, _, fecha in rows})
+    obra_id_for_log = target_obra_id or (rows[0][1] if rows else None)
 
-    count = len(asignaciones)
-    fechas_borradas = [a.fecha.strftime('%d/%m/%Y') for a in asignaciones]
-    fechas_objs = sorted({a.fecha for a in asignaciones})
-
-    for a in asignaciones:
+    for uid, oid, fecha in rows:
         CoreAssignmentService.desasignar(
-            a.user_id, a.obra_id, a.fecha, actor_user.id,
-            "Planificación Manual",
+            uid, oid, fecha, actor_user.id,
+            'Planificación Manual',
             registrar_log=False,
         )
 
-    if count and fechas_objs:
+    if count and fechas_objs and obra_id_for_log:
         CoreAssignmentService.registrar_log_rango(
-            worker_id, target_obra_id or asignaciones[0].obra_id,
+            worker_id, obra_id_for_log,
             fechas_objs[0], fechas_objs[-1], count,
-            actor_user.id, "Planificación Manual", False,
+            actor_user.id, 'Planificación Manual', False,
         )
     
     for d_obj in date_objs:
         try:
-            update_solicitudes_for_assignment(target_obra_id, worker_id, d_obj, resolved_by_id=actor_user.id)
+            update_solicitudes_for_assignment(
+                target_obra_id or obra_id_for_log, worker_id, d_obj,
+                resolved_by_id=actor_user.id,
+            )
         except Exception:
             pass
 
     db.session.commit()
     
-    if target_obra_id and count > 0:
-        worker = User.query.get(worker_id)
-        worker_name = f"{worker.name} {worker.lastname}" if worker else f"ID {worker_id}"
-        
-        if len(fechas_borradas) > 10:
-            fechas_str = ", ".join(fechas_borradas[:10]) + f" ... y {len(fechas_borradas)-10} días más."
-        else:
-            fechas_str = ", ".join(fechas_borradas)
+    if (target_obra_id or obra_id_for_log) and count > 0:
+        try:
+            worker = User.query.get(worker_id)
+            worker_name = f'{worker.name} {worker.lastname}' if worker else f'ID {worker_id}'
+            
+            if len(fechas_borradas) > 10:
+                fechas_str = ', '.join(fechas_borradas[:10]) + f' ... y {len(fechas_borradas)-10} días más.'
+            else:
+                fechas_str = ', '.join(fechas_borradas)
 
-        notificar_movimiento_admin_a_jo(target_obra_id, worker_name, "Desasignar", fechas_str, actor_user.name)
+            notificar_movimiento_admin_a_jo(
+                target_obra_id or obra_id_for_log,
+                worker_name, 'Desasignar', fechas_str, actor_user.name,
+            )
+        except Exception:
+            pass
 
     return {'success': True, 'action': 'unassigned', 'message': f'Se han eliminado {count} asignaciones.'}

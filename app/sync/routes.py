@@ -21,6 +21,12 @@ from app.services.permission_service import can_resolve_fichajes, is_laboral, la
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
 
 
+@sync_bp.before_request
+def _enforce_sync_module_permissions():
+    from app.services.permission_guard import enforce_sync_permissions
+    return enforce_sync_permissions()
+
+
 def _company_by_odoo_id(odoo_c_id):
     if not odoo_c_id:
         return None
@@ -664,8 +670,9 @@ def commit_empleados():
 @sync_bp.route('/auditoria')
 @login_required
 def auditoria_fichajes():
-    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
-        flash("Acceso denegado. Solo Admin o Jefes de Obra pueden auditar fichajes.", "danger")
+    from app.services.permission_service import user_can
+    if not user_can(current_user, 'auditoria_fichajes', 'r'):
+        flash("Acceso denegado.", "danger")
         return redirect(url_for('main.index'))
     
     # 1. FILTROS BASE MÚLTIPLES

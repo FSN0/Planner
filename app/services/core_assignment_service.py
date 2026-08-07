@@ -80,6 +80,11 @@ class CoreAssignmentService:
             )
 
         db.session.flush()
+        # Evita ObjectDeletedError si más tarde se toca la identidad en sesión.
+        try:
+            db.session.expunge(asig)
+        except Exception:
+            pass
         return True
 
     @staticmethod

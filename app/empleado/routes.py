@@ -25,6 +25,20 @@ def _solo_operario_con_web():
     if current_user.role != ROLE_OPERARIO:
         flash('Acceso no autorizado', 'danger')
         return redirect(url_for('auth.login'))
+    from app.services.permission_service import user_can
+    if not user_can(current_user, 'operario_web', 'r'):
+        flash(
+            'Tu perfil no tiene acceso al portal web. '
+            'Pide a administración que active el permiso de operario.',
+            'warning',
+        )
+        try:
+            from app.services.fichaje_operario_service import fichaje_operario_activo
+            if fichaje_operario_activo() and user_can(current_user, 'operario_fichaje', 'r'):
+                return redirect(url_for('operarios.inicio'))
+        except Exception:
+            pass
+        return redirect(url_for('auth.login'))
     if not getattr(current_user, 'web_access', False):
         flash(
             'Tu cuenta no tiene acceso a la plataforma web. '
@@ -33,12 +47,13 @@ def _solo_operario_con_web():
         )
         try:
             from app.services.fichaje_operario_service import fichaje_operario_activo
-            if fichaje_operario_activo():
+            if fichaje_operario_activo() and user_can(current_user, 'operario_fichaje', 'r'):
                 return redirect(url_for('operarios.inicio'))
         except Exception:
             pass
         return redirect(url_for('auth.login'))
-    return None
+    from app.services.permission_guard import enforce_empleado_permissions
+    return enforce_empleado_permissions()
 
 
 @empleado_bp.route('/')

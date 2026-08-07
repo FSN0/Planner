@@ -86,6 +86,13 @@ def _solo_perfiles_con_jornada():
         flash('Tu perfil no tiene área de fichaje.', 'warning')
         return redirect(url_for('main.dashboard'))
 
+    # Matriz de permisos: el rol operario puede tener fichaje desactivado por tenant.
+    if current_user.role == ROLE_OPERARIO:
+        from app.services.permission_service import user_can
+        if not user_can(current_user, 'operario_fichaje', 'r'):
+            flash('Tu perfil no tiene acceso al fichaje.', 'warning')
+            return redirect(url_for('auth.login'))
+
     # PIN provisional: solo puede cambiar PIN o salir.
     from app.services.pin_auth_service import debe_cambiar_pin
     if debe_cambiar_pin(current_user) and request.endpoint not in (
@@ -282,7 +289,14 @@ def ausencias():
         leaves_del_usuario,
         solicitar_ausencia_propia,
     )
+    from app.services.permission_service import user_can
     from app.utils import register_log
+
+    if current_user.role == ROLE_OPERARIO:
+        need = 'w' if request.method == 'POST' else 'r'
+        if not user_can(current_user, 'operario_ausencias', need):
+            flash('No tienes permiso para gestionar ausencias.', 'warning')
+            return redirect(url_for('operarios.inicio'))
 
     if request.method == 'POST':
         accion = (request.form.get('accion') or 'solicitar').strip()

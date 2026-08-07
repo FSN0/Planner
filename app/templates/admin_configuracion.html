@@ -78,6 +78,9 @@
       <a href="#cfg-vehiculos">Vehículos</a>
       <a href="#cfg-festivos">Festivos</a>
       <a href="#cfg-emails">Correos</a>
+      {% if user_can(current_user, 'permisos', 'r') %}
+      <a href="{{ url_for('admin.permisos_roles') }}">Permisos por rol</a>
+      {% endif %}
       <a href="#cfg-idioma">Idioma</a>
     </nav>
 

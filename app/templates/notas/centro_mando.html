@@ -21,9 +21,11 @@
         </h1>
         <p class="bitacora-toolbar-sub">{{ _('Registro de reuniones, notas operativas e incidencias.') }}</p>
       </div>
+      {% if user_can(current_user, 'reuniones', 'w') %}
       <button class="btn-admin btn-admin-primary" onclick="$('#modalNuevaNota').modal('show')">
         <i class="fas fa-plus mr-1"></i> {{ _('Nueva nota / reunión') }}
       </button>
+      {% endif %}
     </div>
 
     <div class="bitacora-card">
@@ -73,12 +75,20 @@
               </td>
               <td>
                 <div class="bitacora-actions">
+                  {% if user_can(current_user, 'reuniones', 'w') %}
                   <button class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="{{ _('Ver / editar') }}">
                     <i class="fas fa-edit text-success"></i>
                   </button>
+                  {% else %}
+                  <button class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="{{ _('Ver') }}">
+                    <i class="fas fa-eye text-secondary"></i>
+                  </button>
+                  {% endif %}
+                  {% if user_can(current_user, 'reuniones', 'x') or (nota.autor_id == current_user.id and user_can(current_user, 'reuniones', 'w')) %}
                   <button class="btn btn-light border btn-icon" onclick="eliminarNota({{ nota.id }})" title="{{ _('Eliminar') }}">
                     <i class="fas fa-trash-alt text-danger"></i>
                   </button>
+                  {% endif %}
                 </div>
               </td>
             </tr>

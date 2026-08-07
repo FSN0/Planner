@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', function() {
     window.hiddenGroups = new Set();
     window.allGroupsMaster = [];
     window.allEventsMaster = [];
+    /** Estado confirmado en BD (solo se actualiza tras loadTimelineData). Evita que onMoving contamine old_obra_id. */
+    window.committedEventState = {};
     window.currentSidebarWidth = 250;
     
     window.AppGroups = new vis.DataSet();
@@ -195,7 +197,9 @@ document.addEventListener('DOMContentLoaded', function() {
         margin: { item: 2, axis: 5 },
         throttleRedraw: 15,
         showTooltips: false,
-        editable: { add: false, updateTime: true, updateGroup: true, remove: false },
+        editable: (window.PLANIFICADOR_CAN_EDIT === false)
+            ? false
+            : { add: false, updateTime: true, updateGroup: true, remove: false },
         zoomMin: 1000 * 60 * 60 * 24 * 7,
         zoomMax: 1000 * 60 * 60 * 24 * 365,
         locale: (typeof window.SP_LOCALE === 'string' && window.SP_LOCALE) ? window.SP_LOCALE : (document.documentElement.lang || 'es').slice(0, 2),
@@ -424,11 +428,19 @@ document.addEventListener('DOMContentLoaded', function() {
             let hoy = moment().startOf('day');
             let startReal = moment(item.start); 
             let endReal = moment(item.end).subtract(1, 'days');
-            
+
+            // Origen = último estado confirmado en BD (no el group contaminado por onMoving).
+            let committed = (window.committedEventState && window.committedEventState[item.id]) || null;
             let oldItem = window.allEventsMaster.find(e => e.id === item.id);
-            let oldGroup = oldItem ? oldItem.group : item.group;
-            let oldStart = oldItem ? moment(oldItem.start) : startReal;
-            let oldEnd = oldItem ? moment(oldItem.end).subtract(1, 'days') : endReal;
+            let oldGroup = committed
+                ? committed.group
+                : (oldItem ? oldItem.group : item.group);
+            let oldStart = committed
+                ? moment(committed.start)
+                : (oldItem ? moment(oldItem.start) : startReal);
+            let oldEnd = committed
+                ? moment(committed.end).subtract(1, 'days')
+                : (oldItem ? moment(oldItem.end).subtract(1, 'days') : endReal);
 
             if (endReal.isBefore(hoy)) {
                 Swal.fire(t('Acción inválida'), t('La fecha de fin de la asignación debe ser al menos hoy.'), 'warning');
@@ -438,6 +450,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let startStr = startReal.format('YYYY-MM-DD');
             let endStr = endReal.format('YYYY-MM-DD');
+            let sameObra = String(oldGroup) === String(item.group);
+            // Traslado entre obras = sobrescribir origen (es lo que el usuario pretende al arrastrar).
+            let moveMode = sameObra ? 'check' : 'overwrite';
 
             pendingAction = { 
                 worker_id: item.worker_id, 
@@ -447,24 +462,30 @@ document.addEventListener('DOMContentLoaded', function() {
                 end_date: endStr,
                 original_start: oldStart.format('YYYY-MM-DD'),
                 original_end: oldEnd.format('YYYY-MM-DD'),
-                overwrite_mode: 'check' 
+                overwrite_mode: moveMode
             };
             
             pendingRevert = function() { callback(null); loadTimelineData(); };
 
-            if (oldGroup !== item.group) {
+            function commitMove() {
+                // No confiar en el item local: recargar desde BD.
+                callback(null);
+                loadTimelineData();
+            }
+
+            if (!sameObra) {
                 Swal.fire({ 
                     title: t('¿Trasladar a otra Obra?'),
-                    text: `Vas a reasignar al operario del ${moment(startStr).format('DD/MM')} al ${moment(endStr).format('DD/MM')}.`, 
+                    text: `Vas a reasignar al operario del ${moment(startStr).format('DD/MM')} al ${moment(endStr).format('DD/MM')}. Se quitará de la obra anterior en esas fechas.`, 
                     icon: 'question', 
                     showCancelButton: true, 
                     confirmButtonText: t('Sí, mover')
                 }).then((result) => { 
-                    if (result.isConfirmed) ejecutarAccionAPI(pendingRevert, function() { callback(item); }); 
+                    if (result.isConfirmed) ejecutarAccionAPI(pendingRevert, commitMove); 
                     else callback(null); 
                 });
             } else { 
-                ejecutarAccionAPI(pendingRevert, function() { callback(item); }); 
+                ejecutarAccionAPI(pendingRevert, commitMove); 
             }
         }
     };
@@ -625,9 +646,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 let btnVerSol = document.getElementById('btn-ver-solicitud');
                 if (btnVerSol) btnVerSol.style.display = 'none';
 
-                // 2. Restauramos los botones de desasignar a su visibilidad original (¡SIN usar la palabra button!)
+                // 2. Restauramos los botones de desasignar (solo si hay W)
                 let btnsDesasignar = popover.querySelectorAll('[onclick*="desasignarDesdePop"]');
-                btnsDesasignar.forEach(b => b.style.display = ''); 
+                btnsDesasignar.forEach(b => {
+                    b.style.display = (window.PLANIFICADOR_CAN_EDIT === false) ? 'none' : '';
+                });
                 
                 // 3. NUEVO: BOTÓN DE VER CALENDARIO UNIVERSAL
                 let btnVerCal = document.getElementById('btn-ver-calendario');
@@ -699,7 +722,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     end: clickedDate.clone().add(1, 'days').toDate(),
                     worker_id: 'NEW',
                     className: 'phantom-item',
-                    editable: { updateTime: true, updateGroup: true, remove: true } 
+                    editable: (window.PLANIFICADOR_CAN_EDIT === false)
+                        ? false
+                        : { updateTime: true, updateGroup: true, remove: true }
                 };
                 window.AppItems.add(newItem);
                 window.AppTimeline.setSelection('phantom_new'); 
@@ -791,6 +816,17 @@ document.addEventListener('DOMContentLoaded', function() {
                             base.empresa_id = e.empresa_id; base.categoria = e.categoria; base.especialidad = e.especialidad; base.nota = e.nota;
                         }
                         return base;
+                    });
+
+                    window.committedEventState = {};
+                    window.allEventsMaster.forEach(function(ev) {
+                        if (!ev || ev.type === 'background') return;
+                        window.committedEventState[ev.id] = {
+                            group: ev.group,
+                            start: ev.start,
+                            end: ev.end,
+                            worker_id: ev.worker_id,
+                        };
                     });
                     
                     window.renderItems();
@@ -986,6 +1022,21 @@ document.addEventListener('DOMContentLoaded', function() {
             data: JSON.stringify(pendingAction),
             success: function(data) {
                 if (data.success) {
+                    // No-op del servidor: la UI NO debe “confirmar” el drag.
+                    if (data.noop || data.unchanged) {
+                        Swal.fire({
+                            toast: true,
+                            position: 'top-end',
+                            icon: 'info',
+                            title: data.message || t('Sin cambios'),
+                            showConfirmButton: false,
+                            timer: 2000,
+                        });
+                        pendingAction = null;
+                        pendingRevert = null;
+                        if (revertFunc) revertFunc();
+                        return;
+                    }
                     Swal.fire({toast: true, position: 'top-end', icon: 'success', title: data.message || 'Guardado', showConfirmButton: false, timer: 1500});
                     pendingAction = null; 
                     pendingRevert = null;
@@ -1036,9 +1087,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (popover && !popover.classList.contains('d-none')) { popover.classList.add('d-none'); }
     });
 
-    // --- NUEVO: FUNCIÓN PARA DESASIGNAR DIRECTAMENTE DESDE EL POPOVER ---
+    // Suprimir / Delete con bloque seleccionado = "Solo este bloque"
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        if (window.PLANIFICADOR_CAN_EDIT === false) return;
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
+        if (typeof Swal !== 'undefined' && Swal.isVisible && Swal.isVisible()) return;
+        if (!window.currentSelectedItem) return;
+        const wid = window.currentSelectedItem.worker_id;
+        if (wid === 'SYSTEM' || wid === 'REQUEST') return;
+        e.preventDefault();
+        if (typeof window.desasignarDesdePop === 'function') {
+            window.desasignarDesdePop('periodo');
+        }
+    });
+
     // --- NUEVO: FUNCIÓN PARA DESASIGNAR DIRECTAMENTE DESDE EL POPOVER ---
     window.desasignarDesdePop = function(mode) {
+        if (window.PLANIFICADOR_CAN_EDIT === false) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('Sin permiso', 'No tienes permisos de escritura en el planificador.', 'warning');
+            }
+            return;
+        }
         if (!window.currentSelectedItem) return;
 
         let item = window.currentSelectedItem;

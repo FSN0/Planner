@@ -10,7 +10,13 @@
   font-size: 0.8rem;
   overflow: hidden;
   padding: 0.25rem;
-  z-index: 10600 !important;
+  z-index: 20060 !important;
+}
+body > .select2-container {
+  z-index: 20060 !important;
+}
+body > .select2-container--open {
+  z-index: 20061 !important;
 }
 .select2-dropdown.admin-select2-dropdown .select2-search__field {
   border: 1px solid #e2e8f0 !important;
@@ -35,6 +41,7 @@
   min-width: 320px !important;
   width: max-content !important;
   max-width: min(480px, 92vw) !important;
+  z-index: 20062 !important;
 }
 .select2-dropdown.univ-calendar-select2-dropdown .select2-results__option {
   white-space: nowrap;
@@ -118,6 +125,8 @@
   background: var(--color-surface, #fff);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
   overflow: visible;
+  position: relative;
+  z-index: 20;
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .univ-calendar-panel-head h6 .univ-calendar-icon,

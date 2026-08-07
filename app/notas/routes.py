@@ -7,6 +7,12 @@ from app.models import Nota, Obra, User, nota_obra, nota_user, Asignacion, ROLE_
 
 notas_bp = Blueprint('notas', __name__, url_prefix='/notas')
 
+
+@notas_bp.before_request
+def _enforce_notas_module_permissions():
+    from app.services.permission_guard import enforce_notas_permissions
+    return enforce_notas_permissions()
+
 @notas_bp.route('/', methods=['GET'])
 @login_required
 def centro_mando():

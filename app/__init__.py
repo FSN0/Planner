@@ -401,7 +401,12 @@ def create_app():
             return redirect(url_for('admin.panel_laboral'))
         elif user.role == ROLE_OPERARIO:
             if getattr(user, 'web_access', False):
-                return redirect(url_for('empleado.inicio'))
+                try:
+                    from app.services.permission_service import user_can
+                    if user_can(user, 'operario_web', 'r'):
+                        return redirect(url_for('empleado.inicio'))
+                except Exception:
+                    pass
             from flask_login import logout_user
             logout_user()
             from flask import flash

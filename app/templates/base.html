@@ -118,7 +118,7 @@
 
     {% block extra_js %}{% endblock %}
 
-    {% if current_user.is_authenticated and current_user.role in ['admin', 'jefe_obra'] %}
+    {% if current_user.is_authenticated and user_can(current_user, 'reuniones', 'w') %}
     <div class="modal fade admin-note-modal" id="modalNuevaNota" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
@@ -207,18 +207,48 @@
             if(!form.checkValidity()) { form.reportValidity(); return; }
 
             let notaId = document.getElementById('notaGlobalId').value;
-            let url = notaId ? `/notas/${notaId}/editar` : '/notas/crear'; // Decide si crea o actualiza
+            let url = notaId ? `/notas/${notaId}/editar` : '/notas/crear';
 
             let formData = new FormData(form);
-            fetch(url, { method: 'POST', body: formData })
-            .then(r => r.json()).then(data => {
-                if(data.success) {
+            fetch(url, {
+                method: 'POST',
+                body: formData,
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            })
+            .then(async (r) => {
+                let data = null;
+                try { data = await r.json(); } catch (e) { data = null; }
+                if (r.status === 403 || (data && data.permission_denied)) {
+                    const msg = (data && (data.message || data.error))
+                        || 'No tienes permisos de escritura para esta acción.';
+                    if (typeof Swal !== 'undefined') Swal.fire('Sin permiso', msg, 'warning');
+                    else alert(msg);
+                    return;
+                }
+                if (!data) {
+                    const msg = 'No se pudo guardar la nota.';
+                    if (typeof Swal !== 'undefined') Swal.fire('Error', msg, 'error');
+                    else alert(msg);
+                    return;
+                }
+                if (data.success) {
                     $('#modalNuevaNota').modal('hide');
                     if (window.location.pathname.includes('/notas')) window.location.reload();
-                    else alert(notaId ? "Nota actualizada." : "Nota guardada."); 
+                    else if (typeof Swal !== 'undefined') {
+                        Swal.fire({ toast: true, position: 'top-end', icon: 'success',
+                            title: notaId ? 'Nota actualizada.' : 'Nota guardada.',
+                            showConfirmButton: false, timer: 1800 });
+                    } else alert(notaId ? 'Nota actualizada.' : 'Nota guardada.');
                 } else {
-                    alert("Error: " + data.message);
+                    const msg = data.message || data.error || 'Error al guardar';
+                    if (typeof Swal !== 'undefined') Swal.fire('Error', msg, 'error');
+                    else alert('Error: ' + msg);
                 }
+            })
+            .catch(() => {
+                const msg = 'Error de red al guardar la nota.';
+                if (typeof Swal !== 'undefined') Swal.fire('Error', msg, 'error');
+                else alert(msg);
             });
         }
 

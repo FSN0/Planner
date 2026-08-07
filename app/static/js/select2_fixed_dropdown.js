@@ -53,7 +53,9 @@
         left: Math.max(8, r.left) + 'px',
         width: Math.max(r.width, 160) + 'px',
         transform: 'none',
+        zIndex: 20061,
       });
+      $dd.css({ zIndex: 20062 });
     }
 
     function attachListeners() {

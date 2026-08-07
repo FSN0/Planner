@@ -84,4 +84,4 @@ if len(heads) != 1:
 print(f"==> Head en disco: {heads[0]}")
 PY
 
-echo "==> Cadena esperada: ... -> q8l9m0n1o2p3 -> p7k8l9m0n1o2 -> r9s0t1u2v3w4 -> s0t1u2v3w4x5"
+echo "==> Cadena esperada: ... -> w4d5e6f7g8h9 -> x5e6f7g8h9i0"

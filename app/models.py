@@ -1004,7 +1004,30 @@ class ConfiguracionGlobal(db.Model):
 
     def __repr__(self):
         return f'<ConfiguracionGlobal {self.clave}={self.valor}>'
-    
+
+
+class RolePermission(db.Model):
+    """Matriz de permisos por rol dentro del tenant (R/W/X por módulo)."""
+    __tablename__ = 'role_permissions'
+    __table_args__ = (
+        db.UniqueConstraint('role', 'module', name='uq_role_permissions_role_module'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    role = db.Column(db.String(30), nullable=False, index=True)
+    module = db.Column(db.String(50), nullable=False, index=True)
+    can_read = db.Column(db.Boolean, nullable=False, default=False)
+    can_write = db.Column(db.Boolean, nullable=False, default=False)
+    can_execute = db.Column(db.Boolean, nullable=False, default=False)
+
+    def __repr__(self):
+        flags = ''.join([
+            'r' if self.can_read else '-',
+            'w' if self.can_write else '-',
+            'x' if self.can_execute else '-',
+        ])
+        return f'<RolePermission {self.role}/{self.module} {flags}>'
+
 
 # ==========================================
 # MÓDULO DE NOTAS Y REUNIONES (CRM INTERNO)

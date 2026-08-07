@@ -115,6 +115,14 @@ body.marketing-page {
 
 .mkt-nav-links a:hover { color: var(--mkt-ink); }
 
+/* CTA del nav: no heredar el gris de los links */
+.mkt-nav-links a.mkt-btn-primary,
+.mkt-nav-links a.mkt-btn-primary:hover,
+.mkt-nav-links a.mkt-btn-primary:focus,
+.mkt-nav-links a.mkt-btn-primary:visited {
+  color: #fff;
+}
+
 .mkt-lang select {
   border: 1px solid var(--mkt-border);
   background: var(--mkt-surface);
@@ -148,7 +156,20 @@ body.marketing-page {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
-.mkt-btn-primary:hover { background: var(--mkt-primary-hover); }
+.mkt-btn-primary:hover,
+.mkt-btn-primary:focus,
+.mkt-btn-primary:active,
+.mkt-btn-primary:visited {
+  background: var(--mkt-primary-hover);
+  color: #fff;
+}
+
+.mkt-hero-actions .mkt-btn-primary,
+.mkt-hero-actions .mkt-btn-primary:hover,
+.mkt-hero-actions .mkt-btn-primary:focus,
+.mkt-hero-actions .mkt-btn-primary:visited {
+  color: #fff;
+}
 
 .mkt-btn-ghost {
   background: transparent;

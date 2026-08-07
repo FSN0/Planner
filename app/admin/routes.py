@@ -60,6 +60,12 @@ from app.services.email_service import notificar_resolucion_solicitud, notificar
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 ALLOWED_EXTENSIONS = {"xlsx", "xls", "csv"}
 
+
+@admin_bp.before_request
+def _enforce_admin_module_permissions():
+    from app.services.permission_guard import enforce_admin_permissions
+    return enforce_admin_permissions()
+
 IMPORT_WIZARD_CONFIG = {
     "obras": {
         "title": "Importar Obras",
@@ -1375,7 +1381,8 @@ def obras_detailed():
     context['next_month_url'] = url_for('admin.obras_detailed', selected_date=context['next_date_str'])
     
     # 4. Configurar modo vista (para activar botones de edición en el HTML)
-    context['view_mode'] = 'readonly' if is_laboral(current_user) else 'admin'
+    can_write_tablero = user_can(current_user, 'tablero', 'w')
+    context['view_mode'] = 'readonly' if (is_laboral(current_user) or not can_write_tablero) else 'admin'
     
     # 5. Renderizar desempaquetando el contexto (header_days, timeline_data, free_workers, etc.)
     return render_template("obras_detailed_unificado.html", **context)
@@ -1893,39 +1900,49 @@ def edit_obra(obra_id):
         obra.encargado_id = int(enc_id) if enc_id and enc_id.strip() else None
 
         today = date.today()
+        actor_id = current_user.id
+        obra_nombre = obra.nombre
         if new_estado == 'Pendiente' and old_estado != 'Pendiente':
-            futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
-            for asig in futuras:
+            futuras = (
+                Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today)
+                .with_entities(Asignacion.user_id, Asignacion.obra_id, Asignacion.fecha)
+                .all()
+            )
+            for uid, oid, fecha in futuras:
                 CoreAssignmentService.desasignar(
-                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                    "Pausa de Obra", f"Obra '{obra.nombre}' pausada.",
+                    uid, oid, fecha, actor_id,
+                    "Pausa de Obra", f"Obra '{obra_nombre}' pausada.",
                     registrar_log=False,
                 )
             if futuras:
                 from app.utils import register_log
                 register_log(
-                    user_id=current_user.id,
+                    user_id=actor_id,
                     category='planificacion',
                     action='Pausa de Obra',
-                    detail=f"Obra '{obra.nombre}' pausada: {len(futuras)} asignaciones futuras eliminadas.",
+                    detail=f"Obra '{obra_nombre}' pausada: {len(futuras)} asignaciones futuras eliminadas.",
                 )
                 flash(f"Obra pausada. {len(futuras)} asignaciones eliminadas.", "warning")
         elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
             obra.fecha_fin = today
-            futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
-            for asig in futuras:
+            futuras = (
+                Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today)
+                .with_entities(Asignacion.user_id, Asignacion.obra_id, Asignacion.fecha)
+                .all()
+            )
+            for uid, oid, fecha in futuras:
                 CoreAssignmentService.desasignar(
-                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                    "Finalización de Obra", f"Obra '{obra.nombre}' finalizada.",
+                    uid, oid, fecha, actor_id,
+                    "Finalización de Obra", f"Obra '{obra_nombre}' finalizada.",
                     registrar_log=False,
                 )
             if futuras:
                 from app.utils import register_log
                 register_log(
-                    user_id=current_user.id,
+                    user_id=actor_id,
                     category='planificacion',
                     action='Finalización de Obra',
-                    detail=f"Obra '{obra.nombre}' finalizada: {len(futuras)} asignaciones futuras eliminadas.",
+                    detail=f"Obra '{obra_nombre}' finalizada: {len(futuras)} asignaciones futuras eliminadas.",
                 )
             flash(f"Obra finalizada. {len(futuras)} asignaciones eliminadas.", "success")
 
@@ -1933,10 +1950,10 @@ def edit_obra(obra_id):
             db.session.commit()
             from app.utils import register_log
             register_log(
-                user_id=current_user.id,
+                user_id=actor_id,
                 category='obras',
                 action='Editar Obra',
-                detail=f"Ha editado la obra '{obra.nombre}'. Estado actual: {obra.estado}"
+                detail=f"Ha editado la obra '{obra_nombre}'. Estado actual: {obra.estado}"
             )
             flash("Obra actualizada correctamente", "success")
             return redirect(url_for("admin.obras_detailed", selected_date=str(date.today())))
@@ -2291,21 +2308,26 @@ def delete_obra(obra_id):
 
     today = date.today()
     obra.is_deleted = True
+    actor_id = current_user.id
+    obra_nombre = obra.nombre
 
-    future_asignaciones = [a for a in obra.asignaciones if a.fecha >= today]
-    for asign in future_asignaciones:
+    future_rows = [
+        (a.user_id, a.obra_id, a.fecha)
+        for a in obra.asignaciones if a.fecha >= today
+    ]
+    for uid, oid, fecha in future_rows:
         CoreAssignmentService.desasignar(
-            asign.user_id, asign.obra_id, asign.fecha, current_user.id,
-            "Eliminación de Obra", f"Obra '{obra.nombre}' eliminada.",
+            uid, oid, fecha, actor_id,
+            "Eliminación de Obra", f"Obra '{obra_nombre}' eliminada.",
             registrar_log=False,
         )
-    if future_asignaciones:
+    if future_rows:
         from app.utils import register_log
         register_log(
-            user_id=current_user.id,
+            user_id=actor_id,
             category='planificacion',
             action='Eliminación de Obra',
-            detail=f"Obra '{obra.nombre}' eliminada: {len(future_asignaciones)} asignaciones futuras liberadas.",
+            detail=f"Obra '{obra_nombre}' eliminada: {len(future_rows)} asignaciones futuras liberadas.",
         )
 
     db.session.commit()
@@ -2406,12 +2428,11 @@ from app import db
 from app.services.assignment_service import process_assignment_action
 
 # 1. FUNCIÓN QUE CARGA EL HTML Y EL DESPLEGABLE
-# 1. FUNCIÓN QUE CARGA EL HTML Y EL DESPLEGABLE
 @admin_bp.route("/planificador")
 @login_required
 def planificador_jo():
-    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]:
-        flash("Acceso denegado.", "danger")
+    if not user_can(current_user, 'planificador', 'r'):
+        flash("Acceso no autorizado", "danger")
         return redirect(url_for('main.dashboard'))
     todas_obras = []
     jefes = []
@@ -2434,7 +2455,14 @@ def planificador_jo():
         if current_user.role == ROLE_ADMIN:
             jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).order_by(User.name).all()
         
-    return render_template("planificador.html", todas_obras=todas_obras, jefes=jefes, empresas=empresas, ROLE_ADMIN=ROLE_ADMIN)
+    return render_template(
+        "planificador.html",
+        todas_obras=todas_obras,
+        jefes=jefes,
+        empresas=empresas,
+        ROLE_ADMIN=ROLE_ADMIN,
+        can_edit_planificador=user_can(current_user, 'planificador', 'w'),
+    )
 
 
 # 2. FUNCIÓN QUE CARGA LAS FILAS (EJE Y) DEL CALENDARIO
@@ -2766,7 +2794,8 @@ def search_workers():
 @admin_bp.route('/configuracion')
 @login_required
 def configuracion_global():
-    if current_user.role != 'admin':
+    from app.services.permission_service import user_can
+    if not user_can(current_user, 'configuracion', 'r'):
         flash("Acceso denegado. Área exclusiva de administración.", "danger")
         return redirect(url_for('main.dashboard'))
         
@@ -2793,10 +2822,76 @@ def configuracion_global():
     )
 
 
+@admin_bp.route('/permisos')
+@admin_bp.route('/permisos/<role>')
+@login_required
+def permisos_roles(role=None):
+    from app.services.permission_catalog import (
+        ADMIN_LOCKED_MODULES,
+        MODULE_EXECUTE_HINTS,
+        MODULE_WRITE_HINTS,
+        PERMISSION_MODULES,
+        PERMISSION_ROLES,
+    )
+    from app.services.permission_service import (
+        ensure_role_permissions,
+        matrix_for_role,
+        user_can,
+    )
+    if not user_can(current_user, 'permisos', 'r'):
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    ensure_role_permissions()
+    valid = {r for r, _ in PERMISSION_ROLES}
+    active = role if role in valid else 'admin'
+    return render_template(
+        'admin_permisos.html',
+        roles=PERMISSION_ROLES,
+        modules=PERMISSION_MODULES,
+        active_role=active,
+        matrix=matrix_for_role(active),
+        locked_modules=ADMIN_LOCKED_MODULES,
+        execute_hints=MODULE_EXECUTE_HINTS,
+        write_hints=MODULE_WRITE_HINTS,
+    )
+
+
+@admin_bp.route('/permisos/guardar', methods=['POST'])
+@login_required
+def permisos_roles_save():
+    from app.services.permission_catalog import PERMISSION_ROLES
+    from app.services.permission_service import (
+        ensure_role_permissions,
+        save_role_matrix,
+        user_can,
+    )
+    if not user_can(current_user, 'permisos', 'w'):
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    if request.form.get('reset_defaults'):
+        ensure_role_permissions(force=True)
+        flash('Permisos restaurados a los valores por defecto.', 'success')
+        return redirect(url_for('admin.permisos_roles'))
+    role = (request.form.get('role') or '').strip()
+    valid = {r for r, _ in PERMISSION_ROLES}
+    if role not in valid:
+        flash('Rol no válido.', 'danger')
+        return redirect(url_for('admin.permisos_roles'))
+    try:
+        save_role_matrix(role, request.form)
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'No se pudieron guardar los permisos: {exc}', 'danger')
+        return redirect(url_for('admin.permisos_roles', role=role))
+    flash('Permisos guardados.', 'success')
+    return redirect(url_for('admin.permisos_roles', role=role))
+
+
 @admin_bp.route('/configuracion/update', methods=['POST'])
 @login_required
 def update_config():
-    if current_user.role != 'admin':
+    from app.services.permission_service import user_can
+    if not user_can(current_user, 'configuracion', 'w'):
         return redirect(url_for('main.dashboard'))
 
     from app.models import ConfiguracionGlobal
@@ -3022,27 +3117,37 @@ def batch_update_obras_status():
         obras = Obra.query.filter(Obra.id.in_(obra_ids)).all()
         today = date.today()
         total_deleted = 0
+        actor_id = current_user.id
 
         for obra in obras:
             old_estado = obra.estado
             obra.estado = new_estado
+            obra_nombre = obra.nombre
 
             if new_estado == 'Pendiente' and old_estado != 'Pendiente':
-                futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
-                for asig in futuras:
+                futuras = (
+                    Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today)
+                    .with_entities(Asignacion.user_id, Asignacion.obra_id, Asignacion.fecha)
+                    .all()
+                )
+                for uid, oid, fecha in futuras:
                     CoreAssignmentService.desasignar(
-                        asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                        "Pausa de Obra (Masiva)", f"Obra '{obra.nombre}' pausada.",
+                        uid, oid, fecha, actor_id,
+                        "Pausa de Obra (Masiva)", f"Obra '{obra_nombre}' pausada.",
                         registrar_log=False,
                     )
                 total_deleted += len(futuras)
             elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
                 obra.fecha_fin = today
-                futuras = Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today).all()
-                for asig in futuras:
+                futuras = (
+                    Asignacion.query.filter(Asignacion.obra_id == obra.id, Asignacion.fecha >= today)
+                    .with_entities(Asignacion.user_id, Asignacion.obra_id, Asignacion.fecha)
+                    .all()
+                )
+                for uid, oid, fecha in futuras:
                     CoreAssignmentService.desasignar(
-                        asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                        "Finalización de Obra (Masiva)", f"Obra '{obra.nombre}' finalizada.",
+                        uid, oid, fecha, actor_id,
+                        "Finalización de Obra (Masiva)", f"Obra '{obra_nombre}' finalizada.",
                         registrar_log=False,
                     )
                 total_deleted += len(futuras)
@@ -3050,7 +3155,7 @@ def batch_update_obras_status():
         if total_deleted > 0:
             from app.utils import register_log
             register_log(
-                user_id=current_user.id,
+                user_id=actor_id,
                 category='planificacion',
                 action=f'Cambio masivo a {new_estado}',
                 detail=f"{len(obras)} obra(s) → '{new_estado}': {total_deleted} jornadas futuras liberadas.",
