@@ -68,6 +68,11 @@ if command -v python3 >/dev/null 2>&1 && [[ -f "$ROOT/scripts/trim_brand_margins
   python3 "$ROOT/scripts/trim_brand_margins.py" || true
 fi
 
+# Favicons 48/192 para Google SERP
+if command -v python3 >/dev/null 2>&1 && [[ -f "$ROOT/scripts/generate_favicons.py" ]]; then
+  python3 "$ROOT/scripts/generate_favicons.py" || true
+fi
+
 echo -e "${GREEN}Assets de marca sincronizados -> $DEST${NC}"
 if [[ ${#copied[@]} -eq 0 ]]; then
   echo -e "${YELLOW}  (ningun archivo copiado)${NC}"

@@ -1013,13 +1013,24 @@ class UniversalCalendarManager {
         }
         const panel = document.getElementById(this.panelId);
         const modal = panel ? panel.closest('.modal.show, .modal') : null;
-        const dropdownParent = modal ? $(modal) : (panel ? $(panel) : $(document.body));
+        // Siempre body + position fixed anclado al campo (scroll en admin-main/modal).
+        const dropdownParent = $(document.body);
         const opts = Object.assign({
             dropdownParent: dropdownParent,
             dropdownCssClass: 'admin-select2-dropdown univ-calendar-select2-dropdown',
             width: '100%',
         }, extraOpts);
         $select.select2(opts);
+        if (window.SignaPlanSelect2 && typeof window.SignaPlanSelect2.bindFixedDropdown === 'function') {
+            const roots = [
+                document.querySelector('.planificador-page'),
+                document.querySelector('.admin-main'),
+                modal ? modal.querySelector('.modal-body') : null,
+                modal,
+                panel,
+            ].filter(Boolean);
+            window.SignaPlanSelect2.bindFixedDropdown($select, roots);
+        }
         return $select;
     }
 

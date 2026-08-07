@@ -826,6 +826,9 @@ document.addEventListener('DOMContentLoaded', function() {
             dropdownCssClass: 'planificador-select2-dropdown admin-select2-dropdown',
         });
         setupSelect2ChipRemoveAnimation($obrasSelect);
+        if (window.SignaPlanSelect2) {
+            window.SignaPlanSelect2.bindFixedDropdown($obrasSelect, [planificadorScrollRoot, document.querySelector('.admin-main')].filter(Boolean));
+        }
 
         if ($jefeSelect.is(':visible') && $jefeSelect.find('option').length > 1) {
             $jefeSelect.select2({
@@ -836,6 +839,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 dropdownParent: $(document.body),
                 dropdownCssClass: 'planificador-select2-dropdown admin-select2-dropdown planificador-jefe-dropdown',
             });
+            if (window.SignaPlanSelect2) {
+                window.SignaPlanSelect2.bindFixedDropdown($jefeSelect, [planificadorScrollRoot, document.querySelector('.admin-main')].filter(Boolean));
+            }
         }
 
         let isUpdating = false;

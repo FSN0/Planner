@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% set page_title = article.title ~ ' — SignaPlan' %}
+    {% set meta_description = article.description %}
+    {% set canonical_path = url_for('marketing.recurso', slug=slug) %}
+    {% set og_type = 'article' %}
+    {% set legal_email = contact_email %}
+    {% include "components/_marketing_seo_head.html" %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": {{ article.title|tojson }},
+      "description": {{ article.description|tojson }},
+      "dateModified": {{ article.updated|tojson }},
+      "author": { "@type": "Organization", "name": "SignaPlan" },
+      "publisher": {
+        "@type": "Organization",
+        "name": "SignaPlan",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "{{ request.url_root.rstrip('/') }}{{ url_for('static', filename='img/brand/favicon-192.png') }}"
+        }
+      },
+      "mainEntityOfPage": "{{ request.url_root.rstrip('/') }}{{ url_for('marketing.recurso', slug=slug) }}"
+    }
+    </script>
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            {% with variant='horizontal', width=150, height=26 %}
+              {% include "components/_brand_logo.html" %}
+            {% endwith %}
+        </a>
+        <nav class="mkt-nav-links">
+            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
+            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
+        </nav>
+    </header>
+
+    <article class="mkt-article">
+        <p class="mkt-article-meta"><a href="{{ url_for('marketing.recursos_index') }}">Guías</a> · Actualizado {{ article.updated }}</p>
+        <h1>{{ article.h1 }}</h1>
+        <div class="mkt-article-body">
+            {{ article.body_html|safe }}
+        </div>
+        <p class="mkt-article-cta">
+            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta gratuita</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.contacto') }}">Contacto</a>
+        </p>
+    </article>
+
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+        <span>
+            <a href="/">Inicio</a> ·
+            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a> ·
+            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a>
+        </span>
+    </footer>
+    {% include "components/_cookie_banner.html" %}
+</body>
+</html>

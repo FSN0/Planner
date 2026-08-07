@@ -6,6 +6,7 @@ from datetime import datetime
 
 from flask import (
     Blueprint,
+    Response,
     abort,
     flash,
     redirect,
@@ -15,6 +16,7 @@ from flask import (
 )
 
 from app import limiter
+from app.marketing.seo_articles import get_article, list_articles
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 marketing_bp = Blueprint('marketing', __name__)
@@ -302,3 +304,78 @@ def legal(slug):
         page_title=page['title'],
         legal=_legal_entity(),
     )
+
+
+@marketing_bp.route('/recursos/')
+def recursos_index():
+    _require_marketing()
+    legal = _legal_entity()
+    return render_template(
+        'marketing/recursos_index.html',
+        current_year=datetime.utcnow().year,
+        articles=list_articles(),
+        contact_email=legal.get('email'),
+    )
+
+
+@marketing_bp.route('/recursos/<slug>')
+def recurso(slug):
+    _require_marketing()
+    article = get_article(slug)
+    if not article:
+        abort(404)
+    legal = _legal_entity()
+    return render_template(
+        'marketing/recursos_articulo.html',
+        current_year=datetime.utcnow().year,
+        slug=slug,
+        article=article,
+        contact_email=legal.get('email'),
+    )
+
+
+@marketing_bp.route('/robots.txt')
+def robots_txt():
+    # Público en marketing host; en tenants no hace daño servir lo mismo.
+    sitemap = url_for('marketing.sitemap_xml', _external=True)
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /auth/\n"
+        "Disallow: /superadmin\n"
+        "Disallow: /api/\n"
+        "Disallow: /sync\n"
+        f"Sitemap: {sitemap}\n"
+    )
+    return Response(body, mimetype='text/plain')
+
+
+@marketing_bp.route('/sitemap.xml')
+def sitemap_xml():
+    _require_marketing()
+    base = request.url_root.rstrip('/')
+    urls = [
+        ('/', '1.0', 'weekly'),
+        ('/alta', '0.8', 'monthly'),
+        ('/entrar', '0.6', 'monthly'),
+        ('/contacto', '0.7', 'monthly'),
+        ('/recursos/', '0.8', 'weekly'),
+    ]
+    for slug in LEGAL_PAGES:
+        urls.append((f'/legal/{slug}', '0.3', 'yearly'))
+    for a in list_articles():
+        urls.append((f"/recursos/{a['slug']}", '0.7', 'monthly'))
+
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for path, prio, freq in urls:
+        parts.append('  <url>')
+        parts.append(f'    <loc>{base}{path}</loc>')
+        parts.append(f'    <changefreq>{freq}</changefreq>')
+        parts.append(f'    <priority>{prio}</priority>')
+        parts.append('  </url>')
+    parts.append('</urlset>')
+    return Response('\n'.join(parts) + '\n', mimetype='application/xml')
