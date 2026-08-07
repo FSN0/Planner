@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% set page_title = solution.title ~ ' — SignaPlan' %}
+    {% set meta_description = solution.description %}
+    {% set canonical_path = url_for('marketing.solucion', slug=slug) %}
+    {% set og_type = 'article' %}
+    {% set legal_email = contact_email %}
+    {% include "components/_marketing_seo_head.html" %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": {{ solution.title|tojson }},
+      "description": {{ solution.description|tojson }},
+      "dateModified": {{ solution.updated|tojson }},
+      "isPartOf": { "@type": "WebSite", "name": "SignaPlan", "url": "{{ request.url_root.rstrip('/') }}/" },
+      "mainEntity": {
+        "@type": "SoftwareApplication",
+        "name": "SignaPlan",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+      }
+    }
+    </script>
+    {% if solution.faq %}
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {% for item in solution.faq %}
+        {
+          "@type": "Question",
+          "name": {{ item.q|tojson }},
+          "acceptedAnswer": { "@type": "Answer", "text": {{ item.a|tojson }} }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    }
+    </script>
+    {% endif %}
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            {% with variant='horizontal', width=150, height=26 %}
+              {% include "components/_brand_logo.html" %}
+            {% endwith %}
+        </a>
+        <nav class="mkt-nav-links">
+            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a>
+            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
+            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
+        </nav>
+    </header>
+
+    <article class="mkt-article">
+        <p class="mkt-article-meta">
+            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a>
+            · {{ solution.eyebrow }} · Actualizado {{ solution.updated }}
+        </p>
+        <h1>{{ solution.h1 }}</h1>
+        <div class="mkt-article-body">
+            {{ solution.body_html|safe }}
+        </div>
+
+        {% if solution.faq %}
+        <section class="mkt-faq" aria-labelledby="faq-title">
+            <h2 id="faq-title">Preguntas frecuentes</h2>
+            {% for item in solution.faq %}
+            <details class="mkt-faq-item">
+                <summary>{{ item.q }}</summary>
+                <p>{{ item.a }}</p>
+            </details>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <p class="mkt-article-cta">
+            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta gratuita</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.contacto') }}">Contacto</a>
+        </p>
+
+        <nav class="mkt-related" aria-label="Otras soluciones">
+            <h2>También te puede interesar</h2>
+            <ul>
+                {% for s in related %}
+                <li><a href="{{ url_for('marketing.solucion', slug=s.slug) }}">{{ s.h1 }}</a></li>
+                {% endfor %}
+            </ul>
+        </nav>
+    </article>
+
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+        <span>
+            <a href="/">Inicio</a> ·
+            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a> ·
+            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a>
+        </span>
+    </footer>
+    {% include "components/_cookie_banner.html" %}
+</body>
+</html>

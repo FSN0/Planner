@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    {% set page_title = 'Soluciones SignaPlan — planificar, fichar y flota en obra' %}
+    {% set meta_description = 'Cuadrante de personal, fichaje en construcción, registro de jornada y flota para constructoras. Soluciones prácticas sin montar un ERP entero.' %}
+    {% set canonical_path = url_for('marketing.soluciones_index') %}
+    {% set legal_email = contact_email %}
+    {% include "components/_marketing_seo_head.html" %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            {% with variant='horizontal', width=150, height=26 %}
+              {% include "components/_brand_logo.html" %}
+            {% endwith %}
+        </a>
+        <nav class="mkt-nav-links">
+            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
+            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
+        </nav>
+    </header>
+
+    <section class="mkt-article mkt-soluciones">
+        <p class="mkt-article-meta">SignaPlan · Soluciones</p>
+        <h1>Organiza obra sin montar un ERP el primer día</h1>
+        <p class="mkt-article-lead">
+            Tres dolores reales de constructora: <strong>quién va a cada tajo</strong>,
+            <strong>quién ha fichado</strong> y <strong>qué coche está libre</strong>.
+            Elige el que más te duele ahora.
+        </p>
+        <ul class="mkt-soluciones-grid">
+            {% for s in solutions %}
+            <li>
+                <a href="{{ url_for('marketing.solucion', slug=s.slug) }}">
+                    <span class="mkt-soluciones-eyebrow">{{ s.eyebrow }}</span>
+                    <strong>{{ s.h1 }}</strong>
+                    <span>{{ s.description }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        <p class="mkt-article-cta">
+            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta gratuita</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.contacto') }}">Hablar con nosotros</a>
+        </p>
+    </section>
+
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+        <span>
+            <a href="/">Inicio</a> ·
+            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a> ·
+            <a href="{{ url_for('marketing.contacto') }}">Contacto</a>
+        </span>
+    </footer>
+    {% include "components/_cookie_banner.html" %}
+</body>
+</html>

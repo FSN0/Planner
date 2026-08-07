@@ -17,6 +17,7 @@ from flask import (
 
 from app import limiter
 from app.marketing.seo_articles import get_article, list_articles
+from app.marketing.seo_solutions import get_solution, list_solutions
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 marketing_bp = Blueprint('marketing', __name__)
@@ -334,6 +335,36 @@ def recurso(slug):
     )
 
 
+@marketing_bp.route('/soluciones/')
+def soluciones_index():
+    _require_marketing()
+    legal = _legal_entity()
+    return render_template(
+        'marketing/soluciones_index.html',
+        current_year=datetime.utcnow().year,
+        solutions=list_solutions(),
+        contact_email=legal.get('email'),
+    )
+
+
+@marketing_bp.route('/soluciones/<slug>')
+def solucion(slug):
+    _require_marketing()
+    solution = get_solution(slug)
+    if not solution:
+        abort(404)
+    legal = _legal_entity()
+    related = [s for s in list_solutions() if s['slug'] != slug][:3]
+    return render_template(
+        'marketing/soluciones_articulo.html',
+        current_year=datetime.utcnow().year,
+        slug=slug,
+        solution=solution,
+        related=related,
+        contact_email=legal.get('email'),
+    )
+
+
 @marketing_bp.route('/robots.txt')
 def robots_txt():
     # Público en marketing host; en tenants no hace daño servir lo mismo.
@@ -360,12 +391,15 @@ def sitemap_xml():
         ('/alta', '0.8', 'monthly'),
         ('/entrar', '0.6', 'monthly'),
         ('/contacto', '0.7', 'monthly'),
-        ('/recursos/', '0.8', 'weekly'),
+        ('/soluciones/', '0.9', 'weekly'),
+        ('/recursos/', '0.7', 'weekly'),
     ]
     for slug in LEGAL_PAGES:
         urls.append((f'/legal/{slug}', '0.3', 'yearly'))
+    for s in list_solutions():
+        urls.append((f"/soluciones/{s['slug']}", '0.85', 'monthly'))
     for a in list_articles():
-        urls.append((f"/recursos/{a['slug']}", '0.7', 'monthly'))
+        urls.append((f"/recursos/{a['slug']}", '0.65', 'monthly'))
 
     parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',

@@ -117,6 +117,7 @@
         <div class="mkt-cta-actions">
             <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">{{ _('nav.signup') }}</a>
             <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.contacto') }}">{{ _('cta.mail') }}</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.soluciones_index') }}">Ver soluciones</a>
         </div>
     </section>
 
@@ -130,6 +131,7 @@
             <a href="{{ url_for('marketing.legal', slug='cookies') }}">{{ _('footer.cookies') }}</a> ·
             <a href="{{ url_for('marketing.legal', slug='condiciones') }}">{{ _('footer.terms') }}</a> ·
             <a href="{{ url_for('marketing.legal', slug='encargado') }}">{{ _('footer.dpa') }}</a> ·
+            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a> ·
             <a href="{{ url_for('marketing.recursos_index') }}">Guías</a>
         </span>
     </footer>
