@@ -60,6 +60,11 @@ def _solo_operario_con_web():
 @login_required
 @roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def inicio():
+    # Inicio = calendario si tiene permiso; si no, resumen semanal.
+    from app.services.permission_service import user_can
+    if user_can(current_user, 'operario_calendario', 'r'):
+        return redirect(url_for('empleado.calendario'))
+
     hoy = today_local()
     fin_semana = hoy + timedelta(days=6)
 
@@ -108,6 +113,29 @@ def inicio():
 @roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def calendario():
     return render_template('empleado/calendario.html', worker=current_user)
+
+
+@empleado_bp.route('/fichar')
+@login_required
+@roles_required(ROLE_OPERARIO, redirect_to='auth.login')
+def fichar():
+    """Panel de fichaje en escritorio (misma lógica que /mi)."""
+    from app.services.fichaje_operario_service import (
+        estado_para_pantalla,
+        fichaje_operario_activo,
+    )
+    from app.services.permission_service import user_can
+    from app.services.pin_auth_service import debe_cambiar_pin
+
+    if not fichaje_operario_activo() or not user_can(current_user, 'operario_fichaje', 'r'):
+        abort(404)
+
+    if debe_cambiar_pin(current_user):
+        flash('Debes cambiar el PIN antes de fichar.', 'warning')
+        return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
+
+    contexto = estado_para_pantalla(current_user)
+    return render_template('empleado/fichar.html', **contexto)
 
 
 @empleado_bp.route('/fichajes')

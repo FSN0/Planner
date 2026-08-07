@@ -27,7 +27,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 
 from app import limiter
 from app import db
-from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO
+from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
 from app.services.fichaje_ledger_service import FichajeLedgerError
 from app.services.fichaje_operario_service import (
     estado_para_pantalla,
@@ -42,7 +42,7 @@ from app.utils.timezone_utils import format_datetime, format_time, today_local
 operarios_bp = Blueprint('operarios', __name__, url_prefix='/mi')
 
 # Quién ve el área de fichaje. Los perfiles de oficina también tienen jornada.
-ROLES_CON_FICHAJE = (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN)
+ROLES_CON_FICHAJE = (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
 
 # Rutas públicas del área: no exigen sesión.
 _RUTAS_PUBLICAS = {

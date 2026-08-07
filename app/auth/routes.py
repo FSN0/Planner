@@ -82,7 +82,7 @@ def _destino_por_rol(user):
             try:
                 from app.services.permission_service import user_can
                 if user_can(user, 'operario_web', 'r'):
-                    return url_for('empleado.inicio')
+                    return url_for('empleado.calendario')
             except Exception:
                 pass
         return None

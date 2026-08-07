@@ -144,8 +144,50 @@ def _import_session_key(entity_type):
     return f"import_{entity_type}"
 
 
+def _import_nav_key(entity_type):
+    return f"import_{entity_type}_nav"
+
+
+def _import_from_onboarding() -> bool:
+    """True si el wizard se abrió desde Primeros pasos."""
+    raw = (
+        request.args.get('desde')
+        or request.form.get('desde')
+        or ''
+    ).strip().lower()
+    if raw in ('primeros-pasos', 'primeros_pasos', 'onboarding', '1'):
+        return True
+    return False
+
+
+def _apply_import_nav_context(entity_type, cfg: dict) -> dict:
+    """Ajusta Volver / éxito si venimos de primeros pasos."""
+    cfg = dict(cfg)
+    nav = session.get(_import_nav_key(entity_type)) or {}
+    from_onb = bool(nav.get('from_onboarding')) or _import_from_onboarding()
+    if from_onb:
+        session[_import_nav_key(entity_type)] = {'from_onboarding': True}
+        session.modified = True
+        cfg['back_endpoint'] = 'admin.primeros_pasos'
+        cfg['back_label'] = 'Volver a primeros pasos'
+        cfg['success_endpoint'] = 'admin.primeros_pasos'
+        cfg['success_label'] = 'Volver a primeros pasos'
+        cfg['from_onboarding'] = True
+    else:
+        cfg['from_onboarding'] = bool(nav.get('from_onboarding'))
+        if cfg['from_onboarding']:
+            cfg['back_endpoint'] = 'admin.primeros_pasos'
+            cfg['back_label'] = 'Volver a primeros pasos'
+            cfg['success_endpoint'] = 'admin.primeros_pasos'
+            cfg['success_label'] = 'Volver a primeros pasos'
+    return cfg
+
+
 def _clear_import_session(entity_type):
     data = session.pop(_import_session_key(entity_type), None)
+    session.pop(_import_session_key(entity_type) + '_opts', None)
+    # Conservar nav (desde primeros pasos) entre reintentos del mismo flujo;
+    # se limpia al salir al listado normal o al terminar con éxito.
     if data:
         cleanup_import_file(data.get("token", ""), data.get("ext", "xlsx"))
 
@@ -183,20 +225,117 @@ def _column_map_from_form(_entity_type=None):
 
 def _render_import_upload(entity_type):
     cfg = IMPORT_WIZARD_CONFIG[entity_type]
-    # Nuevo ciclo: no reutilizar un fichero de un intento anterior.
+    import_mode = None
+    if entity_type == 'users':
+        import_mode = (request.args.get('modo') or request.form.get('modo') or '').strip().lower()
+        if import_mode not in ('internos', 'externos'):
+            import_mode = 'externos'
+
+    from_onb = _import_from_onboarding()
     _clear_import_session(entity_type)
+    if from_onb:
+        session[_import_nav_key(entity_type)] = {'from_onboarding': True}
+        session.modified = True
+    else:
+        session.pop(_import_nav_key(entity_type), None)
+
+    cfg = _apply_import_nav_context(entity_type, cfg)
+
+    external_companies = []
+    internal_company = None
+    if entity_type == 'users':
+        session[_import_session_key(entity_type) + '_opts'] = {'mode': import_mode}
+        session.modified = True
+        from app.models import Company
+        internal_company = Company.query.filter_by(is_internal=True).order_by(Company.id).first()
+        external_companies = (
+            Company.query.filter_by(is_internal=False)
+            .order_by(Company.nombre)
+            .all()
+        )
+        if import_mode == 'internos':
+            cfg['title'] = 'Importar personal interno'
+            cfg['subtitle'] = (
+                'Todos se asignarán a la empresa interna'
+                + (f' («{internal_company.nombre}»)' if internal_company else '')
+                + '. La columna empresa del Excel se ignora.'
+            )
+        else:
+            cfg['title'] = 'Importar personal externo'
+            cfg['subtitle'] = (
+                'Puedes forzar una empresa externa para todos, o dejar que se use/cree '
+                'la del Excel.'
+            )
+
     return render_template(
         "admin_import_wizard.html",
         entity_type=entity_type,
         entity_label=ENTITY_LABELS.get(entity_type, entity_type),
         cfg=cfg,
         step=1,
+        import_mode=import_mode,
+        internal_company=internal_company,
+        external_companies=external_companies,
+        from_onboarding=cfg.get('from_onboarding'),
     )
 
 
+def _import_options_from_session(entity_type):
+    opts = session.get(_import_session_key(entity_type) + '_opts') or {}
+    mode = (opts.get('mode') or '').strip().lower() or None
+    force = opts.get('force_company_id')
+    try:
+        force = int(force) if force not in (None, '', '0') else None
+    except (TypeError, ValueError):
+        force = None
+    # PIN de fichaje: por defecto sí (correo con enlace para definirlo)
+    assign_pin = opts.get('assign_pin')
+    if assign_pin is None:
+        assign_pin = True
+    notify_pin = opts.get('notify_pin')
+    if notify_pin is None:
+        notify_pin = True
+    return {
+        'mode': mode,
+        'force_company_id': force,
+        'assign_pin': bool(assign_pin),
+        'notify_pin': bool(notify_pin),
+    }
+
+
 def _render_import_preview(entity_type, preview, column_map=None):
-    cfg = IMPORT_WIZARD_CONFIG[entity_type]
+    cfg = _apply_import_nav_context(entity_type, IMPORT_WIZARD_CONFIG[entity_type])
     data = session.get(_import_session_key(entity_type)) or {}
+    import_mode = None
+    external_companies = []
+    internal_company = None
+    import_options = {}
+    if entity_type == 'users':
+        import_options = _import_options_from_session(entity_type)
+        import_mode = import_options.get('mode')
+        from app.models import Company
+        internal_company = Company.query.filter_by(is_internal=True).order_by(Company.id).first()
+        external_companies = (
+            Company.query.filter_by(is_internal=False).order_by(Company.nombre).all()
+        )
+        internal = preview.get('_internal_rows') or []
+        from app.services.import_service import annotate_user_rows_for_mode, _summarize_rows
+        annotated = annotate_user_rows_for_mode(internal, import_options)
+        preview = dict(preview)
+        preview['_internal_rows'] = annotated
+        public_rows = [
+            {
+                'row_number': r['row_number'],
+                'status': r['status'],
+                'messages': r.get('messages') or [],
+                'data': r.get('data') or {},
+            }
+            for r in annotated
+        ]
+        preview['rows'] = public_rows
+        preview['sample_rows'] = public_rows
+        preview['summary'] = _summarize_rows(annotated)
+
     return render_template(
         "admin_import_wizard.html",
         entity_type=entity_type,
@@ -208,21 +347,54 @@ def _render_import_preview(entity_type, preview, column_map=None):
         fields=preview.get("fields") or [],
         original_name=data.get("original_name"),
         step=2,
+        import_mode=import_mode,
+        internal_company=internal_company,
+        external_companies=external_companies,
+        force_company_id=import_options.get('force_company_id') if entity_type == 'users' else None,
+        assign_pin=import_options.get('assign_pin', True) if entity_type == 'users' else False,
+        notify_pin=import_options.get('notify_pin', True) if entity_type == 'users' else False,
+        from_onboarding=cfg.get('from_onboarding'),
     )
 
 
 def _handle_import_upload_post(entity_type):
     file = request.files.get("file")
+    from_onb = _import_from_onboarding()
     if not file or not allowed_file(file.filename):
         flash("Sube un archivo Excel (.xlsx) o CSV (.csv) válido.", "danger")
-        return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["upload_endpoint"]))
+        kwargs = {}
+        if from_onb:
+            kwargs['desde'] = 'primeros-pasos'
+        if entity_type == 'users' and request.form.get('modo') in ('internos', 'externos'):
+            kwargs['modo'] = request.form.get('modo')
+        return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["upload_endpoint"], **kwargs))
+
+    # Conservar modo antes de limpiar sesión de fichero
+    preserved_opts = None
+    if entity_type == 'users':
+        modo = (request.form.get('modo') or '').strip().lower()
+        if modo not in ('internos', 'externos'):
+            modo = 'externos'
+        preserved_opts = {'mode': modo}
 
     _clear_import_session(entity_type)
+    if from_onb:
+        session[_import_nav_key(entity_type)] = {'from_onboarding': True}
+        session.modified = True
+    if preserved_opts:
+        session[_import_session_key(entity_type) + '_opts'] = preserved_opts
+        session.modified = True
+
     try:
         _store_import_upload(entity_type, file)
     except Exception as exc:
         flash(f"No se pudo guardar el archivo: {exc}", "danger")
-        return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["upload_endpoint"]))
+        kwargs = {}
+        if from_onb:
+            kwargs['desde'] = 'primeros-pasos'
+        if preserved_opts and preserved_opts.get('mode'):
+            kwargs['modo'] = preserved_opts['mode']
+        return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["upload_endpoint"], **kwargs))
 
     return redirect(url_for(IMPORT_WIZARD_CONFIG[entity_type]["preview_endpoint"]))
 
@@ -244,6 +416,19 @@ def _handle_import_preview(entity_type):
         column_map = _column_map_from_form(entity_type)
         data["column_map"] = column_map
         session[_import_session_key(entity_type)] = data
+        # Opciones de personal (modo / empresa forzada)
+        if entity_type == 'users':
+            opts = session.get(_import_session_key(entity_type) + '_opts') or {}
+            if request.form.get('modo') in ('internos', 'externos'):
+                opts['mode'] = request.form.get('modo')
+            force = (request.form.get('force_company_id') or '').strip()
+            opts['force_company_id'] = int(force) if force.isdigit() else None
+            # Checkbox: solo False si viene el form sin marcar (hidden 0 + checkbox)
+            if 'assign_pin' in request.form:
+                opts['assign_pin'] = request.form.get('assign_pin') in ('1', 'on', 'true', 'True')
+            if 'notify_pin' in request.form:
+                opts['notify_pin'] = request.form.get('notify_pin') in ('1', 'on', 'true', 'True')
+            session[_import_session_key(entity_type) + '_opts'] = opts
         session.modified = True
     else:
         column_map = data.get("column_map")
@@ -274,12 +459,49 @@ def _handle_import_confirm(entity_type):
         return redirect(url_for(cfg["upload_endpoint"]))
 
     column_map = _column_map_from_form(entity_type) or data.get("column_map")
-    result = commit_import(path, entity_type, column_map)
+    import_options = _import_options_from_session(entity_type) if entity_type == 'users' else None
+    if entity_type == 'users':
+        import_options = dict(import_options or {})
+        if request.form.get('force_company_id') is not None:
+            force = (request.form.get('force_company_id') or '').strip()
+            import_options['force_company_id'] = int(force) if force.isdigit() else None
+        if request.form.get('modo') in ('internos', 'externos'):
+            import_options['mode'] = request.form.get('modo')
+        # Checkbox: hidden 0 + checkbox 1
+        import_options['assign_pin'] = request.form.get('assign_pin') in ('1', 'on', 'true', 'True')
+        import_options['notify_pin'] = (
+            import_options['assign_pin']
+            and request.form.get('notify_pin') in ('1', 'on', 'true', 'True')
+        )
+        session[_import_session_key(entity_type) + '_opts'] = {
+            k: import_options.get(k)
+            for k in ('mode', 'force_company_id', 'assign_pin', 'notify_pin')
+        }
+        session.modified = True
+
+    result = commit_import(
+        path,
+        entity_type,
+        column_map,
+        row_edits_form=request.form,
+        import_options=import_options,
+    )
+    cfg = _apply_import_nav_context(entity_type, cfg)
+    from_onb = bool(cfg.get('from_onboarding'))
     _clear_import_session(entity_type)
+    if from_onb:
+        # Tras éxito, el botón de vuelta sigue a primeros pasos
+        session[_import_nav_key(entity_type)] = {'from_onboarding': True}
+        session.modified = True
 
     if not result.get("success"):
         flash(result.get("message") or "Error en la importación", "danger")
-        return redirect(url_for(cfg["upload_endpoint"]))
+        kwargs = {}
+        if from_onb:
+            kwargs['desde'] = 'primeros-pasos'
+        if entity_type == 'users' and (import_options or {}).get('mode'):
+            kwargs['modo'] = import_options['mode']
+        return redirect(url_for(cfg["upload_endpoint"], **kwargs))
 
     return render_template(
         "admin_import_wizard.html",
@@ -292,6 +514,8 @@ def _handle_import_confirm(entity_type):
         imported=result.get("imported") or [],
         created_companies=result.get("created_companies") or [],
         step=3,
+        from_onboarding=from_onb,
+        import_mode=(import_options or {}).get('mode') if entity_type == 'users' else None,
     )
 
 
@@ -1696,7 +1920,11 @@ def primeros_pasos():
                 )
             elif accion == "fichaje":
                 set_tenant_config(CONFIG_FICHAJE_OPERARIO, "True")
-                flash("Fichaje móvil activado. Los operarios ya pueden entrar en /mi.", "success")
+                url_mi = url_for("operarios.entrar", _external=True)
+                flash(
+                    f"Fichaje activado. Comparte esta dirección con tus operarios: {url_mi}",
+                    "success",
+                )
             elif accion == "informe":
                 from app.services.onboarding_service import marcar_informe_visto
                 marcar_informe_visto()
@@ -1748,11 +1976,13 @@ def primeros_pasos():
         return redirect(url_for("admin.panel"))
 
     obra_hecha = any(p['id'] == 'obra' and p['hecho'] for p in estado['pasos'])
+    url_fichar = url_for("operarios.entrar", _external=True)
     return render_template(
         "admin_primeros_pasos.html",
         onboarding=estado,
         demo_cantidades=demo_cantidades(),
         empresa_vacia=not obra_hecha,
+        url_fichar=url_fichar,
     )
 
 
@@ -2224,7 +2454,7 @@ def create_user():
 
         pin_form = (request.form.get("pin") or "").strip()
         pin_msg = ""
-        if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN):
+        if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
             from app.services.pin_auth_service import (
                 PinAuthError,
                 asignar_pin_explicito,
@@ -2443,12 +2673,11 @@ def planificador_jo():
     empresas = Company.query.order_by(Company.nombre).all()
     
     if current_user.role in [ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH]:
-        today = date.today()
-        # Filtro blindado: Ni finalizadas, ni borradas lógicamente, ni pasadas de fecha
+        # Misma lógica que el API: no finalizadas / no borradas.
+        # Sin filtro por fecha_fin (imports con fin pasado siguen listables).
         todas_obras = Obra.query.filter(
             func.lower(Obra.estado) != 'finalizada',
-            Obra.is_deleted != True,
-            or_(Obra.fecha_fin == None, Obra.fecha_fin >= today)
+            Obra.is_deleted.is_(False),
         ).order_by(Obra.nombre).all()
         
         # Cargamos los Jefes de Obra para el nuevo desplegable
@@ -2470,13 +2699,13 @@ def planificador_jo():
 @login_required
 def api_planificador_resources():
     jefe_id = request.args.get('jefe_id')
-    today = date.today()
-    
+
     # Empaquetamos los filtros para que sean idénticos en todas las búsquedas
+    # No filtramos por fecha_fin: obras «En Curso» con fin pasado (Excel antiguo)
+    # deben seguir planificables; el tablero tampoco excluye por fecha fin.
     base_filters = [
         func.lower(Obra.estado) != 'finalizada',
-        Obra.is_deleted != True,
-        or_(Obra.fecha_fin == None, Obra.fecha_fin >= today)
+        Obra.is_deleted.is_(False),
     ]
     
     if current_user.role == ROLE_JEFE:
@@ -2516,12 +2745,9 @@ def api_planificador_events():
     
     start_date = datetime.fromisoformat(start_str.replace('Z', '')).date() if start_str else datetime.today().date()
     end_date = datetime.fromisoformat(end_str.replace('Z', '')).date() if end_str else start_date + timedelta(days=30)
-    today = date.today()
-
     base_filters = [
         func.lower(Obra.estado) != 'finalizada',
-        Obra.is_deleted != True,
-        or_(Obra.fecha_fin == None, Obra.fecha_fin >= today)
+        Obra.is_deleted.is_(False),
     ]
     
     # Recopilamos IDs asegurándonos de aplicar los mismos filtros blindados
@@ -3318,9 +3544,11 @@ def system_logs():
                 db.session.commit()
 
         if category in LABORAL_LOG_CATEGORIES:
-            laboral_acked_ids = get_laboral_acknowledged_ids(
-                current_user.id, [log.id for log in logs]
-            )
+            from app.services.tenant_modules import has_avisos_laborales
+            if has_avisos_laborales():
+                laboral_acked_ids = get_laboral_acknowledged_ids(
+                    current_user.id, [log.id for log in logs]
+                )
 
     active_prefs = []
     if current_user.role == ROLE_ADMIN:
@@ -3328,6 +3556,8 @@ def system_logs():
         active_prefs = [p.category for p in all_prefs if p.is_active]
 
     today = today_local()
+    from app.services.tenant_modules import has_avisos_laborales
+    avisos_laborales = has_avisos_laborales()
     return render_template(
         "admin_logs.html",
         logs=logs,
@@ -3335,7 +3565,7 @@ def system_logs():
         active_prefs=active_prefs,
         log_unread_by_category=(
             get_unread_laboral_logs_by_category(current_user.id)
-            if is_laboral(current_user)
+            if is_laboral(current_user) and avisos_laborales
             else get_unread_logs_by_category(current_user.id, active_only=True)
         ),
         laboral_acked_ids=laboral_acked_ids,
@@ -3345,6 +3575,7 @@ def system_logs():
         default_date_to=today.strftime('%Y-%m-%d'),
         can_manage_log_prefs=(current_user.role == ROLE_ADMIN),
         log_tabs=allowed_categories,
+        tenant_has_avisos_laborales=avisos_laborales,
     )
 
 
@@ -3352,6 +3583,9 @@ def system_logs():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def acknowledge_system_log(log_id):
+    from app.services.tenant_modules import has_avisos_laborales
+    if not has_avisos_laborales():
+        return jsonify({'ok': False, 'error': 'No disponible'}), 404
     from app.services.log_notification_service import acknowledge_log
     acknowledge_log(current_user.id, log_id)
     return jsonify({'ok': True})
@@ -3361,6 +3595,9 @@ def acknowledge_system_log(log_id):
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def unacknowledge_system_log(log_id):
+    from app.services.tenant_modules import has_avisos_laborales
+    if not has_avisos_laborales():
+        return jsonify({'ok': False, 'error': 'No disponible'}), 404
     from app.services.log_notification_service import unacknowledge_log
     unacknowledge_log(current_user.id, log_id)
     return jsonify({'ok': True})
@@ -3371,6 +3608,9 @@ def unacknowledge_system_log(log_id):
 @roles_required(ROLE_ADMIN)
 def acknowledge_all_laboral_system_logs():
     """Admin: marca como leídos TODOS los avisos laborales para todos los usuarios."""
+    from app.services.tenant_modules import has_avisos_laborales
+    if not has_avisos_laborales():
+        return jsonify({'ok': False, 'error': 'No disponible'}), 404
     from app.services.log_notification_service import acknowledge_all_laboral_logs_global
     remaining = acknowledge_all_laboral_logs_global()
     return jsonify({'ok': True, 'remaining': remaining})

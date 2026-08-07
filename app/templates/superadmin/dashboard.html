@@ -258,6 +258,9 @@
                 {% if key == 'registro_jornada' and (not t.modulos_activos or t.modulos_activos.get(key) is none) %}
                     {% set activo = True %}
                 {% endif %}
+                {% if key == 'avisos_laborales' and (not t.modulos_activos or t.modulos_activos.get(key) is none) and (t.subdominio or '')|lower == 'soltec' %}
+                    {% set activo = True %}
+                {% endif %}
                 
                 <div class="custom-control custom-switch mb-3">
                     <input type="checkbox" class="custom-control-input odoo-switch" data-tenant="{{ t.id }}" data-modulo="{{ key }}" name="modulos" value="{{ key }}" id="modModal_{{ t.id }}_{{ key }}" {% if activo %}checked{% endif %}>
@@ -271,6 +274,8 @@
                     <small class="text-muted d-block ml-4 mb-3">Muestra <code>/mi</code> y sus ajustes (PIN, geolocalización, Oficina como obra). Para clientes ERP puros puedes dejarlo apagado.</small>
                 {% elif key == 'registro_jornada' %}
                     <small class="text-muted d-block ml-4 mb-3">Visible por defecto. Apágalo si no quieres enseñar el módulo de Inspección en este cliente.</small>
+                {% elif key == 'avisos_laborales' %}
+                    <small class="text-muted d-block ml-4 mb-3">Personalización: click en logs Planificación/Solicitud para acusar avisos (flujo laboral Soltec). Solo actívalo en clientes que lo pidan.</small>
                 {% endif %}
                 
                 {% if key == 'odoo' %}

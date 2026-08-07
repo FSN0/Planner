@@ -230,6 +230,8 @@ body {
 
 .boton--entrar   { background: var(--entrar); }
 .boton--entrar:active   { background: var(--entrar-activo); }
+.boton--primario { background: var(--entrar); }
+.boton--primario:active { background: var(--entrar-activo); }
 .boton--salir    { background: var(--salir); }
 .boton--salir:active    { background: var(--salir-activo); }
 .boton--pausa,
@@ -435,6 +437,38 @@ body {
 .entrar__ayuda {
     color: var(--texto-suave);
     margin: 0 0 20px;
+}
+
+/* Pantallas de acceso / PIN: legibles también en escritorio */
+.entrar--auth {
+    max-width: 420px;
+    margin: 0 auto;
+}
+
+body:not(:has(.barra-inferior)) .contenido {
+    padding-bottom: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+@media (min-width: 768px) {
+    .entrar--auth {
+        margin-top: 2rem;
+        padding: 28px 28px 32px;
+        background: var(--superficie);
+        border: 1px solid var(--borde);
+        border-radius: 20px;
+    }
+
+    .entrar--auth .titulo {
+        font-size: 26px;
+    }
+
+    .boton {
+        min-height: 64px;
+        font-size: 20px;
+    }
 }
 
 .campo__control--pin {

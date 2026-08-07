@@ -22,9 +22,16 @@ from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db
-from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO, User
+from app.models import (
+    ROLE_ADMIN,
+    ROLE_JEFE,
+    ROLE_LABORAL,
+    ROLE_OPERARIO,
+    ROLE_RRHH,
+    User,
+)
 
-ROLES_CON_PIN = (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN)
+ROLES_CON_PIN = (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
 
 PIN_MIN = 4
 PIN_MAX = 6
@@ -79,6 +86,23 @@ def _email_parece_real(email):
     return True
 
 
+def asegurar_rol_con_pin(user):
+    """
+    Garantiza un rol que admite PIN de fichaje.
+
+    Roles inventados en Excel (oficial, peón…) se corrigen a operario.
+    Operario, jefe, admin, laboral y RRHH pueden fichar (obra u oficina).
+    """
+    role = (user.role or '').strip().lower()
+    if role in ROLES_CON_PIN:
+        if user.role != role:
+            user.role = role
+        return user
+    # Rol desconocido / legacy de importación → operario
+    user.role = ROLE_OPERARIO
+    return user
+
+
 def asignar_pin(user, pin, *, must_change=False, notify=False, actor=None):
     """
     Guarda el hash del PIN. No hace commit.
@@ -87,11 +111,13 @@ def asignar_pin(user, pin, *, must_change=False, notify=False, actor=None):
     notify: si True y el usuario tiene email real, envía enlace para definir PIN
     (nunca el PIN en claro).
     """
-    if user.role not in ROLES_CON_PIN:
-        raise PinAuthError('Este perfil no usa PIN de fichaje.')
+    asegurar_rol_con_pin(user)
     pin = validar_pin(pin)
     user.pin_hash = generate_password_hash(pin)
     user.pin_must_change = bool(must_change)
+    # Sin activo no pueden fichar: al darles PIN se asume que quieres que entren
+    if hasattr(user, 'active') and not user.active:
+        user.active = True
     if notify:
         notificar_definir_pin_por_email(user, actor=actor)
     return user
@@ -279,8 +305,7 @@ def enviar_acceso_fichaje(user, pin_plano=None, *, actor=None, regenerar=False):
 
     Devuelve (ok_envio, pin_mostrable_admin_o_None).
     """
-    if user.role not in ROLES_CON_PIN:
-        raise PinAuthError('Este perfil no usa PIN de fichaje.')
+    asegurar_rol_con_pin(user)
     pin = (pin_plano or '').strip()
     pin_mostrable = None
     if pin:

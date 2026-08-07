@@ -1,0 +1,126 @@
+{% extends 'empleado/base.html' %}
+{% block title %}{{ _('Fichar') }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/operario.css') }}">
+<style>
+  /* Adaptación escritorio: el panel de fichaje dentro del shell empleado */
+  .empleado-fichar-wrap {
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .empleado-fichar-wrap .cabecera { display: none; }
+  .empleado-fichar-wrap .barra-inferior { display: none; }
+  .empleado-fichar-wrap .contenido { padding: 0; }
+  .empleado-fichar-wrap body,
+  .empleado-fichar-wrap { background: transparent; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set dias_semana = [_('Lunes'), _('Martes'), _('Miércoles'), _('Jueves'), _('Viernes'), _('Sábado'), _('Domingo')] %}
+{% set meses = [_('enero'), _('febrero'), _('marzo'), _('abril'), _('mayo'), _('junio'), _('julio'),
+                _('agosto'), _('septiembre'), _('octubre'), _('noviembre'), _('diciembre')] %}
+
+<div class="empleado-card empleado-fichar-wrap">
+  <h2 class="mb-3"><i class="fas fa-fingerprint mr-2 text-success"></i>{{ _('Fichar') }}</h2>
+  <p class="empleado-muted mb-3">{{ _('Registra entrada, pausas y salida desde el ordenador, igual que en el móvil.') }}</p>
+
+  <div class="fichaje"
+       data-url-fichar="{{ url_for('operarios.api_fichar') }}"
+       data-url-conformar="{{ url_for('operarios.api_conformar') }}"
+       data-modo-geo="{{ modo_geo }}"
+       data-estado="{{ estado }}">
+
+    <div class="reloj">
+        <div class="reloj__hora" id="reloj-hora">--:--</div>
+        <div class="reloj__fecha">
+            {{ dias_semana[fecha.weekday()] }}, {{ fecha.day }} {{ _('de') }} {{ meses[fecha.month - 1] }}
+        </div>
+    </div>
+
+    <div class="estado estado--{{ estado }}" id="tarjeta-estado">
+        <div class="estado__etiqueta" id="estado-etiqueta">
+            {% if estado == 'dentro' %}{{ _('Jornada iniciada') }}
+            {% elif estado == 'pausa' %}{{ _('En pausa') }}
+            {% else %}{{ _('Fuera de jornada') }}{% endif %}
+        </div>
+        <div class="estado__obra" id="estado-obra">
+            {% if obra_actual %}{{ obra_actual.nombre }}{% else %}&mdash;{% endif %}
+        </div>
+        <div class="estado__acumulado">
+            {{ _('Hoy llevas') }} <strong id="estado-minutos">{{ '%d h %02d min' | format(minutos // 60, minutos % 60) }}</strong>
+        </div>
+    </div>
+
+    <div class="mensaje" id="mensaje" role="status" aria-live="polite" hidden></div>
+
+    {% if estado == 'fuera' %}
+        <div class="campo">
+            <label class="campo__etiqueta" for="obra">{{ _('¿Dónde vas a trabajar?') }}</label>
+            <select class="campo__control" id="obra" name="obra">
+                {% if not obras_planificadas and not otras_obras %}
+                    <option value="">{{ _('No hay obras disponibles') }}</option>
+                {% endif %}
+                {% if obras_planificadas %}
+                    <optgroup label="{{ _('Tu planificación de hoy') }}">
+                        {% for obra in obras_planificadas %}
+                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                        {% endfor %}
+                    </optgroup>
+                {% endif %}
+                {% if otras_obras %}
+                    <optgroup label="{{ _('Otras obras') }}">
+                        {% for obra in otras_obras %}
+                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                        {% endfor %}
+                    </optgroup>
+                {% endif %}
+            </select>
+        </div>
+        <button class="boton boton--entrar" type="button" data-tipo="entrada">{{ _('Entrar') }}</button>
+    {% else %}
+        <div class="botonera">
+            {% if estado == 'dentro' %}
+                <button class="boton boton--pausa" type="button" data-tipo="pausa_inicio">{{ _('Pausa') }}</button>
+            {% else %}
+                <button class="boton boton--reanudar" type="button" data-tipo="pausa_fin">{{ _('Reanudar') }}</button>
+            {% endif %}
+            <button class="boton boton--salir" type="button" data-tipo="salida">{{ _('Salir') }}</button>
+        </div>
+    {% endif %}
+
+    {% if puede_conformar %}
+        <button class="boton boton--conforme" type="button" id="btn-conformar" data-tipo="conforme">
+            {{ _('Firmar jornada de hoy') }}
+        </button>
+    {% elif conforme %}
+        <p class="nota-legal" id="conforme-ok">{{ _('Jornada de hoy firmada. Gracias.') }}</p>
+    {% endif %}
+
+    <section class="jornada mt-3">
+        <h2 class="jornada__titulo">{{ _('Movimientos de hoy') }}</h2>
+        <ul class="jornada__lista" id="lista-eventos">
+            {% for evento in eventos %}
+                <li class="jornada__item jornada__item--{{ evento.tipo }}">
+                    <span class="jornada__hora">{{ evento.ocurrido_en | format_time }}</span>
+                    <span class="jornada__tipo">
+                        {% if evento.tipo == 'entrada' %}{{ _('Entrada') }}
+                        {% elif evento.tipo == 'salida' %}{{ _('Salida') }}
+                        {% elif evento.tipo == 'pausa_inicio' %}{{ _('Inicio pausa') }}
+                        {% elif evento.tipo == 'pausa_fin' %}{{ _('Fin pausa') }}
+                        {% else %}{{ evento.tipo }}{% endif %}
+                    </span>
+                </li>
+            {% else %}
+                <li class="jornada__vacio text-muted">{{ _('Sin movimientos todavía.') }}</li>
+            {% endfor %}
+        </ul>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/operario-fichaje.js') }}"></script>
+{% endblock %}

@@ -171,7 +171,7 @@
       </form>
     </section>
 
-    {% if edit_mode and user.role in ['operario', 'jefe_obra', 'admin'] %}
+    {% if edit_mode and user.role in ['operario', 'jefe_obra', 'admin', 'laboral', 'rrhh'] %}
     <section class="admin-panel admin-form-panel mt-3">
       <div class="admin-panel-header">
         <h2 class="admin-panel-title">{{ _('PIN de fichaje') }}</h2>

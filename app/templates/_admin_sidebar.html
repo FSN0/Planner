@@ -223,7 +223,7 @@
           <i class="fas fa-history fa-fw"></i>
           <span>{{ _('Logs') }}</span>
           {% set show_classic_badge = unread_logs_count and unread_logs_count > 0 %}
-          {% set show_laboral_badge = unread_laboral_count and unread_laboral_count > 0 %}
+          {% set show_laboral_badge = tenant_has_avisos_laborales and unread_laboral_count and unread_laboral_count > 0 %}
           {% if show_classic_badge or show_laboral_badge %}
           <span class="sidebar-badges">
             {% if show_classic_badge %}

@@ -18,7 +18,7 @@
         <span class="page-toolbar-count">{{ _('Auditoría y trazabilidad') }}</span>
       </div>
       <div class="page-toolbar-actions">
-        {% if unread_laboral_count and unread_laboral_count > 0 and current_user.role == 'admin' %}
+        {% if tenant_has_avisos_laborales and unread_laboral_count and unread_laboral_count > 0 and current_user.role == 'admin' %}
         <button type="button" class="btn-admin btn-admin-ghost" id="btnAckAllLaboral"
                 title="{{ _('Marca como leídos los avisos laborales de todos (admin + laboral)') }}">
           <i class="fas fa-check-double"></i> {{ _('Leer todas') }}
@@ -44,7 +44,9 @@
           <label><input type="checkbox" name="pref_accesos" {% if 'accesos' in active_prefs %}checked{% endif %}> {{ _('Accesos') }}</label>
           <label><input type="checkbox" name="pref_valoraciones" {% if 'valoraciones' in active_prefs %}checked{% endif %}> {{ _('Valoraciones') }}</label>
           <label><input type="checkbox" name="pref_planificacion" {% if 'planificacion' in active_prefs %}checked{% endif %}> {{ _('Planificación') }}</label>
+          {% if tenant_has_avisos_laborales %}
           <label><input type="checkbox" name="pref_solicitud" {% if 'solicitud' in active_prefs %}checked{% endif %}> {{ _('Solicitud') }}</label>
+          {% endif %}
           <label><input type="checkbox" name="pref_obras" {% if 'obras' in active_prefs %}checked{% endif %}> {{ _('Obras') }}</label>
           <label><input type="checkbox" name="pref_fichajes" {% if 'fichajes' in active_prefs %}checked{% endif %}> {{ _('Fichajes') }}</label>
         </div>
@@ -81,7 +83,7 @@
           {% include 'components/_person_day_timeline_panel.html' %}
         </div>
       {% else %}
-        {% set is_laboral_tab = current_category in ['solicitud', 'planificacion'] %}
+        {% set is_laboral_tab = tenant_has_avisos_laborales and current_category in ['solicitud', 'planificacion'] %}
         <div class="admin-table-scroll">
           <table class="filterable-table admin-data-table mb-0" id="logsTable">
             <thead>

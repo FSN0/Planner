@@ -73,8 +73,10 @@ def estado_onboarding():
         }
 
     obras_vivas = Obra.query.filter(Obra.is_deleted.is_(False)).count()
+    # No exigir active=True: la importación a menudo deja activo=No en Excel
+    # y el paso 2 debe OK si ya hay gente con PIN listos para fichar.
     operarios = User.query.filter_by(
-        role=ROLE_OPERARIO, is_deleted=False, active=True
+        role=ROLE_OPERARIO, is_deleted=False
     ).all()
     con_pin = sum(1 for u in operarios if tiene_pin(u))
     fichaje = fichaje_operario_activo()
@@ -93,15 +95,19 @@ def estado_onboarding():
             'titulo': 'Ten plantilla lista para fichar',
             'hecho': len(operarios) > 0 and con_pin > 0,
             'hint': (
-                'Alta al menos un operario con PIN: sin PIN no puede entrar en /mi. '
-                'Si ya importaste empleados, asígnales PIN al editar su ficha.'
+                'Alta o importa al menos un operario con PIN: sin PIN no puede '
+                'entrar a fichar. Al importar, marca «Activar PIN» para asignarlo '
+                'y avisar por correo.'
             ),
         },
         {
             'id': 'fichaje',
-            'titulo': 'Activa el fichaje desde el móvil',
+            'titulo': 'Quiero que mis operarios fichen',
             'hecho': fichaje,
-            'hint': 'Abre el acceso a /mi para el rol operario.',
+            'hint': (
+                'Activa el fichaje y te damos la dirección completa para que '
+                'entren desde el móvil con DNI y PIN.'
+            ),
         },
         {
             'id': 'informe',

@@ -55,6 +55,7 @@ _JEFE_RULES = (
 _EMPLEADO_RULES = (
     ('/empleado/ausencias', 'operario_ausencias', 'r', {'POST': 'w'}),
     ('/empleado/calendario', 'operario_calendario', 'r', {}),
+    ('/empleado/fichar', 'operario_fichaje', 'r', {}),
     ('/empleado/fichajes', 'operario_fichaje', 'r', {}),
     ('/empleado', 'operario_web', 'r', {}),
 )

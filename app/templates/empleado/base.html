@@ -13,12 +13,32 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/universal_calendar.css') }}">
   <style>
     .empleado-shell { max-width: 960px; margin: 0 auto; padding: 1rem 1rem 2.5rem; }
-    .empleado-nav { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1.25rem; }
+    .empleado-top {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;
+      padding-bottom: 0.85rem; border-bottom: 1px solid #e2e8f0;
+    }
+    .empleado-brand {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: #94a3b8; margin-bottom: 0.15rem;
+    }
+    .empleado-nav {
+      display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1.25rem;
+      align-items: center;
+    }
     .empleado-nav a {
-      font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.75rem;
-      border-radius: 6px; color: #334155; text-decoration: none; background: #f1f5f9;
+      font-size: 0.85rem; font-weight: 600; padding: 0.45rem 0.85rem;
+      border-radius: 8px; color: #334155; text-decoration: none; background: #f1f5f9;
     }
     .empleado-nav a.is-active, .empleado-nav a:hover { background: #e2e8f0; color: #0f172a; }
+    .empleado-nav a.empleado-nav-fichar {
+      background: #dcfce7; color: #166534;
+    }
+    .empleado-nav a.empleado-nav-fichar.is-active,
+    .empleado-nav a.empleado-nav-fichar:hover { background: #bbf7d0; color: #14532d; }
+    .empleado-nav a.empleado-nav-salir {
+      margin-left: auto; background: transparent; border: 1px solid #e2e8f0; color: #64748b;
+    }
     .empleado-card {
       background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
       padding: 1.1rem 1.25rem; margin-bottom: 1rem;
@@ -33,31 +53,41 @@
     {% include "components/_flashes.html" %}
   </div>
   <div class="empleado-shell">
-    <header class="d-flex justify-content-between align-items-center mb-3 flex-wrap" style="gap: 0.5rem;">
+    <header class="empleado-top">
       <div>
-        <div class="text-muted small font-weight-bold text-uppercase" style="letter-spacing: .04em;">SignaPlan</div>
+        <div class="empleado-brand">SignaPlan</div>
         <h1 class="h4 mb-0 font-weight-bold">{{ current_user.name }} {{ current_user.lastname }}</h1>
       </div>
-      <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-outline-secondary">
-        <i class="fas fa-sign-out-alt"></i> {{ _('Salir') }}
-      </a>
     </header>
 
     <nav class="empleado-nav" aria-label="{{ _('Navegación') }}">
-      <a href="{{ url_for('empleado.inicio') }}"
-         class="{% if request.endpoint == 'empleado.inicio' %}is-active{% endif %}">{{ _('Inicio') }}</a>
       {% if user_can(current_user, 'operario_calendario', 'r') %}
       <a href="{{ url_for('empleado.calendario') }}"
-         class="{% if request.endpoint == 'empleado.calendario' %}is-active{% endif %}">{{ _('Mi calendario') }}</a>
+         class="{% if request.endpoint == 'empleado.calendario' or request.endpoint == 'empleado.inicio' %}is-active{% endif %}">
+        <i class="fas fa-calendar-alt mr-1"></i>{{ _('Mi calendario') }}
+      </a>
+      {% else %}
+      <a href="{{ url_for('empleado.inicio') }}"
+         class="{% if request.endpoint == 'empleado.inicio' %}is-active{% endif %}">{{ _('Inicio') }}</a>
       {% endif %}
+
       {% if tenant_has_fichaje_operario and user_can(current_user, 'operario_fichaje', 'r') %}
+      <a href="{{ url_for('empleado.fichar') }}"
+         class="empleado-nav-fichar {% if request.endpoint == 'empleado.fichar' %}is-active{% endif %}">
+        <i class="fas fa-fingerprint mr-1"></i>{{ _('Fichar') }}
+      </a>
       <a href="{{ url_for('empleado.fichajes') }}"
-         class="{% if request.endpoint == 'empleado.fichajes' %}is-active{% endif %}">{{ _('Mis fichajes') }}</a>
+         class="{% if request.endpoint == 'empleado.fichajes' %}is-active{% endif %}">{{ _('Mis horas') }}</a>
       {% endif %}
+
       {% if user_can(current_user, 'operario_ausencias', 'r') %}
       <a href="{{ url_for('empleado.ausencias') }}"
          class="{% if request.endpoint == 'empleado.ausencias' %}is-active{% endif %}">{{ _('Mis ausencias') }}</a>
       {% endif %}
+
+      <a href="{{ url_for('auth.logout') }}" class="empleado-nav-salir">
+        <i class="fas fa-sign-out-alt mr-1"></i>{{ _('Cerrar sesión') }}
+      </a>
     </nav>
 
     {% block content %}{% endblock %}

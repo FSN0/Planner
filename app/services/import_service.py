@@ -231,7 +231,7 @@ ENTITY_LABELS = {
     "companies": "Subcontratas",
 }
 
-PREVIEW_SAMPLE_ROWS = 15
+PREVIEW_SAMPLE_ROWS = 500  # Editable: mostrar (casi) todas las filas
 
 
 # ---------------------------------------------------------------------------
@@ -502,6 +502,15 @@ def _preview_obra_row(row: pd.Series, column_map: dict, row_number: int) -> dict
     if not fecha_fin:
         fecha_fin = fecha_inicio + timedelta(days=365)
         data["fecha_fin"] = fecha_fin.isoformat()
+    elif fecha_fin < date.today():
+        # Excel con obra ya «acabada» en papel: al importar para planificar
+        # extendemos un año desde hoy y avisamos (si no, el planificador las ocultaba).
+        messages.append(
+            f"Fecha fin {fecha_fin.isoformat()} ya pasada; se usará "
+            f"{(date.today() + timedelta(days=365)).isoformat()} al importar"
+        )
+        fecha_fin = date.today() + timedelta(days=365)
+        data["fecha_fin"] = fecha_fin.isoformat()
 
     if codigo:
         existing = Obra.query.filter(func.lower(Obra.codigo) == codigo.lower()).first()
@@ -512,11 +521,30 @@ def _preview_obra_row(row: pd.Series, column_map: dict, row_number: int) -> dict
                 "messages": [f"Ya existe una obra con código «{codigo}»"],
                 "data": data,
             }
+        if len(codigo) > _OBRA_LIMITS["codigo"]:
+            messages.append(
+                f"Código demasiado largo ({len(codigo)}>{_OBRA_LIMITS['codigo']}); se acortará al importar"
+            )
 
+    if len(nombre) > _OBRA_LIMITS["nombre"]:
+        messages.append(
+            f"Nombre demasiado largo ({len(nombre)}>{_OBRA_LIMITS['nombre']}); se acortará al importar"
+        )
+    if len(cliente) > _OBRA_LIMITS["cliente"]:
+        messages.append(
+            f"Cliente demasiado largo ({len(cliente)}>{_OBRA_LIMITS['cliente']}); "
+            "se acortará en ficha y el texto completo irá a descripción"
+        )
+    if len(direccion) > _OBRA_LIMITS["ubicacion"]:
+        messages.append(
+            f"Dirección demasiado larga ({len(direccion)}>{_OBRA_LIMITS['ubicacion']}); se acortará al importar"
+        )
+
+    # Avisos de longitud no bloquean: status sigue 'new'
     return {
         "row_number": row_number,
         "status": "new",
-        "messages": [],
+        "messages": messages,
         "data": data,
         "_parsed": {
             "codigo": codigo or None,
@@ -530,33 +558,48 @@ def _preview_obra_row(row: pd.Series, column_map: dict, row_number: int) -> dict
 
 
 def _normalize_role(raw: str) -> str:
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
+
     role = (raw or "").strip().lower().replace(" ", "_")
     aliases = {
         "operario": ROLE_OPERARIO,
         "trabajador": ROLE_OPERARIO,
         "empleado": ROLE_OPERARIO,
-        "admin": "admin",
-        "administrador": "admin",
-        "jefe": "jefe_obra",
-        "jefe_obra": "jefe_obra",
-        "jefe de obra": "jefe_obra",
-        "rrhh": "rrhh",
-        "recursos_humanos": "rrhh",
-        "laboral": "laboral",
+        "oficial": ROLE_OPERARIO,
+        "peon": ROLE_OPERARIO,
+        "peón": ROLE_OPERARIO,
+        "admin": ROLE_ADMIN,
+        "administrador": ROLE_ADMIN,
+        "jefe": ROLE_JEFE,
+        "jefe_obra": ROLE_JEFE,
+        "jefe_de_obra": ROLE_JEFE,
+        "jefe de obra": ROLE_JEFE,
+        "rrhh": ROLE_RRHH,
+        "recursos_humanos": ROLE_RRHH,
+        "laboral": ROLE_LABORAL,
     }
-    return aliases.get(role, role or ROLE_OPERARIO)
+    if not role:
+        return ROLE_OPERARIO
+    mapped = aliases.get(role, role)
+    known = {ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH}
+    # Roles inventados del Excel → operario (si no, no pueden tener PIN)
+    if mapped not in known:
+        return ROLE_OPERARIO
+    return mapped
 
 
 def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict:
     email = _cell_str(_mapped_value(row, column_map, "email")).lower()
-    rol = _normalize_role(_cell_str(_mapped_value(row, column_map, "rol")))
+    rol_raw = _cell_str(_mapped_value(row, column_map, "rol"))
+    rol = _normalize_role(rol_raw)
     nombre = _cell_str(_mapped_value(row, column_map, "nombre"))
     apellidos = _cell_str(_mapped_value(row, column_map, "apellidos"))
     dni = _cell_str(_mapped_value(row, column_map, "dni")).upper().replace(" ", "")
     empresa = _cell_str(_mapped_value(row, column_map, "empresa"))
     password = _cell_str(_mapped_value(row, column_map, "password"))
     pin = _cell_str(_mapped_value(row, column_map, "pin"))
-    activo = _parse_bool(_mapped_value(row, column_map, "activo"), default=False)
+    # Activo por defecto: si no, el paso 2 de primeros pasos no cuenta la plantilla
+    activo = _parse_bool(_mapped_value(row, column_map, "activo"), default=True)
     recibir = _parse_bool(_mapped_value(row, column_map, "recibir_emails"), default=True)
 
     data = {
@@ -571,6 +614,21 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
         "recibir_emails": "Sí" if recibir else "No",
     }
     messages: list[str] = []
+
+    if rol_raw and _normalize_role(rol_raw) == ROLE_OPERARIO:
+        raw_l = rol_raw.strip().lower().replace(" ", "_")
+        if raw_l not in (
+            ROLE_OPERARIO, "trabajador", "empleado", "oficial", "peon", "peón", ""
+        ):
+            # Solo avisar si el Excel traía algo distinto de sinónimos de operario
+            from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
+            known_aliases = {
+                ROLE_OPERARIO, "trabajador", "empleado", "oficial", "peon", "peón",
+                ROLE_ADMIN, "administrador", ROLE_JEFE, "jefe", "jefe_obra", "jefe_de_obra",
+                ROLE_RRHH, "recursos_humanos", ROLE_LABORAL,
+            }
+            if raw_l not in known_aliases:
+                messages.append(f"Rol «{rol_raw}» no reconocido → Operario")
 
     if not any([email, nombre, apellidos, dni, empresa]):
         return {
@@ -818,13 +876,74 @@ def preview_import(file_or_path, entity_type: str, column_map: Optional[dict] = 
 # Commit
 # ---------------------------------------------------------------------------
 
-def _commit_obra(parsed: dict) -> None:
+# Límites reales del modelo Obra (app.models.Obra)
+_OBRA_LIMITS = {
+    "codigo": 20,
+    "nombre": 100,
+    "cliente": 100,
+    "ubicacion": 100,
+}
+
+
+def _clip_str(value, max_len: int) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) <= max_len:
+        return text
+    return text[:max_len].rstrip()
+
+
+def _friendly_import_error(exc: BaseException) -> str:
+    """Mensaje legible; nunca volcar SQLAlchemy/psycopg2 al usuario."""
+    if isinstance(exc, ValueError):
+        return str(exc)
+    raw = str(exc) or ""
+    low = raw.lower()
+    if (
+        "stringdatarighttruncation" in low
+        or "value too long" in low
+        or "character varying" in low
+    ):
+        return (
+            "Un texto es demasiado largo para la base de datos "
+            "(código máx. 20; nombre/cliente/ubicación máx. 100). "
+            "Acórtalo en la vista previa e inténtalo de nuevo."
+        )
+    if "unique" in low or "duplicate" in low:
+        return "Ya existe un registro con el mismo código o identificador."
+    return "No se pudo guardar esta fila. Revisa los datos e inténtalo de nuevo."
+
+
+def _commit_obra(parsed: dict) -> dict:
+    """Crea la obra respetando límites de columna. Devuelve resumen para la UI."""
+    codigo_full = (parsed.get("codigo") or "") or ""
+    nombre_full = parsed.get("nombre") or ""
+    cliente_full = (parsed.get("cliente") or "") or ""
+    ubicacion_full = (parsed.get("direccion") or "") or ""
+
+    codigo = _clip_str(codigo_full, _OBRA_LIMITS["codigo"])
+    nombre = _clip_str(nombre_full, _OBRA_LIMITS["nombre"])
+    cliente = _clip_str(cliente_full, _OBRA_LIMITS["cliente"])
+    ubicacion = _clip_str(ubicacion_full, _OBRA_LIMITS["ubicacion"])
+
+    if not nombre:
+        raise ValueError("Falta el nombre de la obra")
+
+    # El cliente completo (si era largo) va a descripción (Text); en cliente, versión corta.
+    if len(cliente_full) > _OBRA_LIMITS["cliente"]:
+        descripcion = cliente_full
+    else:
+        descripcion = cliente_full or None
+
     obra = Obra(
-        codigo=parsed.get("codigo"),
-        nombre=parsed["nombre"],
-        cliente=parsed.get("cliente"),
-        ubicacion=parsed.get("direccion"),
-        descripcion=parsed.get("cliente") or None,
+        codigo=codigo,
+        nombre=nombre,
+        cliente=cliente,
+        ubicacion=ubicacion,
+        descripcion=descripcion,
         fecha_inicio=parsed["fecha_inicio"],
         fecha_fin=parsed["fecha_fin"],
         estado="Pendiente",
@@ -833,9 +952,40 @@ def _commit_obra(parsed: dict) -> None:
         fecha_importacion=datetime.utcnow(),
     )
     db.session.add(obra)
+    return {
+        "codigo": codigo or "",
+        "nombre": nombre,
+    }
 
 
-def _ensure_company_for_user(empresa_nombre: str) -> tuple[Optional[Company], bool]:
+def _ensure_company_for_user(
+    empresa_nombre: str,
+    *,
+    mode: str | None = None,
+    force_company_id: int | None = None,
+) -> tuple[Optional[Company], bool]:
+    """
+    mode:
+      - 'internos': siempre la empresa interna del tenant (ignora texto Excel)
+      - 'externos': si force_company_id → esa; si no, match/crear por nombre (externa)
+      - None: comportamiento legado (match o crear externa)
+    """
+    mode = (mode or '').strip().lower() or None
+
+    if mode == 'internos':
+        internal = Company.query.filter_by(is_internal=True).order_by(Company.id).first()
+        if not internal:
+            raise ValueError(
+                'No hay empresa interna configurada. Crea o marca una empresa como interna.'
+            )
+        return internal, False
+
+    if force_company_id:
+        forced = Company.query.get(int(force_company_id))
+        if not forced:
+            raise ValueError('La empresa seleccionada no existe.')
+        return forced, False
+
     if not empresa_nombre:
         return None, False
     comp = Company.query.filter(func.lower(Company.nombre) == empresa_nombre.lower()).first()
@@ -852,17 +1002,45 @@ def _ensure_company_for_user(empresa_nombre: str) -> tuple[Optional[Company], bo
     return comp, True
 
 
-def _commit_user(parsed: dict) -> dict:
+def _commit_user(parsed: dict, *, import_options: Optional[dict] = None) -> dict:
     from app.services.pin_auth_service import (
         PinAuthError,
         asignar_pin_explicito,
         asignar_pin_generado,
     )
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO
+    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
 
-    comp, company_created = _ensure_company_for_user(parsed.get("empresa") or "")
+    opts = import_options or {}
+    mode = opts.get('mode')
+    force_company_id = opts.get('force_company_id')
+
+    empresa_txt = parsed.get("empresa") or ""
+    if mode == 'internos':
+        # El nombre visible en resultado será el de la empresa interna
+        internal = Company.query.filter_by(is_internal=True).order_by(Company.id).first()
+        empresa_txt = internal.nombre if internal else empresa_txt
+
+    comp, company_created = _ensure_company_for_user(
+        empresa_txt if mode != 'internos' else '',
+        mode=mode,
+        force_company_id=force_company_id if mode == 'externos' else None,
+    )
+    if mode == 'internos' and comp:
+        empresa_txt = comp.nombre
+    elif mode == 'externos' and force_company_id and comp:
+        empresa_txt = comp.nombre
+
     pwd = parsed.get("password") or secrets.token_urlsafe(16)
-    role = parsed.get("rol") or ROLE_OPERARIO
+    role = _normalize_role(parsed.get("rol") or ROLE_OPERARIO)
+    # Importación internos/externos: plantilla de obra → operario salvo jefe/admin explícito
+    if mode in ('internos', 'externos') and role not in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN):
+        role = ROLE_OPERARIO
+
+    # Personal importado activo salvo Excel/preview diga No
+    activo = True if parsed.get("activo") is None else bool(parsed.get("activo"))
+    if mode in ('internos', 'externos'):
+        activo = bool(parsed.get("activo", True))
+
     new_user = User(
         email=parsed["email"],
         password_hash=generate_password_hash(pwd),
@@ -871,7 +1049,7 @@ def _commit_user(parsed: dict) -> dict:
         lastname=parsed["apellidos"],
         dni=parsed["dni"],
         company_id=comp.id if comp else None,
-        active=bool(parsed.get("activo")),
+        active=activo,
         email_verified=True,
         receive_emails=bool(parsed.get("recibir_emails", True)),
     )
@@ -880,18 +1058,21 @@ def _commit_user(parsed: dict) -> dict:
 
     pin_plano = None
     pin_mode = None
-    if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN):
+    pin_mail = False
+    assign_pin = opts.get('assign_pin', True)
+    notify_pin = opts.get('notify_pin', True)
+    if assign_pin and role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         pin_in = (parsed.get("pin") or "").strip()
         try:
             if pin_in:
-                asignar_pin_explicito(new_user, pin_in, notify=True)
+                asignar_pin_explicito(new_user, pin_in, notify=bool(notify_pin))
                 pin_plano = pin_in
                 pin_mode = "explicit"
             else:
-                _, pin_plano = asignar_pin_generado(new_user, notify=True)
+                _, pin_plano = asignar_pin_generado(new_user, notify=bool(notify_pin))
                 pin_mode = "generated"
+            pin_mail = bool(notify_pin)
         except PinAuthError:
-            # No abortamos toda la importación: el usuario queda sin PIN usable.
             pin_plano = None
             pin_mode = "error"
 
@@ -901,12 +1082,13 @@ def _commit_user(parsed: dict) -> dict:
         "name": parsed["nombre"],
         "lastname": parsed["apellidos"],
         "dni": parsed["dni"],
-        "empresa": parsed.get("empresa") or "",
+        "empresa": empresa_txt or (comp.nombre if comp else ""),
         "company_created": company_created,
-        "active": bool(parsed.get("activo")),
+        "active": activo,
         "receive_emails": bool(parsed.get("recibir_emails", True)),
         "pin": pin_plano,
         "pin_mode": pin_mode,
+        "pin_mail": pin_mail,
     }
 
 
@@ -931,7 +1113,295 @@ def _commit_company(parsed: dict) -> None:
     db.session.add(company)
 
 
-def commit_import(file_or_path, entity_type: str, column_map: Optional[dict] = None) -> dict:
+def annotate_user_rows_for_mode(rows: list, import_options: Optional[dict] = None) -> list:
+    """Ajusta mensajes/empresa visible según modo internos/externos (sin tocar BD)."""
+    opts = import_options or {}
+    mode = (opts.get('mode') or '').strip().lower()
+    force_id = opts.get('force_company_id')
+    if not mode:
+        return rows
+
+    internal = Company.query.filter_by(is_internal=True).order_by(Company.id).first()
+    forced = Company.query.get(int(force_id)) if force_id else None
+
+    out = []
+    for row in rows:
+        r = dict(row)
+        data = dict(r.get('data') or {})
+        msgs = list(r.get('messages') or [])
+        parsed = dict(r.get('_parsed') or {})
+
+        if mode == 'internos':
+            if not internal:
+                if r.get('status') == 'new':
+                    r['status'] = 'error'
+                    msgs.append('No hay empresa interna en el sistema')
+            else:
+                data['empresa'] = internal.nombre
+                parsed['empresa'] = internal.nombre
+                if r.get('status') == 'new':
+                    msgs = [m for m in msgs if 'empresa' not in m.lower()]
+                    msgs.append(f'Empresa interna: {internal.nombre}')
+        elif mode == 'externos':
+            if forced:
+                data['empresa'] = forced.nombre
+                parsed['empresa'] = forced.nombre
+                if r.get('status') == 'new':
+                    msgs.append(f'Empresa forzada: {forced.nombre}')
+            elif not (data.get('empresa') or '').strip():
+                if r.get('status') == 'new':
+                    # Se creará al confirmar si hay texto; sin texto → sin empresa
+                    msgs.append('Sin empresa en Excel: se importará sin empresa (o créala en el texto)')
+            else:
+                if r.get('status') == 'new':
+                    existing = Company.query.filter(
+                        func.lower(Company.nombre) == data['empresa'].lower()
+                    ).first()
+                    if existing:
+                        msgs.append(f'Empresa existente: {existing.nombre}')
+                    else:
+                        msgs.append(f'Se creará empresa externa «{data["empresa"]}»')
+
+        r['data'] = data
+        r['messages'] = msgs
+        if parsed:
+            r['_parsed'] = parsed
+        out.append(r)
+    return out
+
+
+def apply_row_edits(entity_type: str, internal_rows: list, form) -> list:
+    """
+    Aplica ediciones de la vista previa (edit_{row}_{field}).
+    Revalida filas tocadas.
+    """
+    fields = ENTITY_FIELDS.get(entity_type) or []
+    editable_keys = [
+        f['key'] for f in fields
+        if f['key'] not in ('password',)  # no editar contraseña en preview
+    ]
+    result = []
+    for row in internal_rows:
+        rn = row.get('row_number')
+        edits = {}
+        for key in editable_keys:
+            form_key = f'edit_{rn}_{key}'
+            if form_key in form:
+                edits[key] = (form.get(form_key) or '').strip()
+        if not edits:
+            result.append(row)
+            continue
+
+        data = dict(row.get('data') or {})
+        data.update(edits)
+
+        if entity_type == 'obras':
+            rebuilt = _rebuild_obra_from_data(rn, data)
+        elif entity_type == 'users':
+            # Conservar password/pin del parse original si no se editan
+            parsed_old = row.get('_parsed') or {}
+            rebuilt = _rebuild_user_from_data(rn, data, parsed_old)
+        elif entity_type == 'companies':
+            rebuilt = _rebuild_company_from_data(rn, data)
+        else:
+            result.append(row)
+            continue
+        result.append(rebuilt)
+    return result
+
+
+def _rebuild_obra_from_data(row_number: int, data: dict) -> dict:
+    codigo = _cell_str(data.get('codigo'))
+    nombre = _cell_str(data.get('nombre'))
+    cliente = _cell_str(data.get('cliente'))
+    direccion = _cell_str(data.get('direccion'))
+    fecha_inicio = _parse_date(data.get('fecha_inicio'))
+    fecha_fin = _parse_date(data.get('fecha_fin'))
+    display = {
+        'codigo': codigo,
+        'nombre': nombre,
+        'cliente': cliente,
+        'direccion': direccion,
+        'fecha_inicio': fecha_inicio.isoformat() if fecha_inicio else _cell_str(data.get('fecha_inicio')),
+        'fecha_fin': fecha_fin.isoformat() if fecha_fin else _cell_str(data.get('fecha_fin')),
+    }
+    messages = []
+    if not any([codigo, nombre, cliente, direccion, fecha_inicio]):
+        return {'row_number': row_number, 'status': 'skip', 'messages': ['Fila vacía'], 'data': display}
+    if not nombre:
+        messages.append('Falta el nombre de la obra')
+    if not fecha_inicio:
+        messages.append('Falta o es inválida la fecha de inicio')
+    if messages:
+        return {'row_number': row_number, 'status': 'error', 'messages': messages, 'data': display}
+    if not fecha_fin:
+        fecha_fin = fecha_inicio + timedelta(days=365)
+        display['fecha_fin'] = fecha_fin.isoformat()
+    elif fecha_fin < date.today():
+        messages.append(
+            f"Fecha fin {fecha_fin.isoformat()} ya pasada; se usará "
+            f"{(date.today() + timedelta(days=365)).isoformat()}"
+        )
+        fecha_fin = date.today() + timedelta(days=365)
+        display['fecha_fin'] = fecha_fin.isoformat()
+    if codigo:
+        existing = Obra.query.filter(func.lower(Obra.codigo) == codigo.lower()).first()
+        if existing:
+            return {
+                'row_number': row_number,
+                'status': 'duplicate',
+                'messages': [f'Ya existe una obra con código «{codigo}»'],
+                'data': display,
+            }
+    return {
+        'row_number': row_number,
+        'status': 'new',
+        'messages': messages,
+        'data': display,
+        '_parsed': {
+            'codigo': codigo or None,
+            'nombre': nombre,
+            'cliente': cliente or None,
+            'direccion': direccion or None,
+            'fecha_inicio': fecha_inicio,
+            'fecha_fin': fecha_fin,
+        },
+    }
+
+
+def _rebuild_user_from_data(row_number: int, data: dict, parsed_old: dict) -> dict:
+    email = _cell_str(data.get('email')).lower()
+    rol = _normalize_role(_cell_str(data.get('rol')))
+    nombre = _cell_str(data.get('nombre'))
+    apellidos = _cell_str(data.get('apellidos'))
+    dni = _cell_str(data.get('dni')).upper().replace(' ', '')
+    empresa = _cell_str(data.get('empresa'))
+    activo_raw = data.get('activo')
+    if isinstance(activo_raw, bool):
+        activo = activo_raw
+    else:
+        activo = _parse_bool(activo_raw, default=True)
+    recibir_raw = data.get('recibir_emails')
+    if isinstance(recibir_raw, bool):
+        recibir = recibir_raw
+    else:
+        recibir = _parse_bool(recibir_raw, default=True)
+
+    display = {
+        'email': email,
+        'rol': rol,
+        'nombre': nombre,
+        'apellidos': apellidos,
+        'dni': dni,
+        'empresa': empresa,
+        'pin': ('sí' if (data.get('pin') or parsed_old.get('pin')) else 'auto'),
+        'activo': 'Sí' if activo else 'No',
+        'recibir_emails': 'Sí' if recibir else 'No',
+    }
+    messages = []
+    if not any([email, nombre, apellidos, dni, empresa]):
+        return {'row_number': row_number, 'status': 'skip', 'messages': ['Fila vacía'], 'data': display}
+    if not email:
+        messages.append('Falta el email')
+    elif '@' not in email:
+        messages.append('Email inválido')
+    if not dni:
+        messages.append('Falta el DNI')
+    if not nombre:
+        messages.append('Falta el nombre')
+    if not apellidos:
+        messages.append('Faltan los apellidos')
+    if messages:
+        return {'row_number': row_number, 'status': 'error', 'messages': messages, 'data': display}
+
+    existing = User.query.filter(
+        (func.lower(User.email) == email) | (func.upper(User.dni) == dni)
+    ).first()
+    if existing:
+        reason = []
+        if existing.email and existing.email.lower() == email:
+            reason.append('email')
+        if existing.dni and existing.dni.upper() == dni:
+            reason.append('DNI')
+        return {
+            'row_number': row_number,
+            'status': 'duplicate',
+            'messages': [f"Usuario ya existe ({' y '.join(reason)})"],
+            'data': display,
+        }
+
+    pin = _cell_str(data.get('pin')) if 'pin' in data else (parsed_old.get('pin') or '')
+    password = parsed_old.get('password') or ''
+
+    return {
+        'row_number': row_number,
+        'status': 'new',
+        'messages': [],
+        'data': display,
+        '_parsed': {
+            'email': email,
+            'rol': rol,
+            'nombre': nombre,
+            'apellidos': apellidos,
+            'dni': dni,
+            'empresa': empresa,
+            'password': password,
+            'pin': pin,
+            'activo': activo,
+            'recibir_emails': recibir,
+        },
+    }
+
+
+def _rebuild_company_from_data(row_number: int, data: dict) -> dict:
+    nombre = _cell_str(data.get('nombre'))
+    nif = _cell_str(data.get('nif')).upper().replace(' ', '')
+    code = _cell_str(data.get('code')).upper().replace(' ', '')
+    gremio = _cell_str(data.get('gremio'))
+    email = _cell_str(data.get('email')).lower()
+    descripcion = _cell_str(data.get('descripcion'))
+    is_internal = _parse_bool(data.get('is_internal'), default=False)
+    display = {
+        'nombre': nombre,
+        'nif': nif,
+        'code': code,
+        'gremio': gremio,
+        'email': email,
+        'descripcion': descripcion,
+        'is_internal': 'Sí' if is_internal else 'No',
+    }
+    if not nombre:
+        return {
+            'row_number': row_number,
+            'status': 'error',
+            'messages': ['Falta el nombre de la empresa'],
+            'data': display,
+        }
+    return {
+        'row_number': row_number,
+        'status': 'new',
+        'messages': [],
+        'data': display,
+        '_parsed': {
+            'nombre': nombre,
+            'nif': nif or None,
+            'code': code or None,
+            'gremio': gremio or None,
+            'email': email or None,
+            'descripcion': descripcion or None,
+            'is_internal': is_internal,
+        },
+    }
+
+
+def commit_import(
+    file_or_path,
+    entity_type: str,
+    column_map: Optional[dict] = None,
+    *,
+    row_edits_form=None,
+    import_options: Optional[dict] = None,
+) -> dict:
     """
     Aplica la importación. Solo crea filas con status 'new'.
     Duplicados y errores se reportan sin abortar el resto.
@@ -948,6 +1418,11 @@ def commit_import(file_or_path, entity_type: str, column_map: Optional[dict] = N
         }
 
     internal_rows = preview.get("_internal_rows") or []
+    if row_edits_form is not None:
+        internal_rows = apply_row_edits(entity_type, internal_rows, row_edits_form)
+    if entity_type == 'users' and import_options:
+        internal_rows = annotate_user_rows_for_mode(internal_rows, import_options)
+
     result_rows = []
     imported = []
     created_companies: set = set()
@@ -968,29 +1443,37 @@ def commit_import(file_or_path, entity_type: str, column_map: Optional[dict] = N
 
         parsed = row.get("_parsed") or {}
         try:
-            # Savepoint: un fallo en una fila no descarta el resto.
             with db.session.begin_nested():
                 if entity_type == "obras":
-                    _commit_obra(parsed)
+                    info = _commit_obra(parsed)
                 elif entity_type == "users":
-                    info = _commit_user(parsed)
+                    info = _commit_user(parsed, import_options=import_options)
                 elif entity_type == "companies":
-                    _commit_company(parsed)
+                    info = _commit_company(parsed)
+                else:
+                    info = None
                 db.session.flush()
             public["status"] = "created"
             if entity_type == "obras":
-                public["messages"] = ["Obra creada"]
+                cod = (info or {}).get("codigo") or "—"
+                nom = (info or {}).get("nombre") or ""
+                public["messages"] = [f"Creada: {cod} — {nom}"]
             elif entity_type == "users":
                 imported.append(info)
                 if info.get("company_created") and info.get("empresa"):
                     created_companies.add(info["empresa"])
-                public["messages"] = ["Usuario creado"]
+                public["messages"] = [
+                    f"Creado: {info.get('name', '')} {info.get('lastname', '')} "
+                    f"({info.get('email', '')})"
+                ]
             elif entity_type == "companies":
-                public["messages"] = ["Empresa creada"]
+                public["messages"] = [
+                    f"Creada: {(row.get('data') or {}).get('nombre') or 'empresa'}"
+                ]
             created_count += 1
         except Exception as exc:
             public["status"] = "error"
-            public["messages"] = [f"Error al guardar: {exc}"]
+            public["messages"] = [_friendly_import_error(exc)]
 
         result_rows.append(public)
 

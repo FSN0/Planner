@@ -298,15 +298,17 @@ def create_app():
                     SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
                 ).count()
 
-                from app.services.log_notification_service import (
-                    get_total_unread_logs,
-                    get_unread_laboral_logs,
-                )
+                from app.services.log_notification_service import get_total_unread_logs
                 unread_logs_count = get_total_unread_logs(current_user.id)
-                unread_laboral_count = get_unread_laboral_logs(current_user.id)
+                from app.services.tenant_modules import has_avisos_laborales
+                if has_avisos_laborales():
+                    from app.services.log_notification_service import get_unread_laboral_logs
+                    unread_laboral_count = get_unread_laboral_logs(current_user.id)
             elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
-                from app.services.log_notification_service import get_unread_laboral_logs
-                unread_laboral_count = get_unread_laboral_logs(current_user.id)
+                from app.services.tenant_modules import has_avisos_laborales
+                if has_avisos_laborales():
+                    from app.services.log_notification_service import get_unread_laboral_logs
+                    unread_laboral_count = get_unread_laboral_logs(current_user.id)
 
             # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
             elif current_user.role == ROLE_JEFE:
@@ -338,6 +340,7 @@ def create_app():
         tenant_has_integrations = False
         tenant_has_registro_jornada = True
         tenant_has_fichaje_operario = False
+        tenant_has_avisos_laborales = False
         if current_user.is_authenticated:
             tenant = getattr(g, 'current_tenant', None)
             if tenant:
@@ -351,6 +354,8 @@ def create_app():
                 tenant_has_fichaje_operario = bool(
                     modulos_activos.get('fichaje_operario')
                 )
+                from app.services.tenant_modules import has_avisos_laborales
+                tenant_has_avisos_laborales = has_avisos_laborales(tenant)
 
         from app.services.permission_service import (
             user_can, is_laboral, is_admin, can_resolve_fichajes,
@@ -379,6 +384,7 @@ def create_app():
             tenant_has_integrations=tenant_has_integrations,
             tenant_has_registro_jornada=tenant_has_registro_jornada,
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
+            tenant_has_avisos_laborales=tenant_has_avisos_laborales,
             mostrar_onboarding=mostrar_onboarding,
             demo_data_activa=demo_data_activa,
             user_can=user_can,

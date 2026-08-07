@@ -17,6 +17,7 @@ from app.models import (
     ROLE_JEFE,
     ROLE_LABORAL,
     ROLE_OPERARIO,
+    ROLE_RRHH,
     FichajeEvento,
     Obra,
     User,
@@ -64,7 +65,9 @@ def _parse_local_datetime(valor):
 
 def _asegurar_trabajador(user_id):
     user = User.query.filter_by(id=user_id, is_deleted=False).first()
-    if not user or user.role not in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL):
+    if not user or user.role not in (
+        ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH
+    ):
         raise FichajeAdminError('Trabajador no válido.')
     return user
 

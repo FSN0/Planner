@@ -17,6 +17,8 @@ MODULOS_DISPONIBLES = {
     'onboarding': 'Onboarding de primeros pasos',
     'odoo': 'Integración Odoo (ERP / Sincronización)',
     'odoo_alta': 'Alta Odoo (Fichajes Soltec / SSO)',
+    # Personalizaciones por cliente (no producto genérico)
+    'avisos_laborales': 'Avisos laborales en Logs (click acusar Planificación/Solicitud)',
 }
 
 # Solo adaptadores realmente implementados en app/sync/adapters/.

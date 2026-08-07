@@ -43,6 +43,15 @@
     color: #0f172a;
   }
   .onb-step .hint { font-size: 0.8rem; color: #64748b; margin: 0.2rem 0 0; }
+  .onb-url {
+    display: inline-block;
+    font-size: 0.95rem;
+    word-break: break-all;
+    background: #f1f5f9;
+    padding: 0.35rem 0.55rem;
+    border-radius: 4px;
+    color: #0f172a;
+  }
   .onb-form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -94,9 +103,41 @@
       <div class="onb-intro">
         <p>
           En pocos minutos tienes obra, un trabajador con PIN, fichaje móvil
-          y el informe de jornada listo.
+          y el informe de jornada listo. Si ya tienes Excel, puedes importar
+          obras, personal o empresas y seguir con los pasos.
         </p>
       </div>
+
+      <section class="onb-step" style="border-color:#c7d2fe;background:#eef2ff;">
+        <div class="onb-step-head">
+          <span class="onb-badge" style="background:#6366f1;color:#fff;"><i class="fas fa-file-import"></i></span>
+          <div>
+            <h2>Importar desde Excel</h2>
+            <p class="hint">
+              Si ya tienes listados, súbelos aquí y vuelve a esta guía. No hace falta
+              crear uno a uno.
+            </p>
+          </div>
+        </div>
+        <div class="onb-actions">
+          <a href="{{ url_for('admin.import_obras', desde='primeros-pasos') }}"
+             class="btn-admin btn-admin-primary">
+            <i class="fas fa-hard-hat mr-1"></i> Importar obras
+          </a>
+          <a href="{{ url_for('admin.import_users', modo='internos', desde='primeros-pasos') }}"
+             class="btn-admin btn-admin-ghost">
+            <i class="fas fa-users mr-1"></i> Importar personal interno
+          </a>
+          <a href="{{ url_for('admin.import_users', modo='externos', desde='primeros-pasos') }}"
+             class="btn-admin btn-admin-ghost">
+            <i class="fas fa-hard-hat mr-1"></i> Importar personal externo
+          </a>
+          <a href="{{ url_for('admin.import_companies', desde='primeros-pasos') }}"
+             class="btn-admin btn-admin-ghost">
+            <i class="fas fa-building mr-1"></i> Importar empresas
+          </a>
+        </div>
+      </section>
 
       {% if empresa_vacia %}
       <section class="onb-step" style="border-color:#93c5fd;background:#eff6ff;">
@@ -143,6 +184,10 @@
               Activar obra Oficina
             </button>
           </form>
+          <a href="{{ url_for('admin.import_obras', desde='primeros-pasos') }}"
+             class="btn-admin btn-admin-ghost">
+            <i class="fas fa-file-import mr-1"></i> Importar obras
+          </a>
         </div>
         <form method="post" class="mt-3">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -208,6 +253,14 @@
           </div>
           <div class="onb-actions">
             <button type="submit" class="btn-admin btn-admin-primary">Dar de alta</button>
+            <a href="{{ url_for('admin.import_users', modo='internos', desde='primeros-pasos') }}"
+               class="btn-admin btn-admin-ghost">
+              <i class="fas fa-file-import mr-1"></i> Importar internos
+            </a>
+            <a href="{{ url_for('admin.import_users', modo='externos', desde='primeros-pasos') }}"
+               class="btn-admin btn-admin-ghost">
+              Importar externos
+            </a>
           </div>
         </form>
         {% else %}
@@ -231,14 +284,22 @@
         <form method="post">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="accion" value="fichaje">
+          <p class="hint mb-3">
+            Si quieres que tus operarios fichen desde el móvil, actívalo aquí.
+            Después verás la dirección completa para compartirla.
+          </p>
           <div class="onb-actions">
             <button type="submit" class="btn-admin btn-admin-primary">
-              Activar fichaje en /mi
+              Sí, activar fichaje
             </button>
           </div>
         </form>
         {% else %}
-        <p class="hint mb-0">Fichaje móvil activo. Los operarios entran en <code>/mi</code> con DNI y PIN.</p>
+        <p class="hint mb-1">Fichaje activo. Comparte esta dirección con tus operarios:</p>
+        <p class="mb-0">
+          <code class="onb-url">{{ url_fichar }}</code>
+        </p>
+        <p class="hint mt-2 mb-0">Entran con DNI y PIN.</p>
         {% endif %}
       </section>
 
