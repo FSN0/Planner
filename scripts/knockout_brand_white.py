@@ -9,13 +9,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-try:
-    from PIL import Image
-except ImportError:
-    import subprocess
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _pil_util import require_pil  # noqa: E402
 
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "pillow", "-q"])
-    from PIL import Image
+Image = require_pil("knockout_brand_white.py")
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "logos_signaplan"

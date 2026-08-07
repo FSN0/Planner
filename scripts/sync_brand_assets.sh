@@ -53,8 +53,9 @@ copy_if_exists() {
 }
 
 # Si el export trae blanco opaco (p.ej. Logo + Nombre), quitarlo antes de copiar.
+# Sin Pillow: aviso limpio y se sigue (el build Docker lo aplica con Pillow).
 if command -v python3 >/dev/null 2>&1 && [[ -f "$ROOT/scripts/knockout_brand_white.py" ]]; then
-  python3 "$ROOT/scripts/knockout_brand_white.py" || true
+  python3 "$ROOT/scripts/knockout_brand_white.py" 2>&1 || true
 fi
 
 copy_if_exists "Logo.png" "logo-mark.png"
@@ -65,12 +66,12 @@ copy_if_exists "Wallpaper.png" "wallpaper.png"
 
 # Quitar margen vacío del canvas (el export suele venir muy aireado).
 if command -v python3 >/dev/null 2>&1 && [[ -f "$ROOT/scripts/trim_brand_margins.py" ]]; then
-  python3 "$ROOT/scripts/trim_brand_margins.py" || true
+  python3 "$ROOT/scripts/trim_brand_margins.py" 2>&1 || true
 fi
 
 # Favicons 48/192 para Google SERP
 if command -v python3 >/dev/null 2>&1 && [[ -f "$ROOT/scripts/generate_favicons.py" ]]; then
-  python3 "$ROOT/scripts/generate_favicons.py" || true
+  python3 "$ROOT/scripts/generate_favicons.py" 2>&1 || true
 fi
 
 echo -e "${GREEN}Assets de marca sincronizados -> $DEST${NC}"

@@ -24,8 +24,11 @@ RUN if [ "$INSTALL_DEV" = "true" ]; then \
 
 COPY . .
 
+# Procesar logos en build (host de deploy suele no tener Pillow/pip).
+RUN bash scripts/sync_brand_assets.sh
+
 RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
-RUN chmod +x /app/entrypoint.sh /app/entrypoint.prod.sh /app/scripts/fix_migration_heads.sh
+RUN chmod +x /app/entrypoint.sh /app/entrypoint.prod.sh /app/scripts/fix_migration_heads.sh /app/scripts/sync_brand_assets.sh
 
 USER appuser
 
