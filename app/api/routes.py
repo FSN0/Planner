@@ -290,7 +290,11 @@ def get_universal_calendar_events():
             if plan_status == 'ausencia' or plan_status == 'muerto':
                 color = VEHICLE_COLOR_AUSENCIA
                 ev_type = 'vehiculo'
-                tip = f'<b>Rojo · Ausencia</b><br>Asignado en ausencia ({v_meta.get("ausencia_tipo") or "ausencia"}).'
+                tip = (
+                    f'<b>Turquesa · Libre (ausencia)</b><br>'
+                    f'Asignado en ausencia ({v_meta.get("ausencia_tipo") or "ausencia"}). '
+                    f'El coche cuenta como libre.'
+                )
             elif plan_status == 'cumplido' or plan_status == 'conductor_real':
                 color = VEHICLE_COLOR_CUMPLIDO
                 ev_type = 'vehiculo'
@@ -924,9 +928,9 @@ def get_universal_calendar_events():
                     tipo = (leave.tipo or 'Ausencia').strip() or 'Ausencia'
                     title = f"{planned_name} · {tipo}"
                     tip_h, tip_p = _veh_tip(
-                        'Rojo · Ausencia',
+                        'Turquesa · Libre (ausencia)',
                         f'{planned_name} está de {tipo.lower()} y sigue asignado a este coche.',
-                        'El coche cuenta como libre a efectos prácticos.',
+                        'El coche cuenta como libre a efectos prácticos (misma regla que Coches libres).',
                     )
                     color = VEHICLE_COLOR_AUSENCIA
                     status = 'ausencia'
@@ -1009,9 +1013,10 @@ def get_universal_calendar_events():
                 if on_leave:
                     tipo = (leave.tipo or 'Ausencia').strip() or 'Ausencia'
                     tip_h, tip_p = _veh_tip(
-                        'Rojo · Ausencia',
+                        'Turquesa · Libre (ausencia)',
                         f'{planned_name} está de {tipo.lower()} y sigue asignado.',
-                        (f'Además Odoo reporta uso: {odoo_title}{km_bit}.' if odoo_title else None),
+                        (f'Además Odoo reporta uso: {odoo_title}{km_bit}.' if odoo_title else
+                         'El coche cuenta como libre a efectos prácticos.'),
                     )
                     _append_veh(
                         f"{planned_name} · {tipo}{km_bit}",

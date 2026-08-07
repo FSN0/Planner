@@ -691,7 +691,29 @@ def auditoria_fichajes():
     historial = RegistroFichaje.query.filter(*filtros_historial).order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc()).limit(1500).all()
     correcciones = RegistroFichaje.query.filter(*filtros_correcciones).order_by(RegistroFichaje.fecha.desc()).limit(500).all()
     visible_sections = laboral_auditoria_sections(current_user)
-    
+
+    trabajadores_marca = []
+    obras_marca = []
+    if can_resolve_fichajes(current_user) and current_user.role in (
+        'admin', ROLE_LABORAL, ROLE_RRHH,
+    ):
+        trabajadores_marca = (
+            User.query
+            .filter(
+                User.is_deleted.is_(False),
+                User.active.is_(True),
+                User.role.in_(['operario', 'jefe_obra', 'admin', 'laboral']),
+            )
+            .order_by(User.lastname.asc(), User.name.asc())
+            .all()
+        )
+        obras_marca = (
+            Obra.query
+            .filter(Obra.estado != 'Finalizada')
+            .order_by(Obra.nombre.asc())
+            .all()
+        )
+
     return render_template('sync/auditoria.html', 
                            pendientes=pendientes, 
                            historial=historial,
@@ -699,7 +721,9 @@ def auditoria_fichajes():
                            auditoria_sections=visible_sections,
                            visible_sections=visible_sections,
                            can_resolve=can_resolve_fichajes(current_user),
-                           can_resolve_fichajes=can_resolve_fichajes(current_user))
+                           can_resolve_fichajes=can_resolve_fichajes(current_user),
+                           trabajadores_marca=trabajadores_marca,
+                           obras_marca=obras_marca)
 
 ACCION_RESOLUCION_TITULOS = {
     'ignorar': 'Ignorar',
@@ -715,6 +739,16 @@ ACCION_RESOLUCION_TITULOS = {
 _ESTADOS_HERMANO_PLACEHOLDER = (
     'Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso',
     'Paracaidista', 'Conflicto',
+)
+
+
+_ESTADOS_RESUELTOS = (
+    'Resuelto_Movido',
+    'Resuelto_Asignado',
+    'Resuelto_Dividido',
+    'Resuelto_Ignorado',
+    'Resuelto_Falta',
+    'Resuelto_Ausencia',
 )
 
 
@@ -742,10 +776,35 @@ def _cerrar_hermanos_placeholder(registro, accion):
         'confirmar_ausencia': 'Cerrado: ausencia confirmada para el día.',
     }.get(accion, 'Cerrado tras resolución de auditoría.')
     for h in hermanos:
+        h.estado_antes_resolucion = h.estado
         h.estado = 'Resuelto_Ignorado'
         h.resuelto_por_id = registro.resuelto_por_id
         h.fecha_auditoria = registro.fecha_auditoria
         h.notas_resolucion = nota
+
+
+def _reabrir_hermanos_cerrados(registro, fecha_auditoria_previa):
+    """Restaura hermanos auto-cerrados en la misma resolución (misma fecha_auditoria)."""
+    if not fecha_auditoria_previa:
+        return
+    hermanos = RegistroFichaje.query.filter(
+        RegistroFichaje.user_id == registro.user_id,
+        RegistroFichaje.fecha == registro.fecha,
+        RegistroFichaje.id != registro.id,
+        RegistroFichaje.estado == 'Resuelto_Ignorado',
+        RegistroFichaje.fecha_auditoria == fecha_auditoria_previa,
+    ).all()
+    for h in hermanos:
+        previo = (h.estado_antes_resolucion or '').strip()
+        if not previo or previo in _ESTADOS_RESUELTOS:
+            continue
+        if not (h.notas_resolucion or '').startswith('Cerrado:'):
+            continue
+        h.estado = previo
+        h.estado_antes_resolucion = None
+        h.notas_resolucion = None
+        h.resuelto_por_id = None
+        h.fecha_auditoria = None
 
 
 def _obra_label_resolucion(obra_id):
@@ -832,7 +891,12 @@ def resolver_fichaje():
         registro.resuelto_por_id = current_user.id
         from app.utils.timezone_utils import utc_now
         registro.fecha_auditoria = utc_now()
-        
+
+        # Guardar clasificación previa para poder «Reabrir» desde el histórico.
+        estado_previo = registro.estado
+        if estado_previo and estado_previo not in _ESTADOS_RESUELTOS:
+            registro.estado_antes_resolucion = estado_previo
+
         estado_anterior = None
 
         if accion == 'ignorar':
@@ -867,7 +931,7 @@ def resolver_fichaje():
             registro.estado = 'Resuelto_Movido'
 
         elif accion == 'anadir':
-            estado_anterior = registro.estado
+            estado_anterior = estado_previo
 
             if registro.obra_real_id:
                 existe = Asignacion.query.filter_by(
@@ -955,6 +1019,238 @@ def resolver_fichaje():
         db.session.commit()
         return jsonify({'success': True})
         
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/auditoria/reabrir', methods=['POST'])
+@login_required
+def reabrir_fichaje():
+    """Restaura la clasificación previa de un registro resuelto (histórico).
+
+    No deshace cambios de cuadrante (mover/añadir/borrar): solo vuelve a poner
+    la incidencia en cola de auditoría con el estado que tenía.
+    """
+    from app import db
+    from app.models import RegistroFichaje, Obra
+    from app.utils import register_log
+    from app.utils.timezone_utils import utc_now
+
+    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    if not can_resolve_fichajes(current_user):
+        return jsonify({'success': False, 'error': 'Resolución deshabilitada para este perfil.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    registro_id = data.get('registro_id')
+    registro = RegistroFichaje.query.get(registro_id)
+    if not registro:
+        return jsonify({'success': False, 'error': 'Registro no encontrado'}), 404
+
+    if current_user.role == 'jefe_obra':
+        obras_del_jefe = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()]
+        if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
+            return jsonify({'success': False, 'error': 'No tienes permisos sobre este registro.'}), 403
+
+    if registro.estado not in _ESTADOS_RESUELTOS:
+        return jsonify({'success': False, 'error': 'Solo se pueden reabrir registros ya resueltos.'}), 400
+
+    previo = (registro.estado_antes_resolucion or '').strip()
+    if not previo or previo in _ESTADOS_RESUELTOS:
+        return jsonify({
+            'success': False,
+            'error': 'No hay clasificación previa guardada (decisiones antiguas no se pueden reabrir).',
+        }), 400
+
+    try:
+        fecha_aud_previa = registro.fecha_auditoria
+        nota_previa = (registro.notas_resolucion or '').strip()
+
+        registro.estado = previo
+        registro.estado_antes_resolucion = None
+        registro.notas_resolucion = (
+            f'Reabierto → vuelve a «{previo}». '
+            f'La clasificación se restaura; el cuadrante no se deshace automáticamente.'
+            + (f' (Antes: {nota_previa})' if nota_previa else '')
+        )
+        registro.resuelto_por_id = current_user.id
+        registro.fecha_auditoria = utc_now()
+
+        _reabrir_hermanos_cerrados(registro, fecha_aud_previa)
+
+        register_log(
+            user_id=current_user.id,
+            category='fichajes',
+            action='Reabrir resolución de fichaje',
+            detail=registro.notas_resolucion,
+            target_user_id=registro.user_id,
+            target_date=registro.fecha,
+        )
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'estado': previo,
+            'aviso': (
+                'Clasificación restaurada. Si la resolución cambió el cuadrante '
+                '(mover/añadir/borrar), revisa las asignaciones a mano.'
+            ),
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _puede_editar_marcas():
+    return (
+        current_user.role in ('admin', ROLE_LABORAL, ROLE_RRHH)
+        and can_resolve_fichajes(current_user)
+    )
+
+
+@sync_bp.route('/auditoria/marcas', methods=['GET'])
+@login_required
+def listar_marcas_dia():
+    """Lista eventos del ledger de un trabajador/día (para corregir)."""
+    if not _puede_editar_marcas():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    from datetime import datetime as dt
+    from app.services.fichaje_admin_service import FichajeAdminError, listar_eventos_dia
+
+    user_id = request.args.get('user_id', type=int)
+    fecha_raw = (request.args.get('fecha') or '').strip()
+    if not user_id or not fecha_raw:
+        return jsonify({'success': False, 'error': 'Indica trabajador y fecha.'}), 400
+    try:
+        fecha = dt.strptime(fecha_raw, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Fecha no válida.'}), 400
+    try:
+        eventos = listar_eventos_dia(user_id, fecha)
+    except FichajeAdminError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    return jsonify({'success': True, 'eventos': eventos})
+
+
+@sync_bp.route('/auditoria/marcas', methods=['POST'])
+@login_required
+def registrar_marca_auditoria():
+    """Alta manual de entrada/salida/pausa (libro append-only + motivo)."""
+    if not _puede_editar_marcas():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    from datetime import datetime as dt
+    from app.services.fichaje_admin_service import (
+        FichajeAdminError,
+        registrar_marca_manual,
+    )
+    from app.utils import register_log
+
+    data = request.get_json(silent=True) or {}
+    fecha_lab = None
+    if data.get('fecha_laboral'):
+        try:
+            fecha_lab = dt.strptime(data['fecha_laboral'], '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Fecha laboral no válida.'}), 400
+    try:
+        evento = registrar_marca_manual(
+            user_id=data.get('user_id'),
+            tipo=data.get('tipo'),
+            ocurrido_en_local=data.get('ocurrido_en'),
+            motivo=data.get('motivo'),
+            autor_id=current_user.id,
+            obra_id=data.get('obra_id') or None,
+            fecha_laboral=fecha_lab,
+            ip=request.remote_addr,
+        )
+        register_log(
+            user_id=current_user.id,
+            category='fichajes',
+            action='Marca manual (admin)',
+            detail=f"{evento.tipo} · motivo: {evento.motivo}",
+            target_user_id=evento.user_id,
+            target_date=evento.fecha_laboral,
+        )
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'evento_id': evento.id,
+            'secuencia': evento.secuencia,
+        })
+    except FichajeAdminError as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/auditoria/marcas/corregir', methods=['POST'])
+@login_required
+def corregir_marca_auditoria():
+    """Anula la marca original y registra la corregida (ambas quedan en el libro)."""
+    if not _puede_editar_marcas():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    from app.services.fichaje_admin_service import FichajeAdminError, corregir_marca
+    from app.utils import register_log
+
+    data = request.get_json(silent=True) or {}
+    try:
+        evento = corregir_marca(
+            evento_id=data.get('evento_id'),
+            motivo=data.get('motivo'),
+            autor_id=current_user.id,
+            nuevo_ocurrido_en_local=data.get('ocurrido_en') or None,
+            nueva_obra_id=data.get('obra_id'),
+            ip=request.remote_addr,
+        )
+        register_log(
+            user_id=current_user.id,
+            category='fichajes',
+            action='Corrección de marca (admin)',
+            detail=f"Nueva secuencia #{evento.secuencia} · motivo: {evento.motivo}",
+            target_user_id=evento.user_id,
+            target_date=evento.fecha_laboral,
+        )
+        db.session.commit()
+        return jsonify({'success': True, 'evento_id': evento.id})
+    except FichajeAdminError as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/auditoria/marcas/anular', methods=['POST'])
+@login_required
+def anular_marca_auditoria():
+    """Anula una marca sin crear otra (queda la huella de anulación)."""
+    if not _puede_editar_marcas():
+        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+    from app.services.fichaje_admin_service import FichajeAdminError, anular_marca
+    from app.utils import register_log
+
+    data = request.get_json(silent=True) or {}
+    try:
+        evento = anular_marca(
+            evento_id=data.get('evento_id'),
+            motivo=data.get('motivo'),
+            autor_id=current_user.id,
+        )
+        register_log(
+            user_id=current_user.id,
+            category='fichajes',
+            action='Anulación de marca (admin)',
+            detail=f"Anulado evento {data.get('evento_id')} · motivo: {evento.motivo}",
+            target_user_id=evento.user_id,
+            target_date=evento.fecha_laboral,
+        )
+        db.session.commit()
+        return jsonify({'success': True})
+    except FichajeAdminError as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(exc)}), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500

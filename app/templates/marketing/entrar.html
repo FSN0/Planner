@@ -12,10 +12,10 @@
 <body class="marketing-page">
     <header class="mkt-nav">
         <a class="mkt-brand" href="/">
-            <span class="mkt-brand-mark" aria-hidden="true"></span>
-            <span>SignaPlan</span>
+            {% include "components/_brand_logo.html" %}
         </a>
         <nav class="mkt-nav-links">
+            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
             <a href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
         </nav>
     </header>
@@ -23,7 +23,11 @@
     <section class="mkt-section" style="padding-top: 4rem;">
         <div class="mkt-section-header">
             <h2>Entra en tu empresa</h2>
-            <p>Indica el correo con el que te dieron de alta. Te llevamos a tu espacio.</p>
+            <p>
+                Indica el correo con el que te dieron de alta. Te enviaremos un email con el enlace
+                de acceso a tu empresa (o empresas). Si el correo de verificación no te llegó,
+                también incluiremos ese enlace.
+            </p>
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -41,12 +45,14 @@
                    value="{{ email or '' }}"
                    autocomplete="username" autocapitalize="none"
                    style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
-            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">Continuar</button>
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">Enviar enlace de acceso</button>
         </form>
 
         <p style="text-align:center;margin-top:1.5rem;color:#64748b;font-size:.95rem;">
             ¿No tienes cuenta? <a href="{{ url_for('marketing.alta') }}">Créala gratis</a>
+            · <a href="{{ url_for('marketing.contacto') }}">Contacto</a>
         </p>
     </section>
+    {% include "components/_cookie_banner.html" %}
 </body>
 </html>

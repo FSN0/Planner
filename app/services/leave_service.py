@@ -731,6 +731,41 @@ def create_manual_leave(
     return leave
 
 
+def solicitar_ausencia_propia(
+    actor_user,
+    fecha_inicio,
+    fecha_fin,
+    tipo='Vacaciones',
+    descripcion=None,
+):
+    """
+    Solicitud del propio trabajador (móvil / portal). Siempre queda pendiente:
+    la aprueba admin, laboral o RRHH. Las ausencias de Odoo no pasan por aquí.
+    """
+    if not actor_puede_crear_ausencia(actor_user):
+        raise ValueError('Tu perfil no puede solicitar ausencias.')
+
+    return create_manual_leave(
+        user_id=actor_user.id,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        tipo=(tipo or 'Vacaciones').strip() or 'Vacaciones',
+        estado=LEAVE_STATUS_PENDIENTE,
+        descripcion=(descripcion or '').strip() or None,
+        created_by_id=actor_user.id,
+    )
+
+
+def leaves_del_usuario(user_id, limit=100):
+    """Historial de ausencias de un trabajador (todas las fuentes/estados)."""
+    return (
+        AusenciaPlanificada.query.filter_by(user_id=int(user_id))
+        .order_by(AusenciaPlanificada.fecha_inicio.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def heal_odoo_pending_leaves():
     """Marca como aprobadas las ausencias Odoo que quedaron en pendiente."""
     n = (

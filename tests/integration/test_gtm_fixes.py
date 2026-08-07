@@ -129,6 +129,8 @@ class TestFichajeHermanos:
         conflicto = RegistroFichaje.query.get(conflicto.id)
         assert seed.estado == 'Resuelto_Ignorado'
         assert conflicto.estado == 'Resuelto_Ignorado'
+        assert seed.estado_antes_resolucion == 'Ausencia'
+        assert conflicto.estado_antes_resolucion == 'Conflicto'
 
 
 class TestOnboardingPin:

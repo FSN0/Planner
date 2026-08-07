@@ -61,6 +61,10 @@ if [ -d .git ]; then
     git pull --ff-only origin VERSION_SAAS
 fi
 
+# --- Brand assets (before image build) ---
+print_step "Sincronizando assets de marca (logos_signaplan)..."
+bash scripts/sync_brand_assets.sh
+
 # --- Build ---
 print_step "Construyendo imágenes..."
 if [ "$BUILD" = true ]; then

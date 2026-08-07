@@ -164,7 +164,7 @@
                 <p class="admin-form-switch-label mb-0">Fichaje desde el móvil del trabajador</p>
                 <p class="admin-form-switch-hint mb-0">
                   Habilita <code>/mi</code>, la aplicación de fichaje que el operario
-                  puede instalar en su móvil. Incluido en el plan gratuito.
+                  puede instalar en su móvil.
                   Al activarlo, <strong>los usuarios con rol operario podrán iniciar
                   sesión</strong>: revisa antes que tengan PIN o contraseña usable.
                 </p>
@@ -190,10 +190,9 @@
                 Solo se guarda la coordenada del instante del fichaje, nunca un
                 seguimiento continuo.
                 {% if monetizacion_activa %}
-                En el plan gratuito la ubicación queda desactivada;
-                opcional/obligatoria requieren plan de pago o cortesía.
+                Con el cobro activo, opcional/obligatoria pueden depender del plan.
                 {% else %}
-                De momento puedes activarla sin cobro (fase previa a Stripe).
+                Puedes activarla libremente (todavía no hay planes de cobro).
                 {% endif %}
               </p>
             </div>

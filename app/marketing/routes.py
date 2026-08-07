@@ -94,16 +94,18 @@ def alta():
             if not email_enviado:
                 flash(
                     'Tu espacio se ha creado, pero no hemos podido enviar el correo '
-                    'de verificación. Revisa la configuración de correo del servidor '
-                    'o contacta con soporte.',
+                    'de verificación. Puedes reenviarlo desde esta página o desde tu panel.',
                     'warning',
                 )
+            from app.services.signup_service import url_acceso_tenant
             return render_template(
                 'marketing/alta_pendiente.html',
                 current_year=datetime.utcnow().year,
                 email=admin_email,
                 subdomain=tenant.subdominio,
                 base_domain=_alta_base_domain(),
+                email_enviado=email_enviado,
+                login_url=url_acceso_tenant(tenant, path='/auth/login'),
             )
         except SignupError as exc:
             flash(str(exc), 'danger')
@@ -132,13 +134,18 @@ def _alta_base_domain():
 @limiter.limit('10 per minute; 40 per hour', methods=['POST'])
 def entrar():
     """
-    Resolver de acceso: correo → tenant(s) con login web.
-    La contraseña se pide siempre en el host del tenant.
+    Resolver de acceso: el usuario indica su correo y, si hay empresas,
+    recibe los enlaces por email (sin enumerarlas en pantalla).
     """
     _require_marketing()
-    from app.services.signup_service import url_acceso_tenant
+    from app.services.tenant_access_email_service import enviar_enlaces_acceso
     from app.services.tenant_email_lookup_service import buscar_tenants_por_email
-    from urllib.parse import quote
+
+    mensaje_generico = (
+        'Si hay una cuenta con ese correo, te hemos enviado un email con el acceso '
+        'a tu empresa (y el enlace de verificación si aún no lo confirmaste). '
+        'Revisa la bandeja de entrada y el spam.'
+    )
 
     if request.method == 'GET':
         return render_template(
@@ -157,39 +164,129 @@ def entrar():
         )
 
     matches = buscar_tenants_por_email(email)
-    if not matches:
-        flash(
-            'No encontramos una empresa activa con acceso web para ese correo. '
-            'Si acabas de darte de alta, prueba el enlace del correo o contacta con soporte.',
-            'warning',
-        )
-        return render_template(
-            'marketing/entrar.html',
-            current_year=datetime.utcnow().year,
-            email=email,
-        )
-
-    def _login_url(tenant):
-        path = f'/auth/login?email={quote(email, safe="")}'
-        return url_acceso_tenant(tenant, path=path)
-
-    if len(matches) == 1:
-        return redirect(_login_url(matches[0]['tenant']))
-
-    items = [
-        {
-            'tenant': m['tenant'],
-            'user_name': m['user_name'],
-            'login_url': _login_url(m['tenant']),
-        }
-        for m in matches
-    ]
+    if matches:
+        try:
+            enviar_enlaces_acceso(email, matches)
+        except Exception:
+            pass
+    flash(mensaje_generico, 'info')
     return render_template(
-        'marketing/entrar_selector.html',
+        'marketing/entrar.html',
         current_year=datetime.utcnow().year,
         email=email,
-        matches=items,
+    )
+
+
+@marketing_bp.route('/reenviar-verificacion', methods=['POST'])
+@limiter.limit('3 per minute; 10 per hour')
+def reenviar_verificacion():
+    """Reenvío desde marketing (post-alta) sin estar logueado en el tenant."""
+    _require_marketing()
+    from sqlalchemy import text
+
+    from app import db
+    from app.models import Tenant
+    from app.services.email_verification_service import (
+        EmailVerificationError,
+        reenviar_verificacion as _reenviar,
+    )
+
+    email = (request.form.get('email') or '').strip().lower()
+    subdomain = (request.form.get('subdomain') or '').strip().lower()
+    if not email or not subdomain:
+        flash('Faltan datos para reenviar la verificación.', 'danger')
+        return redirect(url_for('marketing.alta'))
+
+    tenant = Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
+    if not tenant:
+        # Mismo mensaje genérico: no delatar existencia
+        flash(
+            'Si la cuenta existe y el correo está pendiente, te hemos enviado un nuevo enlace.',
+            'info',
+        )
+        return redirect(url_for('marketing.alta'))
+
+    try:
+        db.session.execute(text(f'SET search_path TO {tenant.schema_name}, public'))
+        _reenviar(tenant, email=email)
+        flash(
+            'Si el correo está pendiente de verificación, te hemos enviado un nuevo enlace. '
+            'Revisa también spam.',
+            'info',
+        )
+    except EmailVerificationError as exc:
+        flash(str(exc), 'danger')
+    except Exception:
+        flash('No se ha podido reenviar el correo ahora. Prueba más tarde.', 'danger')
+
+    from app.services.signup_service import url_acceso_tenant
+    return render_template(
+        'marketing/alta_pendiente.html',
+        current_year=datetime.utcnow().year,
+        email=email,
+        subdomain=tenant.subdominio,
         base_domain=_alta_base_domain(),
+        email_enviado=True,
+        login_url=url_acceso_tenant(tenant, path='/auth/login'),
+    )
+
+
+@marketing_bp.route('/contacto', methods=['GET', 'POST'])
+@limiter.limit('5 per minute; 20 per hour', methods=['POST'])
+def contacto():
+    """Formulario de contacto → correo al titular (LEGAL_EMAIL / info@)."""
+    _require_marketing()
+    from app.services.email_service import send_email
+
+    legal = _legal_entity()
+    destino = (legal.get('email') or 'info@signaplan.com').strip()
+    form = {}
+
+    if request.method == 'POST':
+        # Honeypot: si viene relleno, fingimos éxito
+        if (request.form.get('website') or '').strip():
+            flash('Mensaje enviado. Te responderemos lo antes posible.', 'success')
+            return redirect(url_for('marketing.contacto'))
+
+        form = {
+            'nombre': (request.form.get('nombre') or '').strip()[:120],
+            'email': (request.form.get('email') or '').strip().lower()[:120],
+            'empresa': (request.form.get('empresa') or '').strip()[:160],
+            'mensaje': (request.form.get('mensaje') or '').strip()[:4000],
+        }
+        if not form['nombre'] or '@' not in form['email'] or len(form['mensaje']) < 10:
+            flash('Completa nombre, un correo válido y un mensaje (mín. 10 caracteres).', 'danger')
+        else:
+            asunto = f"Contacto SignaPlan — {form['nombre']}"
+            if form['empresa']:
+                asunto += f" ({form['empresa']})"
+            texto = (
+                f"Nombre: {form['nombre']}\n"
+                f"Email: {form['email']}\n"
+                f"Empresa: {form['empresa'] or '—'}\n\n"
+                f"{form['mensaje']}\n"
+            )
+            html = (
+                f"<p><strong>Nombre:</strong> {form['nombre']}<br>"
+                f"<strong>Email:</strong> <a href=\"mailto:{form['email']}\">{form['email']}</a><br>"
+                f"<strong>Empresa:</strong> {form['empresa'] or '—'}</p>"
+                f"<p>{form['mensaje'].replace(chr(10), '<br>')}</p>"
+            )
+            ok = send_email(asunto, [destino], texto, html_body=html)
+            if ok:
+                flash('Mensaje enviado. Te responderemos lo antes posible.', 'success')
+                return redirect(url_for('marketing.contacto'))
+            flash(
+                'No hemos podido enviar el mensaje ahora. Escríbenos a '
+                f'{destino} o inténtalo más tarde.',
+                'danger',
+            )
+
+    return render_template(
+        'marketing/contacto.html',
+        current_year=datetime.utcnow().year,
+        form=form,
+        contact_email=destino,
     )
 
 

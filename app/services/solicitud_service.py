@@ -294,7 +294,8 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
             solicitud.estado = "CUMPLIDA"
             solicitud.cantidad_cubierta = solicitud.cantidad_solicitada
             solicitud.resolved_at = utc_now()
-            if resolved_by_id: resolved_by_id = resolved_by_id
+            if resolved_by_id:
+                solicitud.resolved_by_id = resolved_by_id
         elif is_in_process:
             solicitud.estado = "EN_PROCESO"
         else:
@@ -514,11 +515,23 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
             mensaje = f"Devolución aprobada. Se han eliminado {count} asignaciones."
 
         else:
+            from app.models import Festivo
+            festivos = {
+                f.fecha for f in Festivo.query.filter(
+                    Festivo.fecha >= solicitud.fecha_inicio,
+                    Festivo.fecha <= solicitud.fecha_fin,
+                ).all()
+            }
             dias = []
             curr = solicitud.fecha_inicio
             while curr <= solicitud.fecha_fin:
-                dias.append(curr)
+                if curr.weekday() < 5 and curr not in festivos:
+                    dias.append(curr)
                 curr += timedelta(days=1)
+            if not dias:
+                raise ValueError(
+                    "El rango de la solicitud no contiene días laborables válidos."
+                )
 
             result = process_assignment_action(
                 actor_user=user_actor, worker_id=solicitud.empleado_id,

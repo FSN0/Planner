@@ -125,6 +125,11 @@ class User(UserMixin, db.Model):
     pin_must_change = db.Column(
         db.Boolean, nullable=False, default=False, server_default='false'
     )
+    # Bloqueo temporal tras intentos fallidos de PIN (anti fuerza bruta suave).
+    pin_failed_attempts = db.Column(
+        db.Integer, nullable=False, default=0, server_default='0'
+    )
+    pin_locked_until = db.Column(db.DateTime, nullable=True)
     role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, operario
     
     # Datos Personales
@@ -260,8 +265,20 @@ def load_user(user_id):
     if session.get('tenant_id') != g.current_tenant.id:
         return None
     
-    # Buscamos al usuario en el esquema actual
-    return User.query.get(int(user_id))
+    # Si una query anterior dejó la transacción abortada (p. ej. columna
+    # pendiente de migración), recuperamos la sesión antes de cargar el user.
+    try:
+        return User.query.get(int(user_id))
+    except Exception:
+        try:
+            from app import db
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            return User.query.get(int(user_id))
+        except Exception:
+            return None
 
 
 
@@ -449,8 +466,10 @@ class RegistroFichaje(db.Model):
     # Dónde pisó realmente la obra
     obra_real_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
     
-    # Estados: 'Correcto', 'Conflicto', 'Ausencia', 'Resuelto_Movido', 'Resuelto_Dividido', 'Resuelto_Ignorado'
-    estado = db.Column(db.String(50), default='Pendiente') 
+    # Estados: 'Correcto', 'Conflicto', 'Ausencia', 'Resuelto_Movido', ...
+    estado = db.Column(db.String(50), default='Pendiente')
+    # Estado previo a la resolución de auditoría (para «Reabrir»).
+    estado_antes_resolucion = db.Column(db.String(50), nullable=True)
     notas_resolucion = db.Column(db.Text, nullable=True)
     fecha_auditoria = db.Column(db.DateTime, default=_utc_now)
 

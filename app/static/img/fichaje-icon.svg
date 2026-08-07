@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Fichaje">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SignaPlan Fichaje">
   <rect width="512" height="512" rx="96" fill="#0f172a"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#38bdf8" stroke-width="26"/>
-  <path d="M256 158v104l70 42" fill="none" stroke="#f1f5f9" stroke-width="30"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <path fill="#16a34a" d="M112 144h128c53 0 96 43 96 96s-43 96-96 96h-48v80H112V144zm64 64v64h64c17.7 0 32-14.3 32-32s-14.3-32-32-32h-64z"/>
+  <path fill="#0ea5e9" d="M304 336l48 48 96-112-44-36-52 60-20-20z"/>
 </svg>

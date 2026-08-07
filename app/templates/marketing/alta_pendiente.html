@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verifica tu correo — SignaPlan</title>
+    <title>{% if email_enviado %}Verifica tu correo{% else %}Cuenta creada{% endif %} — SignaPlan</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
         <a class="mkt-brand" href="/">
-            <span class="mkt-brand-mark" aria-hidden="true"></span>
-            <span>SignaPlan</span>
+            {% include "components/_brand_logo.html" %}
         </a>
     </header>
     <section class="mkt-form-wrap">
+        {% if email_enviado %}
         <h1>Revisa tu correo</h1>
         <p>
             Hemos creado el espacio <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
@@ -24,14 +24,55 @@
             hasta entonces algunas acciones (como dar de alta usuarios) estarán limitadas.
             Si no ves el mensaje, revisa spam o la carpeta de promociones.
         </p>
+        {% else %}
+        <h1>Cuenta creada</h1>
+        <p>
+            Hemos creado el espacio <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %},
+            pero <strong>no hemos podido enviar</strong> el correo de verificación a
+            <strong>{{ email }}</strong> (problema temporal de correo).
+        </p>
+        <p>
+            Entra con tu correo y contraseña. Desde tu panel podrás reenviar el enlace de verificación.
+            Si el correo no llega, contacta con soporte.
+        </p>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('marketing.reenviar_verificacion') }}"
+              style="margin-top:1.25rem;padding:1rem;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="email" value="{{ email }}">
+            <input type="hidden" name="subdomain" value="{{ subdomain }}">
+            <p style="margin:0 0 .75rem;font-size:.95rem;color:#475569;">
+                ¿No te ha llegado el enlace?
+            </p>
+            <button type="submit" class="mkt-btn mkt-btn-secondary" style="width:100%;">
+                Reenviar correo de verificación
+            </button>
+        </form>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="mkt-alert mkt-alert-{{ category if category != 'error' else 'danger' }}" style="margin-top:1rem;">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
         <p style="margin-top:1.5rem;">
-            <a class="mkt-btn mkt-btn-primary" href="https://{{ subdomain }}.{{ base_domain }}/auth/login">
+            <a class="mkt-btn mkt-btn-primary" href="{{ login_url }}">
                 Ir al acceso de tu empresa
             </a>
+        </p>
+        <p style="margin-top:1.25rem;color:#64748b;font-size:.95rem;">
+            Si sales de esta página y no encuentras el correo,
+            vuelve a <a href="{{ url_for('marketing.entrar') }}"><strong>Entrar</strong></a>
+            en signaplan.com: con tu email te reenviamos el acceso
+            (y el enlace de verificación si aún no lo has confirmado).
         </p>
     </section>
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
     </footer>
+    {% include "components/_cookie_banner.html" %}
 </body>
 </html>

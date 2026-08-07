@@ -76,6 +76,9 @@ class Config:
     # déjalo en false: todo el mundo usa el producto sin bloqueos de plan.
     BILLING_ENFORCED = _env_bool('BILLING_ENFORCED', default=False)
 
+    # Google Analytics (opcional). Vacío = no se carga el script aunque haya consentimiento.
+    GOOGLE_ANALYTICS_ID = (os.environ.get('GOOGLE_ANALYTICS_ID') or '').strip() or None
+
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 20,
         'max_overflow': 40,

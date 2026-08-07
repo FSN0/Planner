@@ -261,11 +261,9 @@ class UniversalCalendarManager {
                 const props = arg.event.extendedProps || {};
                 if (props.estado_fichaje) {
                     let estado = props.estado_fichaje;
-                    let dotClass = '#94a3b8'; let titleMsg = t('Sin Registro');
-                    if (estado === 'Correcto' || estado === 'Correcto_Automatico') { dotClass = '#10b981'; titleMsg = t('Fichaje Correcto'); }
-                    else if (estado === 'Ausencia') { dotClass = '#f59e0b'; titleMsg = t('Ausencia Pendiente'); }
-                    else if (estado === 'Conflicto' || estado === 'Paracaidista') { dotClass = '#ef4444'; titleMsg = t('Conflicto/Desviación'); }
-                    else if (estado.startsWith('Resuelto') || estado === 'Correcto' || estado === 'Correcto_Automatico') { dotClass = '#10b981'; titleMsg = t('Fichaje resuelto'); }
+                    let FE = window.SPFichajeEstado;
+                    let dotClass = (FE && FE.colorDeEstado) ? FE.colorDeEstado(estado) : '#94a3b8';
+                    let titleMsg = (FE && FE.labelDeEstado) ? FE.labelDeEstado(estado) : (estado || t('Sin Registro'));
 
                     innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background-color:${dotClass}; margin-right:3px; flex-shrink:0;"></span>`;
                 }

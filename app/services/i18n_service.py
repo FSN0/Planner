@@ -42,6 +42,7 @@ _CATALOG = {
     'es': {
         'nav.features': 'Funciones',
         'nav.access': 'Acceso clientes',
+        'nav.integrations': 'Integraciones',
         'nav.signup': 'Crear cuenta',
         'nav.cta': 'Empezar gratis',
         'nav.lang': 'Idioma',
@@ -56,8 +57,8 @@ _CATALOG = {
         'hero.proof': 'Sin tarjeta · Espacio propio en minutos',
         'suite.title': 'No es solo fichaje. Es el conjunto.',
         'suite.sub': (
-            'Hay herramientas de fichaje mejores en aislamiento. '
-            'La diferencia es unir planificación, presencia y flota en el mismo sitio.'
+            'Planificación, fichaje y flota en la misma herramienta: '
+            'menos ir y venir entre apps y más control del día a día en obra.'
         ),
         'suite.plan.title': 'Planificador de obra',
         'suite.plan.body': 'Quién va a cada tajo cada día. Tablero claro para oficina y jefes.',
@@ -65,17 +66,31 @@ _CATALOG = {
         'suite.clock.body': 'DNI + PIN en el móvil. Pausas, conforme del trabajador e informe listo para inspección.',
         'suite.fleet.title': 'Flota y coches libres',
         'suite.fleet.body': 'Asignación de vehículos alineada con ausencias y el cuadrante de personal.',
+        'erp.title': 'Integraciones con tu ERP',
+        'erp.body': (
+            'Conectamos SignaPlan con Odoo y otros ERPs como proyecto a medida: '
+            'personal, obras, ausencias o fichajes según tu sistema. '
+            'Cuéntanos qué usáis y lo diseñamos juntos.'
+        ),
+        'erp.cta': 'Hablar de una integración',
         'legal.title': 'Registro de jornada con trazabilidad',
         'legal.body': (
             'Libro append-only con cadena de hashes, pausas, conforme digital del trabajador '
             'y PDF/CSV con huella. Documentación laboral sin Excel eterno.'
         ),
         'access.title': '¿Ya eres cliente?',
-        'access.body': 'Cada empresa entra por su propia URL de trabajo.',
+        'access.body': (
+            'Cada empresa tiene su propia URL. Si no la recuerdas o no te llegó el correo '
+            'de verificación, pide el acceso con tu email.'
+        ),
         'access.example': 'tuempresa.signaplan.com',
+        'access.cta': 'Entrar / recuperar acceso',
         'cta.title': 'Pon el día a día de obra en orden',
         'cta.body': 'Empieza gratis. Si quieres una demo con tu equipo, escríbenos.',
         'cta.mail': 'Hablar con nosotros',
+        'nav.login': 'Entrar',
+        'footer.login': 'Entrar',
+        'footer.contact': 'Contacto',
         'footer.legal': 'Aviso legal',
         'footer.privacy': 'Privacidad',
         'footer.cookies': 'Cookies',
@@ -92,6 +107,7 @@ _CATALOG = {
     'en': {
         'nav.features': 'Features',
         'nav.access': 'Customer access',
+        'nav.integrations': 'Integrations',
         'nav.signup': 'Create account',
         'nav.cta': 'Start free',
         'nav.lang': 'Language',
@@ -106,8 +122,8 @@ _CATALOG = {
         'hero.proof': 'No card · Your own workspace in minutes',
         'suite.title': 'Not just time clocking. The full stack.',
         'suite.sub': (
-            'Standalone clock apps may look sharper in isolation. '
-            'What sells is planning, presence and fleet in one place.'
+            'Scheduling, time clocking and fleet in one place — '
+            'less switching between apps, more control of the site day.'
         ),
         'suite.plan.title': 'Site planner',
         'suite.plan.body': 'Who goes where each day. A clear board for office and site managers.',
@@ -115,17 +131,31 @@ _CATALOG = {
         'suite.clock.body': 'ID + PIN on the phone. Breaks, worker confirmation and inspection-ready reports.',
         'suite.fleet.title': 'Fleet & free cars',
         'suite.fleet.body': 'Vehicle assignment aligned with leave and the crew schedule.',
+        'erp.title': 'ERP integrations',
+        'erp.body': (
+            'We connect SignaPlan to Odoo and other ERPs as a custom project: '
+            'people, sites, leave or time clocking to match your system. '
+            'Tell us what you use and we will design it with you.'
+        ),
+        'erp.cta': 'Talk about an integration',
         'legal.title': 'Working-time record with traceability',
         'legal.body': (
             'Append-only ledger with hash chain, breaks, digital worker confirmation '
             'and PDF/CSV fingerprint. Labour documentation without endless spreadsheets.'
         ),
         'access.title': 'Already a customer?',
-        'access.body': 'Each company signs in through its own workspace URL.',
+        'access.body': (
+            'Each company has its own URL. If you forgot it or never got the verification '
+            'email, request access with your address.'
+        ),
         'access.example': 'yourcompany.signaplan.com',
+        'access.cta': 'Sign in / recover access',
         'cta.title': 'Get the site day under control',
         'cta.body': 'Start free. Want a guided demo with your team? Email us.',
         'cta.mail': 'Talk to us',
+        'nav.login': 'Sign in',
+        'footer.login': 'Sign in',
+        'footer.contact': 'Contact',
         'footer.legal': 'Legal notice',
         'footer.privacy': 'Privacy',
         'footer.cookies': 'Cookies',
@@ -137,6 +167,7 @@ _CATALOG = {
     'pt': {
         'nav.features': 'Funções',
         'nav.access': 'Acesso clientes',
+        'nav.integrations': 'Integrações',
         'nav.signup': 'Criar conta',
         'nav.cta': 'Começar grátis',
         'nav.lang': 'Idioma',
@@ -151,8 +182,8 @@ _CATALOG = {
         'hero.proof': 'Sem cartão · O seu espaço em minutos',
         'suite.title': 'Não é só ponto. É o conjunto.',
         'suite.sub': (
-            'Há apps de ponto melhores sozinhas. '
-            'A diferença é unir planeamento, presença e frota no mesmo sítio.'
+            'Planeamento, ponto e frota na mesma ferramenta: '
+            'menos ir e vir entre apps e mais controlo do dia a dia na obra.'
         ),
         'suite.plan.title': 'Planeador de obra',
         'suite.plan.body': 'Quem vai a cada frente cada dia. Quadro claro para escritório e chefes.',
@@ -160,17 +191,31 @@ _CATALOG = {
         'suite.clock.body': 'Documento + PIN no telemóvel. Pausas, conforme do trabalhador e relatório para inspeção.',
         'suite.fleet.title': 'Frota e carros livres',
         'suite.fleet.body': 'Atribuição de veículos alinhada com ausências e o quadro de pessoal.',
+        'erp.title': 'Integrações com o seu ERP',
+        'erp.body': (
+            'Ligamos o SignaPlan ao Odoo e a outros ERPs como projeto à medida: '
+            'pessoal, obras, ausências ou ponto conforme o seu sistema. '
+            'Diga-nos o que usam e desenhamos juntos.'
+        ),
+        'erp.cta': 'Falar de uma integração',
         'legal.title': 'Registo de jornada com rastreabilidade',
         'legal.body': (
             'Livro append-only com cadeia de hashes, pausas, conforme digital '
             'e PDF/CSV com impressão digital. Documentação laboral sem Excel eterno.'
         ),
         'access.title': 'Já é cliente?',
-        'access.body': 'Cada empresa entra pela sua própria URL de trabalho.',
+        'access.body': (
+            'Cada empresa tem o seu URL. Se não o lembrar ou não recebeu o email '
+            'de verificação, peça o acesso com o seu endereço.'
+        ),
         'access.example': 'suaempresa.signaplan.com',
+        'access.cta': 'Entrar / recuperar acesso',
         'cta.title': 'Organize o dia a dia da obra',
         'cta.body': 'Comece grátis. Quer uma demo com a sua equipa? Escreva-nos.',
         'cta.mail': 'Falar connosco',
+        'nav.login': 'Entrar',
+        'footer.login': 'Entrar',
+        'footer.contact': 'Contacto',
         'footer.legal': 'Aviso legal',
         'footer.privacy': 'Privacidade',
         'footer.cookies': 'Cookies',
@@ -182,6 +227,7 @@ _CATALOG = {
     'fr': {
         'nav.features': 'Fonctions',
         'nav.access': 'Accès clients',
+        'nav.integrations': 'Intégrations',
         'nav.signup': 'Créer un compte',
         'nav.cta': 'Commencer gratuitement',
         'nav.lang': 'Langue',
@@ -196,8 +242,8 @@ _CATALOG = {
         'hero.proof': 'Sans carte · Votre espace en quelques minutes',
         'suite.title': 'Pas seulement le pointage. L’ensemble.',
         'suite.sub': (
-            'Des apps de pointage peuvent sembler meilleures isolées. '
-            'Ce qui vend, c’est planning, présence et flotte au même endroit.'
+            'Planning, pointage et flotte dans le même outil : '
+            'moins d’allers-retours entre apps, plus de contrôle du quotidien sur chantier.'
         ),
         'suite.plan.title': 'Planning de chantier',
         'suite.plan.body': 'Qui va où chaque jour. Un tableau clair pour le bureau et les chefs.',
@@ -205,17 +251,31 @@ _CATALOG = {
         'suite.clock.body': 'Pièce d’identité + PIN sur le téléphone. Pauses, accord du salarié et rapport d’inspection.',
         'suite.fleet.title': 'Flotte et véhicules libres',
         'suite.fleet.body': 'Affectation des véhicules alignée sur les absences et le planning.',
+        'erp.title': 'Intégrations avec votre ERP',
+        'erp.body': (
+            'Nous connectons SignaPlan à Odoo et à d’autres ERP en projet sur mesure : '
+            'personnel, chantiers, absences ou pointage selon votre système. '
+            'Dites-nous ce que vous utilisez, nous le concevons avec vous.'
+        ),
+        'erp.cta': 'Parler d’une intégration',
         'legal.title': 'Registre du temps de travail traçable',
         'legal.body': (
             'Registre append-only avec chaîne de hachage, pauses, confirmation numérique '
             'et PDF/CSV empreinté. Documentation sociale sans Excel éternel.'
         ),
         'access.title': 'Déjà client ?',
-        'access.body': 'Chaque entreprise se connecte via sa propre URL.',
+        'access.body': (
+            'Chaque entreprise a sa propre URL. Si vous l’avez oubliée ou n’avez pas reçu '
+            'l’e-mail de vérification, demandez l’accès avec votre adresse.'
+        ),
         'access.example': 'votreentreprise.signaplan.com',
+        'access.cta': 'Se connecter / récupérer l’accès',
         'cta.title': 'Mettez le chantier sous contrôle',
         'cta.body': 'Commencez gratuitement. Envie d’une démo avec votre équipe ? Écrivez-nous.',
         'cta.mail': 'Nous contacter',
+        'nav.login': 'Connexion',
+        'footer.login': 'Connexion',
+        'footer.contact': 'Contact',
         'footer.legal': 'Mentions légales',
         'footer.privacy': 'Confidentialité',
         'footer.cookies': 'Cookies',
@@ -382,7 +442,7 @@ def _translation_pairs(locale):
         if not src or not dst or src == dst:
             continue
         if '.' in src and src.split('.', 1)[0] in (
-            'nav', 'hero', 'suite', 'legal', 'access', 'cta', 'footer', 'alta',
+            'nav', 'hero', 'suite', 'erp', 'legal', 'access', 'cta', 'footer', 'alta',
             'pref', 'role',
         ):
             continue

@@ -180,7 +180,7 @@
       <div class="p-3">
         <p class="small text-muted mb-3">
           {% if user.pin_hash %}
-            {{ _('Este trabajador ya tiene PIN. Puedes cambiarlo o enviarle los datos de acceso por correo (se genera uno nuevo si no indicas PIN).') }}
+            {{ _('Este trabajador ya tiene PIN. Puedes cambiarlo o enviarle un enlace por correo para que lo defina (nunca se envía el PIN en claro).') }}
           {% else %}
             {{ _('Todavía no tiene PIN de fichaje.') }}
           {% endif %}
@@ -209,17 +209,17 @@
             <form method="POST" action="{{ url_for('admin.enviar_acceso_fichaje', user_id=user.id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="regenerar" value="1">
-              <label class="admin-form-label">{{ _('Enviar acceso por correo') }}</label>
+              <label class="admin-form-label">{{ _('Enviar enlace para definir PIN') }}</label>
               <input type="password" name="nuevo_pin" class="form-control mb-2"
                      inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
-                     placeholder="{{ _('Vacío = genera PIN nuevo') }}">
+                     placeholder="{{ _('Vacío = genera PIN provisional') }}">
               <p class="small text-muted mb-2">
                 {{ _('Envía a') }} <strong>{{ user.email }}</strong>
-                {{ _('la URL de fichaje, el DNI y el PIN. El PIN anterior no se puede recuperar: si dejas el campo vacío se genera uno nuevo.') }}
+                {{ _('un enlace para que defina su PIN. El PIN no viaja en el correo. Si dejas el campo vacío se genera uno provisional (solo lo verás tú aquí).') }}
               </p>
               <button type="submit" class="btn-admin btn-admin-primary"
                       {% if not user.email or '@demo.signaplan' in (user.email or '') or '@local.signaplan' in (user.email or '') %}disabled title="{{ _('Necesita un correo real') }}"{% endif %}>
-                <i class="fas fa-paper-plane"></i> {{ _('Enviar datos de acceso') }}
+                <i class="fas fa-paper-plane"></i> {{ _('Enviar enlace') }}
               </button>
             </form>
           </div>

@@ -1,0 +1,85 @@
+{% extends 'operario/base.html' %}
+{% set activo = 'ausencias' %}
+{% block title %}{{ _('Vacaciones') }}{% endblock %}
+
+{% block contenido %}
+<h1 class="titulo">{{ _('Vacaciones y permisos') }}</h1>
+<p class="campo__ayuda" style="margin-top:-8px;margin-bottom:20px;">
+  {{ _('La solicitud queda pendiente hasta que la apruebe oficina o RRHH. Si tu empresa trae las vacaciones del ERP, esas ya vienen validadas y no hay que pedirlas aquí.') }}
+</p>
+
+<form method="POST" class="form-ausencia" action="{{ url_for('operarios.ausencias') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="accion" value="solicitar">
+
+  <div class="campo">
+    <label class="campo__etiqueta" for="tipo">{{ _('Tipo') }}</label>
+    <select class="campo__control" id="tipo" name="tipo" required>
+      <option value="Vacaciones">{{ _('Vacaciones') }}</option>
+      <option value="Permiso">{{ _('Permiso') }}</option>
+      <option value="Asuntos propios">{{ _('Asuntos propios') }}</option>
+      <option value="Baja">{{ _('Baja') }}</option>
+    </select>
+  </div>
+
+  <div class="campo">
+    <label class="campo__etiqueta" for="fecha_inicio">{{ _('Desde') }}</label>
+    <input class="campo__control" type="date" id="fecha_inicio" name="fecha_inicio" required>
+  </div>
+
+  <div class="campo">
+    <label class="campo__etiqueta" for="fecha_fin">{{ _('Hasta') }}</label>
+    <input class="campo__control" type="date" id="fecha_fin" name="fecha_fin" required>
+  </div>
+
+  <div class="campo">
+    <label class="campo__etiqueta" for="descripcion">{{ _('Nota (opcional)') }}</label>
+    <textarea class="campo__control" id="descripcion" name="descripcion" rows="2"
+              placeholder="{{ _('Motivo breve…') }}"></textarea>
+  </div>
+
+  <button class="boton boton--entrar" type="submit">{{ _('Enviar solicitud') }}</button>
+</form>
+
+<h2 class="titulo" style="font-size:18px;margin-top:28px;">{{ _('Mis solicitudes') }}</h2>
+
+{% if ausencias %}
+<ul class="dias">
+  {% for a in ausencias %}
+  <li class="dia">
+    <div class="dia__cabecera">
+      <span>{{ a.tipo }}</span>
+      {% if a.estado == 'pendiente' %}
+        <span class="badge-estado badge-estado--pendiente">{{ _('Pendiente') }}</span>
+      {% elif a.estado == 'aprobada' %}
+        <span class="badge-estado badge-estado--ok">{{ _('Aprobada') }}</span>
+      {% elif a.estado == 'rechazada' %}
+        <span class="badge-estado badge-estado--no">{{ _('Rechazada') }}</span>
+      {% else %}
+        <span class="badge-estado">{{ a.estado }}</span>
+      {% endif %}
+    </div>
+    <div class="dia__cuerpo">
+      <span>{{ a.fecha_inicio.strftime('%d/%m/%Y') }} — {{ a.fecha_fin.strftime('%d/%m/%Y') }}</span>
+      {% if a.origen == 'odoo' or a.origen == 'erp' %}
+        <span>{{ _('ERP') }}</span>
+      {% endif %}
+    </div>
+    {% if a.descripcion %}
+    <div class="dia__aviso">{{ a.descripcion }}</div>
+    {% endif %}
+    {% if a.estado == 'pendiente' and a.origen == 'manual' %}
+    <form method="POST" action="{{ url_for('operarios.ausencias') }}" style="margin-top:10px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="accion" value="cancelar">
+      <input type="hidden" name="leave_id" value="{{ a.id }}">
+      <button type="submit" class="boton boton--secundario">{{ _('Cancelar solicitud') }}</button>
+    </form>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="vacio">{{ _('Todavía no tienes ausencias ni solicitudes.') }}</p>
+{% endif %}
+{% endblock %}

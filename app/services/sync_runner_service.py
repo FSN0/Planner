@@ -1,4 +1,5 @@
 """Ejecución de sync automática por módulo (usado por Celery y «Auto ahora»)."""
+import secrets
 import time
 from datetime import datetime
 
@@ -102,7 +103,7 @@ def run_auto_sync_empleados():
             dni=obj['dni'], email=obj['email'], role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
             company_id=default_company_id, active=True, email_verified=True,
-            password_hash=generate_password_hash("123456"),
+            password_hash=generate_password_hash(secrets.token_urlsafe(24)),
         ))
 
     for obj in emp_act:
@@ -183,7 +184,7 @@ def run_auto_sync_subcontratas():
             dni=dni, email=obj['email'], role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional'),
             company_id=local_comp_id, active=True, email_verified=True,
-            password_hash=generate_password_hash("123456"),
+            password_hash=generate_password_hash(secrets.token_urlsafe(24)),
         ))
 
     tot_n = len(diff['empresas']['nuevas']) + len(diff['empleados']['nuevos'])

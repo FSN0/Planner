@@ -19,9 +19,10 @@ MODULOS_DISPONIBLES = {
     'odoo_alta': 'Alta Odoo (Fichajes Soltec / SSO)',
 }
 
+# Solo adaptadores realmente implementados en app/sync/adapters/.
+# Integraciones ERP a medida para otros clientes: proyecto bajo demanda (ver landing).
 ADAPTADORES_ODOO = {
     'odoo_soltec': 'Traductor / Adaptador Soltec',
-    'odoo_generico': 'Traductor Genérico Estándar'
 }
 
 # ==========================================

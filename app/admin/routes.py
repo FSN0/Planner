@@ -2043,7 +2043,7 @@ def reset_password(user_id):
 @login_required
 @roles_required(ROLE_ADMIN)
 def enviar_acceso_fichaje(user_id):
-    """Asigna/regenera PIN y envía DNI + PIN + URL /mi al correo del trabajador."""
+    """Asigna/regenera PIN y envía enlace para que el trabajador lo defina."""
     from app.services.pin_auth_service import PinAuthError, enviar_acceso_fichaje as _enviar
 
     user = User.query.get_or_404(user_id)
@@ -2058,14 +2058,16 @@ def enviar_acceso_fichaje(user_id):
         )
         db.session.commit()
         if ok:
+            extra = f' PIN provisional (solo visible aquí): {pin_usado}.' if pin_usado else ''
             flash(
-                f'Acceso enviado a {user.email}. PIN: {pin_usado}.',
+                f'Enlace para definir PIN enviado a {user.email}.{extra}',
                 'success',
             )
         else:
             flash(
-                f'PIN actualizado ({pin_usado}), pero no se pudo enviar el correo. '
-                f'Revisa SMTP o cópiale el PIN a mano.',
+                f'PIN preparado'
+                f'{f" ({pin_usado})" if pin_usado else ""}, '
+                f'pero no se pudo enviar el correo. Revisa SMTP o entrégaselo en mano.',
                 'warning',
             )
     except PinAuthError as exc:
@@ -2086,7 +2088,8 @@ def reset_pin(user_id):
     Asigna o cambia el PIN de fichaje de un trabajador.
 
     El PIN solo se muestra al guardarlo aquí: después queda hasheado y no se
-    puede recuperar, igual que una contraseña.
+    puede recuperar, igual que una contraseña. El correo nunca lleva el PIN
+    en claro: envía un enlace para definirlo.
     """
     from app.services.pin_auth_service import PinAuthError, asignar_pin, quitar_pin
 
@@ -2105,10 +2108,14 @@ def reset_pin(user_id):
                 user, notify=True, actor=current_user
             )
             db.session.commit()
+            mail_msg = (
+                ' Se ha enviado un enlace por correo para que lo defina.'
+                if user.email else ''
+            )
             flash(
-                f'PIN generado para {user.name} {user.lastname}: {pin_plano}. '
-                f'Debe cambiarlo en el primer acceso a /mi.'
-                f'{" Se ha enviado por correo." if user.email else ""}',
+                f'PIN provisional para {user.name} {user.lastname}: {pin_plano}. '
+                f'Debe cambiarlo en el primer acceso a /mi (o con el enlace del correo).'
+                f'{mail_msg}',
                 'success',
             )
         else:
@@ -2116,9 +2123,13 @@ def reset_pin(user_id):
             pin = request.form.get('nuevo_pin')
             asignar_pin_explicito(user, pin, notify=True, actor=current_user)
             db.session.commit()
+            mail_msg = (
+                ' Se ha enviado un enlace por correo para que pueda redefinirlo.'
+                if user.email else ''
+            )
             flash(
-                f'PIN de fichaje actualizado para {user.name} {user.lastname}. '
-                f'Entrará en /mi con su DNI y este PIN.',
+                f'PIN de fichaje actualizado para {user.name} {user.lastname}.'
+                f'{mail_msg}',
                 'success',
             )
     except PinAuthError as exc:
@@ -2842,7 +2853,6 @@ def update_config():
 
         # Activar esto abre el login a los operarios, que hasta ahora no
         # entraban. Se avisa en la plantilla porque tiene consecuencias.
-        # El fichaje móvil está en el plan gratuito; la geolocalización no.
         from app.services.plan_service import PlanLimitError, exigir_geolocalizacion
         if tenant_tiene_fichaje_operario_module():
             operario_activo = 'True' if request.form.get('fichaje_operario_activo') else 'False'
@@ -3288,7 +3298,7 @@ def save_log_preferences():
 
 @admin_bp.route('/ausencias')
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH)
 def ausencias_list():
     from datetime import date as date_cls
     from app.services.leave_service import (
@@ -3412,7 +3422,7 @@ def ausencias_crear():
 
 @admin_bp.route('/ausencias/<int:leave_id>/aprobar', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+@roles_required(ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
 def ausencias_aprobar(leave_id):
     from app.models import LEAVE_STATUS_APROBADA
     from app.services.leave_service import set_leave_estado
@@ -3426,7 +3436,7 @@ def ausencias_aprobar(leave_id):
 
 @admin_bp.route('/ausencias/<int:leave_id>/rechazar', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_LABORAL)
+@roles_required(ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
 def ausencias_rechazar(leave_id):
     from app.models import LEAVE_STATUS_RECHAZADA
     from app.services.leave_service import set_leave_estado

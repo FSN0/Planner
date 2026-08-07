@@ -20,6 +20,7 @@ FICHAJE_OK = (
     'Correcto', 'Correcto_Automatico',
     'Resuelto_Movido', 'Resuelto_Asignado', 'Resuelto_Dividido',
     'Resuelto_Ignorado', 'Resuelto_Falta', 'Resuelto_Ausencia',
+    'Exento_Ausencia', 'Cerrado_Multiobra',
 )
 
 

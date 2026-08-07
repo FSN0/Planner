@@ -23,7 +23,7 @@ def _puede_login_web_row(role, web_access):
 
 def buscar_tenants_por_email(email):
     """
-    Devuelve lista de dicts {tenant, user_name} para emails con acceso web.
+    Devuelve lista de dicts {tenant, user_name, email_verified} para emails con acceso web.
 
     Mensaje genérico hacia fuera: el caller no debe delatar si el correo
     existe cuando la lista está vacía.
@@ -55,7 +55,8 @@ def buscar_tenants_por_email(email):
                         SELECT name, lastname, role,
                                COALESCE(web_access, false) AS web_access,
                                COALESCE(active, false) AS active,
-                               COALESCE(is_deleted, false) AS is_deleted
+                               COALESCE(is_deleted, false) AS is_deleted,
+                               COALESCE(email_verified, false) AS email_verified
                         FROM {schema}.users
                         WHERE lower(email) = :email
                         LIMIT 1
@@ -73,6 +74,7 @@ def buscar_tenants_por_email(email):
                     'tenant': tenant,
                     'user_name': f"{row['name']} {row['lastname']}".strip(),
                     'role': row['role'],
+                    'email_verified': bool(row['email_verified']),
                 })
     finally:
         engine.dispose()

@@ -16,11 +16,12 @@ from app.utils.timezone_utils import today_local
 #   Azul   = planificado (aún no hay dato Odoo; típico futuro / hoy)
 #   Verde  = cumplido (planificado + km Odoo, misma persona)
 #   Naranja = conflicto (km sin plan | plan pasado sin km | otro conductor)
-#   Rojo   = ausencia (planificado en vacaciones/baja)
+#   Teal   = libre por ausencia (hay plan, pero el conductor está de vacaciones/baja;
+#            el coche se puede usar — misma regla que «Coches libres»)
 VEHICLE_COLOR_PLAN = '#0ea5e9'
 VEHICLE_COLOR_CUMPLIDO = '#16a34a'
 VEHICLE_COLOR_CONFLICTO = '#f59e0b'
-VEHICLE_COLOR_AUSENCIA = '#dc2626'
+VEHICLE_COLOR_AUSENCIA = '#0d9488'  # libre práctico (no es “ocupado”)
 VEHICLE_COLOR_ODOO_EXT = '#64748b'  # conductor Odoo no matcheado en el programa
 
 # Alias legados (imports antiguos)

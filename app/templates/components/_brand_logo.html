@@ -1,0 +1,31 @@
+{# Logo SignaPlan (PNG de marca).
+   variant: mark | horizontal | horizontal_on_dark | wordmark
+   horizontal_on_dark = con fondo blanco (hero sobre wallpaper).
+#}
+{% set _variant = variant|default('horizontal') %}
+{% set _brand_v = '20260807e' %}
+{% if _variant == 'mark' %}
+  {% set _src = 'img/brand/logo-mark.png' %}
+  {% set _w = width|default(32) %}
+  {% set _h = height|default(32) %}
+{% elif _variant == 'wordmark' %}
+  {% set _src = 'img/brand/logo-wordmark.png' %}
+  {% set _w = width|default(160) %}
+  {% set _h = height|default(40) %}
+{% elif _variant == 'horizontal_on_dark' %}
+  {% set _src = 'img/brand/logo-horizontal-on-dark.png' %}
+  {% set _w = width|default(220) %}
+  {% set _h = height|default(56) %}
+{% else %}
+  {% set _src = 'img/brand/logo-horizontal.png' %}
+  {% set _w = width|default(180) %}
+  {% set _h = height|default(48) %}
+{% endif %}
+<img
+  class="sp-logo sp-logo--{{ _variant|replace('_', '-') }} {{ logo_class|default('') }}"
+  src="{{ url_for('static', filename=_src) }}?v={{ _brand_v }}"
+  alt="SignaPlan"
+  width="{{ _w }}"
+  height="{{ _h }}"
+  decoding="async"
+/>

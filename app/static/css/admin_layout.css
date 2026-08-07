@@ -1541,13 +1541,20 @@ body.layout-admin .navbar {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-md, 0.625rem);
-  background: linear-gradient(135deg, #22c55e, #0ea5e9);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
-  color: #0b1120;
+  overflow: hidden;
   flex-shrink: 0;
+}
+.admin-logo-mark img {
+  width: 28px;
+  height: 28px;
+  display: block;
+  /* Tinta oscura sobre sidebar oscura: halo claro sin caja blanca */
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.9))
+          drop-shadow(0 0 2px rgba(255, 255, 255, 0.55));
 }
 
 .admin-logo-text {
@@ -1558,18 +1565,21 @@ body.layout-admin .navbar {
   line-height: 1.15;
 }
 
-.admin-logo-text span:first-child {
+.admin-logo-text span:first-child,
+.admin-logo-text .admin-logo-sub {
   font-size: 0.58rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #64748b;
 }
-
-.admin-logo-text span:last-child {
+.admin-logo-text span:last-child,
+.admin-logo-text .admin-logo-brand {
   font-size: 0.88rem;
   font-weight: 700;
   color: #f1f5f9;
+  letter-spacing: -0.02em;
+  text-transform: none;
 }
 
 .sidebar-toggle-btn {

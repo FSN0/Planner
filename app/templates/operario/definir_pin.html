@@ -1,0 +1,30 @@
+{% extends "operario/base.html" %}
+{% block title %}{{ _('Definir PIN') }}{% endblock %}
+{% block contenido %}
+<section class="tarjeta">
+    <h1 class="titulo">{{ _('Define tu PIN') }}</h1>
+    <p class="texto-suave">
+        {{ _('Elige un PIN de 4 a 6 dígitos para fichar con tu DNI. No lo compartas.') }}
+    </p>
+
+    <form method="POST" class="formulario" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="t" value="{{ token }}">
+
+        <label class="campo">
+            <span>{{ _('PIN nuevo') }}</span>
+            <input type="password" name="pin_nuevo" inputmode="numeric" pattern="[0-9]*"
+                   maxlength="6" required autocomplete="new-password"
+                   placeholder="••••">
+        </label>
+        <label class="campo">
+            <span>{{ _('Repite el PIN') }}</span>
+            <input type="password" name="pin_nuevo2" inputmode="numeric" pattern="[0-9]*"
+                   maxlength="6" required autocomplete="new-password"
+                   placeholder="••••">
+        </label>
+
+        <button type="submit" class="boton boton--primario">{{ _('Guardar PIN') }}</button>
+    </form>
+</section>
+{% endblock %}

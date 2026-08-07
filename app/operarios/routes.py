@@ -47,6 +47,7 @@ ROLES_CON_FICHAJE = (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN)
 # Rutas públicas del área: no exigen sesión.
 _RUTAS_PUBLICAS = {
     'operarios.entrar',
+    'operarios.definir_pin',
     'operarios.manifest',
     'operarios.service_worker',
 }
@@ -173,6 +174,58 @@ def inicio():
     return render_template('operario/fichar.html', **contexto)
 
 
+@operarios_bp.route('/definir-pin', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 40 per hour', methods=['POST'])
+def definir_pin():
+    """Define el PIN desde el enlace del correo (sin sesión ni PIN previo)."""
+    from app.services.pin_auth_service import (
+        PinAuthError,
+        definir_pin_desde_token,
+        leer_token_definir_pin,
+    )
+
+    if not getattr(g, 'current_tenant', None):
+        flash('Accede desde la URL de tu empresa.', 'warning')
+        return redirect(url_for('operarios.entrar'))
+
+    token = (request.values.get('t') or '').strip()
+    if not token:
+        flash('El enlace para definir el PIN no es válido.', 'danger')
+        return redirect(url_for('operarios.entrar'))
+
+    # Validación temprana en GET para mostrar error claro si el token caducó.
+    if request.method == 'GET':
+        try:
+            leer_token_definir_pin(token, g.current_tenant)
+        except PinAuthError as exc:
+            flash(str(exc), 'danger')
+            return redirect(url_for('operarios.entrar'))
+
+    if request.method == 'POST':
+        try:
+            user = definir_pin_desde_token(
+                token,
+                g.current_tenant,
+                request.form.get('pin_nuevo'),
+                request.form.get('pin_nuevo2'),
+            )
+            db.session.commit()
+            if current_user.is_authenticated:
+                logout_user()
+            login_user(user, remember=True)
+            flash('PIN guardado. Ya puedes fichar.', 'success')
+            return redirect(url_for('operarios.inicio'))
+        except PinAuthError as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+
+    return render_template(
+        'operario/definir_pin.html',
+        token=token,
+        activo='pin',
+    )
+
+
 @operarios_bp.route('/pin', methods=['GET', 'POST'])
 @limiter.limit('20 per minute; 60 per hour', methods=['POST'])
 def cambiar_pin():
@@ -216,6 +269,66 @@ def cambiar_pin():
         'operario/cambiar_pin.html',
         obligatorio=obligatorio or debe_cambiar_pin(current_user),
         activo='pin',
+    )
+
+
+@operarios_bp.route('/ausencias', methods=['GET', 'POST'])
+@limiter.limit('20 per minute; 60 per hour', methods=['POST'])
+def ausencias():
+    """Solicitar vacaciones/permisos y ver el estado (pendiente → aprobación oficina)."""
+    from app.models import LEAVE_STATUS_PENDIENTE, LEAVE_SOURCE_MANUAL
+    from app.services.leave_service import (
+        delete_manual_leave,
+        leaves_del_usuario,
+        solicitar_ausencia_propia,
+    )
+    from app.utils import register_log
+
+    if request.method == 'POST':
+        accion = (request.form.get('accion') or 'solicitar').strip()
+        if accion == 'cancelar':
+            leave_id = request.form.get('leave_id', type=int)
+            try:
+                delete_manual_leave(leave_id, current_user)
+                flash('Solicitud cancelada.', 'success')
+            except Exception as exc:
+                flash(str(exc), 'danger')
+            return redirect(url_for('operarios.ausencias'))
+
+        try:
+            leave = solicitar_ausencia_propia(
+                current_user,
+                fecha_inicio=request.form.get('fecha_inicio'),
+                fecha_fin=request.form.get('fecha_fin'),
+                tipo=request.form.get('tipo') or 'Vacaciones',
+                descripcion=request.form.get('descripcion'),
+            )
+            register_log(
+                user_id=current_user.id,
+                category='ausencias',
+                action='Solicitud de ausencia',
+                detail=(
+                    f'{leave.tipo}: {leave.fecha_inicio} — {leave.fecha_fin} '
+                    f'(pendiente de aprobación)'
+                ),
+                target_user_id=current_user.id,
+                target_date=leave.fecha_inicio,
+            )
+            flash(
+                'Solicitud enviada. Queda pendiente de que oficina o RRHH la aprueben.',
+                'success',
+            )
+        except Exception as exc:
+            flash(str(exc), 'danger')
+        return redirect(url_for('operarios.ausencias'))
+
+    items = leaves_del_usuario(current_user.id, limit=50)
+    return render_template(
+        'operario/ausencias.html',
+        ausencias=items,
+        activo='ausencias',
+        LEAVE_STATUS_PENDIENTE=LEAVE_STATUS_PENDIENTE,
+        LEAVE_SOURCE_MANUAL=LEAVE_SOURCE_MANUAL,
     )
 
 
@@ -412,7 +525,7 @@ def manifest():
         'lang': 'es',
         'icons': [
             {
-                'src': url_for('static', filename='img/fichaje-icon.svg'),
+                'src': url_for('static', filename='img/brand/logo-mark.png'),
                 'sizes': 'any',
                 'type': 'image/svg+xml',
                 'purpose': 'any maskable',

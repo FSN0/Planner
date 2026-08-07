@@ -19,15 +19,12 @@ window.PersonDayTimeline = (function () {
 
     function applyEstadoBadge(el, estado) {
         if (!el) return;
-        const value = t((estado || 'Sin registro').replace(/_/g, ' '));
+        const raw = estado || 'Sin_Registro';
+        const FE = window.SPFichajeEstado;
+        const value = FE && FE.labelDeEstado ? FE.labelDeEstado(raw) : t(raw.replace(/_/g, ' '));
         el.textContent = value;
-        el.className = 'badge-soft person-day-timeline-estado badge-soft-gray';
-        if (value.includes('Correcto') || value.startsWith('Resuelto')) el.className = 'badge-soft person-day-timeline-estado badge-soft-green';
-        else if (value === 'Paracaidista' || value === 'Conflicto') el.className = 'badge-soft person-day-timeline-estado badge-soft-amber';
-        else if (value.includes('Ausencia') || value === 'Conflicto') el.className = 'badge-soft person-day-timeline-estado badge-soft-red';
-        else if (value.includes('Asignado') || value.includes('RRHH') || value.includes('Actividad') || value.includes('día')) {
-            el.className = 'badge-soft person-day-timeline-estado badge-soft-blue';
-        }
+        const badge = FE && FE.badgeClass ? FE.badgeClass(raw) : 'badge-soft-gray';
+        el.className = 'badge-soft person-day-timeline-estado ' + badge;
     }
 
     function renderActor(hito) {

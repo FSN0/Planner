@@ -8,7 +8,7 @@
 #   make help         → Ver todos los comandos disponibles
 # =============================================================================
 
-.PHONY: help dev dev-build dev-down dev-restart prod-deploy prod-down prod-logs \
+.PHONY: help sync-brand dev dev-build dev-down dev-restart prod-deploy prod-down prod-logs \
         migrate migrate-new backup restore test test-db test-unit test-integration \
         test-ledger test-pwa test-erp test-informe test-pin test-plan test-comercial \
         test-oficina test-onboarding lan-tunnel logs shell db-shell clean init-saas
@@ -40,7 +40,11 @@ help: ## Muestra esta ayuda
 # ─────────────────────────────────────────────────────────────────────────────
 # DESARROLLO
 # ─────────────────────────────────────────────────────────────────────────────
+sync-brand: ## Copia logos desde logos_signaplan/ a static/img/brand
+	@bash scripts/sync_brand_assets.sh
+
 dev: ## Levanta entorno de desarrollo
+	@$(MAKE) sync-brand
 	docker compose -f $(DEV_COMPOSE) up -d --build
 	@echo ""
 	@echo "✓ Entorno de desarrollo listo"
@@ -49,6 +53,7 @@ dev: ## Levanta entorno de desarrollo
 	@echo ""
 
 dev-build: ## Rebuild completo (sin caché) + levantar
+	@$(MAKE) sync-brand
 	docker compose -f $(DEV_COMPOSE) build --no-cache
 	docker compose -f $(DEV_COMPOSE) up -d
 

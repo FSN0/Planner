@@ -5,7 +5,7 @@
 
 from datetime import timedelta
 
-from flask import abort, flash, redirect, render_template, url_for
+from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.decorators import roles_required
@@ -13,7 +13,6 @@ from app.empleado import empleado_bp
 from app.models import (
     ROLE_OPERARIO,
     Asignacion,
-    AusenciaPlanificada,
     Obra,
 )
 from app.utils.timezone_utils import today_local
@@ -112,14 +111,53 @@ def fichajes():
     return render_template('empleado/fichajes.html', **datos)
 
 
-@empleado_bp.route('/ausencias')
+@empleado_bp.route('/ausencias', methods=['GET', 'POST'])
 @login_required
 @roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def ausencias():
-    items = (
-        AusenciaPlanificada.query.filter_by(user_id=current_user.id)
-        .order_by(AusenciaPlanificada.fecha_inicio.desc())
-        .limit(100)
-        .all()
+    from app.services.leave_service import (
+        delete_manual_leave,
+        leaves_del_usuario,
+        solicitar_ausencia_propia,
     )
+    from app.utils import register_log
+
+    if request.method == 'POST':
+        accion = (request.form.get('accion') or 'solicitar').strip()
+        if accion == 'cancelar':
+            leave_id = request.form.get('leave_id', type=int)
+            try:
+                delete_manual_leave(leave_id, current_user)
+                flash('Solicitud cancelada.', 'success')
+            except Exception as exc:
+                flash(str(exc), 'danger')
+            return redirect(url_for('empleado.ausencias'))
+        try:
+            leave = solicitar_ausencia_propia(
+                current_user,
+                fecha_inicio=request.form.get('fecha_inicio'),
+                fecha_fin=request.form.get('fecha_fin'),
+                tipo=request.form.get('tipo') or 'Vacaciones',
+                descripcion=request.form.get('descripcion'),
+            )
+            register_log(
+                user_id=current_user.id,
+                category='ausencias',
+                action='Solicitud de ausencia',
+                detail=(
+                    f'{leave.tipo}: {leave.fecha_inicio} — {leave.fecha_fin} '
+                    f'(pendiente de aprobación)'
+                ),
+                target_user_id=current_user.id,
+                target_date=leave.fecha_inicio,
+            )
+            flash(
+                'Solicitud enviada. Queda pendiente de aprobación.',
+                'success',
+            )
+        except Exception as exc:
+            flash(str(exc), 'danger')
+        return redirect(url_for('empleado.ausencias'))
+
+    items = leaves_del_usuario(current_user.id, limit=100)
     return render_template('empleado/ausencias.html', ausencias=items)

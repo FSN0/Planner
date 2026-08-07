@@ -351,6 +351,28 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
     }
     detailsHtml += '</ul>';
 
+    // Ausencia aprobada: bloqueo duro — no ofrecer sobrescribir/pluriempleo.
+    if (data.conflict_type === 'leave') {
+        Swal.fire(window.adminSwalDefaults({
+            title: 'Trabajador de ausencia',
+            icon: 'info',
+            width: '34em',
+            showConfirmButton: true,
+            confirmButtonText: 'Entendido',
+            html: `
+                <p class="mb-2">${data.message || 'No se puede asignar: hay una ausencia aprobada en esas fechas.'}</p>
+                <div class="admin-swal-conflict-box">
+                    <p class="mb-1 font-weight-bold" style="font-size:0.78rem;color:#334155;">Días afectados</p>
+                    ${detailsHtml}
+                </div>
+                <p class="text-muted mb-0" style="font-size:0.85rem;">
+                    Gestiona la ausencia en Ausencias o elige otro trabajador / otras fechas.
+                </p>
+            `,
+        })).then(() => { if (onCancelCallback) onCancelCallback(); });
+        return;
+    }
+
     let config = window.adminSwalDefaults({
         title: data.conflict_type === 'custody_partial' ? 'Custodia Parcial Detectada' : 'Conflicto de Asignación',
         icon: 'warning',

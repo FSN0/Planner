@@ -444,6 +444,38 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
+.form-ausencia .campo { margin-bottom: 14px; }
+
+textarea.campo__control {
+    min-height: 72px;
+    resize: vertical;
+    font: inherit;
+}
+
+.boton--secundario {
+    width: 100%;
+    min-height: var(--alto-toque);
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--texto-suave);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.badge-estado {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--superficie-alta);
+    color: var(--texto-suave);
+}
+
+.badge-estado--pendiente { background: #78350f; color: #fde68a; }
+.badge-estado--ok { background: #14532d; color: #bbf7d0; }
+.badge-estado--no { background: #7f1d1d; color: #fecaca; }
+
 /* Quien haya configurado el sistema para reducir animaciones no quiere que
    los botones reboten al pulsarlos. */
 @media (prefers-reduced-motion: reduce) {

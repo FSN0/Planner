@@ -174,13 +174,13 @@
         <div class="modal-body p-4">
           <label class="font-weight-bold">Plan</label>
           <select name="plan" class="form-control mb-3">
-            <option value="free" {% if t.plan != 'paid' %}selected{% endif %}>Gratis (hasta 10 trabajadores)</option>
-            <option value="paid" {% if t.plan == 'paid' %}selected{% endif %}>Pago (geo + plantilla amplia)</option>
+            <option value="free" {% if t.plan != 'paid' %}selected{% endif %}>Sin cobro (abierto)</option>
+            <option value="paid" {% if t.plan == 'paid' %}selected{% endif %}>De pago</option>
           </select>
           <label class="font-weight-bold">Límite de trabajadores (opcional)</label>
           <input type="number" min="1" name="limite_empleados" class="form-control"
                  value="{{ t.limite_empleados if t.limite_empleados is not none else '' }}"
-                 placeholder="Vacío = según plan (10 en gratis, ilimitado en pago)">
+                 placeholder="Vacío = sin límite aplicado por ahora">
           <div class="custom-control custom-checkbox mt-3">
             <input type="checkbox" class="custom-control-input" name="billing_exempt" value="1"
                    id="billingExempt_{{ t.id }}" {% if t.billing_exempt %}checked{% endif %}>
@@ -189,8 +189,8 @@
             </label>
           </div>
           <small class="text-muted d-block mt-2">
-            Cuentan operarios y jefes de obra activos. Con «sin cobro» tienen geolocalización
-            y plantilla amplia aunque no pase por la pasarela. El fichaje móvil está en el gratis.
+            Cuentan operarios y jefes de obra activos. Hoy el cobro está apagado:
+            estos campos sirven para cuando se active Stripe.
           </small>
         </div>
         <div class="modal-footer bg-light">

@@ -1,0 +1,32 @@
+{# Banner de consentimiento de cookies (CMP ligero). Solo no-esenciales con OK. #}
+{% set ga_id = config.get('GOOGLE_ANALYTICS_ID') if config is defined else none %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/cookie-consent.css') }}">
+<div id="sp-cookie-banner" class="sp-cookie-banner" hidden role="dialog" aria-live="polite" aria-label="Cookies">
+  <div class="sp-cookie-inner">
+    <p class="sp-cookie-text">
+      Usamos cookies esenciales para que el sitio funcione.
+      {% if ga_id %}
+      Con tu permiso también usamos cookies de analítica (Google Analytics) para mejorar el producto.
+      {% else %}
+      Si en el futuro activamos analítica o marketing, te pediremos permiso aquí.
+      {% endif %}
+      <a href="{{ url_for('marketing.legal', slug='cookies') }}">Más información</a>.
+    </p>
+    <div class="sp-cookie-actions">
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-ghost" data-sp-cookie="essential">Solo esenciales</button>
+      {% if ga_id %}
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="all">Aceptar todas</button>
+      {% else %}
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="essential">Entendido</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+  window.SP_COOKIE_CONFIG = {
+    gaId: {{ (ga_id or '')|tojson }},
+    cookieName: 'sp_cookie_consent',
+    maxAgeDays: 180
+  };
+</script>
+<script src="{{ url_for('static', filename='js/cookie-consent.js') }}" defer></script>

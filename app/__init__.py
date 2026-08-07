@@ -192,6 +192,19 @@ def create_app():
             pass
         return response
 
+    @app.teardown_appcontext
+    def _shutdown_session(exception=None):
+        # Si algo dejó la transacción abortada, no envenene la siguiente petición.
+        if exception is not None:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+        try:
+            db.session.remove()
+        except Exception:
+            pass
+
     @app.after_request
     def translate_html_ui(response):
         """Traduce textos de interfaz del HTML al idioma activo."""

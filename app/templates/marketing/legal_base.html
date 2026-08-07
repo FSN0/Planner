@@ -15,7 +15,7 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="{{ url_for('main.dashboard') }}"><span>SignaPlan</span></a>
+        <a class="mkt-brand" href="{{ url_for('main.dashboard') }}">{% include "components/_brand_logo.html" %}</a>
         <nav class="mkt-nav-links">
             <a href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
         </nav>
@@ -35,5 +35,6 @@
             <a href="{{ url_for('marketing.legal', slug='encargado') }}">Encargo de tratamiento</a>
         </span>
     </footer>
+    {% include "components/_cookie_banner.html" %}
 </body>
 </html>

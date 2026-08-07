@@ -3,6 +3,42 @@
 
 {% block content %}
 <section class="empleado-card">
+  <h2>{{ _('Solicitar ausencia') }}</h2>
+  <p class="empleado-muted">
+    {{ _('La solicitud queda pendiente hasta que la apruebe oficina o RRHH. Las vacaciones que vienen del ERP ya están validadas y no hay que pedirlas aquí.') }}
+  </p>
+  <form method="POST" action="{{ url_for('empleado.ausencias') }}" class="mt-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="accion" value="solicitar">
+    <div class="form-row">
+      <div class="form-group col-md-4">
+        <label for="tipo">{{ _('Tipo') }}</label>
+        <select class="form-control" id="tipo" name="tipo" required>
+          <option value="Vacaciones">{{ _('Vacaciones') }}</option>
+          <option value="Permiso">{{ _('Permiso') }}</option>
+          <option value="Asuntos propios">{{ _('Asuntos propios') }}</option>
+          <option value="Baja">{{ _('Baja') }}</option>
+        </select>
+      </div>
+      <div class="form-group col-md-4">
+        <label for="fecha_inicio">{{ _('Desde') }}</label>
+        <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio" required>
+      </div>
+      <div class="form-group col-md-4">
+        <label for="fecha_fin">{{ _('Hasta') }}</label>
+        <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" required>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="descripcion">{{ _('Nota (opcional)') }}</label>
+      <input type="text" class="form-control" id="descripcion" name="descripcion"
+             placeholder="{{ _('Motivo breve…') }}">
+    </div>
+    <button type="submit" class="btn btn-primary">{{ _('Enviar solicitud') }}</button>
+  </form>
+</section>
+
+<section class="empleado-card mt-3">
   <h2>{{ _('Mis ausencias') }}</h2>
   {% if ausencias %}
   <div class="table-responsive">
@@ -13,6 +49,7 @@
           <th>{{ _('Desde') }}</th>
           <th>{{ _('Hasta') }}</th>
           <th>{{ _('Estado') }}</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -21,7 +58,25 @@
           <td>{{ a.tipo }}</td>
           <td>{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
           <td>{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
-          <td>{{ a.estado }}</td>
+          <td>
+            {% if a.estado == 'pendiente' %}{{ _('Pendiente') }}
+            {% elif a.estado == 'aprobada' %}{{ _('Aprobada') }}
+            {% elif a.estado == 'rechazada' %}{{ _('Rechazada') }}
+            {% else %}{{ a.estado }}{% endif %}
+            {% if a.origen in ('odoo', 'erp') %}
+              <span class="text-muted small">(ERP)</span>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            {% if a.estado == 'pendiente' and a.origen == 'manual' %}
+            <form method="POST" action="{{ url_for('empleado.ausencias') }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="cancelar">
+              <input type="hidden" name="leave_id" value="{{ a.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-secondary">{{ _('Cancelar') }}</button>
+            </form>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

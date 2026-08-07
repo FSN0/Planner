@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contacto — SignaPlan</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            {% include "components/_brand_logo.html" %}
+        </a>
+        <nav class="mkt-nav-links">
+            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
+            <a href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
+        </nav>
+    </header>
+
+    <section class="mkt-form-wrap">
+        <h1>Hablar con nosotros</h1>
+        <p style="color:#64748b;margin-bottom:1.5rem;">
+            Cuéntanos qué necesitas (demo, integración, duda comercial) y te respondemos en
+            <strong>{{ contact_email }}</strong>.
+        </p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="mkt-alert mkt-alert-{{ category if category != 'error' else 'danger' }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('marketing.contacto') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {# Honeypot anti-spam #}
+            <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
+                   style="position:absolute;left:-9999px;opacity:0;" aria-hidden="true">
+
+            <label for="nombre" style="display:block;font-weight:600;margin-bottom:.35rem;">Nombre</label>
+            <input type="text" name="nombre" id="nombre" required maxlength="120"
+                   value="{{ form.nombre or '' }}"
+                   style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
+
+            <label for="email" style="display:block;font-weight:600;margin-bottom:.35rem;">Tu correo</label>
+            <input type="email" name="email" id="email" required maxlength="120"
+                   value="{{ form.email or '' }}"
+                   style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
+
+            <label for="empresa" style="display:block;font-weight:600;margin-bottom:.35rem;">Empresa <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label>
+            <input type="text" name="empresa" id="empresa" maxlength="160"
+                   value="{{ form.empresa or '' }}"
+                   style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
+
+            <label for="mensaje" style="display:block;font-weight:600;margin-bottom:.35rem;">Mensaje</label>
+            <textarea name="mensaje" id="mensaje" required maxlength="4000" rows="6"
+                      style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">{{ form.mensaje or '' }}</textarea>
+
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">Enviar mensaje</button>
+        </form>
+    </section>
+
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+    </footer>
+    {% include "components/_cookie_banner.html" %}
+</body>
+</html>

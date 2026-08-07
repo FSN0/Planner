@@ -40,6 +40,11 @@
         <span class="page-toolbar-count">{{ _(toolbar_sub) }}</span>
       </div>
       <div class="page-toolbar-actions">
+        {% if can_resolve_fichajes and current_user.role in ['admin', 'laboral', 'rrhh'] %}
+        <button type="button" class="btn-admin btn-admin-secondary mr-2" onclick="abrirModalMarcaManual()">
+          <i class="fas fa-clock"></i> {{ _('Registrar / corregir marca') }}
+        </button>
+        {% endif %}
         {% if current_user.role != 'laboral' and tenant_has_odoo %}
         <select id="diasSync" class="form-control custom-select mr-2">
           <option value="0">{{ _('Solo hoy') }}</option>
@@ -391,8 +396,11 @@
                         {{ audit_sort_th(4, 'Entrada', '6%', 'center', 'time') }}
                         {{ audit_sort_th(5, 'Salida', '6%', 'center', 'time') }}
                         {{ audit_sort_th(6, 'Notas', '14%') }}
-                        {{ audit_sort_th(7, 'Auditado por', '9%') }}
-                        {{ audit_sort_th(8, 'Hora reg.', '9%', '', 'date') }}
+                        {{ audit_sort_th(7, 'Auditado por', '8%') }}
+                        {{ audit_sort_th(8, 'Hora reg.', '7%', '', 'date') }}
+                        {% if can_resolve_fichajes %}
+                        <th style="width:7%;" class="text-center no-sort">{{ _('Acción') }}</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -474,6 +482,21 @@
                         <td class="text-muted" data-order="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '0' }}" data-sort-value="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '' }}">
                             {{ reg.fecha_auditoria.strftime('%d/%m/%y %H:%M') if reg.fecha_auditoria else '—' }}
                         </td>
+                        {% if can_resolve_fichajes %}
+                        <td class="text-center" onclick="event.stopPropagation();">
+                            {% if reg.estado.startswith('Resuelto_') and reg.estado_antes_resolucion %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    style="font-size:0.7rem; padding:0.15rem 0.45rem;"
+                                    title="{{ _('Vuelve a la clasificación anterior (el cuadrante no se deshace solo)') }}"
+                                    onclick="reabrirResolucion({{ reg.id }}, this)">
+                                <i class="fas fa-undo"></i> {{ _('Reabrir') }}
+                            </button>
+                            {% else %}
+                            <span class="text-muted" style="font-size:0.7rem;">—</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -497,12 +520,137 @@
   {% include 'components/_person_day_timeline_modal.html' %}
 {% endwith %}
 
+{% if can_resolve_fichajes and current_user.role in ['admin', 'laboral', 'rrhh'] %}
+<div class="modal fade" id="modalMarcaManual" tabindex="-1" role="dialog" aria-hidden="true"
+     data-url-list="{{ url_for('sync.listar_marcas_dia') }}"
+     data-url-create="{{ url_for('sync.registrar_marca_auditoria') }}"
+     data-url-fix="{{ url_for('sync.corregir_marca_auditoria') }}"
+     data-url-anular="{{ url_for('sync.anular_marca_auditoria') }}">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-clock mr-2"></i>{{ _('Registrar / corregir marca') }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          {{ _('Las correcciones no borran el pasado: se anula la marca anterior y se añade una nueva. Ambas quedan en el libro de jornada con motivo y autor.') }}
+        </p>
+        <ul class="nav nav-tabs mb-3" role="tablist">
+          <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tabMarcaAlta" role="tab">{{ _('Registrar marca') }}</a></li>
+          <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabMarcaCorregir" role="tab" id="tabCorregirLink">{{ _('Corregir / anular') }}</a></li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="tabMarcaAlta" role="tabpanel">
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label>{{ _('Trabajador') }}</label>
+                <select id="marcaUserId" class="form-control">
+                  <option value="">—</option>
+                  {% for u in trabajadores_marca %}
+                  <option value="{{ u.id }}">{{ u.lastname }}, {{ u.name }} ({{ u.dni }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group col-md-3">
+                <label>{{ _('Tipo') }}</label>
+                <select id="marcaTipo" class="form-control">
+                  <option value="entrada">{{ _('Entrada') }}</option>
+                  <option value="salida">{{ _('Salida') }}</option>
+                  <option value="pausa_inicio">{{ _('Inicio pausa') }}</option>
+                  <option value="pausa_fin">{{ _('Fin pausa') }}</option>
+                </select>
+              </div>
+              <div class="form-group col-md-3">
+                <label>{{ _('Fecha y hora') }}</label>
+                <input type="datetime-local" id="marcaOcurrido" class="form-control">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label>{{ _('Obra') }} <span class="text-muted">({{ _('opcional') }})</span></label>
+                <select id="marcaObraId" class="form-control">
+                  <option value="">—</option>
+                  {% for o in obras_marca %}
+                  <option value="{{ o.id }}">{{ o.nombre }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group col-md-6">
+                <label>{{ _('Motivo') }} <span class="text-danger">*</span></label>
+                <input type="text" id="marcaMotivo" class="form-control" maxlength="500"
+                       placeholder="{{ _('Ej: olvido de fichaje / corrección tras consulta') }}">
+              </div>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="guardarMarcaManual()">
+              <i class="fas fa-save mr-1"></i>{{ _('Guardar en el libro') }}
+            </button>
+          </div>
+          <div class="tab-pane fade" id="tabMarcaCorregir" role="tabpanel">
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label>{{ _('Trabajador') }}</label>
+                <select id="corrUserId" class="form-control">
+                  <option value="">—</option>
+                  {% for u in trabajadores_marca %}
+                  <option value="{{ u.id }}">{{ u.lastname }}, {{ u.name }} ({{ u.dni }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group col-md-4">
+                <label>{{ _('Día laboral') }}</label>
+                <input type="date" id="corrFecha" class="form-control">
+              </div>
+              <div class="form-group col-md-2 d-flex align-items-end">
+                <button type="button" class="btn btn-outline-secondary btn-block" onclick="cargarMarcasDia()">{{ _('Cargar') }}</button>
+              </div>
+            </div>
+            <div id="corrLista" class="mb-3" style="max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:.5rem;">
+              <span class="text-muted small">{{ _('Elige trabajador y día, luego Cargar.') }}</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group col-md-4">
+                <label>{{ _('Nueva fecha/hora') }}</label>
+                <input type="datetime-local" id="corrOcurrido" class="form-control">
+              </div>
+              <div class="form-group col-md-4">
+                <label>{{ _('Nueva obra') }}</label>
+                <select id="corrObraId" class="form-control">
+                  <option value="">{{ _('(sin cambiar)') }}</option>
+                  {% for o in obras_marca %}
+                  <option value="{{ o.id }}">{{ o.nombre }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="form-group col-md-4">
+                <label>{{ _('Motivo') }} <span class="text-danger">*</span></label>
+                <input type="text" id="corrMotivo" class="form-control" maxlength="500">
+              </div>
+            </div>
+            <div class="d-flex" style="gap:.5rem;">
+              <button type="button" class="btn btn-primary" onclick="corregirMarcaSeleccionada()">
+                <i class="fas fa-pen mr-1"></i>{{ _('Corregir (anular + nueva)') }}
+              </button>
+              <button type="button" class="btn btn-outline-danger" onclick="anularMarcaSeleccionada()">
+                <i class="fas fa-ban mr-1"></i>{{ _('Solo anular') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+<script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
 <script src="{{ url_for('static', filename='js/person_day_timeline.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auditoria_marcas.js') }}"></script>
 
 <script>
 var dtCorrecciones = null;
@@ -654,6 +802,42 @@ function resolver(id, accion) {
             row.style.opacity = '1';
             row.style.transform = 'translateX(0)';
             row.style.pointerEvents = 'auto';
+        }
+    });
+}
+
+function reabrirResolucion(id, btn) {
+    if (!confirm({{ _('¿Reabrir esta decisión? Volverá a la clasificación anterior. Si moviste o borraste asignaciones, el cuadrante no se deshace solo.')|tojson }})) {
+        return;
+    }
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+    }
+    fetch("{{ url_for('sync.reabrir_fichaje') }}", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({registro_id: id})
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.aviso || {{ _('Reabierto')|tojson }}, true);
+            setTimeout(() => window.location.reload(), 700);
+        } else {
+            alert("Error: " + (data.error || {{ _('No se pudo reabrir')|tojson }}));
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert({{ _('Fallo de red al reabrir.')|tojson }});
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
         }
     });
 }
