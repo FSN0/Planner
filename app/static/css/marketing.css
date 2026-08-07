@@ -64,7 +64,7 @@ body.marketing-page {
 
 /* PNG recortado a contenido (márgenes iguales arriba/abajo) */
 .mkt-brand .sp-logo--horizontal {
-  height: 32px;
+  height: 26px;
   width: auto;
   display: block;
   object-fit: contain;
