@@ -761,9 +761,12 @@ def api_solicitud_asignar_candidatos(solicitud_id):
         db.session.refresh(solicitud)
         
         if solicitud.estado == 'CUMPLIDA':
-            from app.services.email_service import notificar_resolucion_solicitud
-            notificar_resolucion_solicitud(solicitud, current_user.name)
-        
+            try:
+                from app.services.email_service import notificar_resolucion_solicitud
+                notificar_resolucion_solicitud(solicitud, current_user.name)
+            except Exception:
+                pass
+
         accion_txt = "desasignaciones" if accion == 'DESASIGNAR' else "asignaciones"
         flash(f'Se han procesado {count_exito} {accion_txt} correctamente.', 'success')
         return jsonify({'success': True})
@@ -837,3 +840,6 @@ def api_resolver_solicitud(solicitud_id):
         return jsonify({'success': True, 'message': mensaje})
     except ValueError as e:
         return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Error del servidor: {e}'}), 500

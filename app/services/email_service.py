@@ -93,13 +93,15 @@ def notificar_resolucion_solicitud(solicitud, admin_name, worker_id=None):
     id_trabajador = solicitud.empleado_id or worker_id
     
     destinatarios = _obtener_destinatarios('email_sol_resuelta', obra_id=solicitud.obra_id, worker_id=id_trabajador)
-    if not destinatarios: return
+    if not destinatarios:
+        return
 
-    obra = Obra.query.get(solicitud.obra_id)
-    asunto = f"Resolución de solicitud #{solicitud.id} - {obra.nombre}"
+    obra = Obra.query.get(solicitud.obra_id) if solicitud.obra_id else None
+    obra_nombre = obra.nombre if obra else 'obra'
+    asunto = f"Resolución de solicitud #{solicitud.id} - {obra_nombre}"
     
     texto = (
-        f"La solicitud para la obra {obra.nombre} ha sido resuelta por {admin_name}.\n\n"
+        f"La solicitud para la obra {obra_nombre} ha sido resuelta por {admin_name}.\n\n"
         f"Estado: {solicitud.estado}\n"
         f"Acción solicitada: {getattr(solicitud, 'accion', 'ASIGNAR')}\n"
     )
@@ -111,8 +113,12 @@ def notificar_resolucion_solicitud(solicitud, admin_name, worker_id=None):
             empresa = worker.company_rel.nombre if worker.company_rel else "Sin empresa"
             texto += f"Trabajador movido: {worker.name} {worker.lastname}\n"
             texto += f"Empresa: {empresa}\n"
-            
-    texto += f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n\n"
+
+    if solicitud.fecha_inicio and solicitud.fecha_fin:
+        texto += (
+            f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
+            f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n\n"
+        )
     texto += f"Revisa la plataforma para más detalles."
     
     send_email(asunto, destinatarios, texto)

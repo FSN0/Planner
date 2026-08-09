@@ -250,7 +250,8 @@ window.submitConcretaTotal = function() {
 
 function ejecutarAsignacionConcretaApi() {
     var $btn = $('button[onclick="submitConcretaTotal()"]');
-    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Asignando...');
+    var originalHtml = $btn.html();
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i> Procesando...');
     
     $.ajax({
         url: "/api/v6/solicitudes/{{ solicitud.id }}/resolver",
@@ -258,11 +259,16 @@ function ejecutarAsignacionConcretaApi() {
         data: JSON.stringify({ accion: 'aceptar_concreta' }),
         success: function(res) {
             if(res.success) location.reload();
-            else { alert(res.message); $btn.prop('disabled', false).html('<i class="fas fa-check-double mr-1"></i> Todo el periodo'); }
+            else { alert(res.message || 'No se pudo completar.'); $btn.prop('disabled', false).html(originalHtml); }
         },
-        error: function(xhr) { 
-            alert("Error del servidor."); 
-            $btn.prop('disabled', false).html('<i class="fas fa-check-double mr-1"></i> Todo el periodo'); 
+        error: function(xhr) {
+            var msg = 'Error del servidor.';
+            try {
+                var data = xhr.responseJSON || JSON.parse(xhr.responseText || '{}');
+                if (data && data.message) msg = data.message;
+            } catch (e) {}
+            alert(msg);
+            $btn.prop('disabled', false).html(originalHtml);
         }
     });
 }

@@ -590,7 +590,7 @@ def get_universal_calendar_events():
 
             if s.tipo == 'CONCRETA':
                 emp_name = s.empleado.name if s.empleado else '?'
-                title = f"BAJA: {emp_name}" if accion == 'DESASIGNAR' else f"FALTA: {emp_name}"
+                title = f"Solicitud de Baja: {emp_name}" if accion == 'DESASIGNAR' else f"FALTA: {emp_name}"
             else:
                 faltan = s.cantidad_solicitada - s.cantidad_cubierta
                 if faltan <= 0: continue
@@ -682,7 +682,7 @@ def get_universal_calendar_events():
 
             if s.tipo == 'CONCRETA':
                 emp_name = s.empleado.name if s.empleado else '?'
-                title = f"BAJA: {emp_name} ({obra_txt})" if accion == 'DESASIGNAR' else f"FALTA: {emp_name} ({obra_txt})"
+                title = f"Solicitud de Baja: {emp_name} ({obra_txt})" if accion == 'DESASIGNAR' else f"FALTA: {emp_name} ({obra_txt})"
             else:
                 faltan = s.cantidad_solicitada - s.cantidad_cubierta
                 if faltan <= 0: continue
@@ -1135,7 +1135,7 @@ def get_universal_calendar_events():
                 emp = s.empleado
                 emp_name = f"{emp.name} {emp.lastname}" if emp else '?'
                 accion = (s.accion or 'ASIGNAR').upper()
-                title = f"{'BAJA' if accion == 'DESASIGNAR' else 'SOL'}: {emp_name}"
+                title = f"{'Solicitud de Baja' if accion == 'DESASIGNAR' else 'SOL'}: {emp_name}"
                 color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
                 end_to_draw = min(s.fecha_fin, end_date - timedelta(days=1))
                 events.append({

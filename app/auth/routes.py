@@ -236,11 +236,26 @@ def verificar_email():
                 f'Correo verificado tras alta. IP: {request.remote_addr or "Desconocida"}'
             ),
         )
+        db.session.commit()
     except Exception:
-        pass
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
     flash('Correo verificado. Bienvenido a SignaPlan.', 'success')
-    destino = _destino_por_rol(user)
+    try:
+        destino = _destino_por_rol(user)
+    except Exception:
+        destino = None
+    # Evitar DetachedInstanceError / sesión sucia en el siguiente request
+    try:
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
     return redirect(destino or url_for('admin.panel'))
 
 

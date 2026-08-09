@@ -3,7 +3,7 @@
   {% set email_pending = session.get('email_pending_verification') %}
   {% set admin_unverified = (
     current_user.role == 'admin'
-    and not current_user.email_verified
+    and not (current_user.email_verified|default(true))
   ) %}
   {% if email_pending or admin_unverified %}
   <div class="container-fluid mt-2" style="position: relative; z-index: 9998;">

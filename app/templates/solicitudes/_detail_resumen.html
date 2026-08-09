@@ -2,6 +2,27 @@
   <div class="row no-gutters">
     <div class="col-lg-8 col-xl-8 border-right">
       <div class="solicitud-resumen-body">
+        {% set emp_nom = (solicitud.empleado.name ~ ' ' ~ solicitud.empleado.lastname)|trim if solicitud.empleado else 'el operario' %}
+        {% set obra_nom = solicitud.obra.nombre if solicitud.obra else 'la obra' %}
+        {% if solicitud.comentarios and 'all_obra' in solicitud.comentarios and solicitud.accion == 'DESASIGNAR' %}
+          {% set rango_txt = solicitud.fecha_inicio.strftime('%d/%m/%Y') ~ ' en adelante' if solicitud.fecha_inicio else 'el periodo indicado' %}
+        {% elif solicitud.fecha_inicio and solicitud.fecha_fin %}
+          {% set rango_txt = 'del ' ~ solicitud.fecha_inicio.strftime('%d/%m/%Y') ~ ' al ' ~ solicitud.fecha_fin.strftime('%d/%m/%Y') %}
+        {% else %}
+          {% set rango_txt = 'el periodo indicado' %}
+        {% endif %}
+        <p class="solicitud-resumen-frase mb-3">
+          {% if solicitud.accion == 'DESASIGNAR' %}
+            Solicitud para desasignar a <strong>{{ emp_nom }}</strong> de la obra <strong>{{ obra_nom }}</strong> {{ rango_txt }}.
+          {% elif solicitud.tipo|lower == 'generica' %}
+            Solicitud de
+            <strong>{{ solicitud.cantidad_solicitada }}</strong>
+            {{ solicitud.perfil_categoria or 'persona(s)' }}
+            para la obra <strong>{{ obra_nom }}</strong> {{ rango_txt }}.
+          {% else %}
+            Solicitud para asignar a <strong>{{ emp_nom }}</strong> a la obra <strong>{{ obra_nom }}</strong> {{ rango_txt }}.
+          {% endif %}
+        </p>
         <div class="solicitud-meta-grid">
           <div class="solicitud-meta-item">
             <label>Obra</label>

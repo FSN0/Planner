@@ -1976,7 +1976,10 @@ def primeros_pasos():
         return redirect(url_for("admin.panel"))
 
     obra_hecha = any(p['id'] == 'obra' and p['hecho'] for p in estado['pasos'])
-    url_fichar = url_for("operarios.entrar", _external=True)
+    try:
+        url_fichar = url_for("operarios.entrar", _external=True)
+    except Exception:
+        url_fichar = url_for("operarios.entrar")
     return render_template(
         "admin_primeros_pasos.html",
         onboarding=estado,
@@ -2929,7 +2932,7 @@ def api_planificador_events():
         # 2. Definir Título
         if sol.tipo == 'CONCRETA':
             emp_name = sol.empleado.name if sol.empleado else '?'
-            title = f"{'BAJA' if is_baja else 'FALTA'}: {emp_name}"
+            title = f"{'Solicitud de Baja' if is_baja else 'FALTA'}: {emp_name}"
         else:
             faltan = sol.cantidad_solicitada - sol.cantidad_cubierta
             if faltan <= 0: continue

@@ -172,7 +172,10 @@ def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=
             from app.services.email_service import notificar_resolucion_solicitud
             admin_user = User.query.get(resolved_by_id) if resolved_by_id else None
             admin_name = f"{admin_user.name} {admin_user.lastname}" if admin_user else "Sistema Automático"
-            notificar_resolucion_solicitud(sol, admin_name, worker_id=worker_id)
+            try:
+                notificar_resolucion_solicitud(sol, admin_name, worker_id=worker_id)
+            except Exception:
+                pass
 
 def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
     start = solicitud.fecha_inicio
@@ -548,7 +551,11 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
         solicitud.resolved_at = utc_now()
         solicitud.resolved_by_id = user_actor.id
         db.session.commit()
-        notificar_resolucion_solicitud(solicitud, user_actor.name)
+        try:
+            notificar_resolucion_solicitud(solicitud, user_actor.name)
+        except Exception:
+            # La resolución ya está guardada; un fallo de correo no debe tumbar la API.
+            pass
         return mensaje
 
     elif accion == 'denegar':
@@ -556,7 +563,10 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
         solicitud.resolved_at = utc_now()
         solicitud.resolved_by_id = user_actor.id
         db.session.commit()
-        notificar_resolucion_solicitud(solicitud, user_actor.name)
+        try:
+            notificar_resolucion_solicitud(solicitud, user_actor.name)
+        except Exception:
+            pass
         return "Solicitud denegada."
 
     elif accion == 'reabrir':

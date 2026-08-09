@@ -59,9 +59,20 @@ def _legal_entity():
         ).strip(),
         'email': (
             os.environ.get('LEGAL_EMAIL')
-            or 'paconavarro.fsn@gmail.com'
+            or 'info@signaplan.com'
         ).strip(),
     }
+
+
+def _contact_email():
+    """Buzón comercial público (no el correo personal del titular legal)."""
+    import os
+    return (
+        os.environ.get('CONTACT_EMAIL')
+        or os.environ.get('MAIL_DEFAULT_SENDER')
+        or os.environ.get('MAIL_USERNAME')
+        or 'info@signaplan.com'
+    ).strip()
 
 
 def _require_marketing():
@@ -237,12 +248,11 @@ def reenviar_verificacion():
 @marketing_bp.route('/contacto', methods=['GET', 'POST'])
 @limiter.limit('5 per minute; 20 per hour', methods=['POST'])
 def contacto():
-    """Formulario de contacto → correo al titular (LEGAL_EMAIL / info@)."""
+    """Formulario de contacto → info@signaplan.com (buzón comercial)."""
     _require_marketing()
     from app.services.email_service import send_email
 
-    legal = _legal_entity()
-    destino = (legal.get('email') or 'info@signaplan.com').strip()
+    destino = _contact_email()
     form = {}
 
     if request.method == 'POST':

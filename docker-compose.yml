@@ -43,6 +43,7 @@ services:
       - LEGAL_NIF=${LEGAL_NIF:-}
       - LEGAL_DOMICILIO=${LEGAL_DOMICILIO:-}
       - LEGAL_EMAIL=${LEGAL_EMAIL:-}
+      - CONTACT_EMAIL=${CONTACT_EMAIL:-info@signaplan.com}
     depends_on:
       db:
         condition: service_healthy

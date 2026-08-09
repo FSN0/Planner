@@ -290,41 +290,50 @@ def create_app():
         unread_laboral_count = 0
 
         if current_user.is_authenticated:
-            if current_user.role == ROLE_ADMIN:
-                pending_count = Solicitud.query.filter(
-                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                ).count()
-                pending_count += SolicitudVehiculo.query.filter(
-                    SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                ).count()
+            try:
+                if current_user.role == ROLE_ADMIN:
+                    pending_count = Solicitud.query.filter(
+                        Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
+                    ).count()
+                    pending_count += SolicitudVehiculo.query.filter(
+                        SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
+                    ).count()
 
-                from app.services.log_notification_service import get_total_unread_logs
-                unread_logs_count = get_total_unread_logs(current_user.id)
-                from app.services.tenant_modules import has_avisos_laborales
-                if has_avisos_laborales():
-                    from app.services.log_notification_service import get_unread_laboral_logs
-                    unread_laboral_count = get_unread_laboral_logs(current_user.id)
-            elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
-                from app.services.tenant_modules import has_avisos_laborales
-                if has_avisos_laborales():
-                    from app.services.log_notification_service import get_unread_laboral_logs
-                    unread_laboral_count = get_unread_laboral_logs(current_user.id)
+                    from app.services.log_notification_service import get_total_unread_logs
+                    unread_logs_count = get_total_unread_logs(current_user.id)
+                    from app.services.tenant_modules import has_avisos_laborales
+                    if has_avisos_laborales():
+                        from app.services.log_notification_service import get_unread_laboral_logs
+                        unread_laboral_count = get_unread_laboral_logs(current_user.id)
+                elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
+                    from app.services.tenant_modules import has_avisos_laborales
+                    if has_avisos_laborales():
+                        from app.services.log_notification_service import get_unread_laboral_logs
+                        unread_laboral_count = get_unread_laboral_logs(current_user.id)
 
-            # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
-            elif current_user.role == ROLE_JEFE:
-                from sqlalchemy import or_
-                from app.models import Obra
-                pending_count = Solicitud.query.join(Obra).filter(
-                    or_(
-                        Solicitud.requested_by_id == current_user.id,
-                        Obra.jefe_obra_id == current_user.id,
-                    ),
-                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                ).count()
-                pending_count += SolicitudVehiculo.query.filter(
-                    SolicitudVehiculo.requested_by_id == current_user.id,
-                    SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                ).count()
+                # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
+                elif current_user.role == ROLE_JEFE:
+                    from sqlalchemy import or_
+                    from app.models import Obra
+                    pending_count = Solicitud.query.join(Obra).filter(
+                        or_(
+                            Solicitud.requested_by_id == current_user.id,
+                            Obra.jefe_obra_id == current_user.id,
+                        ),
+                        Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                    ).count()
+                    pending_count += SolicitudVehiculo.query.filter(
+                        SolicitudVehiculo.requested_by_id == current_user.id,
+                        SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                    ).count()
+            except Exception:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                pending_count = 0
+                unread_logs_count = 0
+                unread_laboral_count = 0
 
         tz_ctx = {}
         if current_user.is_authenticated:

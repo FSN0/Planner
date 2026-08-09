@@ -62,28 +62,33 @@
     </div>
 
     <section class="admin-panel admin-panel-flush admin-panel--no-header">
-      <ul class="nav admin-tabs-compact" id="personalTab" role="tablist">
-        <li class="nav-item">
-          <a class="nav-link active" id="internos-tab" data-toggle="tab" href="#internos" role="tab">
-            {{ _('Internos') }} <span class="tab-count">{{ internos|length }}</span>
+      <div class="d-flex align-items-center justify-content-between flex-wrap px-3 pt-2" style="gap:0.5rem;">
+        <ul class="nav admin-tabs-compact mb-0" id="personalTab" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" id="internos-tab" data-toggle="tab" href="#internos" role="tab">
+              {{ _('Internos') }} <span class="tab-count">{{ internos|length }}</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="operarios-tab" data-toggle="tab" href="#operarios" role="tab">
+              {{ _('Externos') }} <span class="tab-count">{{ (operarios_activos|length) + (operarios_pendientes|length) }}</span>
+            </a>
+          </li>
+        </ul>
+        {% if user_can(current_user, 'trabajadores', 'w') %}
+        <div class="d-flex align-items-center flex-wrap" style="gap:0.5rem;">
+          <a href="{{ url_for('admin.import_users', modo='internos') }}" class="btn-admin btn-admin-ghost btn-sm tab-import-btn" data-tab="internos">
+            <i class="fas fa-file-import"></i> {{ _('Importar internos') }}
           </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" id="operarios-tab" data-toggle="tab" href="#operarios" role="tab">
-            {{ _('Externos') }} <span class="tab-count">{{ (operarios_activos|length) + (operarios_pendientes|length) }}</span>
+          <a href="{{ url_for('admin.import_users', modo='externos') }}" class="btn-admin btn-admin-ghost btn-sm tab-import-btn d-none" data-tab="operarios">
+            <i class="fas fa-file-import"></i> {{ _('Importar externos') }}
           </a>
-        </li>
-      </ul>
+        </div>
+        {% endif %}
+      </div>
 
       <div class="tab-content">
         <div class="tab-pane fade show active" id="internos">
-          {% if user_can(current_user, 'trabajadores', 'w') %}
-          <div class="d-flex justify-content-end px-3 pt-2 pb-1" style="gap:0.5rem;">
-            <a href="{{ url_for('admin.import_users', modo='internos') }}" class="btn-admin btn-admin-ghost btn-sm">
-              <i class="fas fa-file-import"></i> {{ _('Importar internos') }}
-            </a>
-          </div>
-          {% endif %}
           <div class="admin-table-scroll">
             <table class="filterable-table admin-data-table mb-0" id="tableInternos">
               <colgroup>
@@ -170,13 +175,6 @@
         </div>
 
         <div class="tab-pane fade" id="operarios">
-          {% if user_can(current_user, 'trabajadores', 'w') %}
-          <div class="d-flex justify-content-end px-3 pt-2 pb-1" style="gap:0.5rem;">
-            <a href="{{ url_for('admin.import_users', modo='externos') }}" class="btn-admin btn-admin-ghost btn-sm">
-              <i class="fas fa-file-import"></i> {{ _('Importar externos') }}
-            </a>
-          </div>
-          {% endif %}
           <div class="admin-table-scroll">
             <table class="filterable-table admin-data-table admin-data-table--wide-actions mb-0" id="tableExternos">
               <colgroup>
@@ -379,6 +377,17 @@ document.addEventListener("DOMContentLoaded", function() {
 
     initBulkSelection({ tableId: 'tableInternos', checkboxClass: '.interno-checkbox', selectAllId: 'selectAllInternos', toolbarId: 'bulk-internos', countId: 'count-internos' });
     initBulkSelection({ tableId: 'tableExternos', checkboxClass: '.externo-checkbox', selectAllId: 'selectAllExternos', toolbarId: 'bulk-externos', countId: 'count-externos' });
+
+    function syncPersonalImportButtons(tabHref) {
+        var target = (tabHref || '#internos').replace('#', '');
+        document.querySelectorAll('.tab-import-btn').forEach(function(btn) {
+            btn.classList.toggle('d-none', btn.getAttribute('data-tab') !== target);
+        });
+    }
+    $('#personalTab a[data-toggle="tab"]').on('shown.bs.tab', function(e) {
+        syncPersonalImportButtons(e.target.getAttribute('href'));
+    });
+    syncPersonalImportButtons('#internos');
 
     $(document).on('click', '.reset-pwd-btn', function() {
         $('#resetUsernameDisplay').text($(this).data('username'));
