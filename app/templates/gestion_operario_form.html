@@ -4,9 +4,53 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+<style>
+  .user-form-advanced {
+    margin-top: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem 0.9rem;
+    background: #f8fafc;
+  }
+  .user-form-advanced > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: #334155;
+    list-style: none;
+  }
+  .user-form-advanced > summary::-webkit-details-marker { display: none; }
+  .user-form-advanced > summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 0.35rem;
+    color: #64748b;
+  }
+  .user-form-advanced[open] > summary::before { content: '▾'; }
+  .user-form-advanced .advanced-body { margin-top: 0.85rem; }
+  .pin-mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin: 0.35rem 0 0.75rem;
+  }
+  .pin-mode-options label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.86rem;
+    color: #334155;
+    margin: 0;
+    cursor: pointer;
+  }
+  .pin-mode-options input { margin-top: 0.2rem; }
+</style>
 {% endblock %}
 
 {% block wrapper %}
+{% set role_actual = user.role if edit_mode and user.role else 'operario' %}
+{% set email_valor = user.email if edit_mode else '' %}
+{% set email_es_placeholder = email_valor and ('@local.signaplan' in email_valor or '@demo.signaplan' in email_valor) %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
@@ -25,144 +69,183 @@
       <div class="admin-panel-header">
         {% if edit_mode %}
           <h2 class="admin-panel-title">{{ user.name }} {{ user.lastname }}</h2>
-          <span class="admin-panel-subtitle">{{ user.email }}</span>
+          <span class="admin-panel-subtitle">
+            {% if email_es_placeholder %}{{ _('Sin correo (acceso por DNI + PIN)') }}{% else %}{{ user.email }}{% endif %}
+          </span>
         {% else %}
           <h2 class="admin-panel-title">{{ _('Nuevo usuario') }}</h2>
-          <span class="admin-panel-subtitle">{{ _('Complete la información del personal') }}</span>
+          <span class="admin-panel-subtitle">{{ _('Solo lo necesario según el rol. El resto está en opciones avanzadas.') }}</span>
         {% endif %}
       </div>
 
-      <form action="{{ action_url }}" method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <div class="admin-form-section">{{ _('Datos de cuenta') }}</div>
-        <div class="form-row">
-          <div class="form-group col-md-6">
-            <label class="admin-form-label">{{ _('Email') }}</label>
-            <input type="email" name="email" class="form-control" value="{{ user.email if edit_mode else '' }}" required>
-          </div>
-          {% if not edit_mode %}
-          <div class="form-group col-md-6">
-            <label class="admin-form-label">{{ _('Contraseña') }}</label>
-            <input type="password" name="password" class="form-control" required>
-          </div>
-          {% endif %}
-        </div>
+      <form action="{{ action_url }}" method="POST" id="userCreateForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="form-group">
           <label class="admin-form-label">{{ _('Rol de sistema') }}</label>
-          <select name="role" class="form-control custom-select" required>
-            <option value="operario" {% if edit_mode and user.role == 'operario' %}selected{% endif %}>{{ _('Operario') }}</option>
-            <option value="jefe_obra" {% if edit_mode and user.role == 'jefe_obra' %}selected{% endif %}>{{ _('Jefe de obra') }}</option>
-            <option value="rrhh" {% if edit_mode and user.role == 'rrhh' %}selected{% endif %}>{{ _('RRHH / Administrativo') }}</option>
-            <option value="laboral" {% if edit_mode and user.role == 'laboral' %}selected{% endif %}>{{ _('Laboral') }}</option>
-            <option value="admin" {% if edit_mode and user.role == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
+          <select name="role" id="roleSelect" class="form-control custom-select" required>
+            <option value="operario" {% if role_actual == 'operario' %}selected{% endif %}>{{ _('Operario') }}</option>
+            <option value="jefe_obra" {% if role_actual == 'jefe_obra' %}selected{% endif %}>{{ _('Jefe de obra') }}</option>
+            <option value="rrhh" {% if role_actual == 'rrhh' %}selected{% endif %}>{{ _('RRHH / Administrativo') }}</option>
+            <option value="laboral" {% if role_actual == 'laboral' %}selected{% endif %}>{{ _('Laboral') }}</option>
+            <option value="admin" {% if role_actual == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
           </select>
-          <small class="form-text text-muted" style="font-size: 0.72rem;">{{ _('Define los permisos de acceso a la plataforma.') }}</small>
+          <small class="form-text text-muted" style="font-size: 0.72rem;">
+            {{ _('Operario: entra con DNI + PIN. El resto: email y contraseña en el panel de oficina.') }}
+          </small>
         </div>
 
-        <div class="admin-form-section">{{ _('Información personal') }}</div>
+        <div class="admin-form-section">{{ _('Datos básicos') }}</div>
         <div class="form-row">
           <div class="form-group col-md-6">
             <label class="admin-form-label">{{ _('Nombre') }}</label>
-            <input type="text" name="name" class="form-control" value="{% if edit_mode %}{{ user.name }}{% endif %}" required>
+            <input type="text" name="name" class="form-control" value="{% if edit_mode %}{{ user.name }}{% endif %}" required data-tour-field="name">
           </div>
           <div class="form-group col-md-6">
             <label class="admin-form-label">{{ _('Apellidos') }}</label>
             <input type="text" name="lastname" class="form-control" value="{% if edit_mode %}{{ user.lastname }}{% endif %}" required>
           </div>
         </div>
+
         <div class="form-group" style="max-width: 220px;">
           <label class="admin-form-label">{{ _('DNI / NIE') }}</label>
           <input type="text" name="dni" class="form-control" value="{% if edit_mode %}{{ user.dni }}{% endif %}" required>
         </div>
 
-        {% if not edit_mode %}
-        <div class="form-group" style="max-width: 220px;">
-          <label class="admin-form-label">{{ _('PIN de fichaje') }}</label>
-          <input type="password" name="pin" class="form-control"
-                 inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
-                 placeholder="{{ _('Vacío = se genera') }}">
-          <small class="form-text text-muted" style="font-size: 0.72rem;">
-            {{ _('Si lo dejas vacío se genera uno aleatorio y el trabajador deberá cambiarlo en /mi. Si tiene correo, se le avisa.') }}
-          </small>
-        </div>
-        {% endif %}
-
-        <div class="admin-form-section">{{ _('Perfil profesional') }}</div>
-        <div class="form-row">
-          <div class="form-group col-md-6">
-            <label class="admin-form-label">{{ _('Categoría (nómina)') }}</label>
-            <input type="text" name="categoria_profesional" class="form-control" placeholder="{{ _('Ej: Oficial 1ª') }}" value="{{ user.categoria_profesional or '' }}">
-          </div>
-          <div class="form-group col-md-6">
-            <label class="admin-form-label">{{ _('Especialidad (oficio)') }}</label>
-            <input type="text" name="especialidad" class="form-control" placeholder="{{ _('Ej: Electricista') }}" value="{{ user.especialidad or '' }}">
-          </div>
-        </div>
-
-        <div class="admin-form-section">{{ _('Afiliación') }}</div>
-        <div class="form-group">
-          <label class="admin-form-label">{{ _('Empresa') }}</label>
-          <select name="company_id" class="form-control custom-select" required>
-            <option value="">{{ _('— Seleccione empresa —') }}</option>
-            {% for company in companies %}
-              <option value="{{ company.id }}" {% if edit_mode and user.company_id == company.id %}selected{% endif %}>
-                {{ company.nombre }}
-              </option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div class="admin-form-options">
-          <div class="admin-form-switch-row mb-2">
-            <label class="admin-form-switch">
-              <input type="checkbox" id="activeCheck" name="active" {% if edit_mode and user.active %}checked{% endif %}>
-              <span class="slider"></span>
+        {# —— Operario: PIN —— #}
+        <div id="operarioAccessBlock" data-tour="user-acceso">
+          {% if not edit_mode %}
+          <div class="admin-form-section">{{ _('Acceso del operario (DNI + PIN)') }}</div>
+          <div class="pin-mode-options" data-tour="user-pin-modes">
+            <label>
+              <input type="radio" name="pin_mode" value="manual" id="pinModeManual" checked>
+              <span>{{ _('Establecer PIN ahora') }} — {{ _('útil para probar o dárselo en mano') }}</span>
             </label>
-            <div>
-              <p class="admin-form-switch-label">{{ _('Usuario activo') }}</p>
-              <p class="admin-form-switch-hint">{{ _('Puede ser asignado a obras') }}</p>
-            </div>
-          </div>
-          <div class="admin-form-switch-row mb-2">
-            <label class="admin-form-switch">
-              <input type="checkbox" id="webAccessCheck" name="web_access"
-                {% if edit_mode and user.web_access %}checked{% elif not edit_mode %}{% endif %}>
-              <span class="slider"></span>
+            <label>
+              <input type="radio" name="pin_mode" value="email_link" id="pinModeEmail">
+              <span>{{ _('Enviar enlace por correo') }} — {{ _('el trabajador define su PIN (requiere email)') }}</span>
             </label>
-            <div>
-              <p class="admin-form-switch-label">{{ _('Acceso a la plataforma (email y contraseña)') }}</p>
-              <p class="admin-form-switch-hint">{{ _('Solo para operarios: portal web aparte del fichaje con PIN. Los demás roles ya tienen acceso.') }}</p>
-            </div>
           </div>
-          <div class="form-group" id="webPasswordGroup" style="max-width: 280px; display: none;">
-            <label class="admin-form-label">{{ _('Contraseña de plataforma') }}</label>
-            <input type="password" name="web_password" id="webPassword" class="form-control"
-                   autocomplete="new-password"
-                   placeholder="{% if edit_mode %}{{ _('Obligatoria al activar') }}{% else %}{{ _('Opcional si ya hay contraseña arriba') }}{% endif %}">
+          <div class="form-group" id="pinManualGroup" style="max-width: 220px;">
+            <label class="admin-form-label">{{ _('PIN de fichaje') }}</label>
+            <input type="password" name="pin" id="pinInput" class="form-control"
+                   inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                   placeholder="••••" autocomplete="new-password">
             <small class="form-text text-muted" style="font-size: 0.72rem;">
-              {{ _('Mínimo 8 caracteres. El PIN de fichaje (/mi) no cambia.') }}
+              {{ _('4 a 6 dígitos. Con este PIN y el DNI entra en /mi.') }}
             </small>
           </div>
-          <div class="admin-form-switch-row">
-            <label class="admin-form-switch">
-              <input type="checkbox" id="receiveEmailsCheck" name="receive_emails"
-                {% if edit_mode and user.receive_emails %}checked{% elif not edit_mode %}checked{% endif %}>
-              <span class="slider"></span>
-            </label>
-            <div>
-              <p class="admin-form-switch-label">{{ _('Notificaciones por email') }}</p>
-              <p class="admin-form-switch-hint">{{ _('Recibir avisos de asignaciones y cambios') }}</p>
-            </div>
+          {% endif %}
+          <div class="form-group" id="operarioEmailMainGroup" style="display: none;">
+            <label class="admin-form-label">{{ _('Email') }}</label>
+            <input type="email" name="email" id="operarioEmailMain" class="form-control"
+                   value="{% if edit_mode and not email_es_placeholder %}{{ user.email }}{% endif %}"
+                   autocomplete="off">
+            <small class="form-text text-muted" style="font-size: 0.72rem;" id="operarioEmailHint">
+              {{ _('Necesario para enviarle el enlace de definir PIN.') }}
+            </small>
           </div>
         </div>
+
+        {# —— Oficina: email + contraseña —— #}
+        <div id="officeAccessBlock" style="display: none;">
+          <div class="admin-form-section">{{ _('Acceso de oficina') }}</div>
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label class="admin-form-label">{{ _('Email') }}</label>
+              <input type="email" name="email_office" id="officeEmail" class="form-control"
+                     value="{% if edit_mode and not email_es_placeholder %}{{ user.email }}{% elif edit_mode %}{{ user.email }}{% endif %}"
+                     autocomplete="off">
+            </div>
+            {% if not edit_mode %}
+            <div class="form-group col-md-6">
+              <label class="admin-form-label">{{ _('Contraseña') }}</label>
+              <input type="password" name="password" id="officePassword" class="form-control"
+                     autocomplete="new-password" minlength="8">
+              <small class="form-text text-muted" style="font-size: 0.72rem;">
+                {{ _('Mínimo 8 caracteres. Login del panel de oficina.') }}
+              </small>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <details class="user-form-advanced" id="advancedDetails">
+          <summary>{{ _('Opciones avanzadas') }}</summary>
+          <div class="advanced-body">
+            <div class="form-group" id="operarioEmailAdvancedGroup">
+              <label class="admin-form-label">{{ _('Email (opcional)') }}</label>
+              <input type="email" name="email_advanced" id="operarioEmailAdvanced" class="form-control"
+                     value="{% if edit_mode and not email_es_placeholder %}{{ user.email }}{% endif %}"
+                     autocomplete="off">
+              <small class="form-text text-muted" style="font-size: 0.72rem;">
+                {{ _('Avisos y enlace para definir PIN. Si está vacío, el operario solo entra con DNI + PIN.') }}
+              </small>
+            </div>
+
+            <div class="form-group">
+              <label class="admin-form-label">{{ _('Empresa') }}</label>
+              <select name="company_id" class="form-control custom-select">
+                <option value="">{{ _('— Sin empresa —') }}</option>
+                {% for company in companies %}
+                  <option value="{{ company.id }}"
+                    {% if edit_mode and user.company_id == company.id %}selected
+                    {% elif not edit_mode and default_company_id and company.id == default_company_id %}selected
+                    {% endif %}>
+                    {{ company.nombre }}{% if company.is_internal %} ({{ _('interna') }}){% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="admin-form-section">{{ _('Perfil profesional') }}</div>
+            <div class="form-row">
+              <div class="form-group col-md-6">
+                <label class="admin-form-label">{{ _('Categoría (nómina)') }}</label>
+                <input type="text" name="categoria_profesional" class="form-control"
+                       placeholder="{{ _('Ej: Oficial 1ª') }}"
+                       value="{{ user.categoria_profesional or '' }}">
+              </div>
+              <div class="form-group col-md-6">
+                <label class="admin-form-label">{{ _('Especialidad (oficio)') }}</label>
+                <input type="text" name="especialidad" class="form-control"
+                       placeholder="{{ _('Ej: Electricista') }}"
+                       value="{{ user.especialidad or '' }}">
+              </div>
+            </div>
+
+            <div class="admin-form-options">
+              <div class="admin-form-switch-row mb-2">
+                <label class="admin-form-switch">
+                  <input type="checkbox" id="activeCheck" name="active"
+                         {% if edit_mode %}{% if user.active %}checked{% endif %}{% else %}checked{% endif %}>
+                  <span class="slider"></span>
+                </label>
+                <div>
+                  <p class="admin-form-switch-label">{{ _('Usuario activo') }}</p>
+                  <p class="admin-form-switch-hint">{{ _('Puede ser asignado a obras') }}</p>
+                </div>
+              </div>
+              <div class="admin-form-switch-row">
+                <label class="admin-form-switch">
+                  <input type="checkbox" id="receiveEmailsCheck" name="receive_emails"
+                    {% if edit_mode and user.receive_emails %}checked{% elif not edit_mode %}checked{% endif %}>
+                  <span class="slider"></span>
+                </label>
+                <div>
+                  <p class="admin-form-switch-label">{{ _('Notificaciones por email') }}</p>
+                  <p class="admin-form-switch-hint">{{ _('Solo aplica si tiene un correo real') }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <div class="admin-form-actions">
           <div></div>
           <div class="admin-form-actions-right">
             <a href="{{ cancel_url }}" class="btn-admin-link">{{ _('Cancelar') }}</a>
-            <button type="submit" class="btn-admin btn-admin-primary">
+            <button type="submit" class="btn-admin btn-admin-primary" data-tour="user-guardar">
               <i class="fas fa-save"></i>
               {% if edit_mode %}{{ _('Guardar') }}{% else %}{{ _('Crear usuario') }}{% endif %}
             </button>
@@ -172,7 +255,7 @@
     </section>
 
     {% if edit_mode and user.role in ['operario', 'jefe_obra', 'admin', 'laboral', 'rrhh'] %}
-    <section class="admin-panel admin-form-panel mt-3">
+    <section class="admin-panel admin-form-panel mt-3" id="pinEditSection">
       <div class="admin-panel-header">
         <h2 class="admin-panel-title">{{ _('PIN de fichaje') }}</h2>
         <span class="admin-panel-subtitle">{{ _('Acceso a /mi con DNI + PIN') }}</span>
@@ -215,7 +298,7 @@
                      placeholder="{{ _('Vacío = genera PIN provisional') }}">
               <p class="small text-muted mb-2">
                 {{ _('Envía a') }} <strong>{{ user.email }}</strong>
-                {{ _('un enlace para que defina su PIN. El PIN no viaja en el correo. Si dejas el campo vacío se genera uno provisional (solo lo verás tú aquí).') }}
+                {{ _('un enlace para que defina su PIN. El PIN no viaja en el correo.') }}
               </p>
               <button type="submit" class="btn-admin btn-admin-primary"
                       {% if not user.email or '@demo.signaplan' in (user.email or '') or '@local.signaplan' in (user.email or '') %}disabled title="{{ _('Necesita un correo real') }}"{% endif %}>
@@ -231,29 +314,84 @@
 </div>
 <script>
 (function () {
-  var roleSelect = document.querySelector('select[name="role"]');
-  var webCheck = document.getElementById('webAccessCheck');
-  var pwdGroup = document.getElementById('webPasswordGroup');
-  var hadWeb = {{ (edit_mode and user.web_access)|tojson }};
+  var roleSelect = document.getElementById('roleSelect');
+  var operarioBlock = document.getElementById('operarioAccessBlock');
+  var officeBlock = document.getElementById('officeAccessBlock');
+  var pinManual = document.getElementById('pinModeManual');
+  var pinEmail = document.getElementById('pinModeEmail');
+  var pinManualGroup = document.getElementById('pinManualGroup');
+  var pinInput = document.getElementById('pinInput');
+  var emailMainGroup = document.getElementById('operarioEmailMainGroup');
+  var emailMain = document.getElementById('operarioEmailMain');
+  var emailAdvGroup = document.getElementById('operarioEmailAdvancedGroup');
+  var emailAdv = document.getElementById('operarioEmailAdvanced');
+  var officeEmail = document.getElementById('officeEmail');
+  var officePassword = document.getElementById('officePassword');
+  var editMode = {{ edit_mode|tojson }};
 
-  function syncWebAccessUi() {
-    var isOperario = roleSelect && roleSelect.value === 'operario';
-    if (!webCheck || !pwdGroup) return;
-    var row = webCheck.closest('.admin-form-switch-row');
-    if (row) row.style.display = isOperario ? '' : 'none';
-    if (!isOperario) {
-      pwdGroup.style.display = 'none';
-      return;
+  function isOperario() {
+    return roleSelect && roleSelect.value === 'operario';
+  }
+
+  function syncPinMode() {
+    if (editMode || !isOperario()) return;
+    var sendLink = pinEmail && pinEmail.checked;
+    if (pinManualGroup) pinManualGroup.style.display = sendLink ? 'none' : '';
+    if (pinInput) {
+      pinInput.required = !sendLink;
+      if (sendLink) pinInput.value = '';
     }
-    pwdGroup.style.display = webCheck.checked ? '' : 'none';
-    var input = document.getElementById('webPassword');
-    if (input) {
-      input.required = webCheck.checked && !hadWeb;
+    if (emailMainGroup) emailMainGroup.style.display = sendLink ? '' : 'none';
+    if (emailMain) {
+      emailMain.required = !!sendLink;
+      emailMain.disabled = !sendLink;
+    }
+    if (emailAdvGroup) emailAdvGroup.style.display = sendLink ? 'none' : '';
+    if (emailAdv) {
+      emailAdv.disabled = !!sendLink;
+      if (sendLink) emailAdv.value = '';
     }
   }
-  if (roleSelect) roleSelect.addEventListener('change', syncWebAccessUi);
-  if (webCheck) webCheck.addEventListener('change', syncWebAccessUi);
-  syncWebAccessUi();
+
+  function syncRole() {
+    var op = isOperario();
+    if (operarioBlock) operarioBlock.style.display = op ? '' : 'none';
+    if (officeBlock) officeBlock.style.display = op ? 'none' : '';
+
+    if (officeEmail) {
+      officeEmail.required = !op;
+      officeEmail.disabled = op;
+    }
+    if (officePassword) {
+      officePassword.required = !op && !editMode;
+      officePassword.disabled = op;
+    }
+
+    if (op) {
+      if (emailMain) emailMain.disabled = false;
+      if (emailAdv) emailAdv.disabled = false;
+      if (pinInput) pinInput.disabled = false;
+      if (editMode) {
+        if (emailMainGroup) emailMainGroup.style.display = 'none';
+        if (emailMain) { emailMain.required = false; emailMain.disabled = true; }
+        if (emailAdvGroup) emailAdvGroup.style.display = '';
+      } else {
+        syncPinMode();
+      }
+    } else {
+      if (pinInput) { pinInput.required = false; pinInput.disabled = true; }
+      if (emailMain) { emailMain.required = false; emailMain.disabled = true; }
+      if (emailMainGroup) emailMainGroup.style.display = 'none';
+      // Oficina ya tiene email arriba: no duplicar en avanzadas
+      if (emailAdvGroup) emailAdvGroup.style.display = 'none';
+      if (emailAdv) { emailAdv.disabled = true; emailAdv.value = ''; }
+    }
+  }
+
+  if (roleSelect) roleSelect.addEventListener('change', syncRole);
+  if (pinManual) pinManual.addEventListener('change', syncPinMode);
+  if (pinEmail) pinEmail.addEventListener('change', syncPinMode);
+  syncRole();
 })();
 </script>
 {% endblock %}

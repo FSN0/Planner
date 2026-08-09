@@ -284,10 +284,28 @@ def enviar_super_reporte_diario():
     from app.utils.timezone_utils import today_local
     hoy = today_local()
     ayer = hoy - timedelta(days=1)
-    
-    # 1. Ausencias tempranas de HOY
-    ausencias_hoy = RegistroFichaje.query.filter_by(fecha=hoy, estado='Ausencia').all()
-    
+
+    def _falso_positivo_ausencia(reg):
+        """Si ya fichó (aunque sea Paracaidista) o hay resolución, no es «no ha fichado»."""
+        hermanos = RegistroFichaje.query.filter(
+            RegistroFichaje.user_id == reg.user_id,
+            RegistroFichaje.fecha == reg.fecha,
+            RegistroFichaje.id != reg.id,
+        ).all()
+        for h in hermanos:
+            est = h.estado or ''
+            if h.obra_real_id or h.check_in or est.startswith('Resuelto') or est in (
+                'Correcto', 'Correcto_Automatico', 'Cerrado_Multiobra',
+                'Paracaidista', 'Conflicto',
+            ):
+                return True
+        return False
+
+    # 1. Ausencias tempranas de HOY (sin falsos positivos por semillas de sync)
+    ausencias_hoy = [
+        a for a in RegistroFichaje.query.filter_by(fecha=hoy, estado='Ausencia').all()
+        if not _falso_positivo_ausencia(a)
+    ] 
     # 2. Paracaidistas/Conflictos de AYER (por si en la BD guardas Paracaidista o Conflicto)
     conflictos_ayer = RegistroFichaje.query.filter(
         RegistroFichaje.fecha == ayer,

@@ -287,6 +287,13 @@
         });
     </script>
     {% endif %}
-    
+
+    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding_tour.css') }}?v=20260809an">
+    <script>
+      window.__ONB_IMPORT_DONE__ = {{ (onboarding_import_done or {})|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260809an"></script>
+    {% endif %}
 </body>
 </html>

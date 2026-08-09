@@ -12,6 +12,40 @@
   }
   .import-step.is-active { background: #e0f2fe; color: #0369a1; }
   .import-step.is-done { background: #dcfce7; color: #166534; }
+  .import-intro {
+    margin-bottom: 1.25rem;
+  }
+  .import-intro .admin-panel-title {
+    font-size: 1.15rem;
+    margin-bottom: 0.35rem;
+  }
+  .import-intro-lead {
+    font-size: 0.92rem;
+    color: #334155;
+    line-height: 1.45;
+    margin: 0 0 0.85rem;
+  }
+  .import-help {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+  }
+  .import-help ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1.15rem;
+    color: #475569;
+    font-size: 0.86rem;
+    line-height: 1.5;
+  }
+  .import-help li { margin-bottom: 0.35rem; }
+  .import-help li strong { color: #0f172a; }
+  .import-help-note {
+    margin: 0.75rem 0 0;
+    font-size: 0.8rem;
+    color: #64748b;
+    line-height: 1.4;
+  }
 </style>
 {% endblock %}
 
@@ -36,35 +70,48 @@
         </div>
 
         <div class="admin-panel">
-          <div class="admin-panel-header border-bottom pb-3 mb-4">
-            <h2 class="admin-panel-title" style="font-size: 1.1rem;">{{ cfg.title }}</h2>
-            <p class="admin-panel-subtitle mb-0">{{ cfg.subtitle }}</p>
-          </div>
+          <div class="import-intro" data-tour="import-intro">
+            <h2 class="admin-panel-title">{{ cfg.title }}</h2>
+            <p class="import-intro-lead">
+              {{ cfg.intro_lead or cfg.subtitle }}
+            </p>
 
-          <div class="alert alert-info mb-4" style="font-size: 0.9rem;">
-            <i class="fas fa-info-circle mr-2"></i>
-            <strong>Columnas esperadas:</strong> {{ cfg.required_hint }}
-            <br>
-            <small class="ml-4">Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.</small>
+            <div class="import-help" data-tour="import-help">
+              {% if cfg.help_html %}
+                {{ cfg.help_html|safe }}
+              {% elif cfg.help_blocks %}
+                {% for block in cfg.help_blocks %}
+                <p class="mb-2" style="font-size:0.86rem;color:#475569;line-height:1.45;">
+                  <strong style="color:#0f172a;">{{ block.title }}.</strong>
+                  {{ block.body|safe }}
+                </p>
+                {% endfor %}
+                <p class="import-help-note">Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.</p>
+              {% else %}
+                <p class="mb-0" style="font-size:0.86rem;color:#475569;">{{ cfg.required_hint }}</p>
+              {% endif %}
+            </div>
           </div>
 
           <form action="{{ url_for(cfg.upload_endpoint) }}" method="post" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <div class="form-group text-center p-5 border rounded bg-light mb-4"
-                 style="border-style: dashed !important; border-color: #cbd5e1 !important;">
+                 style="border-style: dashed !important; border-color: #cbd5e1 !important;"
+                 data-tour="import-file-zone">
               <i class="fas {{ cfg.icon }} fa-3x text-primary mb-3"></i>
               <br>
-              <div class="custom-file" style="max-width: 320px; margin: 0 auto;">
+              <div class="custom-file" style="max-width: 300px; margin: 0 auto;">
                 <input type="file" class="custom-file-input" id="file" name="file"
-                       accept=".xlsx,.xls,.csv" required onchange="updateFileName(this)">
+                       accept=".xlsx,.xls,.csv" required onchange="updateFileName(this)"
+                       data-tour="import-file">
                 <label class="custom-file-label text-left" for="file" id="file-label">Seleccionar archivo…</label>
               </div>
             </div>
 
             <div class="d-flex justify-content-end">
               <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-link text-muted mr-2">Cancelar</a>
-              <button type="submit" class="btn btn-primary px-4">
+              <button type="submit" class="btn btn-primary px-4" data-tour="import-submit">
                 <i class="fas fa-upload mr-2"></i> Continuar
               </button>
             </div>

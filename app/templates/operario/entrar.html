@@ -9,12 +9,13 @@
         {{ _('Introduce tu DNI y tu PIN. Si te han enviado un correo, usa el enlace «Definir mi PIN» antes de entrar.') }}
     </p>
 
-    <form method="POST" action="{{ url_for('operarios.entrar') }}" class="entrar__formulario">
+    <form method="POST" action="{{ url_for('operarios.entrar') }}" class="entrar__formulario" data-tour="fichar-login">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="campo">
             <label class="campo__etiqueta" for="dni">{{ _('DNI / NIE') }}</label>
             <input class="campo__control" type="text" id="dni" name="dni"
+                   data-tour="fichar-dni"
                    required autocomplete="username"
                    inputmode="text" autocapitalize="characters"
                    autocorrect="off" spellcheck="false"
@@ -25,12 +26,13 @@
             <label class="campo__etiqueta" for="pin">{{ _('PIN') }}</label>
             <input class="campo__control campo__control--pin" type="password"
                    id="pin" name="pin" required
+                   data-tour="fichar-pin"
                    inputmode="numeric" pattern="[0-9]{4,6}"
                    maxlength="6" autocomplete="one-time-code"
                    placeholder="••••">
         </div>
 
-        <button class="boton boton--entrar" type="submit">{{ _('Entrar') }}</button>
+        <button class="boton boton--entrar" type="submit" data-tour="fichar-submit">{{ _('Entrar') }}</button>
     </form>
 
     <p class="nota-legal">

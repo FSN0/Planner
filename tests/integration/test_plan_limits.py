@@ -125,12 +125,12 @@ class TestAltaPorFormulario:
         resp = authenticated_client.post(
             '/admin/create_user',
             data={
-                'email': 'nuevo@test.local',
-                'password': 'Segura123!',
                 'role': ROLE_OPERARIO,
                 'name': 'Nuevo',
                 'lastname': 'Operario',
                 'dni': 'Z9999999Z',
+                'pin_mode': 'manual',
+                'pin': '2580',
                 'company_id': str(company_internal.id),
                 'active': 'on',
             },

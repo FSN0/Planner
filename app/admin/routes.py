@@ -68,9 +68,14 @@ def _enforce_admin_module_permissions():
 
 IMPORT_WIZARD_CONFIG = {
     "obras": {
-        "title": "Importar Obras",
-        "subtitle": "Carga un Excel o CSV para crear varias obras a la vez.",
-        "required_hint": "Código, Nombre, Cliente, Dirección, Fecha de inicio. Opcional: Fecha de fin.",
+        "title": "Importar obras",
+        "subtitle": "Sube un Excel o CSV para crear varias obras de una vez.",
+        "intro_lead": (
+            "Desde aquí cargas de golpe el listado de obras de tu empresa. "
+            "No hace falta crearlas una a una: el asistente lee el fichero, "
+            "mapea las columnas y te muestra una vista previa antes de guardar."
+        ),
+        "required_hint": "Obligatorio: Nombre. Opcional: Código, Dirección, Fechas.",
         "icon": "fa-hard-hat",
         "upload_endpoint": "admin.import_obras",
         "preview_endpoint": "admin.import_obras_preview",
@@ -79,11 +84,25 @@ IMPORT_WIZARD_CONFIG = {
         "back_label": "Volver al listado",
         "success_endpoint": "admin.obras_detailed",
         "success_label": "Ir a obras",
+        "help_html": """
+<ul>
+  <li><strong>Obligatorio:</strong> una columna de <strong>Nombre</strong> de la obra.</li>
+  <li><strong>Opcionales:</strong> Código, Dirección, Fecha de inicio y Fecha de fin.</li>
+  <li><strong>Sin fechas:</strong> se pone <strong>hoy</strong> como inicio y <strong>un año después</strong> como fin.
+      Si el Excel ya trae fechas (aunque sean del pasado), se respetan tal cual.</li>
+  <li><strong>Sin código:</strong> la obra se crea sin código (puedes asignarlo después en la ficha).</li>
+</ul>
+<p class="import-help-note">Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo de columnas.</p>
+""",
     },
     "users": {
-        "title": "Importar Personal",
-        "subtitle": "Carga un Excel o CSV para dar de alta usuarios.",
-        "required_hint": "Email, Rol, Nombre, Apellidos, DNI, Empresa. Opcional: Contraseña, Activo.",
+        "title": "Importar personal",
+        "subtitle": "Sube un Excel o CSV para dar de alta usuarios.",
+        "intro_lead": (
+            "Carga de golpe tu plantilla (interna o externa). "
+            "Revisarás el mapeo y una vista previa antes de crear a nadie."
+        ),
+        "required_hint": "Obligatorio: Nombre, Apellidos, DNI, Email. Recomendado: Empresa (externos), Rol.",
         "icon": "fa-users",
         "upload_endpoint": "admin.import_users",
         "preview_endpoint": "admin.import_users_preview",
@@ -92,11 +111,25 @@ IMPORT_WIZARD_CONFIG = {
         "back_label": "Volver a personal",
         "success_endpoint": "admin.personal",
         "success_label": "Ir a personal",
+        "help_html": """
+<ul>
+  <li><strong>Obligatorias:</strong> Nombre, Apellidos, DNI y Email.</li>
+  <li><strong>Recomendadas:</strong> Rol y, si son externos, Empresa.</li>
+  <li><strong>Empresa / subcontrata:</strong> en personal externo se busca o crea una empresa con ese nombre.
+      Si dos personas son de la misma subcontrata, el nombre debe ser <strong>exactamente igual</strong>.</li>
+  <li><strong>Sin rol:</strong> se asume operario. El PIN puedes activarlo después en Trabajadores.</li>
+</ul>
+<p class="import-help-note">Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.</p>
+""",
     },
     "companies": {
-        "title": "Importar Subcontratas",
-        "subtitle": "Carga un Excel o CSV para dar de alta empresas subcontratadas.",
-        "required_hint": "Nombre. Opcional: NIF, Código, Gremio, Email, Descripción, Interna.",
+        "title": "Importar subcontratas",
+        "subtitle": "Sube un Excel o CSV para dar de alta empresas externas.",
+        "intro_lead": (
+            "Da de alta las empresas externas / subcontratas con las que trabajas. "
+            "Así podrás vincular personal externo a cada una."
+        ),
+        "required_hint": "Obligatorio: Nombre. Opcional: NIF, Código, Gremio, Email, Descripción.",
         "icon": "fa-building",
         "upload_endpoint": "admin.import_companies",
         "preview_endpoint": "admin.import_companies_preview",
@@ -105,6 +138,15 @@ IMPORT_WIZARD_CONFIG = {
         "back_label": "Volver a subcontratas",
         "success_endpoint": "admin.companies",
         "success_label": "Ir a subcontratas",
+        "help_html": """
+<ul>
+  <li><strong>Obligatorio:</strong> Nombre de la subcontrata / empresa externa.</li>
+  <li><strong>Opcionales:</strong> NIF, Código, Gremio, Email, Descripción.</li>
+  <li><strong>Mismo nombre:</strong> si ya existe una empresa con ese nombre, la fila se marca como duplicada.
+      Usa siempre el mismo nombre para la misma subcontrata.</li>
+</ul>
+<p class="import-help-note">Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.</p>
+""",
     },
 }
 
@@ -502,6 +544,21 @@ def _handle_import_confirm(entity_type):
         if entity_type == 'users' and (import_options or {}).get('mode'):
             kwargs['modo'] = import_options['mode']
         return redirect(url_for(cfg["upload_endpoint"], **kwargs))
+
+    # Tick de la guía de importación (obras / personal / empresas)
+    try:
+        from app.services.onboarding_service import marcar_import_tutorial
+        if entity_type == 'obras':
+            marcar_import_tutorial('obras')
+        elif entity_type == 'companies':
+            marcar_import_tutorial('companies')
+        elif entity_type == 'users':
+            mode = (import_options or {}).get('mode') or 'internos'
+            marcar_import_tutorial(
+                'users_externos' if mode == 'externos' else 'users_internos'
+            )
+    except Exception:
+        pass
 
     return render_template(
         "admin_import_wizard.html",
@@ -1679,42 +1736,62 @@ def deactivate_operario(user_id):
 @roles_required(ROLE_ADMIN)
 def edit_operario(user_id):
     user = User.query.get_or_404(user_id)
-    companies = Company.query.all()
+    companies = Company.query.order_by(
+        Company.is_internal.desc(), Company.nombre.asc()
+    ).all()
 
     if request.method == "POST":
-        # Recogemos los datos críticos
-        new_dni = request.form.get("dni")
-        new_email = request.form.get("email")
+        new_dni = (request.form.get("dni") or "").strip().upper()
+        nuevo_rol = (request.form.get("role") or user.role).strip()
 
-        # --- 1. VALIDACIÓN: DNI DUPLICADO ---
-        # Buscamos si existe otro usuario con ese DNI, excluyendo al propio usuario (user.id)
+        if nuevo_rol == ROLE_OPERARIO:
+            new_email = (
+                request.form.get("email")
+                or request.form.get("email_advanced")
+                or ""
+            ).strip().lower()
+            if not _email_parece_real_form(new_email):
+                new_email = _email_placeholder_desde_dni(new_dni or user.dni)
+        else:
+            new_email = (
+                request.form.get("email_office")
+                or request.form.get("email")
+                or ""
+            ).strip().lower()
+            if not _email_parece_real_form(new_email):
+                flash("Email obligatorio para perfiles de oficina.", "danger")
+                return _render_user_form(
+                    edit_mode=True,
+                    user=user,
+                    action_url=url_for("admin.edit_operario", user_id=user.id),
+                    companies=companies,
+                )
+
         existing_dni = User.query.filter(User.dni == new_dni, User.id != user.id).first()
         if existing_dni:
-            flash(f"Error: El DNI {new_dni} ya pertenece a otro usuario ({existing_dni.name}).", "danger")
-            # Devolvemos la plantilla directamente para no perder lo escrito, pero sin guardar
-            return render_template(
-                "gestion_operario_form.html",
-                edit_mode=True,
-                user=user, # Ojo: user sigue teniendo los datos viejos en memoria
-                action_url=url_for("admin.edit_operario", user_id=user.id),
-                cancel_url=url_for("admin.personal"),
-                companies=companies,
+            flash(
+                f"Error: El DNI {new_dni} ya pertenece a otro usuario ({existing_dni.name}).",
+                "danger",
             )
-
-        # --- 2. VALIDACIÓN: EMAIL DUPLICADO ---
-        existing_email = User.query.filter(User.email == new_email, User.id != user.id).first()
-        if existing_email:
-            flash(f"Error: El email {new_email} ya está registrado.", "danger")
-            return render_template(
-                "gestion_operario_form.html",
+            return _render_user_form(
                 edit_mode=True,
                 user=user,
                 action_url=url_for("admin.edit_operario", user_id=user.id),
-                cancel_url=url_for("admin.personal"),
                 companies=companies,
             )
 
-       # --- 3. SI PASA LAS VALIDACIONES, ACTUALIZAMOS ---
+        existing_email = User.query.filter(
+            User.email == new_email, User.id != user.id
+        ).first()
+        if existing_email:
+            flash(f"Error: El email {new_email} ya está registrado.", "danger")
+            return _render_user_form(
+                edit_mode=True,
+                user=user,
+                action_url=url_for("admin.edit_operario", user_id=user.id),
+                companies=companies,
+            )
+
         try:
             from app.services.plan_service import (
                 PlanLimitError,
@@ -1722,8 +1799,7 @@ def edit_operario(user_id):
                 exigir_cambio_cupo,
             )
 
-            nuevo_rol = request.form.get("role") or user.role
-            nuevo_active = True if request.form.get("active") == "on" else False
+            nuevo_active = request.form.get("active") == "on"
             ocupar_antes = cuenta_como_empleado(user)
             ocupar_despues = cuenta_como_empleado(
                 role=nuevo_rol,
@@ -1732,67 +1808,35 @@ def edit_operario(user_id):
             )
             exigir_cambio_cupo(ocupar_antes, ocupar_despues)
 
-            user.name = request.form.get("name")
-            user.lastname = request.form.get("lastname")
+            user.name = (request.form.get("name") or "").strip()
+            user.lastname = (request.form.get("lastname") or "").strip()
             user.dni = new_dni
             user.email = new_email
             user.role = nuevo_rol
-        
-            
-            # Gestión del Company ID (mejorado para aceptar vacíos)
-            company_id = request.form.get("company_id")
-            if company_id and company_id.strip():
+
+            company_id = (request.form.get("company_id") or "").strip()
+            if company_id:
                 user.company_id = int(company_id)
             else:
-                user.company_id = None # Permite dejar al usuario sin empresa si es necesario
-            
-            # Checkboxes (Tu lógica original)
-            user.active = nuevo_active
-            user.receive_emails = True if request.form.get("receive_emails") == "on" else False
-            
-            user.categoria_profesional = request.form.get("categoria_profesional")
-            user.especialidad = request.form.get("especialidad")
+                user.company_id = None
 
-            # Acceso web (email/contraseña) — independiente del PIN de /mi
-            quiere_web = request.form.get("web_access") == "on"
-            web_password = (request.form.get("web_password") or "").strip()
+            user.active = nuevo_active
+            user.receive_emails = request.form.get("receive_emails") == "on"
+            user.categoria_profesional = (
+                request.form.get("categoria_profesional") or ""
+            ).strip() or None
+            user.especialidad = (
+                request.form.get("especialidad") or ""
+            ).strip() or None
+
+            # Operario: acceso = DNI + PIN (sin login web). Oficina: siempre web.
             if nuevo_rol == ROLE_OPERARIO:
-                if quiere_web:
-                    if not user.web_access and len(web_password) < 8:
-                        flash(
-                            "Para activar el acceso a la plataforma indica una "
-                            "contraseña de al menos 8 caracteres.",
-                            "danger",
-                        )
-                        return render_template(
-                            "gestion_operario_form.html",
-                            edit_mode=True,
-                            user=user,
-                            action_url=url_for("admin.edit_operario", user_id=user.id),
-                            cancel_url=url_for("admin.personal"),
-                            companies=companies,
-                        )
-                    if web_password:
-                        if len(web_password) < 8:
-                            flash("La contraseña web debe tener al menos 8 caracteres.", "danger")
-                            return render_template(
-                                "gestion_operario_form.html",
-                                edit_mode=True,
-                                user=user,
-                                action_url=url_for("admin.edit_operario", user_id=user.id),
-                                cancel_url=url_for("admin.personal"),
-                                companies=companies,
-                            )
-                        user.password_hash = generate_password_hash(web_password)
-                    user.web_access = True
-                else:
-                    user.web_access = False
+                user.web_access = False
             else:
-                # Perfiles de oficina siempre tienen login web
                 user.web_access = True
-            
+
             db.session.commit()
-            flash("Datos del Operario actualizados correctamente", "success")
+            flash("Datos actualizados correctamente", "success")
             return redirect(url_for("admin.personal"))
 
         except PlanLimitError as e:
@@ -1802,13 +1846,10 @@ def edit_operario(user_id):
             db.session.rollback()
             flash(f"Error inesperado al guardar: {str(e)}", "danger")
 
-    # GET Request o si falla algo
-    return render_template(
-        "gestion_operario_form.html",
+    return _render_user_form(
         edit_mode=True,
         user=user,
         action_url=url_for("admin.edit_operario", user_id=user.id),
-        cancel_url=url_for("admin.personal"),
         companies=companies,
     )
 
@@ -1846,23 +1887,15 @@ def panel_laboral():
 @roles_required(ROLE_ADMIN)
 def primeros_pasos():
     """
-    Wizard post-alta: obra → trabajador+PIN → fichaje móvil.
+    Hub de arranque: guía interactiva, import Excel, demo o saltar.
     """
-    from werkzeug.security import generate_password_hash
     from app.services.onboarding_service import (
         estado_onboarding,
         marcar_onboarding_completo,
         necesita_onboarding,
         tenant_tiene_onboarding,
     )
-    from app.services.oficina_obra_service import (
-        CONFIG_OBRA_OFICINA,
-        sincronizar_obra_oficina,
-    )
-    from app.services.fichaje_operario_service import CONFIG_FICHAJE_OPERARIO
-    from app.services.pin_auth_service import PinAuthError, asignar_pin
-    from app.services.config_service import set_tenant_config
-    from app.models import Company
+    from app.services.demo_data_service import demo_activa, demo_cantidades
 
     if not tenant_tiene_onboarding():
         return redirect(url_for("admin.panel"))
@@ -1870,83 +1903,24 @@ def primeros_pasos():
     if request.method == "POST":
         accion = (request.form.get("accion") or "").strip()
         try:
-            if accion == "oficina":
-                set_tenant_config(CONFIG_OBRA_OFICINA, "True")
-                sincronizar_obra_oficina(True)
-                db.session.commit()
-                flash("Obra Oficina lista. Ya puedes planificar y fichar ahí.", "success")
-            elif accion == "obra":
-                nombre = (request.form.get("nombre_obra") or "").strip()
-                if len(nombre) < 2:
-                    raise ValueError("Indica un nombre de obra.")
-                db.session.add(Obra(
-                    nombre=nombre,
-                    codigo=(request.form.get("codigo_obra") or "").strip() or None,
-                    estado="En Curso",
-                ))
-                db.session.commit()
-                flash(f"Obra «{nombre}» creada.", "success")
-            elif accion == "operario":
-                if not _exige_email_verificado_para_usuarios():
-                    return redirect(url_for("admin.primeros_pasos"))
-                company = Company.query.filter_by(is_internal=True).first() or Company.query.first()
-                name = (request.form.get("name") or "").strip()
-                lastname = (request.form.get("lastname") or "").strip()
-                dni = (request.form.get("dni") or "").strip().upper()
-                pin = request.form.get("pin")
-                email = (request.form.get("email") or "").strip().lower()
-                if not all([name, lastname, dni, pin]):
-                    raise ValueError("Nombre, apellidos, DNI y PIN son obligatorios.")
-                if not email:
-                    email = f"{dni.lower().replace(' ', '')}@local.signaplan"
-                user = User(
-                    name=name,
-                    lastname=lastname,
-                    dni=dni,
-                    email=email,
-                    role=ROLE_OPERARIO,
-                    active=True,
-                    email_verified=True,
-                    company_id=company.id if company else None,
-                    password_hash=generate_password_hash(pin),
-                )
-                db.session.add(user)
-                db.session.flush()
-                asignar_pin(user, pin, must_change=False, notify=True, actor=current_user)
-                db.session.commit()
-                flash(
-                    f"{name} dado de alta. Entrará en /mi con DNI {dni} y su PIN.",
-                    "success",
-                )
-            elif accion == "fichaje":
-                set_tenant_config(CONFIG_FICHAJE_OPERARIO, "True")
-                url_mi = url_for("operarios.entrar", _external=True)
-                flash(
-                    f"Fichaje activado. Comparte esta dirección con tus operarios: {url_mi}",
-                    "success",
-                )
-            elif accion == "informe":
-                from app.services.onboarding_service import marcar_informe_visto
-                marcar_informe_visto()
-                flash("Paso de informe marcado. Puedes volver al registro de jornada cuando quieras.", "success")
-            elif accion == "listo":
+            if accion in ("listo", "saltar"):
                 marcar_onboarding_completo()
-                flash("Listo. Ya puedes usar el planificador y el registro de jornada.", "success")
-                return redirect(url_for("admin.panel"))
-            elif accion == "saltar":
-                flash("Puedes volver a Primeros pasos desde el panel cuando quieras.", "info")
-                return redirect(url_for("admin.panel"))
+                flash(
+                    "Listo. Ya puedes usar SignaPlan a tu ritmo. "
+                    "Primeros pasos sigue disponible en el menú.",
+                    "success" if accion == "listo" else "info",
+                )
+                return redirect(url_for("admin.obras_detailed"))
             elif accion == "demo_generar":
                 from app.services.demo_data_service import generar_datos_demo
                 qty = generar_datos_demo(actor_user=current_user)
-                marcar_onboarding_completo()
                 flash(
                     f"Datos de ejemplo listos: {qty['obras']} obras, "
                     f"{qty['empleados']} trabajadores, {qty['vehiculos']} vehículos. "
-                    f"Explora el panel; el banner te permite borrarlos cuando quieras.",
+                    f"Te guiamos por lo esencial; el banner permite borrarlos cuando quieras.",
                     "success",
                 )
-                return redirect(url_for("admin.panel"))
+                return redirect(url_for("admin.obras_detailed", tour="demo"))
             elif accion == "demo_borrar":
                 from app.services.demo_data_service import borrar_datos_demo
                 from app.services.config_service import set_tenant_config
@@ -1960,117 +1934,193 @@ def primeros_pasos():
                 return redirect(url_for("admin.panel"))
             else:
                 raise ValueError("Acción no reconocida.")
-        except (ValueError, PinAuthError) as exc:
+        except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "danger")
         except Exception as exc:
             db.session.rollback()
-            flash(f"No se ha podido completar el paso: {exc}", "danger")
+            flash(f"No se ha podido completar la acción: {exc}", "danger")
 
         return redirect(url_for("admin.primeros_pasos"))
 
-    from app.services.demo_data_service import demo_cantidades
-
     estado = estado_onboarding()
-    if estado["completo"] and not necesita_onboarding():
+    tour_q = (request.args.get("tour") or "").strip().lower()
+    if not tour_q and not necesita_onboarding():
         return redirect(url_for("admin.panel"))
 
-    obra_hecha = any(p['id'] == 'obra' and p['hecho'] for p in estado['pasos'])
-    try:
-        url_fichar = url_for("operarios.entrar", _external=True)
-    except Exception:
-        url_fichar = url_for("operarios.entrar")
     return render_template(
         "admin_primeros_pasos.html",
         onboarding=estado,
         demo_cantidades=demo_cantidades(),
-        empresa_vacia=not obra_hecha,
-        url_fichar=url_fichar,
+        demo_activa=demo_activa(),
+        empresa_vacia=estado.get("empresa_vacia", False),
     )
+
+
+@admin_bp.route("/api/tour/fichaje", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_tour_fichaje():
+    """Activa/desactiva fichaje operario desde la guía interactiva."""
+    from app.services.config_service import set_tenant_config
+    from app.services.fichaje_operario_service import (
+        CONFIG_FICHAJE_OPERARIO,
+        tenant_tiene_fichaje_operario_module,
+    )
+    data = request.get_json(silent=True) or {}
+    activo = bool(data.get('activo'))
+    if activo and not tenant_tiene_fichaje_operario_module():
+        return jsonify({
+            'success': False,
+            'message': 'Este espacio no tiene el módulo de fichaje operario.',
+        }), 400
+    set_tenant_config(CONFIG_FICHAJE_OPERARIO, 'True' if activo else 'False')
+    return jsonify({'success': True, 'activo': activo})
+
+
+@admin_bp.route("/tour/fichaje-probar", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def tour_fichaje_probar():
+    """
+    Cierra la sesión de oficina y abre /mi/entrar para que el admin
+    pruebe el fichaje como el operario creado en la guía.
+    Guarda el id del admin para poder volver al tablero después.
+    """
+    from flask import session
+    from flask_login import logout_user
+
+    session['tour_admin_user_id'] = current_user.id
+    logout_user()
+    # tour=mi: continúa el capítulo fichaje (NO usar tour=1, reinicia la guía).
+    return redirect(url_for('operarios.entrar', tour='mi'))
 
 
 @admin_bp.route("/create_obra", methods=["GET", "POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
 def create_obra():
-    # Cargar listas necesarias
-    jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).all()
-    encargados = User.query.join(Company).filter(
-        User.role == ROLE_OPERARIO,
-        User.active == True,
-        User.is_deleted == False,
-        Company.is_internal == True 
-    ).order_by(User.name).all()
+    jefes = (
+        User.query.filter(
+            User.role.in_([ROLE_JEFE, ROLE_ADMIN]),
+            User.is_deleted.is_(False),
+            User.active.is_(True),
+        )
+        .order_by(User.name, User.lastname)
+        .all()
+    )
+    encargados = (
+        User.query.join(Company)
+        .filter(
+            User.role == ROLE_OPERARIO,
+            User.active.is_(True),
+            User.is_deleted.is_(False),
+            Company.is_internal.is_(True),
+        )
+        .order_by(User.name)
+        .all()
+    )
+    inicio = date.today()
+    try:
+        fin = date(inicio.year + 1, inicio.month, inicio.day)
+    except ValueError:
+        fin = date(inicio.year + 1, 2, 28)
+    defaults = {
+        'fecha_inicio': inicio.isoformat(),
+        'fecha_fin': fin.isoformat(),
+        'estado': 'En Curso',
+        'jefe_obra_id': str(current_user.id),
+    }
+
+    def _render_create(form_data):
+        return render_template(
+            "create_obra.html",
+            jefes=jefes,
+            encargados=encargados,
+            form_data=form_data,
+            defaults=defaults,
+        )
 
     if request.method == "POST":
-        # Recogemos datos del formulario
-        codigo = request.form.get("codigo")
-        jefe_obra_id = request.form.get("jefe_obra_id")
-        
-        # --- 1. VALIDACIÓN: JEFE OBLIGATORIO ---
-        if not jefe_obra_id or not jefe_obra_id.strip():
-            flash("Error: Debes seleccionar un Jefe de Obra obligatoriamente.", "danger")
-            # Devolvemos form_data para no perder lo escrito
-            return render_template("create_obra.html", jefes=jefes, encargados=encargados, form_data=request.form)
+        codigo = (request.form.get("codigo") or "").strip() or None
+        jefe_obra_id = (request.form.get("jefe_obra_id") or "").strip()
+        nombre = (request.form.get("nombre") or "").strip()
+        fecha_inicio = (request.form.get("fecha_inicio") or "").strip()
+        fecha_fin = (request.form.get("fecha_fin") or "").strip()
+        estado = (request.form.get("estado") or "En Curso").strip() or "En Curso"
 
-        # --- 2. VALIDACIÓN: CÓDIGO ÚNICO ---
+        if not nombre:
+            flash("El nombre de la obra es obligatorio.", "danger")
+            return _render_create(request.form)
+        if not fecha_inicio:
+            flash("La fecha de inicio es obligatoria.", "danger")
+            return _render_create(request.form)
+        if not jefe_obra_id:
+            flash("Debes seleccionar un jefe de obra.", "danger")
+            return _render_create(request.form)
+
+        if not fecha_fin:
+            try:
+                ini = parse_date(fecha_inicio)
+                fecha_fin = date(ini.year + 1, ini.month, ini.day).isoformat()
+            except Exception:
+                fecha_fin = defaults['fecha_fin']
+
         if codigo:
-            # Importante: Buscamos en BD antes de crear nada
             existe = Obra.query.filter_by(codigo=codigo).first()
             if existe:
-                flash(f"Error: El código '{codigo}' ya existe en la obra '{existe.nombre}'.", "danger")
-                return render_template("create_obra.html", jefes=jefes, encargados=encargados, form_data=request.form)
-        
-        # --- 3. CREACIÓN ---
-        try:
-            nombre = request.form.get("nombre")
-            descripcion = request.form.get("descripcion")
-            ubicacion = request.form.get("ubicacion")
-            fecha_inicio = request.form.get("fecha_inicio")
-            fecha_fin = request.form.get("fecha_fin")
-            estado = request.form.get("estado")
-            limite_trabajadores = request.form.get("limite_trabajadores")
-            encargado_id = request.form.get("encargado_id")
-            color = request.form.get("color")
+                flash(
+                    f"Error: El código '{codigo}' ya existe en la obra '{existe.nombre}'.",
+                    "danger",
+                )
+                return _render_create(request.form)
 
+        try:
+            color = (request.form.get("color") or "").strip()
             if not color:
                 from app.models import generate_random_color
                 color = generate_random_color()
-                
+
+            encargado_id = (request.form.get("encargado_id") or "").strip()
             nueva_obra = Obra(
                 codigo=codigo,
                 nombre=nombre,
-                descripcion=descripcion,
-                ubicacion=ubicacion,
+                descripcion=(request.form.get("descripcion") or "").strip() or None,
+                ubicacion=(request.form.get("ubicacion") or "").strip() or None,
                 fecha_inicio=parse_date(fecha_inicio),
                 fecha_fin=parse_date(fecha_fin),
                 estado=estado,
-                limite_trabajadores=int(limite_trabajadores) if limite_trabajadores else 0,
+                limite_trabajadores=0,
                 jefe_obra_id=int(jefe_obra_id),
                 encargado_id=int(encargado_id) if encargado_id else None,
                 color=color,
             )
             db.session.add(nueva_obra)
             db.session.commit()
-            
+
             from app.utils import register_log
             register_log(
                 user_id=current_user.id,
                 category='obras',
                 action='Crear Obra',
-                detail=f"Ha creado la obra '{nombre}' (Código: {codigo})"
+                detail=f"Ha creado la obra '{nombre}'"
+                + (f" (Código: {codigo})" if codigo else ""),
             )
-            
+
             flash("Obra creada exitosamente", "success")
-            return redirect(url_for("admin.obras_detailed", selected_date=nueva_obra.fecha_inicio.strftime("%Y-%m-%d")))
-            
+            return redirect(
+                url_for(
+                    "admin.obras_detailed",
+                    selected_date=nueva_obra.fecha_inicio.strftime("%Y-%m-%d"),
+                    obra=nueva_obra.id,
+                )
+            )
         except Exception as e:
             db.session.rollback()
             flash(f"Error al guardar: {str(e)}", "danger")
-            return render_template("create_obra.html", jefes=jefes, encargados=encargados, form_data=request.form)
-    
-    # GET: Formulario vacío
-    return render_template("create_obra.html", jefes=jefes, encargados=encargados, form_data={})
+            return _render_create(request.form)
+
+    return _render_create({})
 
 
 @admin_bp.route("/edit_obra/<int:obra_id>", methods=["GET", "POST"])
@@ -2078,59 +2128,74 @@ def create_obra():
 @roles_required(ROLE_ADMIN)
 def edit_obra(obra_id):
     obra = Obra.query.get_or_404(obra_id)
-    jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).all()
-    encargados = User.query.join(Company).filter(
-        User.role == ROLE_OPERARIO,
-        User.active == True,
-        User.is_deleted == False,
-        Company.is_internal == True
-    ).order_by(User.name).all()
+    jefes = (
+        User.query.filter(
+            User.role.in_([ROLE_JEFE, ROLE_ADMIN]),
+            User.is_deleted.is_(False),
+            User.active.is_(True),
+        )
+        .order_by(User.name, User.lastname)
+        .all()
+    )
+    encargados = (
+        User.query.join(Company)
+        .filter(
+            User.role == ROLE_OPERARIO,
+            User.active.is_(True),
+            User.is_deleted.is_(False),
+            Company.is_internal.is_(True),
+        )
+        .order_by(User.name)
+        .all()
+    )
 
     if request.method == "POST":
-        # --- 1. EXTRACCIÓN DE DATOS ---
-        new_codigo = request.form.get("codigo")
-        new_jefe_id = request.form.get("jefe_obra_id")
-        
-        # --- 2. VALIDACIÓN: CÓDIGO ÚNICO (SIN TOCAR EL OBJETO AÚN) ---
-        # Esto arregla el "IntegrityError autoflush"
+        new_codigo = (request.form.get("codigo") or "").strip() or None
+        new_jefe_id = (request.form.get("jefe_obra_id") or "").strip()
+        nombre = (request.form.get("nombre") or "").strip()
+
+        if not nombre:
+            flash("El nombre de la obra es obligatorio.", "danger")
+            return render_template(
+                "edit_obra.html", obra=obra, jefes=jefes,
+                encargados=encargados, form_data=request.form,
+            )
+
         if new_codigo and new_codigo != obra.codigo:
             existe = Obra.query.filter(Obra.codigo == new_codigo, Obra.id != obra.id).first()
             if existe:
                 flash(f"Error: El código '{new_codigo}' ya está en uso en '{existe.nombre}'.", "danger")
-                # Renderizamos pasando request.form para que los campos muestren lo que el usuario escribió
                 return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
 
-        # --- 3. VALIDACIÓN: JEFE OBLIGATORIO ---
-        if not new_jefe_id or not new_jefe_id.strip():
+        if not new_jefe_id:
             flash("Error: La obra no puede quedarse sin Jefe de Obra.", "danger")
             return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
 
-        # --- 4. ASIGNACIÓN SEGURA (Solo llegamos aquí si todo es válido) ---
         obra.codigo = new_codigo
         obra.jefe_obra_id = int(new_jefe_id)
-        
-        obra.nombre = request.form.get("nombre")
-        obra.descripcion = request.form.get("descripcion")
-        obra.ubicacion = request.form.get("ubicacion")
-        obra.url_prl = request.form.get("url_prl")
-        obra.color = request.form.get("color")
-        
-        # Gestión de estados
-        old_estado = obra.estado 
-        new_estado = request.form.get("estado")
+        obra.nombre = nombre
+        obra.descripcion = (request.form.get("descripcion") or "").strip() or None
+        obra.ubicacion = (request.form.get("ubicacion") or "").strip() or None
+        obra.url_prl = (request.form.get("url_prl") or "").strip() or None
+        obra.color = request.form.get("color") or obra.color
+
+        old_estado = obra.estado
+        new_estado = request.form.get("estado") or obra.estado
         obra.estado = new_estado
 
-        # Fechas
         f_inicio = request.form.get("fecha_inicio")
         f_fin = request.form.get("fecha_fin")
-        if f_inicio: obra.fecha_inicio = parse_date(f_inicio)
-        if f_fin: obra.fecha_fin = parse_date(f_fin)
+        if f_inicio:
+            obra.fecha_inicio = parse_date(f_inicio)
+        if f_fin:
+            obra.fecha_fin = parse_date(f_fin)
 
-        limite = request.form.get("limite_trabajadores")
-        obra.limite_trabajadores = int(limite) if limite and limite.strip() else 0
+        # Legacy: ya no se edita en UI
+        if obra.limite_trabajadores is None:
+            obra.limite_trabajadores = 0
 
-        enc_id = request.form.get("encargado_id")
-        obra.encargado_id = int(enc_id) if enc_id and enc_id.strip() else None
+        enc_id = (request.form.get("encargado_id") or "").strip()
+        obra.encargado_id = int(enc_id) if enc_id else None
 
         today = date.today()
         actor_id = current_user.id
@@ -2195,7 +2260,6 @@ def edit_obra(obra_id):
             flash(f"Error al actualizar: {str(e)}", "danger")
             return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
 
-    # GET Request: form_data vacío (se usarán los datos de 'obra')
     return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data={})
 
 
@@ -2408,6 +2472,36 @@ def delete_user(user_id):
     return redirect(url_for("admin.personal"))
 
 
+def _email_placeholder_desde_dni(dni):
+    base = (dni or '').strip().lower().replace(' ', '').replace('-', '')
+    return f"{base}@local.signaplan"
+
+
+def _email_parece_real_form(email):
+    from app.services.pin_auth_service import _email_parece_real
+    return _email_parece_real(email)
+
+
+def _default_internal_company_id():
+    interna = Company.query.filter_by(is_internal=True).order_by(Company.id.asc()).first()
+    return interna.id if interna else None
+
+
+def _render_user_form(*, edit_mode, user, action_url, companies=None):
+    companies = companies if companies is not None else Company.query.order_by(
+        Company.is_internal.desc(), Company.nombre.asc()
+    ).all()
+    return render_template(
+        "gestion_operario_form.html",
+        edit_mode=edit_mode,
+        user=user,
+        action_url=action_url,
+        cancel_url=url_for("admin.personal"),
+        companies=companies,
+        default_company_id=_default_internal_company_id(),
+    )
+
+
 @admin_bp.route("/create_user", methods=["GET", "POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -2416,31 +2510,91 @@ def create_user():
         return redirect(url_for("admin.personal"))
 
     if request.method == "POST":
-        # ... (Mantén toda tu lógica POST igual) ...
-        email = request.form.get("email")
-        password = request.form.get("password")
-        role = request.form.get("role")
-        name = request.form.get("name")
-        lastname = request.form.get("lastname")
-        dni = request.form.get("dni")
-        company_id = request.form.get("company_id")
-        active = True if request.form.get("active") == "on" else False
-        categoria = request.form.get("categoria_profesional")
-        especialidad = request.form.get("especialidad")
-        web_access = True if request.form.get("web_access") == "on" else False
-        if role != ROLE_OPERARIO:
-            web_access = True
+        import secrets
 
+        from app.services.pin_auth_service import (
+            PinAuthError,
+            asignar_pin_explicito,
+            enviar_acceso_fichaje as _enviar_acceso_fichaje,
+        )
         from app.services.plan_service import PlanLimitError, exigir_alta_empleado
+
+        role = (request.form.get("role") or ROLE_OPERARIO).strip()
+        name = (request.form.get("name") or "").strip()
+        lastname = (request.form.get("lastname") or "").strip()
+        dni = (request.form.get("dni") or "").strip().upper()
+        company_id = (request.form.get("company_id") or "").strip()
+        active = request.form.get("active") == "on"
+        categoria = (request.form.get("categoria_profesional") or "").strip() or None
+        especialidad = (request.form.get("especialidad") or "").strip() or None
+        receive_emails = request.form.get("receive_emails") == "on"
+        pin_mode = (request.form.get("pin_mode") or "manual").strip()
+
+        if not name or not lastname or not dni:
+            flash("Nombre, apellidos y DNI son obligatorios.", "danger")
+            return redirect(url_for("admin.create_user"))
+
+        if User.query.filter_by(dni=dni).first():
+            flash(f"Error: El DNI {dni} ya pertenece a otro usuario.", "danger")
+            return redirect(url_for("admin.create_user"))
+
+        if role == ROLE_OPERARIO:
+            email_link = (
+                request.form.get("email") or request.form.get("email_advanced") or ""
+            ).strip().lower()
+            if pin_mode == "email_link":
+                if not _email_parece_real_form(email_link):
+                    flash(
+                        "Para enviar el enlace de PIN indica un correo electrónico real.",
+                        "danger",
+                    )
+                    return redirect(url_for("admin.create_user"))
+                email = email_link
+            else:
+                pin_form = (request.form.get("pin") or "").strip()
+                if not pin_form:
+                    flash("Indica un PIN de 4 a 6 dígitos, o elige enviar enlace por correo.", "danger")
+                    return redirect(url_for("admin.create_user"))
+                email_opt = (
+                    request.form.get("email_advanced") or request.form.get("email") or ""
+                ).strip().lower()
+                email = email_opt if _email_parece_real_form(email_opt) else _email_placeholder_desde_dni(dni)
+            password_hash = generate_password_hash(secrets.token_urlsafe(32))
+            web_access = False
+        else:
+            email = (
+                request.form.get("email_office")
+                or request.form.get("email")
+                or ""
+            ).strip().lower()
+            password = request.form.get("password") or ""
+            if not _email_parece_real_form(email):
+                flash("Email obligatorio para perfiles de oficina.", "danger")
+                return redirect(url_for("admin.create_user"))
+            if len(password) < 8:
+                flash("La contraseña debe tener al menos 8 caracteres.", "danger")
+                return redirect(url_for("admin.create_user"))
+            password_hash = generate_password_hash(password)
+            web_access = True
+            pin_mode = "none"
+
+        if User.query.filter_by(email=email).first():
+            flash(f"Error: El email {email} ya está registrado.", "danger")
+            return redirect(url_for("admin.create_user"))
+
+        if not company_id:
+            default_cid = _default_internal_company_id()
+            company_id = str(default_cid) if default_cid else ""
+
         try:
             exigir_alta_empleado(role=role, active=active)
         except PlanLimitError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("admin.create_user"))
-        
+
         new_user = User(
             email=email,
-            password_hash=generate_password_hash(password),
+            password_hash=password_hash,
             role=role,
             name=name,
             lastname=lastname,
@@ -2449,56 +2603,49 @@ def create_user():
             active=active,
             email_verified=True,
             web_access=web_access,
+            receive_emails=receive_emails,
             categoria_profesional=categoria,
             especialidad=especialidad,
         )
         db.session.add(new_user)
         db.session.flush()
 
-        pin_form = (request.form.get("pin") or "").strip()
         pin_msg = ""
-        if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-            from app.services.pin_auth_service import (
-                PinAuthError,
-                asignar_pin_explicito,
-                asignar_pin_generado,
-            )
-            try:
-                if pin_form:
-                    asignar_pin_explicito(
-                        new_user, pin_form, notify=True, actor=current_user
-                    )
-                    pin_msg = " PIN asignado."
+        try:
+            if role == ROLE_OPERARIO and pin_mode == "email_link":
+                ok, pin_usado = _enviar_acceso_fichaje(
+                    new_user, pin_plano=None, actor=current_user, regenerar=True,
+                )
+                if ok:
+                    pin_msg = f" Enlace para definir PIN enviado a {email}."
+                    if pin_usado:
+                        pin_msg += f" PIN provisional (solo aquí): {pin_usado}."
                 else:
-                    _, pin_plano = asignar_pin_generado(
-                        new_user, notify=True, actor=current_user
-                    )
                     pin_msg = (
-                        f" PIN generado ({pin_plano}): deberá cambiarlo en /mi."
+                        f" PIN preparado"
+                        f"{f' ({pin_usado})' if pin_usado else ''}, "
+                        "pero no se pudo enviar el correo."
                     )
-            except PinAuthError as exc:
-                db.session.rollback()
-                flash(str(exc), "danger")
-                return redirect(url_for("admin.create_user"))
+            elif role == ROLE_OPERARIO:
+                pin_form = (request.form.get("pin") or "").strip()
+                asignar_pin_explicito(
+                    new_user, pin_form, notify=False, actor=current_user
+                )
+                pin_msg = " PIN asignado (DNI + PIN en /mi)."
+        except PinAuthError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return redirect(url_for("admin.create_user"))
 
         db.session.commit()
         flash(f"Usuario creado exitosamente.{pin_msg}", "success")
         return redirect(url_for("admin.personal"))
 
-    # --- LOGICA GET (CORREGIDA) ---
-    companies = Company.query.all()
-    
-    # Creamos un usuario vacío para evitar el error 'undefined' en la plantilla
-    dummy_user = User() 
-
-    return render_template(
-        "gestion_operario_form.html",
+    return _render_user_form(
         edit_mode=False,
-        user=dummy_user,  # <--- ESTA ES LA LÍNEA QUE FALTABA
+        user=User(),
         action_url=url_for("admin.create_user"),
-        cancel_url=url_for("admin.personal"),
-        companies=companies,
-   )
+    )
 
 
 @admin_bp.route("/approve_operario/<int:user_id>", methods=["POST"])
@@ -3048,7 +3195,38 @@ def configuracion_global():
         configs=configs_dict,
         monetizacion_activa=monetizacion_activa(),
         tenant_has_fichaje_operario=bool(tenant_modulos.get('fichaje_operario')),
+        tenant_has_onboarding=bool(tenant_modulos.get('onboarding')),
     )
+
+
+@admin_bp.route('/configuracion/reiniciar-guia', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def reiniciar_guia_onboarding():
+    """Permite volver a lanzar Primeros pasos + guía aunque ya haya datos."""
+    from app.services.onboarding_service import (
+        reiniciar_onboarding,
+        tenant_tiene_onboarding,
+    )
+    from app.services.permission_service import user_can
+
+    if not user_can(current_user, 'configuracion', 'w'):
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('admin.configuracion_global'))
+    if not tenant_tiene_onboarding():
+        flash('Este espacio no tiene el módulo de onboarding.', 'warning')
+        return redirect(url_for('admin.configuracion_global'))
+
+    reiniciar_onboarding()
+    modo = (request.form.get('modo') or 'guia').strip()
+    flash(
+        'Onboarding reiniciado. Puedes seguir la guía o los primeros pasos '
+        '(no se han borrado datos de la empresa).',
+        'success',
+    )
+    if modo == 'pasos':
+        return redirect(url_for('admin.primeros_pasos'))
+    return redirect(url_for('admin.primeros_pasos', tour='start'))
 
 
 @admin_bp.route('/permisos')
@@ -3919,6 +4097,7 @@ def registro_jornada():
     de que el libro de eventos no ha sido manipulado.
     """
     from app.services.fichaje_informe_service import (
+        etiquetar_tipo,
         formatear_horas,
         listar_empresas_para_filtro,
         listar_trabajadores_para_filtro,
@@ -3960,6 +4139,7 @@ def registro_jornada():
         user_id=request.args.get('user_id') or '',
         company_id=request.args.get('company_id') or '',
         formatear_horas=formatear_horas,
+        etiquetar_tipo=etiquetar_tipo,
         desde_onboarding=bool(request.args.get('desde_onboarding')),
         url_fichaje_mi=url_fichaje_mi,
     )

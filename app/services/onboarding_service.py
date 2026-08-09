@@ -1,10 +1,10 @@
 # app/services/onboarding_service.py
 #
-# Primeros pasos tras crear la empresa: obra, gente+PIN, fichaje móvil
-# e informe de jornada (lo que se enseña a la Inspección).
-# Sin esto el free se abandona en la pantalla vacía.
+# Hub de Primeros pasos: el admin elige guía / import / demo / saltar.
+# El flag onboarding_completo decide si hay que mostrar el hub.
 
 from flask import g, has_app_context
+import json
 
 from app.models import ROLE_OPERARIO, Obra, User
 from app.services.config_service import get_tenant_config, set_tenant_config
@@ -14,6 +14,15 @@ from app.services.pin_auth_service import tiene_pin
 
 CONFIG_ONBOARDING = 'onboarding_completo'
 CONFIG_INFORME_VISTO = 'onboarding_informe_visto'
+CONFIG_REABRIR = 'onboarding_reabrir'
+CONFIG_IMPORT_DONE = 'onboarding_import_done'
+
+IMPORT_TUTORIAL_KEYS = (
+    'obras',
+    'users_internos',
+    'users_externos',
+    'companies',
+)
 
 
 def _modulos_tenant():
@@ -45,6 +54,41 @@ def onboarding_marcado_completo():
 
 def marcar_onboarding_completo():
     set_tenant_config(CONFIG_ONBOARDING, 'True')
+    set_tenant_config(CONFIG_REABRIR, 'False')
+
+
+def reiniciar_onboarding():
+    """
+    Vuelve a mostrar Primeros pasos / guía aunque el tenant ya tenga datos.
+    No borra obras ni usuarios: solo reabre el onboarding.
+    """
+    set_tenant_config(CONFIG_ONBOARDING, 'False')
+    set_tenant_config(CONFIG_INFORME_VISTO, 'False')
+    set_tenant_config(CONFIG_REABRIR, 'True')
+    set_tenant_config(CONFIG_IMPORT_DONE, '{}')
+
+
+def import_tutorials_done() -> dict:
+    """Qué listados de la guía de importación ya se han completado."""
+    raw = get_tenant_config(CONFIG_IMPORT_DONE, default='{}') or '{}'
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    return {k: bool(data.get(k)) for k in IMPORT_TUTORIAL_KEYS}
+
+
+def marcar_import_tutorial(key: str) -> None:
+    """Marca un tipo de importación como hecho en la guía (tick)."""
+    if key not in IMPORT_TUTORIAL_KEYS:
+        return
+    data = import_tutorials_done()
+    if data.get(key):
+        return
+    data[key] = True
+    set_tenant_config(CONFIG_IMPORT_DONE, json.dumps(data, ensure_ascii=False))
 
 
 def informe_onboarding_visto():
@@ -57,7 +101,7 @@ def marcar_informe_visto():
 
 
 def estado_onboarding():
-    """Pasos del wizard y si hace falta mostrarlo."""
+    """Estado del hub (flag + métricas útiles para plantillas / banners)."""
     if not tenant_tiene_onboarding():
         return {
             'completo': True,
@@ -70,11 +114,12 @@ def estado_onboarding():
             'fichaje_activo': False,
             'oficina_activa': False,
             'informe_visto': True,
+            'empresa_vacia': False,
+            'import_done': {k: False for k in IMPORT_TUTORIAL_KEYS},
         }
 
+    marcado = onboarding_marcado_completo()
     obras_vivas = Obra.query.filter(Obra.is_deleted.is_(False)).count()
-    # No exigir active=True: la importación a menudo deja activo=No en Excel
-    # y el paso 2 debe OK si ya hay gente con PIN listos para fichar.
     operarios = User.query.filter_by(
         role=ROLE_OPERARIO, is_deleted=False
     ).all()
@@ -82,80 +127,38 @@ def estado_onboarding():
     fichaje = fichaje_operario_activo()
     oficina = oficina_activa() and buscar_obra_oficina() is not None
     informe = (not tenant_tiene_registro_jornada()) or informe_onboarding_visto()
+    reabrir = str(get_tenant_config(CONFIG_REABRIR, default='False')) == 'True'
+    completo = marcado and not reabrir
 
-    pasos = [
-        {
-            'id': 'obra',
-            'titulo': 'Crea una obra (o activa Oficina)',
-            'hecho': obras_vivas > 0 or oficina,
-            'hint': 'Sin obra no se puede fichar ni planificar el día.',
-        },
-        {
-            'id': 'gente',
-            'titulo': 'Ten plantilla lista para fichar',
-            'hecho': len(operarios) > 0 and con_pin > 0,
-            'hint': (
-                'Alta o importa al menos un operario con PIN: sin PIN no puede '
-                'entrar a fichar. Al importar, marca «Activar PIN» para asignarlo '
-                'y avisar por correo.'
-            ),
-        },
-        {
-            'id': 'fichaje',
-            'titulo': 'Quiero que mis operarios fichen',
-            'hecho': fichaje,
-            'hint': (
-                'Activa el fichaje y te damos la dirección completa para que '
-                'entren desde el móvil con DNI y PIN.'
-            ),
-        },
-        {
-            'id': 'informe',
-            'titulo': 'Abre el informe de jornada',
-            'hecho': informe,
-            'hint': (
-                'PDF/CSV con cadena de hashes para tu archivo laboral. '
-                'Con un fichaje de prueba ya tiene contenido.'
-            ),
-        },
-    ]
-    pendientes = [p for p in pasos if not p['hecho']]
     return {
-        'completo': onboarding_marcado_completo() or not pendientes,
-        'marcado': onboarding_marcado_completo(),
-        'pasos': pasos,
-        'pendientes': len(pendientes),
+        'completo': completo,
+        'marcado': marcado,
+        'pasos': [],
+        'pendientes': 0 if completo else 1,
         'obras': obras_vivas,
         'operarios': len(operarios),
         'con_pin': con_pin,
         'fichaje_activo': fichaje,
         'oficina_activa': oficina,
         'informe_visto': informe,
+        'empresa_vacia': obras_vivas == 0 and not oficina,
+        'import_done': import_tutorials_done(),
     }
 
 
 def necesita_onboarding():
-    """True si quedan pasos: sirve para el aviso del panel."""
+    """True si el hub debe mostrarse (no marcado, o reabierto desde Configuración)."""
     if not tenant_tiene_onboarding():
         return False
-    if onboarding_marcado_completo():
-        return False
-    return bool(estado_onboarding()['pendientes'])
+    if str(get_tenant_config(CONFIG_REABRIR, default='False')) == 'True':
+        return True
+    return not onboarding_marcado_completo()
 
 
 def debe_redirigir_a_wizard():
     """
-    Redirige al login solo si la empresa está vacía (sin obra).
-
-    Así un alta nueva cae en el wizard; un tenant ya rodando (Soltec, etc.)
-    no se ve arrastrado a primeros pasos por falta de PIN o de fichaje.
+    Tras login, manda al hub si el onboarding no está cerrado.
     """
     if not tenant_tiene_onboarding():
         return False
-    if onboarding_marcado_completo():
-        return False
-    obra = next(
-        (p for p in estado_onboarding()['pasos'] if p['id'] == 'obra'),
-        None,
-    )
-    return bool(obra and not obra['hecho'])
+    return necesita_onboarding()

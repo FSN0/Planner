@@ -19,11 +19,11 @@
         <h1 class="page-toolbar-title">{{ _('Obras') }}</h1>
         <span class="page-toolbar-count">{{ obras|length }} {{ _('registros') }}</span>
       </div>
-      <div class="page-toolbar-actions">
-        <a href="{{ url_for('admin.import_obras') }}" class="btn-admin btn-admin-ghost">
+      <div class="page-toolbar-actions" data-tour="obra-actions">
+        <a href="{{ url_for('admin.import_obras') }}" class="btn-admin btn-admin-ghost" data-tour="obra-import">
           <i class="fas fa-file-import"></i> {{ _('Importar') }}
         </a>
-        <a href="{{ url_for('admin.create_obra') }}" class="btn-admin btn-admin-primary">
+        <a href="{{ url_for('admin.create_obra') }}" class="btn-admin btn-admin-primary" data-tour="obra-nueva">
           <i class="fas fa-plus"></i> {{ _('Nueva') }}
         </a>
       </div>
@@ -47,7 +47,7 @@
     </div>
 
     <section class="admin-panel admin-panel-flush admin-panel--no-header">
-      <div class="admin-table-scroll">
+      <div class="admin-table-scroll" data-tour="import-list-dest">
         <table class="filterable-table admin-data-table obras-table mb-0" id="obrasTable">
           <colgroup>
             <col style="width: 3%">

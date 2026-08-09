@@ -370,12 +370,19 @@ def create_app():
             user_can, is_laboral, is_admin, can_resolve_fichajes,
         )
         mostrar_onboarding = False
+        onboarding_import_done = {}
         if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
             try:
-                from app.services.onboarding_service import necesita_onboarding
+                from app.services.onboarding_service import (
+                    necesita_onboarding,
+                    import_tutorials_done,
+                )
                 mostrar_onboarding = necesita_onboarding()
+                if mostrar_onboarding:
+                    onboarding_import_done = import_tutorials_done()
             except Exception:
                 mostrar_onboarding = False
+                onboarding_import_done = {}
         demo_data_activa = False
         if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
             try:
@@ -395,6 +402,7 @@ def create_app():
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
             tenant_has_avisos_laborales=tenant_has_avisos_laborales,
             mostrar_onboarding=mostrar_onboarding,
+            onboarding_import_done=onboarding_import_done,
             demo_data_activa=demo_data_activa,
             user_can=user_can,
             is_laboral=is_laboral,

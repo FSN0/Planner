@@ -87,6 +87,25 @@
     background: #fef3c7;
     color: #92400e;
   }
+  .rj-row-clickable { cursor: pointer; }
+  .rj-row-clickable:hover td { background: #f8fafc; }
+  .rj-row-clickable.is-open td { background: #f1f5f9; }
+  .rj-detail-row td {
+    background: #f8fafc;
+    border-top: none !important;
+    padding-top: 0.35rem !important;
+    padding-bottom: 0.85rem !important;
+  }
+  .rj-detail-list {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    list-style: none;
+    font-size: 0.84rem;
+    color: #334155;
+  }
+  .rj-detail-list li { margin: 0.25rem 0; }
+  .rj-detail-list .rj-detail-tipo { font-weight: 600; color: #0f172a; }
+  .rj-detail-list .rj-detail-motivo { color: #64748b; }
   .rj-hash {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.78rem;
@@ -263,7 +282,8 @@
               </thead>
               <tbody>
                 {% for d in t.dias %}
-                  <tr>
+                  <tr class="{% if d.correcciones %}rj-row-clickable{% endif %}"
+                      {% if d.correcciones %}data-rj-toggle="1" title="Ver detalle de correcciones"{% endif %}>
                     <td>{{ d.fecha.strftime('%d/%m/%Y') }}</td>
                     <td>{{ d.entrada|format_time if d.entrada else '—' }}</td>
                     <td>{{ d.salida|format_time if d.salida else '—' }}</td>
@@ -279,11 +299,31 @@
                     <td>
                       {% if d.tiene_correcciones %}
                         <span class="rj-flag">Con corrección</span>
+                        <i class="fas fa-chevron-down text-muted ml-1" style="font-size:0.65rem;"></i>
                       {% elif d.sin_salida %}
                         <span class="rj-flag">Sin salida</span>
                       {% endif %}
                     </td>
                   </tr>
+                  {% if d.correcciones %}
+                  <tr class="rj-detail-row d-none">
+                    <td colspan="7">
+                      <ul class="rj-detail-list">
+                        {% for c in d.correcciones %}
+                        <li>
+                          <span class="rj-detail-tipo">{{ etiquetar_tipo(c.tipo) }}</span>
+                          {% if c.ocurrido_en %}
+                            <span class="text-muted">· {{ c.ocurrido_en|format_time }}</span>
+                          {% endif %}
+                          {% if c.motivo %}
+                            <div class="rj-detail-motivo">{{ c.motivo }}</div>
+                          {% endif %}
+                        </li>
+                        {% endfor %}
+                      </ul>
+                    </td>
+                  </tr>
+                  {% endif %}
                 {% endfor %}
               </tbody>
             </table>
@@ -302,4 +342,24 @@
     {% endif %}
   </main>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  document.querySelectorAll('[data-rj-toggle]').forEach(function (row) {
+    row.addEventListener('click', function () {
+      var detail = row.nextElementSibling;
+      if (!detail || !detail.classList.contains('rj-detail-row')) return;
+      var open = detail.classList.toggle('d-none') === false;
+      row.classList.toggle('is-open', open);
+      var icon = row.querySelector('.fa-chevron-down, .fa-chevron-up');
+      if (icon) {
+        icon.classList.toggle('fa-chevron-down', !open);
+        icon.classList.toggle('fa-chevron-up', open);
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

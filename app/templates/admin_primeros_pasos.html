@@ -5,82 +5,88 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
 <style>
-  .onb-wrap { max-width: 720px; margin: 0 auto; }
-  .onb-intro { margin-bottom: 1.25rem; }
-  .onb-intro p { color: #64748b; font-size: 0.9rem; margin: 0.35rem 0 0; }
-  .onb-step {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 1rem 1.15rem;
-    margin-bottom: 0.85rem;
+  .onb-wrap { max-width: 920px; margin: 0 auto; }
+  .onb-intro { margin-bottom: 1.5rem; }
+  .onb-intro p { color: #64748b; font-size: 0.95rem; margin: 0.4rem 0 0; max-width: 36rem; }
+  .onb-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
   }
-  .onb-step.is-done { border-color: #bbf7d0; background: #f0fdf4; }
-  .onb-step-head {
+  @media (max-width: 720px) {
+    .onb-grid { grid-template-columns: 1fr; }
+  }
+  .onb-card {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
-    gap: 0.75rem;
-    margin-bottom: 0.65rem;
+    text-align: left;
+    width: 100%;
+    min-height: 168px;
+    padding: 1.35rem 1.4rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    color: inherit;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+    text-decoration: none;
   }
-  .onb-badge {
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 999px;
+  .onb-card:hover, .onb-card:focus {
+    border-color: #7dd3fc;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: inherit;
+    outline: none;
+  }
+  .onb-card--primary {
+    border-color: #bae6fd;
+    background: linear-gradient(160deg, #f0f9ff 0%, #fff 55%);
+  }
+  .onb-card--primary:hover, .onb-card--primary:focus {
+    border-color: #38bdf8;
+  }
+  .onb-card--muted {
+    background: #f8fafc;
+  }
+  .onb-card-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 700;
-    flex-shrink: 0;
+    font-size: 1.1rem;
+    margin-bottom: 0.85rem;
     background: #e2e8f0;
-    color: #334155;
+    color: #0f172a;
   }
-  .onb-step.is-done .onb-badge { background: #16a34a; color: #fff; }
-  .onb-step h2 {
-    font-size: 1rem;
+  .onb-card--primary .onb-card-icon { background: #0ea5e9; color: #fff; }
+  .onb-card--import .onb-card-icon { background: #eef2ff; color: #4f46e5; }
+  .onb-card--demo .onb-card-icon { background: #ecfdf5; color: #059669; }
+  .onb-card h2 {
+    font-size: 1.05rem;
     font-weight: 700;
+    margin: 0 0 0.35rem;
+    color: #0f172a;
+  }
+  .onb-card p {
+    font-size: 0.86rem;
+    color: #64748b;
     margin: 0;
-    color: #0f172a;
+    line-height: 1.45;
+    flex: 1;
   }
-  .onb-step .hint { font-size: 0.8rem; color: #64748b; margin: 0.2rem 0 0; }
-  .onb-url {
-    display: inline-block;
-    font-size: 0.95rem;
-    word-break: break-all;
-    background: #f1f5f9;
-    padding: 0.35rem 0.55rem;
-    border-radius: 4px;
-    color: #0f172a;
-  }
-  .onb-form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.65rem;
-  }
-  @media (max-width: 560px) {
-    .onb-form-row { grid-template-columns: 1fr; }
-  }
-  .onb-form-row label {
-    display: block;
-    font-size: 0.72rem;
+  .onb-card-cta {
+    margin-top: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    color: #475569;
-    margin-bottom: 0.2rem;
+    color: #0284c7;
   }
-  .onb-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
-  }
-  .onb-footer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: space-between;
-    margin-top: 1.25rem;
-    padding-top: 1rem;
-    border-top: 1px solid #e2e8f0;
+  .onb-card--muted .onb-card-cta { color: #64748b; }
+  button.onb-card {
+    font-family: inherit;
   }
 </style>
 {% endblock %}
@@ -94,276 +100,108 @@
       <div class="page-toolbar">
         <div class="page-toolbar-left">
           <h1 class="page-toolbar-title">Primeros pasos</h1>
-          <span class="page-toolbar-count">
-            {% if onboarding.pendientes %}{{ onboarding.pendientes }} pendientes{% else %}Listo{% endif %}
-          </span>
         </div>
       </div>
 
       <div class="onb-intro">
-        <p>
-          En pocos minutos tienes obra, un trabajador con PIN, fichaje móvil
-          y el informe de jornada listo. Si ya tienes Excel, puedes importar
-          obras, personal o empresas y seguir con los pasos.
-        </p>
+        <p>Elige cómo quieres empezar. Cada camino te guía según lo que necesites ahora.</p>
       </div>
 
-      <section class="onb-step" style="border-color:#c7d2fe;background:#eef2ff;">
-        <div class="onb-step-head">
-          <span class="onb-badge" style="background:#6366f1;color:#fff;"><i class="fas fa-file-import"></i></span>
-          <div>
-            <h2>Importar desde Excel</h2>
-            <p class="hint">
-              Si ya tienes listados, súbelos aquí y vuelve a esta guía. No hace falta
-              crear uno a uno.
-            </p>
-          </div>
-        </div>
-        <div class="onb-actions">
-          <a href="{{ url_for('admin.import_obras', desde='primeros-pasos') }}"
-             class="btn-admin btn-admin-primary">
-            <i class="fas fa-hard-hat mr-1"></i> Importar obras
-          </a>
-          <a href="{{ url_for('admin.import_users', modo='internos', desde='primeros-pasos') }}"
-             class="btn-admin btn-admin-ghost">
-            <i class="fas fa-users mr-1"></i> Importar personal interno
-          </a>
-          <a href="{{ url_for('admin.import_users', modo='externos', desde='primeros-pasos') }}"
-             class="btn-admin btn-admin-ghost">
-            <i class="fas fa-hard-hat mr-1"></i> Importar personal externo
-          </a>
-          <a href="{{ url_for('admin.import_companies', desde='primeros-pasos') }}"
-             class="btn-admin btn-admin-ghost">
-            <i class="fas fa-building mr-1"></i> Importar empresas
-          </a>
-        </div>
-      </section>
-
-      {% if empresa_vacia %}
-      <section class="onb-step" style="border-color:#93c5fd;background:#eff6ff;">
-        <div class="onb-step-head">
-          <span class="onb-badge">★</span>
-          <div>
-            <h2>¿Cómo quieres empezar?</h2>
-            <p class="hint">
-              Puedes preparar tu empresa real o explorar SignaPlan con datos de ejemplo
-              ({{ demo_cantidades.obras }} obras, {{ demo_cantidades.empleados }} trabajadores,
-              {{ demo_cantidades.vehiculos }} vehículos).
-            </p>
-          </div>
-        </div>
-        <div class="onb-actions">
-          <form method="post" style="display:inline;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="accion" value="demo_generar">
-            <button type="submit" class="btn-admin btn-admin-primary">
-              Probar con datos de ejemplo
-            </button>
-          </form>
-          <span class="hint" style="align-self:center;">o completa los pasos de abajo con tu empresa</span>
-        </div>
-      </section>
-      {% endif %}
-
-      {# —— Paso obra —— #}
-      {% set paso_obra = onboarding.pasos[0] %}
-      <section class="onb-step {% if paso_obra.hecho %}is-done{% endif %}">
-        <div class="onb-step-head">
-          <span class="onb-badge">{% if paso_obra.hecho %}<i class="fas fa-check"></i>{% else %}1{% endif %}</span>
-          <div>
-            <h2>{{ paso_obra.titulo }}</h2>
-            <p class="hint">{{ paso_obra.hint }}</p>
-          </div>
-        </div>
-        {% if not paso_obra.hecho %}
-        <div class="onb-actions">
-          <form method="post" style="display:inline;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="accion" value="oficina">
-            <button type="submit" class="btn-admin btn-admin-primary">
-              Activar obra Oficina
-            </button>
-          </form>
-          <a href="{{ url_for('admin.import_obras', desde='primeros-pasos') }}"
-             class="btn-admin btn-admin-ghost">
-            <i class="fas fa-file-import mr-1"></i> Importar obras
-          </a>
-        </div>
-        <form method="post" class="mt-3">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="accion" value="obra">
-          <div class="onb-form-row">
-            <div>
-              <label for="nombre_obra">O crea una obra de tajo</label>
-              <input class="form-control form-control-sm" id="nombre_obra" name="nombre_obra"
-                     placeholder="Ej. Reforma calle Mayor" required minlength="2">
-            </div>
-            <div>
-              <label for="codigo_obra">Código (opcional)</label>
-              <input class="form-control form-control-sm" id="codigo_obra" name="codigo_obra"
-                     placeholder="OB-001">
-            </div>
-          </div>
-          <div class="onb-actions">
-            <button type="submit" class="btn-admin btn-admin-ghost">Crear obra</button>
-          </div>
-        </form>
-        {% else %}
-        <p class="hint mb-0">
-          {{ onboarding.obras }} obra(s)
-          {% if onboarding.oficina_activa %}· Oficina activa{% endif %}
-        </p>
-        {% endif %}
-      </section>
-
-      {# —— Paso gente —— #}
-      {% set paso_gente = onboarding.pasos[1] %}
-      <section class="onb-step {% if paso_gente.hecho %}is-done{% endif %}">
-        <div class="onb-step-head">
-          <span class="onb-badge">{% if paso_gente.hecho %}<i class="fas fa-check"></i>{% else %}2{% endif %}</span>
-          <div>
-            <h2>{{ paso_gente.titulo }}</h2>
-            <p class="hint">{{ paso_gente.hint }}</p>
-          </div>
-        </div>
-        {% if not paso_gente.hecho %}
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="accion" value="operario">
-          <div class="onb-form-row">
-            <div>
-              <label for="name">Nombre</label>
-              <input class="form-control form-control-sm" id="name" name="name" required>
-            </div>
-            <div>
-              <label for="lastname">Apellidos</label>
-              <input class="form-control form-control-sm" id="lastname" name="lastname" required>
-            </div>
-            <div>
-              <label for="dni">DNI / NIE</label>
-              <input class="form-control form-control-sm" id="dni" name="dni" required
-                     autocomplete="off">
-            </div>
-            <div>
-              <label for="pin">PIN (4–6 dígitos)</label>
-              <input class="form-control form-control-sm" id="pin" name="pin" required
-                     inputmode="numeric" pattern="\d{4,6}" autocomplete="off"
-                     placeholder="••••">
-            </div>
-          </div>
-          <div class="onb-actions">
-            <button type="submit" class="btn-admin btn-admin-primary">Dar de alta</button>
-            <a href="{{ url_for('admin.import_users', modo='internos', desde='primeros-pasos') }}"
-               class="btn-admin btn-admin-ghost">
-              <i class="fas fa-file-import mr-1"></i> Importar internos
-            </a>
-            <a href="{{ url_for('admin.import_users', modo='externos', desde='primeros-pasos') }}"
-               class="btn-admin btn-admin-ghost">
-              Importar externos
-            </a>
-          </div>
-        </form>
-        {% else %}
-        <p class="hint mb-0">
-          {{ onboarding.operarios }} trabajador(es) · {{ onboarding.con_pin }} con PIN
-        </p>
-        {% endif %}
-      </section>
-
-      {# —— Paso fichaje —— #}
-      {% set paso_fichaje = onboarding.pasos[2] %}
-      <section class="onb-step {% if paso_fichaje.hecho %}is-done{% endif %}">
-        <div class="onb-step-head">
-          <span class="onb-badge">{% if paso_fichaje.hecho %}<i class="fas fa-check"></i>{% else %}3{% endif %}</span>
-          <div>
-            <h2>{{ paso_fichaje.titulo }}</h2>
-            <p class="hint">{{ paso_fichaje.hint }}</p>
-          </div>
-        </div>
-        {% if not paso_fichaje.hecho %}
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="accion" value="fichaje">
-          <p class="hint mb-3">
-            Si quieres que tus operarios fichen desde el móvil, actívalo aquí.
-            Después verás la dirección completa para compartirla.
+      <div class="onb-grid">
+        {# 1 — Guía interactiva #}
+        <button type="button" class="onb-card onb-card--primary" data-tour-start="trabajadores">
+          <span class="onb-card-icon"><i class="fas fa-magic"></i></span>
+          <h2>Guía interactiva</h2>
+          <p>
+            Te acompañamos paso a paso: alta de un trabajador, una obra, fichaje de prueba
+            y cómo resolverlo en auditoría.
           </p>
-          <div class="onb-actions">
-            <button type="submit" class="btn-admin btn-admin-primary">
-              Sí, activar fichaje
-            </button>
-          </div>
+          <span class="onb-card-cta">Empezar guía →</span>
+        </button>
+
+        {# 2 — Importar Excel #}
+        <button type="button" class="onb-card onb-card--import" data-tour-start="import">
+          <span class="onb-card-icon"><i class="fas fa-file-excel"></i></span>
+          <h2>Importar datos desde Excel</h2>
+          <p>
+            Si ya tienes listados de obras, personal o empresas, te guiamos para subirlos
+            sin crearlos uno a uno.
+          </p>
+          <span class="onb-card-cta">Abrir guía de importación →</span>
+        </button>
+
+        {# 3 — Datos de ejemplo #}
+        {% if demo_activa %}
+        <button type="button" class="onb-card onb-card--demo" data-tour-start="demo">
+          <span class="onb-card-icon"><i class="fas fa-flask"></i></span>
+          <h2>Probar con datos de ejemplo</h2>
+          <p>
+            Ya tienes datos demo. Te mostramos qué merece la pena toquetear: tablero,
+            directorio, trabajadores y auditoría.
+          </p>
+          <span class="onb-card-cta">Explorar con la guía →</span>
+        </button>
+        {% else %}
+        <form method="post" class="onb-card-form" style="display:contents;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="demo_generar">
+          <button type="submit" class="onb-card onb-card--demo">
+            <span class="onb-card-icon"><i class="fas fa-flask"></i></span>
+            <h2>Probar con datos de ejemplo</h2>
+            <p>
+              Generamos obras, trabajadores y vehículos de prueba
+              ({{ demo_cantidades.obras }} obras, {{ demo_cantidades.empleados }} trabajadores,
+              {{ demo_cantidades.vehiculos }} vehículos) y te enseñamos qué explorar.
+            </p>
+            <span class="onb-card-cta">Generar y explorar →</span>
+          </button>
         </form>
-        {% else %}
-        <p class="hint mb-1">Fichaje activo. Comparte esta dirección con tus operarios:</p>
-        <p class="mb-0">
-          <code class="onb-url">{{ url_fichar }}</code>
-        </p>
-        <p class="hint mt-2 mb-0">Entran con DNI y PIN.</p>
         {% endif %}
-      </section>
 
-      {# —— Paso informe Inspección —— #}
-      {% set paso_informe = onboarding.pasos[3] %}
-      <section class="onb-step {% if paso_informe.hecho %}is-done{% endif %}">
-        <div class="onb-step-head">
-          <span class="onb-badge">{% if paso_informe.hecho %}<i class="fas fa-check"></i>{% else %}4{% endif %}</span>
-          <div>
-            <h2>{{ paso_informe.titulo }}</h2>
-            <p class="hint">{{ paso_informe.hint }}</p>
-          </div>
-        </div>
-        {% if not paso_informe.hecho %}
-        <div class="onb-actions">
-          <a href="{{ url_for('admin.registro_jornada', generar=1, desde_onboarding=1) }}"
-             class="btn-admin btn-admin-primary">
-            Abrir registro de jornada
-          </a>
-          <form method="post" style="display:inline;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="accion" value="informe">
-            <button type="submit" class="btn-admin btn-admin-ghost">
-              Ya lo he visto
-            </button>
-          </form>
-        </div>
-        <p class="hint mt-2 mb-0">
-          Tip: pide al trabajador de prueba que fiche entrada y salida en
-          <code>/mi</code> y vuelve a generar el PDF — verás el sello de cadena íntegra.
-        </p>
-        {% else %}
-        <p class="hint mb-0">
-          Informe listo.
-          <a href="{{ url_for('admin.registro_jornada', generar=1) }}">Abrir de nuevo</a>
-        </p>
-        {% endif %}
-      </section>
-
-      <div class="onb-footer">
-        <form method="post">
+        {# 4 — Saltar #}
+        <form method="post" style="display:contents;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="accion" value="saltar">
-          <button type="submit" class="btn-admin btn-admin-ghost">Más tarde</button>
-        </form>
-        {% if onboarding.pendientes == 0 %}
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="accion" value="listo">
-          <button type="submit" class="btn-admin btn-admin-primary">
-            Ir al panel
+          <button type="submit" class="onb-card onb-card--muted">
+            <span class="onb-card-icon"><i class="fas fa-forward"></i></span>
+            <h2>Saltar primeros pasos</h2>
+            <p>
+              Si ya conoces la herramienta, entra directamente al panel vacío y configura
+              a tu ritmo. Puedes volver aquí desde el menú cuando quieras.
+            </p>
+            <span class="onb-card-cta">Ir a la herramienta →</span>
           </button>
         </form>
-        {% else %}
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="accion" value="listo">
-          <button type="submit" class="btn-admin btn-admin-ghost">
-            Marcar como listo e ir al panel
-          </button>
-        </form>
-        {% endif %}
       </div>
     </div>
   </main>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  function kick() {
+    if (!window.SignaPlanTour) return;
+    var params = new URLSearchParams(window.location.search || '');
+    var tour = params.get('tour');
+    if (tour === '1' || tour === 'start') {
+      window.SignaPlanTour.start('trabajadores');
+    } else if (tour === 'import') {
+      window.SignaPlanTour.start('import');
+    } else if (tour === 'demo') {
+      window.SignaPlanTour.start('demo');
+    } else if (tour === 'obra') {
+      window.SignaPlanTour.start('obra');
+    } else if (tour === 'fichaje') {
+      window.SignaPlanTour.start('fichaje');
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(kick, 0); });
+  } else {
+    setTimeout(kick, 0);
+  }
+})();
+</script>
 {% endblock %}

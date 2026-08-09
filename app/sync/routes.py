@@ -759,11 +759,16 @@ _ESTADOS_RESUELTOS = (
 )
 
 
-def _cerrar_hermanos_placeholder(registro, accion):
+def _cerrar_hermanos_placeholder(registro, accion, estado_anterior=None):
     """
     Al aceptar/mover/borrar, cierra filas hermanas del mismo día que solo son
     semillas de sync o incidencias ya cubiertas por la resolución principal.
     Así el día queda verde si el admin ya resolvió el caso.
+
+    Si aceptamos un Paracaidista, las semillas Sin_Registro/Ausencia de LA MISMA
+    obra se eliminan (no Resuelto_Ignorado): si no, el histórico muestra dos
+    filas absurdas («asignado» + «ignorado / faltó») y el correo de corte puede
+    haberse basado en esa Ausencia fantasma.
     """
     if accion not in (
         'anadir', 'mover', 'borrar_planificacion', 'ignorar', 'confirmar_ausencia',
@@ -782,7 +787,29 @@ def _cerrar_hermanos_placeholder(registro, accion):
         'ignorar': 'Cerrado junto con la incidencia ignorada.',
         'confirmar_ausencia': 'Cerrado: ausencia confirmada para el día.',
     }.get(accion, 'Cerrado tras resolución de auditoría.')
+
+    obra_real = registro.obra_real_id
     for h in hermanos:
+        # Aceptar Paracaidista: las semillas Sin_Registro/Ausencia del día son
+        # falsos positivos (sí fichó). Borrarlas; no dejar Resuelto_Ignorado.
+        semilla_dia = (
+            estado_anterior == 'Paracaidista'
+            and accion == 'anadir'
+            and h.estado in ('Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso')
+        )
+        misma_obra = (
+            estado_anterior == 'Paracaidista'
+            and accion == 'anadir'
+            and obra_real
+            and (
+                h.obra_planificada_id == obra_real
+                or h.obra_real_id == obra_real
+            )
+            and h.estado in ('Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso')
+        )
+        if semilla_dia or misma_obra:
+            db.session.delete(h)
+            continue
         h.estado_antes_resolucion = h.estado
         h.estado = 'Resuelto_Ignorado'
         h.resuelto_por_id = registro.resuelto_por_id
@@ -951,6 +978,16 @@ def resolver_fichaje():
                         registro.user_id, registro.obra_real_id, registro.fecha,
                         None, "Actualización de Cuadrante (Auto)"
                     )
+
+            # Paracaidista: el fichaje ya ocurrió en obra_real. Al aceptar hay que
+            # enlazar obra_planificada_id; si no, el sync siembra Sin_Registro→Ausencia
+            # y dispara el correo de «no ha fichado» aunque sí fichó.
+            if (
+                estado_anterior == 'Paracaidista'
+                and registro.obra_real_id
+                and not registro.obra_planificada_id
+            ):
+                registro.obra_planificada_id = registro.obra_real_id
             
             if estado_anterior in ('Paracaidista', 'Conflicto'):
                 registro.estado = 'Resuelto_Asignado'
@@ -978,10 +1015,13 @@ def resolver_fichaje():
             registro, accion, estado_anterior=estado_anterior
         )
 
-        _cerrar_hermanos_placeholder(registro, accion)
+        _cerrar_hermanos_placeholder(
+            registro, accion, estado_anterior=estado_anterior or estado_previo
+        )
 
-        # Libro legal: la conciliación admin debe quedar en fichajes_eventos
-        # para que el informe de Inspección refleje reimputaciones.
+        # Libro legal: solo registrar reimputación cuando hay cambio real de obra.
+        # Aceptar un Paracaidista NO es un «cambio de obra»: el trabajador ya
+        # fichó ahí; solo se valida a nivel de auditoría.
         try:
             from app.models import EVENTO_REASIGNACION_OBRA, ORIGEN_ADMIN
             from app.services.fichaje_ledger_service import (
@@ -989,10 +1029,14 @@ def resolver_fichaje():
                 registrar_evento,
             )
             obra_ledger = registro.obra_real_id or registro.obra_planificada_id
-            if obra_ledger and accion in (
-                'mover', 'anadir', 'ignorar',
-                'borrar_planificacion', 'confirmar_ausencia',
-            ):
+            emitir_reasignacion = (
+                accion == 'mover'
+                or (
+                    accion == 'anadir'
+                    and estado_previo not in ('Paracaidista',)
+                )
+            )
+            if obra_ledger and emitir_reasignacion:
                 registrar_evento(
                     user_id=registro.user_id,
                     tipo=EVENTO_REASIGNACION_OBRA,

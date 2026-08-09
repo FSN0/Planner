@@ -103,6 +103,27 @@ def _solo_perfiles_con_jornada():
     return None
 
 
+@operarios_bp.route('/tour-volver-admin')
+def tour_volver_admin():
+    """
+    Tras probar el fichaje en la guía: restaura la sesión del admin
+    y vuelve al tablero para ver la autoasignación.
+    """
+    from flask import session
+    from app.models import User
+
+    admin_id = session.pop('tour_admin_user_id', None)
+    logout_user()
+    if admin_id:
+        admin = User.query.get(admin_id)
+        if admin and admin.role == ROLE_ADMIN and not admin.is_deleted:
+            login_user(admin, remember=True)
+            if getattr(g, 'current_tenant', None):
+                session['tenant_id'] = g.current_tenant.id
+            return redirect(url_for('admin.obras_detailed', tour='fichaje_done'))
+    return redirect(url_for('operarios.entrar'))
+
+
 @operarios_bp.route('/entrar', methods=['GET', 'POST'])
 @limiter.limit('20 per minute; 100 per hour', methods=['POST'])
 def entrar():
@@ -115,6 +136,13 @@ def entrar():
     """
     if not fichaje_operario_activo():
         abort(404)
+
+    # Guía: forzar pantalla de login aunque hubiera sesión residual.
+    if request.args.get('tour') and current_user.is_authenticated:
+        from flask import session as flask_session
+        if current_user.role == ROLE_ADMIN and not flask_session.get('tour_admin_user_id'):
+            flask_session['tour_admin_user_id'] = current_user.id
+        logout_user()
 
     if current_user.is_authenticated and current_user.role in ROLES_CON_FICHAJE:
         return redirect(url_for('operarios.inicio'))

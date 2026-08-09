@@ -1,0 +1,232 @@
+/* Guía interactiva SignaPlan (primeros pasos) */
+.sp-tour-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  pointer-events: none;
+}
+.sp-tour-hole {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55);
+  outline: 2px solid #38bdf8;
+  transition: top .15s, left .15s, width .15s, height .15s;
+  pointer-events: none;
+}
+.sp-tour-hole.is-hidden {
+  display: none !important;
+  opacity: 0;
+  width: 0 !important;
+  height: 0 !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  outline: none;
+  box-shadow: none !important;
+  pointer-events: none;
+}
+.sp-tour-card {
+  position: fixed;
+  z-index: 12001;
+  max-width: 380px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.25);
+  padding: 0.9rem 1rem;
+  color: #0f172a;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  pointer-events: auto;
+}
+.sp-tour-card.is-modal {
+  outline: 2px solid #38bdf8;
+  box-shadow:
+    0 0 0 9999px rgba(15, 23, 42, 0.55),
+    0 12px 40px rgba(15, 23, 42, 0.25);
+}
+.sp-tour-card h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+}
+.sp-tour-card p {
+  margin: 0 0 0.75rem;
+  color: #475569;
+  font-size: 0.84rem;
+}
+.sp-tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+.sp-tour-actions .sp-tour-skip {
+  margin-right: auto;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+}
+.sp-tour-actions button.sp-tour-next,
+.sp-tour-actions button.sp-tour-primary {
+  background: #0ea5e9;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sp-tour-actions button.sp-tour-ghost {
+  background: #f1f5f9;
+  color: #334155;
+  border: none;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.sp-tour-card.is-wide {
+  max-width: 420px;
+}
+.sp-tour-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.15rem 0 0.85rem;
+}
+.sp-tour-choices .sp-tour-primary {
+  width: 100%;
+  text-align: left;
+  background: #0ea5e9;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.sp-tour-choices .sp-tour-primary:hover {
+  background: #0284c7;
+}
+.sp-tour-choices .sp-tour-primary.is-done {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.sp-tour-choices .sp-tour-primary.is-done:hover {
+  background: #d1fae5;
+}
+.sp-tour-choice-tick {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: #059669;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+.sp-tour-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 12050;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1rem;
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.35);
+  font-size: 0.86rem;
+}
+.sp-tour-banner p {
+  margin: 0;
+  flex: 1 1 220px;
+  color: #cbd5e1;
+  line-height: 1.35;
+}
+.sp-tour-banner strong {
+  color: #fff;
+}
+.sp-tour-banner .sp-tour-actions {
+  margin: 0;
+}
+.sp-tour-banner .sp-tour-primary {
+  background: #38bdf8;
+  color: #0f172a;
+}
+.sp-tour-banner .sp-tour-ghost {
+  background: transparent;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+}
+.sp-tour-banner .sp-tour-skip {
+  color: #94a3b8;
+  margin-right: 0;
+}
+body.sp-tour-banner-active {
+  padding-top: 56px;
+}
+.sp-tour-progress {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-bottom: 0.35rem;
+}
+/* Solo el ancla del paso recibe el z-index; no hijos sueltos ni filas vecinas */
+body.sp-tour-active .sp-tour-target {
+  position: relative;
+  z-index: 12002 !important;
+  pointer-events: auto !important;
+}
+body.sp-tour-active tr.sp-tour-target {
+  outline: 2px solid #38bdf8;
+  outline-offset: -2px;
+  background: #f0f9ff !important;
+}
+/* Evitar que filas vecinas (p. ej. admin) se iluminen al pasar el ratón bajo el foco */
+body.sp-tour-active .filterable-table tbody tr:not(.sp-tour-target):hover,
+body.sp-tour-active .filterable-table tbody tr:not(.sp-tour-target):hover td {
+  background: transparent !important;
+}
+body.sp-tour-active tr.sp-tour-target .table-actions,
+body.sp-tour-active tr.sp-tour-target .btn-table-action {
+  position: static !important;
+  z-index: auto !important;
+  filter: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+  background: var(--color-surface, #fff) !important;
+  color: var(--color-text-muted, #64748b) !important;
+}
+body.sp-tour-active tr.sp-tour-target .btn-table-action:hover {
+  background: var(--color-bg-main, #f8fafc) !important;
+  color: var(--color-text, #0f172a) !important;
+}
+body.sp-tour-active .worker-chip.sp-tour-target {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+  background: #f0f9ff !important;
+  z-index: 12002 !important;
+  position: relative;
+}
+body.sp-tour-active tr.sp-tour-target td {
+  background: #f0f9ff !important;
+}
+body.sp-tour-active [data-tour="audit-aceptar"].sp-tour-target {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}

@@ -175,8 +175,8 @@
         {% endif %}
 
         {% if 'paracaidistas' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false">
+        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-paracaidistas">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false" data-tour="audit-paracaidistas-toggle">
                 <h6 class="auditoria-section-title text-info mb-0">
                     <span class="section-icon-wrap section-icon-wrap--info"><i class="fas fa-parachute-box"></i></span>
                     {{ _('Fichajes sin planificar') }}
@@ -202,7 +202,12 @@
                         </thead>
                         <tbody>
                             {% for reg in var_paracaidistas %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row"
+                                data-user-id="{{ reg.user_id }}"
+                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
+                                {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
+                                data-tour-audit-row
+                                style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td data-sort-value="{{ reg.user.lastname|lower }}">
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
@@ -224,7 +229,7 @@
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="Asignar oficialmente a esta obra">Aceptar</button>
+                                    <button class="btn btn-outline-primary btn-audit mr-1" data-tour="audit-aceptar" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="Asignar oficialmente a esta obra">Aceptar</button>
                                     <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="Ocultar esta alerta">Ignorar</button>
                                     {% else %}
                                     <span class="text-muted small">Solo lectura</span>
@@ -685,6 +690,7 @@ function openAuditoriaSection(collapseSelector) {
         }
     }, alreadyOpen ? 0 : 400);
 }
+window.openAuditoriaSection = openAuditoriaSection;
 
 $(document).ready(function() {
     ['auditConflictosTable', 'auditParacaidistasTable', 'auditAusenciasTable'].forEach(function(id) {

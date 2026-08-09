@@ -143,6 +143,17 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             obra_planificada_id=asig.obra_id,
         ).first()
         if not registro:
+            # Ya fichó / resolvió en esa obra (p. ej. Paracaidista aceptado):
+            # no sembrar Sin_Registro→Ausencia fantasma.
+            ya_en_obra = RegistroFichaje.query.filter(
+                RegistroFichaje.user_id == asig.user_id,
+                RegistroFichaje.fecha == fecha_obj,
+                RegistroFichaje.obra_real_id == asig.obra_id,
+            ).first()
+            if ya_en_obra:
+                if not ya_en_obra.obra_planificada_id:
+                    ya_en_obra.obra_planificada_id = asig.obra_id
+                continue
             estado_ini = (
                 'Exento_Ausencia'
                 if user_has_approved_leave(asig.user_id, fecha_obj)
@@ -382,6 +393,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
 
         if ahora_local.time() >= hora_corte:
             from app.services.leave_service import user_has_approved_leave
+            from app.services.fichaje_estado_service import FICHAJE_OK
 
             candidatos = RegistroFichaje.query.filter(
                 RegistroFichaje.fecha == fecha_obj,
@@ -394,6 +406,28 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     reg.notas_resolucion = 'Cubierto por ausencia planificada (no cuenta como ausencia).'
                     continue
                 if reg.estado == 'Sin_Registro':
+                    # No inventar Ausencia si el día ya tiene fichaje/resolución real
+                    hermano_ok = RegistroFichaje.query.filter(
+                        RegistroFichaje.user_id == reg.user_id,
+                        RegistroFichaje.fecha == fecha_obj,
+                        RegistroFichaje.id != reg.id,
+                    ).filter(
+                        db.or_(
+                            RegistroFichaje.obra_real_id.isnot(None),
+                            RegistroFichaje.check_in.isnot(None),
+                            RegistroFichaje.estado.like('Resuelto%'),
+                            RegistroFichaje.estado.in_(
+                                list(FICHAJE_OK) + ['Paracaidista', 'Conflicto', 'Cerrado_Multiobra']
+                            ),
+                        )
+                    ).first()
+                    if hermano_ok:
+                        reg.estado = 'Cerrado_Multiobra'
+                        reg.notas_resolucion = (
+                            'Cerrado automáticamente: ya hay fichaje o resolución '
+                            'el mismo día.'
+                        )
+                        continue
                     reg.estado = 'Ausencia'
                     reg.notas_resolucion = 'Generada automáticamente tras superar la hora de corte.'
         else:
@@ -406,14 +440,15 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     reg.notas_resolucion = None
 
         # Multi-obra: si el día ya tiene fichaje/resolución real, las semillas
-        # Sin_Registro dejan de ensuciar la pelotita (artefacto de planificación).
+        # Sin_Registro / Ausencia dejan de ensuciar la pelotita.
         from app.services.fichaje_estado_service import (
             FICHAJE_INTERVENCION,
             FICHAJE_OK,
             FICHAJE_ROJO,
         )
-        semillas = RegistroFichaje.query.filter_by(
-            fecha=fecha_obj, estado='Sin_Registro'
+        semillas = RegistroFichaje.query.filter(
+            RegistroFichaje.fecha == fecha_obj,
+            RegistroFichaje.estado.in_(['Sin_Registro', 'Ausencia']),
         ).all()
         if semillas:
             by_user = {}

@@ -60,6 +60,7 @@
         <div class="worker-chip{% if en_leave %} worker-chip--leave{% if not worker.temp_ausencia_aprobada %} worker-chip--leave-pending{% endif %}{% endif %}"
              data-worker-id="{{ worker.id }}"
              data-worker-name="{{ worker.name }} {{ worker.lastname }}"
+             {% if worker.dni %}data-dni="{{ worker.dni }}"{% endif %}
              {% if en_leave %}data-en-ausencia="1" title="{{ worker.temp_ausencia_tipo }} — sigue asignado"{% endif %}
              style="border-left-color: {{ '#7c3aed' if en_leave and worker.temp_ausencia_aprobada else ('#a78bfa' if en_leave else (worker.company_rel.color if worker.company_rel else '#ccc')) }}">
 

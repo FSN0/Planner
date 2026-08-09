@@ -67,7 +67,7 @@ ENTITY_FIELDS = {
         {
             "key": "fecha_inicio",
             "label": "Fecha de inicio",
-            "required": True,
+            "required": False,
             "aliases": [
                 "fecha de inicio", "fecha inicio", "inicio", "start",
                 "start date", "f inicio", "fecha_inicio", "comienzo",
@@ -488,8 +488,6 @@ def _preview_obra_row(row: pd.Series, column_map: dict, row_number: int) -> dict
 
     if not nombre:
         messages.append("Falta el nombre de la obra")
-    if not fecha_inicio:
-        messages.append("Falta o es inválida la fecha de inicio")
 
     if messages:
         return {
@@ -499,18 +497,16 @@ def _preview_obra_row(row: pd.Series, column_map: dict, row_number: int) -> dict
             "data": data,
         }
 
+    if not fecha_inicio:
+        fecha_inicio = date.today()
+        data["fecha_inicio"] = fecha_inicio.isoformat()
+        messages.append("Sin fecha de inicio; se usará hoy")
+
     if not fecha_fin:
         fecha_fin = fecha_inicio + timedelta(days=365)
         data["fecha_fin"] = fecha_fin.isoformat()
-    elif fecha_fin < date.today():
-        # Excel con obra ya «acabada» en papel: al importar para planificar
-        # extendemos un año desde hoy y avisamos (si no, el planificador las ocultaba).
-        messages.append(
-            f"Fecha fin {fecha_fin.isoformat()} ya pasada; se usará "
-            f"{(date.today() + timedelta(days=365)).isoformat()} al importar"
-        )
-        fecha_fin = date.today() + timedelta(days=365)
-        data["fecha_fin"] = fecha_fin.isoformat()
+        messages.append("Sin fecha de fin; se usará un año después del inicio")
+    # Si viene fecha de fin (aunque sea pasada), se respeta tal cual.
 
     if codigo:
         existing = Obra.query.filter(func.lower(Obra.codigo) == codigo.lower()).first()
@@ -613,14 +609,14 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
         "activo": "Sí" if activo else "No",
         "recibir_emails": "Sí" if recibir else "No",
     }
-    messages: list[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     if rol_raw and _normalize_role(rol_raw) == ROLE_OPERARIO:
         raw_l = rol_raw.strip().lower().replace(" ", "_")
         if raw_l not in (
             ROLE_OPERARIO, "trabajador", "empleado", "oficial", "peon", "peón", ""
         ):
-            # Solo avisar si el Excel traía algo distinto de sinónimos de operario
             from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
             known_aliases = {
                 ROLE_OPERARIO, "trabajador", "empleado", "oficial", "peon", "peón",
@@ -628,7 +624,8 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
                 ROLE_RRHH, "recursos_humanos", ROLE_LABORAL,
             }
             if raw_l not in known_aliases:
-                messages.append(f"Rol «{rol_raw}» no reconocido → Operario")
+                # Aviso informativo: el rol queda como Operario y SÍ se puede importar
+                warnings.append(f"Rol «{rol_raw}» no reconocido → Operario")
 
     if not any([email, nombre, apellidos, dni, empresa]):
         return {
@@ -639,21 +636,21 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
         }
 
     if not email:
-        messages.append("Falta el email")
+        errors.append("Falta el email")
     elif "@" not in email:
-        messages.append("Email inválido")
+        errors.append("Email inválido")
     if not dni:
-        messages.append("Falta el DNI")
+        errors.append("Falta el DNI")
     if not nombre:
-        messages.append("Falta el nombre")
+        errors.append("Falta el nombre")
     if not apellidos:
-        messages.append("Faltan los apellidos")
+        errors.append("Faltan los apellidos")
 
-    if messages:
+    if errors:
         return {
             "row_number": row_number,
             "status": "error",
-            "messages": messages,
+            "messages": errors + warnings,
             "data": data,
         }
 
@@ -676,7 +673,7 @@ def _preview_user_row(row: pd.Series, column_map: dict, row_number: int) -> dict
     return {
         "row_number": row_number,
         "status": "new",
-        "messages": [],
+        "messages": warnings,
         "data": data,
         "_parsed": {
             "email": email,
@@ -1230,20 +1227,16 @@ def _rebuild_obra_from_data(row_number: int, data: dict) -> dict:
         return {'row_number': row_number, 'status': 'skip', 'messages': ['Fila vacía'], 'data': display}
     if not nombre:
         messages.append('Falta el nombre de la obra')
-    if not fecha_inicio:
-        messages.append('Falta o es inválida la fecha de inicio')
     if messages:
         return {'row_number': row_number, 'status': 'error', 'messages': messages, 'data': display}
+    if not fecha_inicio:
+        fecha_inicio = date.today()
+        display['fecha_inicio'] = fecha_inicio.isoformat()
+        messages.append('Sin fecha de inicio; se usará hoy')
     if not fecha_fin:
         fecha_fin = fecha_inicio + timedelta(days=365)
         display['fecha_fin'] = fecha_fin.isoformat()
-    elif fecha_fin < date.today():
-        messages.append(
-            f"Fecha fin {fecha_fin.isoformat()} ya pasada; se usará "
-            f"{(date.today() + timedelta(days=365)).isoformat()}"
-        )
-        fecha_fin = date.today() + timedelta(days=365)
-        display['fecha_fin'] = fecha_fin.isoformat()
+        messages.append('Sin fecha de fin; se usará un año después del inicio')
     if codigo:
         existing = Obra.query.filter(func.lower(Obra.codigo) == codigo.lower()).first()
         if existing:
@@ -1423,6 +1416,12 @@ def commit_import(
     if entity_type == 'users' and import_options:
         internal_rows = annotate_user_rows_for_mode(internal_rows, import_options)
 
+    # Checkboxes include_{n}: si el form trae include_enabled, solo se importan los marcados
+    use_include = bool(
+        row_edits_form is not None
+        and str(row_edits_form.get('include_enabled') or '') in ('1', 'true', 'True', 'on')
+    )
+
     result_rows = []
     imported = []
     created_companies: set = set()
@@ -1430,12 +1429,21 @@ def commit_import(
 
     for row in internal_rows:
         status = row.get("status")
+        rn = row.get("row_number")
         public = {
-            "row_number": row["row_number"],
+            "row_number": rn,
             "status": status,
             "messages": list(row.get("messages") or []),
             "data": row.get("data") or {},
         }
+
+        if use_include and status == "new":
+            included = (row_edits_form.get(f'include_{rn}') in ('1', 'on', 'true', 'True'))
+            if not included:
+                public["status"] = "skip"
+                public["messages"] = ["Excluida por el usuario"]
+                result_rows.append(public)
+                continue
 
         if status != "new":
             result_rows.append(public)

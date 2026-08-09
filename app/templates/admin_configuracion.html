@@ -78,6 +78,10 @@
       <a href="#cfg-vehiculos">Vehículos</a>
       <a href="#cfg-festivos">Festivos</a>
       <a href="#cfg-emails">Correos</a>
+      {% if tenant_has_onboarding %}
+      <a href="#cfg-guia">Guía</a>
+      {% endif %}
+      <a href="#cfg-idioma">Idioma</a>
       {% if user_can(current_user, 'permisos', 'r') %}
       <a href="{{ url_for('admin.permisos_roles') }}">Permisos por rol</a>
       {% endif %}
@@ -494,6 +498,42 @@
           </form>
         </div>
       </section>
+
+      {% if tenant_has_onboarding %}
+      <section class="config-block" id="cfg-guia">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--violet"><i class="fas fa-magic"></i></div>
+          <div>
+            <h2>Guía de primeros pasos</h2>
+            <p>
+              Vuelve a lanzar el tutorial o el hub de Primeros pasos aunque la empresa ya tenga datos.
+              No se borra nada: solo se reabre el onboarding.
+            </p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.reiniciar_guia_onboarding') }}" method="POST" class="mb-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="modo" value="guia">
+            <button type="submit" class="btn-admin btn-admin-primary"
+                    onclick="try{sessionStorage.removeItem('signaplan_tour_v1');}catch(e){}">
+              <i class="fas fa-play"></i> Reiniciar guía interactiva
+            </button>
+          </form>
+          <form action="{{ url_for('admin.reiniciar_guia_onboarding') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="modo" value="pasos">
+            <button type="submit" class="btn-admin btn-admin-ghost"
+                    onclick="try{sessionStorage.removeItem('signaplan_tour_v1');}catch(e){}">
+              <i class="fas fa-th-large"></i> Abrir hub Primeros pasos
+            </button>
+          </form>
+          <p class="config-field-hint mt-2 mb-0">
+            Útil para probar las guías sin crear un tenant nuevo.
+          </p>
+        </div>
+      </section>
+      {% endif %}
 
       {# —— Idioma de interfaz (preferencia del usuario) —— #}
       <section class="config-block" id="cfg-idioma">
