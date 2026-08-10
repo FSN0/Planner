@@ -5,7 +5,7 @@
 
 {% block extra_css %}
   {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}">
 {% endblock %}

@@ -161,6 +161,8 @@ class User(UserMixin, db.Model):
     timezone = db.Column(db.String(64), nullable=True)
     # Idioma de interfaz (es, en, pt, fr). None → detección automática.
     locale = db.Column(db.String(8), nullable=True)
+    # Preferencias del menú lateral: secciones, orden, títulos, ocultos.
+    sidebar_prefs = db.Column(JSONB, server_default='{}', nullable=False)
     especialidad = db.Column(db.String(100), nullable=True) # Electricista, Fontanero, Albañil...
     
     # Programación de estados (Activación/Desactivación futura)

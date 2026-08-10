@@ -165,6 +165,72 @@ def reorder_pinned_obras():
     db.session.commit()
     return jsonify({'success': True})
 
+
+@api_bp.route('/sidebar_prefs', methods=['GET', 'POST'])
+@login_required
+def sidebar_prefs_api():
+    """Lee / guarda la personalización del menú lateral (por usuario)."""
+    from app.services.sidebar_nav_service import (
+        build_sidebar_nav,
+        prefs_for_client,
+        save_sidebar_prefs,
+    )
+    from flask import g
+
+    ctx = {
+        'pending_notifications': 0,
+        'unread_logs_count': 0,
+        'unread_laboral_count': 0,
+        'tenant_has_odoo': False,
+        'tenant_has_odoo_alta': False,
+        'tenant_has_integrations': False,
+        'tenant_has_registro_jornada': True,
+        'tenant_has_avisos_laborales': False,
+        'mostrar_onboarding': False,
+    }
+    # Reutilizar flags del context processor si existen en g (no siempre)
+    tenant = getattr(g, 'current_tenant', None)
+    if tenant is not None:
+        mods = getattr(tenant, 'modulos_activos', None) or {}
+        ctx['tenant_has_odoo'] = bool(mods.get('odoo'))
+        ctx['tenant_has_odoo_alta'] = bool(mods.get('odoo_alta_empleados'))
+        ctx['tenant_has_integrations'] = bool(mods.get('integrations') or mods.get('odoo'))
+        ctx['tenant_has_registro_jornada'] = bool(mods.get('registro_jornada', True))
+        try:
+            from app.services.tenant_modules import has_avisos_laborales
+            ctx['tenant_has_avisos_laborales'] = has_avisos_laborales(tenant)
+        except Exception:
+            pass
+        try:
+            from app.services.onboarding_service import necesita_onboarding
+            if current_user.role == ROLE_ADMIN:
+                ctx['mostrar_onboarding'] = necesita_onboarding()
+        except Exception:
+            pass
+
+    if request.method == 'GET':
+        return jsonify({'success': True, 'prefs': prefs_for_client(current_user, ctx)})
+
+    data = request.get_json(silent=True) or {}
+    try:
+        cleaned = save_sidebar_prefs(current_user, data)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Error al guardar: {exc}'}), 500
+
+    # Devolver nav resuelto para refrescar sin recargar si se quiere
+    nav = build_sidebar_nav(current_user, ctx)
+    return jsonify({'success': True, 'prefs': cleaned, 'nav': {
+        'sections': [
+            {'id': s['id'], 'title': s['title'], 'items': [it['id'] for it in s['items']]}
+            for s in nav['sections']
+        ],
+        'hidden': nav['hidden'],
+    }})
+
+
 # ==============================================================================
 # NUEVO: ENDPOINT PARA EL CALENDARIO UNIVERSAL (DRAG & DROP, AGRUPADO)
 # ==============================================================================

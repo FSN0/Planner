@@ -390,6 +390,25 @@ def create_app():
                 demo_data_activa = demo_activa()
             except Exception:
                 demo_data_activa = False
+
+        sidebar_nav = None
+        if current_user.is_authenticated:
+            try:
+                from app.services.sidebar_nav_service import build_sidebar_nav
+                sidebar_nav = build_sidebar_nav(current_user, {
+                    'pending_notifications': pending_count,
+                    'unread_logs_count': unread_logs_count,
+                    'unread_laboral_count': unread_laboral_count,
+                    'tenant_has_odoo': tenant_has_odoo,
+                    'tenant_has_odoo_alta': tenant_has_odoo_alta,
+                    'tenant_has_integrations': tenant_has_integrations,
+                    'tenant_has_registro_jornada': tenant_has_registro_jornada,
+                    'tenant_has_avisos_laborales': tenant_has_avisos_laborales,
+                    'mostrar_onboarding': mostrar_onboarding,
+                })
+            except Exception:
+                sidebar_nav = None
+
         return dict(
             pending_notifications=pending_count,
             unread_logs_count=unread_logs_count,
@@ -404,6 +423,7 @@ def create_app():
             mostrar_onboarding=mostrar_onboarding,
             onboarding_import_done=onboarding_import_done,
             demo_data_activa=demo_data_activa,
+            sidebar_nav=sidebar_nav,
             user_can=user_can,
             is_laboral=is_laboral,
             is_admin=is_admin,

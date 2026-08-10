@@ -1,0 +1,550 @@
+# app/services/sidebar_nav_service.py
+#
+# Menú lateral personalizable: secciones (título libre), orden de entradas,
+# ocultar/mostrar. Los ítems disponibles siguen gobernados por permisos.
+
+from __future__ import annotations
+
+import copy
+import uuid
+from typing import Any, Optional
+
+from flask import has_request_context, request, url_for
+from flask_login import current_user
+
+from app import db
+from app.services.i18n_service import _
+from app.services.permission_service import is_laboral, user_can
+
+
+# Claves estables de entradas del catálogo
+ITEM_INICIO = 'inicio'
+ITEM_TABLERO = 'tablero'
+ITEM_DIRECTORIO = 'directorio'
+ITEM_PLANIFICADOR = 'planificador'
+ITEM_REUNIONES = 'reuniones'
+ITEM_TRABAJADORES = 'trabajadores'
+ITEM_SUBCONTRATAS = 'subcontratas'
+ITEM_SOLICITUDES = 'solicitudes'
+ITEM_AUSENCIAS = 'ausencias'
+ITEM_FLOTA = 'flota'
+ITEM_COCHES_LIBRES = 'coches_libres'
+ITEM_AUDITORIA_VEH = 'auditoria_vehiculos'
+ITEM_AUDITORIA_FICH = 'auditoria_fichajes'
+ITEM_REGISTRO_JORNADA = 'registro_jornada'
+ITEM_INTEGRACIONES = 'integraciones'
+ITEM_PRIMEROS_PASOS = 'primeros_pasos'
+ITEM_CONFIGURACION = 'configuracion'
+ITEM_PERMISOS = 'permisos'
+ITEM_LOGS = 'logs'
+
+ALL_ITEM_KEYS = (
+    ITEM_INICIO,
+    ITEM_TABLERO,
+    ITEM_DIRECTORIO,
+    ITEM_PLANIFICADOR,
+    ITEM_REUNIONES,
+    ITEM_TRABAJADORES,
+    ITEM_SUBCONTRATAS,
+    ITEM_SOLICITUDES,
+    ITEM_AUSENCIAS,
+    ITEM_FLOTA,
+    ITEM_COCHES_LIBRES,
+    ITEM_AUDITORIA_VEH,
+    ITEM_AUDITORIA_FICH,
+    ITEM_REGISTRO_JORNADA,
+    ITEM_INTEGRACIONES,
+    ITEM_PRIMEROS_PASOS,
+    ITEM_CONFIGURACION,
+    ITEM_PERMISOS,
+    ITEM_LOGS,
+)
+
+
+def _default_sections_blueprint() -> list[dict]:
+    """Estructura por defecto (títulos traducidos al construir)."""
+    return [
+        {'id': 'sec_home', 'title': '', 'items': [ITEM_INICIO]},
+        {
+            'id': 'sec_plan',
+            'title': str(_('Planificación')),
+            'items': [ITEM_TABLERO, ITEM_DIRECTORIO, ITEM_PLANIFICADOR, ITEM_REUNIONES],
+        },
+        {
+            'id': 'sec_personal',
+            'title': str(_('Personal')),
+            'items': [ITEM_TRABAJADORES, ITEM_SUBCONTRATAS, ITEM_SOLICITUDES, ITEM_AUSENCIAS],
+        },
+        {
+            'id': 'sec_fleet',
+            'title': str(_('Vehículos')),
+            'items': [ITEM_FLOTA, ITEM_COCHES_LIBRES, ITEM_AUDITORIA_VEH],
+        },
+        {
+            'id': 'sec_jornada',
+            'title': str(_('Jornada')),
+            'items': [ITEM_AUDITORIA_FICH, ITEM_REGISTRO_JORNADA],
+        },
+        {
+            'id': 'sec_sys',
+            'title': str(_('Sistema')),
+            'items': [
+                ITEM_INTEGRACIONES,
+                ITEM_PRIMEROS_PASOS,
+                ITEM_CONFIGURACION,
+                ITEM_PERMISOS,
+                ITEM_LOGS,
+            ],
+        },
+    ]
+
+
+def _ep() -> str:
+    if not has_request_context():
+        return ''
+    return request.endpoint or ''
+
+
+def _is_jefe(user) -> bool:
+    return getattr(user, 'role', None) == 'jefe_obra'
+
+
+def _is_adm(user) -> bool:
+    return getattr(user, 'role', None) == 'admin'
+
+
+def _home_href(user) -> str:
+    if _is_jefe(user):
+        return url_for('jefe.panel')
+    if _is_adm(user):
+        return url_for('admin.panel')
+    if is_laboral(user):
+        return url_for('admin.panel_laboral')
+    if user_can(user, 'operario_web', 'r'):
+        return url_for('empleado.calendario')
+    return url_for('main.dashboard')
+
+
+def _home_active() -> bool:
+    return _ep() in (
+        'main.dashboard', 'admin.panel', 'admin.panel_laboral',
+        'jefe.panel', 'empleado.calendario',
+    )
+
+
+def catalog_definitions(ctx: dict) -> dict[str, dict]:
+    """Definiciones estáticas (sin filtrar por permiso)."""
+    u = ctx.get('user') or current_user
+    return {
+        ITEM_INICIO: {
+            'id': ITEM_INICIO,
+            'label': str(_('Inicio')),
+            'icon': 'fa-home',
+            'kind': 'link',
+            'href': _home_href(u),
+            'active': _home_active(),
+            'data_tour': None,
+        },
+        ITEM_TABLERO: {
+            'id': ITEM_TABLERO,
+            'label': str(_('Tablero')),
+            'icon': 'fa-th-large',
+            'kind': 'link',
+            'href': url_for('jefe.obras_detailed') if _is_jefe(u) else url_for('admin.obras_detailed'),
+            'active': _ep() in ('admin.obras_detailed', 'jefe.obras_detailed'),
+            'data_tour': None,
+        },
+        ITEM_DIRECTORIO: {
+            'id': ITEM_DIRECTORIO,
+            'label': str(_('Directorio')),
+            'icon': 'fa-building',
+            'kind': 'link',
+            'href': url_for('admin.obras_list'),
+            'active': _ep() == 'admin.obras_list',
+            'data_tour': 'nav-directorio',
+        },
+        ITEM_PLANIFICADOR: {
+            'id': ITEM_PLANIFICADOR,
+            'label': str(_('Planificador')),
+            'icon': 'fa-calendar-check',
+            'kind': 'link',
+            'href': url_for('admin.planificador_jo'),
+            'active': 'planificador' in _ep(),
+            'data_tour': None,
+        },
+        ITEM_REUNIONES: {
+            'id': ITEM_REUNIONES,
+            'label': str(_('Reuniones')),
+            'icon': 'fa-book-open',
+            'kind': 'link',
+            'href': url_for('notas.centro_mando'),
+            'active': 'notas' in _ep(),
+            'data_tour': None,
+        },
+        ITEM_TRABAJADORES: {
+            'id': ITEM_TRABAJADORES,
+            'label': str(_('Trabajadores')),
+            'icon': 'fa-users',
+            'kind': 'link',
+            'href': url_for('admin.personal'),
+            'active': 'personal' in _ep(),
+            'data_tour': 'nav-trabajadores',
+        },
+        ITEM_SUBCONTRATAS: {
+            'id': ITEM_SUBCONTRATAS,
+            'label': str(_('Subcontratas')),
+            'icon': 'fa-industry',
+            'kind': 'link',
+            'href': url_for('admin.companies'),
+            'active': 'companies' in _ep() or _ep() == 'admin.company_panel',
+            'data_tour': 'nav-empresas',
+        },
+        ITEM_SOLICITUDES: {
+            'id': ITEM_SOLICITUDES,
+            'label': str(_('Solicitudes')),
+            'icon': 'fa-user-plus',
+            'kind': 'link',
+            'href': url_for('admin.solicitudes_list'),
+            'active': 'solicitud' in _ep(),
+            'data_tour': None,
+            'badge': int(ctx.get('pending_notifications') or 0),
+        },
+        ITEM_AUSENCIAS: {
+            'id': ITEM_AUSENCIAS,
+            'label': str(_('Ausencias')),
+            'icon': 'fa-umbrella-beach',
+            'kind': 'link',
+            'href': url_for('admin.ausencias_list'),
+            'active': 'ausencias' in _ep(),
+            'data_tour': None,
+        },
+        ITEM_FLOTA: {
+            'id': ITEM_FLOTA,
+            'label': str(_('Flota')),
+            'icon': 'fa-car',
+            'kind': 'link',
+            'href': url_for('admin.vehiculos'),
+            'active': _ep() in ('admin.vehiculos', 'admin.vehicle_panel'),
+            'data_tour': None,
+        },
+        ITEM_COCHES_LIBRES: {
+            'id': ITEM_COCHES_LIBRES,
+            'label': str(_('Coches libres')),
+            'icon': 'fa-car-side',
+            'kind': 'link',
+            'href': url_for('admin.vehiculos_libres'),
+            'active': _ep() == 'admin.vehiculos_libres',
+            'data_tour': None,
+        },
+        ITEM_AUDITORIA_VEH: {
+            'id': ITEM_AUDITORIA_VEH,
+            'label': str(_('Auditoría')),
+            'icon': 'fa-clipboard-check',
+            'kind': 'link',
+            'href': url_for('sync.auditoria_vehiculos'),
+            'active': _ep() == 'sync.auditoria_vehiculos',
+            'data_tour': None,
+        },
+        ITEM_AUDITORIA_FICH: {
+            'id': ITEM_AUDITORIA_FICH,
+            'label': str(_('Auditoría fichajes')),
+            'icon': 'fa-user-clock',
+            'kind': 'link',
+            'href': url_for('sync.auditoria_fichajes'),
+            'active': _ep() == 'sync.auditoria_fichajes',
+            'data_tour': 'nav-auditoria-fichajes',
+        },
+        ITEM_REGISTRO_JORNADA: {
+            'id': ITEM_REGISTRO_JORNADA,
+            'label': str(_('Registro jornada')),
+            'icon': 'fa-file-signature',
+            'kind': 'link',
+            'href': url_for('admin.registro_jornada'),
+            'active': 'registro_jornada' in _ep(),
+            'data_tour': 'nav-registro-jornada',
+        },
+        ITEM_INTEGRACIONES: {
+            'id': ITEM_INTEGRACIONES,
+            'label': str(_('Integraciones')),
+            'icon': 'fa-plug',
+            'kind': 'integrations',
+            'href': '#',
+            'active': _ep() in ('sync.panel', 'sync.odoo_panel'),
+            'data_tour': None,
+            'open': _ep() in ('sync.panel', 'sync.odoo_panel'),
+            'children': _integration_children(ctx),
+        },
+        ITEM_PRIMEROS_PASOS: {
+            'id': ITEM_PRIMEROS_PASOS,
+            'label': str(_('Primeros pasos')),
+            'icon': 'fa-rocket',
+            'kind': 'link',
+            'href': url_for('admin.primeros_pasos'),
+            'active': _ep() == 'admin.primeros_pasos',
+            'data_tour': None,
+        },
+        ITEM_CONFIGURACION: {
+            'id': ITEM_CONFIGURACION,
+            'label': str(_('Configuración')),
+            'icon': 'fa-sliders-h',
+            'kind': 'link',
+            'href': url_for('admin.configuracion_global'),
+            'active': 'configuracion' in _ep() and 'permisos' not in _ep(),
+            'data_tour': None,
+        },
+        ITEM_PERMISOS: {
+            'id': ITEM_PERMISOS,
+            'label': str(_('Permisos')),
+            'icon': 'fa-user-shield',
+            'kind': 'link',
+            'href': url_for('admin.permisos_roles'),
+            'active': _ep() == 'admin.permisos_roles',
+            'data_tour': None,
+        },
+        ITEM_LOGS: {
+            'id': ITEM_LOGS,
+            'label': str(_('Logs')),
+            'icon': 'fa-history',
+            'kind': 'link',
+            'href': url_for('admin.system_logs'),
+            'active': 'system_logs' in _ep(),
+            'data_tour': None,
+            'badge_logs': int(ctx.get('unread_logs_count') or 0),
+            'badge_laboral': int(ctx.get('unread_laboral_count') or 0),
+            'show_laboral_badge': bool(ctx.get('tenant_has_avisos_laborales')),
+        },
+    }
+
+
+def _integration_children(ctx: dict) -> list[dict]:
+    kids = []
+    if ctx.get('tenant_has_odoo'):
+        kids.append({
+            'id': 'odoo_sync',
+            'label': str(_('Sincronización Odoo')),
+            'icon': 'fa-sync',
+            'href': url_for('sync.odoo_panel'),
+            'active': _ep() == 'sync.odoo_panel',
+            'external': False,
+        })
+    if ctx.get('tenant_has_odoo_alta'):
+        kids.append({
+            'id': 'odoo_alta',
+            'label': str(_('Alta Odoo')),
+            'icon': 'fa-address-book',
+            'href': url_for('admin.sso_odoo_contactos'),
+            'active': False,
+            'external': True,
+        })
+    if ctx.get('tenant_has_integrations'):
+        kids.append({
+            'id': 'integ_all',
+            'label': str(_('Ver todas')),
+            'icon': 'fa-th-large',
+            'href': url_for('sync.panel'),
+            'active': _ep() == 'sync.panel',
+            'external': False,
+        })
+    return kids
+
+
+def item_is_available(item_id: str, user, ctx: dict) -> bool:
+    if item_id == ITEM_INICIO:
+        return True
+    if item_id == ITEM_TABLERO:
+        return user_can(user, 'tablero', 'r')
+    if item_id == ITEM_DIRECTORIO:
+        return user_can(user, 'directorio', 'r')
+    if item_id == ITEM_PLANIFICADOR:
+        return user_can(user, 'planificador', 'r')
+    if item_id == ITEM_REUNIONES:
+        return user_can(user, 'reuniones', 'r')
+    if item_id == ITEM_TRABAJADORES:
+        return user_can(user, 'trabajadores', 'r')
+    if item_id == ITEM_SUBCONTRATAS:
+        return user_can(user, 'subcontratas', 'r')
+    if item_id == ITEM_SOLICITUDES:
+        return user_can(user, 'solicitudes', 'r')
+    if item_id == ITEM_AUSENCIAS:
+        return user_can(user, 'ausencias', 'r')
+    if item_id == ITEM_FLOTA:
+        return user_can(user, 'vehiculos', 'r')
+    if item_id == ITEM_COCHES_LIBRES:
+        return user_can(user, 'vehiculos_libres', 'r')
+    if item_id == ITEM_AUDITORIA_VEH:
+        return user_can(user, 'auditoria_vehiculos', 'r') and bool(ctx.get('tenant_has_odoo'))
+    if item_id == ITEM_AUDITORIA_FICH:
+        return user_can(user, 'auditoria_fichajes', 'r')
+    if item_id == ITEM_REGISTRO_JORNADA:
+        return user_can(user, 'registro_jornada', 'r') and bool(ctx.get('tenant_has_registro_jornada'))
+    if item_id == ITEM_INTEGRACIONES:
+        return user_can(user, 'integraciones', 'r') and bool(
+            ctx.get('tenant_has_integrations') or ctx.get('tenant_has_odoo_alta')
+        )
+    if item_id == ITEM_PRIMEROS_PASOS:
+        return user_can(user, 'primeros_pasos', 'r') and bool(ctx.get('mostrar_onboarding'))
+    if item_id == ITEM_CONFIGURACION:
+        return user_can(user, 'configuracion', 'r')
+    if item_id == ITEM_PERMISOS:
+        return user_can(user, 'permisos', 'r')
+    if item_id == ITEM_LOGS:
+        return user_can(user, 'logs', 'r')
+    return False
+
+
+def _raw_prefs(user) -> dict:
+    raw = getattr(user, 'sidebar_prefs', None) or {}
+    if not isinstance(raw, dict):
+        return {}
+    return raw
+
+
+def _normalize_prefs_payload(payload: Any) -> dict:
+    """Valida y limpia el JSON de preferencias."""
+    if not isinstance(payload, dict):
+        raise ValueError('Formato inválido')
+    sections_in = payload.get('sections')
+    if not isinstance(sections_in, list):
+        raise ValueError('sections debe ser una lista')
+    hidden_in = payload.get('hidden') or []
+    if not isinstance(hidden_in, list):
+        raise ValueError('hidden debe ser una lista')
+
+    seen_items: set[str] = set()
+    sections_out = []
+    for sec in sections_in:
+        if not isinstance(sec, dict):
+            continue
+        sid = str(sec.get('id') or '').strip() or f'sec_{uuid.uuid4().hex[:8]}'
+        title = str(sec.get('title') if sec.get('title') is not None else '').strip()
+        # límite razonable
+        if len(title) > 60:
+            title = title[:60]
+        items = []
+        for it in (sec.get('items') or []):
+            key = str(it).strip()
+            if key not in ALL_ITEM_KEYS or key in seen_items:
+                continue
+            seen_items.add(key)
+            items.append(key)
+        sections_out.append({'id': sid, 'title': title, 'items': items})
+
+    if not sections_out:
+        raise ValueError('Hace falta al menos una sección')
+
+    hidden_out = []
+    for h in hidden_in:
+        key = str(h).strip()
+        if key in ALL_ITEM_KEYS and key not in hidden_out:
+            hidden_out.append(key)
+
+    return {'sections': sections_out, 'hidden': hidden_out}
+
+
+def save_sidebar_prefs(user, payload: dict) -> dict:
+    from sqlalchemy.orm.attributes import flag_modified
+
+    cleaned = _normalize_prefs_payload(payload)
+    user.sidebar_prefs = cleaned
+    flag_modified(user, 'sidebar_prefs')
+    db.session.add(user)
+    db.session.commit()
+    return cleaned
+
+
+def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
+    """
+    Devuelve { sections: [...], hidden: [...], edit_mode_items: [...] }
+    listo para la plantilla.
+    """
+    ctx = dict(ctx or {})
+    ctx['user'] = user
+    defs = catalog_definitions(ctx)
+    available = {k: v for k, v in defs.items() if item_is_available(k, user, ctx)}
+
+    prefs = _raw_prefs(user)
+    sections_pref = prefs.get('sections') if isinstance(prefs.get('sections'), list) else None
+    hidden_pref = set(prefs.get('hidden') or []) if isinstance(prefs.get('hidden'), list) else set()
+
+    if not sections_pref:
+        sections_pref = _default_sections_blueprint()
+
+    placed: set[str] = set()
+    sections_out = []
+    for sec in sections_pref:
+        if not isinstance(sec, dict):
+            continue
+        sid = str(sec.get('id') or f'sec_{uuid.uuid4().hex[:8]}')
+        title = str(sec.get('title') if sec.get('title') is not None else '')
+        items_resolved = []
+        for key in (sec.get('items') or []):
+            key = str(key)
+            if key not in available or key in placed:
+                continue
+            placed.add(key)
+            item = copy.deepcopy(available[key])
+            item['hidden'] = key in hidden_pref
+            items_resolved.append(item)
+        sections_out.append({
+            'id': sid,
+            'title': title,
+            'items': items_resolved,
+        })
+
+    # Ítems nuevos (permisos nuevos) que no estaban en prefs → sección al final
+    orphan_keys = [k for k in available.keys() if k not in placed]
+    if orphan_keys:
+        # Intentar meterlos en su sección por defecto si existe
+        default_map = {}
+        for sec in _default_sections_blueprint():
+            for k in sec['items']:
+                default_map[k] = sec['id']
+        by_sec: dict[str, list] = {}
+        for k in orphan_keys:
+            sec_id = default_map.get(k, 'sec_extra')
+            by_sec.setdefault(sec_id, []).append(k)
+        sec_index = {s['id']: s for s in sections_out}
+        for sec_id, keys in by_sec.items():
+            if sec_id in sec_index:
+                for k in keys:
+                    item = copy.deepcopy(available[k])
+                    item['hidden'] = k in hidden_pref
+                    sec_index[sec_id]['items'].append(item)
+                    placed.add(k)
+            else:
+                title = str(_('Más')) if sec_id == 'sec_extra' else ''
+                # buscar título default
+                for d in _default_sections_blueprint():
+                    if d['id'] == sec_id:
+                        title = d['title']
+                        break
+                items_resolved = []
+                for k in keys:
+                    item = copy.deepcopy(available[k])
+                    item['hidden'] = k in hidden_pref
+                    items_resolved.append(item)
+                    placed.add(k)
+                sections_out.append({'id': sec_id, 'title': title, 'items': items_resolved})
+
+    # En modo normal la plantilla solo pinta no-hidden; en config pinta todos
+    return {
+        'sections': sections_out,
+        'hidden': sorted(hidden_pref & set(available.keys())),
+        'available_ids': list(available.keys()),
+    }
+
+
+def prefs_for_client(user, ctx: Optional[dict] = None) -> dict:
+    """Snapshot serializable para el JS de configuración."""
+    nav = build_sidebar_nav(user, ctx)
+    return {
+        'sections': [
+            {
+                'id': s['id'],
+                'title': s['title'],
+                'items': [it['id'] for it in s['items']],
+            }
+            for s in nav['sections']
+        ],
+        'hidden': nav['hidden'],
+    }
