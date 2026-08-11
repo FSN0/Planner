@@ -107,12 +107,13 @@ def _solo_perfiles_con_jornada():
 def tour_volver_admin():
     """
     Tras probar el fichaje en la guía: restaura la sesión del admin
-    y vuelve al tablero para ver la autoasignación.
+    y vuelve al tablero (o a la URL next= si es interna).
     """
     from flask import session
     from app.models import User
 
     admin_id = session.pop('tour_admin_user_id', None)
+    next_url = (request.args.get('next') or '').strip()
     logout_user()
     if admin_id:
         admin = User.query.get(admin_id)
@@ -120,6 +121,8 @@ def tour_volver_admin():
             login_user(admin, remember=True)
             if getattr(g, 'current_tenant', None):
                 session['tenant_id'] = g.current_tenant.id
+            if next_url.startswith('/') and not next_url.startswith('//'):
+                return redirect(next_url)
             return redirect(url_for('admin.obras_detailed', tour='fichaje_done'))
     return redirect(url_for('operarios.entrar'))
 
@@ -184,6 +187,23 @@ def entrar():
         destino = request.args.get('next') or url_for('operarios.inicio')
         if not destino.startswith('/mi'):
             destino = url_for('operarios.inicio')
+        # Preservar guía en /mi (capítulo + forzar Oficina)
+        tour = (request.args.get('tour') or request.form.get('tour') or '').strip()
+        chapter = (request.args.get('chapter') or request.form.get('chapter') or '').strip()
+        from flask import session as flask_session
+        if flask_session.get('tour_fichar_oficina') and not chapter:
+            chapter = flask_session.get('tour_chapter') or 'fichajes'
+        if tour or chapter or flask_session.get('tour_fichar_oficina'):
+            sep = '&' if '?' in destino else '?'
+            parts = []
+            if tour:
+                parts.append('tour=' + tour)
+            elif flask_session.get('tour_fichar_oficina'):
+                parts.append('tour=mi')
+            if chapter:
+                parts.append('chapter=' + chapter)
+            if parts:
+                destino = destino + sep + '&'.join(parts)
         return redirect(destino)
 
     return render_template('operario/entrar.html')
@@ -206,6 +226,16 @@ def inicio():
         return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
 
     contexto = estado_para_pantalla(current_user)
+    from flask import session as flask_session
+    force_oficina = bool(flask_session.get('tour_fichar_oficina'))
+    obra_preselect_id = None
+    if force_oficina:
+        from app.services.oficina_obra_service import buscar_obra_oficina
+        of = buscar_obra_oficina()
+        if of:
+            obra_preselect_id = of.id
+    contexto['tour_force_oficina'] = force_oficina
+    contexto['obra_preselect_id'] = obra_preselect_id
     return render_template('operario/fichar.html', **contexto)
 
 

@@ -206,7 +206,7 @@ def _borrar_eventos_libro_demo(user_ids):
         )
 
 
-def generar_datos_demo(actor_user=None):
+def generar_datos_demo(actor_user=None, activar_fichaje=None):
     if demo_activa():
         raise ValueError('Ya hay datos de ejemplo activos. Bórralos antes de generar otros.')
     if _demo_users():
@@ -394,7 +394,7 @@ def generar_datos_demo(actor_user=None):
                 with db.session.begin_nested():
                     CoreAssignmentService.asignar(
                         op.id, obra.id, dia, autor_id, 'demo',
-                        registrar_log=False,
+                        registrar_log=True,
                     )
             except Exception:
                 continue
@@ -493,7 +493,7 @@ def generar_datos_demo(actor_user=None):
                 with db.session.begin_nested():
                     CoreAssignmentService.asignar(
                         candidato_baja.id, obra_a.id, dia, autor_id, 'demo',
-                        registrar_log=False,
+                        registrar_log=True,
                     )
                 fechas_baja.append(dia)
             except Exception:
@@ -526,7 +526,17 @@ def generar_datos_demo(actor_user=None):
             ))
         db.session.flush()
 
-    set_tenant_config(CONFIG_FICHAJE_OPERARIO, 'True')
+    if activar_fichaje is None:
+        from app.services.fichaje_operario_service import fichaje_operario_activo
+        activo_fichaje = bool(fichaje_operario_activo())
+    else:
+        activo_fichaje = bool(activar_fichaje)
+    set_tenant_config(CONFIG_FICHAJE_OPERARIO, 'True' if activo_fichaje else 'False')
+    try:
+        from app.services.fichaje_operario_service import marcar_fichaje_preferencia_decidida
+        marcar_fichaje_preferencia_decidida()
+    except Exception:
+        pass
     set_tenant_config(CONFIG_DEMO_ACTIVA, 'True')
     return qty
 

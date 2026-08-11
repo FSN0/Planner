@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
 <link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}">
@@ -26,7 +26,10 @@
         </span>
       </div>
 
-      <div class="page-toolbar-actions planificador-filters">
+      <div class="page-toolbar-actions planificador-filters" data-tour="planif-filtros">
+        {% with tour_id='planificador_multi', tour_label=_('Tutorial'), tour_href=url_for('admin.planificador_jo', tour='planificador_multi', mode='solo') %}
+          {% include "components/_tour_cta.html" %}
+        {% endwith %}
         <button type="button"
                 class="btn-admin btn-admin-ghost planificador-filter-btn"
                 onclick="window.reordenarPorVentanaVisible()"
@@ -98,7 +101,7 @@
       </div>
     </div>
 
-    <div class="planificador-container">
+    <div class="planificador-container" data-tour="planif-grid">
         <div id="col-resizer" title="Arrastrar para ajustar tamaño"></div>
         <div id="col-resizer-ghost"></div>
         <div id="planificador-calendar"></div>
@@ -219,5 +222,5 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260810m"></script>
 {% endblock %}

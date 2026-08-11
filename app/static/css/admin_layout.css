@@ -1750,6 +1750,16 @@ body.layout-admin .navbar {
 html:not(.sidebar-config-mode) li.is-nav-hidden {
   display: none !important;
 }
+/* Durante la guía: mostrar entradas del menú aunque el usuario las haya ocultado */
+body.sp-tour-active li.is-nav-hidden:has([data-tour]),
+body.sp-tour-active li.is-nav-hidden[data-tour-forced-visible="1"] {
+  display: list-item !important;
+  opacity: 1;
+}
+body.sp-tour-active .sidebar-section.is-section-all-hidden:has([data-tour]),
+body.sp-tour-active .sidebar-section[data-tour-forced-visible="1"] {
+  display: block !important;
+}
 html:not(.sidebar-config-mode) .sidebar-section.is-section-all-hidden {
   display: none !important;
 }
@@ -1806,6 +1816,24 @@ html.sidebar-config-mode .admin-sidebar {
   border-radius: 4px;
   height: 2rem;
   margin: 0.15rem 0.35rem;
+}
+/* Listas vacías: zona de drop usable (sin altura no reciben el sortable) */
+html.sidebar-config-mode .sidebar-nav {
+  min-height: 2.5rem;
+  padding: 0.15rem 0.25rem 0.35rem;
+  border-radius: 6px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+html.sidebar-config-mode .sidebar-nav.is-empty-nav,
+html.sidebar-config-mode .sidebar-section.is-nav-empty > .sidebar-nav {
+  min-height: 2.75rem;
+  border: 1px dashed #475569;
+  background: rgba(15, 23, 42, 0.45);
+}
+html.sidebar-config-mode .sidebar-nav.is-empty-nav:hover,
+html.sidebar-config-mode .sidebar-section.is-nav-empty > .sidebar-nav.ui-sortable-over {
+  border-color: #38bdf8;
+  background: rgba(14, 165, 233, 0.12);
 }
 html.sidebar-collapsed .sidebar-config-btn,
 html.sidebar-collapsed .sidebar-config-bar {
@@ -3354,3 +3382,64 @@ body.layout-admin .swal2-toast { border-radius: 12px !important; }
 .sync-linkage-row:hover td {
   background: #f8fafc;
 }
+
+/* Indicador de navegación / espera (guía, menú, verify) */
+.sp-page-loading[hidden] { display: none !important; }
+.sp-page-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  pointer-events: none;
+}
+.sp-page-loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 35%;
+  background: linear-gradient(90deg, #0ea5e9, #2dd4bf);
+  animation: spPageLoadBar 1.1s ease-in-out infinite;
+}
+@keyframes spPageLoadBar {
+  0% { left: -35%; width: 35%; }
+  50% { left: 25%; width: 45%; }
+  100% { left: 100%; width: 35%; }
+}
+.sp-page-loading-card {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
+  pointer-events: none;
+}
+.sp-page-loading-spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-top-color: #2dd4bf;
+  border-radius: 50%;
+  animation: spPageSpin 0.7s linear infinite;
+}
+@keyframes spPageSpin { to { transform: rotate(360deg); } }
+html.sp-nav-loading,
+html.sp-nav-loading body {
+  cursor: progress;
+}
+
+.tour-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.tour-cta i { opacity: 0.9; }

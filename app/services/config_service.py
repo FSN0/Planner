@@ -1,6 +1,24 @@
+from flask import g, has_request_context
+
 from app import db
 from app.models import ConfiguracionGlobal
 from app.utils.crypto_utils import encrypt_data, decrypt_data
+
+_CACHE_ATTR = '_tenant_config_cache'
+
+
+def _cache():
+    if not has_request_context():
+        return None
+    cache = getattr(g, _CACHE_ATTR, None)
+    if cache is None:
+        cache = {}
+        setattr(g, _CACHE_ATTR, cache)
+    return cache
+
+
+def _cache_key(clave: str, desencriptar: bool) -> str:
+    return f'{clave}|{1 if desencriptar else 0}'
 
 
 def set_tenant_config(clave: str, valor: str, encriptar: bool = False):
@@ -22,15 +40,30 @@ def set_tenant_config(clave: str, valor: str, encriptar: bool = False):
 
     db.session.commit()
 
+    cache = _cache()
+    if cache is not None:
+        # Invalida ambas variantes (plain / decrypt)
+        cache.pop(_cache_key(clave, False), None)
+        cache.pop(_cache_key(clave, True), None)
+
 
 def get_tenant_config(clave: str, desencriptar: bool = False, default=None):
     """
     Obtiene una configuración del esquema del cliente actual.
     Si desencriptar=True, desencripta el valor al vuelo antes de devolverlo.
     Si la fila existe pero el valor está vacío, usa default (p.ej. env ODOO_*).
+    Cache por request para evitar N consultas idénticas en onboarding/sidebar.
     """
+    cache = _cache()
+    key = _cache_key(clave, desencriptar)
+    if cache is not None and key in cache:
+        stored = cache[key]
+        return default if stored['miss'] else stored['value']
+
     config = ConfiguracionGlobal.query.filter_by(clave=clave).first()
     if not config:
+        if cache is not None:
+            cache[key] = {'miss': True, 'value': None}
         return default
 
     valor = config.valor
@@ -41,6 +74,10 @@ def get_tenant_config(clave: str, desencriptar: bool = False, default=None):
             valor = config.valor
 
     if valor is None or (isinstance(valor, str) and not str(valor).strip()):
+        if cache is not None:
+            cache[key] = {'miss': True, 'value': None}
         return default
 
+    if cache is not None:
+        cache[key] = {'miss': False, 'value': valor}
     return valor

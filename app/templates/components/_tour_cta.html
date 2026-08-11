@@ -1,0 +1,13 @@
+{# CTA «Ver tutorial» — requiere tour_id y opcionalmente tour_label / tour_href #}
+{% if tenant_has_onboarding|default(false) and current_user.is_authenticated and current_user.role == 'admin' %}
+  {% set _tid = tour_id|default('') %}
+  {% if _tid %}
+  <a href="{{ tour_href|default(url_for('admin.primeros_pasos')) }}"
+     class="btn-admin btn-admin-ghost btn-admin-sm tour-cta"
+     data-tour-cta="{{ _tid }}"
+     title="{{ _('Abrir tutorial') }}">
+    <i class="fas fa-graduation-cap"></i>
+    <span>{{ tour_label|default(_('Tutorial')) }}</span>
+  </a>
+  {% endif %}
+{% endif %}

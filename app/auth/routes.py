@@ -256,7 +256,10 @@ def verificar_email():
             db.session.rollback()
         except Exception:
             pass
-    return redirect(destino or url_for('admin.panel'))
+    destino = destino or url_for('admin.panel')
+    # Pantalla mínima inmediata: el destino (p.ej. Primeros pasos) puede tardar;
+    # así el usuario ve feedback en cuanto abre el enlace del correo.
+    return render_template('auth_email_verified_boot.html', destino=destino)
 
 
 @auth_bp.route('/reenviar-verificacion', methods=['POST'])

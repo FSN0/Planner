@@ -1,5 +1,5 @@
 import os
-from flask import Flask, redirect, url_for, request, g, abort, current_app
+from flask import Flask, redirect, url_for, request, g, abort, current_app, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
@@ -284,48 +284,99 @@ def create_app():
     @app.context_processor
     def inject_notifications():
         from app.models import Solicitud, SolicitudVehiculo, ROLE_ADMIN, ROLE_JEFE
+        import time as _time
+
+        # Tras verificar email solo pintamos una pantalla mínima: no construir sidebar/badges.
+        if (request.endpoint or '') == 'auth.verificar_email':
+            return dict(
+                pending_notifications=0,
+                unread_logs_count=0,
+                unread_laboral_count=0,
+                modulos_activos={},
+                tenant_has_odoo=False,
+                tenant_has_odoo_alta=False,
+                tenant_has_integrations=False,
+                tenant_has_registro_jornada=True,
+                tenant_has_fichaje_operario=False,
+                tenant_has_avisos_laborales=False,
+                mostrar_onboarding=False,
+                onboarding_import_done={},
+                onboarding_fichaje_asked=False,
+                onboarding_fichaje_activo=False,
+                demo_data_activa=False,
+                sidebar_nav=None,
+            )
 
         pending_count = 0
         unread_logs_count = 0
         unread_laboral_count = 0
 
+        # Primeros pasos / onboarding: priorizar TTFB; los badges no son críticos ahí.
+        _light_endpoints = {
+            'admin.primeros_pasos',
+            'admin.api_tour_fichaje',
+        }
+        skip_heavy_badges = (request.endpoint or '') in _light_endpoints
+
         if current_user.is_authenticated:
             try:
-                if current_user.role == ROLE_ADMIN:
-                    pending_count = Solicitud.query.filter(
-                        Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                    ).count()
-                    pending_count += SolicitudVehiculo.query.filter(
-                        SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                    ).count()
+                # Cache corta en sesión: la guía dispara muchas navegaciones seguidas
+                # y los COUNT sobre system_logs pueden congelar workers.
+                _badge_ttl = 45
+                _badge_key = f'_nav_badges_{current_user.id}'
+                _cached = session.get(_badge_key)
+                _now = _time.time()
+                if (
+                    not skip_heavy_badges
+                    and isinstance(_cached, dict)
+                    and (_now - float(_cached.get('t') or 0)) < _badge_ttl
+                ):
+                    pending_count = int(_cached.get('pending') or 0)
+                    unread_logs_count = int(_cached.get('logs') or 0)
+                    unread_laboral_count = int(_cached.get('laboral') or 0)
+                elif not skip_heavy_badges:
+                    if current_user.role == ROLE_ADMIN:
+                        pending_count = Solicitud.query.filter(
+                            Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
+                        ).count()
+                        pending_count += SolicitudVehiculo.query.filter(
+                            SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
+                        ).count()
 
-                    from app.services.log_notification_service import get_total_unread_logs
-                    unread_logs_count = get_total_unread_logs(current_user.id)
-                    from app.services.tenant_modules import has_avisos_laborales
-                    if has_avisos_laborales():
-                        from app.services.log_notification_service import get_unread_laboral_logs
-                        unread_laboral_count = get_unread_laboral_logs(current_user.id)
-                elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
-                    from app.services.tenant_modules import has_avisos_laborales
-                    if has_avisos_laborales():
-                        from app.services.log_notification_service import get_unread_laboral_logs
-                        unread_laboral_count = get_unread_laboral_logs(current_user.id)
+                        from app.services.log_notification_service import get_total_unread_logs
+                        unread_logs_count = get_total_unread_logs(current_user.id)
+                        from app.services.tenant_modules import has_avisos_laborales
+                        if has_avisos_laborales():
+                            from app.services.log_notification_service import get_unread_laboral_logs
+                            unread_laboral_count = get_unread_laboral_logs(current_user.id)
+                    elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
+                        from app.services.tenant_modules import has_avisos_laborales
+                        if has_avisos_laborales():
+                            from app.services.log_notification_service import get_unread_laboral_logs
+                            unread_laboral_count = get_unread_laboral_logs(current_user.id)
 
-                # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
-                elif current_user.role == ROLE_JEFE:
-                    from sqlalchemy import or_
-                    from app.models import Obra
-                    pending_count = Solicitud.query.join(Obra).filter(
-                        or_(
-                            Solicitud.requested_by_id == current_user.id,
-                            Obra.jefe_obra_id == current_user.id,
-                        ),
-                        Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                    ).count()
-                    pending_count += SolicitudVehiculo.query.filter(
-                        SolicitudVehiculo.requested_by_id == current_user.id,
-                        SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                    ).count()
+                    # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
+                    elif current_user.role == ROLE_JEFE:
+                        from sqlalchemy import or_
+                        from app.models import Obra
+                        pending_count = Solicitud.query.join(Obra).filter(
+                            or_(
+                                Solicitud.requested_by_id == current_user.id,
+                                Obra.jefe_obra_id == current_user.id,
+                            ),
+                            Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                        ).count()
+                        pending_count += SolicitudVehiculo.query.filter(
+                            SolicitudVehiculo.requested_by_id == current_user.id,
+                            SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                        ).count()
+
+                    session[_badge_key] = {
+                        't': _now,
+                        'pending': pending_count,
+                        'logs': unread_logs_count,
+                        'laboral': unread_laboral_count,
+                    }
             except Exception:
                 try:
                     db.session.rollback()
@@ -371,18 +422,34 @@ def create_app():
         )
         mostrar_onboarding = False
         onboarding_import_done = {}
+        onboarding_fichaje_asked = False
+        onboarding_fichaje_activo = False
+        tenant_has_onboarding = bool(modulos_activos.get('onboarding'))
+        onboarding_completo = False
         if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
             try:
                 from app.services.onboarding_service import (
                     necesita_onboarding,
                     import_tutorials_done,
+                    onboarding_marcado_completo,
+                    tenant_tiene_onboarding,
                 )
+                from app.services.fichaje_operario_service import (
+                    fichaje_operario_activo,
+                    fichaje_preferencia_decidida,
+                )
+                tenant_has_onboarding = tenant_tiene_onboarding()
                 mostrar_onboarding = necesita_onboarding()
-                if mostrar_onboarding:
+                onboarding_completo = onboarding_marcado_completo() and not mostrar_onboarding
+                if tenant_has_onboarding:
                     onboarding_import_done = import_tutorials_done()
+                    onboarding_fichaje_asked = fichaje_preferencia_decidida()
+                    onboarding_fichaje_activo = fichaje_operario_activo()
             except Exception:
                 mostrar_onboarding = False
                 onboarding_import_done = {}
+                onboarding_fichaje_asked = False
+                onboarding_fichaje_activo = False
         demo_data_activa = False
         if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
             try:
@@ -405,6 +472,8 @@ def create_app():
                     'tenant_has_registro_jornada': tenant_has_registro_jornada,
                     'tenant_has_avisos_laborales': tenant_has_avisos_laborales,
                     'mostrar_onboarding': mostrar_onboarding,
+                    'tenant_has_onboarding': tenant_has_onboarding,
+                    'onboarding_completo': onboarding_completo,
                 })
             except Exception:
                 sidebar_nav = None
@@ -420,8 +489,12 @@ def create_app():
             tenant_has_registro_jornada=tenant_has_registro_jornada,
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
             tenant_has_avisos_laborales=tenant_has_avisos_laborales,
+            tenant_has_onboarding=tenant_has_onboarding,
+            onboarding_completo=onboarding_completo,
             mostrar_onboarding=mostrar_onboarding,
             onboarding_import_done=onboarding_import_done,
+            onboarding_fichaje_asked=onboarding_fichaje_asked,
+            onboarding_fichaje_activo=onboarding_fichaje_activo,
             demo_data_activa=demo_data_activa,
             sidebar_nav=sidebar_nav,
             user_can=user_can,

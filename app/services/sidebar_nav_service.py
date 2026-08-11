@@ -68,35 +68,52 @@ def _default_sections_blueprint() -> list[dict]:
         {
             'id': 'sec_plan',
             'title': str(_('Planificación')),
-            'items': [ITEM_TABLERO, ITEM_DIRECTORIO, ITEM_PLANIFICADOR, ITEM_REUNIONES],
+            'items': [ITEM_TABLERO, ITEM_PLANIFICADOR, ITEM_COCHES_LIBRES],
         },
         {
-            'id': 'sec_personal',
-            'title': str(_('Personal')),
-            'items': [ITEM_TRABAJADORES, ITEM_SUBCONTRATAS, ITEM_SOLICITUDES, ITEM_AUSENCIAS],
+            'id': 'sec_gestion',
+            # Maestros / fichas: obras, gente, empresas y vehículos
+            'title': str(_('Gestión')),
+            'items': [ITEM_DIRECTORIO, ITEM_TRABAJADORES, ITEM_SUBCONTRATAS, ITEM_FLOTA],
         },
         {
-            'id': 'sec_fleet',
-            'title': str(_('Vehículos')),
-            'items': [ITEM_FLOTA, ITEM_COCHES_LIBRES, ITEM_AUDITORIA_VEH],
+            'id': 'sec_solicitudes',
+            'title': str(_('Solicitudes')),
+            'items': [ITEM_SOLICITUDES, ITEM_AUSENCIAS],
         },
         {
-            'id': 'sec_jornada',
-            'title': str(_('Jornada')),
-            'items': [ITEM_AUDITORIA_FICH, ITEM_REGISTRO_JORNADA],
+            'id': 'sec_audit',
+            'title': str(_('Auditorías')),
+            'items': [ITEM_AUDITORIA_FICH, ITEM_REGISTRO_JORNADA, ITEM_AUDITORIA_VEH],
         },
         {
             'id': 'sec_sys',
             'title': str(_('Sistema')),
+            # Permisos va como submenú de Configuración (no ítem suelto).
+            # Logs queda oculto por defecto (_default_hidden).
             'items': [
                 ITEM_INTEGRACIONES,
                 ITEM_PRIMEROS_PASOS,
                 ITEM_CONFIGURACION,
-                ITEM_PERMISOS,
+                ITEM_REUNIONES,
                 ITEM_LOGS,
             ],
         },
     ]
+
+
+def _default_hidden() -> list[str]:
+    """Ítems del catálogo ocultos en el menú por defecto (siguen en personalizar)."""
+    return [ITEM_LOGS]
+
+
+def _is_stock_v1_layout(sections: list) -> bool:
+    """True si las prefs parecen el menú stock anterior (antes del rediseño)."""
+    ids = {str(s.get('id')) for s in sections if isinstance(s, dict)}
+    if 'sec_gestion' in ids or 'sec_solicitudes' in ids or 'sec_audit' in ids:
+        return False
+    # Layout viejo tenía Personal + Vehículos + Jornada
+    return 'sec_personal' in ids and 'sec_fleet' in ids and 'sec_jornada' in ids
 
 
 def _ep() -> str:
@@ -152,11 +169,11 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'kind': 'link',
             'href': url_for('jefe.obras_detailed') if _is_jefe(u) else url_for('admin.obras_detailed'),
             'active': _ep() in ('admin.obras_detailed', 'jefe.obras_detailed'),
-            'data_tour': None,
+            'data_tour': 'nav-tablero',
         },
         ITEM_DIRECTORIO: {
             'id': ITEM_DIRECTORIO,
-            'label': str(_('Directorio')),
+            'label': str(_('Directorio de obras')),
             'icon': 'fa-building',
             'kind': 'link',
             'href': url_for('admin.obras_list'),
@@ -170,7 +187,7 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'kind': 'link',
             'href': url_for('admin.planificador_jo'),
             'active': 'planificador' in _ep(),
-            'data_tour': None,
+            'data_tour': 'nav-planificador',
         },
         ITEM_REUNIONES: {
             'id': ITEM_REUNIONES,
@@ -234,11 +251,11 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'kind': 'link',
             'href': url_for('admin.vehiculos_libres'),
             'active': _ep() == 'admin.vehiculos_libres',
-            'data_tour': None,
+            'data_tour': 'nav-coches-libres',
         },
         ITEM_AUDITORIA_VEH: {
             'id': ITEM_AUDITORIA_VEH,
-            'label': str(_('Auditoría')),
+            'label': str(_('Auditoría vehículos')),
             'icon': 'fa-clipboard-check',
             'kind': 'link',
             'href': url_for('sync.auditoria_vehiculos'),
@@ -267,17 +284,15 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'id': ITEM_INTEGRACIONES,
             'label': str(_('Integraciones')),
             'icon': 'fa-plug',
-            'kind': 'integrations',
-            'href': '#',
+            'kind': 'link',
+            'href': url_for('sync.panel'),
             'active': _ep() in ('sync.panel', 'sync.odoo_panel'),
             'data_tour': None,
-            'open': _ep() in ('sync.panel', 'sync.odoo_panel'),
-            'children': _integration_children(ctx),
         },
         ITEM_PRIMEROS_PASOS: {
             'id': ITEM_PRIMEROS_PASOS,
-            'label': str(_('Primeros pasos')),
-            'icon': 'fa-rocket',
+            'label': str(_('Academia')) if ctx.get('onboarding_completo') else str(_('Primeros pasos')),
+            'icon': 'fa-graduation-cap' if ctx.get('onboarding_completo') else 'fa-rocket',
             'kind': 'link',
             'href': url_for('admin.primeros_pasos'),
             'active': _ep() == 'admin.primeros_pasos',
@@ -287,12 +302,16 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'id': ITEM_CONFIGURACION,
             'label': str(_('Configuración')),
             'icon': 'fa-sliders-h',
-            'kind': 'link',
+            'kind': 'group',
             'href': url_for('admin.configuracion_global'),
-            'active': 'configuracion' in _ep() and 'permisos' not in _ep(),
+            'active': ('configuracion' in _ep()) or (_ep() == 'admin.permisos_roles'),
             'data_tour': None,
+            'open': ('configuracion' in _ep()) or (_ep() == 'admin.permisos_roles'),
+            'children': _config_children(ctx),
         },
         ITEM_PERMISOS: {
+            # Conservado por compatibilidad con prefs antiguas; en el layout
+            # nuevo vive como hijo de Configuración.
             'id': ITEM_PERMISOS,
             'label': str(_('Permisos')),
             'icon': 'fa-user-shield',
@@ -316,7 +335,33 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
     }
 
 
+def _config_children(ctx: dict) -> list[dict]:
+    """Subentradas bajo Configuración (ajustes + permisos)."""
+    u = ctx.get('user') or current_user
+    kids = [{
+        'id': 'cfg_general',
+        'label': str(_('Ajustes')),
+        'icon': 'fa-sliders-h',
+        'href': url_for('admin.configuracion_global'),
+        'active': 'configuracion' in _ep() and 'permisos' not in _ep(),
+        'external': False,
+    }]
+    if user_can(u, 'permisos', 'r'):
+        kids.append({
+            'id': 'cfg_permisos',
+            'label': str(_('Permisos')),
+            'icon': 'fa-user-shield',
+            'href': url_for('admin.permisos_roles'),
+            'active': _ep() == 'admin.permisos_roles',
+            'external': False,
+        })
+    # Reuniones encaja en sistema operativo de la oficina; si el usuario la
+    # tiene visible y no está en otra sección, también puede vivir aquí vía prefs.
+    return kids
+
+
 def _integration_children(ctx: dict) -> list[dict]:
+    """Legacy: el hub es ahora un enlace; se mantiene por si hay prefs antiguas."""
     kids = []
     if ctx.get('tenant_has_odoo'):
         kids.append({
@@ -378,11 +423,12 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_REGISTRO_JORNADA:
         return user_can(user, 'registro_jornada', 'r') and bool(ctx.get('tenant_has_registro_jornada'))
     if item_id == ITEM_INTEGRACIONES:
-        return user_can(user, 'integraciones', 'r') and bool(
-            ctx.get('tenant_has_integrations') or ctx.get('tenant_has_odoo_alta')
-        )
+        # Visible siempre si tiene permiso: sin módulos muestra página de contacto.
+        return user_can(user, 'integraciones', 'r')
     if item_id == ITEM_PRIMEROS_PASOS:
-        return user_can(user, 'primeros_pasos', 'r') and bool(ctx.get('mostrar_onboarding'))
+        return user_can(user, 'primeros_pasos', 'r') and bool(
+            ctx.get('mostrar_onboarding') or ctx.get('tenant_has_onboarding')
+        )
     if item_id == ITEM_CONFIGURACION:
         return user_can(user, 'configuracion', 'r')
     if item_id == ITEM_PERMISOS:
@@ -464,10 +510,20 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
 
     prefs = _raw_prefs(user)
     sections_pref = prefs.get('sections') if isinstance(prefs.get('sections'), list) else None
-    hidden_pref = set(prefs.get('hidden') or []) if isinstance(prefs.get('hidden'), list) else set()
+    hidden_raw = prefs.get('hidden') if isinstance(prefs.get('hidden'), list) else None
 
-    if not sections_pref:
+    # Migrar el layout stock antiguo (Personal/Vehículos/Jornada) al nuevo por defecto
+    if sections_pref is not None and _is_stock_v1_layout(sections_pref):
+        sections_pref = None
+        hidden_raw = list(_default_hidden())
+
+    if sections_pref is None and hidden_raw is None:
         sections_pref = _default_sections_blueprint()
+        hidden_pref = set(_default_hidden())
+    else:
+        if sections_pref is None:
+            sections_pref = _default_sections_blueprint()
+        hidden_pref = set(hidden_raw or [])
 
     placed: set[str] = set()
     sections_out = []
@@ -476,10 +532,13 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
             continue
         sid = str(sec.get('id') or f'sec_{uuid.uuid4().hex[:8]}')
         title = str(sec.get('title') if sec.get('title') is not None else '')
+        sec_items = [str(x) for x in (sec.get('items') or [])]
         items_resolved = []
-        for key in (sec.get('items') or []):
-            key = str(key)
+        for key in sec_items:
             if key not in available or key in placed:
+                continue
+            # Permisos vive bajo Configuración; no duplicar como ítem suelto
+            if key == ITEM_PERMISOS and ITEM_CONFIGURACION in sec_items:
                 continue
             placed.add(key)
             item = copy.deepcopy(available[key])
@@ -490,6 +549,9 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
             'title': title,
             'items': items_resolved,
         })
+
+    if ITEM_CONFIGURACION in placed:
+        placed.add(ITEM_PERMISOS)
 
     # Ítems nuevos (permisos nuevos) que no estaban en prefs → sección al final
     orphan_keys = [k for k in available.keys() if k not in placed]

@@ -26,7 +26,7 @@
 }
 .sp-tour-card {
   position: fixed;
-  z-index: 12001;
+  z-index: 13000;
   max-width: 380px;
   background: #fff;
   border-radius: 12px;
@@ -192,6 +192,28 @@ body.sp-tour-active .sp-tour-target {
   z-index: 12002 !important;
   pointer-events: auto !important;
 }
+/* Sticky del tablero: relative anula sticky y la columna de libres «salta» abajo */
+body.sp-tour-active .kanban-libres-panel.sp-tour-target,
+body.sp-tour-active .col-libres.sp-tour-target,
+body.sp-tour-active [data-tour="tablero-libres"].sp-tour-target,
+body.sp-tour-active .kanban-sticky-header.sp-tour-target {
+  position: sticky !important;
+}
+/* La fecha vive dentro de la cabecera sticky: no convertirla en relative/sticky */
+body.sp-tour-active [data-tour="tablero-fecha"].sp-tour-target,
+body.sp-tour-active .timeline-header-wrapper.sp-tour-target {
+  position: static !important;
+}
+/* vis.js usa position:absolute; relative rompe el layout (desaparecen obras) */
+body.sp-tour-active .vis-panel.sp-tour-target,
+body.sp-tour-active .vis-item.sp-tour-target,
+body.sp-tour-active .vis-label.sp-tour-target,
+body.sp-tour-active .vis-labelset.sp-tour-target,
+body.sp-tour-active .vis-foreground.sp-tour-target,
+body.sp-tour-active .vis-time-axis.sp-tour-target,
+body.sp-tour-active .vis-timeline.sp-tour-target {
+  position: absolute !important;
+}
 body.sp-tour-active tr.sp-tour-target {
   outline: 2px solid #38bdf8;
   outline-offset: -2px;
@@ -227,6 +249,23 @@ body.sp-tour-active tr.sp-tour-target td {
   background: #f0f9ff !important;
 }
 body.sp-tour-active [data-tour="audit-aceptar"].sp-tour-target {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+/* El helper de drag queda bajo el tip del tour (z ~12001); subirlo para que se vea */
+body.sp-tour-active .ui-draggable-dragging,
+body.sp-tour-active .ui-draggable-helper,
+body.sp-tour-active .worker-chip.ui-draggable-dragging {
+  z-index: 13050 !important;
+}
+body.sp-tour-active .fc-ghost-event.sp-tour-target,
+body.sp-tour-active .univ-calendar-panel .sp-tour-target,
+body.sp-tour-active .vis-item.sp-tour-target {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+body.sp-tour-active #worker-popover.sp-tour-target {
+  z-index: 13040 !important;
   outline: 2px solid #38bdf8;
   outline-offset: 2px;
 }

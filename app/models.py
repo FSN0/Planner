@@ -1002,7 +1002,8 @@ class ConfiguracionGlobal(db.Model):
     __tablename__ = 'configuracion_global'
     id = db.Column(db.Integer, primary_key=True)
     clave = db.Column(db.String(50), unique=True, nullable=False)
-    valor = db.Column(db.String(255), nullable=False)
+    # Text: Academia y otros JSON de onboarding superan con facilidad 255 chars.
+    valor = db.Column(db.Text, nullable=False)
 
     def __repr__(self):
         return f'<ConfiguracionGlobal {self.clave}={self.valor}>'

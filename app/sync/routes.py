@@ -59,9 +59,7 @@ def _require_integration_access():
 @login_required
 @roles_required(ROLE_ADMIN)
 def panel():
-    """Hub de módulos de integración contratados (solo admin)."""
-    if not _require_integration_access():
-        return redirect(url_for('admin.panel'))
+    """Hub de integraciones: módulos activos o página de contacto si no hay ninguno."""
     modulos_activos = _tenant_modulos()
     return render_template(
         'sync/integrations_hub.html',

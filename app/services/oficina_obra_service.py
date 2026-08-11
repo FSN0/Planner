@@ -35,13 +35,11 @@ def buscar_obra_oficina(incluir_borradas=False):
     if obra:
         return obra
 
-    q = Obra.query
+    # Fallback JSONB sin cargar todas las obras en memoria
+    q = Obra.query.filter(Obra.external_ids.contains({'sistema': 'oficina'}))
     if not incluir_borradas:
         q = q.filter(Obra.is_deleted.is_(False))
-    for candidata in q.order_by(Obra.id.asc()).all():
-        if es_obra_oficina(candidata):
-            return candidata
-    return None
+    return q.order_by(Obra.id.asc()).first()
 
 
 def asegurar_obra_oficina():

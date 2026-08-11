@@ -378,6 +378,116 @@ def _build_hito(log, user, obra_cache):
     }
 
 
+def _planificacion_log_covers_obra(logs, obra):
+    if not obra:
+        return False
+    label = format_obra_label(obra)
+    codigo = (obra.codigo or "").strip()
+    nombre = (obra.nombre or "").strip()
+    for log in logs:
+        if log.category != "planificacion":
+            continue
+        detail = log.detail or ""
+        if "Asignado" not in detail:
+            continue
+        if label and label in detail:
+            return True
+        if codigo and codigo in detail:
+            return True
+        if nombre and nombre in detail:
+            return True
+    return False
+
+
+def _synthetic_asignacion_hito(user, obra, fecha_obj, created_at=None, source_id=None):
+    """Hito de planificación cuando existe Asignacion/obra_planificada sin SystemLog."""
+    label = format_obra_label(obra)
+    user_nombre = f"{user.name} {user.lastname}".strip() if user else "Operario"
+    detail = (
+        f"Asignado {user_nombre} → '{label}' "
+        f"({fecha_obj.strftime('%d/%m/%Y')})."
+    )
+    ts = created_at
+    if not ts:
+        ts = datetime.combine(fecha_obj, datetime.min.time()) + timedelta(hours=6)
+    local_ts = format_datetime(ts, "%Y-%m-%d %H:%M:%S")
+    style = CATEGORY_STYLES["planificacion"]
+    return {
+        "id": f"asig-{source_id or obra.id}-{fecha_obj.isoformat()}",
+        "sort_time": local_ts,
+        "prioridad": 2,
+        "fecha": format_datetime(ts, "%d/%m %H:%M"),
+        "icon_class": style["icon"],
+        "icon_color": style["color"],
+        "titulo": "Planificación",
+        "autor": "Planificación",
+        "actor_user_id": None,
+        "actor_url": None,
+        "descripcion": detail,
+        "descripcion_html": str(_link_obras_in_text(detail, {label.lower(): obra} if label else {})),
+    }
+
+
+def _append_missing_planificacion_hitos(hitos, logs, user, fecha_obj, obra_cache):
+    """
+    Si hay asignación (o obra planificada en el registro de fichaje) sin log de
+    planificación, añade el hito para que la actividad del día cuente la historia.
+    """
+    from app.models import Asignacion
+
+    obra_ids = set()
+    created_by_obra = {}
+
+    for asig in Asignacion.query.filter_by(user_id=user.id, fecha=fecha_obj).all():
+        if asig.obra_id:
+            obra_ids.add(asig.obra_id)
+            if asig.created_at and asig.obra_id not in created_by_obra:
+                created_by_obra[asig.obra_id] = asig.created_at
+
+    for reg in RegistroFichaje.query.filter_by(user_id=user.id, fecha=fecha_obj).all():
+        if reg.obra_planificada_id:
+            obra_ids.add(reg.obra_planificada_id)
+
+    if not obra_ids:
+        return hitos
+
+    out = list(hitos or [])
+    # Quitar placeholder "Sin actividad" si vamos a añadir hechos reales
+    if len(out) == 1 and out[0].get("titulo") == "Sin actividad":
+        out = []
+
+    for obra_id in sorted(obra_ids):
+        obra = Obra.query.get(obra_id)
+        if not obra:
+            continue
+        obra_cache[(obra.codigo or "").lower()] = obra
+        obra_cache[(obra.nombre or "").lower()] = obra
+        if _planificacion_log_covers_obra(logs, obra):
+            continue
+        # Evitar duplicar si ya hay hito sintético/real con el mismo label
+        label = format_obra_label(obra)
+        already = False
+        for h in out:
+            if h.get("titulo") in ("Planificación",) or "Asignado" in (h.get("descripcion") or ""):
+                if label and label in (h.get("descripcion") or ""):
+                    already = True
+                    break
+        if already:
+            continue
+        out.append(
+            _synthetic_asignacion_hito(
+                user,
+                obra,
+                fecha_obj,
+                created_at=created_by_obra.get(obra_id),
+                source_id=obra_id,
+            )
+        )
+
+    out.sort(key=lambda x: (x.get("sort_time") or "", x.get("prioridad") or 0))
+    return out
+
+
 def build_person_day_timeline(user_id, fecha_obj):
     user = User.query.get(user_id)
     if not user:
@@ -393,6 +503,9 @@ def build_person_day_timeline(user_id, fecha_obj):
 
     obra_cache = {}
     hitos = [_build_hito(log, user, obra_cache) for log in logs_del_dia]
+    hitos = _append_missing_planificacion_hitos(
+        hitos, logs_del_dia, user, fecha_obj, obra_cache
+    )
     hitos.sort(key=lambda x: (x["sort_time"], x["prioridad"]))
 
     if not hitos:

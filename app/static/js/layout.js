@@ -5,6 +5,9 @@ document.addEventListener("DOMContentLoaded", function() {
         document.body.classList.remove('preload');
     }, 100);
 
+    // 1b. Indicador de navegación (sidebar / enlaces internos): feedback inmediato
+    initPageNavLoading();
+
     // 2. Lógica del Sidebar (Menú lateral)
     var toggle = document.getElementById("sidebar-toggle");
     
@@ -45,6 +48,52 @@ document.addEventListener("DOMContentLoaded", function() {
     // 4. Personalizar menú lateral
     initSidebarConfig();
 });
+
+function initPageNavLoading() {
+    if (document.getElementById("sp-page-loading")) return;
+
+    var bar = document.createElement("div");
+    bar.id = "sp-page-loading";
+    bar.className = "sp-page-loading";
+    bar.setAttribute("hidden", "");
+    bar.innerHTML =
+        '<div class="sp-page-loading-bar" aria-hidden="true"></div>' +
+        '<div class="sp-page-loading-card" role="status" aria-live="polite">' +
+        '<div class="sp-page-loading-spinner" aria-hidden="true"></div>' +
+        '<span class="sp-page-loading-text">Cargando…</span>' +
+        "</div>";
+    document.body.appendChild(bar);
+
+    function show(msg) {
+        var text = bar.querySelector(".sp-page-loading-text");
+        if (text && msg) text.textContent = msg;
+        bar.removeAttribute("hidden");
+        document.documentElement.classList.add("sp-nav-loading");
+    }
+
+    function hide() {
+        bar.setAttribute("hidden", "");
+        document.documentElement.classList.remove("sp-nav-loading");
+    }
+
+    window.SP_pageLoading = { show: show, hide: hide };
+
+    document.addEventListener("click", function (ev) {
+        if (document.documentElement.classList.contains("sidebar-config-mode")) return;
+        var a = ev.target.closest("a[href]");
+        if (!a) return;
+        if (ev.defaultPrevented || ev.button !== 0) return;
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+        if (a.target && a.target !== "_self") return;
+        var href = a.getAttribute("href") || "";
+        if (!href || href.charAt(0) === "#" || href.indexOf("javascript:") === 0) return;
+        // Solo navegación misma origen / relativa
+        if (/^https?:\/\//i.test(href) && href.indexOf(window.location.origin) !== 0) return;
+        show("Cargando…");
+    }, true);
+
+    window.addEventListener("pageshow", function () { hide(); });
+}
 
 function initSidebarConfig() {
     var configBtn = document.getElementById("sidebar-config-btn");
@@ -150,9 +199,20 @@ function initSidebarConfig() {
             });
     }
 
+    function markEmptyNavs() {
+        sectionsRoot.querySelectorAll(".sidebar-section").forEach(function (sec) {
+            var nav = sec.querySelector(":scope > .sidebar-nav");
+            if (!nav) return;
+            var hasItem = !!nav.querySelector(":scope > li[data-nav-id]");
+            sec.classList.toggle("is-nav-empty", !hasItem);
+            nav.classList.toggle("is-empty-nav", !hasItem);
+        });
+    }
+
     function bindSortables() {
         if (typeof $ === "undefined" || !$.fn.sortable) return;
         destroySortables();
+        markEmptyNavs();
         $("#sidebar-sections").sortable({
             handle: ".sidebar-sec-handle",
             axis: "y",
@@ -160,15 +220,26 @@ function initSidebarConfig() {
             placeholder: "sidebar-section-placeholder",
             forcePlaceholderSize: true,
         });
+        // Sin axis:y — facilita soltar en listas vacías / otras secciones.
+        // dropOnEmpty + min-height CSS: las .sidebar-nav vacías deben poder recibir.
         $("#sidebar-sections .sidebar-nav").sortable({
             connectWith: "#sidebar-sections .sidebar-nav",
             handle: ".sidebar-item-handle",
-            axis: "y",
             tolerance: "pointer",
+            dropOnEmpty: true,
             placeholder: "sidebar-item-placeholder",
             forcePlaceholderSize: true,
             receive: function () {
-                // ok
+                markEmptyNavs();
+            },
+            remove: function () {
+                markEmptyNavs();
+            },
+            stop: function () {
+                markEmptyNavs();
+                try {
+                    $("#sidebar-sections .sidebar-nav").sortable("refresh");
+                } catch (e) { /* ignore */ }
             },
         });
     }
@@ -210,6 +281,7 @@ function initSidebarConfig() {
             sectionsRoot.appendChild(wrap);
             bindSortables();
             syncTitleInputs();
+            markEmptyNavs();
         });
     }
 

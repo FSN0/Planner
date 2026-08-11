@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <style>
   .rj-kpis {
     display: grid;
@@ -128,6 +128,9 @@
         <span class="page-toolbar-count">Informe para Inspección</span>
       </div>
       <div class="page-toolbar-actions">
+        {% with tour_id='fichajes', tour_label=_('Tutorial fichajes'), tour_href=url_for('admin.personal', tour='fichajes', mode='solo') %}
+          {% include "components/_tour_cta.html" %}
+        {% endwith %}
         {% if desde_onboarding or mostrar_onboarding %}
         <a href="{{ url_for('admin.primeros_pasos') }}" class="btn-admin btn-admin-primary">
           <i class="fas fa-arrow-left"></i> Volver a primeros pasos

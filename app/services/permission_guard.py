@@ -12,6 +12,7 @@ from app.services.permission_service import user_can
 _ADMIN_RULES = (
     ('/admin/permisos', 'permisos', 'r', {'POST': 'w'}),
     ('/admin/configuracion', 'configuracion', 'r', {'POST': 'w'}),
+    ('/admin/api/tour', 'primeros_pasos', 'r', {'POST': 'w'}),
     ('/admin/primeros-pasos', 'primeros_pasos', 'r', {'POST': 'w'}),
     ('/admin/obras_detailed', 'tablero', 'r', {}),
     ('/admin/planificador', 'planificador', 'r', {'POST': 'w'}),

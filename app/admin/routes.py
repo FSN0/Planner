@@ -1168,6 +1168,18 @@ def vehiculos():
     )
 
 
+@admin_bp.route("/vehiculos/nuevo", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def vehiculos_nuevo():
+    """Formulario de alta (misma plantilla que editar)."""
+    return render_template(
+        "admin_vehiculo_form.html",
+        vehiculo=None,
+        form_data={},
+    )
+
+
 @admin_bp.route("/vehiculos/crear", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -1177,10 +1189,17 @@ def vehiculos_crear():
     matricula = (request.form.get('matricula') or '').strip().upper() or None
     marca = (request.form.get('marca') or '').strip() or None
     modelo = (request.form.get('modelo') or '').strip() or None
+    from_form = request.form.get('from_form') == '1'
 
     if not nombre:
         flash('Indica un nombre para el vehículo.', 'danger')
-        return redirect(url_for('admin.vehiculos'))
+        if from_form:
+            return render_template(
+                "admin_vehiculo_form.html",
+                vehiculo=None,
+                form_data=request.form,
+            )
+        return redirect(url_for('admin.vehiculos_nuevo'))
 
     if matricula:
         dup = Vehiculo.query.filter(
@@ -1188,7 +1207,13 @@ def vehiculos_crear():
         ).first()
         if dup:
             flash(f'Ya existe un vehículo con matrícula {matricula}.', 'danger')
-            return redirect(url_for('admin.vehiculos'))
+            if from_form:
+                return render_template(
+                    "admin_vehiculo_form.html",
+                    vehiculo=None,
+                    form_data=request.form,
+                )
+            return redirect(url_for('admin.vehiculos_nuevo'))
 
     v = Vehiculo(
         nombre=nombre[:120],
@@ -1200,22 +1225,36 @@ def vehiculos_crear():
     db.session.add(v)
     db.session.commit()
     flash(f'Vehículo «{v.label()}» dado de alta.', 'success')
-    return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
+    return redirect(url_for('admin.vehiculos'))
 
 
-@admin_bp.route("/vehiculos/<int:vehiculo_id>/editar", methods=["POST"])
+@admin_bp.route("/vehiculos/<int:vehiculo_id>/editar", methods=["GET", "POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
 def vehiculos_editar(vehiculo_id):
     v = Vehiculo.query.get_or_404(vehiculo_id)
+    if request.method == "GET":
+        return render_template(
+            "admin_vehiculo_form.html",
+            vehiculo=v,
+            form_data={},
+        )
+
     nombre = (request.form.get('nombre') or '').strip()
     matricula = (request.form.get('matricula') or '').strip().upper() or None
     marca = (request.form.get('marca') or '').strip() or None
     modelo = (request.form.get('modelo') or '').strip() or None
+    from_form = request.form.get('from_form') == '1'
 
     if not nombre:
         flash('El nombre no puede quedar vacío.', 'danger')
-        return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
+        if from_form:
+            return render_template(
+                "admin_vehiculo_form.html",
+                vehiculo=v,
+                form_data=request.form,
+            )
+        return redirect(url_for('admin.vehiculos_editar', vehiculo_id=v.id))
 
     if matricula:
         dup = Vehiculo.query.filter(
@@ -1224,12 +1263,20 @@ def vehiculos_editar(vehiculo_id):
         ).first()
         if dup:
             flash(f'Ya existe otro vehículo con matrícula {matricula}.', 'danger')
-            return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
+            if from_form:
+                return render_template(
+                    "admin_vehiculo_form.html",
+                    vehiculo=v,
+                    form_data=request.form,
+                )
+            return redirect(url_for('admin.vehiculos_editar', vehiculo_id=v.id))
 
     v.nombre = nombre[:120]
     v.matricula = matricula[:40] if matricula else None
     v.marca = marca[:80] if marca else None
     v.modelo = modelo[:80] if modelo else None
+    if from_form:
+        v.active = request.form.get('active') in ('1', 'on', 'true', 'yes')
     db.session.commit()
     flash('Vehículo actualizado.', 'success')
     return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
@@ -1887,7 +1934,7 @@ def panel_laboral():
 @roles_required(ROLE_ADMIN)
 def primeros_pasos():
     """
-    Hub de arranque: guía interactiva, import Excel, demo o saltar.
+    Hub de arranque + Academia permanente de tutoriales cortos.
     """
     from app.services.onboarding_service import (
         estado_onboarding,
@@ -1896,6 +1943,7 @@ def primeros_pasos():
         tenant_tiene_onboarding,
     )
     from app.services.demo_data_service import demo_activa, demo_cantidades
+    from app.services.tour_catalog_service import evaluate_academia
 
     if not tenant_tiene_onboarding():
         return redirect(url_for("admin.panel"))
@@ -1907,20 +1955,50 @@ def primeros_pasos():
                 marcar_onboarding_completo()
                 flash(
                     "Listo. Ya puedes usar SignaPlan a tu ritmo. "
-                    "Primeros pasos sigue disponible en el menú.",
+                    "La Academia de tutoriales sigue en el menú.",
                     "success" if accion == "listo" else "info",
                 )
-                return redirect(url_for("admin.obras_detailed"))
+                return redirect(url_for("admin.primeros_pasos"))
             elif accion == "demo_generar":
                 from app.services.demo_data_service import generar_datos_demo
-                qty = generar_datos_demo(actor_user=current_user)
+                from app.services.tour_catalog_service import mark_tour_done, set_onboarding_path
+                fichaje_raw = (request.form.get("fichaje") or "").strip().lower()
+                activar_fichaje = None
+                if fichaje_raw in ("1", "true", "si", "sí", "yes"):
+                    activar_fichaje = True
+                elif fichaje_raw in ("0", "false", "no"):
+                    activar_fichaje = False
+                qty = generar_datos_demo(
+                    actor_user=current_user,
+                    activar_fichaje=activar_fichaje,
+                )
+                try:
+                    set_onboarding_path('demo')
+                    mark_tour_done('demo')
+                except Exception:
+                    pass
                 flash(
                     f"Datos de ejemplo listos: {qty['obras']} obras, "
                     f"{qty['empleados']} trabajadores, {qty['vehiculos']} vehículos. "
-                    f"Te guiamos por lo esencial; el banner permite borrarlos cuando quieras.",
+                    f"Ya tienes material para los siguientes tutoriales.",
                     "success",
                 )
-                return redirect(url_for("admin.obras_detailed", tour="demo"))
+                return redirect(url_for("admin.primeros_pasos", focus="next", demo="1"))
+            elif accion == "elegir_camino":
+                from app.services.tour_catalog_service import set_onboarding_path
+                camino = (request.form.get("camino") or "").strip().lower()
+                set_onboarding_path(camino)
+                if camino == "guide":
+                    return redirect(url_for("admin.primeros_pasos", tour="start"))
+                if camino == "skip":
+                    marcar_onboarding_completo()
+                    flash(
+                        "Listo. Ya puedes usar SignaPlan a tu ritmo. "
+                        "La Academia de tutoriales sigue en el menú.",
+                        "info",
+                    )
+                    return redirect(url_for("admin.panel"))
+                return redirect(url_for("admin.primeros_pasos"))
             elif accion == "demo_borrar":
                 from app.services.demo_data_service import borrar_datos_demo
                 from app.services.config_service import set_tenant_config
@@ -1943,10 +2021,21 @@ def primeros_pasos():
 
         return redirect(url_for("admin.primeros_pasos"))
 
+    # Al terminar la guía, el JS vuelve con ?done=seed — persistir el tic aunque
+    # el POST /api/tour/seed/complete se hubiera perdido en la navegación.
+    if (request.args.get("done") or "").strip().lower() == "seed":
+        from app.services.tour_catalog_service import mark_tour_done
+        try:
+            mark_tour_done("seed")
+        except Exception:
+            pass
+        # Evitar re-marcar en F5: limpiar el query param
+        focus = (request.args.get("focus") or "guide").strip() or "guide"
+        return redirect(url_for("admin.primeros_pasos", focus=focus))
+
     estado = estado_onboarding()
-    tour_q = (request.args.get("tour") or "").strip().lower()
-    if not tour_q and not necesita_onboarding():
-        return redirect(url_for("admin.panel"))
+    academia = evaluate_academia(current_user)
+    show_start = necesita_onboarding()
 
     return render_template(
         "admin_primeros_pasos.html",
@@ -1954,7 +2043,33 @@ def primeros_pasos():
         demo_cantidades=demo_cantidades(),
         demo_activa=demo_activa(),
         empresa_vacia=estado.get("empresa_vacia", False),
+        academia=academia,
+        show_start_cards=show_start,
     )
+
+
+@admin_bp.route("/api/tour/<tour_id>/start", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_tour_start(tour_id):
+    from app.services.tour_catalog_service import mark_tour_started, evaluate_academia
+    try:
+        mark_tour_started(tour_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    return jsonify({'success': True, 'academia': evaluate_academia(current_user)})
+
+
+@admin_bp.route("/api/tour/<tour_id>/complete", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_tour_complete(tour_id):
+    from app.services.tour_catalog_service import mark_tour_done, evaluate_academia
+    try:
+        mark_tour_done(tour_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    return jsonify({'success': True, 'academia': evaluate_academia(current_user)})
 
 
 @admin_bp.route("/api/tour/fichaje", methods=["POST"])
@@ -1965,6 +2080,7 @@ def api_tour_fichaje():
     from app.services.config_service import set_tenant_config
     from app.services.fichaje_operario_service import (
         CONFIG_FICHAJE_OPERARIO,
+        marcar_fichaje_preferencia_decidida,
         tenant_tiene_fichaje_operario_module,
     )
     data = request.get_json(silent=True) or {}
@@ -1975,6 +2091,7 @@ def api_tour_fichaje():
             'message': 'Este espacio no tiene el módulo de fichaje operario.',
         }), 400
     set_tenant_config(CONFIG_FICHAJE_OPERARIO, 'True' if activo else 'False')
+    marcar_fichaje_preferencia_decidida()
     return jsonify({'success': True, 'activo': activo})
 
 
@@ -1986,14 +2103,33 @@ def tour_fichaje_probar():
     Cierra la sesión de oficina y abre /mi/entrar para que el admin
     pruebe el fichaje como el operario creado en la guía.
     Guarda el id del admin para poder volver al tablero después.
+    Activa la obra «Oficina» y la deja preseleccionada en /mi (tutorial).
     """
     from flask import session
     from flask_login import logout_user
+    from app.services.config_service import set_tenant_config
+    from app.services.oficina_obra_service import (
+        CONFIG_OBRA_OFICINA,
+        sincronizar_obra_oficina,
+    )
+
+    try:
+        set_tenant_config(CONFIG_OBRA_OFICINA, 'True')
+        sincronizar_obra_oficina(True)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    chapter = (request.args.get('chapter') or 'fichajes').strip() or 'fichajes'
+    if chapter not in ('fichaje', 'fichajes'):
+        chapter = 'fichajes'
 
     session['tour_admin_user_id'] = current_user.id
+    session['tour_fichar_oficina'] = True
+    session['tour_chapter'] = chapter
     logout_user()
-    # tour=mi: continúa el capítulo fichaje (NO usar tour=1, reinicia la guía).
-    return redirect(url_for('operarios.entrar', tour='mi'))
+    # tour=mi + chapter: no reinicia la guía ni cae al tutorial seed viejo.
+    return redirect(url_for('operarios.entrar', tour='mi', chapter=chapter))
 
 
 @admin_bp.route("/create_obra", methods=["GET", "POST"])
@@ -2361,6 +2497,17 @@ def enviar_acceso_fichaje(user_id):
     from app.services.pin_auth_service import PinAuthError, enviar_acceso_fichaje as _enviar
 
     user = User.query.get_or_404(user_id)
+    if user.role != ROLE_OPERARIO:
+        flash('Solo los operarios usan PIN de fichaje. El resto entra con correo y contraseña.', 'warning')
+        return redirect(url_for('admin.edit_operario', user_id=user.id))
+
+    email = (request.form.get('email') or '').strip()
+    if email:
+        user.email = email
+    elif not user.email or '@demo.signaplan' in (user.email or '') or '@local.signaplan' in (user.email or ''):
+        flash('Indica un correo real para enviar el enlace de definir PIN.', 'danger')
+        return redirect(url_for('admin.edit_operario', user_id=user.id))
+
     pin = (request.form.get('nuevo_pin') or '').strip()
     regenerar = bool(request.form.get('regenerar'))
     try:
@@ -2408,6 +2555,10 @@ def reset_pin(user_id):
     from app.services.pin_auth_service import PinAuthError, asignar_pin, quitar_pin
 
     user = User.query.get_or_404(user_id)
+    if user.role != ROLE_OPERARIO:
+        flash('Solo los operarios usan PIN de fichaje.', 'warning')
+        dest = (request.form.get('next') or '').strip() or url_for('admin.edit_operario', user_id=user.id)
+        return redirect(dest)
     accion = (request.form.get('accion') or 'asignar').strip()
     next_url = (request.form.get('next') or '').strip()
 
@@ -2849,14 +3000,34 @@ def planificador_jo():
 @login_required
 def api_planificador_resources():
     jefe_id = request.args.get('jefe_id')
+    start_str = request.args.get('start')
+    end_str = request.args.get('end')
 
     # Empaquetamos los filtros para que sean idénticos en todas las búsquedas
-    # No filtramos por fecha_fin: obras «En Curso» con fin pasado (Excel antiguo)
-    # deben seguir planificables; el tablero tampoco excluye por fecha fin.
+    # Incluimos no finalizadas; el cliente/API filtra además por solape con la ventana.
     base_filters = [
         func.lower(Obra.estado) != 'finalizada',
         Obra.is_deleted.is_(False),
     ]
+
+    win_start = None
+    win_end = None
+    try:
+        if start_str:
+            win_start = datetime.fromisoformat(start_str.replace('Z', '')).date()
+        if end_str:
+            win_end = datetime.fromisoformat(end_str.replace('Z', '')).date()
+    except Exception:
+        win_start = win_end = None
+
+    if win_start and win_end:
+        obras_ids_req = request.args.getlist('obra_ids[]')
+        if not obras_ids_req:
+            # Solo obras cuyo intervalo [inicio, fin] solapa la ventana pedida
+            base_filters.extend([
+                or_(Obra.fecha_inicio.is_(None), Obra.fecha_inicio <= win_end),
+                or_(Obra.fecha_fin.is_(None), Obra.fecha_fin >= win_start),
+            ])
     
     if current_user.role == ROLE_JEFE:
         obras = Obra.query.filter(Obra.jefe_obra_id == current_user.id, *base_filters).all()
@@ -2876,7 +3047,9 @@ def api_planificador_resources():
         "id": str(obra.id), 
         "title": obra.nombre, 
         "codigo": obra.codigo or '',
-        "fecha_fin": obra.fecha_fin.strftime("%d/%m/%y") if obra.fecha_fin else ""
+        "fecha_inicio": obra.fecha_inicio.strftime("%Y-%m-%d") if obra.fecha_inicio else "",
+        "fecha_fin": obra.fecha_fin.strftime("%d/%m/%y") if obra.fecha_fin else "",
+        "fecha_fin_iso": obra.fecha_fin.strftime("%Y-%m-%d") if obra.fecha_fin else "",
     } for obra in obras]
     
     return jsonify(resources)
@@ -2899,6 +3072,13 @@ def api_planificador_events():
         func.lower(Obra.estado) != 'finalizada',
         Obra.is_deleted.is_(False),
     ]
+    req_ids = request.args.getlist('obra_ids[]')
+    # Sin selección explícita: solo obras que solapan la ventana (no mostrar acabadas “hacia delante”)
+    if not req_ids:
+        base_filters.extend([
+            or_(Obra.fecha_inicio.is_(None), Obra.fecha_inicio <= end_date),
+            or_(Obra.fecha_fin.is_(None), Obra.fecha_fin >= start_date),
+        ])
     
     # Recopilamos IDs asegurándonos de aplicar los mismos filtros blindados
     if current_user.role == ROLE_JEFE:
@@ -2907,7 +3087,6 @@ def api_planificador_events():
         if jefe_id:
             obras_ids = [o.id for o in Obra.query.filter(Obra.jefe_obra_id == jefe_id, *base_filters).all()]
         else:
-            req_ids = request.args.getlist('obra_ids[]')
             if not req_ids:
                 obras_ids = [o.id for o in Obra.query.filter(*base_filters).all()]
             else:

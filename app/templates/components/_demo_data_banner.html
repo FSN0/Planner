@@ -1,5 +1,5 @@
 {% if demo_data_activa and current_user.is_authenticated and current_user.role == 'admin' %}
-<div class="alert alert-warning border-0 rounded-0 mb-0 text-center" style="background:#fef3c7;color:#92400e;">
+<div class="alert alert-warning border-0 rounded-0 mb-0 text-center" data-demo-banner="1" style="background:#fef3c7;color:#92400e;">
   <strong>Modo ejemplo:</strong> estás viendo datos de demostración.
   <form method="POST" action="{{ url_for('admin.primeros_pasos') }}" class="d-inline-flex flex-wrap justify-content-center align-items-center" style="gap:.5rem;margin-left:.5rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -378,10 +378,13 @@ html, body {
     border: 1px solid var(--color-border-strong, #e2e8f0);
     border-radius: var(--radius-lg, 12px);
     box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
-    height: calc(100vh - 8rem) !important;
-    max-height: 52rem;
+    /* top/height siguen la cabecera sticky real (--kanban-header-height) */
+    --kanban-libres-top: var(--kanban-header-height, 0px);
+    height: calc(100vh - var(--kanban-libres-top) - 1rem) !important;
+    max-height: none;
     position: sticky;
-    top: 8rem;
+    top: var(--kanban-libres-top);
+    align-self: flex-start;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -652,8 +655,6 @@ html, body {
     .col-libres {
         width: 14.5rem;
         min-width: 14.5rem;
-        top: 7.5rem;
-        height: calc(100vh - 7.5rem) !important;
     }
     .obra-card { width: 15.5rem; }
     .timeline-header-top { flex-wrap: wrap; justify-content: center; }

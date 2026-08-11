@@ -3,37 +3,8 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <style>
-  .veh-alta {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 1rem 1.15rem;
-    margin-bottom: 1rem;
-  }
-  .veh-alta h2 {
-    font-size: 0.95rem;
-    font-weight: 700;
-    margin: 0 0 0.75rem;
-    color: #0f172a;
-  }
-  .veh-alta-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
-    gap: 0.65rem;
-    align-items: end;
-  }
-  @media (max-width: 900px) {
-    .veh-alta-grid { grid-template-columns: 1fr 1fr; }
-  }
-  .veh-alta-grid label {
-    display: block;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #475569;
-    margin-bottom: 0.2rem;
-  }
   .veh-toolbar-filters {
     display: flex;
     align-items: center;
@@ -44,7 +15,7 @@
     white-space: normal;
     line-height: 1.25;
   }
-  /* Toolbar + formulario de alta + márgenes: el scroll debe caber en viewport */
+  /* Toolbar + márgenes: el scroll debe caber en viewport */
   .admin-main--compact.vehiculos-page {
     padding-bottom: 1.5rem;
   }
@@ -52,7 +23,7 @@
     overflow: visible;
   }
   .admin-main--compact.vehiculos-page .admin-table-scroll {
-    max-height: calc(100vh - 320px);
+    max-height: calc(100vh - 220px);
     overflow-x: auto;
     overflow-y: auto;
     padding-bottom: 0.75rem;
@@ -79,7 +50,10 @@
           <span class="small text-muted">{{ _('Ver inactivos') }}</span>
         </form>
       </div>
-      <div class="page-toolbar-actions">
+      <div class="page-toolbar-actions" data-tour="veh-actions">
+        {% with tour_id='flota', tour_label=_('Tutorial flota'), tour_href=url_for('admin.vehiculos', tour='flota', mode='solo') %}
+          {% include "components/_tour_cta.html" %}
+        {% endwith %}
         <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-car-side"></i> {{ _('Coches libres') }}
         </a>
@@ -88,42 +62,13 @@
           <i class="fas fa-clipboard-check"></i> {{ _('Auditoría') }}
         </a>
         {% endif %}
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('admin.vehiculos_nuevo') }}" class="btn-admin btn-admin-primary" data-tour="veh-nuevo">
+          <i class="fas fa-plus"></i> {{ _('Nuevo vehículo') }}
+        </a>
+        {% endif %}
       </div>
     </div>
-
-    {% if current_user.role == 'admin' %}
-    <section class="veh-alta">
-      <h2><i class="fas fa-plus-circle text-primary mr-1"></i> {{ _('Añadir vehículo') }}</h2>
-      <form method="POST" action="{{ url_for('admin.vehiculos_crear') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="veh-alta-grid">
-          <div>
-            <label for="veh-nombre">{{ _('Nombre') }} *</label>
-            <input type="text" id="veh-nombre" name="nombre" class="form-control form-control-sm" required
-                   placeholder="{{ _('Ej. Furgoneta 1') }}" maxlength="120">
-          </div>
-          <div>
-            <label for="veh-matricula">{{ _('Matrícula') }}</label>
-            <input type="text" id="veh-matricula" name="matricula" class="form-control form-control-sm"
-                   placeholder="1234 ABC" maxlength="40">
-          </div>
-          <div>
-            <label for="veh-marca">{{ _('Marca') }}</label>
-            <input type="text" id="veh-marca" name="marca" class="form-control form-control-sm" maxlength="80">
-          </div>
-          <div>
-            <label for="veh-modelo">{{ _('Modelo') }}</label>
-            <input type="text" id="veh-modelo" name="modelo" class="form-control form-control-sm" maxlength="80">
-          </div>
-          <div>
-            <button type="submit" class="btn-admin btn-admin-primary">
-              <i class="fas fa-plus"></i> {{ _('Crear') }}
-            </button>
-          </div>
-        </div>
-      </form>
-    </section>
-    {% endif %}
 
     <section class="admin-panel admin-panel-flush admin-panel--no-header">
       <div class="admin-table-scroll">
@@ -186,7 +131,7 @@
               <td class="col-actions">
                 <div class="table-actions">
                   <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="Ver ficha"><i class="fas fa-eye"></i></a>
-                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="Editar vehículo"><i class="fas fa-pen"></i></a>
+                  <a href="{{ url_for('admin.vehiculos_editar', vehiculo_id=v.id) }}" class="btn-table-action" title="Editar vehículo"><i class="fas fa-pen"></i></a>
                   {% if current_user.role == 'admin' %}
                   <form method="POST" action="{{ url_for('admin.vehiculos_toggle', vehiculo_id=v.id) }}" style="display:inline;" onclick="event.stopPropagation();">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -5,9 +5,9 @@
 
 {% block extra_css %}
   {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260810a">
 {% endblock %}
 
 {% block wrapper %}
@@ -18,7 +18,6 @@
 
     <div class="kanban-sticky-header">
     {% include "components/_timeline_header.html" %}
-
     <div class="kanban-filter-bar">
       <div class="kanban-filter-label">
         <i class="fas fa-filter"></i> {{ _('Filtrar obras') }}
@@ -31,6 +30,9 @@
       <button type="button" class="btn-admin btn-admin-ghost kanban-filter-clear" onclick="clearKanbanFilters()" id="btnClearFilters" style="display:none;">
         {{ _('Limpiar') }}
       </button>
+      {% with tour_id='tablero_basico', tour_label=_('Tutorial tablero'), tour_href=url_for('admin.obras_detailed', tour='tablero_basico', mode='solo') %}
+        {% include "components/_tour_cta.html" %}
+      {% endwith %}
     </div>
     </div>
 
@@ -39,7 +41,7 @@
         
         {% include "components/_kanban_col_libres.html" %}
 
-        <div class="kanban-works-wrapper" id="kanbanWorksWrapper">
+        <div class="kanban-works-wrapper" id="kanbanWorksWrapper" data-tour="tablero-obras">
             {% for item in obra_data %}
                 <div class="kanban-col-wrapper filterable-obra{% if item.obra.is_pinned %} is-pinned{% endif %}"
                      data-id="{{ item.obra.id }}"
@@ -212,7 +214,7 @@
         window.CURRENT_USER_ROLE = "{{ current_user.role }}";
         window.KANBAN_READONLY = {{ 'true' if view_mode == 'readonly' else 'false' }};
     </script>
-  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260810a"></script>
   
   <script>
     $(document).on('click', '.rating-btn', function() {

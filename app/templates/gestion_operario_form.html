@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <style>
   .user-form-advanced {
     margin-top: 1rem;
@@ -148,7 +148,7 @@
         </div>
 
         {# —— Oficina: email + contraseña —— #}
-        <div id="officeAccessBlock" style="display: none;">
+        <div id="officeAccessBlock" style="display: none;" data-tour="user-acceso-office">
           <div class="admin-form-section">{{ _('Acceso de oficina') }}</div>
           <div class="form-row">
             <div class="form-group col-md-6">
@@ -254,8 +254,8 @@
       </form>
     </section>
 
-    {% if edit_mode and user.role in ['operario', 'jefe_obra', 'admin', 'laboral', 'rrhh'] %}
-    <section class="admin-panel admin-form-panel mt-3" id="pinEditSection">
+    {% if edit_mode and user.role == 'operario' %}
+    <section class="admin-panel admin-form-panel mt-3" id="pinEditSection" data-tour="user-pin-edit">
       <div class="admin-panel-header">
         <h2 class="admin-panel-title">{{ _('PIN de fichaje') }}</h2>
         <span class="admin-panel-subtitle">{{ _('Acceso a /mi con DNI + PIN') }}</span>
@@ -263,49 +263,57 @@
       <div class="p-3">
         <p class="small text-muted mb-3">
           {% if user.pin_hash %}
-            {{ _('Este trabajador ya tiene PIN. Puedes cambiarlo o enviarle un enlace por correo para que lo defina (nunca se envía el PIN en claro).') }}
+            {{ _('Este operario ya tiene PIN. Elige una opción: guardar uno nuevo tú, o enviarle un enlace para que lo defina.') }}
           {% else %}
-            {{ _('Todavía no tiene PIN de fichaje.') }}
+            {{ _('Todavía no tiene PIN. Elige una opción (no hace falta rellenar las dos).') }}
           {% endif %}
         </p>
-        <div class="form-row">
-          <div class="col-md-6 mb-3">
-            <form method="POST" action="{{ url_for('admin.reset_pin', user_id=user.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="next" value="{{ url_for('admin.edit_operario', user_id=user.id) }}">
-              <label class="admin-form-label">{{ _('Nuevo PIN') }}</label>
-              <input type="password" name="nuevo_pin" class="form-control mb-2"
-                     inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
-                     placeholder="••••" required>
-              <div class="d-flex flex-wrap" style="gap:.5rem;">
-                <button type="submit" name="accion" value="asignar" class="btn-admin btn-admin-primary">{{ _('Guardar PIN') }}</button>
-                <button type="submit" name="accion" value="generar" class="btn-admin btn-admin-ghost"
-                        formnovalidate
-                        onclick="this.form.nuevo_pin.required=false;">{{ _('Generar aleatorio') }}</button>
-                <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
-                        formnovalidate style="color:#b91c1c;"
-                        onclick="this.form.nuevo_pin.required=false;return confirm('¿Quitar el PIN?');">{{ _('Quitar') }}</button>
-              </div>
-            </form>
-          </div>
-          <div class="col-md-6 mb-3">
-            <form method="POST" action="{{ url_for('admin.enviar_acceso_fichaje', user_id=user.id) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="regenerar" value="1">
-              <label class="admin-form-label">{{ _('Enviar enlace para definir PIN') }}</label>
-              <input type="password" name="nuevo_pin" class="form-control mb-2"
-                     inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
-                     placeholder="{{ _('Vacío = genera PIN provisional') }}">
-              <p class="small text-muted mb-2">
-                {{ _('Envía a') }} <strong>{{ user.email }}</strong>
-                {{ _('un enlace para que defina su PIN. El PIN no viaja en el correo.') }}
-              </p>
-              <button type="submit" class="btn-admin btn-admin-primary"
-                      {% if not user.email or '@demo.signaplan' in (user.email or '') or '@local.signaplan' in (user.email or '') %}disabled title="{{ _('Necesita un correo real') }}"{% endif %}>
-                <i class="fas fa-paper-plane"></i> {{ _('Enviar enlace') }}
-              </button>
-            </form>
-          </div>
+        <div class="pin-mode-options mb-3" data-tour="user-pin-modes" id="pinEditModeOptions">
+          <label>
+            <input type="radio" name="pin_edit_mode" value="manual" id="pinEditModeManual" checked>
+            <span>{{ _('Guardar PIN yo') }} — {{ _('lo generas o escribes y se lo das en mano') }}</span>
+          </label>
+          <label>
+            <input type="radio" name="pin_edit_mode" value="email_link" id="pinEditModeEmail">
+            <span>{{ _('Enviar enlace por correo') }} — {{ _('el operario define su PIN (requiere email)') }}</span>
+          </label>
+        </div>
+
+        <div id="pinEditManualBlock">
+          <form method="POST" action="{{ url_for('admin.reset_pin', user_id=user.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ url_for('admin.edit_operario', user_id=user.id) }}">
+            <label class="admin-form-label">{{ _('Nuevo PIN') }}</label>
+            <input type="password" name="nuevo_pin" id="pinEditNuevo" class="form-control mb-2" style="max-width:220px;"
+                   inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                   placeholder="••••" required>
+            <div class="d-flex flex-wrap" style="gap:.5rem;">
+              <button type="submit" name="accion" value="asignar" class="btn-admin btn-admin-primary">{{ _('Guardar PIN') }}</button>
+              <button type="submit" name="accion" value="generar" class="btn-admin btn-admin-ghost"
+                      formnovalidate
+                      onclick="this.form.nuevo_pin.required=false;">{{ _('Generar aleatorio') }}</button>
+              <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
+                      formnovalidate style="color:#b91c1c;"
+                      onclick="this.form.nuevo_pin.required=false;return confirm('¿Quitar el PIN?');">{{ _('Quitar') }}</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="pinEditEmailBlock" style="display:none;">
+          <form method="POST" action="{{ url_for('admin.enviar_acceso_fichaje', user_id=user.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="regenerar" value="1">
+            <label class="admin-form-label">{{ _('Email del operario') }}</label>
+            <input type="email" name="email" id="pinEditEmail" class="form-control mb-2" style="max-width:360px;"
+                   value="{% if user.email and '@demo.signaplan' not in (user.email or '') and '@local.signaplan' not in (user.email or '') %}{{ user.email }}{% endif %}"
+                   placeholder="{{ _('Obligatorio para enviar el enlace') }}" required>
+            <p class="small text-muted mb-2">
+              {{ _('Se envía un enlace para que defina su PIN. El PIN no viaja en el correo.') }}
+            </p>
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-paper-plane"></i> {{ _('Enviar enlace') }}
+            </button>
+          </form>
         </div>
       </div>
     </section>
@@ -391,6 +399,30 @@
   if (roleSelect) roleSelect.addEventListener('change', syncRole);
   if (pinManual) pinManual.addEventListener('change', syncPinMode);
   if (pinEmail) pinEmail.addEventListener('change', syncPinMode);
+
+  function syncPinEditMode() {
+    var manual = document.getElementById('pinEditModeManual');
+    var emailMode = document.getElementById('pinEditModeEmail');
+    var manualBlock = document.getElementById('pinEditManualBlock');
+    var emailBlock = document.getElementById('pinEditEmailBlock');
+    var pinInput = document.getElementById('pinEditNuevo');
+    var emailInput = document.getElementById('pinEditEmail');
+    if (!manualBlock || !emailBlock) return;
+    var sendLink = emailMode && emailMode.checked;
+    manualBlock.style.display = sendLink ? 'none' : '';
+    emailBlock.style.display = sendLink ? '' : 'none';
+    if (pinInput) pinInput.required = !sendLink;
+    if (emailInput) emailInput.required = !!sendLink;
+    try {
+      document.dispatchEvent(new CustomEvent('sp-pin-mode-changed'));
+    } catch (e) { /* ignore */ }
+  }
+  var pinEditManual = document.getElementById('pinEditModeManual');
+  var pinEditEmail = document.getElementById('pinEditModeEmail');
+  if (pinEditManual) pinEditManual.addEventListener('change', syncPinEditMode);
+  if (pinEditEmail) pinEditEmail.addEventListener('change', syncPinEditMode);
+  syncPinEditMode();
+
   syncRole();
 })();
 </script>

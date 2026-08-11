@@ -1,0 +1,70 @@
+{# Pantalla mínima tras verificar email: responde al instante y deja cargar el destino. #}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ _('Preparando SignaPlan…') }}</title>
+  <meta http-equiv="refresh" content="0;url={{ destino }}">
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: linear-gradient(160deg, #0f172a 0%, #1e293b 55%, #0f766e 140%);
+      color: #e2e8f0;
+    }
+    .boot {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      max-width: 22rem;
+    }
+    .boot-spinner {
+      width: 2.25rem;
+      height: 2.25rem;
+      margin: 0 auto 1.1rem;
+      border: 3px solid rgba(148, 163, 184, 0.35);
+      border-top-color: #2dd4bf;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 650;
+      margin: 0 0 0.4rem;
+      letter-spacing: -0.01em;
+    }
+    p {
+      margin: 0;
+      font-size: 0.92rem;
+      color: #94a3b8;
+      line-height: 1.45;
+    }
+    a {
+      color: #5eead4;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="boot" role="status" aria-live="polite">
+    <div class="boot-spinner" aria-hidden="true"></div>
+    <h1>{{ _('Correo verificado') }}</h1>
+    <p>{{ _('Preparando tu espacio…') }}</p>
+    <p style="margin-top:1rem"><a href="{{ destino }}">{{ _('Continuar') }}</a></p>
+  </div>
+  <script>
+    (function () {
+      var dest = {{ destino|tojson }};
+      try { window.location.replace(dest); }
+      catch (e) { window.location.href = dest; }
+    })();
+  </script>
+</body>
+</html>

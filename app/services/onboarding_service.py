@@ -10,7 +10,6 @@ from app.models import ROLE_OPERARIO, Obra, User
 from app.services.config_service import get_tenant_config, set_tenant_config
 from app.services.fichaje_operario_service import fichaje_operario_activo
 from app.services.oficina_obra_service import buscar_obra_oficina, oficina_activa
-from app.services.pin_auth_service import tiene_pin
 
 CONFIG_ONBOARDING = 'onboarding_completo'
 CONFIG_INFORME_VISTO = 'onboarding_informe_visto'
@@ -66,7 +65,7 @@ def reiniciar_onboarding():
     set_tenant_config(CONFIG_INFORME_VISTO, 'False')
     set_tenant_config(CONFIG_REABRIR, 'True')
     set_tenant_config(CONFIG_IMPORT_DONE, '{}')
-
+    # No borramos academia_tours: los logros hechos se conservan.
 
 def import_tutorials_done() -> dict:
     """Qué listados de la guía de importación ya se han completado."""
@@ -120,10 +119,13 @@ def estado_onboarding():
 
     marcado = onboarding_marcado_completo()
     obras_vivas = Obra.query.filter(Obra.is_deleted.is_(False)).count()
-    operarios = User.query.filter_by(
-        role=ROLE_OPERARIO, is_deleted=False
-    ).all()
-    con_pin = sum(1 for u in operarios if tiene_pin(u))
+    operarios_q = User.query.filter_by(role=ROLE_OPERARIO, is_deleted=False)
+    n_operarios = operarios_q.count()
+    # pin_hash no nulo/ vacío ≈ tiene PIN (evita cargar todos los usuarios)
+    con_pin = operarios_q.filter(
+        User.pin_hash.isnot(None),
+        User.pin_hash != '',
+    ).count()
     fichaje = fichaje_operario_activo()
     oficina = oficina_activa() and buscar_obra_oficina() is not None
     informe = (not tenant_tiene_registro_jornada()) or informe_onboarding_visto()
@@ -136,7 +138,7 @@ def estado_onboarding():
         'pasos': [],
         'pendientes': 0 if completo else 1,
         'obras': obras_vivas,
-        'operarios': len(operarios),
+        'operarios': n_operarios,
         'con_pin': con_pin,
         'fichaje_activo': fichaje,
         'oficina_activa': oficina,

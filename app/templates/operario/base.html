@@ -80,6 +80,8 @@
     <script>
         window.SP_LOCALE = {{ (current_locale or 'es')|tojson }};
         window.SP_I18N = {{ frontend_i18n|tojson }};
+        window.__SP_TOUR_FORCE_OFICINA__ = {{ 'true' if session.get('tour_fichar_oficina') else 'false' }};
+        window.__SP_TOUR_CHAPTER__ = {{ (session.get('tour_chapter') or request.args.get('chapter') or '')|tojson }};
         window.SP_T = function (key) {
             if (!key) { return ''; }
             return (window.SP_I18N && window.SP_I18N[key]) || key;
@@ -93,7 +95,7 @@
         }
     </script>
     {% block scripts %}{% endblock %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding_tour.css') }}?v=20260809an">
-    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260809an"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding_tour.css') }}?v=20260811b">
+    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260811b"></script>
 </body>
 </html>

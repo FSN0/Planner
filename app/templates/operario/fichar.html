@@ -12,7 +12,8 @@
      data-url-fichar="{{ url_for('operarios.api_fichar') }}"
      data-url-conformar="{{ url_for('operarios.api_conformar') }}"
      data-modo-geo="{{ modo_geo }}"
-     data-estado="{{ estado }}">
+     data-estado="{{ estado }}"
+     {% if tour_force_oficina %}data-tour-force-oficina="1"{% endif %}>
 
     <div class="reloj">
         <div class="reloj__hora" id="reloj-hora">--:--</div>
@@ -44,22 +45,39 @@
                 {% if not obras_planificadas and not otras_obras %}
                     <option value="">{{ _('No hay obras disponibles') }}</option>
                 {% endif %}
+                {# Tutorial: Oficina arriba y selected (sí o sí) #}
+                {% if tour_force_oficina and obra_preselect_id %}
+                    {% set ns_of = namespace(shown=false) %}
+                    {% for obra in (otras_obras or []) + (obras_planificadas or []) %}
+                      {% if obra.id == obra_preselect_id and not ns_of.shown %}
+                        {% set ns_of.shown = true %}
+                        <option value="{{ obra.id }}" selected>{{ obra.nombre }}</option>
+                      {% endif %}
+                    {% endfor %}
+                {% endif %}
                 {% if obras_planificadas %}
                     <optgroup label="{{ _('Tu planificación de hoy') }}">
                         {% for obra in obras_planificadas %}
+                            {% if not (tour_force_oficina and obra_preselect_id and obra.id == obra_preselect_id) %}
                             <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            {% endif %}
                         {% endfor %}
                     </optgroup>
                 {% endif %}
                 {% if otras_obras %}
                     <optgroup label="{{ _('Otras obras') }}">
                         {% for obra in otras_obras %}
-                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            {% if not (tour_force_oficina and obra_preselect_id and obra.id == obra_preselect_id) %}
+                            <option value="{{ obra.id }}"
+                              {% if not tour_force_oficina and not obras_planificadas and loop.first %}selected{% endif %}>{{ obra.nombre }}</option>
+                            {% endif %}
                         {% endfor %}
                     </optgroup>
                 {% endif %}
             </select>
-            {% if not obras_planificadas and otras_obras %}
+            {% if tour_force_oficina %}
+                <p class="campo__ayuda">{{ _('En el día a día aquí sale la obra en la que estás planificado. En este tutorial usamos Oficina para generar un desvío.') }}</p>
+            {% elif not obras_planificadas and otras_obras %}
                 <p class="campo__ayuda">{{ _('Hoy no tienes obra planificada. Elige dónde estás (puedes usar Oficina).') }}</p>
             {% elif not obras_planificadas %}
                 <p class="campo__ayuda">{{ _('Hoy no tienes obra planificada. Elige dónde estás.') }}</p>

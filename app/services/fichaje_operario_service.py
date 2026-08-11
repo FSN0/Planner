@@ -37,6 +37,7 @@ from app.utils.timezone_utils import today_local, utc_now
 
 CONFIG_FICHAJE_OPERARIO = 'fichaje_operario_activo'
 CONFIG_FICHAJE_GEO = 'fichaje_geolocalizacion'
+CONFIG_FICHAJE_ASKED = 'onboarding_fichaje_asked'
 
 # Misma etiqueta que el sync de Odoo: el cuadrante refleja el fichaje físico.
 CONTEXTO_FICHAJE_PWA = 'Auto-asignación por Fichaje Físico'
@@ -81,6 +82,16 @@ def fichaje_operario_activo():
     if not tenant_tiene_fichaje_operario_module():
         return False
     return str(get_tenant_config(CONFIG_FICHAJE_OPERARIO, default='False')) == 'True'
+
+
+def fichaje_preferencia_decidida():
+    """True si el admin ya respondió sí/no al fichaje en el onboarding."""
+    return str(get_tenant_config(CONFIG_FICHAJE_ASKED, default='False')) == 'True'
+
+
+def marcar_fichaje_preferencia_decidida():
+    from app.services.config_service import set_tenant_config
+    set_tenant_config(CONFIG_FICHAJE_ASKED, 'True')
 
 
 def modo_geolocalizacion():

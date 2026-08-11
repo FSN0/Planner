@@ -1,9 +1,55 @@
 {% extends "base.html" %}
-{% block title %}Integraciones{% endblock %}
+{% block title %}{{ _('Integraciones') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<style>
+  .integ-contact {
+    max-width: 40rem;
+    margin: 1.5rem auto 2rem;
+    padding: 1.75rem 1.75rem 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+  }
+  .integ-contact h2 {
+    margin: 0 0 0.65rem;
+    font-size: 1.2rem;
+    color: #0f172a;
+  }
+  .integ-contact p {
+    margin: 0 0 0.85rem;
+    color: #475569;
+    line-height: 1.5;
+    font-size: 0.95rem;
+  }
+  .integ-contact ul {
+    margin: 0 0 1.1rem;
+    padding-left: 1.15rem;
+    color: #334155;
+    font-size: 0.92rem;
+    line-height: 1.55;
+  }
+  .integ-contact .integ-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1rem;
+    border-radius: 10px;
+    background: #0ea5e9;
+    color: #fff;
+    font-weight: 650;
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+  .integ-contact .integ-cta:hover { filter: brightness(0.97); color: #fff; }
+  .integ-contact .integ-note {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: #94a3b8;
+  }
+</style>
 {% endblock %}
 
 {% block wrapper %}
@@ -12,16 +58,34 @@
   <main class="admin-main admin-main--compact">
     <header class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title"><i class="fas fa-plug text-primary mr-2"></i> Integraciones</h1>
-        <span class="page-toolbar-count">Módulos contratados para tu entorno</span>
+        <h1 class="page-toolbar-title"><i class="fas fa-plug text-primary mr-2"></i> {{ _('Integraciones') }}</h1>
+        <span class="page-toolbar-count">
+          {% if tenant_has_integrations %}
+            {{ _('Módulos contratados para tu entorno') }}
+          {% else %}
+            {{ _('Conexiones a medida con tu ERP u otras herramientas') }}
+          {% endif %}
+        </span>
       </div>
     </header>
 
     {% if not tenant_has_integrations %}
-    <div class="alert alert-light border mt-2">
-      <i class="fas fa-info-circle text-muted mr-2"></i>
-      Tu empresa no tiene módulos de integración activos. Contacta con soporte si necesitas conectar un ERP u otras herramientas.
-    </div>
+    <section class="integ-contact" aria-labelledby="integ-contact-title">
+      <h2 id="integ-contact-title">{{ _('Integraciones a medida') }}</h2>
+      <p>
+        {{ _('Las integraciones de SignaPlan se diseñan y activan de forma personalizada para cada cliente: no hay un catálogo genérico que se encienda solo.') }}
+      </p>
+      <p>{{ _('Si quieres conectar un ERP (por ejemplo Odoo), un sistema de fichajes u otra herramienta, necesitamos hablar contigo para:') }}</p>
+      <ul>
+        <li>{{ _('Entender qué datos deben entrar y salir') }}</li>
+        <li>{{ _('Definir el alcance y el calendario de la integración') }}</li>
+        <li>{{ _('Activar los módulos en tu espacio cuando estén listos') }}</li>
+      </ul>
+      <a class="integ-cta" href="mailto:{{ support_email|default('hola@signaplan.com') }}">
+        <i class="fas fa-envelope"></i> {{ _('Contactar con SignaPlan') }}
+      </a>
+      <p class="integ-note">{{ _('Cuando tengas un módulo activo, aquí verás los accesos directos (como la sincronización Odoo).') }}</p>
+    </section>
     {% else %}
     <div class="row mt-3">
       {% if modulos_activos.get('odoo') %}
@@ -30,10 +94,10 @@
           <div class="card-body">
             <h3 class="h5 mb-2" style="color: #714B67;"><i class="fas fa-sync"></i> {{ _('Sincronización Odoo') }}</h3>
             <p class="text-muted small mb-3">
-              Sincronización de obras, empleados, subcontratas y fichajes con Odoo ERP.
+              {{ _('Sincronización de obras, empleados, subcontratas y fichajes con Odoo ERP.') }}
             </p>
-            <span class="badge badge-success mb-3">Módulo activo</span>
-            <a href="{{ url_for('sync.odoo_panel') }}" class="btn btn-primary btn-block">Abrir centro de sincronización</a>
+            <span class="badge badge-success mb-3">{{ _('Módulo activo') }}</span>
+            <a href="{{ url_for('sync.odoo_panel') }}" class="btn btn-primary btn-block">{{ _('Abrir centro de sincronización') }}</a>
           </div>
         </div>
       </div>
@@ -43,13 +107,13 @@
       <div class="col-md-6 col-lg-4 mb-3">
         <div class="card h-100 shadow-sm border-0">
           <div class="card-body">
-            <h3 class="h5 mb-2" style="color: #0369a1;"><i class="fas fa-address-book"></i> Alta Odoo</h3>
+            <h3 class="h5 mb-2" style="color: #0369a1;"><i class="fas fa-address-book"></i> {{ _('Alta Odoo') }}</h3>
             <p class="text-muted small mb-3">
-              Gestión de altas y contactos de subcontratas (módulo Fichajes Soltec).
+              {{ _('Gestión de altas y contactos de subcontratas (módulo Fichajes Soltec).') }}
             </p>
-            <span class="badge badge-success mb-3">Módulo activo</span>
+            <span class="badge badge-success mb-3">{{ _('Módulo activo') }}</span>
             <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="btn btn-outline-primary btn-block" target="_blank" rel="noopener">
-              Abrir panel de altas
+              {{ _('Abrir panel de altas') }}
             </a>
           </div>
         </div>

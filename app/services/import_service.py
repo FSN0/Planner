@@ -893,6 +893,17 @@ def _clip_str(value, max_len: int) -> Optional[str]:
     return text[:max_len].rstrip()
 
 
+def _estado_obra_import(fecha_inicio: Optional[date], fecha_fin: Optional[date]) -> str:
+    """En Curso si el día de hoy cae en el intervalo; si no, Pendiente."""
+    if not fecha_inicio:
+        return "Pendiente"
+    today = date.today()
+    fin = fecha_fin or (fecha_inicio + timedelta(days=365))
+    if fecha_inicio <= today <= fin:
+        return "En Curso"
+    return "Pendiente"
+
+
 def _friendly_import_error(exc: BaseException) -> str:
     """Mensaje legible; nunca volcar SQLAlchemy/psycopg2 al usuario."""
     if isinstance(exc, ValueError):
@@ -935,15 +946,17 @@ def _commit_obra(parsed: dict) -> dict:
     else:
         descripcion = cliente_full or None
 
+    fecha_inicio = parsed["fecha_inicio"]
+    fecha_fin = parsed["fecha_fin"]
     obra = Obra(
         codigo=codigo,
         nombre=nombre,
         cliente=cliente,
         ubicacion=ubicacion,
         descripcion=descripcion,
-        fecha_inicio=parsed["fecha_inicio"],
-        fecha_fin=parsed["fecha_fin"],
-        estado="Pendiente",
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        estado=_estado_obra_import(fecha_inicio, fecha_fin),
         limite_trabajadores=50,
         jefe_obra_id=None,
         fecha_importacion=datetime.utcnow(),

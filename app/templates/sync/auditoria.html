@@ -19,7 +19,7 @@
 {% endmacro %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 {% endblock %}
@@ -40,8 +40,11 @@
         <span class="page-toolbar-count">{{ _(toolbar_sub) }}</span>
       </div>
       <div class="page-toolbar-actions">
+        {% with tour_id='fichajes', tour_label=_('Tutorial fichajes'), tour_href=url_for('admin.personal', tour='fichajes', mode='solo') %}
+          {% include "components/_tour_cta.html" %}
+        {% endwith %}
         {% if can_resolve_fichajes and current_user.role in ['admin', 'laboral', 'rrhh'] %}
-        <button type="button" class="btn-admin btn-admin-secondary mr-2" onclick="abrirModalMarcaManual()">
+        <button type="button" class="btn-admin btn-admin-secondary mr-2" data-tour="audit-corregir-marca" onclick="abrirModalMarcaManual()">
           <i class="fas fa-clock"></i> {{ _('Registrar / corregir marca') }}
         </button>
         {% endif %}
@@ -100,8 +103,8 @@
     <div class="accordion auditoria-accordion" id="accordionAuditoria">
 
         {% if 'conflictos' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;">
-            <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}">
+        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-desviaciones">
+            <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}" data-tour="audit-desviaciones-toggle">
                 <h6 class="auditoria-section-title text-danger mb-0">
                     <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-random"></i></span>
                     {{ _('Desviaciones de plan') }}
@@ -127,7 +130,7 @@
                         </thead>
                         <tbody>
                             {% for reg in var_conflictos %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td data-sort-value="{{ reg.user.lastname|lower }}">
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or 'Externo' }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
@@ -380,8 +383,8 @@
         {% endif %}
 
         {% if 'historico_global' in visible_sections %}
-        <div class="auditoria-section card-modern card mb-4" style="overflow: hidden;">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseHistorial" role="button" aria-expanded="false">
+        <div class="auditoria-section card-modern card mb-4" style="overflow: hidden;" data-tour="audit-historico">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseHistorial" role="button" aria-expanded="false" data-tour="audit-historico-toggle">
                 <h6 class="auditoria-section-title mb-0 text-secondary">
                     <span class="section-icon-wrap section-icon-wrap--archive"><i class="fas fa-history"></i></span>
                     {{ _('Histórico global') }}
@@ -410,7 +413,7 @@
                 </thead>
                 <tbody>
                     {% for reg in historial %}
-                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
                         <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                         <td data-sort-value="{{ reg.user.lastname|lower }}">
                             <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">

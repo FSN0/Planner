@@ -9,6 +9,27 @@ $(document).ready(function() {
     let modalCalendarInstance = null;
     let libresCalendarInstance = null;
 
+    /** Altura real de la cabecera sticky → top/height de operarios libres alineados. */
+    function syncKanbanHeaderHeight() {
+        var header = document.querySelector('.kanban-sticky-header');
+        if (!header) return;
+        var h = Math.ceil(header.getBoundingClientRect().height);
+        if (h < 1) return;
+        document.documentElement.style.setProperty('--kanban-header-height', h + 'px');
+    }
+    syncKanbanHeaderHeight();
+    window.addEventListener('resize', syncKanbanHeaderHeight, { passive: true });
+    if (typeof ResizeObserver !== 'undefined') {
+        var headerEl = document.querySelector('.kanban-sticky-header');
+        if (headerEl) {
+            var ro = new ResizeObserver(function () { syncKanbanHeaderHeight(); });
+            ro.observe(headerEl);
+        }
+    }
+    // Tras fuentes/tour/filtros que cambian altura
+    setTimeout(syncKanbanHeaderHeight, 100);
+    setTimeout(syncKanbanHeaderHeight, 400);
+
     // =========================================================================
     // 1. EVENTOS: DRAG & DROP — abre calendario con datos preseleccionados
     // =========================================================================

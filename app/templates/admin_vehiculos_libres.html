@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <style>
   .admin-main.vl-page {
     max-width: none;
@@ -115,6 +115,9 @@
         </span>
       </div>
       <div class="page-toolbar-actions">
+        {% with tour_id='coches_libres', tour_label=_('Tutorial'), tour_href=url_for('admin.vehiculos_libres', tour='coches_libres') %}
+          {% include "components/_tour_cta.html" %}
+        {% endwith %}
         <a href="{{ url_for('admin.vehiculos') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-car"></i> {{ _('Flota') }}
         </a>

@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260809ap">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <style>
   .vehicle-history-acc {
     background: #fff;
@@ -189,40 +189,10 @@
           </div>
 
           {% if current_user.role == 'admin' %}
-          <div id="vehicleEditCard" class="vehicle-edit-card mt-3">
-          <form method="POST" action="{{ url_for('admin.vehiculos_editar', vehiculo_id=vehiculo.id) }}"
-                class="p-3" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div class="row">
-              <div class="col-md-3 mb-2">
-                <label class="small font-weight-bold text-secondary">{{ _('Nombre') }} *</label>
-                <input type="text" name="nombre" class="form-control form-control-sm" required
-                       value="{{ vehiculo.nombre }}" maxlength="120">
-              </div>
-              <div class="col-md-2 mb-2">
-                <label class="small font-weight-bold text-secondary">{{ _('Matrícula') }}</label>
-                <input type="text" name="matricula" class="form-control form-control-sm"
-                       value="{{ vehiculo.matricula or '' }}" maxlength="40">
-              </div>
-              <div class="col-md-2 mb-2">
-                <label class="small font-weight-bold text-secondary">{{ _('Marca') }}</label>
-                <input type="text" name="marca" class="form-control form-control-sm"
-                       value="{{ vehiculo.marca or '' }}" maxlength="80">
-              </div>
-              <div class="col-md-2 mb-2">
-                <label class="small font-weight-bold text-secondary">{{ _('Modelo') }}</label>
-                <input type="text" name="modelo" class="form-control form-control-sm"
-                       value="{{ vehiculo.modelo or '' }}" maxlength="80">
-              </div>
-              <div class="col-md-3 mb-2 d-flex align-items-end">
-                <button type="submit" class="btn-admin btn-admin-primary mr-2"><i class="fas fa-save"></i> {{ _('Guardar') }}</button>
-                <button type="submit" formaction="{{ url_for('admin.vehiculos_toggle', vehiculo_id=vehiculo.id) }}"
-                        class="btn-admin btn-admin-ghost">
-                  {{ _('Desactivar') if vehiculo.active else _('Activar') }}
-                </button>
-              </div>
-            </div>
-          </form>
+          <div class="mt-3">
+            <a href="{{ url_for('admin.vehiculos_editar', vehiculo_id=vehiculo.id) }}" class="btn-admin btn-admin-primary">
+              <i class="fas fa-pen"></i> {{ _('Editar vehículo') }}
+            </a>
           </div>
           {% endif %}
         </div>

@@ -62,6 +62,14 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     # Obtenemos la lista inicial
     obras = query.order_by(Obra.fecha_inicio.desc()).all()
 
+    # Solo obras vigentes en la fecha del tablero:
+    # si fecha_fin ya pasó (o aún no ha empezado), no aparecen — evita planificar en obras acabadas.
+    obras = [
+        o for o in obras
+        if (not o.fecha_inicio or o.fecha_inicio <= selected_date)
+        and (not o.fecha_fin or o.fecha_fin >= selected_date)
+    ]
+
     # --- 3. PRE-CARGA Y ORDENACIÓN (LÓGICA NUEVA) ---
     obra_ids = [o.id for o in obras]
     mapa_asig = {oid: [] for oid in obra_ids}

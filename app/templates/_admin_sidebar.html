@@ -58,7 +58,7 @@
           </div>
           <ul class="sidebar-nav" data-section-items="{{ section['id'] }}">
             {% for item in sec_items %}
-              {% if item['kind'] == 'integrations' %}
+              {% if item['kind'] in ('integrations', 'group') %}
               <li class="sidebar-nav-group{% if item['open'] %} is-open{% endif %}{% if item['hidden'] %} is-nav-hidden{% endif %}"
                   data-nav-id="{{ item['id'] }}" data-nav-hidden="{{ '1' if item['hidden'] else '0' }}">
                 <div class="sidebar-item-row">

@@ -11,6 +11,14 @@
 
     <form method="POST" action="{{ url_for('operarios.entrar') }}" class="entrar__formulario" data-tour="fichar-login">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if request.args.get('tour') %}
+        <input type="hidden" name="tour" value="{{ request.args.get('tour') }}">
+        {% endif %}
+        {% if request.args.get('chapter') %}
+        <input type="hidden" name="chapter" value="{{ request.args.get('chapter') }}">
+        {% elif session.get('tour_chapter') %}
+        <input type="hidden" name="chapter" value="{{ session.get('tour_chapter') }}">
+        {% endif %}
 
         <div class="campo">
             <label class="campo__etiqueta" for="dni">{{ _('DNI / NIE') }}</label>

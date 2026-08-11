@@ -701,6 +701,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     window.AppTimeline.on('doubleClick', function(props) {
+        // Doble clic en el bloque nuevo → mismo flujo que al soltar el arrastre
+        if (props.item && window.AppItems) {
+            var clicked = window.AppItems.get(props.item);
+            if (clicked && clicked.worker_id === 'NEW' && typeof options.onUpdate === 'function') {
+                options.onUpdate(clicked, function () {});
+                return;
+            }
+        }
         if (!props.item && props.group && props.time) {
             let clickedDate = moment(props.time).startOf('day');
             let hoy = moment().startOf('day');
@@ -797,7 +805,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         id: g.id, 
                         title: g.title, 
                         codigo: g.codigo, 
-                        fecha_fin: g.fecha_fin, 
+                        fecha_fin: g.fecha_fin,
+                        fecha_inicio: g.fecha_inicio || '',
+                        fecha_fin_iso: g.fecha_fin_iso || '',
                         orden: index // El calendario usa este 'orden' para poner las vacías al final
                     })));
 
@@ -830,6 +840,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                     
                     window.renderItems();
+                    if (typeof window.filtrarObrasPorVentana === 'function') {
+                        window.filtrarObrasPorVentana();
+                    }
                 });
             } else {
                 window.allGroupsMaster = [];
@@ -1085,7 +1098,67 @@ document.addEventListener('DOMContentLoaded', function() {
     window.AppTimeline.on('rangechanged', function() {
         let popover = document.getElementById('worker-popover');
         if (popover && !popover.classList.contains('d-none')) { popover.classList.add('d-none'); }
+        if (window.__spFilterObrasTimer) clearTimeout(window.__spFilterObrasTimer);
+        window.__spFilterObrasTimer = setTimeout(function () {
+            if (typeof window.filtrarObrasPorVentana === 'function') {
+                window.filtrarObrasPorVentana();
+            }
+        }, 180);
     });
+
+    /**
+     * Oculta obras cuya fecha de fin ya quedó fuera de la ventana visible
+     * (y las que aún no han empezado). Al ir hacia atrás en el tiempo vuelven a salir.
+     */
+    window.filtrarObrasPorVentana = function () {
+        if (!window.AppTimeline || !window.allGroupsMaster || !window.AppGroups) return;
+        if (!window.allGroupsMaster.length) return;
+
+        let windowRange = window.AppTimeline.getWindow();
+        let vs = moment(windowRange.start).startOf('day');
+        let ve = moment(windowRange.end).startOf('day');
+
+        let filtered = window.allGroupsMaster.filter(function (g) {
+            let fi = g.fecha_inicio ? moment(g.fecha_inicio, 'YYYY-MM-DD') : null;
+            let ff = g.fecha_fin_iso
+                ? moment(g.fecha_fin_iso, 'YYYY-MM-DD')
+                : (g.fecha_fin ? moment(g.fecha_fin, 'DD/MM/YY') : null);
+            if (ff && ff.isValid() && ff.isBefore(vs, 'day')) return false;
+            if (fi && fi.isValid() && fi.isAfter(ve, 'day')) return false;
+            return true;
+        });
+
+        let wantIds = {};
+        filtered.forEach(function (g, index) {
+            wantIds[String(g.id)] = true;
+            let existing = window.AppGroups.get(g.id);
+            if (existing) {
+                window.AppGroups.update({
+                    id: g.id,
+                    orden: index,
+                    fecha_inicio: g.fecha_inicio || '',
+                    fecha_fin_iso: g.fecha_fin_iso || '',
+                    fecha_fin: g.fecha_fin,
+                });
+            } else {
+                window.AppGroups.add({
+                    id: g.id,
+                    title: g.title,
+                    codigo: g.codigo,
+                    fecha_fin: g.fecha_fin,
+                    fecha_inicio: g.fecha_inicio || '',
+                    fecha_fin_iso: g.fecha_fin_iso || '',
+                    orden: index,
+                });
+            }
+        });
+
+        (window.AppGroups.getIds() || []).forEach(function (id) {
+            if (!wantIds[String(id)]) {
+                try { window.AppGroups.remove(id); } catch (e) { /* ignore */ }
+            }
+        });
+    };
 
     // Suprimir / Delete con bloque seleccionado = "Solo este bloque"
     document.addEventListener('keydown', function (e) {

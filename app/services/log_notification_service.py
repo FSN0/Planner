@@ -1,6 +1,8 @@
 """Contadores de logs no leídos por categoría."""
 from datetime import datetime, timezone
 
+from sqlalchemy import func
+
 from app import db
 from app.models import ConfiguracionGlobal, LogAcknowledgement, LogPreference, SystemLog
 from app.utils.timezone_utils import utc_now
@@ -18,20 +20,31 @@ def get_unread_logs_by_category(user_id, active_only=True):
         p.category: p
         for p in LogPreference.query.filter_by(user_id=user_id).all()
     }
-    unread = {}
-
+    # Sin preferencias activas no hay badges → evita escanear system_logs.
+    active_cats = []
+    last_reads = {}
     for cat in LOG_TAB_CATEGORIES:
         pref = prefs.get(cat)
         if active_only and (not pref or not pref.is_active):
             continue
-        last_read = pref.last_read_at if pref else datetime.min.replace(tzinfo=timezone.utc)
+        active_cats.append(cat)
+        last_reads[cat] = (
+            pref.last_read_at if pref and pref.last_read_at
+            else datetime.min.replace(tzinfo=timezone.utc)
+        )
+    if not active_cats:
+        return {}
+
+    unread = {}
+    # Una COUNT por categoría activa (típicamente 0–5), con filtro timestamp.
+    # Con índice (category, timestamp) es barato; sin prefs activas no se llega aquí.
+    for cat in active_cats:
         count = SystemLog.query.filter(
             SystemLog.category == cat,
-            SystemLog.timestamp > last_read,
+            SystemLog.timestamp > last_reads[cat],
         ).count()
         if count > 0:
             unread[cat] = count
-
     return unread
 
 
@@ -82,7 +95,7 @@ def get_unread_laboral_logs(user_id):
 def get_unread_laboral_logs_by_category(user_id):
     """Cuenta logs laborales no acusados por categoría."""
     rows = (
-        db.session.query(SystemLog.category, db.func.count(SystemLog.id))
+        db.session.query(SystemLog.category, func.count(SystemLog.id))
         .filter(*_laboral_base_filter(user_id))
         .group_by(SystemLog.category)
         .all()
