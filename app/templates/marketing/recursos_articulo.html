@@ -24,10 +24,10 @@
         "name": "SignaPlan",
         "logo": {
           "@type": "ImageObject",
-          "url": "{{ request.url_root.rstrip('/') }}{{ url_for('static', filename='img/brand/favicon-192.png') }}"
+          "url": "{{ marketing_origin() }}{{ url_for('static', filename='img/brand/favicon-192.png') }}"
         }
       },
-      "mainEntityOfPage": "{{ request.url_root.rstrip('/') }}{{ url_for('marketing.recurso', slug=slug) }}"
+      "mainEntityOfPage": "{{ marketing_url(url_for('marketing.recurso', slug=slug)) }}"
     }
     </script>
 </head>
@@ -38,10 +38,7 @@
               {% include "components/_brand_logo.html" %}
             {% endwith %}
         </a>
-        <nav class="mkt-nav-links">
-            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
-            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
-        </nav>
+        {% include "components/_marketing_nav.html" %}
     </header>
 
     <article class="mkt-article">
@@ -60,8 +57,8 @@
         <span>© {{ current_year }} SignaPlan</span>
         <span>
             <a href="/">Inicio</a> ·
-            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a> ·
-            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a>
+            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a> ·
+            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a>
         </span>
     </footer>
     {% include "components/_cookie_banner.html" %}

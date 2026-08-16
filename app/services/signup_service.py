@@ -9,7 +9,6 @@ import re
 import unicodedata
 from datetime import datetime
 
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import text
 
 from app import db
@@ -28,8 +27,6 @@ _SUBDOMINIOS_BLOQUEADOS = _RESERVED_SUBDOMAINS | frozenset({
 })
 
 _SUB_RE = re.compile(r'^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$')
-_ENTRADA_SALT = 'signaplan-signup-auto-login'
-_ENTRADA_MAX_AGE = 600  # 10 minutos para completar el salto de host
 
 
 class SignupError(Exception):
@@ -167,56 +164,3 @@ def url_acceso_tenant(tenant, path='/auth/login'):
 
     base = (current_app.config.get('SIGNAPLAN_BASE_DOMAIN') or 'signaplan.com').strip()
     return f'https://{tenant.subdominio}.{base}{path}'
-
-
-def _entrada_serializer():
-    from flask import current_app
-    secret = current_app.config.get('SECRET_KEY')
-    if not secret:
-        raise SignupError('SECRET_KEY no configurada.')
-    return URLSafeTimedSerializer(secret_key=secret, salt=_ENTRADA_SALT)
-
-
-def crear_token_entrada_post_alta(tenant, admin_email):
-    """
-    Token de corta vida para entrar en el subdominio del tenant sin
-    volver a pedir usuario/contraseña.
-
-    Hace falta porque la cookie de sesión de localhost no sirve en
-    paquito.localhost: son hosts distintos.
-    """
-    return _entrada_serializer().dumps({
-        'tid': tenant.id,
-        'sub': tenant.subdominio,
-        'email': (admin_email or '').strip().lower(),
-    })
-
-
-def leer_token_entrada_post_alta(token, tenant_esperado):
-    """Devuelve el email del admin si el token es válido para este tenant."""
-    try:
-        data = _entrada_serializer().loads(token, max_age=_ENTRADA_MAX_AGE)
-    except SignatureExpired as exc:
-        raise SignupError(
-            'El enlace de acceso ha caducado. Entra con tu correo y contraseña.'
-        ) from exc
-    except BadSignature as exc:
-        raise SignupError('El enlace de acceso no es válido.') from exc
-
-    if int(data.get('tid') or 0) != int(tenant_esperado.id):
-        raise SignupError('El enlace no corresponde a este espacio.')
-    if (data.get('sub') or '') != tenant_esperado.subdominio:
-        raise SignupError('El enlace no corresponde a este espacio.')
-    email = (data.get('email') or '').strip().lower()
-    if not email:
-        raise SignupError('El enlace de acceso no es válido.')
-    return email
-
-
-def url_entrada_automatica(tenant, admin_email):
-    """URL completa al subdominio con token de entrada automática."""
-    from urllib.parse import quote
-    token = crear_token_entrada_post_alta(tenant, admin_email)
-    return url_acceso_tenant(
-        tenant, path=f'/auth/entrar-alta?t={quote(token, safe="")}'
-    )

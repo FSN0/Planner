@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    {% set page_title = 'Soluciones SignaPlan — planificar, fichar y flota en obra' %}
-    {% set meta_description = 'Cuadrante de personal, fichaje en construcción, registro de jornada y flota para constructoras. Soluciones prácticas sin montar un ERP entero.' %}
+    {% set page_title = 'Soluciones SignaPlan — cuadrante, fichaje en obra y flota' %}
+    {% set meta_description = 'Cuadrante de personal, fichaje y control horario en construcción, registro de jornada y flota. Sin montar un ERP. Alta gratuita.' %}
     {% set canonical_path = url_for('marketing.soluciones_index') %}
     {% set legal_email = contact_email %}
     {% include "components/_marketing_seo_head.html" %}
@@ -18,10 +18,7 @@
               {% include "components/_brand_logo.html" %}
             {% endwith %}
         </a>
-        <nav class="mkt-nav-links">
-            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
-            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
-        </nav>
+        {% include "components/_marketing_nav.html" %}
     </header>
 
     <section class="mkt-article mkt-soluciones">
@@ -45,8 +42,16 @@
         </ul>
         <p class="mkt-article-cta">
             <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta gratuita</a>
-            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.contacto') }}">Hablar con nosotros</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.recursos_index') }}">Guías prácticas</a>
         </p>
+        <nav class="mkt-related" aria-label="Guías relacionadas">
+            <h2>Guías si vienes de Google</h2>
+            <ul>
+                <li><a href="{{ url_for('marketing.recurso', slug='cuadrante-personal-obra') }}">Cuadrante de personal de obra</a></li>
+                <li><a href="{{ url_for('marketing.recurso', slug='inspeccion-trabajo-construccion') }}">Inspección de jornada en construcción</a></li>
+                <li><a href="{{ url_for('marketing.recurso', slug='software-constructoras') }}">Software para constructoras (sin ERP)</a></li>
+            </ul>
+        </nav>
     </section>
 
     <footer class="mkt-footer">

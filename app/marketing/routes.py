@@ -313,6 +313,7 @@ def legal(slug):
         page['template'],
         current_year=datetime.utcnow().year,
         page_title=page['title'],
+        legal_slug=slug,
         legal=_legal_entity(),
     )
 
@@ -377,8 +378,8 @@ def solucion(slug):
 
 @marketing_bp.route('/robots.txt')
 def robots_txt():
-    # Público en marketing host; en tenants no hace daño servir lo mismo.
-    sitemap = url_for('marketing.sitemap_xml', _external=True)
+    from app.services.seo_origin_service import marketing_url
+    sitemap = marketing_url('/sitemap.xml')
     body = (
         "User-agent: *\n"
         "Allow: /\n"
@@ -387,6 +388,7 @@ def robots_txt():
         "Disallow: /superadmin\n"
         "Disallow: /api/\n"
         "Disallow: /sync\n"
+        "Disallow: /preferencias/\n"
         f"Sitemap: {sitemap}\n"
     )
     return Response(body, mimetype='text/plain')
@@ -395,29 +397,32 @@ def robots_txt():
 @marketing_bp.route('/sitemap.xml')
 def sitemap_xml():
     _require_marketing()
-    base = request.url_root.rstrip('/')
+    from app.services.seo_origin_service import marketing_origin
+    base = marketing_origin()
     urls = [
-        ('/', '1.0', 'weekly'),
-        ('/alta', '0.8', 'monthly'),
-        ('/entrar', '0.6', 'monthly'),
-        ('/contacto', '0.7', 'monthly'),
-        ('/soluciones/', '0.9', 'weekly'),
-        ('/recursos/', '0.7', 'weekly'),
+        ('/', '1.0', 'weekly', None),
+        ('/alta', '0.8', 'monthly', None),
+        ('/entrar', '0.6', 'monthly', None),
+        ('/contacto', '0.7', 'monthly', None),
+        ('/soluciones/', '0.9', 'weekly', None),
+        ('/recursos/', '0.7', 'weekly', None),
     ]
     for slug in LEGAL_PAGES:
-        urls.append((f'/legal/{slug}', '0.3', 'yearly'))
+        urls.append((f'/legal/{slug}', '0.3', 'yearly', None))
     for s in list_solutions():
-        urls.append((f"/soluciones/{s['slug']}", '0.85', 'monthly'))
+        urls.append((f"/soluciones/{s['slug']}", '0.85', 'monthly', s.get('updated')))
     for a in list_articles():
-        urls.append((f"/recursos/{a['slug']}", '0.65', 'monthly'))
+        urls.append((f"/recursos/{a['slug']}", '0.65', 'monthly', a.get('updated')))
 
     parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     ]
-    for path, prio, freq in urls:
+    for path, prio, freq, lastmod in urls:
         parts.append('  <url>')
         parts.append(f'    <loc>{base}{path}</loc>')
+        if lastmod:
+            parts.append(f'    <lastmod>{lastmod}</lastmod>')
         parts.append(f'    <changefreq>{freq}</changefreq>')
         parts.append(f'    <priority>{prio}</priority>')
         parts.append('  </url>')

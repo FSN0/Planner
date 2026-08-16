@@ -14,7 +14,14 @@ from app.models import (
     CONFLICT_PENDING, LEAVE_STATUS_PENDIENTE, LEAVE_STATUS_APROBADA,
     ROLE_OPERARIO, ROLE_JEFE, ROLE_RRHH, ROLE_ADMIN,
 )
+from app.services.fichaje_estado_service import FICHAJE_INTERVENCION, FICHAJE_OK
 from app.utils.timezone_utils import today_local
+
+# Un día se considera "cerrado" cuando el estado es OK (incluye resoluciones de
+# auditoría: Resuelto_*, Cerrado_Multiobra, Exento_Ausencia) o intervención
+# humana (Sobreescrito_RRHH). Sin esta unión, un `Resuelto_Movido` desaparece
+# del KPI de OK y el admin siente que no avanza tras resolver.
+_FICHAJE_ESTADOS_CERRADOS = FICHAJE_OK | FICHAJE_INTERVENCION
 
 
 def resumen_hoy_plan_vs_ficha(fecha=None, limite=40):
@@ -218,7 +225,9 @@ def get_admin_panel_context():
     )
 
     fichajes_hoy = RegistroFichaje.query.filter_by(fecha=today).all()
-    fichajes_ok_hoy = sum(1 for f in fichajes_hoy if f.estado == 'Correcto')
+    fichajes_ok_hoy = sum(
+        1 for f in fichajes_hoy if f.estado in _FICHAJE_ESTADOS_CERRADOS
+    )
     fichajes_incidente_hoy = sum(
         1 for f in fichajes_hoy
         if f.estado in ('Conflicto', 'Paracaidista', 'Ausencia')
@@ -441,7 +450,9 @@ def get_jefe_panel_context(user):
     audit_pendientes_total = audit_conflictos + audit_paracaidistas + audit_ausencias
     libres_hoy = 0
     ocupacion_pct = 0
-    fichajes_ok_hoy = sum(1 for f in fichajes_hoy if f.estado == 'Correcto')
+    fichajes_ok_hoy = sum(
+        1 for f in fichajes_hoy if f.estado in _FICHAJE_ESTADOS_CERRADOS
+    )
     fichajes_incidente_hoy = sum(
         1 for f in fichajes_hoy
         if f.estado in ('Conflicto', 'Paracaidista', 'Ausencia')

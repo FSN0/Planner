@@ -299,6 +299,16 @@ body.marketing-page {
   border-top: 3px solid var(--mkt-primary);
 }
 
+.mkt-suite-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.mkt-suite-link:hover h3 {
+  color: var(--mkt-primary);
+}
+
 .mkt-suite-num {
   display: block;
   font-family: var(--font-display);
@@ -339,6 +349,11 @@ body.marketing-page {
   margin: 0;
   color: rgba(248, 250, 252, 0.72);
   font-size: 1.05rem;
+}
+
+.mkt-legal-inner a {
+  color: #86efac;
+  font-weight: 600;
 }
 
 .mkt-erp-band {
@@ -577,7 +592,8 @@ body.marketing-page {
 @media (max-width: 860px) {
   .mkt-suite { grid-template-columns: 1fr; }
   .mkt-access { grid-template-columns: 1fr; }
-  .mkt-nav-links a:not(.mkt-btn) { display: none; }
+  .mkt-nav-links { flex-wrap: wrap; gap: 0.7rem; justify-content: flex-end; }
+  .mkt-lang { display: none; }
   .mkt-hero {
     min-height: 88vh;
     align-items: flex-end;

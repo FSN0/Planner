@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="{{ current_locale }}">
 <head>
-    {% set page_title = 'SignaPlan — ' + _('hero.headline') %}
-    {% set meta_description = _('hero.sub') %}
+    {% set page_title = 'SignaPlan — Cuadrante, fichaje y flota para constructoras (sin ERP)' %}
+    {% set meta_description = 'Software para constructoras PYME: cuadrante de quién va a cada obra, fichaje en el tajo y coches libres. Sin ERP, sin tarjeta. Crea cuenta en minutos.' %}
     {% set canonical_path = '/' %}
     {% set legal_email = 'info@signaplan.com' %}
     {% include "components/_marketing_seo_head.html" %}
@@ -18,25 +18,8 @@
               {% include "components/_brand_logo.html" %}
             {% endwith %}
         </a>
-        <nav class="mkt-nav-links">
-            <a href="{{ url_for('marketing.entrar') }}">{{ _('nav.login') }}</a>
-            <a href="#suite">{{ _('nav.features') }}</a>
-            <a href="#integraciones">{{ _('nav.integrations') }}</a>
-            <a href="#acceso">{{ _('nav.access') }}</a>
-            <a href="{{ url_for('marketing.contacto') }}">{{ _('footer.contact') }}</a>
-            <div class="mkt-lang">
-                <label class="visually-hidden" for="mkt-lang">{{ _('nav.lang') }}</label>
-                <select id="mkt-lang" onchange="window.location.href=this.value">
-                    {% for code in supported_locales %}
-                    <option value="{{ url_for('main.update_user_locale', lang=code, next=request.path) }}"
-                            {% if code == current_locale %}selected{% endif %}>
-                        {{ locale_labels[code] }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">{{ _('nav.cta') }}</a>
-        </nav>
+        {% set show_lang = true %}
+        {% include "components/_marketing_nav.html" %}
     </header>
 
     <section class="mkt-hero">
@@ -46,7 +29,7 @@
             <p class="mkt-hero-sub">{{ _('hero.sub') }}</p>
             <div class="mkt-hero-actions">
                 <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">{{ _('hero.cta_primary') }}</a>
-                <a class="mkt-btn mkt-btn-ghost-light" href="{{ url_for('marketing.entrar') }}">{{ _('nav.login') }}</a>
+                <a class="mkt-btn mkt-btn-ghost-light" href="{{ url_for('marketing.soluciones_index') }}">Ver soluciones</a>
             </div>
             <p class="mkt-hero-proof">{{ _('hero.proof') }}</p>
         </div>
@@ -59,21 +42,53 @@
         </div>
         <div class="mkt-suite">
             <article class="mkt-suite-item">
+                <a class="mkt-suite-link" href="{{ url_for('marketing.solucion', slug='planificador-personal-obra') }}">
                 <span class="mkt-suite-num">01</span>
                 <h3>{{ _('suite.plan.title') }}</h3>
                 <p>{{ _('suite.plan.body') }}</p>
+                </a>
             </article>
             <article class="mkt-suite-item">
+                <a class="mkt-suite-link" href="{{ url_for('marketing.solucion', slug='fichaje-construccion') }}">
                 <span class="mkt-suite-num">02</span>
                 <h3>{{ _('suite.clock.title') }}</h3>
                 <p>{{ _('suite.clock.body') }}</p>
+                </a>
             </article>
             <article class="mkt-suite-item">
+                <a class="mkt-suite-link" href="{{ url_for('marketing.solucion', slug='flota-obra') }}">
                 <span class="mkt-suite-num">03</span>
                 <h3>{{ _('suite.fleet.title') }}</h3>
                 <p>{{ _('suite.fleet.body') }}</p>
+                </a>
             </article>
         </div>
+    </section>
+
+    <section class="mkt-section" id="guias">
+        <div class="mkt-section-header">
+            <h2>Si estás buscando esto</h2>
+            <p>Guías cortas para constructoras. El siguiente paso es crear cuenta, no descargar un Excel.</p>
+        </div>
+        <ul class="mkt-article-list" style="max-width: 48rem;">
+            <li>
+                <a href="{{ url_for('marketing.recurso', slug='cuadrante-personal-obra') }}"><strong>Cuadrante de personal de obra</strong></a>
+                <span>Quién va a cada tajo cada día. No es un Gantt ni un ERP.</span>
+            </li>
+            <li>
+                <a href="{{ url_for('marketing.recurso', slug='inspeccion-trabajo-construccion') }}"><strong>Inspección de jornada en construcción</strong></a>
+                <span>Qué se suele pedir en obra y por qué el Excel no aguanta el tajo.</span>
+            </li>
+            <li>
+                <a href="{{ url_for('marketing.recurso', slug='software-constructoras') }}"><strong>Software para constructoras (sin ERP)</strong></a>
+                <span>Cuadrante, fichaje y flota. Alta sin tarjeta.</span>
+            </li>
+        </ul>
+        <p style="margin-top:1.25rem;">
+            <a href="{{ url_for('marketing.recursos_index') }}">Ver todas las guías</a>
+            ·
+            <a href="{{ url_for('marketing.soluciones_index') }}">Ver soluciones</a>
+        </p>
     </section>
 
     <section class="mkt-erp-band" id="integraciones">
@@ -90,6 +105,9 @@
         <div class="mkt-legal-inner">
             <h2>{{ _('legal.title') }}</h2>
             <p>{{ _('legal.body') }}</p>
+            <p style="margin-top:1rem;">
+                <a href="{{ url_for('marketing.recurso', slug='inspeccion-trabajo-construccion') }}">Inspección de jornada en obra</a>
+            </p>
         </div>
     </section>
 

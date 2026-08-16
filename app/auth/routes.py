@@ -137,58 +137,6 @@ def _complete_login(user, remember, *, source, success_message=None):
     return render_template('login.html', **_login_page_context())
 
 
-@auth_bp.route('/entrar-alta')
-@limiter.limit('10 per minute; 30 per hour')
-def entrar_alta():
-    """
-    Compatibilidad con enlaces antiguos de auto-login post-alta.
-    El flujo actual pide verificación de correo (/auth/verificar-email),
-    pero permite entrar con email pendiente (banner de verificación).
-    """
-    from app.services.signup_service import SignupError, leer_token_entrada_post_alta
-
-    if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de tu empresa.', 'warning')
-        return redirect(url_for('main.dashboard'))
-
-    token = request.args.get('t') or ''
-    try:
-        email = leer_token_entrada_post_alta(token, g.current_tenant)
-    except SignupError as exc:
-        flash(str(exc), 'warning')
-        return redirect(url_for('auth.login'))
-
-    user = User.query.filter_by(email=email, is_deleted=False).first()
-    if user is None or not user.is_active:
-        flash('No se ha podido abrir la sesión. Entra con tu correo y contraseña.', 'warning')
-        return redirect(url_for('auth.login'))
-
-    if current_user.is_authenticated:
-        logout_user()
-
-    login_user(user, remember=True)
-    session['tenant_id'] = g.current_tenant.id
-    if _marcar_email_pendiente(user):
-        flash(
-            'Has entrado. Verifica tu correo cuando puedas; hasta entonces '
-            'algunas acciones sensibles están limitadas.',
-            'info',
-        )
-    try:
-        from app.utils import register_log
-        register_log(
-            user_id=user.id,
-            category='accesos',
-            action='Entrada post-alta',
-            detail=f"Login automático tras crear cuenta. IP: {request.remote_addr or 'Desconocida'}",
-        )
-    except Exception:
-        pass
-
-    destino = _destino_por_rol(user)
-    return redirect(destino or url_for('admin.panel'))
-
-
 @auth_bp.route('/verificar-email')
 @limiter.limit('10 per minute; 30 per hour')
 def verificar_email():

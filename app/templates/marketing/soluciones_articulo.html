@@ -18,7 +18,7 @@
       "name": {{ solution.title|tojson }},
       "description": {{ solution.description|tojson }},
       "dateModified": {{ solution.updated|tojson }},
-      "isPartOf": { "@type": "WebSite", "name": "SignaPlan", "url": "{{ request.url_root.rstrip('/') }}/" },
+      "isPartOf": { "@type": "WebSite", "name": "SignaPlan", "url": "{{ marketing_origin() }}/" },
       "mainEntity": {
         "@type": "SoftwareApplication",
         "name": "SignaPlan",
@@ -53,11 +53,7 @@
               {% include "components/_brand_logo.html" %}
             {% endwith %}
         </a>
-        <nav class="mkt-nav-links">
-            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a>
-            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
-            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
-        </nav>
+        {% include "components/_marketing_nav.html" %}
     </header>
 
     <article class="mkt-article">

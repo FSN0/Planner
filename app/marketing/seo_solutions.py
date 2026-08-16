@@ -4,10 +4,10 @@ from __future__ import annotations
 
 SOLUTIONS = {
     "fichaje-construccion": {
-        "title": "Fichaje en construcción: móvil en obra sin reloj de pared",
+        "title": "Fichaje en construcción: control horario en el tajo, sin reloj de pared",
         "description": (
-            "Fichaje para constructoras con DNI + PIN en el móvil. Entradas, salidas y "
-            "pausas en el tajo, unido al cuadrante de personal. Prueba SignaPlan gratis."
+            "Fichaje y control horario para constructoras: DNI + PIN en el móvil. "
+            "Entradas, pausas y registro de jornada. Prueba SignaPlan gratis, sin tarjeta."
         ),
         "h1": "Fichaje en construcción pensado para el tajo",
         "eyebrow": "Solución · Fichaje",
@@ -25,7 +25,7 @@ SOLUTIONS = {
             },
             {
                 "q": "¿Cumple con el registro de jornada?",
-                "a": "SignaPlan genera un registro de jornada con trazabilidad (eventos encadenados, pausas y exportación). Consulta también nuestra guía de registro de jornada en obra.",
+                "a": "SignaPlan genera un registro de jornada con trazabilidad (eventos encadenados, pausas y exportación). Consulta también la guía de inspección de jornada en obra.",
             },
         ],
         "body_html": """
@@ -53,15 +53,16 @@ donde esté el tajo, y que la oficina pueda revisar el mismo día.</p>
 y Excel, y quieren fichaje real sin montar un ERP entero el primer mes.</p>
 
 <p>Empieza con <a href="/alta">cuenta gratuita</a> o mira también
-<a href="/soluciones/registro-jornada-obra">registro de jornada en obra</a> y el
-<a href="/soluciones/planificador-personal-obra">planificador de personal</a>.</p>
+<a href="/soluciones/registro-jornada-obra">registro de jornada en obra</a>,
+<a href="/recursos/inspeccion-trabajo-construccion">inspección en construcción</a>
+y el <a href="/soluciones/planificador-personal-obra">planificador de personal</a>.</p>
 """,
     },
     "planificador-personal-obra": {
-        "title": "Planificador de personal de obra: quién va a cada tajo cada día",
+        "title": "Planificador de personal de obra: el cuadrante diario (no un Gantt)",
         "description": (
-            "Cuadrante de peones y jefes por obra y fecha. Menos Excel, menos WhatsApp. "
-            "Planificador de personal para constructoras — SignaPlan."
+            "Quién va a cada tajo cada día. Cuadrante de peones y jefes por obra y fecha. "
+            "No es un ERP. Alta gratuita en SignaPlan, sin tarjeta."
         ),
         "h1": "Planificador de personal de obra (cuadrante real)",
         "eyebrow": "Solución · Planificación",
@@ -108,14 +109,14 @@ SignaPlan cubre el <em>día a día de gente y vehículos</em>. Puedes empezar po
 y enlazar un ERP después si hace falta.</p>
 
 <p><a href="/alta">Crear cuenta gratuita</a> ·
-<a href="/contacto">Pedir demo</a></p>
+<a href="/recursos/cuadrante-personal-obra">Guía: cuadrante de personal</a></p>
 """,
     },
     "registro-jornada-obra": {
-        "title": "Registro de jornada en obra: trazabilidad para inspección",
+        "title": "Registro de jornada en obra: listo para una inspección",
         "description": (
-            "Registro de jornada laboral para constructoras: digital, con pausas y "
-            "exportación. Prepárate ante inspección sin Excel eterno. SignaPlan."
+            "Registro de jornada laboral para constructoras: fichaje en el tajo, pausas "
+            "y exportación. Sin Excel eterno. Empieza gratis en SignaPlan."
         ),
         "h1": "Registro de jornada en obra con trazabilidad",
         "eyebrow": "Solución · Cumplimiento",
@@ -160,7 +161,7 @@ papel y el Excel. Conviene adelantarse con un sistema usable en campo.</p>
 <a href="/soluciones/planificador-personal-obra">cuadrante</a>.</p>
 
 <p><a href="/alta">Empezar gratis</a> ·
-<a href="/recursos/registro-jornada-laboral">Guía relacionada</a></p>
+<a href="/recursos/inspeccion-trabajo-construccion">Guía: inspección en obra</a></p>
 """,
     },
     "flota-obra": {

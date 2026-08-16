@@ -9,15 +9,27 @@ $(document).ready(function() {
     let modalCalendarInstance = null;
     let libresCalendarInstance = null;
 
-    /** Altura real de la cabecera sticky → top/height de operarios libres alineados. */
+    /**
+     * Altura real de la cabecera sticky → top/height de operarios libres.
+     * Solo actualiza si cambia ≥2px (evita el «salto» al cargar).
+     */
     function syncKanbanHeaderHeight() {
         var header = document.querySelector('.kanban-sticky-header');
         if (!header) return;
-        var h = Math.ceil(header.getBoundingClientRect().height);
+        var h = Math.round(header.getBoundingClientRect().height);
         if (h < 1) return;
+        var prev = parseFloat(
+            getComputedStyle(document.documentElement)
+                .getPropertyValue('--kanban-header-height')
+        ) || 0;
+        if (Math.abs(prev - h) < 2) return;
         document.documentElement.style.setProperty('--kanban-header-height', h + 'px');
     }
-    syncKanbanHeaderHeight();
+    // Medir en el primer frame (cabecera ya en layout); sin timeouts que muevan la columna
+    requestAnimationFrame(function () {
+        syncKanbanHeaderHeight();
+        requestAnimationFrame(syncKanbanHeaderHeight);
+    });
     window.addEventListener('resize', syncKanbanHeaderHeight, { passive: true });
     if (typeof ResizeObserver !== 'undefined') {
         var headerEl = document.querySelector('.kanban-sticky-header');
@@ -26,9 +38,6 @@ $(document).ready(function() {
             ro.observe(headerEl);
         }
     }
-    // Tras fuentes/tour/filtros que cambian altura
-    setTimeout(syncKanbanHeaderHeight, 100);
-    setTimeout(syncKanbanHeaderHeight, 400);
 
     // =========================================================================
     // 1. EVENTOS: DRAG & DROP — abre calendario con datos preseleccionados

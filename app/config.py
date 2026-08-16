@@ -64,6 +64,10 @@ class Config:
 
     # Dominio raíz del producto (subdominios {cliente}.signaplan.com).
     SIGNAPLAN_BASE_DOMAIN = (os.environ.get('SIGNAPLAN_BASE_DOMAIN') or 'signaplan.com').strip()
+    # Origen canónico del marketing (sin www). Sitemap, <link rel=canonical> y OG.
+    SIGNAPLAN_PUBLIC_ORIGIN = (
+        os.environ.get('SIGNAPLAN_PUBLIC_ORIGIN') or 'https://signaplan.com'
+    ).strip().rstrip('/')
     # Host comercial / DOMAIN del compose (localhost en dev, signaplan.com en prod).
     DOMAIN = (os.environ.get('DOMAIN') or '').strip() or None
 

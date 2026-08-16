@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    {% set page_title = 'Guías SignaPlan — planificador, fichaje y flota' %}
-    {% set meta_description = 'Artículos prácticos sobre planificador de obra, fichaje en construcción, registro de jornada y flota para constructoras.' %}
+    {% set page_title = 'Guías SignaPlan — cuadrante, fichaje e inspección de jornada' %}
+    {% set meta_description = 'Cuadrante de personal de obra, fichaje en construcción, registro de jornada e inspección. Textos prácticos para constructoras, no jerga de ERP.' %}
     {% set canonical_path = url_for('marketing.recursos_index') %}
     {% set legal_email = contact_email %}
     {% include "components/_marketing_seo_head.html" %}
@@ -18,15 +18,12 @@
               {% include "components/_brand_logo.html" %}
             {% endwith %}
         </a>
-        <nav class="mkt-nav-links">
-            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
-            <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">Empezar gratis</a>
-        </nav>
+        {% include "components/_marketing_nav.html" %}
     </header>
 
     <section class="mkt-article">
         <h1>Guías para constructoras</h1>
-        <p class="mkt-article-lead">Textos prácticos sobre planificación, fichaje y flota. Pensados para quien busca soluciones reales, no jerga de software.</p>
+        <p class="mkt-article-lead">Cuadrante, fichaje e inspección de jornada. El siguiente paso es <a href="{{ url_for('marketing.alta') }}">crear cuenta</a>, no descargar un Excel.</p>
         <ul class="mkt-article-list">
             {% for a in articles %}
             <li>
@@ -39,7 +36,7 @@
 
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
-        <span><a href="/">Inicio</a> · <a href="{{ url_for('marketing.contacto') }}">Contacto</a></span>
+        <span><a href="/">Inicio</a> · <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a> · <a href="{{ url_for('marketing.contacto') }}">Contacto</a></span>
     </footer>
     {% include "components/_cookie_banner.html" %}
 </body>

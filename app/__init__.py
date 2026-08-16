@@ -273,7 +273,12 @@ def create_app():
         format_datetime, format_time, format_date, today_local,
         get_user_timezone, get_app_timezone, COMMON_TIMEZONES, timezone_label,
     )
-    app.jinja_env.globals.update(get_weekday_initial=get_weekday_initial)
+    from app.services.seo_origin_service import marketing_origin, marketing_url
+    app.jinja_env.globals.update(
+        get_weekday_initial=get_weekday_initial,
+        marketing_origin=marketing_origin,
+        marketing_url=marketing_url,
+    )
     app.jinja_env.filters['format_dt'] = format_datetime
     app.jinja_env.filters['format_time'] = format_time
     app.jinja_env.filters['format_date'] = format_date

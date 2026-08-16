@@ -93,4 +93,5 @@ def update_user_locale():
         flash(translate('pref.language_saved', locale), 'success')
 
     resp = make_response(redirect(dest))
+    resp.headers['X-Robots-Tag'] = 'noindex, nofollow'
     return set_locale_cookie(resp, locale)

@@ -1,10 +1,12 @@
 {# Cabecera SEO/marketing compartida.
    Params opcionales: page_title, meta_description, canonical_path, og_type, noindex
+   Canónica SIEMPRE en el origen público (apex), no en el Host de la petición.
 #}
 {% set _title = page_title or ('SignaPlan — ' + _('hero.headline')) %}
 {% set _desc = meta_description or _('hero.sub') %}
-{% set _canon = canonical_url or request.url_root.rstrip('/') + (canonical_path or request.path) %}
-{% set _og_img = request.url_root.rstrip('/') + url_for('static', filename='img/brand/logo-horizontal.png') %}
+{% set _canon = canonical_url or marketing_url(canonical_path or request.path) %}
+{% set _origin = marketing_origin() %}
+{% set _og_img = _origin + url_for('static', filename='img/brand/logo-horizontal.png') %}
 {% set _mark = url_for('static', filename='img/brand/favicon-192.png') %}
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,12 +38,12 @@
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "{{ request.url_root.rstrip('/') }}/#organization",
+      "@id": "{{ _origin }}/#organization",
       "name": "SignaPlan",
-      "url": "{{ request.url_root.rstrip('/') }}/",
+      "url": "{{ _origin }}/",
       "logo": {
         "@type": "ImageObject",
-        "url": "{{ request.url_root.rstrip('/') }}{{ _mark }}",
+        "url": "{{ _origin }}{{ _mark }}",
         "width": 192,
         "height": 192
       },
@@ -49,25 +51,25 @@
     },
     {
       "@type": "WebSite",
-      "@id": "{{ request.url_root.rstrip('/') }}/#website",
-      "url": "{{ request.url_root.rstrip('/') }}/",
+      "@id": "{{ _origin }}/#website",
+      "url": "{{ _origin }}/",
       "name": "SignaPlan",
-      "publisher": { "@id": "{{ request.url_root.rstrip('/') }}/#organization" },
-      "inLanguage": ["es", "en", "pt", "fr"]
+      "publisher": { "@id": "{{ _origin }}/#organization" },
+      "inLanguage": "es"
     },
     {
       "@type": "SoftwareApplication",
       "name": "SignaPlan",
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Web",
-      "url": "{{ request.url_root.rstrip('/') }}/",
+      "url": "{{ _origin }}/",
       "description": {{ _desc|tojson }},
       "offers": {
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "EUR"
       },
-      "publisher": { "@id": "{{ request.url_root.rstrip('/') }}/#organization" }
+      "publisher": { "@id": "{{ _origin }}/#organization" }
     }
   ]
 }

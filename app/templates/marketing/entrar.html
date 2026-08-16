@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entrar — SignaPlan</title>
+    {% set page_title = 'Entrar — SignaPlan' %}
+    {% set meta_description = 'Accede al espacio de tu empresa en SignaPlan. Si no recuerdas la URL, te la enviamos por correo.' %}
+    {% set canonical_path = url_for('marketing.entrar') %}
+    {% include "components/_marketing_seo_head.html" %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
 </head>
 <body class="marketing-page">
@@ -14,10 +15,7 @@
         <a class="mkt-brand" href="/">
             {% include "components/_brand_logo.html" %}
         </a>
-        <nav class="mkt-nav-links">
-            <a href="{{ url_for('marketing.entrar') }}">Entrar</a>
-            <a href="{{ url_for('marketing.alta') }}">Crear cuenta</a>
-        </nav>
+        {% include "components/_marketing_nav.html" %}
     </header>
 
     <section class="mkt-section" style="padding-top: 4rem;">

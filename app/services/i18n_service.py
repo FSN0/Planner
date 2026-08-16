@@ -47,10 +47,10 @@ _CATALOG = {
         'nav.cta': 'Empezar gratis',
         'nav.lang': 'Idioma',
         'hero.brand': 'SignaPlan',
-        'hero.headline': 'Planifica la obra. Ficha en campo. Controla la flota.',
+        'hero.headline': 'Quién va a cada obra. Quién ficha. Qué coche está libre.',
         'hero.sub': (
-            'Una sola plataforma para cuadrante, fichaje móvil con registro de jornada '
-            'inalterable y vehículos. Pensada para constructoras que viven del día a día.'
+            'Cuadrante de personal, fichaje en el tajo y flota en la misma herramienta. '
+            'Para constructoras PYME: no es un ERP de presupuestos. Alta sin tarjeta.'
         ),
         'hero.cta_primary': 'Crear cuenta gratuita',
         'hero.cta_secondary': 'Ver cómo encaja',
@@ -60,8 +60,8 @@ _CATALOG = {
             'Planificación, fichaje y flota en la misma herramienta: '
             'menos ir y venir entre apps y más control del día a día en obra.'
         ),
-        'suite.plan.title': 'Planificador de obra',
-        'suite.plan.body': 'Quién va a cada tajo cada día. Tablero claro para oficina y jefes.',
+        'suite.plan.title': 'Cuadrante de personal',
+        'suite.plan.body': 'Quién va a cada tajo cada día. No es un Gantt ni un ERP: es el tablero de peones.',
         'suite.clock.title': 'Fichaje en obra',
         'suite.clock.body': 'DNI + PIN en el móvil. Pausas, conforme del trabajador e informe listo para inspección.',
         'suite.fleet.title': 'Flota y coches libres',

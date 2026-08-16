@@ -1,0 +1,21 @@
+{# Nav comercial: mismas puertas en todas las páginas públicas (enlazado interno). #}
+<nav class="mkt-nav-links">
+  <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a>
+  <a href="{{ url_for('marketing.recursos_index') }}">Guías</a>
+  <a href="{{ url_for('marketing.contacto') }}">{{ _('footer.contact') }}</a>
+  <a href="{{ url_for('marketing.entrar') }}">{{ _('nav.login') }}</a>
+  {% if show_lang|default(false) %}
+  <div class="mkt-lang">
+    <label class="visually-hidden" for="mkt-lang">{{ _('nav.lang') }}</label>
+    <select id="mkt-lang" onchange="window.location.href=this.value">
+      {% for code in supported_locales %}
+      <option value="{{ url_for('main.update_user_locale', lang=code, next=request.path) }}"
+              {% if code == current_locale %}selected{% endif %}>
+        {{ locale_labels[code] }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="{{ url_for('marketing.alta') }}">{{ _('nav.cta') }}</a>
+</nav>

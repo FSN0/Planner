@@ -342,8 +342,9 @@ html, body {
     flex: 1;
     display: flex;
     padding: 0.85rem 1rem 1.25rem;
-    overflow-x: auto;
-    overflow-y: visible;
+    /* NO overflow aquí: overflow-x en el contenedor convierte overflow-y en auto
+       y el sticky de «libres» se calcula dentro del panel → hueco / salto hacia abajo. */
+    overflow: visible;
     align-items: flex-start;
     background-color: var(--color-bg-main, #f1f5f9);
     width: 100%;
@@ -378,8 +379,8 @@ html, body {
     border: 1px solid var(--color-border-strong, #e2e8f0);
     border-radius: var(--radius-lg, 12px);
     box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
-    /* top/height siguen la cabecera sticky real (--kanban-header-height) */
-    --kanban-libres-top: var(--kanban-header-height, 0px);
+    /* Misma fila que las obras. Al hacer scroll de página se pega bajo la cabecera. */
+    --kanban-libres-top: var(--kanban-header-height, 7.5rem);
     height: calc(100vh - var(--kanban-libres-top) - 1rem) !important;
     max-height: none;
     position: sticky;
@@ -389,6 +390,7 @@ html, body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    z-index: 5; /* por debajo de .kanban-sticky-header (30) */
 }
 .kanban-libres-head {
     padding: 0.65rem 0.7rem 0.55rem;
@@ -453,12 +455,16 @@ html, body {
     scrollbar-width: thin;
 }
 
-/* Wrapper de Obras */
+/* Wrapper de Obras — aquí el scroll horizontal (no en .kanban-container) */
 .kanban-works-wrapper {
     display: flex;
     gap: 16px;
     padding-right: 20px;
     align-items: flex-start; /* Alineadas arriba */
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: visible;
 }
 
 /* --------------------------------------------------------

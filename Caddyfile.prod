@@ -4,8 +4,12 @@
     }
 }
 
-# Dominio raíz SignaPlan (certificado estático)
-signaplan.com, www.signaplan.com {
+# Un solo host indexable: apex. www redirige (Search Console estaba partido).
+www.signaplan.com {
+    redir https://signaplan.com{uri} 301
+}
+
+signaplan.com {
     reverse_proxy web:5000
     encode gzip
 
