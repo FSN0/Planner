@@ -160,11 +160,9 @@ class TestOnboardingPin:
             from flask import g
             g.current_tenant = tenant_soltec
             estado = estado_onboarding()
-            gente = next(p for p in estado['pasos'] if p['id'] == 'gente')
-            assert gente['hecho'] is False
+            antes = estado['con_pin']
 
             asignar_pin(op, '1234')
             session.commit()
             estado2 = estado_onboarding()
-            gente2 = next(p for p in estado2['pasos'] if p['id'] == 'gente')
-            assert gente2['hecho'] is True
+            assert estado2['con_pin'] == antes + 1

@@ -139,7 +139,18 @@ def entrar():
     recordar un email.
     """
     if not fichaje_operario_activo():
-        abort(404)
+        if request.args.get('tour'):
+            try:
+                from app.services.fichaje_operario_service import (
+                    activar_fichajes_alta,
+                    tenant_tiene_fichaje_operario_module,
+                )
+                if tenant_tiene_fichaje_operario_module():
+                    activar_fichajes_alta()
+            except Exception:
+                current_app.logger.exception('No se pudo activar fichaje al abrir /mi (tour)')
+        if not fichaje_operario_activo():
+            abort(404)
 
     # Guía: forzar pantalla de login aunque hubiera sesión residual.
     if request.args.get('tour') and current_user.is_authenticated:

@@ -2,6 +2,21 @@
 
 var t = window.SP_T || function (key) { return key; };
 
+window.SP_lang = function () {
+    var loc = String(window.SP_LOCALE || (document.documentElement && document.documentElement.lang) || 'es');
+    return loc.replace('_', '-').toLowerCase().split('-')[0] || 'es';
+};
+
+window.SP_dateLocale = function () {
+    var map = { es: 'es-ES', en: 'en-GB', pt: 'pt-PT', fr: 'fr-FR' };
+    var lang = window.SP_lang();
+    return map[lang] || lang || 'es-ES';
+};
+
+if (window.moment && typeof window.moment.locale === 'function') {
+    try { window.moment.locale(window.SP_lang()); } catch (e) { /* ignore */ }
+}
+
 // Configuración global para AJAX (CSRF Token)
 // Esto evita errores "400 Bad Request - CSRF token missing" en el futuro
 $.ajaxSetup({

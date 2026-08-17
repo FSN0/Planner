@@ -6,8 +6,8 @@
     {% set noindex = true %}
     {% include "components/_marketing_seo_head.html" %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
-    {% if creating %}
-    <meta http-equiv="refresh" content="3">
+    {% if creating or auto_open %}
+    <meta http-equiv="refresh" content="{% if auto_open and ticket_url %}0;url={{ ticket_url }}{% else %}3{% endif %}">
     {% endif %}
 </head>
 <body class="marketing-page">
@@ -17,7 +17,13 @@
         </a>
     </header>
     <section class="mkt-form-wrap">
-        {% if ready %}
+        {% if auto_open and ticket_url %}
+        <h1>{{ _('alta_confirmar.opening_h1') }}</h1>
+        <p>{{ _('alta_confirmar.opening_lead') }}</p>
+        <p style="margin-top:1.5rem;">
+            <a class="mkt-btn mkt-btn-secondary" href="{{ ticket_url }}">{{ _('alta_confirmar.open_here') }}</a>
+        </p>
+        {% elif ready %}
         <h1>{{ _('alta_confirmar.ready_h1') }}</h1>
         <p>
             {{ _('alta_pendiente.created_space') }} <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
@@ -32,18 +38,24 @@
         <h1>{{ _('alta_confirmar.busy_h1') }}</h1>
         <p>{{ _('alta_confirmar.busy_lead') }}</p>
         {% else %}
-        <h1>{{ _('alta_confirmar.h1') }}</h1>
-        <p>
-            {{ _('alta_confirmar.lead') }}
-            <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
-        </p>
-        <form method="POST" action="{{ mkt_url('marketing.alta_confirmar') }}" style="margin-top:1.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="t" value="{{ token }}">
-            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">
-                {{ _('alta_confirmar.cta') }}
-            </button>
-        </form>
+        <div id="alta-confirm-idle">
+            <h1>{{ _('alta_confirmar.h1') }}</h1>
+            <p>
+                {{ _('alta_confirmar.lead') }}
+                <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
+            </p>
+            <form id="alta-confirm-form" method="POST" action="{{ mkt_url('marketing.alta_confirmar') }}" style="margin-top:1.5rem;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="t" value="{{ token }}">
+                <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">
+                    {{ _('alta_confirmar.cta') }}
+                </button>
+            </form>
+        </div>
+        <div id="alta-confirm-busy" hidden>
+            <h1>{{ _('alta_confirmar.busy_h1') }}</h1>
+            <p>{{ _('alta_confirmar.busy_lead') }}</p>
+        </div>
         {% endif %}
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -58,5 +70,27 @@
         <span>© {{ current_year }} SignaPlan</span>
     </footer>
     {% include "components/_cookie_banner.html" %}
+    {% if auto_open and ticket_url %}
+    <script>
+      (function () {
+        var dest = {{ ticket_url|tojson }};
+        try { window.location.replace(dest); }
+        catch (e) { window.location.href = dest; }
+      })();
+    </script>
+    {% elif not ready and not creating %}
+    <script>
+      (function () {
+        var form = document.getElementById('alta-confirm-form');
+        if (!form) return;
+        form.addEventListener('submit', function () {
+          var idle = document.getElementById('alta-confirm-idle');
+          var busy = document.getElementById('alta-confirm-busy');
+          if (idle) idle.hidden = true;
+          if (busy) busy.hidden = false;
+        });
+      })();
+    </script>
+    {% endif %}
 </body>
 </html>

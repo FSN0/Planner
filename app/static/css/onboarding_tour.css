@@ -92,6 +92,50 @@
 .sp-tour-card.is-wide {
   max-width: 420px;
 }
+.sp-tour-card.is-hero {
+  max-width: 540px;
+  padding: 1.45rem 1.55rem 1.25rem;
+  border-radius: 16px;
+  outline: 3px solid #38bdf8;
+}
+.sp-tour-card.is-hero .sp-tour-progress {
+  display: none;
+}
+.sp-tour-card.is-hero h3 {
+  font-size: 1.28rem;
+  line-height: 1.25;
+  margin-bottom: 0.65rem;
+}
+.sp-tour-card.is-hero p {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #334155;
+  margin-bottom: 1.1rem;
+}
+.sp-tour-card.is-hero .sp-tour-choices {
+  margin-bottom: 0;
+}
+.sp-tour-card.is-hero .sp-tour-choices .sp-tour-primary {
+  justify-content: center;
+  padding: 0.85rem 1rem;
+  font-size: 1.02rem;
+  border-radius: 10px;
+}
+.sp-tour-card.is-hero .sp-tour-choices .sp-tour-ghost {
+  width: 100%;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #334155;
+  border: none;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sp-tour-card.is-hero .sp-tour-choices .sp-tour-ghost:hover {
+  background: #e2e8f0;
+}
 .sp-tour-choices {
   display: flex;
   flex-direction: column;
@@ -122,8 +166,20 @@
   color: #065f46;
   border: 1px solid #a7f3d0;
 }
-.sp-tour-choices .sp-tour-primary.is-done:hover {
-  background: #d1fae5;
+.sp-tour-choices .sp-tour-ghost {
+  width: 100%;
+  text-align: center;
+  background: #f1f5f9;
+  color: #334155;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sp-tour-choices .sp-tour-ghost:hover {
+  background: #e2e8f0;
 }
 .sp-tour-choice-tick {
   flex-shrink: 0;
@@ -268,4 +324,18 @@ body.sp-tour-active #worker-popover.sp-tour-target {
   z-index: 13040 !important;
   outline: 2px solid #38bdf8;
   outline-offset: 2px;
+}
+body.sp-tour-active .swal2-container {
+  z-index: 20060 !important;
+}
+.sp-tour-conflict-hint {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.8rem;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  color: #1e3a8a;
+  text-align: left;
+  line-height: 1.45;
 }

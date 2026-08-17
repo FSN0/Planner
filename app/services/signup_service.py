@@ -40,6 +40,11 @@ _SUBDOMINIOS_BLOQUEADOS = _RESERVED_SUBDOMAINS | frozenset({
 })
 
 _SUB_RE = re.compile(r'^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$')
+_MOBILE_UA_RE = re.compile(
+    r'mobile|iphone|ipod|android.*mobile|webos|blackberry|opera mini|opera mobi|iemobile',
+    re.I,
+)
+_TABLET_UA_RE = re.compile(r'ipad|tablet|playbook|silk', re.I)
 
 _LIVE_STATUSES = (
     SignupReservation.STATUS_PENDING,
@@ -185,6 +190,24 @@ def reserva_desde_cookie(value):
         return None
     rid = int(data.get('rid') or 0)
     return SignupReservation.query.get(rid) if rid else None
+
+
+def es_cliente_movil(user_agent=None, ch_ua_mobile=None):
+    """True si el enlace se abrió en un teléfono (no tablet ni escritorio)."""
+    if has_request_context():
+        if user_agent is None:
+            user_agent = request.headers.get('User-Agent')
+        if ch_ua_mobile is None:
+            ch_ua_mobile = request.headers.get('Sec-CH-UA-Mobile')
+    ch = (ch_ua_mobile or '').strip()
+    if ch == '?1':
+        return True
+    if ch == '?0':
+        return False
+    ua = user_agent or ''
+    if _TABLET_UA_RE.search(ua):
+        return False
+    return bool(_MOBILE_UA_RE.search(ua))
 
 
 def attach_wait_cookie(response, reserva):

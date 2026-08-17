@@ -1768,6 +1768,18 @@ def api_update_obra_jefe():
 @admin_bp.route("/obras_detailed", methods=["GET"])
 @login_required
 def obras_detailed():
+    # Si el alta no dejó ejemplos, sembrarlos ahora (antes de pintar el tablero).
+    try:
+        from app.services.demo_data_service import ensure_demo_for_onboarding
+        if current_user.role == ROLE_ADMIN:
+            ensure_demo_for_onboarding(actor_user=current_user)
+    except Exception:
+        current_app.logger.exception('ensure_demo_for_onboarding falló')
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
     # 1. Obtener fecha de la URL
     date_str = request.args.get('selected_date')
     
@@ -2017,6 +2029,7 @@ def primeros_pasos():
     Hub de arranque + Academia permanente de tutoriales cortos.
     """
     from app.services.onboarding_service import (
+        academia_visible,
         estado_onboarding,
         marcar_onboarding_completo,
         necesita_onboarding,
@@ -2033,11 +2046,18 @@ def primeros_pasos():
         try:
             if accion in ("listo", "saltar"):
                 marcar_onboarding_completo()
+                try:
+                    from app.services.tour_catalog_service import mark_tour_done
+                    from app.services.onboarding_service import marcar_tour_autostart
+                    mark_tour_done('seed')
+                    marcar_tour_autostart()
+                except Exception:
+                    pass
                 flash(translate("Listo. Ya puedes usar SignaPlan a tu ritmo. "
                     "La Academia de tutoriales sigue en el menú."),
                     "success" if accion == "listo" else "info",
                 )
-                return redirect(url_for("admin.primeros_pasos"))
+                return redirect(url_for("admin.obras_detailed"))
             elif accion == "demo_generar":
                 from app.services.demo_data_service import generar_datos_demo
                 from app.services.tour_catalog_service import mark_tour_done, set_onboarding_path
@@ -2120,6 +2140,13 @@ def primeros_pasos():
     academia = evaluate_academia(current_user)
     show_start = necesita_onboarding()
 
+    if not show_start and not academia_visible():
+        flash(
+            translate("La Academia está oculta. Puedes volver a mostrarla en Configuración."),
+            "info",
+        )
+        return redirect(url_for("admin.panel"))
+
     return render_template(
         "admin_primeros_pasos.html",
         onboarding=estado,
@@ -2140,6 +2167,19 @@ def api_tour_start(tour_id):
         mark_tour_started(tour_id)
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
+    return jsonify({'success': True, 'academia': evaluate_academia(current_user)})
+
+
+@admin_bp.route("/api/tour/complete-many", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_tour_complete_many():
+    from app.services.tour_catalog_service import mark_tours_done, evaluate_academia
+    data = request.get_json(silent=True) or {}
+    ids = data.get('ids') or []
+    if not isinstance(ids, list):
+        return jsonify({'success': False, 'message': 'ids inválidos'}), 400
+    mark_tours_done([str(x) for x in ids if x])
     return jsonify({'success': True, 'academia': evaluate_academia(current_user)})
 
 
@@ -2178,6 +2218,26 @@ def api_tour_fichaje():
     return jsonify({'success': True, 'activo': activo})
 
 
+@admin_bp.route("/api/tour/fichaje-demo", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_tour_fichaje_demo():
+    """Borra el fichaje de prueba del recorrido inicial (no el de un día real)."""
+    from app.services.fichaje_operario_service import borrar_fichaje_tutorial
+
+    data = request.get_json(silent=True) or {}
+    dni = (data.get('dni') or '').strip()
+    if not dni:
+        return jsonify({'success': False, 'message': translate('Falta el DNI.')}), 400
+    try:
+        ok = borrar_fichaje_tutorial(dni)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo borrar el fichaje de prueba del tour')
+        return jsonify({'success': False}), 500
+    return jsonify({'success': True, 'deleted': bool(ok)})
+
+
 @admin_bp.route("/tour/fichaje-probar", methods=["GET"])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -2191,10 +2251,36 @@ def tour_fichaje_probar():
     from flask import session
     from flask_login import logout_user
     from app.services.config_service import set_tenant_config
+    from app.services.fichaje_operario_service import (
+        activar_fichajes_alta,
+        fichaje_operario_activo,
+        tenant_tiene_fichaje_operario_module,
+    )
     from app.services.oficina_obra_service import (
         CONFIG_OBRA_OFICINA,
         sincronizar_obra_oficina,
     )
+
+    if not tenant_tiene_fichaje_operario_module():
+        flash(
+            translate('Este espacio no tiene fichaje de operarios. No se puede abrir /mi.'),
+            'warning',
+        )
+        return redirect(url_for('admin.obras_detailed'))
+
+    if not fichaje_operario_activo():
+        try:
+            activar_fichajes_alta()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('No se pudo activar fichaje para el tutorial')
+
+    if not fichaje_operario_activo():
+        flash(
+            translate('No se ha podido abrir el fichaje. Actívalo en Configuración → Fichajes.'),
+            'warning',
+        )
+        return redirect(url_for('admin.obras_detailed'))
 
     try:
         set_tenant_config(CONFIG_OBRA_OFICINA, 'True')
@@ -2207,8 +2293,10 @@ def tour_fichaje_probar():
     if chapter not in ('fichaje', 'fichajes'):
         chapter = 'fichajes'
 
+    force_oficina = (request.args.get('oficina') or '1').strip() != '0'
+
     session['tour_admin_user_id'] = current_user.id
-    session['tour_fichar_oficina'] = True
+    session['tour_fichar_oficina'] = force_oficina
     session['tour_chapter'] = chapter
     logout_user()
     # tour=mi + chapter: no reinicia la guía ni cae al tutorial seed viejo.
@@ -3483,6 +3571,11 @@ def configuracion_global():
         .all()
     )
 
+    academia_pref = False
+    if tenant_modulos.get('onboarding'):
+        from app.services.onboarding_service import academia_visible as _academia_visible
+        academia_pref = _academia_visible()
+
     return render_template(
         'admin_configuracion.html',
         festivos=festivos,
@@ -3491,6 +3584,7 @@ def configuracion_global():
         monetizacion_activa=monetizacion_activa(),
         tenant_has_fichaje_operario=bool(tenant_modulos.get('fichaje_operario')),
         tenant_has_onboarding=bool(tenant_modulos.get('onboarding')),
+        academia_visible=academia_pref,
         tenant_has_auditoria_vehiculos=has_auditoria_vehiculos(),
         jefes_asignan_directo=jefes_asignan_directo(),
         hora_corte_activa=hora_corte_activa(),
@@ -3760,6 +3854,13 @@ def update_config():
             valores_marcados = request.form.getlist(evento)
             _upsert(evento, ",".join(valores_marcados))
 
+    if 'guia' in section_keys:
+        from app.services.onboarding_service import CONFIG_ACADEMIA_VISIBLE
+        _upsert(
+            CONFIG_ACADEMIA_VISIBLE,
+            'True' if request.form.get('academia_visible') else 'False',
+        )
+
     odoo_url = request.form.get('odoo_url')
     if odoo_url:
         _upsert('odoo_url', odoo_url)
@@ -3771,6 +3872,7 @@ def update_config():
         'laboral': translate('Permisos de Laboral guardados.'),
         'vehiculos': translate('Alertas de vehículos guardadas.'),
         'emails': translate('Notificaciones por correo guardadas.'),
+        'guia': translate('Preferencia de Academia guardada.'),
         'all': translate('Configuración global actualizada correctamente.'),
     }
 
@@ -3788,6 +3890,7 @@ def update_config():
         'laboral': 'cfg-laboral',
         'vehiculos': 'cfg-vehiculos',
         'emails': 'cfg-emails',
+        'guia': 'cfg-guia',
     }.get(section)
     if anchor:
         return redirect(url_for('admin.configuracion_global') + f'#{anchor}')

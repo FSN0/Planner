@@ -37,22 +37,27 @@ document.addEventListener('DOMContentLoaded', function() {
     function fitPlanificadorTimelineToGroups() {
         var last = document.querySelector('#planificador-calendar .vis-labelset .vis-label:last-child');
         var timeline = document.querySelector('#planificador-calendar .vis-timeline');
-        if (!last || !timeline) return;
-        var needed = Math.ceil(last.getBoundingClientRect().bottom - timeline.getBoundingClientRect().top);
-        if (needed < 50) return;
+        if (!timeline) return;
+        var page = document.querySelector('.planificador-page');
+        var top = timeline.getBoundingClientRect().top;
+        var pageBottom = page ? page.getBoundingClientRect().bottom : window.innerHeight;
+        var fill = Math.floor(pageBottom - top - 2);
+        var content = 160;
+        if (last) {
+            content = Math.ceil(last.getBoundingClientRect().bottom - top + 10);
+        }
+        var needed = Math.max(content, fill, 200);
         var current = Math.round(timeline.getBoundingClientRect().height);
         if (Math.abs(current - needed) <= 2) return;
         timeline.style.height = needed + 'px';
     }
 
     function tuckAddObraIntoTimelineGap() {
-        var last = document.querySelector('#planificador-calendar .vis-labelset .vis-label:last-child');
-        var timeline = document.querySelector('#planificador-calendar .vis-timeline');
         var btn = document.querySelector('.planificador-add-obra');
-        if (!last || !timeline || !btn) return;
-        var gap = Math.round(timeline.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom);
-        var pull = Math.max(0, Math.min(gap, 28));
-        btn.style.marginTop = pull ? (-pull) + 'px' : '';
+        if (!btn) return;
+        btn.style.marginTop = '';
+        var leftW = window.currentSidebarWidth || 250;
+        btn.style.width = leftW + 'px';
     }
 
     function refreshPlanificadorLayout() {
@@ -214,11 +219,97 @@ document.addEventListener('DOMContentLoaded', function() {
     bindStickyHeaderScroll();
     setupPlanificadorWheelScroll();
     setTimeout(updateStickyHeader, 300);
+    window.addEventListener('resize', function () {
+        refreshPlanificadorLayout();
+    });
     
     // Solo lo ejecutamos cuando el usuario hace scroll, usando un listener "passive" muy ligero
 
 
     var calendarDiv = document.getElementById('planificador-calendar');
+
+    function planifLang() {
+        return (window.SP_lang ? window.SP_lang() : String(window.SP_LOCALE || 'es').slice(0, 2)).toLowerCase();
+    }
+
+    function planifDate(d) {
+        if (!d) return new Date();
+        if (d instanceof Date) return d;
+        if (typeof d.toDate === 'function') return d.toDate();
+        return new Date(d.valueOf ? d.valueOf() : d);
+    }
+
+    function planifFmt(date, scale, major) {
+        var d = planifDate(date);
+        var loc = window.SP_dateLocale ? window.SP_dateLocale() : 'es-ES';
+        var opts;
+        if (!major) {
+            switch (scale) {
+                case 'millisecond':
+                    opts = { second: 'numeric', fractionalSecondDigits: 3 };
+                    break;
+                case 'second':
+                    opts = { second: 'numeric' };
+                    break;
+                case 'minute':
+                case 'hour':
+                    opts = { hour: '2-digit', minute: '2-digit', hour12: false };
+                    break;
+                case 'weekday':
+                    opts = { weekday: 'short', day: 'numeric' };
+                    break;
+                case 'day':
+                    opts = { day: 'numeric' };
+                    break;
+                case 'week':
+                    if (window.moment) return window.moment(d).locale(planifLang()).format('w');
+                    opts = { day: 'numeric' };
+                    break;
+                case 'month':
+                    opts = { month: 'short' };
+                    break;
+                case 'year':
+                    opts = { year: 'numeric' };
+                    break;
+                default:
+                    opts = { day: 'numeric', month: 'short' };
+            }
+        } else {
+            switch (scale) {
+                case 'millisecond':
+                    opts = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+                    break;
+                case 'second':
+                    opts = { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false };
+                    break;
+                case 'minute':
+                case 'hour':
+                    opts = { weekday: 'short', day: 'numeric', month: 'long' };
+                    break;
+                case 'weekday':
+                case 'day':
+                case 'week':
+                    opts = { month: 'long', year: 'numeric' };
+                    break;
+                case 'month':
+                    opts = { year: 'numeric' };
+                    break;
+                case 'year':
+                    return '';
+                default:
+                    opts = { month: 'long', year: 'numeric' };
+            }
+        }
+        try {
+            return new Intl.DateTimeFormat(loc, opts).format(d);
+        } catch (errFmt) {
+            return new Intl.DateTimeFormat('es-ES', opts).format(d);
+        }
+    }
+
+    if (window.moment && typeof window.moment.locale === 'function') {
+        try { window.moment.locale(planifLang()); } catch (eLoc) { /* ignore */ }
+    }
 
     var options = {
         orientation: 'top',
@@ -235,7 +326,17 @@ document.addEventListener('DOMContentLoaded', function() {
             : { add: false, updateTime: true, updateGroup: true, remove: false },
         zoomMin: 1000 * 60 * 60 * 24 * 7,
         zoomMax: 1000 * 60 * 60 * 24 * 365,
-        locale: (typeof window.SP_LOCALE === 'string' && window.SP_LOCALE) ? window.SP_LOCALE : (document.documentElement.lang || 'es').slice(0, 2),
+        locale: planifLang(),
+        locales: {
+            es: { current: 'hoy', time: 'hora' },
+            en: { current: 'current', time: 'time' },
+            pt: { current: 'atual', time: 'hora' },
+            fr: { current: 'actuel', time: 'heure' },
+        },
+        format: {
+            minorLabels: function (date, scale) { return planifFmt(date, scale, false); },
+            majorLabels: function (date, scale) { return planifFmt(date, scale, true); },
+        },
 
         order: function(a, b) {
             let empA = a.empresa_nombre || "ZZ_Sin_Empresa";
@@ -550,7 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {
     try {
         window.AppTimeline = new vis.Timeline(calendarDiv, window.AppItems, window.AppGroups, options);
     } catch (err) {
-        options.locale = 'es';
+        options.locale = planifLang();
         window.AppTimeline = new vis.Timeline(calendarDiv, window.AppItems, window.AppGroups, options);
     }
     window.AppTimeline.setWindow(moment().subtract(1, 'weeks').toDate(), moment().add(3, 'months').toDate());

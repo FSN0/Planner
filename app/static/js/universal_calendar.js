@@ -207,7 +207,7 @@ class UniversalCalendarManager {
 
         let calendarConfig = {
             initialView: 'dayGridMonth',
-            locale: (typeof window.SP_LOCALE === 'string' && window.SP_LOCALE) ? window.SP_LOCALE : (document.documentElement.lang || 'es').slice(0, 2),
+            locale: (window.SP_lang ? window.SP_lang() : ((typeof window.SP_LOCALE === 'string' && window.SP_LOCALE) ? window.SP_LOCALE : (document.documentElement.lang || 'es').slice(0, 2))),
             editable: !this.readonly, 
             selectable: !this.readonly, 
             height: 'auto',
@@ -382,8 +382,10 @@ class UniversalCalendarManager {
                     if (_this.callbacks.onDateToggle) _this.callbacks.onDateToggle(info.dateStr);
                     return;
                 }
-                if (_this.readonly) return; 
-                
+                if (_this.readonly) return;
+                // Un clic con selectable también dispara `select`; no duplicar el bloque.
+                if (_this._fromSelect) return;
+
                 let today = moment().startOf('day');
                 let clickedDate = moment(info.dateStr).startOf('day');
                 if (clickedDate.isBefore(today)) {
@@ -391,6 +393,41 @@ class UniversalCalendarManager {
                     return;
                 }
                 _this.createGhostEvent(info.dateStr); 
+            },
+
+            select: function(info) {
+                if (_this.partialSelectionMode) {
+                    _this.calendar.unselect();
+                    return;
+                }
+                if (_this.readonly) {
+                    _this.calendar.unselect();
+                    return;
+                }
+                _this._fromSelect = true;
+                setTimeout(function () { _this._fromSelect = false; }, 0);
+
+                let today = moment().startOf('day');
+                let start = moment(info.startStr).startOf('day');
+                let endInclusive = moment(info.endStr).subtract(1, 'days').startOf('day');
+                if (!endInclusive.isValid() || endInclusive.isBefore(start)) {
+                    endInclusive = start.clone();
+                }
+                if (start.isBefore(today)) {
+                    _this.calendar.unselect();
+                    if (typeof Swal !== 'undefined') Swal.fire(t('Acción no permitida'), t('No puedes planificar en días pasados.'), 'warning');
+                    return;
+                }
+                _this.createGhostEventRange(
+                    start.format('YYYY-MM-DD'),
+                    endInclusive.format('YYYY-MM-DD')
+                );
+                _this.calendar.unselect();
+            },
+
+            selectAllow: function(info) {
+                if (_this.readonly || _this.partialSelectionMode) return false;
+                return !moment(info.start).startOf('day').isBefore(moment().startOf('day'));
             },
 
             eventClick: function(info) {
@@ -545,7 +582,7 @@ class UniversalCalendarManager {
         try {
             this.calendar = new FullCalendar.Calendar(this.element, calendarConfig);
         } catch (err) {
-            calendarConfig.locale = 'es';
+            calendarConfig.locale = window.SP_lang ? window.SP_lang() : 'es';
             this.calendar = new FullCalendar.Calendar(this.element, calendarConfig);
         }
         this.calendar.render();
@@ -1753,6 +1790,11 @@ class UniversalCalendarManager {
                         this.hidePanel();
                     }
                     if (this.callbacks.onAfterSave) this.callbacks.onAfterSave(res);
+                    try {
+                        if (window.jQuery) {
+                            window.jQuery(document).trigger('sp-calendar-assigned', [res]);
+                        }
+                    } catch (eCal) { /* ignore */ }
                     if(revertFunc) revertFunc(res);
                     
                 } else if (res.batch) {

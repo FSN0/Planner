@@ -40,7 +40,7 @@ $(document).ready(function() {
     }
 
     // =========================================================================
-    // 1. EVENTOS: DRAG & DROP — abre calendario con datos preseleccionados
+    // 1. EVENTOS: DRAG & DROP — soltar en la obra asigna el día del tablero
     // =========================================================================
 
     function getKanbanSelectedDate() {
@@ -48,6 +48,21 @@ $(document).ready(function() {
         if (input && input.value) return input.value;
         if (typeof moment !== 'undefined') return moment().format('YYYY-MM-DD');
         return new Date().toISOString().slice(0, 10);
+    }
+
+    function refreshObraWorkerCounts() {
+        $('.obra-card[data-obra-id]').each(function () {
+            const n = $(this).find('.worker-list-body > .worker-chip').length;
+            $(this).find('.header-subtitle strong').first().text(n);
+        });
+    }
+
+    function moveChipToObra($chip, $targetCol) {
+        if (!$chip || !$chip.length || !$targetCol || !$targetCol.length) return;
+        $chip.detach().appendTo($targetCol);
+        $chip.css({'transition': 'background-color 0.5s', 'background-color': '#d4edda'});
+        setTimeout(function () { $chip.css('background-color', ''); }, 1000);
+        refreshObraWorkerCounts();
     }
 
     const kanbanReadonly = window.KANBAN_READONLY === true
@@ -63,19 +78,21 @@ $(document).ready(function() {
     $(".worker-list-body").droppable({
         accept: ".worker-chip", tolerance: "pointer", hoverClass: "droppable-hover",
         drop: function(event, ui) {
-            const workerId = ui.draggable.data("worker-id");
-            const workerName = ui.draggable.data("worker-name");
-            const targetObraId = $(this).data("obra-id");
-            const targetObraName = $(this).data("obra-name");
-            const $source = ui.draggable.closest('.worker-list-body');
-            const sourceObraId = $source.data('obra-id'); 
+            const $chip = ui.draggable;
+            const workerId = $chip.data("worker-id");
+            const workerName = $chip.data("worker-name");
+            const $targetCol = $(this);
+            const targetObraId = $targetCol.data("obra-id");
+            const $source = $chip.closest('.worker-list-body');
+            const sourceObraId = $source.data('obra-id');
 
             if (sourceObraId == targetObraId) return;
+            if ($chip.data('kanban-assigning')) return;
 
             if (targetObraId == 0) {
                 openUnassignModalWithCalendar(workerId, workerName, sourceObraId, $source.data('obra-name'));
             } else {
-                openConcreteModal(workerId, workerName, targetObraId, targetObraName, sourceObraId);
+                assignKanbanDay($chip, workerId, targetObraId, sourceObraId, $targetCol);
             }
         }
     });
@@ -83,18 +100,89 @@ $(document).ready(function() {
         $(".worker-chip").css('cursor', 'default');
     }
 
+    function assignKanbanDay($chip, workerId, targetObraId, sourceObraId, $targetCol) {
+        const fromObra = sourceObraId != null && String(sourceObraId) !== '0' && String(sourceObraId) !== '';
+        const payload = {
+            worker_id: workerId,
+            target_obra_id: targetObraId,
+            selected_dates: [getKanbanSelectedDate()],
+            overwrite_mode: fromObra ? 'overwrite' : 'check',
+        };
+        enviarAsignacionDiaKanban(payload, $chip, $targetCol);
+    }
+
+    function enviarAsignacionDiaKanban(payload, $chip, $targetCol) {
+        if (!payload.overwrite_mode) payload.overwrite_mode = 'check';
+        if ($chip && $chip.length) $chip.data('kanban-assigning', true);
+
+        $.ajax({
+            url: "/api/v6/assign",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify(payload),
+            success: function(data) {
+                if ($chip && $chip.length) $chip.data('kanban-assigning', false);
+                    if (data.success) {
+                    const action = data.action || 'assigned';
+                    if (action === 'requested') {
+                        Swal.fire({
+                            toast: true, position: 'top-end', icon: 'info',
+                            title: data.message || t('Solicitud enviada'),
+                            showConfirmButton: false, timer: 2200
+                        });
+                        return;
+                    }
+                    Swal.fire({
+                        toast: true, position: 'top-end', icon: 'success',
+                        title: t('Asignado'), showConfirmButton: false, timer: 1200
+                    });
+                    try {
+                        $(document).trigger('sp-kanban-assigned', {
+                            workerId: payload.worker_id,
+                            targetObraId: payload.target_obra_id,
+                        });
+                    } catch (eTrig) { /* ignore */ }
+                    if ($chip && $chip.length && $targetCol && $targetCol.length) {
+                        moveChipToObra($chip, $targetCol);
+                    } else {
+                        setTimeout(function () { location.reload(); }, 600);
+                    }
+                } else if (data.conflict) {
+                    window.resolverConflictoAsignacion(data, payload,
+                        function (nuevoPayload) {
+                            enviarAsignacionDiaKanban(nuevoPayload, $chip, $targetCol);
+                        },
+                        function () {}
+                    );
+                } else {
+                    Swal.fire(t('Error'), data.error || data.message || t('Error desconocido'), 'error');
+                }
+            },
+            error: function(xhr) {
+                if ($chip && $chip.length) $chip.data('kanban-assigning', false);
+                let msg = t('Fallo de conexión');
+                try {
+                    const body = xhr.responseJSON;
+                    if (body) msg = body.error || body.message || msg;
+                } catch (e) { /* ignore */ }
+                Swal.fire(t('Error'), msg, 'error');
+            }
+        });
+    }
+
     // =========================================================================
-    // 2. LÓGICA DEL CALENDARIO UNIVERSAL: ASIGNAR A OBRA (CON CAMBIO DE VISTA)
+    // 2. CALENDARIO DE LA OBRA (icono: vacío, sin persona ni bloque)
     // =========================================================================
-    
-    function renderAssignmentCalendar(viewType, workerId, workerName, targetObraId, obraName, sourceObraId) {
+
+    function renderAssignmentCalendar(viewType, workerId, workerName, targetObraId, obraName, sourceObraId, options) {
+        options = options || {};
         if (modalCalendarInstance) modalCalendarInstance.destroy();
 
         const prefillDate = getKanbanSelectedDate();
-        let context = viewType;
-        let entityId = (viewType === 'obra') ? targetObraId : workerId;
-        let eName = (viewType === 'obra') ? obraName : workerName;
-        let mode = (viewType === 'obra') ? 'empleados' : 'obras';
+        const context = viewType;
+        const entityId = (viewType === 'obra') ? targetObraId : workerId;
+        const eName = (viewType === 'obra') ? obraName : workerName;
+        const mode = (viewType === 'obra') ? 'empleados' : 'obras';
 
         modalCalendarInstance = new UniversalCalendarManager('modal-calendar-container', {
             context: context,
@@ -112,7 +200,8 @@ $(document).ready(function() {
         });
 
         setTimeout(function() {
-            if (modalCalendarInstance && modalCalendarInstance.prefillKanbanAssignment) {
+            if (!modalCalendarInstance) return;
+            if (!options.skipPrefill && workerId && modalCalendarInstance.prefillKanbanAssignment) {
                 modalCalendarInstance.prefillKanbanAssignment({
                     dateStr: prefillDate,
                     workerId: workerId,
@@ -120,17 +209,45 @@ $(document).ready(function() {
                     obraId: targetObraId,
                     obraName: obraName
                 });
+            } else if (modalCalendarInstance.calendar && prefillDate) {
+                modalCalendarInstance.calendar.gotoDate(prefillDate);
             }
         }, 400);
     }
 
+    function setAssignmentModalMode(mode, obraName, workerName) {
+        const empty = mode === 'empty';
+        $('#modalAssignTitleText').text(obraName || t('Calendario de la obra'));
+        $('#modalAssignViewToggle').toggle(!empty);
+        $('#modalAssignHintEmpty').toggleClass('d-none', !empty);
+        $('#modalAssignHintPrefill').toggleClass('d-none', empty);
+        if (!empty) {
+            $('#modalWorkerSummary').text(workerName || '');
+            $('#modalObraSummary').text(obraName || '');
+        }
+    }
+
+    window.openObraCalendarModal = function(targetObraId, obraName) {
+        $('#modalWorkerId').val('');
+        $('#modalTargetObraId').val(targetObraId);
+        setAssignmentModalMode('empty', obraName, '');
+        $('#assignmentModal').modal('show');
+        try {
+            $(document).trigger('sp-kanban-calendar-open', {
+                targetObraId: targetObraId,
+                obraName: obraName,
+            });
+        } catch (eCal) { /* ignore */ }
+
+        setTimeout(function() {
+            renderAssignmentCalendar('obra', null, '', targetObraId, obraName, 0, { skipPrefill: true });
+        }, 300);
+    };
+
     window.openConcreteModal = function(workerId, workerName, targetObraId, obraName, sourceObraId) {
         $('#modalWorkerId').val(workerId);
         $('#modalTargetObraId').val(targetObraId);
-        $('#modalWorkerDisplay').text(workerName);
-        $('#modalObraDisplay').text(obraName);
-        $('#modalWorkerSummary').text(workerName);
-        $('#modalObraSummary').text(obraName);
+        setAssignmentModalMode('prefill', obraName, workerName);
 
         $('#btnViewObra').addClass('active btn-primary').removeClass('btn-outline-primary');
         $('#btnViewWorker').removeClass('active btn-primary').addClass('btn-outline-primary');
@@ -153,6 +270,24 @@ $(document).ready(function() {
             });
         }, 300);
     };
+
+    $(document).on('mousedown', '.btn-obra-calendar', function (e) {
+        e.stopPropagation();
+    });
+    $(document).on('click', '.btn-obra-calendar', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (kanbanReadonly) return;
+        const $btn = $(this);
+        window.openObraCalendarModal($btn.attr('data-obra-id'), $btn.attr('data-obra-name'));
+    });
+
+    $('#assignmentModal').on('hidden.bs.modal', function () {
+        if (modalCalendarInstance) {
+            modalCalendarInstance.destroy();
+            modalCalendarInstance = null;
+        }
+    });
 
     // =========================================================================
     // 3. PUENTE UNIVERSAL: RESOLVEDOR DE CONFLICTOS Y AJAX
@@ -389,7 +524,7 @@ $(document).ready(function() {
         $("#kanbanWorksWrapper").sortable({
             items: ".kanban-col-wrapper",
             handle: ".col-header",
-            cancel: "a, button, input, select, textarea, .btn-pin-obra, .editable-staff",
+            cancel: "a, button, input, select, textarea, .btn-pin-obra, .btn-obra-calendar, .editable-staff",
             placeholder: "ui-state-highlight",
             tolerance: "pointer",
             axis: "x",

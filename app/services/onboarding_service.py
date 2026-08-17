@@ -15,6 +15,8 @@ CONFIG_ONBOARDING = 'onboarding_completo'
 CONFIG_INFORME_VISTO = 'onboarding_informe_visto'
 CONFIG_REABRIR = 'onboarding_reabrir'
 CONFIG_IMPORT_DONE = 'onboarding_import_done'
+CONFIG_TOUR_AUTOSTART = 'onboarding_tour_autostarted'
+CONFIG_ACADEMIA_VISIBLE = 'academia_visible'
 
 IMPORT_TUTORIAL_KEYS = (
     'obras',
@@ -56,6 +58,21 @@ def marcar_onboarding_completo():
     set_tenant_config(CONFIG_REABRIR, 'False')
 
 
+def academia_visible() -> bool:
+    """
+    Si Academia sale en el menú una vez cerrado el recorrido inicial.
+    Por defecto True (si la clave no existe).
+    """
+    raw = get_tenant_config(CONFIG_ACADEMIA_VISIBLE, default=None)
+    if raw is None or str(raw).strip() == '':
+        return True
+    return str(raw).strip().lower() in ('true', '1', 'yes', 'on')
+
+
+def set_academia_visible(visible: bool) -> None:
+    set_tenant_config(CONFIG_ACADEMIA_VISIBLE, 'True' if visible else 'False')
+
+
 def reiniciar_onboarding():
     """
     Vuelve a mostrar Primeros pasos / guía aunque el tenant ya tenga datos.
@@ -65,6 +82,8 @@ def reiniciar_onboarding():
     set_tenant_config(CONFIG_INFORME_VISTO, 'False')
     set_tenant_config(CONFIG_REABRIR, 'True')
     set_tenant_config(CONFIG_IMPORT_DONE, '{}')
+    set_tenant_config(CONFIG_TOUR_AUTOSTART, 'False')
+    set_tenant_config(CONFIG_ACADEMIA_VISIBLE, 'True')
     # No borramos academia_tours: los logros hechos se conservan.
 
 def import_tutorials_done() -> dict:
@@ -157,9 +176,19 @@ def necesita_onboarding():
     return not onboarding_marcado_completo()
 
 
+def tour_ya_autostart():
+    """True si el recorrido inicial ya se lanzó una vez (no repetir en cada login)."""
+    return str(get_tenant_config(CONFIG_TOUR_AUTOSTART, default='False')) == 'True'
+
+
+def marcar_tour_autostart():
+    set_tenant_config(CONFIG_TOUR_AUTOSTART, 'True')
+
+
 def debe_redirigir_a_wizard():
     """
-    Tras login, manda al hub si el onboarding no está cerrado.
+    Tras login, si el onboarding no está cerrado, aterriza en el tablero
+    (con o sin tour=inicio según si ya se autolanzó).
     """
     if not tenant_tiene_onboarding():
         return False

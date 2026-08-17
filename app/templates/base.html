@@ -94,6 +94,9 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/locale/es.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/locale/pt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/locale/fr.min.js"></script>
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
     <script src='https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/locales-all.global.min.js'></script>
     <script>
@@ -106,13 +109,16 @@
             key = String(key);
             return (window.SP_I18N && window.SP_I18N[key]) || key;
         };
+        if (window.moment && typeof moment.locale === 'function') {
+            moment.locale(window.SP_LOCALE || 'es');
+        }
     </script>
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
 
     <script src="{{ url_for('static', filename='js/layout.js') }}?v=20260810b"></script>
     <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/common.js') }}?v=20260817a"></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}?v=20260817b"></script>
 
     {# Select2 antes de extra_js: varios admin init usan $.fn.select2 #}
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -289,13 +295,14 @@
     {% endif %}
 
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding_tour.css') }}?v=20260816f">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding_tour.css') }}?v=20260817d">
     <script>
       window.__ONB_IMPORT_DONE__ = {{ (onboarding_import_done or {})|tojson }};
       window.__ONB_FICHAJE_ASKED__ = {{ 'true' if onboarding_fichaje_asked else 'false' }};
       window.__ONB_FICHAJE_ACTIVO__ = {{ 'true' if onboarding_fichaje_activo else 'false' }};
+      window.__DEMO_DATA_ACTIVA__ = {{ 'true' if demo_data_activa else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260816f"></script>
+    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260817g"></script>
     {% endif %}
 </body>
 </html>

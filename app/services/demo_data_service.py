@@ -46,6 +46,7 @@ from app.services.solicitud_service import build_comentarios_config
 from app.utils.timezone_utils import local_to_utc
 
 CONFIG_DEMO_ACTIVA = 'demo_data_activa'
+CONFIG_DEMO_CLEARED = 'demo_data_cleared'
 
 DEMO_EMAIL_SUFFIX = '@demo.signaplan'
 DEMO_OBRA_PREFIX = 'DEMO-'
@@ -96,6 +97,35 @@ def demo_cantidades():
 
 def demo_activa():
     return str(get_tenant_config(CONFIG_DEMO_ACTIVA, default='False')) == 'True'
+
+
+def ensure_demo_for_onboarding(actor_user=None):
+    """
+    Si el alta no dejó ejemplos, sembrarlos al abrir el tablero.
+    No vuelve a generarlos si el admin ya los quitó a propósito.
+    """
+    from flask import current_app, has_app_context
+    from app.services.onboarding_service import necesita_onboarding, tenant_tiene_onboarding
+
+    if not tenant_tiene_onboarding() or not necesita_onboarding():
+        return False
+    if demo_activa() or _demo_users():
+        return False
+    if str(get_tenant_config(CONFIG_DEMO_CLEARED, default='False')) == 'True':
+        return False
+    try:
+        generar_datos_demo(actor_user=actor_user, activar_fichaje=True)
+        return True
+    except ValueError:
+        return False
+    except Exception:
+        if has_app_context():
+            current_app.logger.exception('No se pudieron generar datos de ejemplo al abrir el tablero')
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _demo_users():
@@ -379,23 +409,42 @@ def generar_datos_demo(actor_user=None, activar_fichaje=None):
         rango = de_vacaciones.get(user_id)
         return bool(rango and rango[0] <= dia <= rango[1])
 
+    # Asignaciones + fichajes (pasados y hoy).
+    # Tope por obra/día para que el calendario no se hinche (el tutorial pide arrastrar).
+    max_por_obra_dia = 4
+    ocupacion = {}
     # Asignaciones + fichajes (pasados y hoy)
     for d_offset in range(qty['dias_historial']):
         dia = hoy - timedelta(days=d_offset)
         if dia.weekday() >= 5:
             continue
+        obras_ciclo = list(obras)
+        random.shuffle(obras_ciclo)
+        cursor = 0
         for op in plantilla:
             if _en_vacaciones(op.id, dia):
                 continue
-            if random.random() < 0.22:
+            if random.random() < 0.28:
                 continue
-            obra = random.choice(obras)
+            obra = None
+            for intento in range(len(obras_ciclo)):
+                candidata = obras_ciclo[(cursor + intento) % len(obras_ciclo)]
+                clave = (candidata.id, dia)
+                if ocupacion.get(clave, 0) >= max_por_obra_dia:
+                    continue
+                obra = candidata
+                cursor = (cursor + intento + 1) % len(obras_ciclo)
+                break
+            if obra is None:
+                continue
             try:
                 with db.session.begin_nested():
                     CoreAssignmentService.asignar(
                         op.id, obra.id, dia, autor_id, 'demo',
                         registrar_log=True,
                     )
+                clave = (obra.id, dia)
+                ocupacion[clave] = ocupacion.get(clave, 0) + 1
             except Exception:
                 continue
 
@@ -620,6 +669,7 @@ def borrar_datos_demo():
         db.session.delete(sub)
 
     set_tenant_config(CONFIG_DEMO_ACTIVA, 'False')
+    set_tenant_config(CONFIG_DEMO_CLEARED, 'True')
     stale = get_tenant_config('demo_data_ids', default=None)
     if stale is not None:
         from app.models import ConfiguracionGlobal

@@ -462,3 +462,72 @@ def historial(user_id, desde=None, hasta=None):
         'minutos_totales': sum(d['minutos'] for d in dias),
         'generado_en': utc_now(),
     }
+
+
+def borrar_fichaje_tutorial(dni, fecha=None):
+    """
+    Quita el fichaje de prueba del recorrido inicial.
+
+    La persona y la obra se quedan; el marcaje no es un fichaje real y no
+    debe permanecer en el libro ni en auditoría.
+    """
+    from sqlalchemy import func, text
+
+    from app.ddl import desproteger_libro_fichajes, proteger_libro_fichajes
+    from app.models import FichajeEvento, User
+
+    dni = (dni or '').strip().upper()
+    if not dni:
+        return False
+
+    user = User.query.filter(func.upper(User.dni) == dni).first()
+    if user is None or getattr(user, 'is_deleted', False):
+        return False
+    if user.role == 'admin':
+        return False
+
+    fecha = fecha or today_local()
+
+    RegistroFichaje.query.filter_by(user_id=user.id, fecha=fecha).delete(
+        synchronize_session=False
+    )
+
+    schema = db.session.execute(text('SELECT current_schema()')).scalar()
+    if not schema or schema == 'public':
+        db.session.commit()
+        return True
+
+    desproteger_libro_fichajes(
+        lambda sql: db.session.execute(text(sql)),
+        schema,
+    )
+    try:
+        FichajeEvento.query.filter(
+            FichajeEvento.user_id == user.id,
+            FichajeEvento.fecha_laboral == fecha,
+        ).delete(synchronize_session=False)
+        restantes = (
+            FichajeEvento.query
+            .order_by(FichajeEvento.secuencia.asc(), FichajeEvento.id.asc())
+            .all()
+        )
+        # Dos pases: la secuencia es única y no se puede pisar al compactar.
+        for i, evento in enumerate(restantes, start=1):
+            evento.secuencia = 1_000_000 + i
+        db.session.flush()
+        prev_hash = None
+        for i, evento in enumerate(restantes, start=1):
+            evento.secuencia = i
+            evento.hash_previo = prev_hash
+            evento.hash = evento.calcular_hash()
+            prev_hash = evento.hash
+        db.session.flush()
+    finally:
+        proteger_libro_fichajes(
+            lambda sql: db.session.execute(text(sql)),
+            schema,
+        )
+
+    db.session.commit()
+    return True
+

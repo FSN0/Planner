@@ -75,12 +75,12 @@ def _default_sections_blueprint() -> list[dict]:
             'id': 'sec_gestion',
             # Maestros / fichas: obras, gente, empresas y vehículos
             'title': str(_('Gestión')),
-            'items': [ITEM_DIRECTORIO, ITEM_TRABAJADORES, ITEM_SUBCONTRATAS, ITEM_FLOTA],
+            'items': [ITEM_DIRECTORIO, ITEM_TRABAJADORES, ITEM_SUBCONTRATAS, ITEM_FLOTA, ITEM_AUSENCIAS],
         },
         {
             'id': 'sec_solicitudes',
             'title': str(_('Solicitudes')),
-            'items': [ITEM_SOLICITUDES, ITEM_AUSENCIAS],
+            'items': [ITEM_SOLICITUDES],
         },
         {
             'id': 'sec_audit',
@@ -93,7 +93,6 @@ def _default_sections_blueprint() -> list[dict]:
             # Permisos va como submenú de Configuración (no ítem suelto).
             # Logs queda oculto por defecto (_default_hidden).
             'items': [
-                ITEM_INTEGRACIONES,
                 ITEM_PRIMEROS_PASOS,
                 ITEM_CONFIGURACION,
                 ITEM_REUNIONES,
@@ -174,7 +173,7 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
         },
         ITEM_DIRECTORIO: {
             'id': ITEM_DIRECTORIO,
-            'label': str(_('Directorio de obras')),
+            'label': str(_('Obras')),
             'icon': 'fa-building',
             'kind': 'link',
             'href': url_for('admin.obras_list'),
@@ -305,9 +304,9 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'icon': 'fa-sliders-h',
             'kind': 'group',
             'href': url_for('admin.configuracion_global'),
-            'active': ('configuracion' in _ep()) or (_ep() == 'admin.permisos_roles'),
+            'active': _config_group_active(),
             'data_tour': None,
-            'open': ('configuracion' in _ep()) or (_ep() == 'admin.permisos_roles'),
+            'open': _config_group_active(),
             'children': _config_children(ctx),
         },
         ITEM_PERMISOS: {
@@ -336,8 +335,16 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
     }
 
 
+def _config_group_active() -> bool:
+    return (
+        'configuracion' in _ep()
+        or _ep() == 'admin.permisos_roles'
+        or _ep() in ('sync.panel', 'sync.odoo_panel')
+    )
+
+
 def _config_children(ctx: dict) -> list[dict]:
-    """Subentradas bajo Configuración (ajustes + permisos)."""
+    """Subentradas bajo Configuración (ajustes, permisos, integraciones)."""
     u = ctx.get('user') or current_user
     kids = [{
         'id': 'cfg_general',
@@ -356,8 +363,15 @@ def _config_children(ctx: dict) -> list[dict]:
             'active': _ep() == 'admin.permisos_roles',
             'external': False,
         })
-    # Reuniones encaja en sistema operativo de la oficina; si el usuario la
-    # tiene visible y no está en otra sección, también puede vivir aquí vía prefs.
+    if user_can(u, 'integraciones', 'r'):
+        kids.append({
+            'id': 'cfg_integraciones',
+            'label': str(_('Integraciones')),
+            'icon': 'fa-plug',
+            'href': url_for('sync.panel'),
+            'active': _ep() in ('sync.panel', 'sync.odoo_panel'),
+            'external': False,
+        })
     return kids
 
 
@@ -410,7 +424,9 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_SUBCONTRATAS:
         return user_can(user, 'subcontratas', 'r')
     if item_id == ITEM_SOLICITUDES:
-        if getattr(user, 'role', None) == ROLE_JEFE and ctx.get('jefes_asignan_directo'):
+        # Buzón de oficina: si el jefe mueve gente en el cuadrante, no hay
+        # peticiones que gestionar. Vale para todos los roles, no solo el jefe.
+        if ctx.get('jefes_asignan_directo'):
             return False
         return user_can(user, 'solicitudes', 'r')
     if item_id == ITEM_AUSENCIAS:
@@ -432,12 +448,19 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_REGISTRO_JORNADA:
         return user_can(user, 'registro_jornada', 'r') and bool(ctx.get('tenant_has_registro_jornada'))
     if item_id == ITEM_INTEGRACIONES:
-        # Visible siempre si tiene permiso: sin módulos muestra página de contacto.
+        # Quien tiene Configuración la ve ahí dentro. Quien no (p. ej. un jefe
+        # con Odoo), sigue teniendo el enlace suelto.
+        if user_can(user, 'configuracion', 'r'):
+            return False
         return user_can(user, 'integraciones', 'r')
     if item_id == ITEM_PRIMEROS_PASOS:
-        return user_can(user, 'primeros_pasos', 'r') and bool(
-            ctx.get('mostrar_onboarding') or ctx.get('tenant_has_onboarding')
-        )
+        if not user_can(user, 'primeros_pasos', 'r'):
+            return False
+        if not ctx.get('tenant_has_onboarding'):
+            return False
+        if ctx.get('mostrar_onboarding'):
+            return True
+        return bool(ctx.get('academia_visible'))
     if item_id == ITEM_CONFIGURACION:
         return user_can(user, 'configuracion', 'r')
     if item_id == ITEM_PERMISOS:
@@ -546,8 +569,8 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
         for key in sec_items:
             if key not in available or key in placed:
                 continue
-            # Permisos vive bajo Configuración; no duplicar como ítem suelto
-            if key == ITEM_PERMISOS and ITEM_CONFIGURACION in sec_items:
+            # Permisos e Integraciones viven bajo Configuración; no duplicar.
+            if key in (ITEM_PERMISOS, ITEM_INTEGRACIONES) and ITEM_CONFIGURACION in sec_items:
                 continue
             placed.add(key)
             item = copy.deepcopy(available[key])
@@ -561,6 +584,7 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
 
     if ITEM_CONFIGURACION in placed:
         placed.add(ITEM_PERMISOS)
+        placed.add(ITEM_INTEGRACIONES)
 
     # Ítems nuevos (permisos nuevos) que no estaban en prefs → sección al final
     orphan_keys = [k for k in available.keys() if k not in placed]

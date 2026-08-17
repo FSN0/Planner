@@ -1,14 +1,14 @@
 {% if demo_data_activa and current_user.is_authenticated and current_user.role == 'admin' %}
 <div class="alert alert-warning border-0 rounded-0 mb-0 text-center" data-demo-banner="1" style="background:#fef3c7;color:#92400e;">
-  <strong>{{ _('Modo ejemplo:') }}</strong> {{ _('estás viendo datos de demostración.') }}
-  <form method="POST" action="{{ url_for('admin.primeros_pasos') }}" class="d-inline-flex flex-wrap justify-content-center align-items-center" style="gap:.5rem;margin-left:.5rem;">
+  <strong>{{ _('Modo ejemplo:') }}</strong>
+  {{ _('estás viendo una empresa de demostración. Puedes trastear; al borrar se quitan solo los datos de ejemplo y se queda lo que hayas creado tú.') }}
+  <form method="POST" action="{{ url_for('admin.primeros_pasos') }}" class="d-inline" style="margin-left:.5rem;"
+        onsubmit="return confirm({{ _('Se borran las obras DEMO, las personas @demo.signaplan y sus asignaciones. Se quedan las obras y personas que hayas creado tú. ¿Seguimos?')|tojson }});">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="accion" value="demo_borrar">
-    <button type="submit" name="despues" value="panel" class="btn btn-sm btn-outline-dark">
-      {{ _('Borrar demo y quedar en panel vacío') }}
-    </button>
-    <button type="submit" name="despues" value="wizard" class="btn btn-sm btn-dark">
-      {{ _('Borrar demo e ir a preparar mi empresa') }}
+    <input type="hidden" name="despues" value="panel">
+    <button type="submit" class="btn btn-sm btn-outline-dark">
+      {{ _('Quitar datos de ejemplo') }}
     </button>
   </form>
 </div>

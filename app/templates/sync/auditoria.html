@@ -257,8 +257,8 @@
         {% endif %}
 
         {% if 'ausencias' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false">
+        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-ausencias">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false" data-tour="audit-ausencias-toggle">
                 <h6 class="auditoria-section-title mb-0" style="color: #d97706;">
                     <span class="section-icon-wrap section-icon-wrap--warning"><i class="fas fa-user-slash"></i></span>
                     {{ _('Ausencias') }}

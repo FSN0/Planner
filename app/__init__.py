@@ -376,6 +376,7 @@ def create_app():
         _light_endpoints = {
             'admin.primeros_pasos',
             'admin.api_tour_fichaje',
+            'admin.api_tour_fichaje_demo',
         }
         skip_heavy_badges = (request.endpoint or '') in _light_endpoints
 
@@ -511,9 +512,11 @@ def create_app():
         onboarding_fichaje_activo = False
         tenant_has_onboarding = bool(modulos_activos.get('onboarding'))
         onboarding_completo = False
+        academia_visible = False
         if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
             try:
                 from app.services.onboarding_service import (
+                    academia_visible as _academia_visible,
                     necesita_onboarding,
                     import_tutorials_done,
                     onboarding_marcado_completo,
@@ -530,11 +533,13 @@ def create_app():
                     onboarding_import_done = import_tutorials_done()
                     onboarding_fichaje_asked = fichaje_preferencia_decidida()
                     onboarding_fichaje_activo = fichaje_operario_activo()
+                    academia_visible = _academia_visible()
             except Exception:
                 mostrar_onboarding = False
                 onboarding_import_done = {}
                 onboarding_fichaje_asked = False
                 onboarding_fichaje_activo = False
+                academia_visible = bool(tenant_has_onboarding)
         demo_data_activa = False
         if current_user.is_authenticated and current_user.role == ROLE_ADMIN:
             try:
@@ -563,6 +568,7 @@ def create_app():
                     'mostrar_onboarding': mostrar_onboarding,
                     'tenant_has_onboarding': tenant_has_onboarding,
                     'onboarding_completo': onboarding_completo,
+                    'academia_visible': academia_visible,
                     'muestra_auditoria_fichajes': muestra_auditoria_fichajes,
                 })
             except Exception:
@@ -586,6 +592,7 @@ def create_app():
             jefes_asignan_directo=jefes_asignan_directo,
             tenant_has_onboarding=tenant_has_onboarding,
             onboarding_completo=onboarding_completo,
+            academia_visible=academia_visible,
             mostrar_onboarding=mostrar_onboarding,
             onboarding_import_done=onboarding_import_done,
             onboarding_fichaje_asked=onboarding_fichaje_asked,

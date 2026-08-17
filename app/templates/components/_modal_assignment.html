@@ -4,11 +4,11 @@
       
       <div class="modal-header bg-dark text-white align-items-center">
         <h5 class="modal-title mb-0">
-            <i class="fas fa-user-check mr-2"></i>
-            {{ _('Asignación') }}: <span id="modalWorkerDisplay" class="text-warning font-weight-bold"></span>
+            <i class="fas fa-calendar-alt mr-2"></i>
+            <span id="modalAssignTitleText">{{ _('Calendario de la obra') }}</span>
         </h5>
         
-        <div class="ml-auto mr-3">
+        <div class="ml-auto mr-3" id="modalAssignViewToggle" style="display:none;">
             <div class="btn-group btn-group-sm bg-white rounded" role="group">
                 <button type="button" class="btn btn-primary font-weight-bold" id="btnViewObra">{{ _('Ver Destino') }}</button>
                 <button type="button" class="btn btn-outline-primary font-weight-bold" id="btnViewWorker">{{ _('Ver Operario') }}</button>
@@ -21,7 +21,10 @@
       </div>
       
       <div class="modal-body bg-light p-4">
-        <div class="alert alert-info py-2 small mb-3 shadow-sm border-0" style="border-left: 4px solid #3b82f6;">
+        <div class="alert alert-info py-2 small mb-3 shadow-sm border-0" id="modalAssignHintEmpty" style="border-left: 4px solid #3b82f6;">
+            {{ _('Elige un trabajador y el rango en el calendario.') }}
+        </div>
+        <div class="alert alert-info py-2 small mb-3 shadow-sm border-0 d-none" id="modalAssignHintPrefill" style="border-left: 4px solid #3b82f6;">
             {{ _('Asignación para el día seleccionado en el tablero. Revisa el bloque «NUEVA ASIGNACIÓN», ajusta fechas si hace falta y confirma con') }} <i class="fas fa-check"></i>.
             <br><strong id="modalWorkerSummary" class="text-dark"></strong> → <strong id="modalObraSummary" class="text-dark"></strong>
         </div>

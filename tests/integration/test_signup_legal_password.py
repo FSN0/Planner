@@ -97,8 +97,11 @@ class TestSignupValidacion:
             data={'t': token},
             follow_redirects=False,
         )
-        assert confirm.status_code == 200
-        assert 'Tu espacio está listo' in confirm.get_data(as_text=True)
+        assert confirm.status_code in (302, 303)
+        location = confirm.headers.get('Location') or ''
+        assert 'demofirma' in location
+        assert '/auth/ticket' in location
+        assert 'Tu espacio está listo' not in (confirm.get_data(as_text=True) or '')
 
         tenant = Tenant.query.filter_by(subdominio='demofirma').first()
         assert tenant is not None
@@ -139,10 +142,63 @@ class TestSignupValidacion:
         assert 'ticket_url' in body
         assert 'demofirma' in body['ticket_url']
 
+        iphone = (
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+            'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+        )
+        mobile = client.get(
+            '/alta/confirmar',
+            headers={'Host': 'signaplan.com', 'User-Agent': iphone},
+            query_string={'t': token},
+        )
+        assert mobile.status_code == 200
+        html_m = mobile.get_data(as_text=True)
+        assert 'Tu espacio está listo' in html_m
+        assert 'pestaña que dejaste abierta' in html_m
+
+        desktop = client.get(
+            '/alta/confirmar',
+            headers={
+                'Host': 'signaplan.com',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+            },
+            query_string={'t': token},
+            follow_redirects=False,
+        )
+        assert desktop.status_code in (302, 303)
+        assert 'demofirma' in (desktop.headers.get('Location') or '')
+        assert '/auth/ticket' in (desktop.headers.get('Location') or '')
+
         session.execute(text(f'DROP SCHEMA IF EXISTS {tenant.schema_name} CASCADE'))
         session.execute(text("DELETE FROM public.signup_reservations WHERE subdominio = 'demofirma'"))
         session.execute(text("DELETE FROM public.tenants WHERE subdominio = 'demofirma'"))
         session.commit()
+
+
+class TestClienteMovil:
+
+    def test_iphone_es_movil(self):
+        from app.services.signup_service import es_cliente_movil
+        ua = (
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+            'AppleWebKit/605.1.15 Mobile/15E148'
+        )
+        assert es_cliente_movil(ua) is True
+
+    def test_chrome_escritorio_no_es_movil(self):
+        from app.services.signup_service import es_cliente_movil
+        ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'
+        assert es_cliente_movil(ua) is False
+
+    def test_ipad_cuenta_como_escritorio(self):
+        from app.services.signup_service import es_cliente_movil
+        ua = 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15'
+        assert es_cliente_movil(ua) is False
+
+    def test_client_hint_mobile(self):
+        from app.services.signup_service import es_cliente_movil
+        assert es_cliente_movil('Mozilla/5.0', '?1') is True
+        assert es_cliente_movil('Mozilla/5.0 (iPhone) Mobile', '?0') is False
 
 
 class TestLegal:

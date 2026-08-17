@@ -1,4 +1,5 @@
-from flask import g, has_request_context
+from flask import g, has_app_context, has_request_context
+from sqlalchemy import text
 
 from app import db
 from app.models import ConfiguracionGlobal
@@ -39,12 +40,34 @@ def set_tenant_config(clave: str, valor: str, encriptar: bool = False):
         db.session.add(config)
 
     db.session.commit()
+    _restore_tenant_search_path()
 
     cache = _cache()
     if cache is not None:
         # Invalida ambas variantes (plain / decrypt)
         cache.pop(_cache_key(clave, False), None)
         cache.pop(_cache_key(clave, True), None)
+
+
+def _restore_tenant_search_path():
+    """
+    commit() puede devolver la conexión al pool y perder SET search_path.
+    Sin esto, el seed del alta (que corre en signaplan.com, no en el
+    subdominio del tenant) escribe en public o revienta en silencio.
+    """
+    if not has_app_context():
+        return
+    tenant = getattr(g, 'current_tenant', None)
+    schema = getattr(tenant, 'schema_name', None)
+    if not schema:
+        return
+    from app import is_safe_schema_name
+    if not is_safe_schema_name(schema):
+        return
+    try:
+        db.session.execute(text(f'SET search_path TO {schema}, public'))
+    except Exception:
+        pass
 
 
 def get_tenant_config(clave: str, desencriptar: bool = False, default=None):

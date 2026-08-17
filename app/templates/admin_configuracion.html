@@ -81,7 +81,7 @@
       <a href="#cfg-festivos">{{ _('Festivos') }}</a>
       <a href="#cfg-emails">{{ _('Correos') }}</a>
       {% if tenant_has_onboarding %}
-      <a href="#cfg-guia">{{ _('Guía') }}</a>
+      <a href="#cfg-guia">{{ _('Academia') }}</a>
       {% endif %}
       <a href="#cfg-idioma">{{ _('Idioma') }}</a>
       {% if user_can(current_user, 'permisos', 'r') %}
@@ -593,19 +593,39 @@
       {% if tenant_has_onboarding %}
       <section class="config-block" id="cfg-guia">
         <header class="config-block-head">
-          <div class="config-block-icon config-block-icon--violet"><i class="fas fa-magic"></i></div>
+          <div class="config-block-icon config-block-icon--violet"><i class="fas fa-graduation-cap"></i></div>
           <div>
-            <h2>{{ _('Guía de primeros pasos') }}</h2>
+            <h2>{{ _('Academia') }}</h2>
             <p>
-              {{ _('Vuelve a lanzar el tutorial o el hub de Primeros pasos aunque la empresa ya tenga datos. No se borra nada: solo se reabre el onboarding.') }}
+              {{ _('La Academia sale en el menú para repetir tutoriales. Se apaga sola al terminar todos. También puedes apagarla aquí.') }}
             </p>
           </div>
         </header>
         <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST" class="mb-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="guia">
+            <div class="config-switch-box mb-0">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="academia_visible" name="academia_visible"
+                       {% if academia_visible %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">{{ _('Mostrar Academia en el menú') }}</p>
+                <p class="admin-form-switch-hint mb-0">
+                  {{ _('Se apaga sola cuando has completado todos los tutoriales. También puedes apagarla aquí y ya no sale en el menú.') }}
+                </p>
+              </div>
+            </div>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar') }}</button>
+            </div>
+          </form>
           <form action="{{ url_for('admin.reiniciar_guia_onboarding') }}" method="POST" class="mb-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="modo" value="guia">
-            <button type="submit" class="btn-admin btn-admin-primary"
+            <button type="submit" class="btn-admin btn-admin-ghost"
                     onclick="try{sessionStorage.removeItem('signaplan_tour_v1');}catch(e){}">
               <i class="fas fa-play"></i> {{ _('Reiniciar guía interactiva') }}
             </button>

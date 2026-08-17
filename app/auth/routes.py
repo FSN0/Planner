@@ -90,9 +90,14 @@ def _destino_por_rol(user):
     """A dónde va cada perfil nada más entrar. None si no tiene sitio."""
     if user.role == 'admin':
         try:
-            from app.services.onboarding_service import debe_redirigir_a_wizard
+            from app.services.onboarding_service import (
+                debe_redirigir_a_wizard,
+                tour_ya_autostart,
+            )
             if debe_redirigir_a_wizard():
-                return url_for('admin.primeros_pasos')
+                if not tour_ya_autostart():
+                    return url_for('admin.obras_detailed', tour='inicio')
+                return url_for('admin.obras_detailed')
         except Exception:
             pass
         return url_for('admin.panel')

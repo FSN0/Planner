@@ -76,7 +76,7 @@ class TestOnboarding:
             assert debe_redirigir_a_wizard() is True
             assert necesita_onboarding() is True
 
-    def test_con_obra_no_redirige_aunque_falte_fichaje(
+    def test_onboarding_incompleto_redirige_aunque_haya_obra(
         self, session, tenant_soltec, app,
     ):
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
@@ -94,7 +94,8 @@ class TestOnboarding:
         with app.test_request_context():
             from flask import g
             g.current_tenant = tenant_soltec
-            assert debe_redirigir_a_wizard() is False
+            assert necesita_onboarding() is True
+            assert debe_redirigir_a_wizard() is True
 
     def test_marcar_completo_quita_aviso(self, session, tenant_soltec, app):
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
@@ -127,8 +128,8 @@ class TestOnboarding:
             assert informe_onboarding_visto() is False
             marcar_informe_visto()
             assert informe_onboarding_visto() is True
-            paso = next(p for p in estado_onboarding()['pasos'] if p['id'] == 'informe')
-            assert paso['hecho'] is True
+            estado = estado_onboarding()
+            assert estado['informe_visto'] is True
 
 
 class TestHoyEnObra:
@@ -154,3 +155,129 @@ class TestHoyEnObra:
         assert resumen['planificados'] >= 1
         fila = next(f for f in resumen['filas'] if f['user'].id == user_operario.id)
         assert fila['estado'] == 'sin_fichar'
+
+
+class TestAcademia:
+
+    def test_visible_por_defecto(self, session, tenant_soltec, app):
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        with app.test_request_context():
+            from flask import g
+            from app.services.onboarding_service import academia_visible
+
+            g.current_tenant = tenant_soltec
+            assert academia_visible() is True
+
+    def test_se_puede_apagar_y_reiniciar_la_vuelve_a_mostrar(
+        self, session, tenant_soltec, app,
+    ):
+        from app.services.onboarding_service import (
+            academia_visible,
+            reiniciar_onboarding,
+            set_academia_visible,
+        )
+
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        tenant_soltec.modulos_activos = {
+            **(tenant_soltec.modulos_activos or {}),
+            'onboarding': True,
+        }
+        with app.test_request_context():
+            from flask import g
+            g.current_tenant = tenant_soltec
+            set_academia_visible(False)
+            assert academia_visible() is False
+            reiniciar_onboarding()
+            assert academia_visible() is True
+
+    def test_hub_all_done_ignora_import_opcional(self):
+        from app.services.tour_catalog_service import hub_all_done
+
+        assert hub_all_done({
+            'caminitos': {
+                'inicial': [{'id': 'tablero_leer', 'status': 'done'}],
+                'shared': [{'id': 'calendario', 'status': 'done'}],
+                'advanced': [{'id': 'coches_libres', 'status': 'done'}],
+                'side_import': {'id': 'import', 'status': 'available'},
+            },
+        }) is True
+        assert hub_all_done({
+            'caminitos': {
+                'inicial': [{'id': 'tablero_leer', 'status': 'done'}],
+                'shared': [{'id': 'calendario', 'status': 'available'}],
+                'advanced': [],
+            },
+        }) is False
+        assert hub_all_done({
+            'caminitos': {
+                'inicial': [{'id': 'tablero_leer', 'status': 'done'}],
+                'shared': [{'id': 'flota', 'status': 'locked'}],
+                'advanced': [{'id': 'coches_libres', 'status': 'locked'}],
+            },
+        }) is True
+        assert hub_all_done({'caminitos': {}}) is False
+
+    def test_auto_hide_al_completar_todos(self, session, tenant_soltec, app, monkeypatch):
+        from app.services.onboarding_service import (
+            academia_visible,
+            marcar_onboarding_completo,
+            set_academia_visible,
+        )
+        from app.services.tour_catalog_service import maybe_auto_hide_academia
+
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        tenant_soltec.modulos_activos = {
+            **(tenant_soltec.modulos_activos or {}),
+            'onboarding': True,
+        }
+        with app.test_request_context():
+            from flask import g
+            g.current_tenant = tenant_soltec
+            marcar_onboarding_completo()
+            set_academia_visible(True)
+            monkeypatch.setattr(
+                'app.services.tour_catalog_service.evaluate_academia',
+                lambda user=None: {
+                    'caminitos': {
+                        'inicial': [{'id': 'tablero_leer', 'status': 'done'}],
+                        'shared': [{'id': 'calendario', 'status': 'done'}],
+                        'advanced': [],
+                    },
+                },
+            )
+            assert maybe_auto_hide_academia() is True
+            assert academia_visible() is False
+
+    def test_repetir_no_vuelve_a_ocultar(self, session, tenant_soltec, app, monkeypatch):
+        from app.services.onboarding_service import (
+            academia_visible,
+            marcar_onboarding_completo,
+            set_academia_visible,
+        )
+        from app.services.tour_catalog_service import mark_tour_done
+
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        tenant_soltec.modulos_activos = {
+            **(tenant_soltec.modulos_activos or {}),
+            'onboarding': True,
+        }
+        with app.test_request_context():
+            from flask import g
+            g.current_tenant = tenant_soltec
+            marcar_onboarding_completo()
+            mark_tour_done('tablero_leer')
+            set_academia_visible(True)
+            called = {'n': 0}
+
+            def _hide():
+                called['n'] += 1
+                return True
+
+            monkeypatch.setattr(
+                'app.services.tour_catalog_service.maybe_auto_hide_academia',
+                _hide,
+            )
+            mark_tour_done('tablero_leer')
+            assert called['n'] == 0
+            assert academia_visible() is True
+

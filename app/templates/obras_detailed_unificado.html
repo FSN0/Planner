@@ -7,7 +7,7 @@
   {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260816i">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260817a">
 {% endblock %}
 
 {% block wrapper %}
@@ -30,7 +30,7 @@
       <button type="button" class="btn-admin btn-admin-ghost kanban-filter-clear" onclick="clearKanbanFilters()" id="btnClearFilters" style="display:none;">
         {{ _('Limpiar') }}
       </button>
-      {% with tour_id='tablero_basico', tour_label=_('Tutorial tablero'), tour_href=url_for('admin.obras_detailed', tour='tablero_basico', mode='solo') %}
+      {% with tour_id='tablero_leer', tour_label=_('Tutorial tablero'), tour_href=url_for('admin.obras_detailed', tour='tablero_leer', mode='solo') %}
         {% include "components/_tour_cta.html" %}
       {% endwith %}
     </div>
@@ -219,14 +219,13 @@
 
 {% block extra_js %}
   <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
   <script>
         // Variable global de seguridad para JS
         const CURRENT_USER_ROLE = "{{ current_user.role }}";
     </script>
   
   <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817c"></script>
+  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817e"></script>
   
   
   <script src="https://cdn.jsdelivr.net/npm/dom-autoscroller@2.3.4/dist/dom-autoscroller.min.js"></script>
@@ -238,7 +237,7 @@
         window.CURRENT_USER_ROLE = "{{ current_user.role }}";
         window.KANBAN_READONLY = {{ 'true' if view_mode == 'readonly' else 'false' }};
     </script>
-  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260816i"></script>
+  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260817b"></script>
   
   {% if tenant_has_valoraciones %}
   <script>

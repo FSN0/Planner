@@ -29,6 +29,14 @@ def _tf(msgid, **kwargs):
     return _(msgid).format(**kwargs)
 
 
+def _stats_sin_buzon(stats):
+    """Si el jefe asigna en el cuadrante, no enseñamos el buzón de solicitudes."""
+    from app.services.tenant_modules import jefes_asignan_directo
+    if not jefes_asignan_directo():
+        return stats
+    return [s for s in stats if s.get('key') != 'solicitudes']
+
+
 def _month_bounds(ref):
     start = ref.replace(day=1)
     if start.month == 12:
@@ -520,7 +528,7 @@ def get_vehicle_panel_stats(vehiculo):
     ]
 
     return {
-        'stats': stats,
+        'stats': _stats_sin_buzon(stats),
         'chart_14d': chart_14d,
         'chart_14d_max': max(chart_14d) if chart_14d else 1,
     }
@@ -792,7 +800,7 @@ def get_obra_panel_stats(obra):
         })
 
     return {
-        'stats': stats,
+        'stats': _stats_sin_buzon(stats),
         'chart_14d': chart_14d,
         'chart_14d_max': max(chart_14d) if chart_14d else 1,
         'operarios_hoy': operarios_hoy,
@@ -942,7 +950,7 @@ def get_worker_panel_stats(worker):
         })
 
     return {
-        'stats': stats,
+        'stats': _stats_sin_buzon(stats),
         'chart_14d': chart_14d,
         'chart_14d_max': max(chart_14d) if chart_14d else 1,
     }
@@ -1107,7 +1115,7 @@ def get_company_panel_stats(company):
     ])
 
     return {
-        'stats': stats,
+        'stats': _stats_sin_buzon(stats),
         'chart_14d': chart_14d,
         'chart_14d_max': max(chart_14d) if chart_14d else 1,
         'avg_rating': avg_rating,

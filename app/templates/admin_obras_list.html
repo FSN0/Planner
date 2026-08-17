@@ -59,7 +59,9 @@
             <col style="width: 7%">
             <col style="width: 7%">
             <col style="width: 10%">
+            {% if not jefes_asignan_directo %}
             <col style="width: 5%">
+            {% endif %}
             <col style="width: 4%">
           </colgroup>
           <thead>
@@ -91,9 +93,11 @@
               <th class="sortable-col" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Import.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
+              {% if not jefes_asignan_directo %}
               <th class="sortable-col col-check" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Sols.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
+              {% endif %}
               <th class="col-actions"></th>
             </tr>
             <tr class="filter-row">
@@ -106,7 +110,9 @@
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 6, this.value)" placeholder="…" title="{{ _('Filtrar inicio') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 7, this.value)" placeholder="…" title="{{ _('Filtrar fin') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 8, this.value)" placeholder="…" title="{{ _('Filtrar importación') }}"></th>
+              {% if not jefes_asignan_directo %}
               <th></th>
+              {% endif %}
               <th></th>
             </tr>
           </thead>
@@ -168,6 +174,7 @@
                   {% endif %}
                 </td>
 
+                {% if not jefes_asignan_directo %}
                 {% set pends = obra.solicitudes|selectattr('estado', 'in', ['PENDIENTE','EN_PROCESO'])|list|length %}
                 <td class="text-center" data-sort-value="{{ '%04d'|format(pends) }}">
                   {% if pends > 0 %}
@@ -180,6 +187,7 @@
                     </a>
                   {% endif %}
                 </td>
+                {% endif %}
 
                 <td class="text-center">
                   <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn-icon-action" title="{{ _('Configurar obra') }}">
@@ -189,7 +197,7 @@
               </tr>
             {% else %}
               <tr>
-                <td colspan="11" class="table-empty-state">
+                <td colspan="{{ 10 if jefes_asignan_directo else 11 }}" class="table-empty-state">
                   <i class="fas fa-building"></i>
                   {{ _('No hay obras registradas todavía.') }}
                 </td>

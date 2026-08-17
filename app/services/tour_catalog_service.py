@@ -16,8 +16,10 @@ from app.services.config_service import get_tenant_config, set_tenant_config
 from app.services.fichaje_operario_service import fichaje_operario_activo
 from app.services.i18n_service import _
 from app.services.onboarding_service import (
+    academia_visible,
     import_tutorials_done,
     onboarding_marcado_completo,
+    set_academia_visible,
     tenant_tiene_onboarding,
     tenant_tiene_registro_jornada,
 )
@@ -32,14 +34,20 @@ STATUS_AVAILABLE = 'available'
 STATUS_IN_PROGRESS = 'in_progress'
 STATUS_DONE = 'done'
 
-# Umbral del puente (vehículos NUNCA obligatorios) — para HACER los tutoriales básicos
-BRIDGE_REQUIRES = {'obras': 3, 'operarios': 3}
+# Umbral del puente — con demo en el alta ya hay material; no bloquear.
+BRIDGE_REQUIRES = {}
 
-# Umbral para VISUALIZAR el bloque «después de empezar» (vehículo no obligatorio)
+# Umbral para VISUALIZAR el bloque «después de empezar»
 CURRICULUM_VISIBLE_REQUIRES = {'obras': 1, 'operarios': 1}
 
 # Capítulos en orden de sugerencia
 TOUR_IDS = (
+    'tablero_leer',
+    'tablero_asignar',
+    'calendario',
+    'obra',
+    'trabajadores',
+    'fichaje',
     'seed',
     'import',
     'demo',
@@ -51,9 +59,18 @@ TOUR_IDS = (
     'auditoria_vehiculos',
 )
 
-# Tutoriales básicos tras el puente (empezar a usar la herramienta)
+# Recorrido inicial (mismo para todos, sobre datos de ejemplo)
+INITIAL_TOUR_IDS = (
+    'tablero_leer',
+    'tablero_asignar',
+    'obra',
+    'trabajadores',
+    'fichaje',
+)
+
+# Tutoriales opcionales después del recorrido
 SHARED_TOUR_IDS = (
-    'tablero_basico',
+    'calendario',
     'planificador_multi',
     'fichajes',
     'flota',
@@ -191,21 +208,105 @@ def catalog_definitions() -> list[dict]:
     """Catálogo estático (sin estado evaluado)."""
     return [
         {
-            'id': 'seed',
-            'phase': 0,
-            'title': str(_('Guía interactiva')),
-            'blurb': str(_('Alta de un trabajador, una obra y el ciclo de fichaje.')),
-            'chapter_js': 'trabajadores',
-            'entry_endpoint': 'admin.primeros_pasos',
-            'entry_args': {'tour': 'start'},
-            'module': 'primeros_pasos',
-            'minutes': 8,
+            'id': 'tablero_leer',
+            'phase': 1,
+            'title': str(_('El tablero de hoy')),
+            'blurb': str(_('Fecha, gente libre y obras del día.')),
+            'chapter_js': 'tablero_leer',
+            'entry_endpoint': 'admin.obras_detailed',
+            'entry_args': {'tour': 'tablero_leer', 'mode': 'solo'},
+            'module': 'tablero',
+            'minutes': 2,
+            'requires': {},
+            'soft': True,
+            'inicial': True,
+        },
+        {
+            'id': 'tablero_asignar',
+            'phase': 1,
+            'title': str(_('Asignar en el tablero')),
+            'blurb': str(_('Arrastra a alguien a una obra: queda asignado ese día.')),
+            'chapter_js': 'tablero_asignar',
+            'entry_endpoint': 'admin.obras_detailed',
+            'entry_args': {'tour': 'tablero_asignar', 'mode': 'solo'},
+            'module': 'tablero',
+            'minutes': 3,
+            'requires': {},
+            'soft': True,
+            'inicial': True,
+        },
+        {
+            'id': 'calendario',
+            'phase': 1,
+            'title': str(_('Calendario de la obra')),
+            'blurb': str(_('Rango de días y persona por nombre, sin arrastrar.')),
+            'chapter_js': 'calendario',
+            'entry_endpoint': 'admin.obras_detailed',
+            'entry_args': {'tour': 'calendario', 'mode': 'solo'},
+            'module': 'tablero',
+            'minutes': 4,
             'requires': {},
             'soft': True,
         },
         {
-            'id': 'import',
+            'id': 'obra',
+            'phase': 1,
+            'title': str(_('Crear una obra')),
+            'blurb': str(_('Alta de una obra tuya, junto a las de ejemplo.')),
+            'chapter_js': 'obra',
+            'entry_endpoint': 'admin.create_obra',
+            'entry_args': {'tour': 'obra', 'mode': 'solo'},
+            'module': 'directorio',
+            'minutes': 3,
+            'requires': {},
+            'soft': True,
+            'inicial': True,
+        },
+        {
+            'id': 'trabajadores',
+            'phase': 1,
+            'title': str(_('Crear una persona')),
+            'blurb': str(_('Alta de un trabajador tuyo, con PIN para fichar.')),
+            'chapter_js': 'trabajadores',
+            'entry_endpoint': 'admin.personal',
+            'entry_args': {'tour': 'trabajadores', 'mode': 'solo'},
+            'module': 'personal',
+            'minutes': 3,
+            'requires': {},
+            'soft': True,
+            'inicial': True,
+        },
+        {
+            'id': 'fichaje',
+            'phase': 1,
+            'title': str(_('Fichar')),
+            'blurb': str(_('Entra como esa persona: al fichar queda en el tablero.')),
+            'chapter_js': 'fichaje',
+            'entry_endpoint': 'admin.obras_detailed',
+            'entry_args': {'tour': 'fichaje', 'mode': 'solo'},
+            'module': 'primeros_pasos',
+            'minutes': 6,
+            'requires': {'fichaje_activo': True},
+            'soft': True,
+            'inicial': True,
+        },
+        {
+            'id': 'seed',
             'phase': 0,
+            'title': str(_('Recorrido inicial')),
+            'blurb': str(_('Tablero, asignar, obra, persona y fichaje.')),
+            'chapter_js': 'tablero_leer',
+            'entry_endpoint': 'admin.obras_detailed',
+            'entry_args': {'tour': 'inicio'},
+            'module': 'primeros_pasos',
+            'minutes': 15,
+            'requires': {},
+            'soft': True,
+            'hidden': True,
+        },
+        {
+            'id': 'import',
+            'phase': 2,
             'title': str(_('Importar desde Excel')),
             'blurb': str(_('Sube obras, personal o empresas con la guía de mapeo.')),
             'chapter_js': 'import',
@@ -219,32 +320,34 @@ def catalog_definitions() -> list[dict]:
         {
             'id': 'demo',
             'phase': 0,
-            'title': str(_('Probar con datos de ejemplo')),
-            'blurb': str(_('Rellena el tablero con datos de ejemplo para los tutoriales.')),
+            'title': str(_('Datos de ejemplo')),
+            'blurb': str(_('Tablero de demostración para los tutoriales.')),
             'chapter_js': 'demo',
-            'entry_endpoint': 'admin.primeros_pasos',
-            'entry_args': {'focus': 'next', 'demo': '1'},
+            'entry_endpoint': 'admin.obras_detailed',
+            'entry_args': {},
             'module': 'primeros_pasos',
-            'minutes': 5,
+            'minutes': 1,
             'requires': {},
             'soft': True,
+            'hidden': True,
         },
         {
             'id': 'tablero_basico',
             'phase': 1,
             'title': str(_('Tablero básico')),
             'blurb': str(_('Asigna gente a obras en el tablero y lee el día.')),
-            'chapter_js': 'tablero_basico',
+            'chapter_js': 'tablero_leer',
             'entry_endpoint': 'admin.obras_detailed',
-            'entry_args': {'tour': 'tablero_basico', 'mode': 'solo'},
+            'entry_args': {'tour': 'tablero_leer', 'mode': 'solo'},
             'module': 'tablero',
             'minutes': 5,
-            'requires': dict(BRIDGE_REQUIRES),
+            'requires': {},
             'soft': True,
+            'hidden': True,
         },
         {
             'id': 'planificador_multi',
-            'phase': 1,
+            'phase': 2,
             'title': str(_('Planificador')),
             'blurb': str(_('Planifica varias personas a varios días.')),
             'chapter_js': 'planificador_multi',
@@ -252,16 +355,15 @@ def catalog_definitions() -> list[dict]:
             'entry_args': {'tour': 'planificador_multi', 'mode': 'solo'},
             'module': 'planificador',
             'minutes': 6,
-            'requires': dict(BRIDGE_REQUIRES),
+            'requires': {},
             'soft': True,
         },
         {
             'id': 'fichajes',
             'phase': 2,
-            'title': str(_('Fichajes')),
-            'blurb': str(_('PIN, fichar, registro de jornada y auditoría.')),
+            'title': str(_('Fichajes (PIN y auditoría)')),
+            'blurb': str(_('PIN, registro de jornada y auditoría.')),
             'chapter_js': 'fichajes',
-            # Quedarse en Primeros pasos: el tour ilumina Trabajadores en el menú
             'entry_endpoint': 'admin.primeros_pasos',
             'entry_args': {'tour': 'fichajes', 'mode': 'solo'},
             'module': 'auditoria_fichajes',
@@ -446,10 +548,7 @@ def _node_status(done: bool, available: bool = True) -> str:
 
 
 def build_caminitos(chapters: list, metrics: dict) -> dict:
-    """
-    Mapa visual: puertas → troncos → puente → currículo compartido.
-    Excel es lateral y no desbloquea el tronco.
-    """
+    """Recorrido inicial único + tutoriales opcionales."""
     by_id = {c['id']: c for c in chapters}
     path = get_onboarding_path()
     bridge = bridge_progress(metrics)
@@ -457,147 +556,29 @@ def build_caminitos(chapters: list, metrics: dict) -> dict:
     seed = by_id.get('seed') or {}
     demo = by_id.get('demo') or {}
     import_ch = by_id.get('import')
-
-    obras = int(metrics.get('obras') or 0)
-    operarios = int(metrics.get('operarios') or 0)
-    vehiculos = int(metrics.get('vehiculos') or 0)
-    fichajes = int(metrics.get('fichajes') or 0)
     seed_done = seed.get('status') == STATUS_DONE
     demo_done = demo.get('status') == STATUS_DONE
 
-    trunk_a = [
-        {
-            'id': 'a0',
-            'kind': 'question',
-            'title': str(_('¿Vais a fichar?')),
-            'blurb': str(_('Se pregunta al empezar el recorrido completo.')),
-            'status': _node_status(True, True) if path == 'guide' or fichaje_on or seed_done else STATUS_AVAILABLE,
-            'action': 'guide_start',
-        },
-        {
-            'id': 'a1',
-            'kind': 'tutorial',
-            'title': str(_('Crear la primera persona')),
-            'blurb': str(_('Te enseñamos dónde crear un trabajador.')),
-            'status': _node_status(operarios >= 1 or seed_done, True),
-            'counters': [{'have': operarios, 'need': 1, 'label': str(_('personas'))}],
-            'action': 'guide_start',
-            'href': _safe_url('admin.primeros_pasos', tour='start'),
-        },
-        {
-            'id': 'a2',
-            'kind': 'tutorial',
-            'title': str(_('Crear la primera obra')),
-            'blurb': str(_('Alta guiada de una obra.')),
-            'status': _node_status(obras >= 1 or seed_done, operarios >= 1 or seed_done),
-            'counters': [{'have': obras, 'need': 1, 'label': str(_('obras'))}],
-            'action': 'guide_obra',
-            'href': (
-                _safe_url('admin.create_obra', tour='obra')
-                if operarios >= 1 or seed_done
-                else None
-            ),
-        },
-        {
-            'id': 'a3',
-            'kind': 'tutorial',
-            'title': str(_('Probar el fichaje')),
-            'blurb': str(_('Solo si decidiste activarlo.')),
-            'status': (
-                STATUS_LOCKED if not fichaje_on and not seed_done
-                else _node_status(fichajes >= 1 or seed_done, fichaje_on or seed_done)
-            ),
-            'optional': True,
-            'hidden_if_no_fichaje': True,
-            'action': 'guide_fichaje',
-        },
-        {
-            'id': 'q_fleet',
-            'kind': 'question',
-            'title': str(_('¿Tenéis vehículos?')),
-            'blurb': str(_('Se pregunta al terminar el recorrido completo.')),
-            'status': _node_status(vehiculos >= 1, obras >= 1 or seed_done),
-            'optional': True,
-            'action': 'fleet_ask',
-        },
-        {
-            'id': 'a4',
-            'kind': 'tutorial',
-            'title': str(_('Alta de un vehículo')),
-            'blurb': str(_('Si dijiste que sí, o cuando quieras desde aquí.')),
-            'status': _node_status(vehiculos >= 1, True),
-            'optional': True,
-            'counters': [{'have': vehiculos, 'need': 1, 'label': str(_('vehículos'))}],
-            'href': _safe_url('admin.vehiculos_nuevo'),
-            'action': 'fleet_tour',
-        },
-    ]
-
-    trunk_b = [
-        {
-            'id': 'b0',
-            'kind': 'question',
-            'title': str(_('¿Vais a fichar?')),
-            'blurb': str(_('También en datos de ejemplo.')),
-            'status': STATUS_AVAILABLE if path != 'demo' else STATUS_DONE,
-            'action': 'demo_fichaje',
-        },
-        {
-            'id': 'b1',
-            'kind': 'tutorial',
-            'title': str(_('Generar datos de ejemplo')),
-            'blurb': str(_('Salta la semilla: obras, personas y vehículos demo.')),
-            'status': _node_status(bool(metrics.get('demo_activa')) or demo_done or path == 'demo', True),
-            'action': 'demo_generate',
-        },
-    ]
-
-    shared = []
-    for tid in SHARED_TOUR_IDS:
-        ch = by_id.get(tid)
-        if ch:
-            shared.append(ch)
-
-    advanced = []
-    for tid in ADVANCED_TOUR_IDS:
-        ch = by_id.get(tid)
-        if ch:
-            advanced.append(ch)
-
+    inicial = [by_id[tid] for tid in INITIAL_TOUR_IDS if tid in by_id]
+    shared = [by_id[tid] for tid in SHARED_TOUR_IDS if tid in by_id]
+    advanced = [by_id[tid] for tid in ADVANCED_TOUR_IDS if tid in by_id]
     curriculum = curriculum_visibility(metrics, chapters)
-
-    if seed_done:
-        for node in trunk_a:
-            if node.get('id') == 'a4':
-                node['status'] = _node_status(vehiculos >= 1, True)
-            elif node.get('kind') in ('tutorial', 'question'):
-                node['status'] = STATUS_DONE
+    curriculum['visible'] = True
 
     return {
-        'path': path,
+        'path': path or 'demo',
         'bridge': bridge,
         'curriculum': curriculum,
         'guide_done': seed_done,
         'demo_done': bool(demo_done or metrics.get('demo_activa')),
-        'trunk_a': trunk_a,
-        'trunk_b': trunk_b,
+        'inicial': inicial,
+        'trunk_a': inicial,
+        'trunk_b': [],
         'shared': shared,
         'advanced': advanced,
         'side_import': import_ch,
         'fichaje_activo': fichaje_on,
-        'doors': {
-            'guide': {
-                'active': path == 'guide',
-                'done': seed_done,
-                'label': str(_('Guía interactiva')),
-            },
-            'demo': {
-                'active': path == 'demo',
-                'done': bool(demo_done or metrics.get('demo_activa')),
-                'label': str(_('Datos de ejemplo')),
-            },
-            'skip': {'active': path == 'skip', 'label': str(_('Ya sé / ir a la app'))},
-        },
+        'doors': {},
     }
 
 
@@ -644,12 +625,33 @@ def evaluate_academia(user=None) -> dict:
         progress['import'] = {'status': STATUS_DONE, 'at': _utcnow_iso(), 'seen_unlock': True}
         dirty = True
 
+    # Recorrido inicial cerrado → los 5 capítulos (y el calendario del tablero) salen como hechos
+    seed_done = (progress.get('seed') or {}).get('status') == STATUS_DONE
+    if seed_done or onboarding_marcado_completo():
+        if not seed_done:
+            progress['seed'] = {
+                'status': STATUS_DONE,
+                'at': _utcnow_iso(),
+                'seen_unlock': True,
+            }
+            dirty = True
+        for tid in list(INITIAL_TOUR_IDS) + ['calendario']:
+            cur = progress.get(tid) if isinstance(progress.get(tid), dict) else {}
+            if cur.get('status') != STATUS_DONE:
+                progress[tid] = {
+                    **cur,
+                    'status': STATUS_DONE,
+                    'at': cur.get('at') or _utcnow_iso(),
+                    'seen_unlock': True,
+                }
+                dirty = True
+
     chapters = []
     newly_unlocked = []
     for defn in catalog_definitions():
         tid = defn['id']
         # Solo si activaron fichaje de operarios
-        if tid == 'fichajes' and not metrics.get('fichaje_activo'):
+        if tid in ('fichajes', 'fichaje') and not metrics.get('fichaje_activo'):
             continue
         if not _module_visible(defn.get('module') or '', user):
             continue
@@ -708,9 +710,14 @@ def evaluate_academia(user=None) -> dict:
                 return c
         return None
 
-    basics = [c for c in chapters if c['id'] in shared_set]
+    basics = [c for c in chapters if c['id'] in set(INITIAL_TOUR_IDS)]
     advanced = [c for c in chapters if c['id'] in advanced_set]
-    other = [c for c in chapters if c['id'] not in shared_set and c['id'] not in advanced_set]
+    other = [
+        c for c in chapters
+        if c['id'] not in set(INITIAL_TOUR_IDS)
+        and c['id'] not in advanced_set
+        and not c.get('hidden')
+    ]
     next_ch = _pick_next(basics) or _pick_next(other) or _pick_next(advanced)
 
     return {
@@ -743,13 +750,82 @@ def mark_tour_status(tour_id: str, status: str) -> dict:
     return entry
 
 
+def mark_tours_done(tour_ids) -> dict:
+    """Marca varios tutoriales a la vez (evita carreras de POSTs concurrentes)."""
+    progress = _load_raw_progress()
+    now = _utcnow_iso()
+    for tid in tour_ids or []:
+        if tid not in TOUR_IDS:
+            continue
+        prev = progress.get(tid) if isinstance(progress.get(tid), dict) else {}
+        progress[tid] = {**prev, 'status': STATUS_DONE, 'at': now, 'seen_unlock': True}
+    _save_progress(progress)
+    try:
+        maybe_auto_hide_academia()
+    except Exception:
+        pass
+    return progress
+
+
+def hub_chapters_from_caminitos(cam: dict | None) -> list[dict]:
+    """Capítulos que salen en el hub (sin importar Excel, que es opcional)."""
+    if not cam:
+        return []
+    bags = (
+        list(cam.get('inicial') or [])
+        + list(cam.get('shared') or [])
+        + list(cam.get('advanced') or [])
+    )
+    return [c for c in bags if isinstance(c, dict) and c.get('id')]
+
+
+def hub_all_done(academia: dict | None) -> bool:
+    """True si no queda ningún tutorial del hub por hacer (los bloqueados no cuentan)."""
+    hub = hub_chapters_from_caminitos((academia or {}).get('caminitos'))
+    pending = [c for c in hub if c.get('status') != STATUS_LOCKED]
+    if not pending:
+        return False
+    return all(c.get('status') == STATUS_DONE for c in pending)
+
+
+def maybe_auto_hide_academia() -> bool:
+    """
+    Apaga Academia en el menú al completar todos los tutoriales del hub.
+    No se relanza al repetir un capítulo ya hecho.
+    """
+    if not onboarding_marcado_completo():
+        return False
+    if not academia_visible():
+        return False
+    snap = evaluate_academia()
+    if not hub_all_done(snap):
+        return False
+    set_academia_visible(False)
+    return True
+
+
 def mark_tour_done(tour_id: str) -> dict:
-    return mark_tour_status(tour_id, STATUS_DONE)
+    progress = _load_raw_progress()
+    prev = progress.get(tour_id) if isinstance(progress.get(tour_id), dict) else {}
+    first_completion = prev.get('status') != STATUS_DONE and not prev.get('at')
+    entry = mark_tour_status(tour_id, STATUS_DONE)
+    if first_completion:
+        try:
+            maybe_auto_hide_academia()
+        except Exception:
+            pass
+    return entry
 
 
 def mark_tour_started(tour_id: str) -> dict:
+    if tour_id in ('seed', 'tablero_leer', 'tablero_asignar', 'obra', 'trabajadores', 'fichaje'):
+        from app.services.onboarding_service import marcar_tour_autostart
+        try:
+            marcar_tour_autostart()
+        except Exception:
+            pass
     if tour_id == 'seed':
-        set_onboarding_path('guide')
+        set_onboarding_path('demo')
     elif tour_id == 'demo':
         set_onboarding_path('demo')
     return mark_tour_status(tour_id, STATUS_IN_PROGRESS)
@@ -759,7 +835,13 @@ def chapter_by_js(chapter_js: str) -> Optional[str]:
     for defn in catalog_definitions():
         if defn.get('chapter_js') == chapter_js:
             return defn['id']
-    # seed uses trabajadores/obra/fichaje chain
-    if chapter_js in ('trabajadores', 'obra', 'fichaje'):
-        return 'seed'
-    return None
+    aliases = {
+        'tablero_basico': 'tablero_leer',
+        'tablero_leer': 'tablero_leer',
+        'tablero_asignar': 'tablero_asignar',
+        'calendario': 'calendario',
+        'trabajadores': 'trabajadores',
+        'obra': 'obra',
+        'fichaje': 'fichaje',
+    }
+    return aliases.get(chapter_js)

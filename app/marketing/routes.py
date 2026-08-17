@@ -175,12 +175,14 @@ def alta_estado():
 def alta_confirmar():
     """
     GET: muestra el botón (los prefetches de Outlook no deben crear el tenant).
-    POST: crea el espacio y deja que la pestaña del ordenador continue sola.
+    POST: crea el espacio. En el ordenador entra en esta pestaña; en el móvil
+    deja que siga la pestaña de espera del PC.
     """
     _require_marketing()
     from app.services.signup_service import (
         SignupError,
         confirmar_reserva,
+        es_cliente_movil,
         inspeccionar_reserva,
         url_ticket_tenant,
         _tenant_de_reserva,
@@ -191,9 +193,19 @@ def alta_confirmar():
         flash(translate('Falta el enlace de confirmación.'), 'danger')
         return _mkt_redirect('marketing.alta')
 
+    def _entrar_si_escritorio(reserva, tenant):
+        """En el PC el enlace abre el espacio aquí; en el móvil sigue la pestaña de espera."""
+        if tenant is None or es_cliente_movil():
+            return None
+        try:
+            return redirect(url_ticket_tenant(reserva, tenant))
+        except SignupError:
+            return None
+
     def _confirmar_view(reserva, tenant=None, creating=False):
         ready = tenant is not None
         ticket_url = url_ticket_tenant(reserva, tenant) if ready else ''
+        auto_open = bool(ticket_url) and not es_cliente_movil()
         return render_template(
             'marketing/alta_confirmar.html',
             current_year=datetime.utcnow().year,
@@ -203,6 +215,7 @@ def alta_confirmar():
             ready=ready,
             creating=creating,
             ticket_url=ticket_url,
+            auto_open=auto_open,
         )
 
     if request.method == 'GET':
@@ -212,7 +225,11 @@ def alta_confirmar():
             flash(str(exc), 'danger')
             return _mkt_redirect('marketing.alta')
         if reserva.status == 'ready':
-            return _confirmar_view(reserva, _tenant_de_reserva(reserva))
+            tenant = _tenant_de_reserva(reserva)
+            entra = _entrar_si_escritorio(reserva, tenant)
+            if entra is not None:
+                return entra
+            return _confirmar_view(reserva, tenant)
         if reserva.status == 'provisioning':
             return _confirmar_view(reserva, creating=True)
         return _confirmar_view(reserva)
@@ -222,6 +239,9 @@ def alta_confirmar():
     except SignupError as exc:
         flash(str(exc), 'danger')
         return _mkt_redirect('marketing.alta')
+    entra = _entrar_si_escritorio(reserva, tenant)
+    if entra is not None:
+        return entra
     return _confirmar_view(reserva, tenant, creating=tenant is None)
 
 

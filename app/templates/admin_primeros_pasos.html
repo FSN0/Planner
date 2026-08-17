@@ -130,7 +130,37 @@
     align-items: center;
     justify-content: center;
   }
-  .onb-steps li.is-done .n { background: #dcfce7; color: #15803d; }
+  .onb-steps li.is-done {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+  }
+  .onb-steps li.is-done .n {
+    background: #16a34a;
+    color: transparent;
+    position: relative;
+  }
+  .onb-steps li.is-done .n::after {
+    content: "✓";
+    color: #fff;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+  }
+  .onb-step-done {
+    display: inline-block;
+    margin-left: auto;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #15803d;
+    background: #dcfce7;
+    border-radius: 999px;
+    padding: 0.08rem 0.45rem;
+    vertical-align: middle;
+  }
+  .onb-steps li.is-done strong { color: #14532d; }
   .onb-steps--done { opacity: 0.92; }
   .onb-guide-done-note {
     margin: 0.85rem 0 0;
@@ -154,6 +184,15 @@
   }
   .onb-steps li.is-clickable { cursor: pointer; }
   .onb-steps li.is-clickable:hover { background: #e0f2fe; }
+  .onb-steps li.is-done.is-clickable:hover { background: #dcfce7; }
+  .onb-steps li.is-clickable > a {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+    color: inherit;
+    text-decoration: none;
+    flex: 1;
+  }
   .onb-step-go {
     display: block;
     margin-top: 0.2rem;
@@ -201,6 +240,8 @@
     font-size: 0.88rem;
     cursor: pointer;
     font-family: inherit;
+    display: inline-block;
+    text-decoration: none;
   }
   .onb-cta--demo { background: #059669; }
   .onb-cta--muted {
@@ -465,50 +506,16 @@
     text-decoration: none;
   }
 
-  .onb-excel {
-    margin-top: 1rem;
-    padding: 1rem 1.15rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    background: #fff;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
+  .onb-tour.is-soon {
+    opacity: 0.78;
+    border-style: dashed;
+    background: #f8fafc;
   }
-  .onb-excel-brand {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.85rem;
-    min-width: 0;
-    flex: 1;
-  }
-  .onb-excel-logo {
-    flex: 0 0 auto;
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 8px;
-    background: #e8f5e9;
-    color: #217346;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.35rem;
-  }
-  .onb-excel h2 {
-    margin: 0 0 0.2rem;
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: #0f172a;
-  }
-  .onb-excel p {
-    margin: 0;
-    font-size: 0.8rem;
+  .onb-tour.is-soon .onb-tour-wait {
     color: #64748b;
-    max-width: 34rem;
-    line-height: 1.4;
+    background: #e2e8f0;
   }
+
   .onb-demo-actions {
     display: flex;
     flex-wrap: wrap;
@@ -554,162 +561,60 @@
 
   <main class="admin-main admin-main--compact">
     <div class="onb-wrap">
-      {% if show_start_cards %}
       <div class="onb-intro">
-        <h1 class="page-toolbar-title" style="margin:0;">{{ _('Primeros pasos') }}</h1>
-        <p>{{ _('Tres formas de empezar. Elige una, mira qué incluye y decide cuándo lanzarla.') }}</p>
-      </div>
-
-      <div class="onb-tabs" role="tablist">
-        <button type="button" class="onb-tab {% if open_tab == 'guide' %}is-open{% endif %} {% if guide_done %}is-done{% endif %}"
-                data-onb-tab="guide" aria-expanded="{{ 'true' if open_tab == 'guide' else 'false' }}">
-          <h2>{{ _('Tutorial guiado') }}</h2>
-          <p>{% if guide_done %}{{ _('Completado: ya creaste lo básico. Puedes repetir los pasos abajo si quieres.') }}{% else %}{{ _('Te vamos llevando por la pantalla: crearás una persona y una obra (y el fichaje si lo usáis), clic a clic, con tus propios datos.') }}{% endif %}</p>
-          <span class="onb-tab-hint" data-open-label="{{ _('abierto') }}">{% if guide_done %}{{ _('Ver resumen') }}{% else %}{{ _('Ver qué incluye') }}{% endif %}</span>
-        </button>
-
-        <button type="button" class="onb-tab onb-tab--demo {% if open_tab == 'demo' %}is-open{% endif %} {% if demo_activa %}is-done{% endif %}"
-                data-onb-tab="demo" aria-expanded="{{ 'true' if open_tab == 'demo' else 'false' }}">
-          <h2>{% if demo_activa %}{{ _('Datos de ejemplo cargados') }}{% else %}{{ _('Probar con ejemplos') }}{% endif %}</h2>
-          <p>{% if demo_activa %}{{ _('Ya tienes obras, personas y vehículos de prueba.') }}{% if curriculum_visible %} {{ _('Sigue abajo con los tutoriales de planificar.') }}{% endif %}{% else %}{{ _('Rellenamos el espacio con obras, personas y vehículos de mentira para que veas el programa en marcha sin inventarte nada.') }}{% endif %}</p>
-          <span class="onb-tab-hint" data-open-label="{{ _('abierto') }}">{% if demo_activa %}{{ _('Ver estado') }}{% else %}{{ _('Ver qué incluye') }}{% endif %}</span>
-        </button>
-
-        <button type="button" class="onb-tab onb-tab--skip {% if open_tab == 'skip' %}is-open{% endif %}"
-                data-onb-tab="skip" aria-expanded="{{ 'true' if open_tab == 'skip' else 'false' }}">
-          <h2>{{ _('Ya sé usarlo') }}</h2>
-          <p>{{ _('Saltas esta introducción y entras al panel vacío. Si más adelante quieres ayuda, la Academia sigue en el menú.') }}</p>
-          <span class="onb-tab-hint" data-open-label="{{ _('abierto') }}">{{ _('Ver opciones') }}</span>
-        </button>
-      </div>
-
-      {# Panel guía #}
-      <div class="onb-panel onb-panel--guide {% if open_tab == 'guide' %}is-open{% endif %}" data-onb-panel="guide" role="tabpanel">
-        {% if guide_done %}
-        <h3>{{ _('Tutorial guiado completado') }}</h3>
-        <p>{{ _('Ya hiciste el recorrido inicial. Los pasos de abajo quedan por si quieres repetir alguno; el foco ahora está en las guías de planificar.') }}</p>
-        {% else %}
-        <h3>{{ _('Qué vas a hacer') }}</h3>
-        <p>{{ _('Es un recorrido corto por la aplicación. En cada paso se ilumina dónde debes hacer clic. Puedes saltarlo cuando quieras.') }}</p>
-        {% endif %}
-        <ol class="onb-steps {% if guide_done %}onb-steps--done{% endif %}">
-          {% if cam and cam.trunk_a %}
-            {% set ns = namespace(i=0) %}
-            {% for node in cam.trunk_a %}
-              {% if node.kind == 'question' %}
-              {% elif node.hidden_if_no_fichaje and not cam.fichaje_activo and node.status == 'locked' %}
-              {% else %}
-              {% set ns.i = ns.i + 1 %}
-              <li class="{% if node.status == 'done' %}is-done{% endif %} {% if node.optional %}is-optional{% endif %} {% if node.status != 'locked' %}is-clickable{% endif %}"
-                  {% if node.id == 'a1' or node.action == 'guide_start' %}
-                    data-tour-start="trabajadores" data-tour-mode="solo" data-academia-id="seed"
-                  {% elif node.id == 'a2' or node.action == 'guide_obra' %}
-                    data-tour-start="obra" data-tour-mode="solo" data-academia-id="seed"
-                  {% elif node.id == 'a3' or node.action == 'guide_fichaje' %}
-                    data-tour-start="fichaje" data-tour-mode="solo" data-academia-id="seed"
-                  {% elif node.id == 'a4' or node.action == 'fleet_tour' %}
-                    data-tour-start="flota" data-tour-mode="solo" data-academia-id="flota"
-                  {% endif %}
-                  {% if node.status != 'locked' %}role="button" tabindex="0"{% endif %}>
-                <span class="n">{{ ns.i }}</span>
-                <div>
-                  <strong>{{ node.title }}</strong>
-                  {% if node.blurb %} — {{ node.blurb }}{% endif %}
-                  {% if node.status != 'locked' %}
-                    <em class="onb-step-go">{{ _('Empezar este paso →') if node.status != 'done' else _('Repetir este paso →') }}</em>
-                  {% endif %}
-                </div>
-              </li>
-              {% endif %}
-            {% endfor %}
-          {% else %}
-            <li><span class="n">1</span><div>{{ _('Crear la primera persona') }}</div></li>
-            <li><span class="n">2</span><div>{{ _('Crear la primera obra') }}</div></li>
-          {% endif %}
-        </ol>
-        {% if not guide_done %}
-        <form method="post" style="display:inline;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="accion" value="elegir_camino">
-          <input type="hidden" name="camino" value="guide">
-          <button type="submit" class="onb-cta">{{ _('Empezar el tutorial →') }}</button>
-        </form>
-        {% else %}
-        <p class="onb-guide-done-note">{{ _('✓ Recorrido inicial hecho. Si quieres, repite un paso concreto en la lista de arriba.') }}</p>
-        {% endif %}
-      </div>
-
-      {# Panel demo #}
-      <div class="onb-panel onb-panel--demo {% if open_tab == 'demo' %}is-open{% endif %}" data-onb-panel="demo" role="tabpanel">
-        {% if demo_activa %}
-        <h3>{{ _('Datos cargados') }}</h3>
-        <p>{{ _('Los datos de ejemplo ya están cargados en tu expansión.') }}</p>
-        {% set ns_demo = namespace(next=none) %}
-        {% if cam and cam.shared %}
-          {% for ch in cam.shared %}
-            {% if not ns_demo.next and ch.status != 'done' %}
-              {% set ns_demo.next = ch %}
-            {% endif %}
-          {% endfor %}
-        {% endif %}
-        <div class="onb-demo-actions">
-          {% if ns_demo.next %}
-          <button type="button" class="onb-cta onb-cta--demo" id="onb-demo-goto-next"
-                  data-focus-tour="{{ ns_demo.next.id }}">
-            {{ _('Ir a los tutoriales:') }} {{ ns_demo.next.title }} →
-          </button>
-          {% else %}
-          <button type="button" class="onb-cta onb-cta--demo" id="onb-demo-goto-next">{{ _('Ir a los tutoriales →') }}</button>
-          {% endif %}
-          <form method="post" style="display:inline;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="accion" value="elegir_camino">
-            <input type="hidden" name="camino" value="skip">
-            <button type="submit" class="onb-cta onb-cta--muted">{{ _('Explorar por mi cuenta →') }}</button>
-          </form>
-        </div>
-        {% else %}
-        <h3>{{ _('Qué vas a hacer') }}</h3>
+        <h1 class="page-toolbar-title" style="margin:0;">{% if show_start_cards %}{{ _('Primeros pasos') }}{% else %}{{ _('Academia') }}{% endif %}</h1>
         <p>
-          {{ _('Generamos datos de prueba') }}
-          ({{ demo_cantidades.obras }} {{ _('obras') }},
-          {{ demo_cantidades.empleados }} {{ _('personas') }},
-          {{ demo_cantidades.vehiculos }} {{ _('vehículos') }})
-          {{ _('y luego puedes seguir con los tutoriales de abajo. Cuando quieras, los borras con un clic.') }}
+          {% if show_start_cards %}
+            {{ _('El tablero ya tiene una empresa de ejemplo. El recorrido es el mismo para todos: ver el día, asignar, crear una obra tuya, una persona y fichar. Puedes saltar un paso o todo el recorrido.') }}
+          {% else %}
+            {{ _('Tutoriales cortos para cuando quieras repasar.') }}
+            {{ _('Los del recorrido inicial siguen aquí por si quieres repetir alguno. Nunca es tarde.') }}
+          {% endif %}
+        </p>
+      </div>
+
+      {% if cam and cam.inicial %}
+      <div class="onb-panel onb-panel--guide is-open" style="display:block;margin-top:0;">
+        <h3>{{ _('Recorrido inicial') if show_start_cards else _('Tutoriales del recorrido') }}</h3>
+        <p>
+          {% if show_start_cards %}
+            {{ _('Cinco capítulos seguidos. Al terminar uno, sigue el siguiente. El icono de calendario del tablero abre su propio tutorial si lo pulsas.') }}
+          {% else %}
+            {{ _('Puedes repetir cualquiera, aunque ya lo hayas hecho.') }}
+          {% endif %}
         </p>
         <ol class="onb-steps">
-          <li><span class="n">1</span><div>{{ _('Una pregunta rápida al empezar (configuración)') }}</div></li>
-          <li><span class="n">2</span><div>{{ _('Crear los datos de ejemplo') }}</div></li>
+          {% set inicial = cam.inicial if cam and cam.inicial else [] %}
+          {% for ch in inicial %}
+          <li class="{% if ch.status == 'done' %}is-done{% endif %} is-clickable">
+            <a href="{% if show_start_cards and ch.chapter_js == 'tablero_leer' %}{{ url_for('admin.obras_detailed', tour='inicio') }}{% elif show_start_cards %}{{ url_for(ch.entry_endpoint, tour=ch.chapter_js, mode='full', track='inicio') }}{% else %}{{ ch.href }}{% endif %}"
+               data-tour-start="{{ ch.chapter_js }}"
+               data-tour-mode="{{ 'full' if show_start_cards else 'solo' }}"
+               data-academia-id="{{ ch.id }}"
+               {% if show_start_cards %}data-tour-track="inicio"{% endif %}>
+              <span class="n">{{ loop.index }}</span>
+              <div>
+                <strong>{{ ch.title }}</strong>
+                {% if ch.blurb %} — {{ ch.blurb }}{% endif %}
+                <em class="onb-step-go">{% if ch.status == 'done' %}{{ _('Repetir este paso →') }}{% else %}{{ _('Empezar este paso →') }}{% endif %}</em>
+              </div>
+              {% if ch.status == 'done' %}<span class="onb-step-done">{{ _('Hecho') }}</span>{% endif %}
+            </a>
+          </li>
+          {% endfor %}
         </ol>
-        <button type="button" class="onb-cta onb-cta--demo" id="onb-demo-open">{{ _('Generar ejemplos →') }}</button>
-        {% endif %}
-      </div>
-
-      {# Panel skip #}
-      <div class="onb-panel {% if open_tab == 'skip' %}is-open{% endif %}" data-onb-panel="skip" role="tabpanel">
-        <h3>{{ _('Entrar sin guía') }}</h3>
-        <p>{{ _('Perfecto si ya conoces SignaPlan o prefieres descubrirlo a tu aire. No pierdes los tutoriales: quedan en el menú.') }}</p>
-        <form method="post" style="display:inline;">
+        {% if show_start_cards and not (cam and cam.guide_done) %}
+        <a class="onb-cta" href="{{ url_for('admin.obras_detailed', tour='inicio') }}">{{ _('Continuar el recorrido →') }}</a>
+        <form method="post" style="display:inline;margin-left:.5rem;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="accion" value="elegir_camino">
-          <input type="hidden" name="camino" value="skip">
-          <button type="submit" class="onb-cta onb-cta--muted">{{ _('Ir al panel →') }}</button>
+          <input type="hidden" name="accion" value="saltar">
+          <button type="submit" class="onb-cta onb-cta--muted">{{ _('Saltar el recorrido →') }}</button>
         </form>
-      </div>
-
-      {# Excel visible en primera plana #}
-      {% if cam and cam.side_import %}
-      <div class="onb-excel">
-        <div class="onb-excel-brand">
-          <span class="onb-excel-logo" aria-hidden="true"><i class="fas fa-file-excel"></i></span>
-          <div>
-            <h2>{{ _('¿Ya tienes listados en Excel?') }}</h2>
-            <p>{{ _('Si ya llevas obras o personal en una hoja, puedes importarlos. No es obligatorio: está aquí por si te ahorra el trabajo a mano.') }}</p>
-          </div>
-        </div>
-        <button type="button" class="onb-cta onb-cta--muted" data-tour-start="import" data-academia-id="import">
-          {{ _('Ver cómo importar') }}
-        </button>
+        {% elif show_start_cards %}
+        <p class="onb-guide-done-note">{{ _('✓ Recorrido inicial hecho. Puedes repetir un paso o seguir con los tutoriales de abajo.') }}</p>
+        {% else %}
+        <p><a href="{{ url_for('admin.configuracion_global') }}#cfg-guia">{{ _('Ocultar la Academia en Configuración') }}</a></p>
+        {% endif %}
       </div>
       {% endif %}
 
@@ -719,65 +624,15 @@
         <div class="onb-flow-down"></div>
       </div>
 
-      {% if curriculum_visible %}
       <section class="onb-next {% if bridge and bridge.met %}is-ready{% endif %}" id="onb-next">
-        <p class="onb-next-label">{{ _('Después de empezar arriba') }}</p>
-        <h2>
-          {% if bridge and bridge.met %}
-            {{ _('Ya tienes material: sigue aprendiendo a planificar') }}
-          {% else %}
-            {{ _('Siguiente: reunir un poco de material') }}
-          {% endif %}
-        </h2>
-        <p>
-          {% if bridge and bridge.met %}
-            {{ _('Con esto ya tiene sentido ver el tablero, el planificador, fichajes y flota. Elige el tutorial que quieras abajo.') }}
-          {% else %}
-            {{ _('Ya puedes ver las guías. Para hacerlas con sentido, reunimos un mínimo de obras y personas (abajo ves el progreso).') }}
-          {% endif %}
-        </p>
-
-        {% if bridge and not bridge.met %}
-        <div class="onb-need">
-          <span class="{% if bridge.obras >= bridge.requires.obras %}ok{% else %}miss{% endif %}">
-            {{ bridge.obras }}/{{ bridge.requires.obras }} {{ _('obras') }}
-          </span>
-          <span class="{% if bridge.operarios >= bridge.requires.operarios %}ok{% else %}miss{% endif %}">
-            {{ bridge.operarios }}/{{ bridge.requires.operarios }} {{ _('personas') }}
-          </span>
-        </div>
-        <div class="onb-choices">
-          <button type="button" class="onb-choice" data-tour-start="trabajadores" data-tour-mode="solo" data-academia-id="seed">
-            <strong>{{ _('Tutorial: crear persona') }}</strong>
-            <span>{{ _('Te guiamos al formulario de personal.') }}</span>
-          </button>
-          <button type="button" class="onb-choice" data-tour-start="obra" data-tour-mode="solo" data-academia-id="seed">
-            <strong>{{ _('Tutorial: crear obra') }}</strong>
-            <span>{{ _('Te guiamos al alta de una obra.') }}</span>
-          </button>
-          <a class="onb-choice" href="{{ url_for('admin.panel') }}">
-            <strong>{{ _('Explorar por libre') }}</strong>
-            <span>{{ _('Entras al panel y vuelves aquí cuando quieras.') }}</span>
-          </a>
-        </div>
-        {% endif %}
+        <p class="onb-next-label">{{ _('Cuando quieras') }}</p>
+        <h2>{{ _('Más tutoriales') }}</h2>
+        <p>{{ _('Calendario de obra, planificador, fichajes a fondo y flota. No hace falta hacerlos el primer día. Iremos añadiendo más aquí.') }}</p>
 
         {% if cam.shared %}
-        <details class="onb-more" {% if bridge and bridge.met %}open{% endif %}>
-          <summary>
-            {% if bridge and bridge.met %}
-              {{ _('Tutoriales básicos') }}
-            {% else %}
-              {{ _('Tutoriales básicos') }}
-              ({{ bridge.requires.obras }} {{ _('obras') }} · {{ bridge.requires.operarios }} {{ _('personas') }} {{ _('para hacerlos') }})
-            {% endif %}
-          </summary>
+        <details class="onb-more" open>
+          <summary>{{ _('Tutoriales básicos') }}</summary>
           <div class="onb-more-body">
-            {% if not bridge or not bridge.met %}
-            <p style="margin:0 0 0.5rem;font-size:0.8rem;color:#64748b;">
-              {{ _('Ya puedes ver las guías. Para empezarlas hace falta un mínimo de obras y personas (contador arriba).') }}
-            </p>
-            {% endif %}
             <div class="onb-tour-list">
             {% for ch in cam.shared %}
             <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %}" data-tour-card="{{ ch.id }}">
@@ -802,13 +657,12 @@
         </details>
         {% endif %}
 
-        {% if bridge and bridge.met %}
         <section class="onb-advanced" id="onb-advanced">
           <p class="onb-next-label">{{ _('Siguiente nivel') }}</p>
           <h2>{{ _('Tutoriales un poco más avanzados') }}</h2>
-          <p>{{ _('Cuando ya manejes lo básico, aquí irán guías más específicas. De momento solo está esta:') }}</p>
-          {% if cam.advanced %}
+          <p>{{ _('Cuando ya manejes lo básico, aquí irán guías más específicas. Iremos añadiendo más.') }}</p>
           <div class="onb-tour-list">
+            {% if cam.advanced %}
             {% for ch in cam.advanced %}
             <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %}" data-tour-card="{{ ch.id }}">
               <div class="onb-tour-body">
@@ -825,97 +679,31 @@
               </a>
             </div>
             {% endfor %}
-          </div>
-          {% endif %}
-          <p class="onb-advanced-soon">{{ _('Se irán incluyendo más tutoriales en esta sección.') }}</p>
-        </section>
-        {% endif %}
-      </section>
-      {% else %}
-      <section class="onb-next onb-next--teaser" id="onb-next" aria-disabled="true">
-        <p class="onb-next-label">{{ _('Después de empezar arriba') }}</p>
-        <h2>{{ _('Próximamente') }}</h2>
-        <p>{{ _('Completa el tutorial guiado, genera ejemplos o importa tus listados para acceder al resto de guías (tablero, planificador, fichajes y flota).') }}</p>
-        <div class="onb-teaser-blur" aria-hidden="true">
-          <span></span><span></span><span></span>
-        </div>
-      </section>
-      {% endif %}
-      {% endif %}
-
-      {% else %}
-      {# Academia tras cerrar onboarding #}
-      <div class="onb-intro">
-        <h1 class="page-toolbar-title" style="margin:0;">{{ _('Academia') }}</h1>
-        <p>{{ _('Tutoriales cortos para cuando quieras repasar.') }}</p>
-      </div>
-      {% if academia and academia.enabled and academia.caminitos %}
-      {% set bridge = academia.caminitos.bridge %}
-      {% set cam_ac = academia.caminitos %}
-      {% set cur_ac = cam_ac.curriculum if cam_ac else none %}
-      <section class="onb-next {% if bridge and bridge.met %}is-ready{% endif %}">
-        {% if cur_ac and not cur_ac.visible %}
-        <div class="onb-next--teaser" style="margin:0;padding:0;border:none;background:transparent;pointer-events:auto;">
-          <h2 style="margin-top:0;">{{ _('Próximamente') }}</h2>
-          <p>{{ _('Cuando tengas al menos una obra y una persona (o uses ejemplos / importación), aquí aparecerán los tutoriales básicos.') }}</p>
-        </div>
-        {% else %}
-        {% if bridge and not bridge.met %}
-        <div class="onb-need" style="margin-top:0;">
-          <span class="{% if bridge.obras >= bridge.requires.obras %}ok{% else %}miss{% endif %}">
-            {{ bridge.obras }}/{{ bridge.requires.obras }} {{ _('obras') }}
-          </span>
-          <span class="{% if bridge.operarios >= bridge.requires.operarios %}ok{% else %}miss{% endif %}">
-            {{ bridge.operarios }}/{{ bridge.requires.operarios }} {{ _('personas') }}
-          </span>
-        </div>
-        {% endif %}
-        <details class="onb-more" open>
-          <summary>{{ _('Tutoriales básicos') }}</summary>
-          <div class="onb-more-body">
-            <div class="onb-tour-list">
-            {% for ch in cam_ac.shared or [] %}
-              <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %}" data-tour-card="{{ ch.id }}">
-                <div class="onb-tour-body">
-                  <strong>{{ ch.title }}</strong>
-                  <span>{{ ch.blurb }}{% if ch.missing_msg %} · {{ ch.missing_msg }}{% endif %}</span>
-                </div>
-                {% if ch.status == 'locked' %}
-                <span class="onb-tour-wait">{{ _('Aún no') }}</span>
-                {% else %}
-                <a href="{{ ch.href }}" data-academia-id="{{ ch.id }}" data-chapter-js="{{ ch.chapter_js }}">
-                  {% if ch.status == 'done' %}{{ _('Repetir') }}{% else %}{{ _('Empezar') }}{% endif %}
-                </a>
-                {% endif %}
-              </div>
-            {% endfor %}
-            </div>
-          </div>
-        </details>
-        {% if bridge and bridge.met %}
-        <section class="onb-advanced">
-          <p class="onb-next-label">{{ _('Siguiente nivel') }}</p>
-          <h2>{{ _('Tutoriales un poco más avanzados') }}</h2>
-          <p>{{ _('Guías más específicas. De momento solo está esta:') }}</p>
-          <div class="onb-tour-list">
-          {% for ch in cam_ac.advanced or [] %}
-            <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %}" data-tour-card="{{ ch.id }}">
+            {% endif %}
+            <div class="onb-tour is-soon">
               <div class="onb-tour-body">
-                <strong>{{ ch.title }}</strong>
-                <span>{{ ch.blurb }}{% if ch.missing_msg %} · {{ ch.missing_msg }}{% endif %}</span>
+                <strong>{{ _('Registro de jornada') }}</strong>
+                <span>{{ _('Informe listo para inspección: fechas, impresión y exportación.') }}</span>
               </div>
-              <a href="{{ ch.href }}" data-academia-id="{{ ch.id }}" data-chapter-js="{{ ch.chapter_js }}">
-                {% if ch.status == 'done' %}{{ _('Repetir') }}{% else %}{{ _('Empezar') }}{% endif %}
-              </a>
+              <span class="onb-tour-wait">{{ _('Próximamente') }}</span>
             </div>
-          {% endfor %}
+            <div class="onb-tour is-soon">
+              <div class="onb-tour-body">
+                <strong>{{ _('Auditoría de vehículos') }}</strong>
+                <span>{{ _('Cómo leer desvíos de flota y el histórico de cada coche.') }}</span>
+              </div>
+              <span class="onb-tour-wait">{{ _('Próximamente') }}</span>
+            </div>
+            <div class="onb-tour is-soon">
+              <div class="onb-tour-body">
+                <strong>{{ _('Más guías') }}</strong>
+                <span>{{ _('Iremos publicando tutoriales cortos de lo que más se usa.') }}</span>
+              </div>
+              <span class="onb-tour-wait">{{ _('Próximamente') }}</span>
+            </div>
           </div>
-          <p class="onb-advanced-soon">{{ _('Se irán incluyendo más tutoriales en esta sección.') }}</p>
         </section>
-        {% endif %}
-        {% endif %}
       </section>
-      {% endif %}
       {% endif %}
     </div>
   </main>
@@ -991,16 +779,20 @@
 
   document.querySelectorAll('[data-tour-start]').forEach(function (el) {
     el.addEventListener('click', function (e) {
-      if (el.tagName === 'A') e.preventDefault();
-      e.stopPropagation();
       var ch = el.getAttribute('data-tour-start');
       var id = el.getAttribute('data-academia-id');
       var mode = el.getAttribute('data-tour-mode') || 'full';
       markStart(id);
+      if (el.tagName === 'A' && el.getAttribute('href')) {
+        return;
+      }
+      if (el.tagName === 'A') e.preventDefault();
+      e.stopPropagation();
       if (ch && window.SignaPlanTour) {
         window.SignaPlanTour.start(ch, {
           mode: mode,
-          // El motor completa returnTo con el capítulo al terminar
+          track: el.getAttribute('data-tour-track') || undefined,
+          keepCreds: true,
         });
       }
     });
@@ -1101,7 +893,7 @@
       if (next) {
         next.classList.add('is-focus');
         // Si vienen de generar demo, resaltar tablero básico
-        var tablero = highlightCard('tablero_basico', 'is-focus-next');
+        var tablero = highlightCard('tablero_leer', 'is-focus-next');
         setTimeout(function () {
           try {
             (tablero || next).scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1156,7 +948,7 @@
         card = document.querySelector('[data-tour-card="' + focusId + '"]');
       }
       if (!card) {
-        card = document.querySelector('[data-tour-card="tablero_basico"]');
+        card = document.querySelector('[data-tour-card="tablero_leer"]');
       }
       // Solo preseleccionar: no arrancar el tutorial
       if (card) card.classList.add('is-focus-next');

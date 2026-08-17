@@ -10,7 +10,7 @@ from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_
 PERMISSION_MODULES = (
     ('inicio', 'Inicio / panel', 'General'),
     ('tablero', 'Tablero de obras', 'Planificación'),
-    ('directorio', 'Directorio de obras', 'Planificación'),
+    ('directorio', 'Obras', 'Planificación'),
     ('planificador', 'Planificador', 'Planificación'),
     ('reuniones', 'Reuniones / notas', 'Planificación'),
     ('trabajadores', 'Trabajadores', 'Personal'),

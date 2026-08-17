@@ -1,4 +1,5 @@
 import re
+from flask import current_app, g, has_app_context
 from app import db
 from sqlalchemy import text
 from app.models import Tenant, User, ROLE_ADMIN, Company
@@ -119,12 +120,52 @@ def provision_new_tenant(
         db.session.add(admin_user)
         db.session.commit()
 
+        def _use_tenant_schema():
+            db.session.execute(text(f"SET search_path TO {schema_name}, public"))
+            if has_app_context():
+                g.current_tenant = db.session.query(Tenant).get(tenant_id)
+
+        # El alta corre en signaplan.com: sin esto, el commit anterior
+        # pierde search_path y el seed / fichaje no tocan el tenant.
+        _use_tenant_schema()
+
         # Alta pública: Fichajes on + oficina. Superadmin deja el módulo off
         # y no entra aquí.
         if (modulos_activos or {}).get('fichaje_operario'):
-            from app.services.fichaje_operario_service import activar_fichajes_alta
-            activar_fichajes_alta()
-        
+            try:
+                from app.services.fichaje_operario_service import activar_fichajes_alta
+                activar_fichajes_alta()
+            except Exception:
+                if has_app_context():
+                    current_app.logger.exception(
+                        'No se pudo activar fichaje en el alta de %s', subdominio,
+                    )
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+            _use_tenant_schema()
+
+        if (modulos_activos or {}).get('onboarding'):
+            try:
+                from app.services.demo_data_service import generar_datos_demo
+                from app.services.tour_catalog_service import mark_tour_done, set_onboarding_path
+                generar_datos_demo(actor_user=admin_user, activar_fichaje=True)
+                _use_tenant_schema()
+                set_onboarding_path('demo')
+                mark_tour_done('demo')
+            except Exception:
+                if has_app_context():
+                    current_app.logger.exception(
+                        'No se pudieron generar datos de ejemplo en el alta de %s',
+                        subdominio,
+                    )
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                _use_tenant_schema()
+
         # 9. Regresar a public
         db.session.execute(text("SET search_path TO public"))
         db.session.commit()

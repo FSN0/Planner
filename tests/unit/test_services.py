@@ -223,6 +223,35 @@ class TestTenantService:
         # Limpiar
         session.execute(text("DROP SCHEMA tenant_testco CASCADE"))
         session.execute(text("DELETE FROM public.tenants WHERE subdominio = 'testco'"))
+
+    def test_alta_con_onboarding_siembra_datos_demo(self, session, app):
+        from sqlalchemy import text
+        from app.models import Obra, ROLE_OPERARIO, User
+        from app.services.demo_data_service import demo_activa
+        from app.services.fichaje_operario_service import fichaje_operario_activo
+        from app.services.tenant_service import provision_new_tenant
+
+        tenant = provision_new_tenant(
+            nombre_empresa="Demo Seed Co",
+            subdominio="demoseed",
+            admin_email="admin@demoseed.com",
+            admin_password="test123",
+            modulos_activos={
+                'onboarding': True,
+                'fichaje_operario': True,
+                'registro_jornada': True,
+            },
+        )
+        session.execute(text("SET search_path TO tenant_demoseed, public"))
+        from flask import g
+        g.current_tenant = tenant
+        assert Obra.query.filter(Obra.is_deleted.is_(False)).count() >= 1
+        assert User.query.filter_by(role=ROLE_OPERARIO, is_deleted=False).count() >= 1
+        assert demo_activa() is True
+        assert fichaje_operario_activo() is True
+        session.execute(text("SET search_path TO public"))
+        session.execute(text("DROP SCHEMA tenant_demoseed CASCADE"))
+        session.execute(text("DELETE FROM public.tenants WHERE subdominio = 'demoseed'"))
     
     
     def test_validate_schema_name_security(self, app):
