@@ -7,6 +7,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import AsignacionVehiculo, Vehiculo, Festivo, ROLE_ADMIN, ROLE_JEFE
 from app.decorators import roles_required
+from app.services.i18n_service import translate
 from app.services.leave_service import user_has_approved_leave
 from app.services.permission_service import is_laboral, user_can
 from app.services.vehicle_assignment_service import process_vehicle_assignment_action
@@ -76,11 +77,11 @@ def api_list_vehicles():
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def api_planificador_vehicle_action():
     if is_laboral(current_user):
-        return jsonify({'success': False, 'error': 'Perfil laboral sin permisos de edición.'}), 403
+        return jsonify({'success': False, 'error': translate('Perfil laboral sin permisos de edición.')}), 403
     if not user_can(current_user, 'vehiculos', 'w') and not user_can(current_user, 'planificador', 'w'):
         return jsonify({
             'success': False,
-            'error': 'No tienes permisos de escritura para asignar vehículos.',
+            'error': translate('No tienes permisos de escritura para asignar vehículos.'),
             'permission_denied': True,
         }), 403
     data = request.get_json() or {}
@@ -94,15 +95,15 @@ def api_planificador_vehicle_action():
     accion = (data.get('accion') or 'ASIGNAR').upper()
 
     if not worker_id or not vehicle_id:
-        return jsonify({'success': False, 'error': 'Faltan worker_id o vehicle_id'}), 400
+        return jsonify({'success': False, 'error': translate('Faltan worker_id o vehicle_id')}), 400
     if not start_date_str or not end_date_str:
-        return jsonify({'success': False, 'error': 'Faltan fechas start/end'}), 400
+        return jsonify({'success': False, 'error': translate('Faltan fechas start/end')}), 400
 
     try:
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
     except ValueError:
-        return jsonify({'success': False, 'error': 'Formato de fecha inválido'}), 400
+        return jsonify({'success': False, 'error': translate('Formato de fecha inválido')}), 400
 
     hoy = today_local()
     festivos_bd = Festivo.query.filter(
@@ -118,7 +119,7 @@ def api_planificador_vehicle_action():
         curr += timedelta(days=1)
 
     if not fechas:
-        return jsonify({'success': False, 'error': 'El rango no contiene días laborables válidos.'}), 400
+        return jsonify({'success': False, 'error': translate('El rango no contiene días laborables válidos.')}), 400
 
     try:
         result = process_vehicle_assignment_action(

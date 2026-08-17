@@ -40,7 +40,7 @@
   </table>
 </div>
 <p class="vehicle-history-meta text-muted mb-0">
-  {{ history_rows|length }} {{ _('registro') }}{{ 's' if history_rows|length != 1 else '' }}
+  {{ history_rows|length }} {{ _('registros') if history_rows|length != 1 else _('registro') }}
   · {{ _('últimos') }} {{ history_days }} {{ _('días') }}
 </p>
 {% else %}

@@ -1,5 +1,7 @@
 // app/static/js/common.js
 
+var t = window.SP_T || function (key) { return key; };
+
 // Configuración global para AJAX (CSRF Token)
 // Esto evita errores "400 Bad Request - CSRF token missing" en el futuro
 $.ajaxSetup({
@@ -392,6 +394,9 @@ document.addEventListener('DOMContentLoaded', captureAllAdminTables);
 // =========================================================================
 window.adminSwalDefaults = function(overrides = {}) {
     const base = {
+        confirmButtonText: t('Aceptar'),
+        cancelButtonText: t('Cancelar'),
+        denyButtonText: t('No'),
         customClass: {
             popup: 'admin-swal-popup',
             title: 'admin-swal-title',
@@ -427,7 +432,7 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
         const daysText = days.length > 10
             ? `${days.slice(0, 10).join(', ')}... (+${days.length - 10})`
             : days.join(', ');
-        detailsHtml += `<li><b>Ausencia aprobada</b>: ${daysText}</li>`;
+        detailsHtml += `<li><b>${t('Ausencia aprobada')}</b>: ${daysText}</li>`;
     } else if (data.conflict_details && typeof data.conflict_details === 'object') {
         for (const [obraName, days] of Object.entries(data.conflict_details)) {
             if (!Array.isArray(days) || !days.length) continue;
@@ -440,19 +445,19 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
     // Ausencia aprobada: bloqueo duro — no ofrecer sobrescribir/pluriempleo.
     if (data.conflict_type === 'leave') {
         Swal.fire(window.adminSwalDefaults({
-            title: 'Trabajador de ausencia',
+            title: t('Trabajador de ausencia'),
             icon: 'info',
             width: '34em',
             showConfirmButton: true,
-            confirmButtonText: 'Entendido',
+            confirmButtonText: t('Entendido'),
             html: `
-                <p class="mb-2">${data.message || 'No se puede asignar: hay una ausencia aprobada en esas fechas.'}</p>
+                <p class="mb-2">${data.message || t('No se puede asignar: hay una ausencia aprobada en esas fechas.')}</p>
                 <div class="admin-swal-conflict-box">
-                    <p class="mb-1 font-weight-bold" style="font-size:0.78rem;color:#334155;">Días afectados</p>
+                    <p class="mb-1 font-weight-bold" style="font-size:0.78rem;color:#334155;">${t('Días afectados')}</p>
                     ${detailsHtml}
                 </div>
                 <p class="text-muted mb-0" style="font-size:0.85rem;">
-                    Gestiona la ausencia en Ausencias o elige otro trabajador / otras fechas.
+                    ${t('Gestiona la ausencia en Ausencias o elige otro trabajador / otras fechas.')}
                 </p>
             `,
         })).then(() => { if (onCancelCallback) onCancelCallback(); });
@@ -460,7 +465,7 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
     }
 
     let config = window.adminSwalDefaults({
-        title: data.conflict_type === 'custody_partial' ? 'Custodia Parcial Detectada' : 'Conflicto de Asignación',
+        title: data.conflict_type === 'custody_partial' ? t('Custodia Parcial Detectada') : t('Conflicto de Asignación'),
         icon: 'warning',
         width: '34em',
         showConfirmButton: false,
@@ -469,28 +474,28 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
         html: `
             <p class="mb-2">${data.message}</p>
             <div class="admin-swal-conflict-box">
-                <p class="mb-1 font-weight-bold" style="font-size:0.78rem;color:#334155;">Detalle de los días en conflicto</p>
+                <p class="mb-1 font-weight-bold" style="font-size:0.78rem;color:#334155;">${t('Detalle de los días en conflicto')}</p>
                 ${detailsHtml}
             </div>
-            <p class="font-weight-bold mb-1" style="font-size:0.78rem;color:#334155;">¿Cómo deseas proceder?</p>
+            <p class="font-weight-bold mb-1" style="font-size:0.78rem;color:#334155;">${t('¿Cómo deseas proceder?')}</p>
             <div id="swal-custom-buttons-global" class="d-flex flex-column w-100"></div>
         `,
         didOpen: () => {
             const container = Swal.getPopup().querySelector('#swal-custom-buttons-global');
             if (data.conflict_type === 'custody_partial') {
                 container.innerHTML = `
-                    <button type="button" class="admin-swal-btn admin-swal-btn-info" id="btn-todo"><i class="fas fa-paper-plane"></i> Todo (Asignar + Solicitar)</button>
-                    <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-solo"><i class="fas fa-shield-alt"></i> Solo mis días (Ignorar conflicto)</button>
-                    <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">Cancelar acción</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-info" id="btn-todo"><i class="fas fa-paper-plane"></i> ${t('Todo (Asignar + Solicitar)')}</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-solo"><i class="fas fa-shield-alt"></i> ${t('Solo mis días (Ignorar conflicto)')}</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">${t('Cancelar acción')}</button>
                 `;
                 container.querySelector('#btn-todo').onclick = () => { Swal.close(); payload.overwrite_mode = 'assign_and_request'; onRetryCallback(payload); };
                 container.querySelector('#btn-solo').onclick = () => { Swal.close(); payload.overwrite_mode = 'only_custody'; onRetryCallback(payload); };
             } else {
                 container.innerHTML = `
-                    <button type="button" class="admin-swal-btn admin-swal-btn-danger" id="btn-over"><i class="fas fa-eraser"></i> Sobrescribir (Quitar de otras obras)</button>
-                    <button type="button" class="admin-swal-btn admin-swal-btn-warning" id="btn-pluri"><i class="fas fa-layer-group"></i> Pluriempleo (Mantener en ambas)</button>
-                    <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-free"><i class="fas fa-calendar-check"></i> Asignar solo días libres</button>
-                    <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">Cancelar acción</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-danger" id="btn-over"><i class="fas fa-eraser"></i> ${t('Sobrescribir (Quitar de otras obras)')}</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-warning" id="btn-pluri"><i class="fas fa-layer-group"></i> ${t('Pluriempleo (Mantener en ambas)')}</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-free"><i class="fas fa-calendar-check"></i> ${t('Asignar solo días libres')}</button>
+                    <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">${t('Cancelar acción')}</button>
                 `;
                 container.querySelector('#btn-over').onclick = () => { Swal.close(); payload.overwrite_mode = 'overwrite'; onRetryCallback(payload); };
                 container.querySelector('#btn-pluri').onclick = () => { Swal.close(); payload.overwrite_mode = 'keep_both'; onRetryCallback(payload); };

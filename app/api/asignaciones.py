@@ -24,6 +24,7 @@ from app.services.email_service import (
     notificar_nueva_solicitud
 )
 from app.services.permission_service import is_laboral, can_write_assignments, user_can
+from app.services.i18n_service import translate
 
 asignaciones_api = Blueprint('asignaciones_api', __name__)
 
@@ -178,11 +179,11 @@ def _process_batch_planificador_assignments(
         results.append(row)
 
     any_ok = ok_count > 0
-    parts = [f'{ok_count} asignado(s)']
+    parts = [translate('{count} asignado(s)', count=ok_count)]
     if fail_count:
-        parts.append(f'{fail_count} con error')
+        parts.append(translate('{count} con error', count=fail_count))
     if leave_fail_count:
-        parts.append(f'{leave_fail_count} por ausencia')
+        parts.append(translate('{count} por ausencia', count=leave_fail_count))
 
     return {
         'success': any_ok,
@@ -201,11 +202,11 @@ def _process_batch_planificador_assignments(
 @login_required
 def api_assign_worker():
     if is_laboral(current_user):
-        return jsonify({"success": False, "message": "Modo solo lectura para perfil laboral."}), 403
+        return jsonify({"success": False, "message": translate("Modo solo lectura para perfil laboral.")}), 403
     if not can_write_assignments(current_user):
         return jsonify({
             "success": False,
-            "message": "No tienes permisos de escritura para asignar personal.",
+            "message": translate("No tienes permisos de escritura para asignar personal."),
             "permission_denied": True,
         }), 403
     data = request.get_json() or {}
@@ -222,10 +223,10 @@ def api_assign_worker():
             selected_dates = [(s_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(num)]
 
         if not selected_dates:
-            raise ValueError("Fechas no proporcionadas")
+            raise ValueError(translate("Fechas no proporcionadas"))
             
     except (TypeError, ValueError) as e:
-        return jsonify({"success": False, "message": f"Datos inválidos: {str(e)}"}), 400
+        return jsonify({"success": False, "message": translate("Datos inválidos: {error}", error=str(e))}), 400
 
     result = process_assignment_action(
         actor_user=current_user,
@@ -242,11 +243,11 @@ def api_assign_worker():
 @login_required
 def api_unassign_worker():
     if is_laboral(current_user):
-        return jsonify({'success': False, 'message': 'Modo solo lectura para perfil laboral.'}), 403
+        return jsonify({'success': False, 'message': translate('Modo solo lectura para perfil laboral.')}), 403
     if not can_write_assignments(current_user):
         return jsonify({
             'success': False,
-            'message': 'No tienes permisos de escritura para desasignar personal.',
+            'message': translate('No tienes permisos de escritura para desasignar personal.'),
             'permission_denied': True,
         }), 403
     data = request.get_json() or {}
@@ -256,7 +257,7 @@ def api_unassign_worker():
     mode = data.get('mode', 'selected')
 
     if not worker_id:
-        return jsonify({'success': False, 'message': 'Faltan datos (worker_id)'}), 400
+        return jsonify({'success': False, 'message': translate('Faltan datos (worker_id)')}), 400
 
     try:
         result = process_unassign_action(
@@ -285,7 +286,7 @@ def api_solicitud_asignar_parcial(solicitud_id):
     mode = data.get('mode', 'overwrite')
 
     if not worker_id or not selected_dates:
-        return jsonify({'success': False, 'message': 'Faltan datos.'}), 400
+        return jsonify({'success': False, 'message': translate('Faltan datos.')}), 400
 
     accion = getattr(solicitud, 'accion', 'ASIGNAR')
     count_processed = 0
@@ -330,9 +331,15 @@ def api_solicitud_asignar_parcial(solicitud_id):
         
         # El motor ya ha evaluado si quedan asignaciones. Si es 0, la habrá puesto como CUMPLIDA.
         if solicitud.estado == 'CUMPLIDA':
-            msg = f"Baja procesada ({count_processed} días). Ya no hay asignaciones, solicitud cerrada."
+            msg = translate(
+                'Baja procesada ({count} días). Ya no hay asignaciones, solicitud cerrada.',
+                count=count_processed,
+            )
         else:
-            msg = f"Se borraron {count_processed} días, pero siguen quedando días asignados a este trabajador."
+            msg = translate(
+                'Se borraron {count} días, pero siguen quedando días asignados a este trabajador.',
+                count=count_processed,
+            )
             
         flash(msg, "success")
         return jsonify({'success': True})
@@ -362,7 +369,7 @@ def api_solicitud_asignar_parcial(solicitud_id):
                 continue
                 
         if not valid_selected_dates:
-            return jsonify({'success': False, 'message': 'Los días seleccionados ya tienen el cupo completo.'}), 400
+            return jsonify({'success': False, 'message': translate('Los días seleccionados ya tienen el cupo completo.')}), 400
         
         selected_dates = valid_selected_dates
 
@@ -401,17 +408,32 @@ def api_solicitud_asignar_parcial(solicitud_id):
             from app.utils.timezone_utils import utc_now
             solicitud.resolved_at = utc_now()
             solicitud.resolved_by_id = current_user.id
-            msg = f"Acción completada ({count_processed} días). Solicitud cerrada."
+            msg = translate(
+                'Acción completada ({count} días). Solicitud cerrada.',
+                count=count_processed,
+            )
             notificar_resolucion_solicitud(solicitud, current_user.name)
         else:
             if solicitud.estado == 'PENDIENTE': solicitud.estado = 'EN_PROCESO'
-            msg = f"Parcial realizado ({count_processed} días). Quedan {len(remaining_dates)} pendientes."
+            msg = translate(
+                'Parcial realizado ({count} días). Quedan {remaining} pendientes.',
+                count=count_processed,
+                remaining=len(remaining_dates),
+            )
     else:
         db.session.refresh(solicitud)
         if solicitud.estado == 'CUMPLIDA':
-            msg = f"Asignación completada ({count_processed} días). Cupo de la solicitud lleno."
+            msg = translate(
+                'Asignación completada ({count} días). Cupo de la solicitud lleno.',
+                count=count_processed,
+            )
         else:
-            msg = f"Asignación inteligente ({count_processed} días). Progreso: {solicitud.cantidad_cubierta} de {solicitud.cantidad_solicitada} cubiertos."
+            msg = translate(
+                'Asignación inteligente ({count} días). Progreso: {cubierta} de {solicitada} cubiertos.',
+                count=count_processed,
+                cubierta=solicitud.cantidad_cubierta,
+                solicitada=solicitud.cantidad_solicitada,
+            )
 
     db.session.commit()
     flash(msg, "success")
@@ -421,12 +443,12 @@ def api_solicitud_asignar_parcial(solicitud_id):
 @login_required
 def api_planificador_action():
     if is_laboral(current_user):
-        return jsonify({"success": False, "error": "Perfil laboral sin permisos de edición."}), 403
+        return jsonify({"success": False, "error": translate("Perfil laboral sin permisos de edición.")}), 403
     if not can_write_assignments(current_user):
         return jsonify({
             "success": False,
-            "error": "No tienes permisos de escritura para asignar o mover personal.",
-            "message": "No tienes permisos de escritura para asignar o mover personal.",
+            "error": translate("No tienes permisos de escritura para asignar o mover personal."),
+            "message": translate("No tienes permisos de escritura para asignar o mover personal."),
             "permission_denied": True,
         }), 403
     data = request.json or {}
@@ -451,7 +473,7 @@ def api_planificador_action():
     notas = (data.get('notas') or '').strip() or None
 
     if target_obra_id is None:
-        return jsonify({"success": False, "error": "Obra destino no válida."})
+        return jsonify({"success": False, "error": translate("Obra destino no válida.")})
     
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
@@ -460,12 +482,12 @@ def api_planificador_action():
         hoy = today_local()
 
         if str(worker_id) == 'GENERICO' and start_date < hoy:
-            return jsonify({"success": False, "error": "No puedes solicitar personal en fechas pasadas."})
+            return jsonify({"success": False, "error": translate("No puedes solicitar personal en fechas pasadas.")})
 
         obra = Obra.query.get(target_obra_id)
         if obra and obra.fecha_fin:
             if start_date > obra.fecha_fin:
-                return jsonify({"success": False, "error": f"Imposible asignar. La obra finalizó el {obra.fecha_fin.strftime('%d/%m/%Y')}."})
+                return jsonify({"success": False, "error": translate("Imposible asignar. La obra finalizó el {date}.", date=obra.fecha_fin.strftime('%d/%m/%Y'))})
             if end_date > obra.fecha_fin:
                 end_date = obra.fecha_fin
 
@@ -480,7 +502,7 @@ def api_planificador_action():
             curr += timedelta(days=1)
 
         if not fechas:
-            return jsonify({"success": False, "error": "El rango no contiene días laborables válidos."})
+            return jsonify({"success": False, "error": translate("El rango no contiene días laborables válidos.")})
 
         sol_baja_creada = False
         msg_baja = ""
@@ -538,7 +560,7 @@ def api_planificador_action():
                         existing_baja.notas = merge_notas(existing_baja.notas, notas)
                         db.session.commit()
                         sol_baja_creada = True
-                        msg_baja = "La solicitud de baja existente ha sido ampliada."
+                        msg_baja = translate("La solicitud de baja existente ha sido ampliada.")
                     else:
                         sol_baja = Solicitud(
                             tipo='CONCRETA', accion='DESASIGNAR', obra_id=old_obra_id,
@@ -553,7 +575,7 @@ def api_planificador_action():
                         log_nueva_solicitud(sol_baja)
                         notificar_nueva_solicitud(sol_baja, current_user.name)
                         sol_baja_creada = True
-                        msg_baja = "Se generó una solicitud de baja para los días recortados."
+                        msg_baja = translate("Se generó una solicitud de baja para los días recortados.")
 
         orig_start = None
         orig_end = None
@@ -579,13 +601,13 @@ def api_planificador_action():
                 "success": True,
                 "noop": True,
                 "unchanged": True,
-                "message": "No hubo cambios.",
+                "message": translate("No hubo cambios."),
             })
 
         batch_workers = _parse_workers_payload(data)
         if batch_workers is not None:
             if not batch_workers:
-                return jsonify({"success": False, "error": "No hay trabajadores válidos en la lista."})
+                return jsonify({"success": False, "error": translate("No hay trabajadores válidos en la lista.")})
             batch_result = _process_batch_planificador_assignments(
                 actor_user=current_user,
                 workers=batch_workers,
@@ -606,7 +628,7 @@ def api_planificador_action():
                 cantidad=cantidad_pedida,
                 perfil=detalles, notas=notas, fechas_explicitas=fechas_a_procesar,
             )
-            return jsonify({"success": True, "action": "requested_generic", "message": "Solicitud genérica enviada."})
+            return jsonify({"success": True, "action": "requested_generic", "message": translate("Solicitud genérica enviada.")})
 
         result = process_assignment_action(
             actor_user=current_user, worker_id=int(worker_id), target_obra_id=target_obra_id,
@@ -647,7 +669,7 @@ def api_solicitud_asignar_candidatos(solicitud_id):
     force_move = data.get('force_move', False)
 
     if not worker_ids:
-        return jsonify({'success': False, 'message': 'No has seleccionado ningún trabajador.'}), 400
+        return jsonify({'success': False, 'message': translate('No has seleccionado ningún trabajador.')}), 400
 
     dias_base = []
     try:
@@ -767,11 +789,11 @@ def api_solicitud_asignar_candidatos(solicitud_id):
             except Exception:
                 pass
 
-        accion_txt = "desasignaciones" if accion == 'DESASIGNAR' else "asignaciones"
-        flash(f'Se han procesado {count_exito} {accion_txt} correctamente.', 'success')
+        accion_txt = translate("desasignaciones") if accion == 'DESASIGNAR' else translate("asignaciones")
+        flash(translate('Se han procesado {count} {accion} correctamente.', count=count_exito, accion=accion_txt), 'success')
         return jsonify({'success': True})
     
-    return jsonify({'success': False, 'message': 'No hay hueco en ningún día de esta solicitud o ya estaban cubiertos.'}), 400
+    return jsonify({'success': False, 'message': translate('No hay hueco en ningún día de esta solicitud o ya estaban cubiertos.')}), 400
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/desasignar_candidato", methods=["POST"])
 @login_required
@@ -782,7 +804,7 @@ def api_solicitud_desasignar_candidato(solicitud_id):
     worker_id = data.get('worker_id')
 
     if not worker_id:
-        return jsonify({'success': False, 'message': 'Falta el ID del trabajador.'}), 400
+        return jsonify({'success': False, 'message': translate('Falta el ID del trabajador.')}), 400
 
     worker_id = int(worker_id)
 
@@ -794,7 +816,7 @@ def api_solicitud_desasignar_candidato(solicitud_id):
     ).all()
     
     if not asignaciones:
-        return jsonify({'success': False, 'message': 'No se encontraron asignaciones para eliminar.'}), 400
+        return jsonify({'success': False, 'message': translate('No se encontraron asignaciones para eliminar.')}), 400
 
     count = len(asignaciones)
     fechas_eliminadas = [a.fecha for a in asignaciones]
@@ -818,7 +840,7 @@ def api_solicitud_desasignar_candidato(solicitud_id):
 
     db.session.commit()
     
-    flash(f"Se han eliminado {count} días de asignación y recalculado la solicitud.", "success")
+    flash(translate("Se han eliminado {count} días de asignación y recalculado la solicitud.", count=count), "success")
     return jsonify({'success': True})
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/resolver", methods=["POST"])
@@ -832,14 +854,14 @@ def api_resolver_solicitud(solicitud_id):
     accion = data.get('accion')
     
     if not accion:
-        return jsonify({'success': False, 'message': 'Falta la acción a realizar.'}), 400
+        return jsonify({'success': False, 'message': translate('Falta la acción a realizar.')}), 400
         
     try:
         mensaje = resolver_solicitud_admin(solicitud, accion, current_user, target_obra_id=data.get('target_obra_id'))
-        flash(mensaje, "success" if accion in ['aceptar_concreta', 'aceptar_concreta_traslado', 'reabrir'] else "warning")
-        return jsonify({'success': True, 'message': mensaje})
+        flash(translate(mensaje), "success" if accion in ['aceptar_concreta', 'aceptar_concreta_traslado', 'reabrir'] else "warning")
+        return jsonify({'success': True, 'message': translate(mensaje)})
     except ValueError as e:
         return jsonify({'success': False, 'message': str(e)}), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': f'Error del servidor: {e}'}), 500
+        return jsonify({'success': False, 'message': translate('Error del servidor: {error}', error=e)}), 500

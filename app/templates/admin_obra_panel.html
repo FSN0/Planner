@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Panel de Obra: {{ obra.nombre }}{% endblock %}
+{% block title %}{{ _('Panel de Obra') }}: {{ obra.nombre }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -171,7 +171,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817a"></script>
 <script>
 let obraCalendarInstance = null;
 const CURRENT_OBRA_ID = {{ obra.id }};

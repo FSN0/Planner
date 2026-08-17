@@ -1,5 +1,6 @@
 # app/admin/routes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, g, session
+from app.services.i18n_service import translate
 from flask_login import login_required, current_user
 from sqlalchemy import or_, and_, func
 from app.models import (
@@ -155,7 +156,7 @@ IMPORT_WIZARD_CONFIG = {
 def _bloquear_operario_en_admin():
     """El operario no entra al panel de oficina (ni por PIN ni por portal web)."""
     if current_user.is_authenticated and current_user.role == ROLE_OPERARIO:
-        flash('Tu perfil no tiene acceso al panel de administración.', 'warning')
+        flash(translate('Tu perfil no tiene acceso al panel de administración.'), 'warning')
         if getattr(current_user, 'web_access', False):
             return redirect(url_for('empleado.inicio'))
         return redirect(url_for('operarios.inicio'))
@@ -169,13 +170,65 @@ def _exige_email_verificado_para_usuarios():
         and hasattr(current_user, 'email_verified')
         and not current_user.email_verified
     ):
-        flash(
-            'Verifica tu correo electrónico antes de dar de alta o invitar usuarios. '
-            'Puedes reenviar el enlace desde el aviso de la parte superior.',
+        flash(translate('Verifica tu correo electrónico antes de dar de alta o invitar usuarios. '
+            'Puedes reenviar el enlace desde el aviso de la parte superior.'),
             'warning',
         )
         return False
     return True
+
+
+_RETURN_TO_ENDPOINTS = {
+    'tablero': 'admin.obras_detailed',
+    'planificador': 'admin.planificador_jo',
+    'personal': 'admin.personal',
+    'solicitudes': 'admin.solicitudes_list',
+    'coches_libres': 'admin.vehiculos_libres',
+    'vehiculos': 'admin.vehiculos',
+}
+
+
+def _return_to_key():
+    key = (request.values.get('next') or '').strip()
+    return key if key in _RETURN_TO_ENDPOINTS else ''
+
+
+def _create_user_default_role():
+    role = (request.values.get('role') or '').strip()
+    if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_RRHH, ROLE_LABORAL, ROLE_ADMIN):
+        return role
+    return ''
+
+
+def _url_with_return_to(endpoint, **kwargs):
+    key = _return_to_key()
+    if key:
+        kwargs['next'] = key
+    if endpoint == 'admin.create_user':
+        role = _create_user_default_role()
+        if role:
+            kwargs.setdefault('role', role)
+    return url_for(endpoint, **kwargs)
+
+
+def _redirect_after_create(default_endpoint, **url_kwargs):
+    key = _return_to_key()
+    if key:
+        extra = {}
+        if key == 'tablero':
+            extra = {
+                k: v for k, v in url_kwargs.items()
+                if k in ('selected_date', 'obra')
+            }
+        return redirect(url_for(_RETURN_TO_ENDPOINTS[key], **extra))
+    return redirect(url_for(default_endpoint, **url_kwargs))
+
+
+def _cancel_url_after_create(default_endpoint, **url_kwargs):
+    key = _return_to_key()
+    if key:
+        return url_for(_RETURN_TO_ENDPOINTS[key])
+    return url_for(default_endpoint, **url_kwargs)
 
 
 def allowed_file(filename):
@@ -403,7 +456,7 @@ def _handle_import_upload_post(entity_type):
     file = request.files.get("file")
     from_onb = _import_from_onboarding()
     if not file or not allowed_file(file.filename):
-        flash("Sube un archivo Excel (.xlsx) o CSV (.csv) válido.", "danger")
+        flash(translate("Sube un archivo Excel (.xlsx) o CSV (.csv) válido."), "danger")
         kwargs = {}
         if from_onb:
             kwargs['desde'] = 'primeros-pasos'
@@ -430,7 +483,7 @@ def _handle_import_upload_post(entity_type):
     try:
         _store_import_upload(entity_type, file)
     except Exception as exc:
-        flash(f"No se pudo guardar el archivo: {exc}", "danger")
+        flash(translate("No se pudo guardar el archivo: {error}", error=exc), "danger")
         kwargs = {}
         if from_onb:
             kwargs['desde'] = 'primeros-pasos'
@@ -446,11 +499,11 @@ def _handle_import_preview(entity_type):
     try:
         path, data = _load_import_path(entity_type)
     except (ValueError, FileNotFoundError) as exc:
-        flash(str(exc), "danger")
+        flash(translate(str(exc)), "danger")
         return redirect(url_for(cfg["upload_endpoint"]))
 
     if not path:
-        flash("Primero sube un archivo para previsualizar.", "warning")
+        flash(translate("Primero sube un archivo para previsualizar."), "warning")
         return redirect(url_for(cfg["upload_endpoint"]))
 
     column_map = None
@@ -477,7 +530,7 @@ def _handle_import_preview(entity_type):
 
     preview = preview_import(path, entity_type, column_map)
     if not preview.get("success"):
-        flash(preview.get("message") or "Error al leer el archivo", "danger")
+        flash(translate(preview.get("message") or "Error al leer el archivo"), "danger")
         _clear_import_session(entity_type)
         return redirect(url_for(cfg["upload_endpoint"]))
 
@@ -493,11 +546,11 @@ def _handle_import_confirm(entity_type):
     try:
         path, data = _load_import_path(entity_type)
     except (ValueError, FileNotFoundError) as exc:
-        flash(str(exc), "danger")
+        flash(translate(str(exc)), "danger")
         return redirect(url_for(cfg["upload_endpoint"]))
 
     if not path:
-        flash("No hay archivo pendiente de importar.", "warning")
+        flash(translate("No hay archivo pendiente de importar."), "warning")
         return redirect(url_for(cfg["upload_endpoint"]))
 
     column_map = _column_map_from_form(entity_type) or data.get("column_map")
@@ -537,7 +590,7 @@ def _handle_import_confirm(entity_type):
         session.modified = True
 
     if not result.get("success"):
-        flash(result.get("message") or "Error en la importación", "danger")
+        flash(translate(result.get("message") or "Error en la importación"), "danger")
         kwargs = {}
         if from_onb:
             kwargs['desde'] = 'primeros-pasos'
@@ -737,6 +790,21 @@ def solicitudes_list():
                 
             stats[s.id] = {'pct': min(pct, 100)}
 
+    solicitudes_inbox_vacio = (
+        not solicitudes
+        and estado == 'todas'
+        and tipo == 'todas'
+        and not obra_seleccionada
+        and not target_date
+    )
+    tiene_jefes = (
+        User.query.filter(
+            User.role == ROLE_JEFE,
+            User.is_deleted.is_(False),
+            User.active.is_(True),
+        ).count() > 0
+    )
+
     return render_template(
         'admin_solicitudes_list.html',
         seccion=seccion,
@@ -750,6 +818,8 @@ def solicitudes_list():
         estados_posibles=estados_posibles,
         tipos_posibles=tipos_posibles,
         can_resolve_vehiculo=(current_user.role == ROLE_ADMIN),
+        solicitudes_inbox_vacio=solicitudes_inbox_vacio,
+        tiene_jefes=tiene_jefes,
     )
 
 
@@ -762,15 +832,15 @@ def resolver_solicitud_vehiculo(solicitud_id):
     solicitud = SolicitudVehiculo.query.get_or_404(solicitud_id)
     decision = request.form.get('decision') or (request.get_json() or {}).get('decision')
     if not decision:
-        flash('Falta la decisión (aceptar/denegar).', 'danger')
+        flash(translate('Falta la decisión (aceptar/denegar).'), 'danger')
         return redirect(url_for('admin.solicitudes_list', seccion='vehiculos'))
 
     try:
         mensaje = VehicleSolicitudService.resolve(solicitud, decision, current_user)
-        flash(mensaje, 'success')
+        flash(translate(mensaje), 'success')
     except Exception as e:
         db.session.rollback()
-        flash(str(e), 'danger')
+        flash(translate(str(e)), 'danger')
 
     return redirect(url_for('admin.solicitudes_list', seccion='vehiculos', estado=request.args.get('estado', 'todas')))
 
@@ -806,7 +876,7 @@ def check_obra_status_impact():
     obra_id = data.get("obra_id")
     
     if not obra_id:
-        return jsonify({"error": "Falta obra_id"}), 400
+        return jsonify({"error": translate("Falta obra_id")}), 400
 
     today = date.today()
     
@@ -992,7 +1062,7 @@ def api_update_obra_staff():
     
     obra = Obra.query.get(obra_id)
     if not obra:
-        return jsonify({"success": False, "error": "Obra no encontrada"}), 404
+        return jsonify({"success": False, "error": translate("Obra no encontrada")}), 404
         
     try:
         new_id = int(user_id) if user_id else None
@@ -1005,11 +1075,11 @@ def api_update_obra_staff():
             obra.encargado_id = new_id
             user_obj = obra.encargado
         else:
-            return jsonify({"success": False, "error": "Tipo de rol inválido"}), 400
+            return jsonify({"success": False, "error": translate("Tipo de rol inválido")}), 400
         
         db.session.commit()
         
-        new_name = f"{user_obj.name} {user_obj.lastname}" if user_obj else "Sin asignar"
+        new_name = f"{user_obj.name} {user_obj.lastname}" if user_obj else translate("Sin asignar")
         return jsonify({"success": True, "new_name": new_name})
         
     except Exception as e:
@@ -1027,11 +1097,11 @@ def schedule_status(user_id):
 
     scheduled_date = parse_date(data.get("date"))
     if not scheduled_date:
-        return jsonify({"success": False, "error": "Fecha inválida"}), 400
+        return jsonify({"success": False, "error": translate("Fecha inválida")}), 400
 
     user = User.query.get(user_id)
     if not user or user.role != ROLE_OPERARIO:
-        return jsonify({"success": False, "error": "Usuario no encontrado o rol inválido"}), 404
+        return jsonify({"success": False, "error": translate("Usuario no encontrado o rol inválido")}), 404
 
     if action == "deactivate":
         user.scheduled_deactivation_date = scheduled_date
@@ -1040,10 +1110,10 @@ def schedule_status(user_id):
         user.scheduled_activation_date = scheduled_date
         user.scheduled_deactivation_date = None
     else:
-        return jsonify({"success": False, "error": "Acción inválida"}), 400
+        return jsonify({"success": False, "error": translate("Acción inválida")}), 400
 
     db.session.commit()
-    return jsonify({"success": True, "message": "Fecha programada correctamente."})
+    return jsonify({"success": True, "message": translate("Fecha programada correctamente.")})
 
 
 @admin_bp.route("/buscar_obras", methods=["GET"])
@@ -1067,7 +1137,7 @@ def buscar_obras():
             )
         )
     else:
-        flash("Formato de fechas inválido", "danger")
+        flash(translate("Formato de fechas inválido"), "danger")
 
     if jefe_id:
         try:
@@ -1114,7 +1184,7 @@ def obra_panel(obra_id):
     
     # Seguridad: si es jefe, solo ve sus obras
     if current_user.role == ROLE_JEFE and obra.jefe_obra_id != current_user.id:
-        flash("No tienes permisos para ver esta obra.", "danger")
+        flash(translate("No tienes permisos para ver esta obra."), "danger")
         return redirect(url_for("jefe.panel"))
 
     jefes = User.query.filter(User.role.in_([ROLE_JEFE, ROLE_ADMIN])).all()
@@ -1168,16 +1238,22 @@ def vehiculos():
     )
 
 
+def _render_vehiculo_form(*, vehiculo=None, form_data=None):
+    return render_template(
+        "admin_vehiculo_form.html",
+        vehiculo=vehiculo,
+        form_data=form_data or {},
+        return_to=_return_to_key(),
+        cancel_url=_cancel_url_after_create('admin.vehiculos'),
+    )
+
+
 @admin_bp.route("/vehiculos/nuevo", methods=["GET"])
 @login_required
 @roles_required(ROLE_ADMIN)
 def vehiculos_nuevo():
     """Formulario de alta (misma plantilla que editar)."""
-    return render_template(
-        "admin_vehiculo_form.html",
-        vehiculo=None,
-        form_data={},
-    )
+    return _render_vehiculo_form()
 
 
 @admin_bp.route("/vehiculos/crear", methods=["POST"])
@@ -1192,28 +1268,20 @@ def vehiculos_crear():
     from_form = request.form.get('from_form') == '1'
 
     if not nombre:
-        flash('Indica un nombre para el vehículo.', 'danger')
+        flash(translate('Indica un nombre para el vehículo.'), 'danger')
         if from_form:
-            return render_template(
-                "admin_vehiculo_form.html",
-                vehiculo=None,
-                form_data=request.form,
-            )
-        return redirect(url_for('admin.vehiculos_nuevo'))
+            return _render_vehiculo_form(form_data=request.form)
+        return redirect(_url_with_return_to('admin.vehiculos_nuevo'))
 
     if matricula:
         dup = Vehiculo.query.filter(
             db.func.upper(Vehiculo.matricula) == matricula
         ).first()
         if dup:
-            flash(f'Ya existe un vehículo con matrícula {matricula}.', 'danger')
+            flash(translate('Ya existe un vehículo con matrícula {matricula}.', matricula=matricula), 'danger')
             if from_form:
-                return render_template(
-                    "admin_vehiculo_form.html",
-                    vehiculo=None,
-                    form_data=request.form,
-                )
-            return redirect(url_for('admin.vehiculos_nuevo'))
+                return _render_vehiculo_form(form_data=request.form)
+            return redirect(_url_with_return_to('admin.vehiculos_nuevo'))
 
     v = Vehiculo(
         nombre=nombre[:120],
@@ -1224,8 +1292,8 @@ def vehiculos_crear():
     )
     db.session.add(v)
     db.session.commit()
-    flash(f'Vehículo «{v.label()}» dado de alta.', 'success')
-    return redirect(url_for('admin.vehiculos'))
+    flash(translate('Vehículo «{label}» dado de alta.', label=v.label()), 'success')
+    return _redirect_after_create('admin.vehiculos')
 
 
 @admin_bp.route("/vehiculos/<int:vehiculo_id>/editar", methods=["GET", "POST"])
@@ -1247,7 +1315,7 @@ def vehiculos_editar(vehiculo_id):
     from_form = request.form.get('from_form') == '1'
 
     if not nombre:
-        flash('El nombre no puede quedar vacío.', 'danger')
+        flash(translate('El nombre no puede quedar vacío.'), 'danger')
         if from_form:
             return render_template(
                 "admin_vehiculo_form.html",
@@ -1262,7 +1330,7 @@ def vehiculos_editar(vehiculo_id):
             Vehiculo.id != v.id,
         ).first()
         if dup:
-            flash(f'Ya existe otro vehículo con matrícula {matricula}.', 'danger')
+            flash(translate('Ya existe otro vehículo con matrícula {matricula}.', matricula=matricula), 'danger')
             if from_form:
                 return render_template(
                     "admin_vehiculo_form.html",
@@ -1278,7 +1346,7 @@ def vehiculos_editar(vehiculo_id):
     if from_form:
         v.active = request.form.get('active') in ('1', 'on', 'true', 'yes')
     db.session.commit()
-    flash('Vehículo actualizado.', 'success')
+    flash(translate('Vehículo actualizado.'), 'success')
     return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
 
 
@@ -1289,8 +1357,9 @@ def vehiculos_toggle(vehiculo_id):
     v = Vehiculo.query.get_or_404(vehiculo_id)
     v.active = not bool(v.active)
     db.session.commit()
+    estado = translate('activado') if v.active else translate('desactivado')
     flash(
-        f'Vehículo «{v.label()}» {"activado" if v.active else "desactivado"}.',
+        translate('Vehículo «{label}» {estado}.', label=v.label(), estado=estado),
         'success',
     )
     return redirect(request.referrer or url_for('admin.vehiculos'))
@@ -1332,6 +1401,7 @@ def vehiculos_libres():
             if q_low in (s.get('vehiculo_label') or '').lower()
         ]
     summary = free_vehicle_summary(stretches)
+    flota_vacia = Vehiculo.query.count() == 0
 
     return render_template(
         "admin_vehiculos_libres.html",
@@ -1343,6 +1413,7 @@ def vehiculos_libres():
         q=q,
         fecha_desde=today,
         fecha_hasta=hasta,
+        flota_vacia=flota_vacia,
     )
 
 
@@ -1423,7 +1494,7 @@ def create_company():
 
         existing = Company.query.filter_by(code=code).first()
         if existing:
-            flash("El código de empresa ya existe.", "danger")
+            flash(translate("El código de empresa ya existe."), "danger")
             return redirect(url_for("admin.create_company"))
         
         new_company = Company(
@@ -1441,11 +1512,11 @@ def create_company():
         try:
             db.session.add(new_company)
             db.session.commit()
-            flash("Empresa creada exitosamente.", "success")
+            flash(translate("Empresa creada exitosamente."), "success")
             return redirect(url_for("admin.companies"))
         except Exception as e:
             db.session.rollback()
-            flash(f"Error en la base de datos: {str(e)}", "danger")
+            flash(translate("Error en la base de datos: {error}", error=str(e)), "danger")
             return redirect(url_for("admin.create_company"))
 
     from app.models import generate_random_color
@@ -1476,7 +1547,7 @@ def edit_company(company_id):
         if new_code != company.code:
             existing = Company.query.filter_by(code=new_code).first()
             if existing:
-                flash(f"El código de empresa '{new_code}' ya está usado por otra subcontrata.", "danger")
+                flash(translate("El código de empresa '{code}' ya está usado por otra subcontrata.", code=new_code), "danger")
                 return render_template("admin_edit_company.html", company=company)
         # --------------------------------------------------------
 
@@ -1494,11 +1565,11 @@ def edit_company(company_id):
         # --- FIX: Try/Except protector ---
         try:
             db.session.commit()
-            flash("Empresa actualizada correctamente", "success")
+            flash(translate("Empresa actualizada correctamente"), "success")
             return redirect(url_for("admin.companies"))
         except Exception as e:
             db.session.rollback()
-            flash(f"Error al guardar los cambios: {str(e)}", "danger")
+            flash(translate("Error al guardar los cambios: {error}", error=str(e)), "danger")
             return render_template("admin_edit_company.html", company=company)
     
     return render_template("admin_edit_company.html", company=company)
@@ -1514,7 +1585,7 @@ def rate_worker():
     reason = data.get('reason')
     
     if not worker_id or not score:
-        return jsonify({'success': False, 'message': 'Faltan datos'}), 400
+        return jsonify({'success': False, 'message': translate('Faltan datos')}), 400
         
     try:
         new_rating = Rating(
@@ -1553,15 +1624,15 @@ def _can_manage_rating(rating):
 def update_rating(rating_id):
     rating = Rating.query.get_or_404(rating_id)
     if not _can_manage_rating(rating):
-        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+        return jsonify({'success': False, 'message': translate('No autorizado')}), 403
     if not rating.is_active:
-        return jsonify({'success': False, 'message': 'Esta valoración ya está archivada'}), 400
+        return jsonify({'success': False, 'message': translate('Esta valoración ya está archivada')}), 400
 
     data = request.get_json() or {}
     score = data.get('score')
     reason = data.get('reason')
     if score is None:
-        return jsonify({'success': False, 'message': 'Falta la puntuación'}), 400
+        return jsonify({'success': False, 'message': translate('Falta la puntuación')}), 400
 
     try:
         rating.score = int(score)
@@ -1587,9 +1658,9 @@ def update_rating(rating_id):
 def delete_rating(rating_id):
     rating = Rating.query.get_or_404(rating_id)
     if not _can_manage_rating(rating):
-        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+        return jsonify({'success': False, 'message': translate('No autorizado')}), 403
     if not rating.is_active:
-        return jsonify({'success': False, 'message': 'Ya estaba eliminada'}), 400
+        return jsonify({'success': False, 'message': translate('Ya estaba eliminada')}), 400
 
     try:
         rating.is_active = False
@@ -1626,7 +1697,7 @@ def reset_worker_ratings(user_id):
         action='Reseteo de Historial',
         detail=f"Ha reseteado a 0.0 todas las valoraciones de {worker.name} {worker.lastname}."
     )
-    flash(f"Puntuación de {worker.name} restablecida a 0. El historial se ha guardado.", "success")
+    flash(translate("Puntuación de {name} restablecida a 0. El historial se ha guardado.", name=worker.name), "success")
     return redirect(url_for('admin.worker_panel', user_id=worker.id))
 
 @admin_bp.route("/worker/<int:user_id>/ratings_history")
@@ -1673,7 +1744,7 @@ def api_update_obra_jefe():
     
     obra = Obra.query.get(obra_id)
     if not obra:
-        return jsonify({"success": False, "error": "Obra no encontrada"}), 404
+        return jsonify({"success": False, "error": translate("Obra no encontrada")}), 404
         
     try:
         if new_jefe_id:
@@ -1684,7 +1755,7 @@ def api_update_obra_jefe():
         db.session.commit()
         
         # Devolver el nombre para actualizar la interfaz
-        nuevo_nombre = f"{obra.jefe_obra.name} {obra.jefe_obra.lastname}" if obra.jefe_obra else "Sin asignar"
+        nuevo_nombre = f"{obra.jefe_obra.name} {obra.jefe_obra.lastname}" if obra.jefe_obra else translate("Sin asignar")
         return jsonify({"success": True, "new_name": nuevo_nombre})
         
     except Exception as e:
@@ -1772,9 +1843,9 @@ def deactivate_operario(user_id):
     if user and user.role == ROLE_OPERARIO:
         user.active = False
         db.session.commit()
-        flash("Operario desactivado", "success")
+        flash(translate("Operario desactivado"), "success")
     else:
-        flash("Usuario no encontrado o rol inválido", "danger")
+        flash(translate("Usuario no encontrado o rol inválido"), "danger")
     return redirect(request.referrer or url_for("admin.personal", tab="operarios"))
 
 
@@ -1806,7 +1877,7 @@ def edit_operario(user_id):
                 or ""
             ).strip().lower()
             if not _email_parece_real_form(new_email):
-                flash("Email obligatorio para perfiles de oficina.", "danger")
+                flash(translate("Email obligatorio para perfiles de oficina."), "danger")
                 return _render_user_form(
                     edit_mode=True,
                     user=user,
@@ -1817,7 +1888,11 @@ def edit_operario(user_id):
         existing_dni = User.query.filter(User.dni == new_dni, User.id != user.id).first()
         if existing_dni:
             flash(
-                f"Error: El DNI {new_dni} ya pertenece a otro usuario ({existing_dni.name}).",
+                translate(
+                    "Error: El DNI {dni} ya pertenece a otro usuario ({name}).",
+                    dni=new_dni,
+                    name=existing_dni.name,
+                ),
                 "danger",
             )
             return _render_user_form(
@@ -1831,7 +1906,7 @@ def edit_operario(user_id):
             User.email == new_email, User.id != user.id
         ).first()
         if existing_email:
-            flash(f"Error: El email {new_email} ya está registrado.", "danger")
+            flash(translate("Error: El email {email} ya está registrado.", email=new_email), "danger")
             return _render_user_form(
                 edit_mode=True,
                 user=user,
@@ -1883,15 +1958,15 @@ def edit_operario(user_id):
                 user.web_access = True
 
             db.session.commit()
-            flash("Datos actualizados correctamente", "success")
+            flash(translate("Datos actualizados correctamente"), "success")
             return redirect(url_for("admin.personal"))
 
         except PlanLimitError as e:
             db.session.rollback()
-            flash(str(e), "danger")
+            flash(translate(str(e)), "danger")
         except Exception as e:
             db.session.rollback()
-            flash(f"Error inesperado al guardar: {str(e)}", "danger")
+            flash(translate("Error inesperado al guardar: {error}", error=str(e)), "danger")
 
     return _render_user_form(
         edit_mode=True,
@@ -1921,9 +1996,13 @@ def panel():
 def panel_laboral():
     """Landing de inicio para perfiles laboral / RRHH."""
     from app.services.panel_service import get_laboral_panel_context
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     ctx = get_laboral_panel_context(
         current_user,
-        puede_ver_auditoria=user_can(current_user, 'auditoria_fichajes', 'r'),
+        puede_ver_auditoria=(
+            user_can(current_user, 'auditoria_fichajes', 'r')
+            and tenant_muestra_auditoria_fichajes()
+        ),
         horizon_days=14,
     )
     return render_template("admin_panel_laboral.html", **ctx)
@@ -1953,9 +2032,8 @@ def primeros_pasos():
         try:
             if accion in ("listo", "saltar"):
                 marcar_onboarding_completo()
-                flash(
-                    "Listo. Ya puedes usar SignaPlan a tu ritmo. "
-                    "La Academia de tutoriales sigue en el menú.",
+                flash(translate("Listo. Ya puedes usar SignaPlan a tu ritmo. "
+                    "La Academia de tutoriales sigue en el menú."),
                     "success" if accion == "listo" else "info",
                 )
                 return redirect(url_for("admin.primeros_pasos"))
@@ -1978,9 +2056,14 @@ def primeros_pasos():
                 except Exception:
                     pass
                 flash(
-                    f"Datos de ejemplo listos: {qty['obras']} obras, "
-                    f"{qty['empleados']} trabajadores, {qty['vehiculos']} vehículos. "
-                    f"Ya tienes material para los siguientes tutoriales.",
+                    translate(
+                        "Datos de ejemplo listos: {obras} obras, "
+                        "{empleados} trabajadores, {vehiculos} vehículos. "
+                        "Ya tienes material para los siguientes tutoriales.",
+                        obras=qty['obras'],
+                        empleados=qty['empleados'],
+                        vehiculos=qty['vehiculos'],
+                    ),
                     "success",
                 )
                 return redirect(url_for("admin.primeros_pasos", focus="next", demo="1"))
@@ -1992,9 +2075,8 @@ def primeros_pasos():
                     return redirect(url_for("admin.primeros_pasos", tour="start"))
                 if camino == "skip":
                     marcar_onboarding_completo()
-                    flash(
-                        "Listo. Ya puedes usar SignaPlan a tu ritmo. "
-                        "La Academia de tutoriales sigue en el menú.",
+                    flash(translate("Listo. Ya puedes usar SignaPlan a tu ritmo. "
+                        "La Academia de tutoriales sigue en el menú."),
                         "info",
                     )
                     return redirect(url_for("admin.panel"))
@@ -2005,19 +2087,19 @@ def primeros_pasos():
                 from app.services.onboarding_service import CONFIG_ONBOARDING
                 borrar_datos_demo()
                 destino = (request.form.get("despues") or "panel").strip()
-                flash("Datos de ejemplo eliminados.", "success")
+                flash(translate("Datos de ejemplo eliminados."), "success")
                 if destino == "wizard":
                     set_tenant_config(CONFIG_ONBOARDING, "False")
                     return redirect(url_for("admin.primeros_pasos"))
                 return redirect(url_for("admin.panel"))
             else:
-                raise ValueError("Acción no reconocida.")
+                raise ValueError(translate("Acción no reconocida."))
         except ValueError as exc:
             db.session.rollback()
-            flash(str(exc), "danger")
+            flash(translate(str(exc)), "danger")
         except Exception as exc:
             db.session.rollback()
-            flash(f"No se ha podido completar la acción: {exc}", "danger")
+            flash(translate("No se ha podido completar la acción: {error}", error=exc), "danger")
 
         return redirect(url_for("admin.primeros_pasos"))
 
@@ -2088,7 +2170,7 @@ def api_tour_fichaje():
     if activo and not tenant_tiene_fichaje_operario_module():
         return jsonify({
             'success': False,
-            'message': 'Este espacio no tiene el módulo de fichaje operario.',
+            'message': translate('Este espacio no tiene el módulo de fichaje operario.'),
         }), 400
     set_tenant_config(CONFIG_FICHAJE_OPERARIO, 'True' if activo else 'False')
     marcar_fichaje_preferencia_decidida()
@@ -2175,6 +2257,8 @@ def create_obra():
             encargados=encargados,
             form_data=form_data,
             defaults=defaults,
+            return_to=_return_to_key(),
+            cancel_url=_cancel_url_after_create('admin.obras_list'),
         )
 
     if request.method == "POST":
@@ -2186,13 +2270,13 @@ def create_obra():
         estado = (request.form.get("estado") or "En Curso").strip() or "En Curso"
 
         if not nombre:
-            flash("El nombre de la obra es obligatorio.", "danger")
+            flash(translate("El nombre de la obra es obligatorio."), "danger")
             return _render_create(request.form)
         if not fecha_inicio:
-            flash("La fecha de inicio es obligatoria.", "danger")
+            flash(translate("La fecha de inicio es obligatoria."), "danger")
             return _render_create(request.form)
         if not jefe_obra_id:
-            flash("Debes seleccionar un jefe de obra.", "danger")
+            flash(translate("Debes seleccionar un jefe de obra."), "danger")
             return _render_create(request.form)
 
         if not fecha_fin:
@@ -2206,7 +2290,11 @@ def create_obra():
             existe = Obra.query.filter_by(codigo=codigo).first()
             if existe:
                 flash(
-                    f"Error: El código '{codigo}' ya existe en la obra '{existe.nombre}'.",
+                    translate(
+                        "Error: El código '{codigo}' ya existe en la obra '{obra}'.",
+                        codigo=codigo,
+                        obra=existe.nombre,
+                    ),
                     "danger",
                 )
                 return _render_create(request.form)
@@ -2243,17 +2331,15 @@ def create_obra():
                 + (f" (Código: {codigo})" if codigo else ""),
             )
 
-            flash("Obra creada exitosamente", "success")
-            return redirect(
-                url_for(
-                    "admin.obras_detailed",
-                    selected_date=nueva_obra.fecha_inicio.strftime("%Y-%m-%d"),
-                    obra=nueva_obra.id,
-                )
+            flash(translate("Obra creada exitosamente"), "success")
+            return _redirect_after_create(
+                "admin.obras_detailed",
+                selected_date=nueva_obra.fecha_inicio.strftime("%Y-%m-%d"),
+                obra=nueva_obra.id,
             )
         except Exception as e:
             db.session.rollback()
-            flash(f"Error al guardar: {str(e)}", "danger")
+            flash(translate("Error al guardar: {error}", error=str(e)), "danger")
             return _render_create(request.form)
 
     return _render_create({})
@@ -2291,7 +2377,7 @@ def edit_obra(obra_id):
         nombre = (request.form.get("nombre") or "").strip()
 
         if not nombre:
-            flash("El nombre de la obra es obligatorio.", "danger")
+            flash(translate("El nombre de la obra es obligatorio."), "danger")
             return render_template(
                 "edit_obra.html", obra=obra, jefes=jefes,
                 encargados=encargados, form_data=request.form,
@@ -2300,11 +2386,11 @@ def edit_obra(obra_id):
         if new_codigo and new_codigo != obra.codigo:
             existe = Obra.query.filter(Obra.codigo == new_codigo, Obra.id != obra.id).first()
             if existe:
-                flash(f"Error: El código '{new_codigo}' ya está en uso en '{existe.nombre}'.", "danger")
+                flash(translate("Error: El código '{codigo}' ya está en uso en '{obra}'.", codigo=new_codigo, obra=existe.nombre), "danger")
                 return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
 
         if not new_jefe_id:
-            flash("Error: La obra no puede quedarse sin Jefe de Obra.", "danger")
+            flash(translate("Error: La obra no puede quedarse sin Jefe de Obra."), "danger")
             return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
 
         obra.codigo = new_codigo
@@ -2356,7 +2442,7 @@ def edit_obra(obra_id):
                     action='Pausa de Obra',
                     detail=f"Obra '{obra_nombre}' pausada: {len(futuras)} asignaciones futuras eliminadas.",
                 )
-                flash(f"Obra pausada. {len(futuras)} asignaciones eliminadas.", "warning")
+                flash(translate("Obra pausada. {count} asignaciones eliminadas.", count=len(futuras)), "warning")
         elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
             obra.fecha_fin = today
             futuras = (
@@ -2378,7 +2464,7 @@ def edit_obra(obra_id):
                     action='Finalización de Obra',
                     detail=f"Obra '{obra_nombre}' finalizada: {len(futuras)} asignaciones futuras eliminadas.",
                 )
-            flash(f"Obra finalizada. {len(futuras)} asignaciones eliminadas.", "success")
+            flash(translate("Obra finalizada. {count} asignaciones eliminadas.", count=len(futuras)), "success")
 
         try:
             db.session.commit()
@@ -2389,11 +2475,11 @@ def edit_obra(obra_id):
                 action='Editar Obra',
                 detail=f"Ha editado la obra '{obra_nombre}'. Estado actual: {obra.estado}"
             )
-            flash("Obra actualizada correctamente", "success")
+            flash(translate("Obra actualizada correctamente"), "success")
             return redirect(url_for("admin.obras_detailed", selected_date=str(date.today())))
         except Exception as e:
             db.session.rollback()
-            flash(f"Error al actualizar: {str(e)}", "danger")
+            flash(translate("Error al actualizar: {error}", error=str(e)), "danger")
             return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
 
     return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data={})
@@ -2439,13 +2525,13 @@ def delete_company(company_id):
         if action_option == "reassign":
             new_company_id = request.form.get("new_company") # Recibimos ID del form
             if not new_company_id:
-                flash("Debe seleccionar una empresa para reasignar", "danger")
+                flash(translate("Debe seleccionar una empresa para reasignar"), "danger")
                 return redirect(url_for("admin.confirm_delete_company", company_id=company_id))
             
             # Convertir a int
             new_company = Company.query.get(int(new_company_id))
             if not new_company:
-                 flash("Empresa destino no válida", "danger")
+                 flash(translate("Empresa destino no válida"), "danger")
                  return redirect(url_for("admin.confirm_delete_company", company_id=company_id))
 
             for worker in associated_workers:
@@ -2469,7 +2555,7 @@ def delete_company(company_id):
     db.session.delete(company)
     db.session.commit()
     
-    flash("Empresa eliminada correctamente", "success")
+    flash(translate("Empresa eliminada correctamente"), "success")
     return redirect(url_for("admin.companies"))
 
 
@@ -2483,9 +2569,9 @@ def reset_password(user_id):
     if user:
         user.password_hash = generate_password_hash(new_password)
         db.session.commit()
-        flash("Contraseña restablecida", "success")
+        flash(translate("Contraseña restablecida"), "success")
     else:
-        flash("Usuario no encontrado", "danger")
+        flash(translate("Usuario no encontrado"), "danger")
     return redirect(url_for("admin.personal"))
 
 
@@ -2498,14 +2584,14 @@ def enviar_acceso_fichaje(user_id):
 
     user = User.query.get_or_404(user_id)
     if user.role != ROLE_OPERARIO:
-        flash('Solo los operarios usan PIN de fichaje. El resto entra con correo y contraseña.', 'warning')
+        flash(translate('Solo los operarios usan PIN de fichaje. El resto entra con correo y contraseña.'), 'warning')
         return redirect(url_for('admin.edit_operario', user_id=user.id))
 
     email = (request.form.get('email') or '').strip()
     if email:
         user.email = email
     elif not user.email or '@demo.signaplan' in (user.email or '') or '@local.signaplan' in (user.email or ''):
-        flash('Indica un correo real para enviar el enlace de definir PIN.', 'danger')
+        flash(translate('Indica un correo real para enviar el enlace de definir PIN.'), 'danger')
         return redirect(url_for('admin.edit_operario', user_id=user.id))
 
     pin = (request.form.get('nuevo_pin') or '').strip()
@@ -2519,24 +2605,30 @@ def enviar_acceso_fichaje(user_id):
         )
         db.session.commit()
         if ok:
-            extra = f' PIN provisional (solo visible aquí): {pin_usado}.' if pin_usado else ''
+            extra = translate(' PIN provisional (solo visible aquí): {pin}.', pin=pin_usado) if pin_usado else ''
             flash(
-                f'Enlace para definir PIN enviado a {user.email}.{extra}',
+                translate(
+                    'Enlace para definir PIN enviado a {email}.{extra}',
+                    email=user.email,
+                    extra=extra,
+                ),
                 'success',
             )
         else:
+            pin_bit = f' ({pin_usado})' if pin_usado else ''
             flash(
-                f'PIN preparado'
-                f'{f" ({pin_usado})" if pin_usado else ""}, '
-                f'pero no se pudo enviar el correo. Revisa SMTP o entrégaselo en mano.',
+                translate(
+                    'PIN preparado{pin}, pero no se pudo enviar el correo. Revisa SMTP o entrégaselo en mano.',
+                    pin=pin_bit,
+                ),
                 'warning',
             )
     except PinAuthError as exc:
         db.session.rollback()
-        flash(str(exc), 'danger')
+        flash(translate(str(exc)), 'danger')
     except Exception as exc:
         db.session.rollback()
-        flash(f'No se ha podido enviar el acceso: {exc}', 'danger')
+        flash(translate('No se ha podido enviar el acceso: {error}', error=exc), 'danger')
 
     return redirect(url_for('admin.edit_operario', user_id=user.id))
 
@@ -2556,7 +2648,7 @@ def reset_pin(user_id):
 
     user = User.query.get_or_404(user_id)
     if user.role != ROLE_OPERARIO:
-        flash('Solo los operarios usan PIN de fichaje.', 'warning')
+        flash(translate('Solo los operarios usan PIN de fichaje.'), 'warning')
         dest = (request.form.get('next') or '').strip() or url_for('admin.edit_operario', user_id=user.id)
         return redirect(dest)
     accion = (request.form.get('accion') or 'asignar').strip()
@@ -2566,7 +2658,7 @@ def reset_pin(user_id):
         if accion == 'quitar':
             quitar_pin(user)
             db.session.commit()
-            flash(f'PIN de fichaje eliminado para {user.name} {user.lastname}.', 'success')
+            flash(translate('PIN de fichaje eliminado para {name}.', name=f'{user.name} {user.lastname}'), 'success')
         elif accion == 'generar':
             from app.services.pin_auth_service import asignar_pin_generado
             _, pin_plano = asignar_pin_generado(
@@ -2574,13 +2666,18 @@ def reset_pin(user_id):
             )
             db.session.commit()
             mail_msg = (
-                ' Se ha enviado un enlace por correo para que lo defina.'
+                translate(' Se ha enviado un enlace por correo para que lo defina.')
                 if user.email else ''
             )
             flash(
-                f'PIN provisional para {user.name} {user.lastname}: {pin_plano}. '
-                f'Debe cambiarlo en el primer acceso a /mi (o con el enlace del correo).'
-                f'{mail_msg}',
+                translate(
+                    'PIN provisional para {name}: {pin}. '
+                    'Debe cambiarlo en el primer acceso a /mi (o con el enlace del correo).'
+                    '{mail}',
+                    name=f'{user.name} {user.lastname}',
+                    pin=pin_plano,
+                    mail=mail_msg,
+                ),
                 'success',
             )
         else:
@@ -2589,17 +2686,20 @@ def reset_pin(user_id):
             asignar_pin_explicito(user, pin, notify=True, actor=current_user)
             db.session.commit()
             mail_msg = (
-                ' Se ha enviado un enlace por correo para que pueda redefinirlo.'
+                translate(' Se ha enviado un enlace por correo para que pueda redefinirlo.')
                 if user.email else ''
             )
             flash(
-                f'PIN de fichaje actualizado para {user.name} {user.lastname}.'
-                f'{mail_msg}',
+                translate(
+                    'PIN de fichaje actualizado para {name}.{mail}',
+                    name=f'{user.name} {user.lastname}',
+                    mail=mail_msg,
+                ),
                 'success',
             )
     except PinAuthError as exc:
         db.session.rollback()
-        flash(str(exc), 'danger')
+        flash(translate(str(exc)), 'danger')
 
     if next_url.startswith('/admin/'):
         return redirect(next_url)
@@ -2614,12 +2714,11 @@ def delete_user(user_id):
     if user:
         user.soft_delete(actor_id=current_user.id)
         db.session.commit()
-        flash(
-            "Usuario eliminado y archivado. Se han removido asignaciones futuras.",
+        flash(translate("Usuario eliminado y archivado. Se han removido asignaciones futuras."),
             "success",
         )
     else:
-        flash("Usuario no encontrado", "danger")
+        flash(translate("Usuario no encontrado"), "danger")
     return redirect(url_for("admin.personal"))
 
 
@@ -2638,7 +2737,7 @@ def _default_internal_company_id():
     return interna.id if interna else None
 
 
-def _render_user_form(*, edit_mode, user, action_url, companies=None):
+def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to='', cancel_url=None, default_role=''):
     companies = companies if companies is not None else Company.query.order_by(
         Company.is_internal.desc(), Company.nombre.asc()
     ).all()
@@ -2647,7 +2746,9 @@ def _render_user_form(*, edit_mode, user, action_url, companies=None):
         edit_mode=edit_mode,
         user=user,
         action_url=action_url,
-        cancel_url=url_for("admin.personal"),
+        cancel_url=cancel_url or url_for("admin.personal"),
+        return_to=return_to,
+        default_role=default_role,
         companies=companies,
         default_company_id=_default_internal_company_id(),
     )
@@ -2682,12 +2783,12 @@ def create_user():
         pin_mode = (request.form.get("pin_mode") or "manual").strip()
 
         if not name or not lastname or not dni:
-            flash("Nombre, apellidos y DNI son obligatorios.", "danger")
-            return redirect(url_for("admin.create_user"))
+            flash(translate("Nombre, apellidos y DNI son obligatorios."), "danger")
+            return redirect(_url_with_return_to("admin.create_user"))
 
         if User.query.filter_by(dni=dni).first():
-            flash(f"Error: El DNI {dni} ya pertenece a otro usuario.", "danger")
-            return redirect(url_for("admin.create_user"))
+            flash(translate("Error: El DNI {dni} ya pertenece a otro usuario.", dni=dni), "danger")
+            return redirect(_url_with_return_to("admin.create_user"))
 
         if role == ROLE_OPERARIO:
             email_link = (
@@ -2695,17 +2796,16 @@ def create_user():
             ).strip().lower()
             if pin_mode == "email_link":
                 if not _email_parece_real_form(email_link):
-                    flash(
-                        "Para enviar el enlace de PIN indica un correo electrónico real.",
+                    flash(translate("Para enviar el enlace de PIN indica un correo electrónico real."),
                         "danger",
                     )
-                    return redirect(url_for("admin.create_user"))
+                    return redirect(_url_with_return_to("admin.create_user"))
                 email = email_link
             else:
                 pin_form = (request.form.get("pin") or "").strip()
                 if not pin_form:
-                    flash("Indica un PIN de 4 a 6 dígitos, o elige enviar enlace por correo.", "danger")
-                    return redirect(url_for("admin.create_user"))
+                    flash(translate("Indica un PIN de 4 a 6 dígitos, o elige enviar enlace por correo."), "danger")
+                    return redirect(_url_with_return_to("admin.create_user"))
                 email_opt = (
                     request.form.get("email_advanced") or request.form.get("email") or ""
                 ).strip().lower()
@@ -2720,18 +2820,18 @@ def create_user():
             ).strip().lower()
             password = request.form.get("password") or ""
             if not _email_parece_real_form(email):
-                flash("Email obligatorio para perfiles de oficina.", "danger")
-                return redirect(url_for("admin.create_user"))
+                flash(translate("Email obligatorio para perfiles de oficina."), "danger")
+                return redirect(_url_with_return_to("admin.create_user"))
             if len(password) < 8:
-                flash("La contraseña debe tener al menos 8 caracteres.", "danger")
-                return redirect(url_for("admin.create_user"))
+                flash(translate("La contraseña debe tener al menos 8 caracteres."), "danger")
+                return redirect(_url_with_return_to("admin.create_user"))
             password_hash = generate_password_hash(password)
             web_access = True
             pin_mode = "none"
 
         if User.query.filter_by(email=email).first():
-            flash(f"Error: El email {email} ya está registrado.", "danger")
-            return redirect(url_for("admin.create_user"))
+            flash(translate("Error: El email {email} ya está registrado.", email=email), "danger")
+            return redirect(_url_with_return_to("admin.create_user"))
 
         if not company_id:
             default_cid = _default_internal_company_id()
@@ -2740,8 +2840,8 @@ def create_user():
         try:
             exigir_alta_empleado(role=role, active=active)
         except PlanLimitError as exc:
-            flash(str(exc), "danger")
-            return redirect(url_for("admin.create_user"))
+            flash(translate(str(exc)), "danger")
+            return redirect(_url_with_return_to("admin.create_user"))
 
         new_user = User(
             email=email,
@@ -2768,34 +2868,38 @@ def create_user():
                     new_user, pin_plano=None, actor=current_user, regenerar=True,
                 )
                 if ok:
-                    pin_msg = f" Enlace para definir PIN enviado a {email}."
+                    pin_msg = translate(" Enlace para definir PIN enviado a {email}.", email=email)
                     if pin_usado:
-                        pin_msg += f" PIN provisional (solo aquí): {pin_usado}."
+                        pin_msg += translate(" PIN provisional (solo aquí): {pin}.", pin=pin_usado)
                 else:
-                    pin_msg = (
-                        f" PIN preparado"
-                        f"{f' ({pin_usado})' if pin_usado else ''}, "
-                        "pero no se pudo enviar el correo."
+                    pin_bit = f' ({pin_usado})' if pin_usado else ''
+                    pin_msg = translate(
+                        " PIN preparado{pin}, pero no se pudo enviar el correo.",
+                        pin=pin_bit,
                     )
             elif role == ROLE_OPERARIO:
                 pin_form = (request.form.get("pin") or "").strip()
                 asignar_pin_explicito(
                     new_user, pin_form, notify=False, actor=current_user
                 )
-                pin_msg = " PIN asignado (DNI + PIN en /mi)."
+                pin_msg = translate(" PIN asignado (DNI + PIN en /mi).")
         except PinAuthError as exc:
             db.session.rollback()
-            flash(str(exc), "danger")
-            return redirect(url_for("admin.create_user"))
+            flash(translate(str(exc)), "danger")
+            return redirect(_url_with_return_to("admin.create_user"))
 
         db.session.commit()
-        flash(f"Usuario creado exitosamente.{pin_msg}", "success")
-        return redirect(url_for("admin.personal"))
+        flash(translate("Usuario creado exitosamente.{pin_msg}", pin_msg=pin_msg), "success")
+        return _redirect_after_create("admin.personal")
 
+    return_to = _return_to_key()
     return _render_user_form(
         edit_mode=False,
         user=User(),
-        action_url=url_for("admin.create_user"),
+        action_url=_url_with_return_to("admin.create_user"),
+        return_to=return_to,
+        cancel_url=_cancel_url_after_create("admin.personal"),
+        default_role=_create_user_default_role(),
     )
 
 
@@ -2817,11 +2921,11 @@ def approve_operario(user_id):
             )
             user.active = True
             db.session.commit()
-            flash("Operario activado", "success")
+            flash(translate("Operario activado"), "success")
         except PlanLimitError as exc:
-            flash(str(exc), "danger")
+            flash(translate(str(exc)), "danger")
     else:
-        flash("El usuario no es un operario", "danger")
+        flash(translate("El usuario no es un operario"), "danger")
     return redirect(url_for("admin.personal", tab="operarios"))
 
 
@@ -2834,7 +2938,7 @@ def approve_operario(user_id):
 def delete_obra(obra_id):
     obra = Obra.query.get(obra_id)
     if not obra:
-        flash("Obra no encontrada", "danger")
+        flash(translate("Obra no encontrada"), "danger")
         return redirect(url_for("admin.panel"))
 
     today = date.today()
@@ -2863,8 +2967,7 @@ def delete_obra(obra_id):
 
     db.session.commit()
 
-    flash(
-        "Obra eliminada. Se desasignaron solo las asignaciones futuras.",
+    flash(translate("Obra eliminada. Se desasignaron solo las asignaciones futuras."),
         "success",
     )
     return redirect(url_for("admin.panel"))
@@ -2963,7 +3066,7 @@ from app.services.assignment_service import process_assignment_action
 @login_required
 def planificador_jo():
     if not user_can(current_user, 'planificador', 'r'):
-        flash("Acceso no autorizado", "danger")
+        flash(translate("Acceso no autorizado"), "danger")
         return redirect(url_for('main.dashboard'))
     todas_obras = []
     jefes = []
@@ -2984,6 +3087,12 @@ def planificador_jo():
         # Cargamos los Jefes de Obra para el nuevo desplegable
         if current_user.role == ROLE_ADMIN:
             jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).order_by(User.name).all()
+
+    from app.services.oficina_obra_service import es_obra_oficina
+    planif_sin_obras = all(es_obra_oficina(o) for o in todas_obras)
+    planif_sin_personal = (
+        User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).count() == 0
+    )
         
     return render_template(
         "planificador.html",
@@ -2992,6 +3101,8 @@ def planificador_jo():
         empresas=empresas,
         ROLE_ADMIN=ROLE_ADMIN,
         can_edit_planificador=user_can(current_user, 'planificador', 'w'),
+        planif_sin_obras=planif_sin_obras,
+        planif_sin_personal=planif_sin_personal,
     )
 
 
@@ -3351,7 +3462,7 @@ def search_workers():
 def configuracion_global():
     from app.services.permission_service import user_can
     if not user_can(current_user, 'configuracion', 'r'):
-        flash("Acceso denegado. Área exclusiva de administración.", "danger")
+        flash(translate("Acceso denegado. Área exclusiva de administración."), "danger")
         return redirect(url_for('main.dashboard'))
         
     from app.models import Festivo, ConfiguracionGlobal
@@ -3390,17 +3501,16 @@ def reiniciar_guia_onboarding():
     from app.services.permission_service import user_can
 
     if not user_can(current_user, 'configuracion', 'w'):
-        flash('Acceso denegado.', 'danger')
+        flash(translate('Acceso denegado.'), 'danger')
         return redirect(url_for('admin.configuracion_global'))
     if not tenant_tiene_onboarding():
-        flash('Este espacio no tiene el módulo de onboarding.', 'warning')
+        flash(translate('Este espacio no tiene el módulo de onboarding.'), 'warning')
         return redirect(url_for('admin.configuracion_global'))
 
     reiniciar_onboarding()
     modo = (request.form.get('modo') or 'guia').strip()
-    flash(
-        'Onboarding reiniciado. Puedes seguir la guía o los primeros pasos '
-        '(no se han borrado datos de la empresa).',
+    flash(translate('Onboarding reiniciado. Puedes seguir la guía o los primeros pasos '
+        '(no se han borrado datos de la empresa).'),
         'success',
     )
     if modo == 'pasos':
@@ -3425,7 +3535,7 @@ def permisos_roles(role=None):
         user_can,
     )
     if not user_can(current_user, 'permisos', 'r'):
-        flash('Acceso denegado.', 'danger')
+        flash(translate('Acceso denegado.'), 'danger')
         return redirect(url_for('main.dashboard'))
     ensure_role_permissions()
     valid = {r for r, _ in PERMISSION_ROLES}
@@ -3452,24 +3562,24 @@ def permisos_roles_save():
         user_can,
     )
     if not user_can(current_user, 'permisos', 'w'):
-        flash('Acceso denegado.', 'danger')
+        flash(translate('Acceso denegado.'), 'danger')
         return redirect(url_for('main.dashboard'))
     if request.form.get('reset_defaults'):
         ensure_role_permissions(force=True)
-        flash('Permisos restaurados a los valores por defecto.', 'success')
+        flash(translate('Permisos restaurados a los valores por defecto.'), 'success')
         return redirect(url_for('admin.permisos_roles'))
     role = (request.form.get('role') or '').strip()
     valid = {r for r, _ in PERMISSION_ROLES}
     if role not in valid:
-        flash('Rol no válido.', 'danger')
+        flash(translate('Rol no válido.'), 'danger')
         return redirect(url_for('admin.permisos_roles'))
     try:
         save_role_matrix(role, request.form)
     except Exception as exc:
         db.session.rollback()
-        flash(f'No se pudieron guardar los permisos: {exc}', 'danger')
+        flash(translate('No se pudieron guardar los permisos: {error}', error=exc), 'danger')
         return redirect(url_for('admin.permisos_roles', role=role))
-    flash('Permisos guardados.', 'success')
+    flash(translate('Permisos guardados.'), 'success')
     return redirect(url_for('admin.permisos_roles', role=role))
 
 
@@ -3539,24 +3649,25 @@ def update_config():
             operario_activo = 'True' if request.form.get('fichaje_operario_activo') else 'False'
             _upsert(CONFIG_FICHAJE_OPERARIO, operario_activo)
 
-            modo_geo = (request.form.get('fichaje_geolocalizacion') or '').strip()
-            if modo_geo not in GEO_OPCIONES:
-                modo_geo = GEO_DESACTIVADA
-            if modo_geo != GEO_DESACTIVADA:
-                try:
-                    exigir_geolocalizacion()
-                except PlanLimitError as exc:
-                    flash(str(exc), 'danger')
+            if operario_activo == 'True':
+                modo_geo = (request.form.get('fichaje_geolocalizacion') or '').strip()
+                if modo_geo not in GEO_OPCIONES:
                     modo_geo = GEO_DESACTIVADA
-            _upsert(CONFIG_FICHAJE_GEO, modo_geo)
+                if modo_geo != GEO_DESACTIVADA:
+                    try:
+                        exigir_geolocalizacion()
+                    except PlanLimitError as exc:
+                        flash(translate(str(exc)), 'danger')
+                        modo_geo = GEO_DESACTIVADA
+                _upsert(CONFIG_FICHAJE_GEO, modo_geo)
 
-            from app.services.oficina_obra_service import (
-                CONFIG_OBRA_OFICINA,
-                sincronizar_obra_oficina,
-            )
-            oficina_on = bool(request.form.get('obra_oficina_activa'))
-            _upsert(CONFIG_OBRA_OFICINA, 'True' if oficina_on else 'False')
-            sincronizar_obra_oficina(oficina_on)
+                from app.services.oficina_obra_service import (
+                    CONFIG_OBRA_OFICINA,
+                    sincronizar_obra_oficina,
+                )
+                oficina_on = bool(request.form.get('obra_oficina_activa'))
+                _upsert(CONFIG_OBRA_OFICINA, 'True' if oficina_on else 'False')
+                sincronizar_obra_oficina(oficina_on)
 
     if 'ausencias' in section_keys:
         jefe_resuelve = 'True' if request.form.get('ausencias_jefe_puede_resolver') else 'False'
@@ -3611,13 +3722,13 @@ def update_config():
         _upsert('odoo_url', odoo_url)
 
     flash_msgs = {
-        'horario': 'Horario y planificación guardados.',
-        'fichajes': 'Configuración de fichajes guardada.',
-        'ausencias': 'Configuración de ausencias guardada.',
-        'laboral': 'Permisos de Laboral guardados.',
-        'vehiculos': 'Alertas de vehículos guardadas.',
-        'emails': 'Notificaciones por correo guardadas.',
-        'all': 'Configuración global actualizada correctamente.',
+        'horario': translate('Horario y planificación guardados.'),
+        'fichajes': translate('Configuración de fichajes guardada.'),
+        'ausencias': translate('Configuración de ausencias guardada.'),
+        'laboral': translate('Permisos de Laboral guardados.'),
+        'vehiculos': translate('Alertas de vehículos guardadas.'),
+        'emails': translate('Notificaciones por correo guardadas.'),
+        'all': translate('Configuración global actualizada correctamente.'),
     }
 
     try:
@@ -3625,7 +3736,7 @@ def update_config():
         flash(flash_msgs.get(section, flash_msgs['all']), 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al guardar la configuración: {str(e)}', 'danger')
+        flash(translate('Error al guardar la configuración: {error}', error=str(e)), 'danger')
 
     anchor = {
         'horario': 'cfg-horario',
@@ -3655,14 +3766,14 @@ def add_festivo():
             # Comprobar si ya existe
             existe = Festivo.query.filter_by(fecha=fecha_obj).first()
             if existe:
-                flash(f"El día {fecha_str} ya está marcado como festivo.", "warning")
+                flash(translate("El día {date} ya está marcado como festivo.", date=fecha_str), "warning")
             else:
                 nuevo_festivo = Festivo(fecha=fecha_obj, descripcion=descripcion)
                 db.session.add(nuevo_festivo)
                 db.session.commit()
-                flash(f"Día {fecha_str} añadido al calendario de festivos.", "success")
+                flash(translate("Día {date} añadido al calendario de festivos.", date=fecha_str), "success")
         except Exception as e:
-            flash(f"Error al añadir festivo: {str(e)}", "danger")
+            flash(translate("Error al añadir festivo: {error}", error=str(e)), "danger")
             db.session.rollback()
             
     return redirect(url_for('admin.configuracion_global'))
@@ -3678,7 +3789,7 @@ def delete_festivo(id):
     f = Festivo.query.get_or_404(id)
     db.session.delete(f)
     db.session.commit()
-    flash("Día festivo eliminado del sistema.", "info")
+    flash(translate("Día festivo eliminado del sistema."), "info")
     return redirect(url_for('admin.configuracion_global'))
 
 @admin_bp.route("/api/obras/batch_status", methods=["POST"])
@@ -3691,13 +3802,13 @@ def batch_update_obras_status():
     new_estado = data.get('new_status')
 
     if not obra_ids or not new_estado:
-        return jsonify({'success': False, 'message': 'Datos incompletos.'}), 400
+        return jsonify({'success': False, 'message': translate('Datos incompletos.')}), 400
 
     # AQUÍ ESTABA EL ERROR: Cambiamos 'Ejecucion' por 'En Curso'
     valid_estados = ['Pendiente', 'En Curso', 'Finalizada'] 
     
     if new_estado not in valid_estados:
-        return jsonify({'success': False, 'message': 'Estado no válido.'}), 400
+        return jsonify({'success': False, 'message': translate('Estado no válido.')}), 400
 
     try:
         obras = Obra.query.filter(Obra.id.in_(obra_ids)).all()
@@ -3749,9 +3860,16 @@ def batch_update_obras_status():
 
         db.session.commit()
         
-        msg = f"Estado actualizado a '{new_estado}' en {len(obras)} obras."
+        msg = translate(
+            "Estado actualizado a '{estado}' en {n} obras.",
+            estado=new_estado,
+            n=len(obras),
+        )
         if total_deleted > 0:
-            msg += f" Se han liberado {total_deleted} jornadas asignadas a futuro."
+            msg += ' ' + translate(
+                'Se han liberado {n} jornadas asignadas a futuro.',
+                n=total_deleted,
+            )
             
         return jsonify({'success': True, 'message': msg})
 
@@ -3767,7 +3885,7 @@ def batch_delete_users():
     data = request.get_json() or {}
     user_ids = data.get("user_ids", [])
     if not user_ids:
-        return jsonify({"success": False, "message": "No se seleccionaron usuarios."}), 400
+        return jsonify({"success": False, "message": translate("No se seleccionaron usuarios.")}), 400
 
     deleted = 0
     for uid in user_ids:
@@ -3776,7 +3894,7 @@ def batch_delete_users():
             user.soft_delete(actor_id=current_user.id)
             deleted += 1
     db.session.commit()
-    return jsonify({"success": True, "message": f"{deleted} usuario(s) eliminado(s)."})
+    return jsonify({"success": True, "message": translate("{n} usuario(s) eliminado(s).", n=deleted)})
 
 
 @admin_bp.route("/api/users/batch_deactivate", methods=["POST"])
@@ -3786,7 +3904,7 @@ def batch_deactivate_users():
     data = request.get_json() or {}
     user_ids = data.get("user_ids", [])
     if not user_ids:
-        return jsonify({"success": False, "message": "No se seleccionaron usuarios."}), 400
+        return jsonify({"success": False, "message": translate("No se seleccionaron usuarios.")}), 400
 
     updated = 0
     for uid in user_ids:
@@ -3795,7 +3913,7 @@ def batch_deactivate_users():
             user.active = False
             updated += 1
     db.session.commit()
-    return jsonify({"success": True, "message": f"{updated} operario(s) desactivado(s)."})
+    return jsonify({"success": True, "message": translate("{n} operario(s) desactivado(s).", n=updated)})
 
 
 @admin_bp.route("/api/companies/batch_delete", methods=["POST"])
@@ -3807,7 +3925,7 @@ def batch_delete_companies():
     data = request.get_json() or {}
     company_ids = data.get("company_ids", [])
     if not company_ids:
-        return jsonify({"success": False, "message": "No se seleccionaron empresas."}), 400
+        return jsonify({"success": False, "message": translate("No se seleccionaron empresas.")}), 400
 
     deleted = 0
     for cid in company_ids:
@@ -3828,7 +3946,7 @@ def batch_delete_companies():
         deleted += 1
 
     db.session.commit()
-    return jsonify({"success": True, "message": f"{deleted} empresa(s) eliminada(s)."})
+    return jsonify({"success": True, "message": translate("{n} empresa(s) eliminada(s).", n=deleted)})
 
 
 @admin_bp.route("/sso/odoo_contactos")
@@ -3840,7 +3958,7 @@ def sso_odoo_contactos():
 
     sso_secret = current_app.config.get('SSO_SECRET_KEY')
     if not sso_secret:
-        flash('SSO no configurado (SSO_SECRET_KEY).', 'danger')
+        flash(translate('SSO no configurado (SSO_SECRET_KEY).'), 'danger')
         return redirect(url_for('admin.panel'))
 
     alta_url = (current_app.config.get('ODOO_ALTA_APP_URL') or '').strip().rstrip('/')
@@ -3945,7 +4063,7 @@ def system_logs():
 def acknowledge_system_log(log_id):
     from app.services.tenant_modules import has_avisos_laborales
     if not has_avisos_laborales():
-        return jsonify({'ok': False, 'error': 'No disponible'}), 404
+        return jsonify({'ok': False, 'error': translate('No disponible')}), 404
     from app.services.log_notification_service import acknowledge_log
     acknowledge_log(current_user.id, log_id)
     return jsonify({'ok': True})
@@ -3957,7 +4075,7 @@ def acknowledge_system_log(log_id):
 def unacknowledge_system_log(log_id):
     from app.services.tenant_modules import has_avisos_laborales
     if not has_avisos_laborales():
-        return jsonify({'ok': False, 'error': 'No disponible'}), 404
+        return jsonify({'ok': False, 'error': translate('No disponible')}), 404
     from app.services.log_notification_service import unacknowledge_log
     unacknowledge_log(current_user.id, log_id)
     return jsonify({'ok': True})
@@ -3970,7 +4088,7 @@ def acknowledge_all_laboral_system_logs():
     """Admin: marca como leídos TODOS los avisos laborales para todos los usuarios."""
     from app.services.tenant_modules import has_avisos_laborales
     if not has_avisos_laborales():
-        return jsonify({'ok': False, 'error': 'No disponible'}), 404
+        return jsonify({'ok': False, 'error': translate('No disponible')}), 404
     from app.services.log_notification_service import acknowledge_all_laboral_logs_global
     remaining = acknowledge_all_laboral_logs_global()
     return jsonify({'ok': True, 'remaining': remaining})
@@ -3993,7 +4111,7 @@ def save_log_preferences():
         pref.is_active = True if request.form.get(f'pref_{cat}') == 'on' else False
         
     db.session.commit()
-    flash("Preferencias de notificaciones actualizadas.", "success")
+    flash(translate("Preferencias de notificaciones actualizadas."), "success")
     return redirect(url_for('admin.system_logs', category=request.form.get('current_category', 'accesos')))
 
 
@@ -4077,12 +4195,18 @@ def ausencias_sync():
     try:
         stats = sync_leaves_from_erp()
         flash(
-            f"Sync ausencias: {stats['nuevos']} nuevas, {stats['actualizados']} actualizadas, "
-            f"{stats['omitidos']} omitidas, {stats['errores']} errores.",
+            translate(
+                "Sync ausencias: {nuevos} nuevas, {actualizados} actualizadas, "
+                "{omitidos} omitidas, {errores} errores.",
+                nuevos=stats['nuevos'],
+                actualizados=stats['actualizados'],
+                omitidos=stats['omitidos'],
+                errores=stats['errores'],
+            ),
             'success' if stats['errores'] == 0 else 'warning',
         )
     except Exception as exc:
-        flash(f'Error sincronizando ausencias: {exc}', 'danger')
+        flash(translate('Error sincronizando ausencias: {error}', error=exc), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -4103,7 +4227,7 @@ def ausencias_crear():
     descripcion = request.form.get('descripcion') or None
 
     if not user_id or not fecha_inicio or not fecha_fin:
-        flash('Faltan empleado o fechas.', 'danger')
+        flash(translate('Faltan empleado o fechas.'), 'danger')
         return redirect(url_for('admin.ausencias_list'))
 
     try:
@@ -4117,11 +4241,11 @@ def ausencias_crear():
             created_by_id=current_user.id,
         )
         if leave.estado == 'pendiente':
-            flash('Solicitud de ausencia enviada. Pendiente de validación.', 'info')
+            flash(translate('Solicitud de ausencia enviada. Pendiente de validación.'), 'info')
         else:
-            flash('Ausencia creada.', 'success')
+            flash(translate('Ausencia creada.'), 'success')
     except Exception as exc:
-        flash(f'Error al crear ausencia: {exc}', 'danger')
+        flash(translate('Error al crear ausencia: {error}', error=exc), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -4133,9 +4257,9 @@ def ausencias_aprobar(leave_id):
     from app.services.leave_service import set_leave_estado
     try:
         set_leave_estado(leave_id, LEAVE_STATUS_APROBADA, resolved_by_id=current_user.id)
-        flash('Ausencia aprobada.', 'success')
+        flash(translate('Ausencia aprobada.'), 'success')
     except Exception as exc:
-        flash(str(exc), 'danger')
+        flash(translate(str(exc)), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -4147,9 +4271,9 @@ def ausencias_rechazar(leave_id):
     from app.services.leave_service import set_leave_estado
     try:
         set_leave_estado(leave_id, LEAVE_STATUS_RECHAZADA, resolved_by_id=current_user.id)
-        flash('Ausencia rechazada.', 'info')
+        flash(translate('Ausencia rechazada.'), 'info')
     except Exception as exc:
-        flash(str(exc), 'danger')
+        flash(translate(str(exc)), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -4168,11 +4292,11 @@ def ausencias_editar(leave_id):
             descripcion=request.form.get('descripcion'),
         )
         if leave.estado == 'pendiente':
-            flash('Ausencia actualizada y pendiente de validación.', 'info')
+            flash(translate('Ausencia actualizada y pendiente de validación.'), 'info')
         else:
-            flash('Ausencia actualizada.', 'success')
+            flash(translate('Ausencia actualizada.'), 'success')
     except Exception as exc:
-        flash(str(exc), 'danger')
+        flash(translate(str(exc)), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -4183,9 +4307,9 @@ def ausencias_borrar(leave_id):
     from app.services.leave_service import delete_manual_leave
     try:
         delete_manual_leave(leave_id, current_user)
-        flash('Ausencia eliminada.', 'success')
+        flash(translate('Ausencia eliminada.'), 'success')
     except Exception as exc:
-        flash(str(exc), 'danger')
+        flash(translate(str(exc)), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -4200,32 +4324,32 @@ def ausencias_resolver_conflicto(conflict_id):
     )
 
     if current_user.role == ROLE_JEFE and not jefe_puede_resolver_ausencias():
-        flash('No tienes permiso para resolver conflictos de ausencias.', 'danger')
+        flash(translate('No tienes permiso para resolver conflictos de ausencias.'), 'danger')
         return redirect(url_for('admin.ausencias_list'))
     if is_laboral(current_user) and not user_can(current_user, 'ausencias', 'x'):
-        flash('No tienes permiso para resolver conflictos de ausencias.', 'danger')
+        flash(translate('No tienes permiso para resolver conflictos de ausencias.'), 'danger')
         return redirect(url_for('admin.ausencias_list'))
 
     decision = request.form.get('decision')
     if decision not in (CONFLICT_KEEP_LEAVE, CONFLICT_KEEP_ASSIGNMENT):
-        flash('Decisión no válida.', 'danger')
+        flash(translate('Decisión no válida.'), 'danger')
         return redirect(url_for('admin.ausencias_list'))
 
     conflict = AusenciaConflicto.query.get_or_404(conflict_id)
     if current_user.role == ROLE_JEFE:
         obra = Obra.query.get(conflict.obra_id)
         if not obra or obra.jefe_obra_id != current_user.id:
-            flash('Solo puedes resolver conflictos de tus obras.', 'danger')
+            flash(translate('Solo puedes resolver conflictos de tus obras.'), 'danger')
             return redirect(url_for('admin.ausencias_list'))
     # laboral: like admin, no obra scope
 
     try:
         ok = resolve_conflict(conflict_id, decision, resolved_by_id=current_user.id)
         db.session.commit()
-        flash('Conflicto resuelto.' if ok else 'El conflicto ya estaba resuelto.', 'success')
+        flash(translate('Conflicto resuelto.') if ok else translate('El conflicto ya estaba resuelto.'), 'success')
     except Exception as exc:
         db.session.rollback()
-        flash(f'Error al resolver: {exc}', 'danger')
+        flash(translate('Error al resolver: {error}', error=exc), 'danger')
     return redirect(url_for('admin.ausencias_list'))
 
 
@@ -4261,7 +4385,7 @@ def _parametros_informe():
             tenant_nombre=tenant_nombre,
         )
     except FichajeInformeError as exc:
-        flash(str(exc), 'warning')
+        flash(translate(str(exc)), 'warning')
         return None
 
 
@@ -4418,9 +4542,8 @@ def registro_jornada_pdf():
         )
     except Exception as exc:
         current_app.logger.warning('No se pudo generar el PDF del registro: %s', exc)
-        flash(
-            'No se ha podido generar el PDF en el servidor. '
-            'Usa «Versión para imprimir» y guárdalo como PDF desde el navegador.',
+        flash(translate('No se ha podido generar el PDF en el servidor. '
+            'Usa «Versión para imprimir» y guárdalo como PDF desde el navegador.'),
             'warning',
         )
         return redirect(url_for(

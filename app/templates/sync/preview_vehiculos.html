@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "sync/_preview_macros.html" import stat_chip %}
-{% block title %}Preview: Vehículos{% endblock %}
+{% block title %}{{ _('Preview: Vehículos') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -14,19 +14,18 @@
 
     <header class="sync-preview-header">
       <div>
-        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
-        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
-        <p class="sync-preview-sub">Flota desde fleet.vehicle · matrícula, marca, modelo y conductor Odoo.</p>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> {{ _('Panel Odoo') }}</a>
+        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ _(preview.modulo_label) }}</h1>
+        <p class="sync-preview-sub">{{ _('Flota desde fleet.vehicle · matrícula, marca, modelo y conductor Odoo.') }}</p>
       </div>
       <button class="btn-admin btn-admin-primary" onclick="confirmSyncVehiculos()" {% if preview.error %}disabled{% endif %}>
-        <i class="fas fa-save"></i> Guardar cambios
-      </button>
+        <i class="fas fa-save"></i>{{ _('Guardar cambios') }}</button>
     </header>
 
     {% if preview.error %}
     <div class="alert alert-warning">
       <i class="fas fa-exclamation-triangle mr-1"></i> {{ preview.error }}
-      <div class="small mt-1">Ejecuta <code>scripts/inspect_odoo_fleet.py</code> para confirmar campos Fleet.</div>
+      <div class="small mt-1">{{ _('Ejecuta <code>scripts/inspect_odoo_fleet.py</code> para confirmar campos Fleet.')|safe }}</div>
     </div>
     {% endif %}
 
@@ -39,17 +38,17 @@
 
     {% if preview.listos %}
     <section class="sync-preview-section sync-preview-section--ok">
-      <h2 class="sync-preview-section-title"><i class="fas fa-check"></i> Listos para importar ({{ preview.listos|length }})</h2>
+      <h2 class="sync-preview-section-title"><i class="fas fa-check"></i> {{ _('Listos para importar') }} ({{ preview.listos|length }})</h2>
       <div class="sync-preview-table-wrap">
         <table class="sync-preview-table">
           <thead>
             <tr>
-              <th>Acción</th>
-              <th>Nombre</th>
-              <th>Matrícula</th>
-              <th>Marca / Modelo</th>
-              <th>Conductor Odoo</th>
-              <th>Cambios</th>
+              <th>{{ _('Acción') }}</th>
+              <th>{{ _('Nombre') }}</th>
+              <th>{{ _('Matrícula') }}</th>
+              <th>{{ _('Marca / Modelo') }}</th>
+              <th>{{ _('Conductor Odoo') }}</th>
+              <th>{{ _('Cambios') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -62,7 +61,7 @@
               <td>{{ v.driver_name or '—' }}</td>
               <td class="sync-preview-reasons small">
                 {% if v.cambios %}
-                  {% for k, val in v.cambios.items() %}{{ k }}: {{ val }}{% if not loop.last %}; {% endif %}{% endfor %}
+                  {% for k, val in v.cambios.items() %}{{ _(k) }}: {{ val }}{% if not loop.last %}; {% endif %}{% endfor %}
                 {% else %}—{% endif %}
               </td>
             </tr>
@@ -75,8 +74,8 @@
 
     {% if preview.sin_cambios %}
     <section class="sync-preview-section">
-      <h2 class="sync-preview-section-title text-muted"><i class="fas fa-equals"></i> Sin cambios ({{ preview.sin_cambios|length }})</h2>
-      <p class="text-muted small">Ya vinculados y con los mismos datos.</p>
+      <h2 class="sync-preview-section-title text-muted"><i class="fas fa-equals"></i> {{ _('Sin cambios') }} ({{ preview.sin_cambios|length }})</h2>
+      <p class="text-muted small">{{ _('Ya vinculados y con los mismos datos.') }}</p>
     </section>
     {% endif %}
 
@@ -91,12 +90,12 @@ const DIFF_PAYLOAD = {{ {'nuevos': diff.nuevos|default([]), 'actualizados': diff
 
 function confirmSyncVehiculos() {
   Swal.fire({
-    title: '¿Guardar flota?',
-    text: 'Se crearán/actualizarán los vehículos listos.',
+    title: {{ _('¿Guardar flota?')|tojson }},
+    text: {{ _('Se crearán/actualizarán los vehículos listos.')|tojson }},
     icon: 'question',
     showCancelButton: true,
-    confirmButtonText: 'Guardar',
-    cancelButtonText: 'Cancelar'
+    confirmButtonText: {{ _('Guardar')|tojson }},
+    cancelButtonText: {{ _('Cancelar')|tojson }}
   }).then(result => {
     if (!result.isConfirmed) return;
     fetch('{{ url_for("sync.commit_vehiculos") }}', {
@@ -107,11 +106,11 @@ function confirmSyncVehiculos() {
     .then(r => r.json())
     .then(res => {
       if (res.success) {
-        Swal.fire('Guardado', 'Flota sincronizada.', 'success').then(() => {
+        Swal.fire({{ _('Guardado')|tojson }}, {{ _('Flota sincronizada.')|tojson }}, 'success').then(() => {
           window.location.href = '{{ url_for("sync.odoo_panel") }}';
         });
       } else {
-        Swal.fire('Error', res.error || 'No se pudo guardar', 'error');
+        Swal.fire({{ _('Error')|tojson }}, res.error || {{ _('No se pudo guardar')|tojson }}, 'error');
       }
     });
   });

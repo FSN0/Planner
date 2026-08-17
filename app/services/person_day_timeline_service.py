@@ -273,9 +273,10 @@ def _link_obras_in_text(text, obra_cache):
         if escaped_label not in html:
             continue
         obra_url = _obra_panel_url(obra.id)
+        from app.services.i18n_service import translate
         link = (
             f'<a href="{obra_url}" class="pdt-link pdt-link-obra" '
-            f'target="_blank" rel="noopener" title="Ver obra">{escaped_label}</a>'
+            f'target="_blank" rel="noopener" title="{translate("Ver obra")}">{escaped_label}</a>'
         )
         html = html.replace(escaped_label, link)
 
@@ -293,9 +294,10 @@ def _link_subject_in_text(html, subject_user):
         return Markup(html_str)
 
     worker_url = _worker_panel_url(subject_user.id)
+    from app.services.i18n_service import translate
     link = (
         f'<a href="{worker_url}" class="pdt-link pdt-link-user" '
-        f'target="_blank" rel="noopener" title="Ver ficha">{escaped_name}</a>'
+        f'target="_blank" rel="noopener" title="{translate("Ver ficha")}">{escaped_name}</a>'
     )
     return Markup(html_str.replace(escaped_name, link, 1))
 
@@ -488,6 +490,30 @@ def _append_missing_planificacion_hitos(hitos, logs, user, fecha_obj, obra_cache
     return out
 
 
+def _localize_hito(hito, user, obra_cache):
+    from app.services.i18n_service import (
+        translate,
+        translate_log_action,
+        translate_log_actor,
+        translate_log_detail,
+    )
+
+    titulo_raw = hito.get("titulo") or ""
+    empty = titulo_raw == "Sin actividad"
+    autor_raw = hito.get("autor") or ""
+    desc = translate_log_detail(hito.get("descripcion") or "")
+    html = _link_obras_in_text(desc, obra_cache)
+    html = _link_subject_in_text(html, user)
+    item = dict(hito)
+    item["empty"] = empty
+    item["titulo"] = translate("Sin actividad") if empty else translate_log_action(titulo_raw)
+    item["autor"] = translate_log_actor(autor_raw)
+    item["actor_is_system"] = autor_raw in (SYSTEM_ACTOR, "Sistema", "-")
+    item["descripcion"] = desc
+    item["descripcion_html"] = str(html)
+    return item
+
+
 def build_person_day_timeline(user_id, fecha_obj):
     user = User.query.get(user_id)
     if not user:
@@ -531,6 +557,8 @@ def build_person_day_timeline(user_id, fecha_obj):
     else:
         estado_actual = "Sin registro"
 
+    hitos = [_localize_hito(h, user, obra_cache) for h in hitos]
+
     return {
         "success": True,
         "empleado": f"{user.name} {user.lastname}",
@@ -549,20 +577,27 @@ def build_person_day_timeline_range(user_id, fecha_inicio, fecha_fin):
     if not user:
         return None
 
+    from app.services.i18n_service import translate
+
     try:
         fecha_inicio = _parse_fecha(fecha_inicio)
         fecha_fin = _parse_fecha(fecha_fin)
     except (TypeError, ValueError):
-        return {"success": False, "error": "Formato de fecha inválido (YYYY-MM-DD)"}
+        return {"success": False, "error": translate("Formato de fecha inválido (YYYY-MM-DD)")}
 
     if fecha_fin < fecha_inicio:
-        return {"success": False, "error": "La fecha fin debe ser posterior o igual a la fecha inicio"}
+        return {
+            "success": False,
+            "error": translate("La fecha fin debe ser posterior o igual a la fecha inicio"),
+        }
 
     num_days = (fecha_fin - fecha_inicio).days + 1
     if num_days > MAX_TIMELINE_RANGE_DAYS:
         return {
             "success": False,
-            "error": f"El rango máximo es de {MAX_TIMELINE_RANGE_DAYS} días",
+            "error": translate(
+                "El rango máximo es de {n} días", n=MAX_TIMELINE_RANGE_DAYS
+            ),
         }
 
     days = []
@@ -594,6 +629,8 @@ def build_person_day_timeline_range(user_id, fecha_inicio, fecha_fin):
         "fecha_fin": fecha_fin.strftime("%d/%m/%Y"),
         "fecha_inicio_iso": fecha_inicio.strftime("%Y-%m-%d"),
         "fecha_fin_iso": fecha_fin.strftime("%Y-%m-%d"),
-        "estado_actual": f"{num_days} día{'s' if num_days != 1 else ''}",
+        "estado_actual": (
+            translate("1 día") if num_days == 1 else translate("{n} días", n=num_days)
+        ),
         "days": days,
     }

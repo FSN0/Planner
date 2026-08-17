@@ -48,7 +48,7 @@
   {% for a in ausencias %}
   <li class="dia">
     <div class="dia__cabecera">
-      <span>{{ a.tipo }}</span>
+      <span>{{ _(a.tipo) }}</span>
       {% if a.estado == 'pendiente' %}
         <span class="badge-estado badge-estado--pendiente">{{ _('Pendiente') }}</span>
       {% elif a.estado == 'aprobada' %}

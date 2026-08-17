@@ -29,7 +29,7 @@ window.PersonDayTimeline = (function () {
 
     function renderActor(hito) {
         const autor = hito.autor || '-';
-        const isSystem = autor === 'Sistema Automático' || autor === 'Sistema';
+        const isSystem = hito.actor_is_system || autor === 'Sistema Automático' || autor === 'Sistema';
         const actorClass = isSystem ? 'person-day-timeline-actor--system' : 'person-day-timeline-actor--user';
 
         let actorContent;
@@ -74,7 +74,11 @@ window.PersonDayTimeline = (function () {
 
     function isEmptyHitos(hitos) {
         if (!hitos || !hitos.length) return true;
-        return hitos.length === 1 && hitos[0].titulo === 'Sin actividad';
+        return hitos.length === 1 && (
+            hitos[0].empty === true
+            || hitos[0].titulo === 'Sin actividad'
+            || hitos[0].titulo === t('Sin actividad')
+        );
     }
 
     function renderHitosHTML(data) {
@@ -88,7 +92,8 @@ window.PersonDayTimeline = (function () {
     }
 
     function renderDaySection(day) {
-        const estado = (day.estado_actual || '').replace(/_/g, ' ');
+        const estadoRaw = day.estado_actual || '';
+        const estado = estadoRaw.replace(/_/g, ' ');
         let estadoClass = 'badge-soft person-day-timeline-estado badge-soft-gray';
         if (estado.includes('Correcto') || estado.startsWith('Resuelto')) estadoClass = 'badge-soft person-day-timeline-estado badge-soft-green';
         else if (estado === 'Paracaidista' || estado === 'Conflicto') estadoClass = 'badge-soft person-day-timeline-estado badge-soft-amber';
@@ -96,6 +101,7 @@ window.PersonDayTimeline = (function () {
         else if (estado.includes('Asignado') || estado.includes('RRHH') || estado.includes('Actividad')) {
             estadoClass = 'badge-soft person-day-timeline-estado badge-soft-blue';
         }
+        const estadoLabel = t(estadoRaw) !== estadoRaw ? t(estadoRaw) : t(estado);
 
         return `
             <section class="person-day-timeline-day" data-fecha-iso="${escapeHtml(day.fecha_iso || '')}">
@@ -103,7 +109,7 @@ window.PersonDayTimeline = (function () {
                     <span class="person-day-timeline-day-date">
                         <i class="fas fa-calendar-day mr-1"></i>${escapeHtml(day.fecha || '')}
                     </span>
-                    <span class="${estadoClass}">${escapeHtml(estado || '—')}</span>
+                    <span class="${estadoClass}">${escapeHtml(estadoLabel || '—')}</span>
                 </header>
                 <div class="person-day-timeline-day-body">
                     ${renderHitosHTML(day)}
@@ -258,7 +264,7 @@ window.PersonDayTimeline = (function () {
                 if (!noMatch) {
                     noMatch = document.createElement('div');
                     noMatch.className = 'person-day-timeline-empty person-day-timeline-empty--compact person-day-timeline-filter-empty';
-                    noMatch.innerHTML = '<p class="mb-0">Sin coincidencias en este día.</p>';
+                    noMatch.innerHTML = '<p class="mb-0">' + escapeHtml(t('Sin coincidencias en este día.')) + '</p>';
                     const body = day.querySelector('.person-day-timeline-day-body');
                     if (body) body.appendChild(noMatch);
                 }

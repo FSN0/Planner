@@ -1,10 +1,36 @@
 {# templates/admin_solicitudes_list.html #}
 {% extends "base.html" %}
-{% block title %}{% if seccion == 'vehiculos' %}Solicitudes de vehículos{% else %}Solicitudes de personal{% endif %}{% endblock %}
+{% block title %}{% if seccion == 'vehiculos' %}{{ _('Solicitudes de vehículos') }}{% else %}{{ _('Solicitudes de personal') }}{% endif %}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<style>
+  .solicitudes-start {
+    padding: 2.25rem 1.5rem !important;
+    text-align: left;
+    max-width: 36rem;
+    margin: 0 auto;
+  }
+  .solicitudes-start-title {
+    margin: 0 0 0.45rem;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: #0f172a;
+  }
+  .solicitudes-start-sub {
+    margin: 0 0 0.75rem;
+    font-size: 0.88rem;
+    color: #64748b;
+    line-height: 1.45;
+  }
+  .solicitudes-start-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+  }
+</style>
 {% endblock %}
 
 {% block wrapper %}
@@ -263,7 +289,7 @@
                 </td>
                 <td data-sort-value="{% if s.tipo == 'GENERICA' %}{{ (s.perfil_categoria or 'varios')|lower }}{% elif s.empleado %}{{ s.empleado.lastname|lower }}{% endif %}">
                   {% if s.tipo == 'GENERICA' %}
-                    <span class="font-weight-bold">{{ s.perfil_categoria or 'Varios' }}</span>
+                    <span class="font-weight-bold">{{ s.perfil_categoria or _('Varios') }}</span>
                   {% elif s.empleado %}
                     <a href="{{ url_for('admin.worker_panel', user_id=s.empleado.id) }}" class="table-link-primary">
                       {{ s.empleado.name }} {{ s.empleado.lastname }}
@@ -313,7 +339,41 @@
         </table>
       </div>
       {% else %}
-        <div class="p-3 text-muted" style="font-size: 0.8rem;">No hay solicitudes con los filtros actuales.</div>
+        {% if solicitudes_inbox_vacio and current_user.role == 'admin' %}
+        <div class="table-empty-state solicitudes-start">
+          <p class="solicitudes-start-title">{{ _('Aquí llegan los pedidos de gente') }}</p>
+          <p class="solicitudes-start-sub">
+            {{ _('Las solicitudes las hace el jefe de obra cuando necesita personal en un tajo. Oficina las ve aquí y coloca a las personas.') }}
+          </p>
+          {% if not tiene_jefes %}
+          <p class="solicitudes-start-sub">
+            {{ _('Si colocas tú mismo a la gente en el tablero, esta pestaña se quedará vacía y no pasa nada. Si en obra hay un jefe que pide cuadrilla, créalo aquí.') }}
+          </p>
+          <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.create_user', role='jefe_obra', next='solicitudes') }}">
+            <i class="fas fa-user-tie"></i> {{ _('Crear jefe de obra') }}
+          </a>
+          {% else %}
+          <p class="solicitudes-start-sub">
+            {{ _('Cuando un jefe pida gente desde el tablero, la petición aparecerá en esta lista.') }}
+          </p>
+          <div class="solicitudes-start-actions">
+            <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.obras_detailed') }}">
+              <i class="fas fa-th-large"></i> {{ _('Ir al tablero') }}
+            </a>
+            <a class="btn-admin btn-admin-ghost" href="{{ url_for('admin.create_user', role='jefe_obra', next='solicitudes') }}">
+              <i class="fas fa-user-tie"></i> {{ _('Crear otro jefe de obra') }}
+            </a>
+          </div>
+          {% endif %}
+        </div>
+        {% elif solicitudes_inbox_vacio %}
+        <div class="table-empty-state">
+          <i class="fas fa-inbox"></i>
+          {{ _('Cuando pidas gente desde el tablero, las solicitudes saldrán aquí.') }}
+        </div>
+        {% else %}
+        <div class="p-3 text-muted" style="font-size: 0.8rem;">{{ _('No hay solicitudes con los filtros actuales.') }}</div>
+        {% endif %}
       {% endif %}
       {% endif %}
     </section>

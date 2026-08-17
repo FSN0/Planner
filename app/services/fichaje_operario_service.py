@@ -4,9 +4,9 @@
 # propios registros. Se apoya en el libro de eventos, que es quien garantiza
 # que lo fichado no se puede alterar después.
 #
-# El acceso de operarios está apagado por defecto en cada tenant. Se enciende
-# desde Configuración, y hasta entonces el rol 'operario' sigue sin poder
-# entrar en la aplicación, igual que antes.
+# Dos capas: el módulo comercial fichaje_operario (superadmin /alta) y el
+# interruptor del cliente fichaje_operario_activo («Fichajes»). Sin módulo
+# no hay /mi. Con módulo apagado, tampoco. El alta pública deja ambos on.
 
 from datetime import timedelta
 
@@ -82,6 +82,42 @@ def fichaje_operario_activo():
     if not tenant_tiene_fichaje_operario_module():
         return False
     return str(get_tenant_config(CONFIG_FICHAJE_OPERARIO, default='False')) == 'True'
+
+
+def tenant_muestra_auditoria_fichajes():
+    """
+    Auditoría de fichajes en menú, panel y correos.
+
+    - Cliente con Odoo (p. ej. Soltec): sí, aunque no tenga /mi.
+    - Alta con módulo de fichaje: solo si el interruptor «Fichajes» está on.
+    - Superadmin sin Odoo ni módulo: no.
+    """
+    from flask import g, has_app_context
+
+    if not has_app_context():
+        return False
+    tenant = getattr(g, 'current_tenant', None)
+    mods = getattr(tenant, 'modulos_activos', None) or {}
+    if mods.get('odoo'):
+        return True
+    if mods.get('fichaje_operario'):
+        return str(get_tenant_config(CONFIG_FICHAJE_OPERARIO, default='False')) == 'True'
+    return False
+
+
+def activar_fichajes_alta():
+    """Alta pública: Fichajes on, oficina on, ubicación no (default)."""
+    from app.services.config_service import set_tenant_config
+    from app.services.oficina_obra_service import (
+        CONFIG_OBRA_OFICINA,
+        sincronizar_obra_oficina,
+    )
+
+    set_tenant_config(CONFIG_FICHAJE_OPERARIO, 'True')
+    marcar_fichaje_preferencia_decidida()
+    set_tenant_config(CONFIG_OBRA_OFICINA, 'True')
+    sincronizar_obra_oficina(True)
+    db.session.commit()
 
 
 def fichaje_preferencia_decidida():

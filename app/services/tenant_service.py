@@ -3,6 +3,7 @@ from app import db
 from sqlalchemy import text
 from app.models import Tenant, User, ROLE_ADMIN, Company
 from app.services.tenant_domain_service import validate_custom_domain, assert_custom_domain_available
+from app.services.i18n_service import translate
 from werkzeug.security import generate_password_hash
 from flask_migrate import stamp 
 
@@ -27,7 +28,7 @@ def provision_new_tenant(
     # Validación estricta: solo letras minúsculas, números y guiones.
     # Evita inyección SQL al construir el nombre de esquema y CREATE SCHEMA.
     if not re.match(r'^[a-z0-9-]+$', subdominio):
-        raise ValueError("El subdominio solo puede contener letras minúsculas, números y guiones.")
+        raise ValueError(translate("El subdominio solo puede contener letras minúsculas, números y guiones."))
 
     schema_name = f"tenant_{subdominio.replace('-', '_')}"
 
@@ -35,7 +36,9 @@ def provision_new_tenant(
         db.session.execute(text("SET search_path TO public"))
         
         if Tenant.query.filter_by(subdominio=subdominio).first():
-            raise ValueError(f"El subdominio '{subdominio}' ya está en uso.")
+            raise ValueError(
+                translate("El subdominio '{subdominio}' ya está en uso.", subdominio=subdominio)
+            )
 
         custom_domain = validate_custom_domain(custom_domain)
         assert_custom_domain_available(custom_domain)
@@ -111,6 +114,12 @@ def provision_new_tenant(
         )
         db.session.add(admin_user)
         db.session.commit()
+
+        # Alta pública: Fichajes on + oficina. Superadmin deja el módulo off
+        # y no entra aquí.
+        if (modulos_activos or {}).get('fichaje_operario'):
+            from app.services.fichaje_operario_service import activar_fichajes_alta
+            activar_fichajes_alta()
         
         # 9. Regresar a public
         db.session.execute(text("SET search_path TO public"))

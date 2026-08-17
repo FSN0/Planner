@@ -2,18 +2,18 @@
     <div class="admin-actions-text">
         <span class="d-inline-flex align-items-center flex-wrap text-muted" style="font-size:0.75rem; gap:0.35rem;">
           <i class="fas fa-clipboard-check"></i>
-          <span>Estado:</span>
+          <span>{{ _('Estado') }}:</span>
           {% set est = solicitud.estado %}
-          {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
-          {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
-          {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
-          {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
-          {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+          {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
+          {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
+          {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
+          {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
+          {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
           {% else %}<span class="badge-soft badge-soft-gray">{{ est }}</span>
           {% endif %}
           {% if cobertura_texto %}
             <span class="text-muted">·</span>
-            <span>Cobertura: <strong class="text-dark">{{ cobertura_texto }}</strong></span>
+            <span>{{ _('Cobertura') }}: <strong class="text-dark">{{ cobertura_texto }}</strong></span>
           {% endif %}
         </span>
     </div>
@@ -23,37 +23,32 @@
             {% if solicitud.tipo|lower == 'concreta' %}
                 {% if solicitud.accion == 'DESASIGNAR' %}
                 <button type="button" onclick="submitConcretaTotal()" class="btn-admin btn-admin-primary">
-                    <i class="fas fa-user-minus"></i> Desasignar
-                </button>
+                    <i class="fas fa-user-minus"></i>{{ _('Desasignar') }}</button>
                 <button type="button" onclick="openTrasladoObraModal()" class="btn-admin btn-admin-ghost">
-                    <i class="fas fa-exchange-alt"></i> Desasignar y enviar a otra obra
-                </button>
+                    <i class="fas fa-exchange-alt"></i>{{ _('Desasignar y enviar a otra obra') }}</button>
                 <button type="button" id="btn-assign-partial" class="btn-admin btn-admin-ghost" onclick="submitPartialFromMain()">
-                    <i class="far fa-calendar-check"></i> Días sueltos
+                    <i class="far fa-calendar-check"></i> {{ _('Días sueltos') }}
                 </button>
                 {% else %}
                 <button type="button" onclick="submitConcretaTotal()" class="btn-admin btn-admin-primary">
-                    <i class="fas fa-check-double"></i> Todo el periodo
+                    <i class="fas fa-check-double"></i> {{ _('Todo el periodo') }}
                 </button>
                 <button type="button" id="btn-assign-partial" class="btn-admin btn-admin-ghost" onclick="submitPartialFromMain()">
-                    <i class="far fa-calendar-check"></i> Días sueltos
+                    <i class="far fa-calendar-check"></i> {{ _('Días sueltos') }}
                 </button>
                 {% endif %}
             {% else %}
                 <button type="button" class="btn-admin btn-admin-primary" onclick="submitGenericTotal()">
-                    <i class="fas fa-check-double"></i> Asignar seleccionados
-                </button>
+                    <i class="fas fa-check-double"></i>{{ _('Asignar seleccionados') }}</button>
                 <button type="button" id="btn-assign-partial" class="btn-admin btn-admin-ghost" onclick="submitPartialFromMain()">
-                    <i class="far fa-calendar-check"></i> Días sueltos
+                    <i class="far fa-calendar-check"></i> {{ _('Días sueltos') }}
                 </button>
             {% endif %}
             <button type="button" onclick="resolverSolicitudApi('{{ solicitud.id }}', 'denegar')" class="btn-admin btn-admin-danger">
-                <i class="fas fa-ban"></i> Denegar
-            </button>
+                <i class="fas fa-ban"></i>{{ _('Denegar') }}</button>
         {% else %}
             <button type="button" onclick="resolverSolicitudApi('{{ solicitud.id }}', 'reabrir')" class="btn-admin btn-admin-ghost">
-                <i class="fas fa-undo"></i> Reabrir
-            </button>
+                <i class="fas fa-undo"></i>{{ _('Reabrir') }}</button>
         {% endif %}
     </div>
 </div>

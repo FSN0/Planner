@@ -18,6 +18,7 @@ from flask import (
 from app import limiter
 from app.marketing.seo_articles import get_article, list_articles
 from app.marketing.seo_solutions import get_solution, list_solutions
+from app.services.i18n_service import get_locale, marketing_path, translate
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 
 marketing_bp = Blueprint('marketing', __name__)
@@ -80,6 +81,11 @@ def _require_marketing():
         abort(404)
 
 
+def _mkt_redirect(endpoint, **values):
+    """Redirect that keeps /en /pt /fr so Google and the user stay on the same language."""
+    return redirect(marketing_path(url_for(endpoint, **values), get_locale()))
+
+
 def render_landing():
     return render_template(
         'marketing/landing.html',
@@ -107,8 +113,10 @@ def alta():
             )
             if not email_enviado:
                 flash(
-                    'Tu espacio se ha creado, pero no hemos podido enviar el correo '
-                    'de verificación. Puedes reenviarlo desde esta página o desde tu panel.',
+                    translate(
+                        'Tu espacio se ha creado, pero no hemos podido enviar el correo '
+                        'de verificación. Puedes reenviarlo desde esta página o desde tu panel.'
+                    ),
                     'warning',
                 )
             from app.services.signup_service import url_acceso_tenant
@@ -125,7 +133,9 @@ def alta():
             flash(str(exc), 'danger')
         except Exception:
             flash(
-                'No se ha podido crear la cuenta. Prueba otro subdominio o contacta con soporte.',
+                translate(
+                    'No se ha podido crear la cuenta. Prueba otro subdominio o contacta con soporte.'
+                ),
                 'danger',
             )
 
@@ -155,7 +165,7 @@ def entrar():
     from app.services.tenant_access_email_service import enviar_enlaces_acceso
     from app.services.tenant_email_lookup_service import buscar_tenants_por_email
 
-    mensaje_generico = (
+    mensaje_generico = translate(
         'Si hay una cuenta con ese correo, te hemos enviado un email con el acceso '
         'a tu empresa (y el enlace de verificación si aún no lo confirmaste). '
         'Revisa la bandeja de entrada y el spam.'
@@ -170,7 +180,7 @@ def entrar():
 
     email = (request.form.get('email') or '').strip().lower()
     if not email or '@' not in email:
-        flash('Indica un correo válido.', 'danger')
+        flash(translate('Indica un correo válido.'), 'danger')
         return render_template(
             'marketing/entrar.html',
             current_year=datetime.utcnow().year,
@@ -208,30 +218,34 @@ def reenviar_verificacion():
     email = (request.form.get('email') or '').strip().lower()
     subdomain = (request.form.get('subdomain') or '').strip().lower()
     if not email or not subdomain:
-        flash('Faltan datos para reenviar la verificación.', 'danger')
-        return redirect(url_for('marketing.alta'))
+        flash(translate('Faltan datos para reenviar la verificación.'), 'danger')
+        return _mkt_redirect('marketing.alta')
 
     tenant = Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
     if not tenant:
         # Mismo mensaje genérico: no delatar existencia
         flash(
-            'Si la cuenta existe y el correo está pendiente, te hemos enviado un nuevo enlace.',
+            translate(
+                'Si la cuenta existe y el correo está pendiente, te hemos enviado un nuevo enlace.'
+            ),
             'info',
         )
-        return redirect(url_for('marketing.alta'))
+        return _mkt_redirect('marketing.alta')
 
     try:
         db.session.execute(text(f'SET search_path TO {tenant.schema_name}, public'))
         _reenviar(tenant, email=email)
         flash(
-            'Si el correo está pendiente de verificación, te hemos enviado un nuevo enlace. '
-            'Revisa también spam.',
+            translate(
+                'Si el correo está pendiente de verificación, te hemos enviado un nuevo enlace. '
+                'Revisa también spam.'
+            ),
             'info',
         )
     except EmailVerificationError as exc:
         flash(str(exc), 'danger')
     except Exception:
-        flash('No se ha podido reenviar el correo ahora. Prueba más tarde.', 'danger')
+        flash(translate('No se ha podido reenviar el correo ahora. Prueba más tarde.'), 'danger')
 
     from app.services.signup_service import url_acceso_tenant
     return render_template(
@@ -258,8 +272,8 @@ def contacto():
     if request.method == 'POST':
         # Honeypot: si viene relleno, fingimos éxito
         if (request.form.get('website') or '').strip():
-            flash('Mensaje enviado. Te responderemos lo antes posible.', 'success')
-            return redirect(url_for('marketing.contacto'))
+            flash(translate('Mensaje enviado. Te responderemos lo antes posible.'), 'success')
+            return _mkt_redirect('marketing.contacto')
 
         form = {
             'nombre': (request.form.get('nombre') or '').strip()[:120],
@@ -268,7 +282,7 @@ def contacto():
             'mensaje': (request.form.get('mensaje') or '').strip()[:4000],
         }
         if not form['nombre'] or '@' not in form['email'] or len(form['mensaje']) < 10:
-            flash('Completa nombre, un correo válido y un mensaje (mín. 10 caracteres).', 'danger')
+            flash(translate('Completa nombre, un correo válido y un mensaje (mín. 10 caracteres).'), 'danger')
         else:
             asunto = f"Contacto SignaPlan — {form['nombre']}"
             if form['empresa']:
@@ -287,11 +301,13 @@ def contacto():
             )
             ok = send_email(asunto, [destino], texto, html_body=html)
             if ok:
-                flash('Mensaje enviado. Te responderemos lo antes posible.', 'success')
-                return redirect(url_for('marketing.contacto'))
+                flash(translate('Mensaje enviado. Te responderemos lo antes posible.'), 'success')
+                return _mkt_redirect('marketing.contacto')
             flash(
-                'No hemos podido enviar el mensaje ahora. Escríbenos a '
-                f'{destino} o inténtalo más tarde.',
+                translate(
+                    'No hemos podido enviar el mensaje ahora. Escríbenos a {email} o inténtalo más tarde.',
+                    email=destino,
+                ),
                 'danger',
             )
 
@@ -325,7 +341,7 @@ def recursos_index():
     return render_template(
         'marketing/recursos_index.html',
         current_year=datetime.utcnow().year,
-        articles=list_articles(),
+        articles=list_articles(get_locale()),
         contact_email=legal.get('email'),
     )
 
@@ -333,7 +349,7 @@ def recursos_index():
 @marketing_bp.route('/recursos/<slug>')
 def recurso(slug):
     _require_marketing()
-    article = get_article(slug)
+    article = get_article(slug, get_locale())
     if not article:
         abort(404)
     legal = _legal_entity()
@@ -353,7 +369,7 @@ def soluciones_index():
     return render_template(
         'marketing/soluciones_index.html',
         current_year=datetime.utcnow().year,
-        solutions=list_solutions(),
+        solutions=list_solutions(get_locale()),
         contact_email=legal.get('email'),
     )
 
@@ -361,11 +377,11 @@ def soluciones_index():
 @marketing_bp.route('/soluciones/<slug>')
 def solucion(slug):
     _require_marketing()
-    solution = get_solution(slug)
+    solution = get_solution(slug, get_locale())
     if not solution:
         abort(404)
     legal = _legal_entity()
-    related = [s for s in list_solutions() if s['slug'] != slug][:3]
+    related = [s for s in list_solutions(get_locale()) if s['slug'] != slug][:3]
     return render_template(
         'marketing/soluciones_articulo.html',
         current_year=datetime.utcnow().year,
@@ -397,9 +413,11 @@ def robots_txt():
 @marketing_bp.route('/sitemap.xml')
 def sitemap_xml():
     _require_marketing()
+    from app.services.i18n_service import SUPPORTED_LOCALES, DEFAULT_LOCALE, marketing_path
     from app.services.seo_origin_service import marketing_origin
+
     base = marketing_origin()
-    urls = [
+    paths = [
         ('/', '1.0', 'weekly', None),
         ('/alta', '0.8', 'monthly', None),
         ('/entrar', '0.6', 'monthly', None),
@@ -408,23 +426,37 @@ def sitemap_xml():
         ('/recursos/', '0.7', 'weekly', None),
     ]
     for slug in LEGAL_PAGES:
-        urls.append((f'/legal/{slug}', '0.3', 'yearly', None))
+        paths.append((f'/legal/{slug}', '0.3', 'yearly', None))
     for s in list_solutions():
-        urls.append((f"/soluciones/{s['slug']}", '0.85', 'monthly', s.get('updated')))
+        paths.append((f"/soluciones/{s['slug']}", '0.85', 'monthly', s.get('updated')))
     for a in list_articles():
-        urls.append((f"/recursos/{a['slug']}", '0.65', 'monthly', a.get('updated')))
+        paths.append((f"/recursos/{a['slug']}", '0.65', 'monthly', a.get('updated')))
+
+    def loc_url(path, locale):
+        return base + marketing_path(path, locale)
 
     parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"',
+        '        xmlns:xhtml="http://www.w3.org/1999/xhtml">',
     ]
-    for path, prio, freq, lastmod in urls:
-        parts.append('  <url>')
-        parts.append(f'    <loc>{base}{path}</loc>')
-        if lastmod:
-            parts.append(f'    <lastmod>{lastmod}</lastmod>')
-        parts.append(f'    <changefreq>{freq}</changefreq>')
-        parts.append(f'    <priority>{prio}</priority>')
-        parts.append('  </url>')
+    for path, prio, freq, lastmod in paths:
+        for locale in SUPPORTED_LOCALES:
+            parts.append('  <url>')
+            parts.append(f'    <loc>{loc_url(path, locale)}</loc>')
+            if lastmod:
+                parts.append(f'    <lastmod>{lastmod}</lastmod>')
+            parts.append(f'    <changefreq>{freq}</changefreq>')
+            parts.append(f'    <priority>{prio}</priority>')
+            for alt in SUPPORTED_LOCALES:
+                parts.append(
+                    f'    <xhtml:link rel="alternate" hreflang="{alt}" '
+                    f'href="{loc_url(path, alt)}"/>'
+                )
+            parts.append(
+                f'    <xhtml:link rel="alternate" hreflang="x-default" '
+                f'href="{loc_url(path, DEFAULT_LOCALE)}"/>'
+            )
+            parts.append('  </url>')
     parts.append('</urlset>')
     return Response('\n'.join(parts) + '\n', mimetype='application/xml')

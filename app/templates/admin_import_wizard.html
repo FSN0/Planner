@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ cfg.title }}{% endblock %}
+{% block title %}{{ _(cfg.title) }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -66,19 +66,19 @@
 
         <div class="d-flex align-items-center mb-3">
           <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-sm btn-link text-muted pl-0">
-            <i class="fas fa-arrow-left"></i> {{ cfg.back_label }}
+            <i class="fas fa-arrow-left"></i> {{ _(cfg.back_label) }}
           </a>
         </div>
 
         <div class="import-stepper">
           <div class="import-step {% if step == 1 %}is-active{% elif step > 1 %}is-done{% endif %}">
-            <span class="badge-step">1</span> Subir archivo
+            <span class="badge-step">1</span> {{ _('Subir archivo') }}
           </div>
           <div class="import-step {% if step == 2 %}is-active{% elif step > 2 %}is-done{% endif %}">
-            <span class="badge-step">2</span> Mapear y previsualizar
+            <span class="badge-step">2</span> {{ _('Mapear y previsualizar') }}
           </div>
           <div class="import-step {% if step == 3 %}is-active{% endif %}">
-            <span class="badge-step">3</span> Resultado
+            <span class="badge-step">3</span> {{ _('Resultado') }}
           </div>
         </div>
 
@@ -88,21 +88,21 @@
           <div class="import-intro" data-tour="import-intro">
             <div class="admin-panel-header border-bottom pb-3 mb-3">
               <h2 class="admin-panel-title" style="font-size: 1.15rem;" data-tour="import-header">
-                <i class="fas {{ cfg.icon }} mr-2"></i>{{ cfg.title }}
+                <i class="fas {{ cfg.icon }} mr-2"></i>{{ _(cfg.title) }}
               </h2>
               <p class="import-intro-lead mb-0">
-                {{ cfg.intro_lead or cfg.subtitle }}
+                {{ _(cfg.intro_lead or cfg.subtitle) }}
               </p>
             </div>
 
             <div class="import-help" data-tour="import-help">
               {% if cfg.help_html %}
-                {{ cfg.help_html|safe }}
+                {{ _(cfg.help_html)|safe }}
               {% else %}
                 <p class="mb-0" style="font-size:0.86rem;color:#475569;">
-                  <strong>Columnas:</strong> {{ cfg.required_hint }}
+                  <strong>{{ _('Columnas:') }}</strong> {{ _(cfg.required_hint) }}
                 </p>
-                <p class="import-help-note">Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.</p>
+                <p class="import-help-note">{{ _('Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.') }}</p>
               {% endif %}
             </div>
           </div>
@@ -110,18 +110,16 @@
           {% if entity_type == 'users' and import_mode == 'internos' %}
           <div class="alert alert-success mb-3" style="font-size: 0.9rem;">
             <i class="fas fa-building mr-1"></i>
-            Modo <strong>internos</strong>:
             {% if internal_company %}
-              todos irán a <strong>{{ internal_company.nombre }}</strong>.
+              {{ _('Modo internos: todos irán a {nombre}.', nombre=internal_company.nombre) }}
             {% else %}
-              <span class="text-danger">no hay empresa interna marcada — créala antes de importar.</span>
+              <span class="text-danger">{{ _('Modo internos: no hay empresa interna marcada — créala antes de importar.') }}</span>
             {% endif %}
           </div>
           {% elif entity_type == 'users' and import_mode == 'externos' %}
           <div class="alert alert-warning mb-3" style="font-size: 0.9rem;">
             <i class="fas fa-hard-hat mr-1"></i>
-            Modo <strong>externos</strong>: en el siguiente paso podrás elegir una empresa
-            para todos o dejar que se use/cree la del Excel.
+            {{ _('Modo externos: en el siguiente paso podrás elegir una empresa para todos o dejar que se use/cree la del Excel.') }}
           </div>
           {% endif %}
 
@@ -138,19 +136,19 @@
                  style="border-style: dashed !important; border-color: #cbd5e1 !important;"
                  data-tour="import-file-zone">
               <i class="fas {{ cfg.icon }} fa-3x text-primary mb-3"></i>
-              <p class="text-muted mb-3">Excel (.xlsx) o CSV (.csv)</p>
+              <p class="text-muted mb-3">{{ _('Excel (.xlsx) o CSV (.csv)') }}</p>
               <div class="custom-file" style="max-width: 320px; margin: 0 auto;">
                 <input type="file" class="custom-file-input" id="file" name="file"
                        accept=".xlsx,.xls,.csv" required onchange="updateImportFileName(this)"
                        data-tour="import-file">
-                <label class="custom-file-label text-left" for="file" id="file-label">Seleccionar archivo…</label>
+                <label class="custom-file-label text-left" for="file" id="file-label">{{ _('Seleccionar archivo…') }}</label>
               </div>
             </div>
 
             <div class="d-flex justify-content-end">
-              <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-link text-muted mr-2">Cancelar</a>
+              <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-link text-muted mr-2">{{ _('Cancelar') }}</a>
               <button type="submit" class="btn btn-primary px-4" data-tour="import-submit">
-                <i class="fas fa-upload mr-2"></i> Continuar
+                <i class="fas fa-upload mr-2"></i> {{ _('Continuar') }}
               </button>
             </div>
           </form>
@@ -160,9 +158,9 @@
           {% if step == 2 %}
           <div class="admin-panel-header border-bottom pb-3 mb-4">
             <h2 class="admin-panel-title" style="font-size: 1.1rem;">
-              <i class="fas {{ cfg.icon }} mr-2"></i>{{ cfg.title }}
+              <i class="fas {{ cfg.icon }} mr-2"></i>{{ _(cfg.title) }}
             </h2>
-            <p class="admin-panel-subtitle mb-0">{{ cfg.subtitle }}</p>
+            <p class="admin-panel-subtitle mb-0">{{ _(cfg.subtitle) }}</p>
           </div>
           {% set summary = preview.summary or {} %}
           {% if original_name %}
@@ -172,10 +170,10 @@
           {% endif %}
 
           <div class="d-flex flex-wrap mb-3" style="gap: .5rem;">
-            <span class="badge badge-light border">Total: {{ (preview.rows or [])|length }}</span>
-            <span class="badge badge-success">Nuevos: {{ summary.get('new', 0) }}</span>
-            <span class="badge badge-warning">Duplicados: {{ summary.get('duplicate', 0) }}</span>
-            <span class="badge badge-danger">Errores: {{ summary.get('error', 0) }}</span>
+            <span class="badge badge-light border">{{ _('Total:') }} {{ (preview.rows or [])|length }}</span>
+            <span class="badge badge-success">{{ _('Nuevos:') }} {{ summary.get('new', 0) }}</span>
+            <span class="badge badge-warning">{{ _('Duplicados:') }} {{ summary.get('duplicate', 0) }}</span>
+            <span class="badge badge-danger">{{ _('Errores:') }} {{ summary.get('error', 0) }}</span>
           </div>
 
           <form method="post" action="{{ url_for(cfg.preview_endpoint) }}" class="mb-4">
@@ -190,10 +188,10 @@
             {% if entity_type == 'users' and import_mode == 'externos' %}
             <div class="form-group mb-3" style="max-width: 28rem;">
               <label class="small font-weight-bold" for="force_company_id">
-                Empresa externa (opcional, para todos)
+                {{ _('Empresa externa (opcional, para todos)') }}
               </label>
               <select class="form-control form-control-sm" name="force_company_id" id="force_company_id">
-                <option value="">— Usar / crear la del Excel —</option>
+                <option value="">{{ _('— Usar / crear la del Excel —') }}</option>
                 {% for c in external_companies or [] %}
                 <option value="{{ c.id }}" {% if force_company_id == c.id %}selected{% endif %}>
                   {{ c.nombre }}
@@ -201,27 +199,26 @@
                 {% endfor %}
               </select>
               <small class="form-text text-muted">
-                Si eliges una, todos los nuevos van a esa empresa. Si dejas vacío, se usa el texto
-                del Excel (y se crea si no existe).
+                {{ _('Si eliges una, todos los nuevos van a esa empresa. Si dejas vacío, se usa el texto del Excel (y se crea si no existe).') }}
               </small>
             </div>
             {% elif entity_type == 'users' and import_mode == 'internos' %}
             <input type="hidden" name="force_company_id" value="">
             <p class="small text-muted mb-3">
-              Empresa fija:
-              <strong>{% if internal_company %}{{ internal_company.nombre }}{% else %}(sin empresa interna){% endif %}</strong>
+              {{ _('Empresa fija:') }}
+              <strong>{% if internal_company %}{{ internal_company.nombre }}{% else %}{{ _('(sin empresa interna)') }}{% endif %}</strong>
             </p>
             {% endif %}
 
-            <h3 class="h6 text-uppercase text-muted mb-3">Correspondencia de columnas</h3>
+            <h3 class="h6 text-uppercase text-muted mb-3">{{ _('Correspondencia de columnas') }}</h3>
             <div class="import-map-grid mb-3">
               {% for field in fields %}
               <div>
                 <label class="small font-weight-bold mb-1" for="map_{{ field.key }}">
-                  {{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
+                  {{ _(field.label) }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
                 </label>
                 <select class="form-control form-control-sm" name="map_{{ field.key }}" id="map_{{ field.key }}">
-                  <option value="__none__">— No mapear —</option>
+                  <option value="__none__">{{ _('— No mapear —') }}</option>
                   {% for col in columns %}
                   <option value="{{ col }}"
                     {% if column_map.get(field.key) == col %}selected{% endif %}>
@@ -233,13 +230,13 @@
               {% endfor %}
             </div>
             <button type="submit" class="btn btn-outline-primary btn-sm">
-              <i class="fas fa-sync-alt mr-1"></i> Actualizar previsualización
+              <i class="fas fa-sync-alt mr-1"></i> {{ _('Actualizar previsualización') }}
             </button>
           </form>
 
-          <h3 class="h6 text-uppercase text-muted mb-2">Vista previa <span class="font-weight-normal text-muted">(editable)</span></h3>
+          <h3 class="h6 text-uppercase text-muted mb-2">{{ _('Vista previa') }} <span class="font-weight-normal text-muted">({{ _('editable') }})</span></h3>
           <p class="small text-muted mb-2">
-            Puedes corregir cualquier celda antes de confirmar. Los cambios se aplican al importar.
+            {{ _('Puedes corregir cualquier celda antes de confirmar. Los cambios se aplican al importar.') }}
           </p>
           <form method="post" action="{{ url_for(cfg.confirm_endpoint) }}" id="import-confirm-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -260,8 +257,8 @@
                          name="assign_pin" value="1"
                          {% if assign_pin is not defined or assign_pin %}checked{% endif %}>
                   <label class="custom-control-label" for="assign_pin">
-                    <strong>Activar PIN para fichaje</strong>
-                    — genera un PIN a cada trabajador importado (necesario para entrar a fichar).
+                    <strong>{{ _('Activar PIN para fichaje') }}</strong>
+                    — {{ _('genera un PIN a cada trabajador importado (necesario para entrar a fichar).') }}
                   </label>
                 </div>
                 <div class="custom-control custom-checkbox">
@@ -270,8 +267,7 @@
                          name="notify_pin" value="1"
                          {% if notify_pin is not defined or notify_pin %}checked{% endif %}>
                   <label class="custom-control-label" for="notify_pin">
-                    Enviar correo a cada uno con el acceso (usuario / DNI y enlace para definir su PIN).
-                    Por seguridad el PIN no va en claro en el correo.
+                    {{ _('Enviar correo a cada uno con el acceso (usuario / DNI y enlace para definir su PIN). Por seguridad el PIN no va en claro en el correo.') }}
                   </label>
                 </div>
               </div>
@@ -285,12 +281,12 @@
             <table class="table table-sm table-bordered import-preview-table mb-0">
               <thead class="thead-light">
                 <tr>
-                  <th style="width:3.5rem;" class="text-center" title="Incluir en la importación">Importar</th>
-                  <th style="width:4rem;">Fila</th>
-                  <th style="width:7rem;">Estado</th>
-                  <th>Mensajes</th>
+                  <th style="width:3.5rem;" class="text-center" title="{{ _('Incluir en la importación') }}">{{ _('Importar') }}</th>
+                  <th style="width:4rem;">{{ _('Fila') }}</th>
+                  <th style="width:7rem;">{{ _('Estado') }}</th>
+                  <th>{{ _('Mensajes') }}</th>
                   {% for field in fields if field.key != 'password' %}
-                  <th>{{ field.label }}</th>
+                  <th>{{ _(field.label) }}</th>
                   {% endfor %}
                 </tr>
               </thead>
@@ -301,7 +297,7 @@
                   <td class="text-center">
                     {% if row.status == 'new' %}
                     <input type="checkbox" class="import-include-cb" name="include_{{ row.row_number }}"
-                           value="1" checked title="Incluir esta fila" aria-label="Importar fila {{ row.row_number }}">
+                           value="1" checked title="{{ _('Incluir esta fila') }}" aria-label="{{ _('Importar fila {n}', n=row.row_number) }}">
                     {% else %}
                     <span class="text-muted">—</span>
                     {% endif %}
@@ -315,19 +311,19 @@
                       {% if field.key in ('activo', 'recibir_emails', 'is_internal') %}
                       <select class="form-control form-control-sm" name="edit_{{ row.row_number }}_{{ field.key }}" style="min-width:4.5rem;">
                         {% set cur = (row.data or {}).get(field.key, '') %}
-                        <option value="Sí" {% if cur in ['Sí', 'Si', 'true', '1', 'yes', True] %}selected{% endif %}>Sí</option>
-                        <option value="No" {% if cur not in ['Sí', 'Si', 'true', '1', 'yes', True] %}selected{% endif %}>No</option>
+                        <option value="Sí" {% if cur in ['Sí', 'Si', 'true', '1', 'yes', True] %}selected{% endif %}>{{ _('Sí') }}</option>
+                        <option value="No" {% if cur not in ['Sí', 'Si', 'true', '1', 'yes', True] %}selected{% endif %}>{{ _('No') }}</option>
                       </select>
                       {% elif field.key == 'rol' %}
                       {% set cur_rol = ((row.data or {}).get(field.key, '') or '')|lower|replace(' ', '_') %}
                       {% set roles_ok = ['operario', 'jefe_obra', 'admin', 'laboral', 'rrhh'] %}
                       {% set sel_rol = cur_rol if cur_rol in roles_ok else 'operario' %}
                       <select class="form-control form-control-sm" name="edit_{{ row.row_number }}_{{ field.key }}" style="min-width:8rem;">
-                        <option value="operario" {% if sel_rol == 'operario' %}selected{% endif %}>Operario</option>
-                        <option value="jefe_obra" {% if sel_rol == 'jefe_obra' %}selected{% endif %}>Jefe de obra</option>
-                        <option value="admin" {% if sel_rol == 'admin' %}selected{% endif %}>Administrador</option>
-                        <option value="laboral" {% if sel_rol == 'laboral' %}selected{% endif %}>Laboral</option>
-                        <option value="rrhh" {% if sel_rol == 'rrhh' %}selected{% endif %}>RRHH</option>
+                        <option value="operario" {% if sel_rol == 'operario' %}selected{% endif %}>{{ _('Operario') }}</option>
+                        <option value="jefe_obra" {% if sel_rol == 'jefe_obra' %}selected{% endif %}>{{ _('Jefe de obra') }}</option>
+                        <option value="admin" {% if sel_rol == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
+                        <option value="laboral" {% if sel_rol == 'laboral' %}selected{% endif %}>{{ _('Laboral') }}</option>
+                        <option value="rrhh" {% if sel_rol == 'rrhh' %}selected{% endif %}>{{ _('RRHH') }}</option>
                       </select>
                       {% else %}
                       <input type="text" class="form-control form-control-sm"
@@ -342,7 +338,7 @@
                   {% endfor %}
                 </tr>
                 {% else %}
-                <tr><td colspan="{{ 4 + fields|length }}" class="text-center text-muted">Sin filas</td></tr>
+                <tr><td colspan="{{ 4 + fields|length }}" class="text-center text-muted">{{ _('Sin filas') }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -350,13 +346,13 @@
 
             <div class="d-flex justify-content-between">
               <a href="{% if from_onboarding or cfg.from_onboarding %}{% if entity_type == 'users' and import_mode %}{{ url_for(cfg.upload_endpoint, desde='primeros-pasos', modo=import_mode) }}{% else %}{{ url_for(cfg.upload_endpoint, desde='primeros-pasos') }}{% endif %}{% elif entity_type == 'users' and import_mode %}{{ url_for(cfg.upload_endpoint, modo=import_mode) }}{% else %}{{ url_for(cfg.upload_endpoint) }}{% endif %}" class="btn btn-link text-muted">
-                <i class="fas fa-arrow-left mr-1"></i> Otro archivo
+                <i class="fas fa-arrow-left mr-1"></i> {{ _('Otro archivo') }}
               </a>
               <button type="submit" class="btn btn-primary px-4" id="import-confirm-btn" data-tour="import-confirm"
                       data-new-total="{{ summary.get('new', 0) }}"
-                      {% if summary.get('new', 0) == 0 %}disabled title="No hay filas nuevas para importar"{% endif %}>
+                      {% if summary.get('new', 0) == 0 %}disabled title="{{ _('No hay filas nuevas para importar') }}"{% endif %}>
                 <i class="fas fa-check mr-2"></i>
-                Confirmar importación (<span id="import-confirm-count">{{ summary.get('new', 0) }}</span>)
+                {{ _('Confirmar importación') }} (<span id="import-confirm-count">{{ summary.get('new', 0) }}</span>)
               </button>
             </div>
           </form>
@@ -368,21 +364,21 @@
           <div data-tour="import-results">
           <div class="alert alert-success mb-4">
             <i class="fas fa-check-circle mr-2"></i>
-            {{ result.message if result else 'Importación finalizada.' }}
+            {{ _(result.message) if result and result.message else _('Importación finalizada.') }}
           </div>
 
           <div class="d-flex flex-wrap mb-4" style="gap: .5rem;">
-            <span class="badge badge-success">Creados: {{ summary.get('created', 0) }}</span>
-            <span class="badge badge-warning">Duplicados: {{ summary.get('duplicate', 0) }}</span>
-            <span class="badge badge-danger">Errores: {{ summary.get('error', 0) }}</span>
+            <span class="badge badge-success">{{ _('Creados:') }} {{ summary.get('created', 0) }}</span>
+            <span class="badge badge-warning">{{ _('Duplicados:') }} {{ summary.get('duplicate', 0) }}</span>
+            <span class="badge badge-danger">{{ _('Errores:') }} {{ summary.get('error', 0) }}</span>
             {% if summary.get('skip', 0) %}
-            <span class="badge badge-secondary">Omitidos: {{ summary.get('skip', 0) }}</span>
+            <span class="badge badge-secondary">{{ _('Omitidos:') }} {{ summary.get('skip', 0) }}</span>
             {% endif %}
           </div>
 
           {% if created_companies %}
           <div class="mb-4">
-            <h3 class="h6">Empresas creadas automáticamente</h3>
+            <h3 class="h6">{{ _('Empresas creadas automáticamente') }}</h3>
             <ul class="mb-0">
               {% for name in created_companies %}
               <li>{{ name }}</li>
@@ -395,9 +391,9 @@
             <table class="table table-sm table-striped import-preview-table mb-0">
               <thead>
                 <tr>
-                  <th>Fila</th>
-                  <th>Estado</th>
-                  <th>Detalle</th>
+                  <th>{{ _('Fila') }}</th>
+                  <th>{{ _('Estado') }}</th>
+                  <th>{{ _('Detalle') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -405,17 +401,17 @@
                 <tr>
                   <td>{{ row.row_number }}</td>
                   <td class="import-status-{{ row.status }}">
-                    {% if row.status == 'created' %}creada
-                    {% elif row.status == 'new' %}nueva
-                    {% elif row.status == 'duplicate' %}duplicada
-                    {% elif row.status == 'error' %}error
-                    {% elif row.status == 'skip' %}omitida
+                    {% if row.status == 'created' %}{{ _('creada') }}
+                    {% elif row.status == 'new' %}{{ _('nueva') }}
+                    {% elif row.status == 'duplicate' %}{{ _('duplicada') }}
+                    {% elif row.status == 'error' %}{{ _('error') }}
+                    {% elif row.status == 'skip' %}{{ _('omitida') }}
                     {% else %}{{ row.status }}{% endif %}
                   </td>
                   <td class="small">{{ (row.messages or [])|join('; ') }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="3" class="text-muted text-center">Sin detalle</td></tr>
+                <tr><td colspan="3" class="text-muted text-center">{{ _('Sin detalle') }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -423,12 +419,12 @@
 
           {% if imported %}
           <details class="mb-4">
-            <summary class="mb-2" style="cursor:pointer;">Usuarios importados ({{ imported|length }})</summary>
+            <summary class="mb-2" style="cursor:pointer;">{{ _('Usuarios importados ({n})', n=imported|length) }}</summary>
             <div class="table-responsive">
               <table class="table table-sm table-bordered">
                 <thead>
                   <tr>
-                    <th>Email</th><th>Rol</th><th>Nombre</th><th>DNI</th><th>Empresa</th>
+                    <th>{{ _('Email') }}</th><th>{{ _('Rol') }}</th><th>{{ _('Nombre') }}</th><th>{{ _('DNI') }}</th><th>{{ _('Empresa') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -438,7 +434,7 @@
                     <td>{{ u.role }}</td>
                     <td>{{ u.name }} {{ u.lastname }}</td>
                     <td>{{ u.dni }}</td>
-                    <td>{{ u.empresa }}{% if u.company_created %} <span class="badge badge-info">nueva</span>{% endif %}</td>
+                    <td>{{ u.empresa }}{% if u.company_created %} <span class="badge badge-info">{{ _('nueva') }}</span>{% endif %}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -450,29 +446,29 @@
           <div class="d-flex justify-content-end">
             <a href="{% if from_onboarding or cfg.from_onboarding %}{{ url_for(cfg.upload_endpoint, desde='primeros-pasos', modo=import_mode) if entity_type == 'users' else url_for(cfg.upload_endpoint, desde='primeros-pasos') }}{% else %}{{ url_for(cfg.upload_endpoint, modo=import_mode) if entity_type == 'users' and import_mode else url_for(cfg.upload_endpoint) }}{% endif %}"
                class="btn btn-outline-secondary mr-2">
-              Importar otro
+              {{ _('Importar otro') }}
             </a>
             {% if from_onboarding or cfg.from_onboarding %}
               {% if entity_type == 'obras' %}
               <a href="{{ url_for('admin.obras_list') }}" class="btn btn-primary" data-tour="import-success-cta">
-                Ir al Directorio
+                {{ _('Ir al Directorio') }}
               </a>
               {% elif entity_type == 'users' %}
               <a href="{{ url_for('admin.personal') }}" class="btn btn-primary" data-tour="import-success-cta">
-                Ir al personal
+                {{ _('Ir al personal') }}
               </a>
               {% elif entity_type == 'companies' %}
               <a href="{{ url_for('admin.companies') }}" class="btn btn-primary" data-tour="import-success-cta">
-                Ir a empresas
+                {{ _('Ir a empresas') }}
               </a>
               {% else %}
               <a href="{{ url_for(cfg.success_endpoint) }}" class="btn btn-primary" data-tour="import-success-cta">
-                {{ cfg.success_label }}
+                {{ _(cfg.success_label) }}
               </a>
               {% endif %}
             {% else %}
             <a href="{{ url_for(cfg.success_endpoint) }}" class="btn btn-primary">
-              {{ cfg.success_label }}
+              {{ _(cfg.success_label) }}
             </a>
             {% endif %}
           </div>
@@ -505,7 +501,7 @@ function updateImportFileName(input) {
     if (countEl) countEl.textContent = String(n);
     if (btn) {
       btn.disabled = n === 0;
-      if (n === 0) btn.setAttribute('title', 'Marca al menos una fila para importar');
+      if (n === 0) btn.setAttribute('title', {{ _('Marca al menos una fila para importar')|tojson }});
       else btn.removeAttribute('title');
     }
   }

@@ -20,108 +20,198 @@ def send_email(subject, recipients, text_body, html_body=None):
         current_app.logger.warning('Error enviando correo a %s: %s', recipients, e)
         return False
 
+def _user_locale(user, *, bulk=False):
+    from app.services.i18n_service import normalize_locale, get_locale, DEFAULT_LOCALE
+    if user is not None:
+        loc = normalize_locale(getattr(user, 'locale', None))
+        if loc:
+            return loc
+        if bulk:
+            return DEFAULT_LOCALE
+    return get_locale() or DEFAULT_LOCALE
+
+
+def _send_localized(users, subject_fn, text_fn, html_fn=None, *, bulk=True):
+    from collections import defaultdict
+    groups = defaultdict(list)
+    seen = set()
+    for user in users:
+        email = (getattr(user, 'email', None) or '').strip() if user is not None else ''
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        groups[_user_locale(user, bulk=bulk)].append(email)
+    for loc, emails in groups.items():
+        send_email(
+            subject_fn(loc),
+            emails,
+            text_fn(loc),
+            html_body=html_fn(loc) if html_fn else None,
+        )
+
+
 def _obtener_destinatarios(evento_clave, obra_id=None, worker_id=None):
     """
     Función maestra que lee la Matriz de Configuración.
-    Busca los correos de Admin, Jefe y Trabajador solo si están marcados (tick) en la BD.
+    Busca Admin, Jefe y Trabajador solo si están marcados (tick) en la BD.
     Sin filtros de silencio: si está tickado, se envía siempre.
+    Devuelve usuarios únicos con email (para traducir por locale).
     """
     conf = ConfiguracionGlobal.query.filter_by(clave=evento_clave).first()
     if not conf or not conf.valor:
-        return [] # Nadie suscrito a este evento
-        
-    suscritos = conf.valor.split(',') # Ej: ['admin', 'jefe', 'trabajador']
-    correos = []
-    
+        return []  # Nadie suscrito a este evento
+
+    suscritos = conf.valor.split(',')  # Ej: ['admin', 'jefe', 'trabajador']
+    users = []
+
     if 'admin' in suscritos:
-        admins = User.query.filter_by(role='admin', active=True).all()
-        correos.extend([a.email for a in admins if a.email])
-        
+        users.extend(User.query.filter_by(role='admin', active=True).all())
+
     if 'jefe' in suscritos and obra_id:
         obra = Obra.query.get(obra_id)
         if obra and obra.jefe_obra_id:
             jefe = User.query.get(obra.jefe_obra_id)
-            if jefe and jefe.email: correos.append(jefe.email)
-            
+            if jefe:
+                users.append(jefe)
+
     if 'trabajador' in suscritos and worker_id:
         worker = User.query.get(worker_id)
-        if worker and worker.email: correos.append(worker.email)
-        
-    # Eliminamos duplicados (por si un admin también es jefe de esa obra)
-    return list(set(correos))
+        if worker:
+            users.append(worker)
+
+    seen = set()
+    out = []
+    for user in users:
+        email = (getattr(user, 'email', None) or '').strip()
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        out.append(user)
+    return out
 
 def notificar_nueva_solicitud(solicitud, solicitante_name):
     """Notifica la creación de una solicitud (Genérica o Concreta)"""
+    from app.services.i18n_service import translate
+
     clave = 'email_sol_generica' if solicitud.tipo == 'GENERICA' else 'email_sol_concreta'
     destinatarios = _obtener_destinatarios(clave, obra_id=solicitud.obra_id, worker_id=solicitud.empleado_id)
-    if not destinatarios: return
+    if not destinatarios:
+        return
 
     obra = Obra.query.get(solicitud.obra_id)
-    
-    # Obtener nombre completo del Jefe y saber si es Baja
+
     jefe = User.query.get(solicitud.requested_by_id)
     nombre_jefe = f"{jefe.name} {jefe.lastname}" if jefe else solicitante_name
-    tipo_solic = "baja de personal" if getattr(solicitud, 'accion', '') == 'DESASIGNAR' else "personal"
-
-    asunto = f"NUEVA SOLICITUD DE {tipo_solic.upper()} - {obra.nombre}"
-    
-    texto = (
-        f"El Jefe de Obra {nombre_jefe} ha creado una nueva solicitud de {tipo_solic}.\n\n"
-        f"Obra: {obra.nombre}\n"
-    )
-    if solicitud.tipo == 'CONCRETA':
-        worker = User.query.get(solicitud.empleado_id)
-        if worker:
-            texto += f"Trabajador Solicitado: {worker.name} {worker.lastname}\n"
-    else:
-        texto += f"Perfil Solicitado: {solicitud.perfil_categoria} (Cant: {solicitud.cantidad_solicitada})\n"
-        
-    texto += f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n"
+    is_baja = getattr(solicitud, 'accion', '') == 'DESASIGNAR'
+    worker = User.query.get(solicitud.empleado_id) if solicitud.tipo == 'CONCRETA' else None
 
     from app.services.solicitud_service import get_solicitud_notas
     notas = get_solicitud_notas(solicitud)
-    if notas:
-        texto += f"\nNotas del solicitante:\n{notas}\n"
+    fechas = (
+        f"{solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
+        f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}"
+    )
 
-    texto += "\nPor favor, entra en la plataforma para revisarla y gestionarla."
-    
-    send_email(asunto, destinatarios, texto)
+    def subject(loc):
+        if is_baja:
+            return translate(
+                'NUEVA SOLICITUD DE BAJA DE PERSONAL - {obra}', loc, obra=obra.nombre
+            )
+        return translate('NUEVA SOLICITUD DE PERSONAL - {obra}', loc, obra=obra.nombre)
+
+    def text(loc):
+        tipo_solic = (
+            translate('baja de personal', loc) if is_baja else translate('personal', loc)
+        )
+        cuerpo = translate(
+            'El Jefe de Obra {nombre} ha creado una nueva solicitud de {tipo}.\n\n'
+            'Obra: {obra}\n',
+            loc,
+            nombre=nombre_jefe,
+            tipo=tipo_solic,
+            obra=obra.nombre,
+        )
+        if solicitud.tipo == 'CONCRETA' and worker:
+            cuerpo += translate(
+                'Trabajador Solicitado: {name}\n',
+                loc,
+                name=f'{worker.name} {worker.lastname}',
+            )
+        else:
+            cuerpo += translate(
+                'Perfil Solicitado: {perfil} (Cant: {cant})\n',
+                loc,
+                perfil=solicitud.perfil_categoria,
+                cant=solicitud.cantidad_solicitada,
+            )
+        cuerpo += translate('Fechas: {fechas}\n', loc, fechas=fechas)
+        if notas:
+            cuerpo += translate('\nNotas del solicitante:\n{notas}\n', loc, notas=notas)
+        cuerpo += translate(
+            '\nPor favor, entra en la plataforma para revisarla y gestionarla.',
+            loc,
+        )
+        return cuerpo
+
+    _send_localized(destinatarios, subject, text)
 
 def notificar_resolucion_solicitud(solicitud, admin_name, worker_id=None):
     """Notifica cuando una solicitud cambia de estado (Aprobada, Denegada, etc.)"""
-    # Usamos el worker_id si lo hay, o el de la solicitud
+    from app.services.i18n_service import translate
+
     id_trabajador = solicitud.empleado_id or worker_id
-    
+
     destinatarios = _obtener_destinatarios('email_sol_resuelta', obra_id=solicitud.obra_id, worker_id=id_trabajador)
     if not destinatarios:
         return
 
     obra = Obra.query.get(solicitud.obra_id) if solicitud.obra_id else None
-    obra_nombre = obra.nombre if obra else 'obra'
-    asunto = f"Resolución de solicitud #{solicitud.id} - {obra_nombre}"
-    
-    texto = (
-        f"La solicitud para la obra {obra_nombre} ha sido resuelta por {admin_name}.\n\n"
-        f"Estado: {solicitud.estado}\n"
-        f"Acción solicitada: {getattr(solicitud, 'accion', 'ASIGNAR')}\n"
-    )
-    
-    # AQUÍ PONEMOS EL NOMBRE Y LA EMPRESA SIN IMPORTAR SI ES CONCRETA O GENÉRICA
-    if id_trabajador:
-        worker = User.query.get(id_trabajador)
-        if worker:
-            empresa = worker.company_rel.nombre if worker.company_rel else "Sin empresa"
-            texto += f"Trabajador movido: {worker.name} {worker.lastname}\n"
-            texto += f"Empresa: {empresa}\n"
+    worker = User.query.get(id_trabajador) if id_trabajador else None
 
-    if solicitud.fecha_inicio and solicitud.fecha_fin:
-        texto += (
-            f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
-            f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n\n"
+    def subject(loc):
+        obra_nombre = obra.nombre if obra else translate('obra', loc)
+        return translate(
+            'Resolución de solicitud #{id} - {obra}',
+            loc,
+            id=solicitud.id,
+            obra=obra_nombre,
         )
-    texto += f"Revisa la plataforma para más detalles."
-    
-    send_email(asunto, destinatarios, texto)
+
+    def text(loc):
+        obra_nombre = obra.nombre if obra else translate('obra', loc)
+        cuerpo = translate(
+            'La solicitud para la obra {obra} ha sido resuelta por {admin}.\n\n'
+            'Estado: {estado}\n'
+            'Acción solicitada: {accion}\n',
+            loc,
+            obra=obra_nombre,
+            admin=admin_name,
+            estado=solicitud.estado,
+            accion=getattr(solicitud, 'accion', 'ASIGNAR'),
+        )
+        if worker:
+            empresa = (
+                worker.company_rel.nombre
+                if worker.company_rel
+                else translate('Sin empresa', loc)
+            )
+            cuerpo += translate(
+                'Trabajador movido: {name}\nEmpresa: {empresa}\n',
+                loc,
+                name=f'{worker.name} {worker.lastname}',
+                empresa=empresa,
+            )
+        if solicitud.fecha_inicio and solicitud.fecha_fin:
+            cuerpo += translate(
+                'Fechas: {inicio} al {fin}\n\n',
+                loc,
+                inicio=solicitud.fecha_inicio.strftime('%d/%m/%Y'),
+                fin=solicitud.fecha_fin.strftime('%d/%m/%Y'),
+            )
+        cuerpo += translate('Revisa la plataforma para más detalles.', loc)
+        return cuerpo
+
+    _send_localized(destinatarios, subject, text)
 
 
 def _clave_email_solicitud_vehiculo():
@@ -134,6 +224,8 @@ def _clave_email_solicitud_vehiculo():
 
 def notificar_nueva_solicitud_vehiculo(solicitud, solicitante_name):
     """Notifica la creación de una SolicitudVehiculo (espejo de personal concreta)."""
+    from app.services.i18n_service import translate
+
     clave = _clave_email_solicitud_vehiculo()
     destinatarios = _obtener_destinatarios(clave, worker_id=solicitud.empleado_id)
     if not destinatarios:
@@ -141,49 +233,79 @@ def notificar_nueva_solicitud_vehiculo(solicitud, solicitante_name):
 
     jefe = User.query.get(solicitud.requested_by_id)
     nombre_jefe = f"{jefe.name} {jefe.lastname}" if jefe else solicitante_name
-    tipo_solic = (
-        "baja de vehículo" if getattr(solicitud, 'accion', '') == 'DESASIGNAR'
-        else "vehículo"
-    )
+    is_baja = getattr(solicitud, 'accion', '') == 'DESASIGNAR'
 
     from app.models import Vehiculo
     veh = getattr(solicitud, 'vehiculo', None)
     if veh is None and solicitud.vehiculo_id:
         veh = Vehiculo.query.get(solicitud.vehiculo_id)
-    veh_txt = veh.label() if veh else (
-        f"vehículo #{solicitud.vehiculo_id}" if solicitud.vehiculo_id else "cualquier"
-    )
-
-    asunto = f"NUEVA SOLICITUD DE {tipo_solic.upper()} - {veh_txt}"
-    texto = (
-        f"El usuario {nombre_jefe} ha creado una nueva solicitud de {tipo_solic}.\n\n"
-        f"Vehículo: {veh_txt}\n"
-    )
     worker = User.query.get(solicitud.empleado_id)
-    if worker:
-        texto += f"Trabajador: {worker.name} {worker.lastname}\n"
-    texto += (
-        f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
-        f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n"
+    fechas = (
+        f"{solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
+        f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}"
     )
     notas = (getattr(solicitud, 'notas', None) or '').strip()
-    if notas:
-        texto += f"\nNotas del solicitante:\n{notas}\n"
-    texto += "\nPor favor, entra en la plataforma para revisarla y gestionarla."
-    send_email(asunto, destinatarios, texto)
+
+    def _veh_txt(loc):
+        if veh:
+            return veh.label()
+        if solicitud.vehiculo_id:
+            return translate('vehículo #{id}', loc, id=solicitud.vehiculo_id)
+        return translate('cualquier', loc)
+
+    def subject(loc):
+        veh_txt = _veh_txt(loc)
+        if is_baja:
+            return translate(
+                'NUEVA SOLICITUD DE BAJA DE VEHÍCULO - {veh}', loc, veh=veh_txt
+            )
+        return translate('NUEVA SOLICITUD DE VEHÍCULO - {veh}', loc, veh=veh_txt)
+
+    def text(loc):
+        tipo_solic = (
+            translate('baja de vehículo', loc) if is_baja else translate('vehículo', loc)
+        )
+        veh_txt = _veh_txt(loc)
+        cuerpo = translate(
+            'El usuario {nombre} ha creado una nueva solicitud de {tipo}.\n\n'
+            'Vehículo: {veh}\n',
+            loc,
+            nombre=nombre_jefe,
+            tipo=tipo_solic,
+            veh=veh_txt,
+        )
+        if worker:
+            cuerpo += translate(
+                'Trabajador: {name}\n',
+                loc,
+                name=f'{worker.name} {worker.lastname}',
+            )
+        cuerpo += translate('Fechas: {fechas}\n', loc, fechas=fechas)
+        if notas:
+            cuerpo += translate('\nNotas del solicitante:\n{notas}\n', loc, notas=notas)
+        cuerpo += translate(
+            '\nPor favor, entra en la plataforma para revisarla y gestionarla.',
+            loc,
+        )
+        return cuerpo
+
+    _send_localized(destinatarios, subject, text)
 
 
 def notificar_resolucion_solicitud_vehiculo(solicitud, admin_name):
     """Notifica resolución de SolicitudVehiculo (aceptar/denegar)."""
+    from app.services.i18n_service import translate
+
     destinatarios = _obtener_destinatarios(
         'email_sol_resuelta', worker_id=solicitud.empleado_id
     )
-    # Sin obra: si 'jefe' está suscrito, avisar al solicitante
     conf = ConfiguracionGlobal.query.filter_by(clave='email_sol_resuelta').first()
     if conf and conf.valor and 'jefe' in conf.valor.split(','):
         requester = User.query.get(solicitud.requested_by_id)
         if requester and requester.email:
-            destinatarios = list(set(destinatarios + [requester.email]))
+            emails = {(getattr(u, 'email', None) or '').strip() for u in destinatarios}
+            if requester.email.strip() not in emails:
+                destinatarios = list(destinatarios) + [requester]
     if not destinatarios:
         return
 
@@ -191,70 +313,123 @@ def notificar_resolucion_solicitud_vehiculo(solicitud, admin_name):
     veh = getattr(solicitud, 'vehiculo', None)
     if veh is None and solicitud.vehiculo_id:
         veh = Vehiculo.query.get(solicitud.vehiculo_id)
-    veh_txt = veh.label() if veh else (
-        f"vehículo #{solicitud.vehiculo_id}" if solicitud.vehiculo_id else "—"
-    )
-
-    asunto = f"Resolución de solicitud de vehículo #{solicitud.id} - {veh_txt}"
-    texto = (
-        f"La solicitud de vehículo ha sido resuelta por {admin_name}.\n\n"
-        f"Estado: {solicitud.estado}\n"
-        f"Acción solicitada: {getattr(solicitud, 'accion', 'ASIGNAR')}\n"
-        f"Vehículo: {veh_txt}\n"
-    )
     worker = User.query.get(solicitud.empleado_id)
-    if worker:
-        texto += f"Trabajador: {worker.name} {worker.lastname}\n"
-    texto += (
-        f"Fechas: {solicitud.fecha_inicio.strftime('%d/%m/%Y')} "
-        f"al {solicitud.fecha_fin.strftime('%d/%m/%Y')}\n\n"
-        f"Revisa la plataforma para más detalles."
-    )
-    send_email(asunto, destinatarios, texto)
+
+    def _veh_txt(loc):
+        if veh:
+            return veh.label()
+        if solicitud.vehiculo_id:
+            return translate('vehículo #{id}', loc, id=solicitud.vehiculo_id)
+        return '—'
+
+    def subject(loc):
+        return translate(
+            'Resolución de solicitud de vehículo #{id} - {veh}',
+            loc,
+            id=solicitud.id,
+            veh=_veh_txt(loc),
+        )
+
+    def text(loc):
+        cuerpo = translate(
+            'La solicitud de vehículo ha sido resuelta por {admin}.\n\n'
+            'Estado: {estado}\n'
+            'Acción solicitada: {accion}\n'
+            'Vehículo: {veh}\n',
+            loc,
+            admin=admin_name,
+            estado=solicitud.estado,
+            accion=getattr(solicitud, 'accion', 'ASIGNAR'),
+            veh=_veh_txt(loc),
+        )
+        if worker:
+            cuerpo += translate(
+                'Trabajador: {name}\n',
+                loc,
+                name=f'{worker.name} {worker.lastname}',
+            )
+        cuerpo += translate(
+            'Fechas: {inicio} al {fin}\n\n'
+            'Revisa la plataforma para más detalles.',
+            loc,
+            inicio=solicitud.fecha_inicio.strftime('%d/%m/%Y'),
+            fin=solicitud.fecha_fin.strftime('%d/%m/%Y'),
+        )
+        return cuerpo
+
+    _send_localized(destinatarios, subject, text)
 
 def notificar_traslado_interno(jefe_name, worker, target_obra, dates, obras_origen=None):
     """Notifica cuando un Jefe mueve a un operario por custodia entre sus obras"""
-    destinatarios = _obtener_destinatarios('email_traslado', obra_id=target_obra.id, worker_id=worker.id)
-    if not destinatarios: return
-    
-    if len(dates) > 1:
-        fecha_str = f"Desde el {min(dates).strftime('%d/%m/%Y')} hasta el {max(dates).strftime('%d/%m/%Y')}"
-    else:
-        fecha_str = f"El {dates[0].strftime('%d/%m/%Y')}"
+    from app.services.i18n_service import translate
 
-    # Buscar el nombre completo del jefe
+    destinatarios = _obtener_destinatarios('email_traslado', obra_id=target_obra.id, worker_id=worker.id)
+    if not destinatarios:
+        return
+
     jefe_obj = User.query.filter(User.name.like(f"%{jefe_name.split()[0]}%")).first()
     nombre_jefe_completo = f"{jefe_obj.name} {jefe_obj.lastname}" if jefe_obj else jefe_name
+    worker_name = f'{worker.name} {worker.lastname}'
 
-    # Diferenciamos si es Traslado o Extensión
-    if obras_origen:
-        asunto = f"Aviso: Traslado de Personal - {nombre_jefe_completo}"
-        texto = (
-            f"El Jefe de Obra {nombre_jefe_completo} ha realizado un traslado entre sus obras.\n\n"
-            f"Trabajador movido: {worker.name} {worker.lastname}\n\n"
-            f"Obra origen: {', '.join(obras_origen)}\n"
-            f"Fechas origen: {fecha_str}\n\n"
-            f"Obra Destino: {target_obra.nombre}\n"
-            f"Fechas: {fecha_str}\n\n"
-            f"Este movimiento ha sido auto-aprobado por el sistema ya que se disponía de custodia activa sobre el trabajador."
-        )
-    else:
-        asunto = f"Aviso: Extensión de Personal - {nombre_jefe_completo}"
-        texto = (
-            f"El Jefe de Obra {nombre_jefe_completo} ha realizado una extensión de personal.\n\n"
-            f"Trabajador movido: {worker.name} {worker.lastname}\n"
-            f"Obra Destino: {target_obra.nombre}\n"
-            f"Fechas: {fecha_str}\n\n"
-            f"Este movimiento ha sido auto-aprobado por el sistema ya que se disponía de custodia activa sobre el trabajador."
+    def _fecha_str(loc):
+        if len(dates) > 1:
+            return translate(
+                'Desde el {start} hasta el {end}',
+                loc,
+                start=min(dates).strftime('%d/%m/%Y'),
+                end=max(dates).strftime('%d/%m/%Y'),
+            )
+        return translate('El {date}', loc, date=dates[0].strftime('%d/%m/%Y'))
+
+    def subject(loc):
+        if obras_origen:
+            return translate(
+                'Aviso: Traslado de Personal - {jefe}', loc, jefe=nombre_jefe_completo
+            )
+        return translate(
+            'Aviso: Extensión de Personal - {jefe}', loc, jefe=nombre_jefe_completo
         )
 
-    send_email(asunto, destinatarios, texto)
+    def text(loc):
+        fecha_str = _fecha_str(loc)
+        if obras_origen:
+            return translate(
+                'El Jefe de Obra {jefe} ha realizado un traslado entre sus obras.\n\n'
+                'Trabajador movido: {worker}\n\n'
+                'Obra origen: {origen}\n'
+                'Fechas origen: {fechas}\n\n'
+                'Obra Destino: {destino}\n'
+                'Fechas: {fechas}\n\n'
+                'Este movimiento ha sido auto-aprobado por el sistema ya que se disponía de custodia activa sobre el trabajador.',
+                loc,
+                jefe=nombre_jefe_completo,
+                worker=worker_name,
+                origen=', '.join(obras_origen),
+                fechas=fecha_str,
+                destino=target_obra.nombre,
+            )
+        return translate(
+            'El Jefe de Obra {jefe} ha realizado una extensión de personal.\n\n'
+            'Trabajador movido: {worker}\n'
+            'Obra Destino: {destino}\n'
+            'Fechas: {fechas}\n\n'
+            'Este movimiento ha sido auto-aprobado por el sistema ya que se disponía de custodia activa sobre el trabajador.',
+            loc,
+            jefe=nombre_jefe_completo,
+            worker=worker_name,
+            destino=target_obra.nombre,
+            fechas=fecha_str,
+        )
+
+    _send_localized(destinatarios, subject, text)
 
 def notificar_movimiento_admin_a_jo(obra_id, worker_name, accion, fecha_str, admin_name):
     """Notifica cuando se asigna o desasigna personal directamente en el planificador"""
+    from app.services.i18n_service import translate
+
     is_baja = 'desasignar' in accion.lower() or 'baja' in accion.lower()
     clave = 'email_desasignacion' if is_baja else 'email_asignacion'
-    
+
     worker_id = None
     if worker_name:
         worker = User.query.filter(User.name.like(f"%{worker_name.split()[0]}%")).first()
@@ -262,18 +437,30 @@ def notificar_movimiento_admin_a_jo(obra_id, worker_name, accion, fecha_str, adm
             worker_id = worker.id
 
     destinatarios = _obtener_destinatarios(clave, obra_id=obra_id, worker_id=worker_id)
-    if not destinatarios: return
+    if not destinatarios:
+        return
 
     obra = Obra.query.get(obra_id)
-    asunto = f"Actualización de Personal - {obra.nombre}"
-    texto = (
-        f"El administrador {admin_name} ha realizado un movimiento en la obra ({obra.nombre}):\n\n"
-        f"Acción: {accion.upper()}\n"
-        f"Operario: {worker_name}\n"
-        f"Fecha/s afectada(s): {fecha_str}\n\n"
-        f"Revisa el planificador para ver los detalles."
-    )
-    send_email(asunto, destinatarios, texto)
+
+    def subject(loc):
+        return translate('Actualización de Personal - {obra}', loc, obra=obra.nombre)
+
+    def text(loc):
+        return translate(
+            'El administrador {admin} ha realizado un movimiento en la obra ({obra}):\n\n'
+            'Acción: {accion}\n'
+            'Operario: {worker}\n'
+            'Fecha/s afectada(s): {fechas}\n\n'
+            'Revisa el planificador para ver los detalles.',
+            loc,
+            admin=admin_name,
+            obra=obra.nombre,
+            accion=accion.upper(),
+            worker=worker_name,
+            fechas=fecha_str,
+        )
+
+    _send_localized(destinatarios, subject, text)
 
 
 def enviar_super_reporte_diario():
@@ -282,6 +469,11 @@ def enviar_super_reporte_diario():
     Manda correos agrupados a JO y Admins sobre ausencias de HOY y paracaidistas/conflictos de AYER.
     """
     from app.utils.timezone_utils import today_local
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+
+    if not tenant_muestra_auditoria_fichajes():
+        return
+
     hoy = today_local()
     ayer = hoy - timedelta(days=1)
 
@@ -319,47 +511,88 @@ def enviar_super_reporte_diario():
     # CORREO GLOBAL PARA LOS ADMINISTRADORES
     # ==========================================
     admins = User.query.filter_by(role='admin', active=True).all()
-    admin_emails = [a.email for a in admins if a.email]
-    
-    if admin_emails:
-        asunto_admin = f"Alerta de Fichajes Global ({hoy.strftime('%d/%m/%Y')})"
-        
-        html_admin = f"""
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-            <h2 style="color: #1d4ed8;">Reporte de Presencia y Fichajes 📋</h2>
-            <p>Resumen automático generado en la hora de corte de entrada.</p>
-            
-            <h3 style="color: #dc2626; border-bottom: 1px solid #ddd; padding-bottom: 5px;">
-                Ausencias Detectadas HOY ({hoy.strftime('%d/%m/%Y')}):
-            </h3>
-            <ul>
-        """
-        if ausencias_hoy:
-            for a in ausencias_hoy:
-                obra_nom = a.obra_planificada.nombre if a.obra_planificada else 'Obra Desconocida'
-                html_admin += f"<li><b>{a.user.name} {a.user.lastname}</b> - Faltó en: {obra_nom}</li>"
-        else:
-            html_admin += "<li><i style='color: green;'>Todo el personal planificado ha fichado.</i></li>"
-            
-        html_admin += f"""
-            </ul>
-            <h3 style="color: #f59e0b; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20px;">
-                Fichajes No Planificados AYER ({ayer.strftime('%d/%m/%Y')}):
-            </h3>
-            <ul>
-        """
-        
-        if conflictos_ayer:
-            for c in conflictos_ayer:
-                obra_real = c.obra_real.nombre if c.obra_real else 'Desconocida'
-                obra_plan = c.obra_planificada.nombre if c.obra_planificada else 'NINGUNA'
-                html_admin += f"<li><b>{c.user.name} {c.user.lastname}</b> - Apareció en: {obra_real} (Estaba planificado en: {obra_plan})</li>"
-        else:
-            html_admin += "<li><i style='color: green;'>No hubo incidencias de paracaidistas ayer.</i></li>"
-            
-        html_admin += "</ul></div>"
-            
-        send_email(asunto_admin, admin_emails, "Contenido en HTML.", html_body=html_admin)
+    admin_users = [a for a in admins if a.email]
+
+    if admin_users:
+        from app.services.i18n_service import translate
+        from collections import defaultdict
+
+        groups = defaultdict(list)
+        for admin in admin_users:
+            groups[_user_locale(admin, bulk=True)].append(admin.email)
+
+        for loc, emails in groups.items():
+            asunto_admin = translate(
+                'Alerta de Fichajes Global ({date})',
+                loc,
+                date=hoy.strftime('%d/%m/%Y'),
+            )
+            html_admin = (
+                '<div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">'
+                f'<h2 style="color: #1d4ed8;">{translate("Reporte de Presencia y Fichajes 📋", loc)}</h2>'
+                f'<p>{translate("Resumen automático generado en la hora de corte de entrada.", loc)}</p>'
+                '<h3 style="color: #dc2626; border-bottom: 1px solid #ddd; padding-bottom: 5px;">'
+                f'{translate("Ausencias Detectadas HOY ({date}):", loc, date=hoy.strftime("%d/%m/%Y"))}'
+                '</h3><ul>'
+            )
+            if ausencias_hoy:
+                for a in ausencias_hoy:
+                    obra_nom = (
+                        a.obra_planificada.nombre
+                        if a.obra_planificada
+                        else translate('Obra Desconocida', loc)
+                    )
+                    html_admin += translate(
+                        '<li><b>{name}</b> - Faltó en: {obra}</li>',
+                        loc,
+                        name=f'{a.user.name} {a.user.lastname}',
+                        obra=obra_nom,
+                    )
+            else:
+                html_admin += (
+                    "<li><i style='color: green;'>"
+                    f"{translate('Todo el personal planificado ha fichado.', loc)}"
+                    "</i></li>"
+                )
+
+            html_admin += (
+                '</ul>'
+                '<h3 style="color: #f59e0b; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20px;">'
+                f'{translate("Fichajes No Planificados AYER ({date}):", loc, date=ayer.strftime("%d/%m/%Y"))}'
+                '</h3><ul>'
+            )
+
+            if conflictos_ayer:
+                for c in conflictos_ayer:
+                    obra_real = (
+                        c.obra_real.nombre if c.obra_real else translate('Desconocida', loc)
+                    )
+                    obra_plan = (
+                        c.obra_planificada.nombre
+                        if c.obra_planificada
+                        else translate('NINGUNA', loc)
+                    )
+                    html_admin += translate(
+                        '<li><b>{name}</b> - Apareció en: {real} (Estaba planificado en: {plan})</li>',
+                        loc,
+                        name=f'{c.user.name} {c.user.lastname}',
+                        real=obra_real,
+                        plan=obra_plan,
+                    )
+            else:
+                html_admin += (
+                    "<li><i style='color: green;'>"
+                    f"{translate('No hubo incidencias de paracaidistas ayer.', loc)}"
+                    "</i></li>"
+                )
+
+            html_admin += "</ul></div>"
+            send_email(
+                asunto_admin,
+                emails,
+                translate('Contenido en HTML.', loc),
+                html_body=html_admin,
+            )
 
     # ==========================================
     # CORREOS ESPECÍFICOS PARA CADA JEFE DE OBRA
@@ -375,25 +608,47 @@ def enviar_super_reporte_diario():
             
         aus_obra = [a for a in ausencias_hoy if a.obra_planificada_id == obra.id]
         con_obra = [c for c in conflictos_ayer if c.obra_real_id == obra.id]
-        
-        asunto_jo = f"Alerta de Personal - {obra.nombre} ({hoy.strftime('%d/%m/%Y')})"
-        
-        html_jo = f"""
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-            <h3>Hola {obra.jefe_obra.name},</h3>
-            <p>Incidencias detectadas en tu obra <b>{obra.nombre}</b> en la hora de corte:</p>
-        """
-        
+
+        from app.services.i18n_service import translate
+        loc = _user_locale(obra.jefe_obra, bulk=True)
+        asunto_jo = translate(
+            'Alerta de Personal - {obra} ({date})',
+            loc,
+            obra=obra.nombre,
+            date=hoy.strftime('%d/%m/%Y'),
+        )
+
+        html_jo = (
+            '<div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">'
+            f'<h3>{translate("Hola {name},", loc, name=obra.jefe_obra.name)}</h3>'
+            f'<p>{translate("Incidencias detectadas en tu obra <b>{obra}</b> en la hora de corte:", loc, obra=obra.nombre)}</p>'
+        )
+
         if aus_obra:
-            html_jo += f"<h4 style='color: #dc2626;'>NO HAN FICHADO HOY ({hoy.strftime('%d/%m/%Y')}):</h4><ul>"
-            for a in aus_obra: html_jo += f"<li>{a.user.name} {a.user.lastname}</li>"
+            html_jo += (
+                "<h4 style='color: #dc2626;'>"
+                f"{translate('NO HAN FICHADO HOY ({date}):', loc, date=hoy.strftime('%d/%m/%Y'))}"
+                "</h4><ul>"
+            )
+            for a in aus_obra:
+                html_jo += f"<li>{a.user.name} {a.user.lastname}</li>"
             html_jo += "</ul>"
-                
+
         if con_obra:
-            html_jo += f"<h4 style='color: #f59e0b;'>FICHARON AYER ({ayer.strftime('%d/%m/%Y')}) SIN ESTAR PLANIFICADOS:</h4><ul>"
-            for c in con_obra: html_jo += f"<li>{c.user.name} {c.user.lastname}</li>"
+            html_jo += (
+                "<h4 style='color: #f59e0b;'>"
+                f"{translate('FICHARON AYER ({date}) SIN ESTAR PLANIFICADOS:', loc, date=ayer.strftime('%d/%m/%Y'))}"
+                "</h4><ul>"
+            )
+            for c in con_obra:
+                html_jo += f"<li>{c.user.name} {c.user.lastname}</li>"
             html_jo += "</ul>"
-            
+
         html_jo += "</div>"
-            
-        send_email(asunto_jo, [obra.jefe_obra.email], "Contenido en HTML.", html_body=html_jo)
+
+        send_email(
+            asunto_jo,
+            [obra.jefe_obra.email],
+            translate('Contenido en HTML.', loc),
+            html_body=html_jo,
+        )

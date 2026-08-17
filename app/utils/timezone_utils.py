@@ -116,10 +116,16 @@ def parse_odoo_datetime(dt_str):
         return None
 
 
-def format_datetime(dt, fmt='%d/%m/%Y %H:%M', user=None):
+def format_datetime(dt, fmt=None, user=None):
     """Formatea un datetime UTC de BD en la zona horaria del usuario."""
     if dt is None:
         return ''
+    if fmt is None:
+        try:
+            from app.services.i18n_service import datetime_format
+            fmt = datetime_format()
+        except Exception:
+            fmt = '%d/%m/%Y %H:%M'
     local_dt = utc_to_local(dt, user)
     return local_dt.strftime(fmt)
 
@@ -128,9 +134,15 @@ def format_time(dt, user=None):
     return format_datetime(dt, '%H:%M', user)
 
 
-def format_date(dt, fmt='%d/%m/%Y', user=None):
+def format_date(dt, fmt=None, user=None):
     if dt is None:
         return ''
+    if fmt is None:
+        try:
+            from app.services.i18n_service import date_format
+            fmt = date_format()
+        except Exception:
+            fmt = '%d/%m/%Y'
     if isinstance(dt, date) and not isinstance(dt, datetime):
         return dt.strftime(fmt)
     local_dt = utc_to_local(dt, user)

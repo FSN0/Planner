@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ cfg.title }} — Resultados{% endblock %}
+{% block title %}{{ _(cfg.title) }} — {{ _('Resultados') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -36,37 +36,37 @@
       <div class="col-lg-10">
 
         <div class="import-steps">
-          <div class="import-step is-done">1. Subir archivo</div>
-          <div class="import-step is-done">2. Mapear columnas</div>
-          <div class="import-step is-done">3. Resultados</div>
+          <div class="import-step is-done">1. {{ _('Subir archivo') }}</div>
+          <div class="import-step is-done">2. {{ _('Mapear columnas') }}</div>
+          <div class="import-step is-done">3. {{ _('Resultados') }}</div>
         </div>
 
         <div class="admin-panel mb-4">
           <div class="admin-panel-header border-bottom pb-3 mb-3">
-            <h2 class="admin-panel-title" style="font-size: 1.1rem;">Importación completada</h2>
-            <p class="admin-panel-subtitle mb-0">{{ result.message }}</p>
+            <h2 class="admin-panel-title" style="font-size: 1.1rem;">{{ _('Importación completada') }}</h2>
+            <p class="admin-panel-subtitle mb-0">{{ _(result.message) }}</p>
           </div>
 
           <div class="import-summary-chips">
             <span class="import-chip import-chip--ok">
-              <i class="fas fa-check-circle"></i> {{ summary.get('created', 0) }} creados
+              <i class="fas fa-check-circle"></i> {{ _('{n} creados', n=summary.get('created', 0)) }}
             </span>
             <span class="import-chip import-chip--dup">
-              <i class="fas fa-copy"></i> {{ summary.get('duplicate', 0) }} duplicados omitidos
+              <i class="fas fa-copy"></i> {{ _('{n} duplicados omitidos', n=summary.get('duplicate', 0)) }}
             </span>
             <span class="import-chip import-chip--err">
-              <i class="fas fa-exclamation-circle"></i> {{ summary.get('error', 0) }} errores
+              <i class="fas fa-exclamation-circle"></i> {{ _('{n} errores', n=summary.get('error', 0)) }}
             </span>
             {% if summary.get('skip') %}
             <span class="import-chip">
-              <i class="fas fa-minus-circle"></i> {{ summary.get('skip', 0) }} vacíos
+              <i class="fas fa-minus-circle"></i> {{ _('{n} vacíos', n=summary.get('skip', 0)) }}
             </span>
             {% endif %}
           </div>
 
           {% if created_companies %}
           <div class="alert alert-info py-2" style="font-size: 0.9rem;">
-            <strong>Empresas creadas automáticamente:</strong>
+            <strong>{{ _('Empresas creadas automáticamente:') }}</strong>
             {{ created_companies|join(', ') }}
           </div>
           {% endif %}
@@ -75,10 +75,10 @@
             <table class="table table-sm table-striped mb-0" style="font-size: 0.85rem;">
               <thead>
                 <tr>
-                  <th>Fila</th>
-                  <th>Estado</th>
-                  <th>Detalle</th>
-                  <th>Mensaje</th>
+                  <th>{{ _('Fila') }}</th>
+                  <th>{{ _('Estado') }}</th>
+                  <th>{{ _('Detalle') }}</th>
+                  <th>{{ _('Mensaje') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,9 +87,9 @@
                 <tr>
                   <td>{{ row.row_number }}</td>
                   <td class="import-status-{{ row.status }}">
-                    {% if row.status == 'created' %}Creado
-                    {% elif row.status == 'duplicate' %}Duplicado
-                    {% elif row.status == 'error' %}Error
+                    {% if row.status == 'created' %}{{ _('Creado') }}
+                    {% elif row.status == 'duplicate' %}{{ _('Duplicado') }}
+                    {% elif row.status == 'error' %}{{ _('Error') }}
                     {% else %}{{ row.status }}{% endif %}
                   </td>
                   <td>
@@ -109,7 +109,7 @@
                 {% endif %}
                 {% else %}
                 <tr>
-                  <td colspan="4" class="text-center text-muted py-3">Sin filas procesadas.</td>
+                  <td colspan="4" class="text-center text-muted py-3">{{ _('Sin filas procesadas.') }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -119,10 +119,10 @@
 
         <div class="d-flex justify-content-between">
           <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-outline-secondary">
-            <i class="fas fa-file-import mr-1"></i> Nueva importación
+            <i class="fas fa-file-import mr-1"></i> {{ _('Nueva importación') }}
           </a>
           <a href="{{ url_for(cfg.success_endpoint) }}" class="btn btn-primary">
-            {{ cfg.success_label }}
+            {{ _(cfg.success_label) }}
           </a>
         </div>
 

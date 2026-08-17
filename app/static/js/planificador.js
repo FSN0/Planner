@@ -24,10 +24,43 @@ document.addEventListener('DOMContentLoaded', function() {
         window.renderItems();
     };
 
+    function hidePlanificadorOverlays() {
+        var popover = document.getElementById('worker-popover');
+        if (popover) popover.classList.add('d-none');
+        var tip = document.getElementById('planificador-item-tooltip');
+        if (tip) {
+            tip.classList.add('d-none');
+            tip.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function fitPlanificadorTimelineToGroups() {
+        var last = document.querySelector('#planificador-calendar .vis-labelset .vis-label:last-child');
+        var timeline = document.querySelector('#planificador-calendar .vis-timeline');
+        if (!last || !timeline) return;
+        var needed = Math.ceil(last.getBoundingClientRect().bottom - timeline.getBoundingClientRect().top);
+        if (needed < 50) return;
+        var current = Math.round(timeline.getBoundingClientRect().height);
+        if (Math.abs(current - needed) <= 2) return;
+        timeline.style.height = needed + 'px';
+    }
+
+    function tuckAddObraIntoTimelineGap() {
+        var last = document.querySelector('#planificador-calendar .vis-labelset .vis-label:last-child');
+        var timeline = document.querySelector('#planificador-calendar .vis-timeline');
+        var btn = document.querySelector('.planificador-add-obra');
+        if (!last || !timeline || !btn) return;
+        var gap = Math.round(timeline.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom);
+        var pull = Math.max(0, Math.min(gap, 28));
+        btn.style.marginTop = pull ? (-pull) + 'px' : '';
+    }
+
     function refreshPlanificadorLayout() {
         if (window.AppTimeline) {
             window.AppTimeline.redraw();
         }
+        fitPlanificadorTimelineToGroups();
+        tuckAddObraIntoTimelineGap();
         updateStickyHeader();
         updateResizerPosition();
     }
@@ -370,7 +403,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (window.AppItems) window.AppItems.remove('phantom_new');
 
                     let modalTitle = document.querySelector('#quickCalendarModal .modal-title');
-                    if (modalTitle) modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2 text-warning"></i> Gestión de Asignaciones`;
+                    if (modalTitle) modalTitle.innerHTML = `<i class="fas fa-calendar-alt mr-2 text-warning"></i> ${t('Gestión de Asignaciones')}`;
 
                     $('#quickCalendarModal').modal('show');
                     
@@ -395,6 +428,8 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         onMoving: function (item, callback) {
+            window.__planificadorDidDrag = true;
+            hidePlanificadorOverlays();
             let hoy = moment().startOf('day').toDate();
             
             if (item.worker_id === 'NEW') {
@@ -476,7 +511,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!sameObra) {
                 Swal.fire({ 
                     title: t('¿Trasladar a otra Obra?'),
-                    text: `Vas a reasignar al operario del ${moment(startStr).format('DD/MM')} al ${moment(endStr).format('DD/MM')}. Se quitará de la obra anterior en esas fechas.`, 
+                    text: `${t('Vas a reasignar al operario del')} ${moment(startStr).format('DD/MM')} ${t('al')} ${moment(endStr).format('DD/MM')}. ${t('Se quitará de la obra anterior en esas fechas.')}`, 
                     icon: 'question', 
                     showCancelButton: true, 
                     confirmButtonText: t('Sí, mover')
@@ -542,12 +577,28 @@ document.addEventListener('DOMContentLoaded', function() {
         planificadorScrollRoot && planificadorScrollRoot.addEventListener('scroll', hideTooltip, { passive: true });
     }
 
-    window.AppTimeline = new vis.Timeline(calendarDiv, window.AppItems, window.AppGroups, options);
+    try {
+        window.AppTimeline = new vis.Timeline(calendarDiv, window.AppItems, window.AppGroups, options);
+    } catch (err) {
+        options.locale = 'es';
+        window.AppTimeline = new vis.Timeline(calendarDiv, window.AppItems, window.AppGroups, options);
+    }
     window.AppTimeline.setWindow(moment().subtract(1, 'weeks').toDate(), moment().add(3, 'months').toDate());
     setupPlanificadorItemTooltip();
 
+    calendarDiv.addEventListener('mousedown', function (e) {
+        if (e.target && e.target.closest && e.target.closest('.vis-item')) {
+            hidePlanificadorOverlays();
+        }
+    }, true);
+
     window.AppTimeline.on('click', function(props) {
         let popover = document.getElementById('worker-popover');
+        if (window.__planificadorDidDrag) {
+            window.__planificadorDidDrag = false;
+            if (popover) popover.classList.add('d-none');
+            return;
+        }
         
         if (props.item && props.item !== 'phantom_new') {
             let item = window.AppItems.get(props.item);
@@ -586,7 +637,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     btnVerSol = document.createElement('a');
                     btnVerSol.id = 'btn-ver-solicitud';
                     btnVerSol.className = 'btn btn-warning btn-sm btn-block mt-3 font-weight-bold text-white';
-                    btnVerSol.innerHTML = '<i class="fas fa-external-link-alt mr-1"></i> Ver Solicitud';
+                    btnVerSol.innerHTML = '<i class="fas fa-external-link-alt mr-1"></i> ' + t('Ver Solicitud');
                     popover.appendChild(btnVerSol); // Lo inyectamos al final del popover
                 }
                 btnVerSol.href = `/admin/solicitudes/${item.solicitud_id}`;
@@ -608,7 +659,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('wp-name').href = `/admin/worker_panel/${item.worker_id}`;
                 
                 let compEl = document.getElementById('wp-company');
-                compEl.textContent = item.empresa_nombre || 'Sin Empresa';
+                compEl.textContent = item.empresa_nombre || t('Sin Empresa');
                 if (item.empresa_id && item.empresa_id > 0) {
                     compEl.href = `/admin/company_panel/${item.empresa_id}`;
                     compEl.style.pointerEvents = 'auto';
@@ -636,9 +687,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     // (Opcional) Damos color al texto: verde si > 0, rojo si < 0, oscuro si es 0
                     let colorClass = item.nota > 0 ? 'text-success' : (item.nota < 0 ? 'text-danger' : 'text-dark');
                     
-                    ratingEl.innerHTML = `<strong class="${colorClass}">${displayNota}</strong> <span class="text-primary ml-1" style="font-size:0.75rem;">(Ver notas)</span>`;
+                    ratingEl.innerHTML = `<strong class="${colorClass}">${displayNota}</strong> <span class="text-primary ml-1" style="font-size:0.75rem;">(${t('Ver notas')})</span>`;
                 } else {
-                    ratingEl.innerHTML = `<span class="text-muted">Sin valoraciones</span>`;
+                    ratingEl.innerHTML = `<span class="text-muted">${t('Sin valoraciones')}</span>`;
                 }
                 ratingEl.href = `/admin/worker/${item.worker_id}/ratings_history`;
 
@@ -658,7 +709,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     btnVerCal = document.createElement('a');
                     btnVerCal.id = 'btn-ver-calendario';
                     btnVerCal.className = 'btn btn-info btn-sm btn-block mt-2 font-weight-bold text-white shadow-sm';
-                    btnVerCal.innerHTML = '<i class="fas fa-calendar-alt mr-1"></i> Ver Calendario';
+                    btnVerCal.innerHTML = '<i class="fas fa-calendar-alt mr-1"></i> ' + t('Ver Calendario');
                     btnVerCal.style.cursor = 'pointer';
                     popover.appendChild(btnVerCal); 
                     
@@ -714,7 +765,7 @@ document.addEventListener('DOMContentLoaded', function() {
             let hoy = moment().startOf('day');
             
             if (clickedDate.isBefore(hoy)) {
-                Swal.fire('Atención', 'Haz doble clic en un día a partir de hoy.', 'info');
+                Swal.fire(t('Atención'), t('Haz doble clic en un día a partir de hoy.'), 'info');
                 return;
             }
 
@@ -725,7 +776,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 let newItem = {
                     id: 'phantom_new',
                     group: props.group,
-                    content: `<i class="fas fa-plus-circle mr-1"></i> Arrastra y Doble Clic`,
+                    content: `<i class="fas fa-plus-circle mr-1"></i> ${t('Arrastra y Doble Clic')}`,
                     start: clickedDate.toDate(),
                     end: clickedDate.clone().add(1, 'days').toDate(),
                     worker_id: 'NEW',
@@ -868,7 +919,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let $jefeSelect = $('#jefeSelect');
         
         $obrasSelect.select2({
-            placeholder: 'Buscar obras…',
+            placeholder: t('Buscar obras…'),
             allowClear: true,
             width: '100%',
             dropdownParent: $(document.body),
@@ -881,7 +932,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if ($jefeSelect.is(':visible') && $jefeSelect.find('option').length > 1) {
             $jefeSelect.select2({
-                placeholder: 'Todos los jefes',
+                placeholder: t('Todos los jefes'),
                 allowClear: true,
                 width: '100%',
                 minimumResultsForSearch: 6,
@@ -987,14 +1038,14 @@ document.addEventListener('DOMContentLoaded', function() {
             let $btnText = $('#empresas-btn-text');
             
             if (checked === total) {
-                $btnText.text('Todas las empresas');
+                $btnText.text(t('Todas las empresas'));
             } else if (checked === 0) {
-                $btnText.text('Ninguna seleccionada');
+                $btnText.text(t('Ninguna seleccionada'));
             } else if (checked === 1) {
                 let name = $('.chk-empresa-filter:checked').next('label').text().trim().replace('⭐', '');
                 $btnText.text(name);
             } else {
-                $btnText.text(checked + ' seleccionadas');
+                $btnText.text(checked + ' ' + t('seleccionadas'));
             }
         }
 
@@ -1050,7 +1101,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (revertFunc) revertFunc();
                         return;
                     }
-                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: data.message || 'Guardado', showConfirmButton: false, timer: 1500});
+                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: data.message || t('Guardado'), showConfirmButton: false, timer: 1500});
                     pendingAction = null; 
                     pendingRevert = null;
                     if (successCallback) successCallback();
@@ -1180,7 +1231,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.desasignarDesdePop = function(mode) {
         if (window.PLANIFICADOR_CAN_EDIT === false) {
             if (typeof Swal !== 'undefined') {
-                Swal.fire('Sin permiso', 'No tienes permisos de escritura en el planificador.', 'warning');
+                Swal.fire(t('Sin permiso'), t('No tienes permisos de escritura en el planificador.'), 'warning');
             }
             return;
         }
@@ -1199,7 +1250,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mode === 'periodo') {
             // 1. Si TODO el bloque está en el pasado, lo bloqueamos de raíz
             if (endDate.isBefore(hoy)) {
-                Swal.fire('Histórico Protegido', 'Este bloque pertenece íntegramente al pasado y no se puede borrar.', 'info');
+                Swal.fire(t('Histórico Protegido'), t('Este bloque pertenece íntegramente al pasado y no se puede borrar.'), 'info');
                 return;
             }
 
@@ -1216,10 +1267,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 3. Avisamos visualmente de que le estamos salvando el histórico
             let msjExtra = startDate.isBefore(hoy) 
-                ? `<br><br><small class="text-info"><i class="fas fa-info-circle"></i> Se conservará el histórico de trabajo desde el ${startDate.format('DD/MM')} hasta ayer.</small>` 
+                ? `<br><br><small class="text-info"><i class="fas fa-info-circle"></i> ${t('Se conservará el histórico de trabajo desde el')} ${startDate.format('DD/MM')} ${t('hasta ayer.')}</small>` 
                 : '';
             
-            lanzarConfirmacionBaja(workerId, obraId, dates, `Se van a eliminar ${dates.length} días de asignación.` + msjExtra);
+            lanzarConfirmacionBaja(workerId, obraId, dates, `${t('Se van a eliminar')} ${dates.length} ${t('días de asignación.')}` + msjExtra);
             
         } else if (mode === 'futuro') {
             let maxEnd = endDate.clone();
@@ -1231,7 +1282,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             if (maxEnd.isBefore(hoy)) {
-                Swal.fire('Atención', 'Este trabajador no tiene asignaciones futuras en esta obra. No hay nada que dar de baja.', 'info');
+                Swal.fire(t('Atención'), t('Este trabajador no tiene asignaciones futuras en esta obra. No hay nada que dar de baja.'), 'info');
                 return;
             }
 
@@ -1240,24 +1291,24 @@ document.addEventListener('DOMContentLoaded', function() {
             let hoyStr = hoy.format('YYYY-MM-DD');
             
             Swal.fire({
-                title: 'Seleccionar Fecha de Baja',
+                title: t('Seleccionar Fecha de Baja'),
                 html: `
-                    <p class="mb-3 text-muted small">Elige a partir de qué día (incluido) quieres eliminar las asignaciones futuras.</p>
+                    <p class="mb-3 text-muted small">${t('Elige a partir de qué día (incluido) quieres eliminar las asignaciones futuras.')}</p>
                     <input type="date" id="input-fecha-baja" class="form-control text-center font-weight-bold" value="${hoyStr}" min="${hoyStr}">
                 `,
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
                 cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Continuar',
-                cancelButtonText: 'Cancelar',
+                confirmButtonText: t('Continuar'),
+                cancelButtonText: t('Cancelar'),
                 preConfirm: () => {
                     let val = document.getElementById('input-fecha-baja').value;
                     if (!val) {
-                        Swal.showValidationMessage('Debes seleccionar una fecha válida');
+                        Swal.showValidationMessage(t('Debes seleccionar una fecha válida'));
                     } else if (moment(val).startOf('day').isBefore(hoy)) {
                         // PROTECCIÓN FRONT: Por si intentan trampear el input escribiendo a mano
-                        Swal.showValidationMessage('No puedes dar de baja en una fecha pasada');
+                        Swal.showValidationMessage(t('No puedes dar de baja en una fecha pasada'));
                     }
                     return val;
                 }
@@ -1266,7 +1317,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     let selectedDate = moment(result.value).startOf('day');
                     
                     if (selectedDate.isAfter(maxEnd)) {
-                        Swal.fire('Aviso', 'La fecha seleccionada es posterior al último día que tiene asignado. No hay nada que borrar.', 'info');
+                        Swal.fire(t('Aviso'), t('La fecha seleccionada es posterior al último día que tiene asignado. No hay nada que borrar.'), 'info');
                         return;
                     }
 
@@ -1277,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         current.add(1, 'days');
                     }
 
-                    lanzarConfirmacionBaja(workerId, obraId, dates, `Se van a eliminar ${dates.length} días de asignación a partir del ${selectedDate.format('DD/MM/YYYY')}.`);
+                    lanzarConfirmacionBaja(workerId, obraId, dates, `${t('Se van a eliminar')} ${dates.length} ${t('días de asignación a partir del')} ${selectedDate.format('DD/MM/YYYY')}.`);
                 }
             });
         }
@@ -1286,14 +1337,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Función auxiliar para no repetir código de borrado
     function lanzarConfirmacionBaja(workerId, obraId, dates, mensajeTexto) {
         Swal.fire({
-            title: '¿Confirmar Desasignación?',
-            text: mensajeTexto + ' Esta acción es inmediata.',
+            title: t('¿Confirmar Desasignación?'),
+            text: mensajeTexto + ' ' + t('Esta acción es inmediata.'),
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
             cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Sí, desasignar',
-            cancelButtonText: 'Cancelar'
+            confirmButtonText: t('Sí, desasignar'),
+            cancelButtonText: t('Cancelar')
         }).then((result) => {
             if (result.isConfirmed) {
                 document.getElementById('worker-popover').classList.add('d-none');
@@ -1311,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        Swal.fire('Completado', data.message, 'success');
+                        Swal.fire(t('Completado'), data.message, 'success');
                         window.loadTimelineData(); 
                     } else {
                         Swal.fire(t('Error'), data.message || t('Ocurrió un error'), 'error');
@@ -1379,7 +1430,7 @@ document.addEventListener('DOMContentLoaded', function() {
             toast: true,
             position: 'top-end',
             icon: 'success',
-            title: 'Vista ordenada',
+            title: t('Vista ordenada'),
             showConfirmButton: false,
             timer: 1500
         });

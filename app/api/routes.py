@@ -4,6 +4,7 @@ from flask_login import login_required, current_user
 from app import db 
 from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_OPERARIO
 from app.services.permission_service import is_laboral
+from app.services.i18n_service import translate
 from app.decorators import roles_required_api
 from datetime import datetime, timedelta
 import json
@@ -58,10 +59,10 @@ def _autorizar_calendario(context, entity_id):
             and entity_id == current_user.id
         ):
             return None
-        return jsonify({'success': False, 'error': 'Acceso no autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
 
     if current_user.role not in _ROLES_OFICINA:
-        return jsonify({'success': False, 'error': 'Acceso no autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
 
     if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return None
@@ -70,12 +71,12 @@ def _autorizar_calendario(context, entity_id):
     if context == 'obra':
         obra = Obra.query.get(entity_id)
         if not obra or obra.jefe_obra_id != current_user.id:
-            return jsonify({'success': False, 'error': 'No tienes permiso sobre esta obra'}), 403
+            return jsonify({'success': False, 'error': translate('No tienes permiso sobre esta obra')}), 403
     elif context == 'worker':
         if not _jefe_puede_ver_worker(entity_id):
-            return jsonify({'success': False, 'error': 'No tienes permiso sobre este trabajador'}), 403
+            return jsonify({'success': False, 'error': translate('No tienes permiso sobre este trabajador')}), 403
     elif context == 'empresa':
-        return jsonify({'success': False, 'error': 'Acceso no autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
     # vehiculo / solicitud: el jefe puede consultar (planificación compartida)
     return None
 
@@ -131,7 +132,7 @@ def recursos_activos():
 @login_required
 def toggle_pin_obra():
     if is_laboral(current_user):
-        return jsonify({'success': False, 'message': 'Modo solo lectura'}), 403
+        return jsonify({'success': False, 'message': translate('Modo solo lectura')}), 403
     data = request.get_json()
     obra_id = data.get('obra_id')
     if not obra_id: return jsonify({'success': False}), 400
@@ -150,7 +151,7 @@ def toggle_pin_obra():
 @login_required
 def reorder_pinned_obras():
     if is_laboral(current_user):
-        return jsonify({'success': False, 'message': 'Modo solo lectura'}), 403
+        return jsonify({'success': False, 'message': translate('Modo solo lectura')}), 403
     data = request.get_json()
     ordered_ids = data.get('ordered_ids', [])
     if not ordered_ids: return jsonify({'success': False})
@@ -218,7 +219,7 @@ def sidebar_prefs_api():
         return jsonify({'success': False, 'message': str(exc)}), 400
     except Exception as exc:
         db.session.rollback()
-        return jsonify({'success': False, 'message': f'Error al guardar: {exc}'}), 500
+        return jsonify({'success': False, 'message': translate('Error al guardar: {error}', error=exc)}), 500
 
     # Devolver nav resuelto para refrescar sin recargar si se quiere
     nav = build_sidebar_nav(current_user, ctx)
@@ -1379,11 +1380,11 @@ def person_day_timeline(user_id, fecha_str):
     from app.services.person_day_timeline_service import build_person_day_timeline
 
     if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
     data = build_person_day_timeline(user_id, fecha_str)
     if not data:
-        return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+        return jsonify({'success': False, 'error': translate('Operario no encontrado')}), 404
     return jsonify(data)
 
 
@@ -1394,7 +1395,7 @@ def person_day_timeline_range(user_id):
     from app.services.person_day_timeline_service import build_person_day_timeline_range
 
     if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
     fecha_from = request.args.get('from') or request.args.get('fecha_inicio')
     fecha_to = request.args.get('to') or request.args.get('fecha_fin')
@@ -1402,7 +1403,7 @@ def person_day_timeline_range(user_id):
     if not fecha_from and not fecha_to:
         return jsonify({
             'success': False,
-            'error': 'Indica from y/o to (YYYY-MM-DD)',
+            'error': translate('Indica from y/o to (YYYY-MM-DD)'),
         }), 400
 
     if fecha_from and not fecha_to:
@@ -1412,7 +1413,7 @@ def person_day_timeline_range(user_id):
 
     data = build_person_day_timeline_range(user_id, fecha_from, fecha_to)
     if data is None:
-        return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+        return jsonify({'success': False, 'error': translate('Operario no encontrado')}), 404
     if not data.get('success'):
         return jsonify(data), 400
     return jsonify(data)

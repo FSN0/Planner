@@ -248,12 +248,25 @@ la integración se habla como proyecto desde <a href="/contacto">contacto</a>.</
 }
 
 
-def list_articles():
-    return [
-        {"slug": slug, **{k: v for k, v in meta.items() if k != "body_html"}}
-        for slug, meta in SEO_ARTICLES.items()
-    ]
+def list_articles(locale: str = None):
+    from app.marketing.seo_i18n import localize_article
+    from app.services.i18n_service import get_locale
+
+    loc = locale or get_locale()
+    items = []
+    for slug, meta in SEO_ARTICLES.items():
+        localized = localize_article(meta, slug, loc)
+        items.append(
+            {"slug": slug, **{k: v for k, v in localized.items() if k != "body_html"}}
+        )
+    return items
 
 
-def get_article(slug: str):
-    return SEO_ARTICLES.get(slug)
+def get_article(slug: str, locale: str = None):
+    from app.marketing.seo_i18n import localize_article
+    from app.services.i18n_service import get_locale
+
+    article = SEO_ARTICLES.get(slug)
+    if article is None:
+        return None
+    return localize_article(article, slug, locale or get_locale())

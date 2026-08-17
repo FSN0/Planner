@@ -1,4 +1,4 @@
-const t = window.SP_T || function (key) { return key; };
+var t = window.SP_T || function (key) { return key; };
 
 class UniversalCalendarManager {
     constructor(elementId, config) {
@@ -48,23 +48,23 @@ class UniversalCalendarManager {
         if (!this.readonly) {
             let icon = 'fa-calendar-alt';
             let typeName = t('Elemento');
-            let prep = 'de';
+            let prep = t('de');
             let headerUrl = null;
             
             if (this.context === 'obra') { 
-                icon = 'fa-building'; typeName = t('Obra'); prep = 'de la'; 
+                icon = 'fa-building'; typeName = t('Obra'); prep = t('de la'); 
                 headerUrl = `/admin/obra_panel/${this.entityId}`;
             }
             else if (this.context === 'worker') { 
-                icon = 'fa-hard-hat'; typeName = t('Empleado'); prep = 'del'; 
+                icon = 'fa-hard-hat'; typeName = t('Empleado'); prep = t('del'); 
                 headerUrl = `/admin/worker_panel/${this.entityId}`;
             }
             else if (this.context === 'empresa') { 
-                icon = 'fa-briefcase'; typeName = t('Empresa'); prep = 'de la'; 
+                icon = 'fa-briefcase'; typeName = t('Empresa'); prep = t('de la'); 
                 headerUrl = `/admin/company_panel/${this.entityId}`;
             }
             else if (this.context === 'vehiculo') {
-                icon = 'fa-car'; typeName = t('Vehículo'); prep = 'del';
+                icon = 'fa-car'; typeName = t('Vehículo'); prep = t('del');
                 headerUrl = `/admin/vehicle_panel/${this.entityId}`;
             }
 
@@ -269,7 +269,7 @@ class UniversalCalendarManager {
                 }
                 if (props.type === 'vehiculo' || props.type === 'vehiculo_odoo') {
                     const tip = props.vehiculo_label
-                        ? `Vehículo: ${props.vehiculo_label}${props.km != null ? ' · ' + Math.round(props.km) + ' km' : ''}`
+                        ? `${t('Vehículo')}: ${props.vehiculo_label}${props.km != null ? ' · ' + Math.round(props.km) + ' km' : ''}`
                         : t('Vehículo');
                     innerHtml += `<i class="fas fa-car" title="${tip}" style="margin-right:3px; flex-shrink:0; opacity:0.95;"></i>`;
                     const evPadVeh = _this.compact ? '0 1px' : '2px 4px';
@@ -542,7 +542,12 @@ class UniversalCalendarManager {
             }
         };
 
-        this.calendar = new FullCalendar.Calendar(this.element, calendarConfig);
+        try {
+            this.calendar = new FullCalendar.Calendar(this.element, calendarConfig);
+        } catch (err) {
+            calendarConfig.locale = 'es';
+            this.calendar = new FullCalendar.Calendar(this.element, calendarConfig);
+        }
         this.calendar.render();
 
         if (!this.readonly) {
@@ -740,8 +745,8 @@ class UniversalCalendarManager {
         }
 
         let selectLabel = (this.context === 'vehiculo')
-            ? 'Trabajador a asignar'
-            : 'Obra destino';
+            ? t('Trabajador a asignar')
+            : t('Obra destino');
 
         this._destroySelect2In(container);
         const existingSelect = $(`#${this.panelId}-select`);
@@ -1055,6 +1060,7 @@ class UniversalCalendarManager {
                 if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Indica fecha de inicio y fin.'), 'warning');
                 return;
             }
+            const TIPO_VACACIONES = 'Vacaciones';
             const doSave = (tipo) => {
                 fetch('/api/v6/ausencias', {
                     method: 'POST',
@@ -1066,7 +1072,7 @@ class UniversalCalendarManager {
                         worker_id: this.entityId,
                         fecha_inicio: startVal,
                         fecha_fin: endVal,
-                        tipo: tipo || t('Vacaciones'),
+                        tipo: tipo || TIPO_VACACIONES,
                     }),
                 })
                 .then((r) => r.json())
@@ -1096,16 +1102,19 @@ class UniversalCalendarManager {
                 Swal.fire({
                     title: t('Marcar ausencia'),
                     input: 'text',
-                    inputValue: t('Vacaciones'),
+                    inputValue: t(TIPO_VACACIONES),
                     inputPlaceholder: t('Tipo (Vacaciones, Baja…)'),
                     showCancelButton: true,
                     confirmButtonText: t('Guardar'),
                     cancelButtonText: t('Cancelar'),
                 }).then((result) => {
-                    if (result.isConfirmed) doSave(result.value || t('Vacaciones'));
+                    if (result.isConfirmed) {
+                        var raw = String(result.value || '').trim();
+                        doSave(!raw || raw === t(TIPO_VACACIONES) ? TIPO_VACACIONES : raw);
+                    }
                 });
             } else {
-                doSave(t('Vacaciones'));
+                doSave(TIPO_VACACIONES);
             }
         });
 
@@ -1140,7 +1149,7 @@ class UniversalCalendarManager {
 
                 if (this.context === 'vehiculo') {
                     if (!selVal || String(selVal) === 'GENERICO') {
-                        Swal.fire('Atención', 'Selecciona un operario para asignar el vehículo.', 'warning');
+                        Swal.fire(t('Atención'), t('Selecciona un operario para asignar el vehículo.'), 'warning');
                         return;
                     }
                     const vPayload = {
@@ -1155,7 +1164,7 @@ class UniversalCalendarManager {
                     this.executeVehicleSave(vPayload, (vres) => {
                         if (!vres || !vres.success) return;
                         if (typeof Swal !== 'undefined') {
-                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Vehículo asignado', showConfirmButton: false, timer: 1800});
+                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Vehículo asignado'), showConfirmButton: false, timer: 1800});
                         }
                         this.calendar.refetchEvents(); this.hidePanel();
                         if (window.loadTimelineData) window.loadTimelineData();
@@ -1165,7 +1174,7 @@ class UniversalCalendarManager {
 
                 if (this.context === 'worker') {
                     if (!selVal && !vehicleVal) {
-                        Swal.fire('Atención', 'Selecciona una obra y/o un vehículo, o usa «Marcar vacaciones».', 'warning');
+                        Swal.fire(t('Atención'), t('Selecciona una obra y/o un vehículo, o usa «Marcar vacaciones».'), 'warning');
                         return;
                     }
                 }
@@ -1231,7 +1240,7 @@ class UniversalCalendarManager {
                 }
 
                 if (this.context !== 'worker' && !selVal) {
-                    Swal.fire('Atención', 'Debes seleccionar un destino/trabajador.', 'warning');
+                    Swal.fire(t('Atención'), t('Debes seleccionar un destino/trabajador.'), 'warning');
                     return;
                 }
 
@@ -1300,7 +1309,7 @@ class UniversalCalendarManager {
                     runVehicleSave((vres) => {
                         if (!vres || !vres.success) return;
                         if (typeof Swal !== 'undefined') {
-                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Vehículo guardado', showConfirmButton: false, timer: 1800});
+                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Vehículo guardado'), showConfirmButton: false, timer: 1800});
                         }
                         afterSave();
                     });
@@ -1338,7 +1347,7 @@ class UniversalCalendarManager {
 
                 if (this.context === 'worker') {
                     if (!selVal) {
-                        if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Debes seleccionar una obra.', 'warning');
+                        if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Debes seleccionar una obra.'), 'warning');
                         return;
                     }
                     payload.worker_id = this.entityId;
@@ -1346,7 +1355,7 @@ class UniversalCalendarManager {
                     payload.target_obra_id = selVal;
                 } else if (this.context === 'vehiculo') {
                     if (!selVal || String(selVal) === 'GENERICO') {
-                        if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Selecciona un operario.', 'warning');
+                        if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Selecciona un operario.'), 'warning');
                         return;
                     }
                     const oldWorkerId = props.worker_id;
@@ -1367,7 +1376,7 @@ class UniversalCalendarManager {
                         this.executeVehicleSave(vPayload, (vres) => {
                             if (!vres || !vres.success) return;
                             if (typeof Swal !== 'undefined') {
-                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Guardado', showConfirmButton: false, timer: 1500});
+                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Guardado'), showConfirmButton: false, timer: 1500});
                             }
                             afterVehicleSave();
                         });
@@ -1402,7 +1411,7 @@ class UniversalCalendarManager {
                     return;
                 } else if (this.context === 'obra') {
                     if (!selVal) {
-                        if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Debes seleccionar un trabajador.', 'warning');
+                        if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Debes seleccionar un trabajador.'), 'warning');
                         return;
                     }
                     const oldWorkerId = props.worker_id;
@@ -1414,7 +1423,7 @@ class UniversalCalendarManager {
                     if (oldWorkerId && String(selVal) !== String(oldWorkerId) && String(selVal) !== 'GENERICO') {
                         const dates = this._buildEditableDates(startVal, endVal);
                         if (!dates.length) {
-                            if (typeof Swal !== 'undefined') Swal.fire('Histórico Protegido', 'No hay días futuros editables en este bloque.', 'info');
+                            if (typeof Swal !== 'undefined') Swal.fire(t('Histórico Protegido'), t('No hay días futuros editables en este bloque.'), 'info');
                             return;
                         }
                         this._unassignThenSave(oldWorkerId, this.entityId, dates, payload, afterSave);
@@ -1446,7 +1455,7 @@ class UniversalCalendarManager {
             let daysCount = Math.max(0, end.diff(start, 'days') + 1);
             
             if (daysCount <= 0) {
-                if (typeof Swal !== 'undefined') Swal.fire('Histórico Protegido', 'Este bloque pertenece íntegramente al pasado y no se puede borrar.', 'info');
+                if (typeof Swal !== 'undefined') Swal.fire(t('Histórico Protegido'), t('Este bloque pertenece íntegramente al pasado y no se puede borrar.'), 'info');
                 return;
             }
 
@@ -1459,17 +1468,17 @@ class UniversalCalendarManager {
 
             if (typeof Swal !== 'undefined') {
                 let msg = originalStart.isBefore(today) 
-                    ? `Se conservará el histórico pasado, pero se vaciarán <b class="text-danger">${daysCount} día(s)</b> desde hoy en adelante.` 
-                    : `Se vaciarán <b class="text-danger">${daysCount} día(s)</b>.`;
+                    ? `${t('Se conservará el histórico pasado, pero se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('desde hoy en adelante.')}` 
+                    : `${t('Se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b>.`;
 
                 const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
                 Swal.fire(swalBase({
-                    title: '¿Desasignar bloque?',
+                    title: t('¿Desasignar bloque?'),
                     html: msg,
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: 'Sí, borrar',
-                    cancelButtonText: 'Cancelar',
+                    confirmButtonText: t('Sí, borrar'),
+                    cancelButtonText: t('Cancelar'),
                     customClass: {
                         popup: 'admin-swal-popup',
                         title: 'admin-swal-title',
@@ -1499,7 +1508,7 @@ class UniversalCalendarManager {
                                 accion: 'DESASIGNAR',
                             }, (vres) => {
                                 if (!vres || !vres.success) return;
-                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || 'Desasignado', showConfirmButton: false, timer: 1500});
+                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Desasignado'), showConfirmButton: false, timer: 1500});
                                 this.calendar.refetchEvents(); this.hidePanel();
                                 if (window.loadTimelineData) window.loadTimelineData();
                             });
@@ -1517,7 +1526,7 @@ class UniversalCalendarManager {
                                 body: JSON.stringify({ worker_id: wId, obra_id: oId, dates: dates, mode: 'selected' })
                             }).then(r=>r.json()).then(data => {
                                 if(data.success) {
-                                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Borrado', showConfirmButton: false, timer: 1500});
+                                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: t('Borrado'), showConfirmButton: false, timer: 1500});
                                     this.calendar.refetchEvents(); this.hidePanel();
                                     if (window.loadTimelineData) window.loadTimelineData();
                                 } else { Swal.fire(t('Error'), data.message, 'error'); }
@@ -1630,19 +1639,19 @@ class UniversalCalendarManager {
         if (this.context === 'obra' && pf.workerId) {
             const val = String(pf.workerId);
             if (!$select.find(`option[value="${val}"]`).length) {
-                $select.append(new Option(pf.workerName || 'Operario', val, true, true));
+                $select.append(new Option(pf.workerName || t('Operario'), val, true, true));
             }
             $select.val(val).trigger('change');
         } else if (this.context === 'vehiculo' && pf.workerId) {
             const val = String(pf.workerId);
             if (!$select.find(`option[value="${val}"]`).length) {
-                $select.append(new Option(pf.workerName || 'Operario', val, true, true));
+                $select.append(new Option(pf.workerName || t('Operario'), val, true, true));
             }
             $select.val(val).trigger('change');
         } else if (this.context === 'worker' && pf.obraId) {
             const val = String(pf.obraId);
             if (!$select.find(`option[value="${val}"]`).length) {
-                $select.append(new Option(pf.obraName || 'Obra', val, true, true));
+                $select.append(new Option(pf.obraName || t('Obra'), val, true, true));
             }
             $select.val(val).trigger('change');
         }
@@ -1663,7 +1672,7 @@ class UniversalCalendarManager {
         let endStr = moment(dateStr).add(1, 'days').format('YYYY-MM-DD');
 
         let ghost = this.calendar.addEvent({
-            id: this.ghostEventId, title: 'NUEVA ASIGNACIÓN', start: dateStr, end: endStr,
+            id: this.ghostEventId, title: t('NUEVA ASIGNACIÓN'), start: dateStr, end: endStr,
             className: 'fc-ghost-event', editable: true, extendedProps: { isGhost: 1 }
         });
 
@@ -1677,7 +1686,7 @@ class UniversalCalendarManager {
         let endObj = moment(endStr).add(1, 'days').format('YYYY-MM-DD'); 
         
         let ghost = this.calendar.addEvent({
-            id: this.ghostEventId, title: 'NUEVA ASIGNACIÓN', start: startStr, end: endObj,
+            id: this.ghostEventId, title: t('NUEVA ASIGNACIÓN'), start: startStr, end: endObj,
             className: 'fc-ghost-event', editable: true, extendedProps: { isGhost: 1 }
         });
         this.showBottomPanel(ghost, true);
@@ -1733,7 +1742,7 @@ class UniversalCalendarManager {
                 if (res.success) {
                     if (!options.skipHideOnSuccess) {
                         if (!options.skipSuccessToast && typeof Swal !== 'undefined') {
-                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Guardado', showConfirmButton: false, timer: 1500});
+                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: t('Guardado'), showConfirmButton: false, timer: 1500});
                         }
                         this.calendar.refetchEvents();
                         this.hidePanel();
@@ -1791,12 +1800,12 @@ class UniversalCalendarManager {
                         detailHtml += '</ul>';
                     }
                     Swal.fire({
-                        title: 'Conflicto de vehículo',
+                        title: t('Conflicto de vehículo'),
                         html: (res.message || '') + detailHtml,
                         icon: 'warning',
                         showCancelButton: true,
-                        confirmButtonText: 'Sobrescribir',
-                        cancelButtonText: 'Cancelar',
+                        confirmButtonText: t('Sobrescribir'),
+                        cancelButtonText: t('Cancelar'),
                     }).then((result) => {
                         if (result.isConfirmed) {
                             const next = Object.assign({}, payload, { overwrite_mode: 'overwrite' });

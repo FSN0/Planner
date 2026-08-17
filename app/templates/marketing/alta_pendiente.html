@@ -1,52 +1,46 @@
 <!DOCTYPE html>
 <html lang="{{ current_locale|default('es') }}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% if email_enviado %}Verifica tu correo{% else %}Cuenta creada{% endif %} — SignaPlan</title>
+    {% set page_title = _('alta_pendiente.seo_title_verify') if email_enviado else _('alta_pendiente.seo_title_created') %}
+    {% set meta_description = _('alta_pendiente.seo_desc') %}
+    {% set noindex = true %}
+    {% include "components/_marketing_seo_head.html" %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% include "components/_brand_logo.html" %}
         </a>
     </header>
     <section class="mkt-form-wrap">
         {% if email_enviado %}
-        <h1>Revisa tu correo</h1>
+        <h1>{{ _('alta_pendiente.h1_verify') }}</h1>
         <p>
-            Hemos creado el espacio <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
-            Te hemos enviado un enlace de verificación a <strong>{{ email }}</strong>.
+            {{ _('alta_pendiente.created_space') }} <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
+            {{ _('alta_pendiente.sent_link') }} <strong>{{ email }}</strong>.
         </p>
-        <p>
-            Ya puedes entrar con tu correo y contraseña. Verifica el correo cuando puedas:
-            hasta entonces algunas acciones (como dar de alta usuarios) estarán limitadas.
-            Si no ves el mensaje, revisa spam o la carpeta de promociones.
-        </p>
+        <p>{{ _('alta_pendiente.verify_later') }}</p>
         {% else %}
-        <h1>Cuenta creada</h1>
+        <h1>{{ _('alta_pendiente.h1_created') }}</h1>
         <p>
-            Hemos creado el espacio <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %},
-            pero <strong>no hemos podido enviar</strong> el correo de verificación a
-            <strong>{{ email }}</strong> (problema temporal de correo).
+            {{ _('alta_pendiente.created_space') }} <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %},
+            {{ _('alta_pendiente.email_failed') }}
+            <strong>{{ email }}</strong>.
         </p>
-        <p>
-            Entra con tu correo y contraseña. Desde tu panel podrás reenviar el enlace de verificación.
-            Si el correo no llega, contacta con soporte.
-        </p>
+        <p>{{ _('alta_pendiente.login_anyway') }}</p>
         {% endif %}
 
-        <form method="POST" action="{{ url_for('marketing.reenviar_verificacion') }}"
+        <form method="POST" action="{{ mkt_url('marketing.reenviar_verificacion') }}"
               style="margin-top:1.25rem;padding:1rem;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="email" value="{{ email }}">
             <input type="hidden" name="subdomain" value="{{ subdomain }}">
             <p style="margin:0 0 .75rem;font-size:.95rem;color:#475569;">
-                ¿No te ha llegado el enlace?
+                {{ _('alta_pendiente.no_link') }}
             </p>
             <button type="submit" class="mkt-btn mkt-btn-secondary" style="width:100%;">
-                Reenviar correo de verificación
+                {{ _('alta_pendiente.resend') }}
             </button>
         </form>
 
@@ -60,14 +54,13 @@
 
         <p style="margin-top:1.5rem;">
             <a class="mkt-btn mkt-btn-primary" href="{{ login_url }}">
-                Ir al acceso de tu empresa
+                {{ _('alta_pendiente.go_login') }}
             </a>
         </p>
         <p style="margin-top:1.25rem;color:#64748b;font-size:.95rem;">
-            Si sales de esta página y no encuentras el correo,
-            vuelve a <a href="{{ url_for('marketing.entrar') }}"><strong>Entrar</strong></a>
-            en signaplan.com: con tu email te reenviamos el acceso
-            (y el enlace de verificación si aún no lo has confirmado).
+            {{ _('alta_pendiente.if_lost') }}
+            <a href="{{ mkt_url('marketing.entrar') }}"><strong>{{ _('nav.login') }}</strong></a>
+            {{ _('alta_pendiente.if_lost_2') }}
         </p>
     </section>
     <footer class="mkt-footer">

@@ -28,6 +28,7 @@ from app.services.fichaje_ledger_service import (
     verificar_cadena,
     vigentes,
 )
+from app.services.i18n_service import translate
 from app.utils.timezone_utils import format_time, today_local, utc_now
 
 MAX_DIAS_INFORME = 366
@@ -56,7 +57,7 @@ def _parse_fecha(valor, nombre):
         return datetime.strptime(str(valor), '%Y-%m-%d').date()
     except (TypeError, ValueError) as exc:
         raise FichajeInformeError(
-            f'La fecha «{nombre}» no es válida.'
+            translate('La fecha «{nombre}» no es válida.', nombre=nombre)
         ) from exc
 
 
@@ -167,7 +168,7 @@ def generar_informe(desde, hasta, user_id=None, company_id=None, tenant_nombre=N
         desde, hasta = hasta, desde
     if (hasta - desde).days > MAX_DIAS_INFORME:
         raise FichajeInformeError(
-            f'El periodo no puede superar {MAX_DIAS_INFORME} días.'
+            translate('El periodo no puede superar {n} días.', n=MAX_DIAS_INFORME)
         )
     if hasta > today_local():
         hasta = today_local()
@@ -304,12 +305,12 @@ def _huella_informe(*, tenant_nombre, desde, hasta, trabajadores, incidencias, g
 
 
 def etiquetar_tipo(tipo):
-    return _ETIQUETAS_TIPO.get(tipo, tipo)
+    return translate(_ETIQUETAS_TIPO.get(tipo, tipo))
 
 
 def formatear_horas(minutos):
     minutos = max(int(minutos or 0), 0)
-    return f'{minutos // 60} h {minutos % 60:02d} min'
+    return translate('{h} h {m:02d} min', h=minutos // 60, m=minutos % 60)
 
 
 def informe_a_csv(informe):
@@ -317,9 +318,12 @@ def informe_a_csv(informe):
     buffer = io.StringIO()
     escritor = csv.writer(buffer, delimiter=';')
     escritor.writerow([
-        'Empresa', 'NIF empresa', 'Trabajador', 'DNI', 'Empresa del trabajador',
-        'Fecha', 'Entrada', 'Salida', 'Horas netas', 'Pausas (min)', 'Detalle pausas',
-        'Obra', 'Conforme trabajador', 'Fecha conforme', 'Correcciones',
+        translate('Empresa'), translate('NIF empresa'), translate('Trabajador'),
+        translate('DNI'), translate('Empresa del trabajador'),
+        translate('Fecha'), translate('Entrada'), translate('Salida'),
+        translate('Horas netas'), translate('Pausas (min)'), translate('Detalle pausas'),
+        translate('Obra'), translate('Conforme trabajador'), translate('Fecha conforme'),
+        translate('Correcciones'),
     ])
 
     nombre_empresa = (
@@ -332,13 +336,18 @@ def informe_a_csv(informe):
     for t in informe['trabajadores']:
         for d in t['dias']:
             detalle_pausas = '; '.join(
-                f"{format_time(p['inicio'])}-{format_time(p['fin'])} ({p['minutos']} min)"
+                translate(
+                    '{start}-{end} ({n} min)',
+                    start=format_time(p['inicio']),
+                    end=format_time(p['fin']),
+                    n=p['minutos'],
+                )
                 for p in (d.get('pausas') or [])
             )
             if d.get('pausa_abierta'):
                 detalle_pausas = (
                     (detalle_pausas + '; ' if detalle_pausas else '')
-                    + f"Abierta desde {format_time(d['pausa_abierta'])}"
+                    + translate('Abierta desde {time}', time=format_time(d['pausa_abierta']))
                 )
             escritor.writerow([
                 nombre_empresa,
@@ -353,24 +362,26 @@ def informe_a_csv(informe):
                 str(d.get('minutos_pausas') or 0),
                 detalle_pausas,
                 d['obra_nombre'] or '',
-                'Sí' if d.get('conforme') else 'No',
+                translate('Sí') if d.get('conforme') else translate('No'),
                 format_time(d['conforme_en']) if d.get('conforme_en') else '',
-                'Sí' if d['tiene_correcciones'] else 'No',
+                translate('Sí') if d['tiene_correcciones'] else translate('No'),
             ])
 
     escritor.writerow([])
-    escritor.writerow(['Total horas', f"{informe['minutos_totales'] / 60:.2f}".replace('.', ',')])
+    escritor.writerow([translate('Total horas'), f"{informe['minutos_totales'] / 60:.2f}".replace('.', ',')])
     escritor.writerow([
-        'Cadena de integridad',
-        'Íntegra' if informe['cadena_integra'] else f"{len(informe['incidencias_cadena'])} incidencia(s)",
+        translate('Cadena de integridad'),
+        translate('Íntegra') if informe['cadena_integra'] else translate(
+            '{n} incidencia(s)', n=len(informe['incidencias_cadena'])
+        ),
     ])
-    escritor.writerow(['Huella del informe', informe['huella']])
+    escritor.writerow([translate('Huella del informe'), informe['huella']])
     escritor.writerow([
-        'Generado el',
+        translate('Generado el'),
         informe['generado_en'].strftime('%d/%m/%Y %H:%M:%S') + ' UTC',
     ])
     escritor.writerow([
-        'Periodo',
+        translate('Periodo'),
         f"{informe['desde'].strftime('%d/%m/%Y')} — {informe['hasta'].strftime('%d/%m/%Y')}",
     ])
 

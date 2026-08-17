@@ -1,52 +1,23 @@
 {% extends "marketing/legal_base.html" %}
 {% block legal_content %}
-<h2>1. Titular del sitio</h2>
-<p>
-    El sitio web <strong>signaplan.com</strong> y el servicio SaaS SignaPlan son operados por
-    <strong>{{ legal.razon_social }}</strong>
-    {% if legal.nif %}(NIF/CIF {{ legal.nif }}){% endif %}
-    {% if legal.domicilio %}, con domicilio en {{ legal.domicilio }}{% endif %}.
-    Correo de contacto: <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>.
-</p>
-<p>
-    Para cualquier consulta relativa a este aviso, contacta en
-    <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>.
-</p>
+{% set nif_bit = (' (NIF/CIF ' ~ legal.nif ~ ')') if legal.nif else '' %}
+{% set dom_bit = (', ' ~ legal.domicilio) if legal.domicilio else '' %}
+<h2>{{ _('legal.aviso.h1') }}</h2>
+<p>{{ _('legal.aviso.p1', name=legal.razon_social, nif=nif_bit, domicilio=dom_bit, email=legal.email) }}</p>
+<p>{{ _('legal.aviso.p2', email=legal.email) }}</p>
 
-<h2>2. Objeto</h2>
-<p>
-    Este aviso regula el acceso y uso de la web comercial, del alta de cuentas y de los
-    espacios de cliente bajo subdominio o dominio propio vinculados a SignaPlan
-    (planificación de obra, personal, flota y registro de jornada).
-</p>
+<h2>{{ _('legal.aviso.h2') }}</h2>
+<p>{{ _('legal.aviso.p3') }}</p>
 
-<h2>3. Condiciones de uso</h2>
-<p>
-    El usuario se compromete a hacer un uso lícito del sitio y del servicio, a no
-    introducir información falsa y a no intentar acceder a espacios de otras organizaciones.
-    El acceso a cada espacio de cliente queda restringido a usuarios autorizados por esa
-    organización.
-</p>
+<h2>{{ _('legal.aviso.h3') }}</h2>
+<p>{{ _('legal.aviso.p4') }}</p>
 
-<h2>4. Propiedad intelectual</h2>
-<p>
-    El software, la marca SignaPlan, los textos, diseños y demás contenidos del servicio
-    están protegidos por la normativa aplicable. Queda prohibida su reproducción,
-    distribución o explotación no autorizada.
-</p>
+<h2>{{ _('legal.aviso.h4') }}</h2>
+<p>{{ _('legal.aviso.p5') }}</p>
 
-<h2>5. Responsabilidad</h2>
-<p>
-    SignaPlan trabaja para mantener el servicio disponible y seguro, sin poder garantizar
-    una disponibilidad ininterrumpida. El cliente es responsable del uso que haga de su
-    espacio, de las credenciales de sus usuarios y de la veracidad de los datos que
-    introduzca (incluidos datos de trabajadores).
-</p>
+<h2>{{ _('legal.aviso.h5') }}</h2>
+<p>{{ _('legal.aviso.p6') }}</p>
 
-<h2>6. Legislación y fuero</h2>
-<p>
-    Este aviso se rige por la ley española. Para cualquier controversia, las partes se
-    someten a los juzgados y tribunales del domicilio del titular, salvo norma imperativa
-    en contrario (en particular, consumidores).
-</p>
+<h2>{{ _('legal.aviso.h6') }}</h2>
+<p>{{ _('legal.aviso.p7') }}</p>
 {% endblock %}

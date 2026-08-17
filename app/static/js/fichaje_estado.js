@@ -3,6 +3,7 @@
  * Fuente canónica en Python; este JS debe mantenerse alineado.
  */
 window.SPFichajeEstado = (function () {
+    var t = window.SP_T || function (key) { return key; };
     var OK = {
         Correcto: 1, Correcto_Automatico: 1,
         Resuelto_Movido: 1, Resuelto_Asignado: 1, Resuelto_Dividido: 1,
@@ -35,26 +36,26 @@ window.SPFichajeEstado = (function () {
 
     function labelDeEstado(estado) {
         var labels = {
-            Correcto: 'Correcto',
-            Correcto_Automatico: 'Correcto (auto)',
-            Conflicto: 'Conflicto',
-            Paracaidista: 'Paracaidista',
-            Ausencia: 'Ausencia',
-            Pendiente: 'Pendiente',
-            Retraso: 'Retraso',
-            Sin_Registro: 'Sin fichaje',
-            Sobreescrito_RRHH: 'Corregido por RRHH / ERP',
-            Exento_Ausencia: 'Exento (ausencia)',
-            Cerrado_Multiobra: 'Multi-obra cerrado',
-            Resuelto_Movido: 'Resuelto (movido)',
-            Resuelto_Asignado: 'Resuelto (asignado)',
-            Resuelto_Dividido: 'Resuelto (multi-obra)',
-            Resuelto_Ignorado: 'Resuelto (ignorado)',
-            Resuelto_Falta: 'Resuelto (falta)',
-            Resuelto_Ausencia: 'Resuelto (ausencia)',
+            Correcto: t('Correcto'),
+            Correcto_Automatico: t('Correcto (auto)'),
+            Conflicto: t('Conflicto'),
+            Paracaidista: t('Paracaidista'),
+            Ausencia: t('Ausencia'),
+            Pendiente: t('Pendiente'),
+            Retraso: t('Retraso'),
+            Sin_Registro: t('Sin fichaje'),
+            Sobreescrito_RRHH: t('Corregido por RRHH / ERP'),
+            Exento_Ausencia: t('Exento (ausencia)'),
+            Cerrado_Multiobra: t('Multi-obra cerrado'),
+            Resuelto_Movido: t('Resuelto (movido)'),
+            Resuelto_Asignado: t('Resuelto (asignado)'),
+            Resuelto_Dividido: t('Resuelto (multi-obra)'),
+            Resuelto_Ignorado: t('Resuelto (ignorado)'),
+            Resuelto_Falta: t('Resuelto (falta)'),
+            Resuelto_Ausencia: t('Resuelto (ausencia)'),
         };
-        if ((estado || '').indexOf('Resuelto') === 0) return labels[estado] || 'Resuelto / correcto';
-        return labels[estado] || estado || 'Sin datos';
+        if ((estado || '').indexOf('Resuelto') === 0) return labels[estado] || t('Resuelto / correcto');
+        return labels[estado] || estado || t('Sin datos');
     }
 
     function badgeClass(estado) {

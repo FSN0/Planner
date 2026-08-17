@@ -7,7 +7,7 @@
   {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260811c">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260816i">
 {% endblock %}
 
 {% block wrapper %}
@@ -42,6 +42,7 @@
         {% include "components/_kanban_col_libres.html" %}
 
         <div class="kanban-works-wrapper" id="kanbanWorksWrapper" data-tour="tablero-obras">
+            {% set kanban_sin_obras = kanban_sin_obras if kanban_sin_obras is defined else (obra_data|length) == 0 %}
             {% for item in obra_data %}
                 <div class="kanban-col-wrapper filterable-obra{% if item.obra.is_pinned %} is-pinned{% endif %}"
                      data-id="{{ item.obra.id }}"
@@ -51,6 +52,25 @@
                 
                 </div>
             {% endfor %}
+            {% if current_user.role == 'admin' %}
+            <div class="kanban-start-obra{% if not kanban_sin_obras %} kanban-start-obra--shortcut{% endif %}" aria-label="{{ _('Añadir obra') }}">
+              <div class="obra-card obra-card--start{% if not kanban_sin_obras %} obra-card--shortcut{% endif %}">
+                <div class="col-header">
+                  {% if kanban_sin_obras %}
+                  <div class="header-title">{{ _('Añade una obra') }}</div>
+                  <p class="obra-card-start-body">
+                    {{ _('Para usar el tablero hace falta al menos una obra de tajo. Aquí irán el resto de obras.') }}
+                  </p>
+                  {% else %}
+                  <div class="header-title">{{ _('Añadir obra') }}</div>
+                  {% endif %}
+                  <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.create_obra', next='tablero') }}">
+                    <i class="fas fa-plus"></i> {{ _('Añadir obra') }}
+                  </a>
+                </div>
+              </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -135,7 +155,7 @@
             <i class="fas fa-calendar-times mr-2 text-danger"></i>
             {{ _('Desasignar a:') }} <span id="libresWorkerName" class="text-warning font-weight-bold"></span>
         </h5>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
@@ -202,7 +222,7 @@
     </script>
   
   <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817a"></script>
   
   
   <script src="https://cdn.jsdelivr.net/npm/dom-autoscroller@2.3.4/dist/dom-autoscroller.min.js"></script>
@@ -214,7 +234,7 @@
         window.CURRENT_USER_ROLE = "{{ current_user.role }}";
         window.KANBAN_READONLY = {{ 'true' if view_mode == 'readonly' else 'false' }};
     </script>
-  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260811c"></script>
+  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260816i"></script>
   
   <script>
     $(document).on('click', '.rating-btn', function() {

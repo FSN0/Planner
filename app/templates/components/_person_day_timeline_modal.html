@@ -3,30 +3,30 @@
     <div class="modal-content person-day-timeline-modal-content">
       <div class="modal-header person-day-timeline-modal-header">
         <div class="person-day-timeline-modal-heading">
-          <span class="person-day-timeline-modal-kicker"><i class="fas fa-stream"></i> {{ modal_title or 'Trazabilidad del día' }}</span>
+          <span class="person-day-timeline-modal-kicker"><i class="fas fa-stream"></i> {{ modal_title or _('Trazabilidad del día') }}</span>
           <h5 class="modal-title mb-0">
             <span data-timeline-empleado>—</span>
           </h5>
         </div>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+        <button type="button" class="close" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
       <div class="modal-body" data-person-day-timeline-root>
         <div data-timeline-meta class="person-day-timeline-meta">
           <div class="person-day-timeline-meta-item">
-            <span class="person-day-timeline-meta-label">Fecha</span>
+            <span class="person-day-timeline-meta-label">{{ _('Fecha') }}</span>
             <span data-timeline-fecha class="person-day-timeline-meta-value">—</span>
           </div>
           <div class="person-day-timeline-meta-item">
-            <span class="person-day-timeline-meta-label">Estado</span>
+            <span class="person-day-timeline-meta-label">{{ _('Estado') }}</span>
             <span data-timeline-estado class="badge-soft badge-soft-gray person-day-timeline-estado">—</span>
           </div>
         </div>
         <div data-timeline-content></div>
       </div>
       <div class="modal-footer person-day-timeline-modal-footer">
-        <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cerrar') }}</button>
       </div>
     </div>
   </div>

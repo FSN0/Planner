@@ -30,6 +30,7 @@ from app.models import (
     ROLE_RRHH,
     User,
 )
+from app.services.i18n_service import translate, normalize_locale, get_locale, DEFAULT_LOCALE
 
 ROLES_CON_PIN = (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
 
@@ -59,10 +60,14 @@ def validar_pin(pin):
     pin = (pin or '').strip()
     if not _PIN_RE.match(pin):
         raise PinAuthError(
-            f'El PIN tiene que tener entre {PIN_MIN} y {PIN_MAX} dígitos.'
+            translate(
+                'El PIN tiene que tener entre {min} y {max} dígitos.',
+                min=PIN_MIN,
+                max=PIN_MAX,
+            )
         )
     if len(set(pin)) == 1:
-        raise PinAuthError('Elige un PIN que no sea el mismo dígito repetido.')
+        raise PinAuthError(translate('Elige un PIN que no sea el mismo dígito repetido.'))
     return pin
 
 
@@ -159,12 +164,12 @@ def debe_cambiar_pin(user):
 def cambiar_pin_propio(user, pin_actual, pin_nuevo, pin_nuevo2):
     """El operario cambia su PIN desde /mi. No hace commit."""
     if not user or not user.pin_hash:
-        raise PinAuthError('Todavía no tienes PIN. Pídeselo a administración.')
+        raise PinAuthError(translate('Todavía no tienes PIN. Pídeselo a administración.'))
     pin_actual = (pin_actual or '').strip()
     if not pin_actual or not check_password_hash(user.pin_hash, pin_actual):
-        raise PinAuthError('El PIN actual no es correcto.')
+        raise PinAuthError(translate('El PIN actual no es correcto.'))
     if (pin_nuevo or '').strip() != (pin_nuevo2 or '').strip():
-        raise PinAuthError('El PIN nuevo no coincide.')
+        raise PinAuthError(translate('El PIN nuevo no coincide.'))
     asignar_pin(user, pin_nuevo, must_change=False, notify=False)
     return user
 
@@ -172,9 +177,9 @@ def cambiar_pin_propio(user, pin_actual, pin_nuevo, pin_nuevo2):
 def forzar_cambio_pin_primer_acceso(user, pin_nuevo, pin_nuevo2):
     """Primer cambio obligatorio tras PIN generado. No pide el PIN viejo."""
     if not debe_cambiar_pin(user):
-        raise PinAuthError('No hace falta cambiar el PIN ahora.')
+        raise PinAuthError(translate('No hace falta cambiar el PIN ahora.'))
     if (pin_nuevo or '').strip() != (pin_nuevo2 or '').strip():
-        raise PinAuthError('El PIN nuevo no coincide.')
+        raise PinAuthError(translate('El PIN nuevo no coincide.'))
     asignar_pin(user, pin_nuevo, must_change=False, notify=False)
     return user
 
@@ -183,7 +188,7 @@ def _serializer_pin_setup():
     from flask import current_app
     secret = current_app.config.get('SECRET_KEY')
     if not secret:
-        raise PinAuthError('SECRET_KEY no configurada.')
+        raise PinAuthError(translate('SECRET_KEY no configurada.'))
     return URLSafeTimedSerializer(secret_key=secret, salt=_PIN_SETUP_SALT)
 
 
@@ -200,13 +205,15 @@ def leer_token_definir_pin(token, tenant_esperado):
         data = _serializer_pin_setup().loads(token, max_age=PIN_SETUP_TOKEN_MAX_AGE)
     except SignatureExpired as exc:
         raise PinAuthError(
-            'El enlace para definir el PIN ha caducado. Pide uno nuevo a administración.'
+            translate(
+                'El enlace para definir el PIN ha caducado. Pide uno nuevo a administración.'
+            )
         ) from exc
     except BadSignature as exc:
-        raise PinAuthError('El enlace para definir el PIN no es válido.') from exc
+        raise PinAuthError(translate('El enlace para definir el PIN no es válido.')) from exc
 
     if int(data.get('tid') or 0) != int(tenant_esperado.id):
-        raise PinAuthError('Este enlace no corresponde a esta empresa.')
+        raise PinAuthError(translate('Este enlace no corresponde a esta empresa.'))
     return data
 
 
@@ -245,24 +252,45 @@ def notificar_definir_pin_por_email(user, actor=None):
         if actor is not None:
             quien = f"{getattr(actor, 'name', '')} {getattr(actor, 'lastname', '')}".strip()
 
-        asunto = f'Define tu PIN de fichaje — {tenant_nombre or "SignaPlan"}'
-        texto = (
-            f'Hola {user.name},\n\n'
-            f'Te han activado el acceso de fichaje en SignaPlan'
-            f'{f" ({tenant_nombre})" if tenant_nombre else ""}.\n\n'
-            f'DNI: {user.dni}\n'
-            f'Define tu PIN (4–6 dígitos) en este enlace:\n{url}\n\n'
-            f'El enlace caduca en 3 días.'
-            f'{f" Te lo ha enviado {quien}." if quien else ""}\n'
-            f'Si no esperabas este correo, ignóralo.\n'
+        loc = normalize_locale(getattr(user, 'locale', None)) or get_locale() or DEFAULT_LOCALE
+        tenant_bit = f' ({tenant_nombre})' if tenant_nombre else ''
+        quien_txt = (
+            translate(' Te lo ha enviado {quien}.', loc, quien=quien) if quien else ''
         )
-        html = (
-            f'<p>Hola {user.name},</p>'
-            f'<p>Te han activado el acceso de fichaje'
-            f'{f" en <strong>{tenant_nombre}</strong>" if tenant_nombre else ""}.</p>'
-            f'<p><strong>DNI:</strong> {user.dni}</p>'
-            f'<p><a href="{url}">Definir mi PIN</a></p>'
-            f'<p>El enlace caduca en 3 días. No compartas este enlace.</p>'
+        asunto = translate(
+            'Define tu PIN de fichaje — {tenant}',
+            loc,
+            tenant=tenant_nombre or 'SignaPlan',
+        )
+        texto = translate(
+            'Hola {name},\n\n'
+            'Te han activado el acceso de fichaje en SignaPlan{tenant}.\n\n'
+            'DNI: {dni}\n'
+            'Define tu PIN (4–6 dígitos) en este enlace:\n{url}\n\n'
+            'El enlace caduca en 3 días.{quien}\n'
+            'Si no esperabas este correo, ignóralo.\n',
+            loc,
+            name=user.name,
+            tenant=tenant_bit,
+            dni=user.dni,
+            url=url,
+            quien=quien_txt,
+        )
+        html_tenant = (
+            translate(' en <strong>{tenant}</strong>', loc, tenant=tenant_nombre)
+            if tenant_nombre else ''
+        )
+        html = translate(
+            '<p>Hola {name},</p>'
+            '<p>Te han activado el acceso de fichaje{tenant}.</p>'
+            '<p><strong>DNI:</strong> {dni}</p>'
+            '<p><a href="{url}">Definir mi PIN</a></p>'
+            '<p>El enlace caduca en 3 días. No compartas este enlace.</p>',
+            loc,
+            name=user.name,
+            tenant=html_tenant,
+            dni=user.dni,
+            url=url,
         )
         return bool(send_email(asunto, [user.email], texto, html_body=html))
     except Exception:
@@ -282,13 +310,13 @@ def definir_pin_desde_token(token, tenant, pin_nuevo, pin_nuevo2):
     data = leer_token_definir_pin(token, tenant)
     user = User.query.filter_by(id=data['uid'], is_deleted=False).first()
     if not user or user.role not in ROLES_CON_PIN:
-        raise PinAuthError('No se ha podido definir el PIN.')
+        raise PinAuthError(translate('No se ha podido definir el PIN.'))
     if (user.email or '').strip().lower() != (data.get('email') or '').lower():
-        raise PinAuthError('No se ha podido definir el PIN.')
+        raise PinAuthError(translate('No se ha podido definir el PIN.'))
     if not user.active:
-        raise PinAuthError('Tu cuenta aún no está activa. Contacta con administración.')
+        raise PinAuthError(translate('Tu cuenta aún no está activa. Contacta con administración.'))
     if (pin_nuevo or '').strip() != (pin_nuevo2 or '').strip():
-        raise PinAuthError('El PIN nuevo no coincide.')
+        raise PinAuthError(translate('El PIN nuevo no coincide.'))
     asignar_pin(user, pin_nuevo, must_change=False, notify=False)
     user.pin_failed_attempts = 0
     user.pin_locked_until = None
@@ -315,7 +343,9 @@ def enviar_acceso_fichaje(user, pin_plano=None, *, actor=None, regenerar=False):
         _, pin_mostrable = asignar_pin_generado(user, notify=False, actor=actor)
     else:
         raise PinAuthError(
-            'Indica un PIN nuevo o marca «Generar uno nuevo» para enviar el enlace.'
+            translate(
+                'Indica un PIN nuevo o marca «Generar uno nuevo» para enviar el enlace.'
+            )
         )
     ok = notificar_definir_pin_por_email(user, actor=actor)
     return ok, pin_mostrable
@@ -354,13 +384,15 @@ def autenticar_por_pin(dni, pin):
 
     user = buscar_por_dni(dni)
     if user is None or user.role not in ROLES_CON_PIN:
-        raise PinAuthError('DNI o PIN incorrectos.')
+        raise PinAuthError(translate('DNI o PIN incorrectos.'))
     if not user.active:
-        raise PinAuthError('Tu cuenta aún no está activa. Contacta con administración.')
+        raise PinAuthError(translate('Tu cuenta aún no está activa. Contacta con administración.'))
     if not user.pin_hash:
         raise PinAuthError(
-            'Todavía no tienes PIN. Revisa el correo con el enlace para definirlo '
-            'o pídeselo a administración.'
+            translate(
+                'Todavía no tienes PIN. Revisa el correo con el enlace para definirlo '
+                'o pídeselo a administración.'
+            )
         )
 
     locked_until = getattr(user, 'pin_locked_until', None)
@@ -368,7 +400,10 @@ def autenticar_por_pin(dni, pin):
     if locked_until and locked_until > now:
         secs = max(1, int((locked_until - now).total_seconds()))
         raise PinAuthError(
-            f'Demasiados intentos. Espera {secs} s e inténtalo de nuevo.'
+            translate(
+                'Demasiados intentos. Espera {secs} s e inténtalo de nuevo.',
+                secs=secs,
+            )
         )
 
     pin = (pin or '').strip()
@@ -384,13 +419,16 @@ def autenticar_por_pin(dni, pin):
             except Exception:
                 db.session.rollback()
             raise PinAuthError(
-                f'Demasiados intentos. Espera {PIN_LOCKOUT_SECONDS} s e inténtalo de nuevo.'
+                translate(
+                    'Demasiados intentos. Espera {secs} s e inténtalo de nuevo.',
+                    secs=PIN_LOCKOUT_SECONDS,
+                )
             )
         try:
             db.session.commit()
         except Exception:
             db.session.rollback()
-        raise PinAuthError('DNI o PIN incorrectos.')
+        raise PinAuthError(translate('DNI o PIN incorrectos.'))
 
     user.pin_failed_attempts = 0
     user.pin_locked_until = None

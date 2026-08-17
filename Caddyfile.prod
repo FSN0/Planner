@@ -41,7 +41,13 @@ planner.soltecgrupo.es {
 # Subdominios *.signaplan.com y dominios propios de clientes (on-demand TLS).
 # Caddy abre :80 automáticamente para los retos ACME http-01.
 # No añadir un bloque :80 con reverse_proxy aquí: rompería la emisión de certificados.
+#
+# IMPORTANTE: el catch-all puede acabar sirviendo www con 200 y duplicar el apex
+# en Google. Redirigimos www también aquí (cinturón + tirantes junto al bloque de arriba).
 https:// {
+    @www host www.signaplan.com
+    redir @www https://signaplan.com{uri} 301
+
     tls {
         on_demand
     }

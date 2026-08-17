@@ -65,9 +65,10 @@ class TestSignupValidacion:
         )
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
-        assert 'Revisa tu correo' in html
         assert 'admin@demofirma.test' in html
         assert 'demofirma' in html
+        # Si el SMTP de test no entrega, la pantalla dice «Cuenta creada».
+        assert ('Revisa tu correo' in html) or ('Cuenta creada' in html)
 
         tenant = Tenant.query.filter_by(subdominio='demofirma').first()
         assert tenant is not None
@@ -81,11 +82,22 @@ class TestSignupValidacion:
         assert (tenant.modulos_activos or {}).get('registro_jornada') is True
 
         session.execute(text(f'SET search_path TO {tenant.schema_name}'))
-        from app.models import User
+        from app.models import ConfiguracionGlobal, Obra, User
         admin = User.query.filter_by(email='admin@demofirma.test').first()
         assert admin is not None
         assert admin.active is True
         assert admin.email_verified is False
+
+        def _cfg(clave):
+            row = ConfiguracionGlobal.query.filter_by(clave=clave).first()
+            return row.valor if row else None
+
+        assert _cfg('fichaje_operario_activo') == 'True'
+        assert _cfg('onboarding_fichaje_asked') == 'True'
+        assert _cfg('obra_oficina_activa') == 'True'
+        oficina = Obra.query.filter_by(codigo='OFICINA').first()
+        assert oficina is not None
+        assert oficina.is_deleted is False
         session.execute(text('SET search_path TO public'))
 
         # Limpieza del esquema creado por el alta

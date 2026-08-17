@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ cfg.title }} — Previsualizar{% endblock %}
+{% block title %}{{ _(cfg.title) }} — {{ _('Previsualizar') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -45,39 +45,39 @@
 
         <div class="d-flex align-items-center mb-3">
           <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-sm btn-link text-muted pl-0">
-            <i class="fas fa-arrow-left"></i> Cambiar archivo
+            <i class="fas fa-arrow-left"></i> {{ _('Cambiar archivo') }}
           </a>
         </div>
 
         <div class="import-steps">
-          <div class="import-step is-done">1. Subir archivo</div>
-          <div class="import-step is-active">2. Mapear columnas</div>
-          <div class="import-step">3. Resultados</div>
+          <div class="import-step is-done">1. {{ _('Subir archivo') }}</div>
+          <div class="import-step is-active">2. {{ _('Mapear columnas') }}</div>
+          <div class="import-step">3. {{ _('Resultados') }}</div>
         </div>
 
         <div class="admin-panel mb-4">
           <div class="admin-panel-header border-bottom pb-3 mb-3">
-            <h2 class="admin-panel-title" style="font-size: 1.1rem;">Mapeo de columnas</h2>
+            <h2 class="admin-panel-title" style="font-size: 1.1rem;">{{ _('Mapeo de columnas') }}</h2>
             <p class="admin-panel-subtitle mb-0">
-              Archivo: <strong>{{ original_name or 'importación' }}</strong>.
-              Ajusta el mapeo si la detección automática no es correcta y vuelve a previsualizar.
+              {{ _('Archivo:') }} <strong>{{ original_name or _('importación') }}</strong>.
+              {{ _('Ajusta el mapeo si la detección automática no es correcta y vuelve a previsualizar.') }}
             </p>
           </div>
 
           {% set summary = preview.summary or {} %}
           <div class="import-summary-chips">
             <span class="import-chip import-chip--ok">
-              <i class="fas fa-plus-circle"></i> {{ summary.get('new', 0) }} nuevos
+              <i class="fas fa-plus-circle"></i> {{ _('{n} nuevos', n=summary.get('new', 0)) }}
             </span>
             <span class="import-chip import-chip--dup">
-              <i class="fas fa-copy"></i> {{ summary.get('duplicate', 0) }} duplicados
+              <i class="fas fa-copy"></i> {{ _('{n} duplicados', n=summary.get('duplicate', 0)) }}
             </span>
             <span class="import-chip import-chip--err">
-              <i class="fas fa-exclamation-circle"></i> {{ summary.get('error', 0) }} errores
+              <i class="fas fa-exclamation-circle"></i> {{ _('{n} errores', n=summary.get('error', 0)) }}
             </span>
             {% if summary.get('skip') %}
             <span class="import-chip">
-              <i class="fas fa-minus-circle"></i> {{ summary.get('skip', 0) }} vacíos
+              <i class="fas fa-minus-circle"></i> {{ _('{n} vacíos', n=summary.get('skip', 0)) }}
             </span>
             {% endif %}
           </div>
@@ -89,10 +89,10 @@
               {% for field in fields %}
               <div>
                 <label for="map_{{ field.key }}">
-                  {{ field.label }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
+                  {{ _(field.label) }}{% if field.required %} <span class="text-danger">*</span>{% endif %}
                 </label>
                 <select class="form-control form-control-sm" name="map_{{ field.key }}" id="map_{{ field.key }}">
-                  <option value="__none__">— No mapear —</option>
+                  <option value="__none__">{{ _('— No mapear —') }}</option>
                   {% for col in columns %}
                   <option value="{{ col }}" {% if column_map.get(field.key) == col %}selected{% endif %}>
                     {{ col }}
@@ -105,10 +105,10 @@
 
             <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
               <button type="submit" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-sync-alt mr-1"></i> Actualizar previsualización
+                <i class="fas fa-sync-alt mr-1"></i> {{ _('Actualizar previsualización') }}
               </button>
               <span class="text-muted small">
-                Mostrando {{ preview.sample_rows|length }} de {{ preview.rows|length }} filas
+                {{ _('Mostrando {shown} de {total} filas', shown=preview.sample_rows|length, total=preview.rows|length) }}
               </span>
             </div>
           </form>
@@ -116,7 +116,7 @@
 
         <div class="admin-panel mb-4">
           <div class="admin-panel-header border-bottom pb-3 mb-3">
-            <h2 class="admin-panel-title" style="font-size: 1.05rem;">Previsualización</h2>
+            <h2 class="admin-panel-title" style="font-size: 1.05rem;">{{ _('Previsualización') }}</h2>
           </div>
 
           <div class="table-responsive">
@@ -124,11 +124,11 @@
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Estado</th>
+                  <th>{{ _('Estado') }}</th>
                   {% for field in fields if field.key in column_map and column_map[field.key] %}
-                  <th>{{ field.label }}</th>
+                  <th>{{ _(field.label) }}</th>
                   {% endfor %}
-                  <th>Mensaje</th>
+                  <th>{{ _('Mensaje') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -136,10 +136,10 @@
                 <tr>
                   <td>{{ row.row_number }}</td>
                   <td class="import-status-{{ row.status }}">
-                    {% if row.status == 'new' %}Nuevo
-                    {% elif row.status == 'duplicate' %}Duplicado
-                    {% elif row.status == 'error' %}Error
-                    {% else %}Omitido{% endif %}
+                    {% if row.status == 'new' %}{{ _('Nuevo') }}
+                    {% elif row.status == 'duplicate' %}{{ _('Duplicado') }}
+                    {% elif row.status == 'error' %}{{ _('Error') }}
+                    {% else %}{{ _('Omitido') }}{% endif %}
                   </td>
                   {% for field in fields if field.key in column_map and column_map[field.key] %}
                   <td>{{ row.data.get(field.key, '') }}</td>
@@ -148,7 +148,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                  <td colspan="10" class="text-center text-muted py-4">No hay filas en el archivo.</td>
+                  <td colspan="10" class="text-center text-muted py-4">{{ _('No hay filas en el archivo.') }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -157,18 +157,18 @@
         </div>
 
         <form action="{{ url_for(cfg.confirm_endpoint) }}" method="post" id="confirm-form"
-              onsubmit="return confirm('Se crearán {{ summary.get('new', 0) }} registros. ¿Continuar?');">
+              onsubmit="return confirm({{ _('Se crearán {n} registros. ¿Continuar?', n=summary.get('new', 0))|tojson }});">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           {% for field in fields %}
           <input type="hidden" name="map_{{ field.key }}" value="{{ column_map.get(field.key) or '__none__' }}" class="confirm-map">
           {% endfor %}
 
           <div class="d-flex justify-content-between">
-            <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-link text-muted">Cancelar</a>
+            <a href="{{ url_for(cfg.upload_endpoint) }}" class="btn btn-link text-muted">{{ _('Cancelar') }}</a>
             <button type="submit" class="btn btn-primary px-4"
-                    {% if summary.get('new', 0) == 0 %}disabled title="No hay filas nuevas para importar"{% endif %}>
+                    {% if summary.get('new', 0) == 0 %}disabled title="{{ _('No hay filas nuevas para importar') }}"{% endif %}>
               <i class="fas fa-check mr-2"></i>
-              Confirmar importación ({{ summary.get('new', 0) }})
+              {{ _('Confirmar importación ({n})', n=summary.get('new', 0)) }}
             </button>
           </div>
         </form>

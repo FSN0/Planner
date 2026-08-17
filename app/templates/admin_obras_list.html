@@ -98,14 +98,14 @@
             </tr>
             <tr class="filter-row">
               <th></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 1, this.value)" placeholder="…" title="Filtrar código"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 2, this.value)" placeholder="…" title="Filtrar nombre"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 3, this.value)" placeholder="…" title="Filtrar cliente"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 4, this.value)" placeholder="…" title="Filtrar jefe"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 5, this.value)" placeholder="…" title="Filtrar estado"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 6, this.value)" placeholder="…" title="Filtrar inicio"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 7, this.value)" placeholder="…" title="Filtrar fin"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 8, this.value)" placeholder="…" title="Filtrar importación"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 1, this.value)" placeholder="…" title="{{ _('Filtrar código') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 2, this.value)" placeholder="…" title="{{ _('Filtrar nombre') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 3, this.value)" placeholder="…" title="{{ _('Filtrar cliente') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 4, this.value)" placeholder="…" title="{{ _('Filtrar jefe') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 5, this.value)" placeholder="…" title="{{ _('Filtrar estado') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 6, this.value)" placeholder="…" title="{{ _('Filtrar inicio') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 7, this.value)" placeholder="…" title="{{ _('Filtrar fin') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 8, this.value)" placeholder="…" title="{{ _('Filtrar importación') }}"></th>
               <th></th>
               <th></th>
             </tr>
@@ -126,7 +126,7 @@
                     data-obra-id="{{ obra.id }}"
                     data-jefe-id="{{ obra.jefe_obra_id or '' }}"
                     data-sort-value="{% if obra.jefe_obra %}{{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}{% else %}sin asignar{% endif %}">
-                  <button type="button" class="jefe-trigger" title="Cambiar jefe de obra">
+                  <button type="button" class="jefe-trigger" title="{{ _('Cambiar jefe de obra') }}">
                     {% if obra.jefe_obra %}
                       <i class="fas fa-user-tie jefe-trigger-icon"></i>
                       <span class="jefe-name-text">{{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}</span>
@@ -158,7 +158,7 @@
                 {% set sort_value = obra.fecha_importacion.strftime('%Y%m%d%H%M%S') if obra.fecha_importacion else '00000000000000' %}
                 <td class="text-center" data-sort-value="{{ sort_value }}">
                   {% if obra.fecha_importacion %}
-                    <span class="badge-soft badge-soft-blue" title="Importada a las {{ obra.fecha_importacion|format_time }}">
+                    <span class="badge-soft badge-soft-blue" title="{{ _('Importada a las {time}', time=obra.fecha_importacion|format_time) }}">
                       <i class="fas fa-cloud-download-alt"></i> {{ obra.fecha_importacion|format_dt('%d/%m/%y') }}
                     </span>
                   {% else %}
@@ -172,17 +172,17 @@
                 <td class="text-center" data-sort-value="{{ '%04d'|format(pends) }}">
                   {% if pends > 0 %}
                     <a href="{{ url_for('admin.solicitudes_list', obra_id=obra.id, estado='PENDIENTE') }}"
-                       class="badge-notify" title="Ver {{ pends }} solicitudes pendientes">{{ pends }}</a>
+                       class="badge-notify" title="{{ _('Ver {n} solicitudes pendientes', n=pends) }}">{{ pends }}</a>
                   {% else %}
                     <a href="{{ url_for('admin.solicitudes_list', obra_id=obra.id) }}"
-                       class="sols-link-muted" title="Ver historial de solicitudes">
+                       class="sols-link-muted" title="{{ _('Ver historial de solicitudes') }}">
                       <i class="fas fa-inbox"></i>
                     </a>
                   {% endif %}
                 </td>
 
                 <td class="text-center">
-                  <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn-icon-action" title="Configurar obra">
+                  <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn-icon-action" title="{{ _('Configurar obra') }}">
                     <i class="fas fa-cog"></i>
                   </a>
                 </td>
@@ -191,7 +191,7 @@
               <tr>
                 <td colspan="11" class="table-empty-state">
                   <i class="fas fa-building"></i>
-                  No hay obras registradas todavía.
+                  {{ _('No hay obras registradas todavía.') }}
                 </td>
               </tr>
             {% endfor %}
@@ -202,7 +202,7 @@
 
     <div id="jefePicker" class="jefe-picker" hidden>
       <div class="jefe-picker-header">
-        <input type="text" class="jefe-picker-search" placeholder="Buscar jefe de obra…" autocomplete="off">
+        <input type="text" class="jefe-picker-search" placeholder="{{ _('Buscar jefe de obra…') }}" autocomplete="off">
       </div>
       <ul class="jefe-picker-list" id="jefePickerList"></ul>
     </div>
@@ -215,7 +215,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="{{ url_for('static', filename='js/common.js') }}?v=20260817a"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
@@ -230,7 +230,7 @@
     function renderJefeTrigger(cell, name) {
         const btn = cell.querySelector('.jefe-trigger');
         if (!name) {
-            btn.innerHTML = '<span class="jefe-unassigned">Sin asignar</span><i class="fas fa-chevron-down jefe-trigger-caret"></i>';
+            btn.innerHTML = '<span class="jefe-unassigned">{{ _('Sin asignar') }}</span><i class="fas fa-chevron-down jefe-trigger-caret"></i>';
         } else {
             btn.innerHTML = '<i class="fas fa-user-tie jefe-trigger-icon"></i><span class="jefe-name-text"></span><i class="fas fa-chevron-down jefe-trigger-caret"></i>';
             btn.querySelector('.jefe-name-text').textContent = name;
@@ -275,7 +275,7 @@
         if (filtered.length === 0 && q) {
             const empty = document.createElement('li');
             empty.className = 'jefe-picker-item jefe-picker-item--empty';
-            empty.textContent = 'Sin resultados';
+            empty.textContent = {{ _('Sin resultados')|tojson }};
             list.appendChild(empty);
         } else {
             filtered.forEach(j => {
@@ -290,7 +290,7 @@
         const unassign = document.createElement('li');
         unassign.className = 'jefe-picker-item jefe-picker-item--unassign' + (!currentJefeId ? ' is-active' : '');
         unassign.dataset.jefeId = '';
-        unassign.textContent = '— Sin asignar';
+        unassign.textContent = {{ _('— Sin asignar')|tojson }};
         list.appendChild(unassign);
     }
 
@@ -313,12 +313,12 @@
                 cell.classList.add('is-saved');
                 setTimeout(() => cell.classList.remove('is-saved'), 900);
             } else {
-                alert('Error: ' + resp.error);
+                alert({{ _('Error:')|tojson }} + ' ' + resp.error);
             }
         })
         .catch(() => {
             cell.classList.remove('is-saving');
-            alert('Error de conexión.');
+            alert({{ _('Error de conexión.')|tojson }});
         });
     }
 
@@ -407,23 +407,23 @@
             const selectedIds = Array.from(document.querySelectorAll('.obra-checkbox:checked')).map(cb => cb.value);
             if (selectedIds.length === 0) return;
 
-            let warningText = `Vas a cambiar el estado de ${selectedIds.length} obra(s) a "${newStatus}".`;
+            let warningText = {{ _('Vas a cambiar el estado de {n} obra(s) a "{status}".')|tojson }}.replace('{n}', selectedIds.length).replace('{status}', newStatus);
             if (newStatus === 'Pendiente' || newStatus === 'Finalizada') {
-                warningText += ' Esto borrará las asignaciones futuras de los trabajadores en estas obras.';
+                warningText += ' ' + {{ _('Esto borrará las asignaciones futuras de los trabajadores en estas obras.')|tojson }};
             }
 
             Swal.fire({
-                title: '¿Confirmar cambio masivo?',
+                title: {{ _('¿Confirmar cambio masivo?')|tojson }},
                 text: warningText,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#16a34a',
                 cancelButtonColor: '#64748b',
-                confirmButtonText: 'Sí, aplicar',
-                cancelButtonText: 'Cancelar'
+                confirmButtonText: {{ _('Sí, aplicar')|tojson }},
+                cancelButtonText: {{ _('Cancelar')|tojson }}
             }).then((result) => {
                 if (result.isConfirmed) {
-                    Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); }});
+                    Swal.fire({ title: {{ _('Procesando...')|tojson }}, allowOutsideClick: false, didOpen: () => { Swal.showLoading(); }});
 
                     fetch('/admin/api/obras/batch_status', {
                         method: 'POST',
@@ -436,12 +436,12 @@
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            Swal.fire('¡Éxito!', data.message, 'success').then(() => window.location.reload());
+                            Swal.fire({{ _('¡Éxito!')|tojson }}, data.message, 'success').then(() => window.location.reload());
                         } else {
-                            Swal.fire('Error', data.message, 'error');
+                            Swal.fire({{ _('Error')|tojson }}, data.message, 'error');
                         }
                     })
-                    .catch(() => Swal.fire('Error', 'Fallo de conexión al servidor.', 'error'));
+                    .catch(() => Swal.fire({{ _('Error')|tojson }}, {{ _('Fallo de conexión al servidor.')|tojson }}, 'error'));
                 }
             });
         };

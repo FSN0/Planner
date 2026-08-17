@@ -121,6 +121,11 @@
         <a href="{{ url_for('admin.vehiculos') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-car"></i> {{ _('Flota') }}
         </a>
+        {% if flota_vacia and current_user.role == 'admin' %}
+        <a href="{{ url_for('admin.vehiculos_nuevo', next='coches_libres') }}" class="btn-admin btn-admin-primary">
+          <i class="fas fa-plus"></i> {{ _('Añadir coche') }}
+        </a>
+        {% endif %}
       </div>
     </div>
 
@@ -252,10 +257,10 @@
               </td>
               <td class="col-actions">
                 <div class="table-actions">
-                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=s.vehiculo_id) }}" class="btn-table-action" title="Abrir ficha y asignar">
+                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=s.vehiculo_id) }}" class="btn-table-action" title="{{ _('Abrir ficha y asignar') }}">
                     <i class="fas fa-user-plus"></i>
                   </a>
-                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=s.vehiculo_id) }}" class="btn-table-action" title="Ficha del coche">
+                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=s.vehiculo_id) }}" class="btn-table-action" title="{{ _('Ficha del coche') }}">
                     <i class="fas fa-eye"></i>
                   </a>
                 </div>
@@ -264,8 +269,20 @@
             {% else %}
             <tr>
               <td colspan="7" class="table-empty-state">
+                {% if flota_vacia %}
+                <i class="fas fa-car"></i>
+                {{ _('No hay ningún coche en flota.') }}
+                {% if current_user.role == 'admin' %}
+                <div style="margin-top:0.85rem;">
+                  <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.vehiculos_nuevo', next='coches_libres') }}">
+                    <i class="fas fa-plus"></i> {{ _('Crear flota') }}
+                  </a>
+                </div>
+                {% endif %}
+                {% else %}
                 <i class="fas fa-car"></i>
                 {{ _('No hay tramos libres en este horizonte') }}{% if motivo_filtro or q %} {{ _('con el filtro elegido') }}{% endif %}.
+                {% endif %}
               </td>
             </tr>
             {% endfor %}
@@ -278,7 +295,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="{{ url_for('static', filename='js/common.js') }}?v=20260817a"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   captureAdminTableOrder('freeVehiclesTable');

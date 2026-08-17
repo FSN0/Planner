@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if show_start_cards %}Primeros pasos{% else %}Academia{% endif %}{% endblock %}
+{% block title %}{% if show_start_cards %}{{ _('Primeros pasos') }}{% else %}{{ _('Academia') }}{% endif %}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -74,7 +74,7 @@
   }
   .onb-tab--demo .onb-tab-hint { color: #059669; }
   .onb-tab--skip .onb-tab-hint { color: #64748b; }
-  .onb-tab.is-open .onb-tab-hint::after { content: " · abierto"; opacity: 0.7; }
+  .onb-tab.is-open .onb-tab-hint::after { content: " · " attr(data-open-label); opacity: 0.7; }
 
   .onb-panel {
     display: none;
@@ -565,21 +565,21 @@
                 data-onb-tab="guide" aria-expanded="{{ 'true' if open_tab == 'guide' else 'false' }}">
           <h2>{{ _('Tutorial guiado') }}</h2>
           <p>{% if guide_done %}{{ _('Completado: ya creaste lo básico. Puedes repetir los pasos abajo si quieres.') }}{% else %}{{ _('Te vamos llevando por la pantalla: crearás una persona y una obra (y el fichaje si lo usáis), clic a clic, con tus propios datos.') }}{% endif %}</p>
-          <span class="onb-tab-hint">{% if guide_done %}{{ _('Ver resumen') }}{% else %}{{ _('Ver qué incluye') }}{% endif %}</span>
+          <span class="onb-tab-hint" data-open-label="{{ _('abierto') }}">{% if guide_done %}{{ _('Ver resumen') }}{% else %}{{ _('Ver qué incluye') }}{% endif %}</span>
         </button>
 
         <button type="button" class="onb-tab onb-tab--demo {% if open_tab == 'demo' %}is-open{% endif %} {% if demo_activa %}is-done{% endif %}"
                 data-onb-tab="demo" aria-expanded="{{ 'true' if open_tab == 'demo' else 'false' }}">
           <h2>{% if demo_activa %}{{ _('Datos de ejemplo cargados') }}{% else %}{{ _('Probar con ejemplos') }}{% endif %}</h2>
           <p>{% if demo_activa %}{{ _('Ya tienes obras, personas y vehículos de prueba.') }}{% if curriculum_visible %} {{ _('Sigue abajo con los tutoriales de planificar.') }}{% endif %}{% else %}{{ _('Rellenamos el espacio con obras, personas y vehículos de mentira para que veas el programa en marcha sin inventarte nada.') }}{% endif %}</p>
-          <span class="onb-tab-hint">{% if demo_activa %}{{ _('Ver estado') }}{% else %}{{ _('Ver qué incluye') }}{% endif %}</span>
+          <span class="onb-tab-hint" data-open-label="{{ _('abierto') }}">{% if demo_activa %}{{ _('Ver estado') }}{% else %}{{ _('Ver qué incluye') }}{% endif %}</span>
         </button>
 
         <button type="button" class="onb-tab onb-tab--skip {% if open_tab == 'skip' %}is-open{% endif %}"
                 data-onb-tab="skip" aria-expanded="{{ 'true' if open_tab == 'skip' else 'false' }}">
           <h2>{{ _('Ya sé usarlo') }}</h2>
           <p>{{ _('Saltas esta introducción y entras al panel vacío. Si más adelante quieres ayuda, la Academia sigue en el menú.') }}</p>
-          <span class="onb-tab-hint">{{ _('Ver opciones') }}</span>
+          <span class="onb-tab-hint" data-open-label="{{ _('abierto') }}">{{ _('Ver opciones') }}</span>
         </button>
       </div>
 

@@ -112,15 +112,15 @@
                 <td data-sort-value="{{ (log.user.lastname|lower) if log.user else 'sistema' }}">
                   {% if log.user %}
                     <span class="log-author-inline">
-                      <span class="table-link-primary" style="font-weight:600;">{{ log.user.name }} {{ log.user.lastname }}</span>
+                      <span class="table-link-primary" style="font-weight:600;">{{ _(log.user.name) }} {{ log.user.lastname }}</span>
                       <span class="badge-soft badge-soft-gray">{{ log.user.role|upper }}</span>
                     </span>
                   {% else %}
                     <span class="badge-soft badge-soft-slate">{{ _('Sistema') }}</span>
                   {% endif %}
                 </td>
-                <td data-sort-value="{{ log.action|lower }}" style="font-weight:600; color:#0369a1;">{{ log.action }}</td>
-                <td data-sort-value="{{ (log.detail or '')|lower }}"><span style="font-size:0.76rem; color:var(--color-text-secondary);">{{ log.detail }}</span></td>
+                <td data-sort-value="{{ log.action|lower }}" style="font-weight:600; color:#0369a1;">{{ log.action|tlog_action }}</td>
+                <td data-sort-value="{{ (log.detail or '')|lower }}"><span style="font-size:0.76rem; color:var(--color-text-secondary);">{{ log.detail|tlog_detail }}</span></td>
               </tr>
               {% else %}
               <tr id="emptyStateRow">
@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var btnAckAll = document.getElementById('btnAckAllLaboral');
     if (btnAckAll) {
         btnAckAll.addEventListener('click', function() {
-            if (!confirm('¿Marcar como leídos TODOS los avisos laborales pendientes para todos los usuarios (admin y laboral)?\n\nLos logs nuevos que lleguen después sí volverán a notificar.')) {
+            if (!confirm({{ _('¿Marcar como leídos TODOS los avisos laborales pendientes para todos los usuarios (admin y laboral)?')|tojson }} + '\n\n' + {{ _('Los logs nuevos que lleguen después sí volverán a notificar.')|tojson }})) {
                 return;
             }
             btnAckAll.disabled = true;

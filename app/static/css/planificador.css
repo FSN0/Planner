@@ -416,9 +416,13 @@
     width: 100%;
 }
 
+.planificador-calendar-wrap {
+    position: relative;
+}
+
 #planificador-calendar {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    min-height: 120px;
+    min-height: 0;
     height: auto !important;
     overflow: visible;
 }
@@ -430,7 +434,7 @@
 
 .vis-timeline {
     border: none;
-    border-radius: 0 0 var(--radius-lg, 10px) var(--radius-lg, 10px);
+    border-radius: 0;
     font-family: var(--font-sans, 'Inter', system-ui, sans-serif);
 }
 .vis-panel.vis-left {
@@ -476,6 +480,10 @@
 
 .vis-time-axis { background-color: #ffffff; }
 .vis-panel.vis-left, .vis-panel.vis-center, .vis-panel.vis-right, .vis-panel.vis-bottom { border-color: #f1f5f9; }
+.vis-panel.vis-bottom {
+    display: none !important;
+    height: 0 !important;
+}
 .vis-time-axis .vis-text { font-size: 12px; font-weight: 600; color: #1e293b; }
 .vis-time-axis .vis-grid.vis-minor { border-color: #f8fafc; }
 .vis-time-axis .vis-grid.vis-major { border-color: #e2e8f0; border-width: 2px; }
@@ -747,6 +755,18 @@ body.layout-admin #quickCalendarModal .modal-header {
     color: #fff;
 }
 body.layout-admin #quickCalendarModal .modal-header .close { color: #fff; opacity: 0.85; }
+
+.planificador-add-obra {
+    display: flex;
+    align-items: center;
+    min-height: 2.85rem;
+    padding: 0.55rem 1rem;
+    border-top: 1px dashed #cbd5e1;
+    background: #f8fafc;
+    border-radius: 0 0 var(--radius-lg, 10px) var(--radius-lg, 10px);
+    position: relative;
+    z-index: 6;
+}
 
 @media (max-width: 991.98px) {
     .planificador-hint { display: none; }

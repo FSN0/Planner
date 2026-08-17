@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% block title %}{{ _('Panel SuperAdmin SaaS') }}{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>🚀 Panel SuperAdmin SaaS</h2>
-        <span class="badge badge-dark">Esquema: public</span>
+        <h2>🚀 {{ _('Panel SuperAdmin SaaS') }}</h2>
+        <span class="badge badge-dark">{{ _('Esquema:') }} public</span>
     </div>
     
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -17,17 +18,17 @@
 
     <div class="card shadow-sm mb-5">
         <div class="card-header bg-primary text-white">
-            <h5 class="mb-0">Provisionar Nuevo Cliente (Tenant)</h5>
+            <h5 class="mb-0">{{ _('Provisionar Nuevo Cliente (Tenant)') }}</h5>
         </div>
         <div class="card-body">
             <form action="{{ url_for('superadmin.create_tenant') }}" method="POST" class="row g-3">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="col-md-3">
-                    <label class="form-label">Nombre Empresa</label>
-                    <input type="text" name="nombre" class="form-control" placeholder="Ej: Construcciones López" required>
+                    <label class="form-label">{{ _('Nombre Empresa') }}</label>
+                    <input type="text" name="nombre" class="form-control" placeholder="{{ _('Ej: Construcciones López') }}" required>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">Subdominio SignaPlan</label>
+                    <label class="form-label">{{ _('Subdominio SignaPlan') }}</label>
                     <div class="input-group">
                         <input type="text" name="subdominio" class="form-control" placeholder="lopez" required>
                         <div class="input-group-append">
@@ -36,37 +37,37 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Dominio propio (opcional)</label>
+                    <label class="form-label">{{ _('Dominio propio (opcional)') }}</label>
                     <input type="text" name="custom_domain" class="form-control" placeholder="planner.empresa.com">
-                    <small class="text-muted">Si el cliente accede desde su propio dominio.</small>
+                    <small class="text-muted">{{ _('Si el cliente accede desde su propio dominio.') }}</small>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">Email del Admin</label>
+                    <label class="form-label">{{ _('Email del Admin') }}</label>
                     <input type="email" name="admin_email" class="form-control" placeholder="jefe@lopez.com" required>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">Contraseña Admin</label>
+                    <label class="form-label">{{ _('Contraseña Admin') }}</label>
                     <input type="password" name="admin_password" class="form-control" required>
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
-                    <button type="submit" class="btn btn-success w-100">Crear y Lanzar</button>
+                    <button type="submit" class="btn btn-success w-100">{{ _('Crear y Lanzar') }}</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <h4>Clientes</h4>
+    <h4>{{ _('Clientes') }}</h4>
     <table class="table table-hover bg-white shadow-sm border align-middle table-sm">
         <thead class="table-light">
             <tr>
                 <th>ID</th>
-                <th>Cliente</th>
-                <th>Acceso</th>
-                <th>Plan</th>
-                <th>Uso</th>
-                <th>Módulos</th>
-                <th>Estado</th>
-                <th>Acciones</th>
+                <th>{{ _('Cliente') }}</th>
+                <th>{{ _('Acceso') }}</th>
+                <th>{{ _('Plan') }}</th>
+                <th>{{ _('Uso') }}</th>
+                <th>{{ _('Módulos') }}</th>
+                <th>{{ _('Estado') }}</th>
+                <th>{{ _('Acciones') }}</th>
             </tr>
         </thead>
         <tbody>
@@ -80,32 +81,32 @@
                     <code class="small">{{ t.subdominio }}.signaplan.com</code>
                     {% if t.custom_domain %}<br><code class="small">{{ t.custom_domain }}</code>{% endif %}
                     <div class="mt-1">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-toggle="modal" data-target="#modalDominio_{{ t.id }}">Dominio</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-toggle="modal" data-target="#modalPlan_{{ t.id }}">Plan</button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#modalModulos_{{ t.id }}">Módulos</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-toggle="modal" data-target="#modalDominio_{{ t.id }}">{{ _('Dominio') }}</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-toggle="modal" data-target="#modalPlan_{{ t.id }}">{{ _('Plan') }}</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#modalModulos_{{ t.id }}">{{ _('Módulos') }}</button>
                     </div>
                 </td>
                 <td class="small">
                     {% if k.admin_email %}<div>{{ k.admin_email }}</div>{% endif %}
-                    <div class="text-muted">Alta {{ t.created_at.strftime('%d/%m/%Y') if t.created_at else '—' }}</div>
+                    <div class="text-muted">{{ _('Alta') }} {{ t.created_at.strftime('%d/%m/%Y') if t.created_at else '—' }}</div>
                 </td>
                 <td>
                     {% if t.plan == 'paid' %}
-                        <span class="badge badge-primary">Pago</span>
+                        <span class="badge badge-primary">{{ _('Pago') }}</span>
                     {% else %}
-                        <span class="badge badge-secondary">Gratis</span>
+                        <span class="badge badge-secondary">{{ _('Gratis') }}</span>
                     {% endif %}
-                    {% if t.billing_exempt %}<span class="badge badge-info">Sin cobro</span>{% endif %}
+                    {% if t.billing_exempt %}<span class="badge badge-info">{{ _('Sin cobro') }}</span>{% endif %}
                 </td>
                 <td class="small">
-                    <div>{{ k.usuarios }} usuarios · {{ k.obras }} obras</div>
-                    <div>{{ k.fichajes_7d }} fichajes / 7d</div>
+                    <div>{{ _('{n} usuarios', n=k.usuarios) }} · {{ _('{n} obras', n=k.obras) }}</div>
+                    <div>{{ _('{n} fichajes / 7d', n=k.fichajes_7d) }}</div>
                     {% if k.dias_sin_uso is not none %}
                         <div class="{% if k.dias_sin_uso >= 14 %}text-danger font-weight-bold{% else %}text-muted{% endif %}">
-                            {{ k.dias_sin_uso }} d sin uso
+                            {{ _('{n} d sin uso', n=k.dias_sin_uso) }}
                         </div>
                     {% else %}
-                        <div class="text-muted">Sin actividad</div>
+                        <div class="text-muted">{{ _('Sin actividad') }}</div>
                     {% endif %}
                 </td>
                 <td class="small">
@@ -117,41 +118,41 @@
                 </td>
                 <td>
                     {% if t.is_active %}
-                        <span class="badge badge-success">Activo</span>
+                        <span class="badge badge-success">{{ _('Activo') }}</span>
                     {% else %}
-                        <span class="badge badge-danger">Inactivo</span>
+                        <span class="badge badge-danger">{{ _('Inactivo') }}</span>
                     {% endif %}
                 </td>
                 <td style="min-width:14rem;">
                     {% if t.is_active %}
                     <form action="{{ url_for('superadmin.impersonar_tenant', id_tenant=t.id) }}" method="POST" class="d-inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-sm btn-warning mb-1">Entrar como admin</button>
+                        <button type="submit" class="btn btn-sm btn-warning mb-1">{{ _('Entrar como admin') }}</button>
                     </form>
                     <form action="{{ url_for('superadmin.desactivar_tenant', id_tenant=t.id) }}" method="POST" class="d-inline"
-                          onsubmit="return confirm('¿Desactivar {{ t.nombre }}? Dejará de ser accesible.');">
+                          onsubmit="return confirm({{ _('¿Desactivar {nombre}? Dejará de ser accesible.', nombre=t.nombre)|tojson }});">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-sm btn-outline-secondary mb-1">Desactivar</button>
+                        <button type="submit" class="btn btn-sm btn-outline-secondary mb-1">{{ _('Desactivar') }}</button>
                     </form>
                     {% else %}
                     <form action="{{ url_for('superadmin.reactivar_tenant', id_tenant=t.id) }}" method="POST" class="d-inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn btn-sm btn-success mb-1">Reactivar</button>
+                        <button type="submit" class="btn btn-sm btn-success mb-1">{{ _('Reactivar') }}</button>
                     </form>
                     {% endif %}
                     <form action="{{ url_for('superadmin.purgar_tenant', id_tenant=t.id) }}" method="POST" class="mt-2 p-2 border border-danger rounded"
-                          onsubmit="return confirm('Esto BORRA PARA SIEMPRE el tenant {{ t.nombre }} y su base ({{ t.schema_name }}). No se puede deshacer. ¿Continuar?');">
+                          onsubmit="return confirm({{ _('Esto BORRA PARA SIEMPRE el tenant {nombre} y su base ({schema}). No se puede deshacer. ¿Continuar?', nombre=t.nombre, schema=t.schema_name)|tojson }});">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <label class="small text-danger font-weight-bold d-block mb-1">Eliminar permanentemente</label>
+                        <label class="small text-danger font-weight-bold d-block mb-1">{{ _('Eliminar permanentemente') }}</label>
                         <input type="text" name="confirm_subdominio" class="form-control form-control-sm mb-1"
-                               placeholder="Escribe: {{ t.subdominio }}" required autocomplete="off">
-                        <button type="submit" class="btn btn-sm btn-danger btn-block">Borrar tenant y base de datos</button>
+                               placeholder="{{ _('Escribe:') }} {{ t.subdominio }}" required autocomplete="off">
+                        <button type="submit" class="btn btn-sm btn-danger btn-block">{{ _('Borrar tenant y base de datos') }}</button>
                     </form>
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="text-center text-muted py-4">Aún no hay clientes registrados.</td>
+                <td colspan="8" class="text-center text-muted py-4">{{ _('Aún no hay clientes registrados.') }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -164,38 +165,37 @@
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content border-0 shadow-lg">
       <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title" id="modalPlanLabel_{{ t.id }}">Plan — {{ t.nombre }}</h5>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+        <h5 class="modal-title" id="modalPlanLabel_{{ t.id }}">{{ _('Plan') }} — {{ t.nombre }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
       <form action="{{ url_for('superadmin.configurar_plan_tenant', id_tenant=t.id) }}" method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-body p-4">
-          <label class="font-weight-bold">Plan</label>
+          <label class="font-weight-bold">{{ _('Plan') }}</label>
           <select name="plan" class="form-control mb-3">
-            <option value="free" {% if t.plan != 'paid' %}selected{% endif %}>Sin cobro (abierto)</option>
-            <option value="paid" {% if t.plan == 'paid' %}selected{% endif %}>De pago</option>
+            <option value="free" {% if t.plan != 'paid' %}selected{% endif %}>{{ _('Sin cobro (abierto)') }}</option>
+            <option value="paid" {% if t.plan == 'paid' %}selected{% endif %}>{{ _('De pago') }}</option>
           </select>
-          <label class="font-weight-bold">Límite de trabajadores (opcional)</label>
+          <label class="font-weight-bold">{{ _('Límite de trabajadores (opcional)') }}</label>
           <input type="number" min="1" name="limite_empleados" class="form-control"
                  value="{{ t.limite_empleados if t.limite_empleados is not none else '' }}"
-                 placeholder="Vacío = sin límite aplicado por ahora">
+                 placeholder="{{ _('Vacío = sin límite aplicado por ahora') }}">
           <div class="custom-control custom-checkbox mt-3">
             <input type="checkbox" class="custom-control-input" name="billing_exempt" value="1"
                    id="billingExempt_{{ t.id }}" {% if t.billing_exempt %}checked{% endif %}>
             <label class="custom-control-label" for="billingExempt_{{ t.id }}">
-              Premium sin cobro (demos, Soltec, cortesías)
+              {{ _('Premium sin cobro (demos, Soltec, cortesías)') }}
             </label>
           </div>
           <small class="text-muted d-block mt-2">
-            Cuentan operarios y jefes de obra activos. Hoy el cobro está apagado:
-            estos campos sirven para cuando se active Stripe.
+            {{ _('Cuentan operarios y jefes de obra activos. Hoy el cobro está apagado: estos campos sirven para cuando se active Stripe.') }}
           </small>
         </div>
         <div class="modal-footer bg-light">
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-          <button type="submit" class="btn btn-primary">Guardar plan</button>
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _('Cerrar') }}</button>
+          <button type="submit" class="btn btn-primary">{{ _('Guardar plan') }}</button>
         </div>
       </form>
     </div>
@@ -206,8 +206,8 @@
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content border-0 shadow-lg">
       <div class="modal-header bg-info text-white">
-        <h5 class="modal-title" id="modalDominioLabel_{{ t.id }}">🌐 Dominio propio — {{ t.nombre }}</h5>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+        <h5 class="modal-title" id="modalDominioLabel_{{ t.id }}">🌐 {{ _('Dominio propio') }} — {{ t.nombre }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
@@ -215,10 +215,10 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="modal-body p-4">
           <p class="text-muted mb-3">
-            El cliente puede seguir entrando por <code>{{ t.subdominio }}.signaplan.com</code>
-            o, si lo prefiere, por su propio dominio.
+            {{ _('El cliente puede seguir entrando por') }} <code>{{ t.subdominio }}.signaplan.com</code>
+            {{ _('o, si lo prefiere, por su propio dominio.') }}
           </p>
-          <label class="font-weight-bold">Dominio personalizado</label>
+          <label class="font-weight-bold">{{ _('Dominio personalizado') }}</label>
           <input
             type="text"
             name="custom_domain"
@@ -227,12 +227,12 @@
             value="{{ t.custom_domain or '' }}"
           >
           <small class="text-muted d-block mt-2">
-            Deja el campo vacío para quitar el dominio propio. El DNS del cliente debe apuntar a este servidor.
+            {{ _('Deja el campo vacío para quitar el dominio propio. El DNS del cliente debe apuntar a este servidor.') }}
           </small>
         </div>
         <div class="modal-footer bg-light">
-          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-          <button type="submit" class="btn btn-info text-white"><i class="fas fa-save"></i> Guardar dominio</button>
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _('Cerrar') }}</button>
+          <button type="submit" class="btn btn-info text-white"><i class="fas fa-save"></i>{{ _('Guardar dominio') }}</button>
         </div>
       </form>
     </div>
@@ -243,8 +243,8 @@
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content border-0 shadow-lg">
       <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title" id="modalLabel_{{ t.id }}">📦 Módulos para {{ t.nombre }}</h5>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+        <h5 class="modal-title" id="modalLabel_{{ t.id }}">📦 {{ _('Módulos para') }} {{ t.nombre }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
@@ -265,37 +265,37 @@
                 <div class="custom-control custom-switch mb-3">
                     <input type="checkbox" class="custom-control-input odoo-switch" data-tenant="{{ t.id }}" data-modulo="{{ key }}" name="modulos" value="{{ key }}" id="modModal_{{ t.id }}_{{ key }}" {% if activo %}checked{% endif %}>
                     <label class="custom-control-label font-weight-bold" style="font-size: 1.1rem; cursor: pointer;" for="modModal_{{ t.id }}_{{ key }}">
-                        {{ nombre }}
+                        {{ _(nombre) }}
                     </label>
                 </div>
                 {% if key == 'onboarding' %}
-                    <small class="text-muted d-block ml-4 mb-3">Actívalo para altas self-serve. En tenants creados por ti normalmente va apagado.</small>
+                    <small class="text-muted d-block ml-4 mb-3">{{ _('Actívalo para altas self-serve. En tenants creados por ti normalmente va apagado.') }}</small>
                 {% elif key == 'fichaje_operario' %}
-                    <small class="text-muted d-block ml-4 mb-3">Muestra <code>/mi</code> y sus ajustes (PIN, geolocalización, Oficina como obra). Para clientes ERP puros puedes dejarlo apagado.</small>
+                    <small class="text-muted d-block ml-4 mb-3">{{ _('Muestra /mi y sus ajustes (PIN, geolocalización, Oficina como obra). Para clientes ERP puros puedes dejarlo apagado.') }}</small>
                 {% elif key == 'registro_jornada' %}
-                    <small class="text-muted d-block ml-4 mb-3">Visible por defecto. Apágalo si no quieres enseñar el módulo de Inspección en este cliente.</small>
+                    <small class="text-muted d-block ml-4 mb-3">{{ _('Visible por defecto. Apágalo si no quieres enseñar el módulo de Inspección en este cliente.') }}</small>
                 {% elif key == 'avisos_laborales' %}
-                    <small class="text-muted d-block ml-4 mb-3">Personalización: click en logs Planificación/Solicitud para acusar avisos (flujo laboral Soltec). Solo actívalo en clientes que lo pidan.</small>
+                    <small class="text-muted d-block ml-4 mb-3">{{ _('Personalización: click en logs Planificación/Solicitud para acusar avisos (flujo laboral Soltec). Solo actívalo en clientes que lo pidan.') }}</small>
                 {% endif %}
                 
                 {% if key == 'odoo' %}
                     <div id="config_odoo_{{ t.id }}" class="mb-4 ml-4 bg-light p-3 rounded border border-info" style="{% if not activo %}display: none;{% endif %}">
-                        <label class="text-muted mb-2 font-weight-bold" style="font-size: 0.85rem;"><i class="fas fa-plug"></i> Adaptador API Odoo:</label>
+                        <label class="text-muted mb-2 font-weight-bold" style="font-size: 0.85rem;"><i class="fas fa-plug"></i> {{ _('Adaptador API Odoo:') }}</label>
                         <select name="odoo_adapter" class="form-control mb-2 form-control-sm">
-                            <option value="">-- Selecciona el traductor --</option>
+                            <option value="">{{ _('-- Selecciona el traductor --') }}</option>
                             {% for adapter_key, adapter_name in adaptadores_odoo.items() %}
-                                <option value="{{ adapter_key }}" {% if t.modulos_activos and t.modulos_activos.get('odoo_adapter') == adapter_key %}selected{% endif %}>{{ adapter_name }}</option>
+                                <option value="{{ adapter_key }}" {% if t.modulos_activos and t.modulos_activos.get('odoo_adapter') == adapter_key %}selected{% endif %}>{{ _(adapter_name) }}</option>
                             {% endfor %}
                         </select>
-                        <small class="text-muted"><i class="fas fa-info-circle"></i> El cliente introducirá sus credenciales desde su propio panel de integraciones.</small>
+                        <small class="text-muted"><i class="fas fa-info-circle"></i> {{ _('El cliente introducirá sus credenciales desde su propio panel de integraciones.') }}</small>
                     </div>
                 {% endif %}
             {% endfor %}
             
           </div>
           <div class="modal-footer bg-light">
-            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> Guardar Configuración</button>
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _('Cerrar') }}</button>
+            <button type="submit" class="btn btn-success"><i class="fas fa-save"></i>{{ _('Guardar Configuración') }}</button>
           </div>
       </form>
     </div>

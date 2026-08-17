@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Eliminar Empresa{% endblock %}
+{% block title %}{{ _('Eliminar Empresa') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -72,9 +72,9 @@
                 <div class="danger-icon">
                     <i class="fas fa-trash-alt"></i>
                 </div>
-                <h2 class="h4 font-weight-bold text-dark mb-2">¿Eliminar Empresa?</h2>
+                <h2 class="h4 font-weight-bold text-dark mb-2">{{ _('¿Eliminar Empresa?') }}</h2>
                 <p class="text-muted mb-4">
-                    Estás a punto de eliminar <strong>{{ company.nombre }}</strong> <span class="badge badge-light border">{{ company.code }}</span>
+                    {{ _('Estás a punto de eliminar') }} <strong>{{ company.nombre }}</strong> <span class="badge badge-light border">{{ company.code }}</span>
                 </p>
 
                 {# CASO A: TIENE TRABAJADORES (CONFLICTO) #}
@@ -83,9 +83,9 @@
                         <div class="d-flex">
                             <i class="fas fa-exclamation-triangle fa-2x mr-3 mt-1 text-warning"></i>
                             <div>
-                                <strong class="text-dark">Atención:</strong> Esta empresa tiene 
-                                <span class="badge badge-warning text-dark">{{ operarios|length }} trabajadores</span> asociados.
-                                <div class="mt-1">No se puede eliminar sin resolver qué hacer con el personal.</div>
+                                <strong class="text-dark">{{ _('Atención:') }}</strong> {{ _('Esta empresa tiene') }}
+                                <span class="badge badge-warning text-dark">{{ operarios|length }} {{ _('trabajadores') }}</span> {{ _('asociados.') }}
+                                <div class="mt-1">{{ _('No se puede eliminar sin resolver qué hacer con el personal.') }}</div>
                             </div>
                         </div>
                     </div>
@@ -93,21 +93,21 @@
                     <form method="POST" action="{{ url_for('admin.delete_company', company_id=company.id) }}" id="deleteForm">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="text-left mb-4">
-                            <label class="small text-uppercase text-muted font-weight-bold mb-2">Selecciona una acción:</label>
+                            <label class="small text-uppercase text-muted font-weight-bold mb-2">{{ _('Selecciona una acción:') }}</label>
                             
                             {# OPCIÓN 1: REASIGNAR #}
                             <div class="action-option selected" onclick="selectOption('reassign')">
                                 <div class="custom-control custom-radio">
                                     <input type="radio" id="reassignOption" name="action_option" value="reassign" class="custom-control-input" checked>
                                     <label class="custom-control-label font-weight-bold text-dark" for="reassignOption">
-                                        Mover trabajadores a otra empresa
+                                        {{ _('Mover trabajadores a otra empresa') }}
                                     </label>
                                 </div>
-                                <div class="small text-muted ml-4">Los empleados conservarán su historial pero cambiarán de empresa.</div>
+                                <div class="small text-muted ml-4">{{ _('Los empleados conservarán su historial pero cambiarán de empresa.') }}</div>
                                 
                                 <div class="nested-select" id="reassignGroup" style="display: block;">
                                     <select class="form-control form-control-sm mt-2" name="new_company" onclick="event.stopPropagation()">
-                                        <option value="">-- Seleccione empresa destino --</option>
+                                        <option value="">{{ _('-- Seleccione empresa destino --') }}</option>
                                         {% for other in companies %}
                                             <option value="{{ other.id }}">{{ other.nombre }}</option>
                                         {% endfor %}
@@ -119,20 +119,18 @@
                             <div class="action-option danger-zone" onclick="selectOption('delete')">
                                 <div class="custom-control custom-radio">
                                     <input type="radio" id="deleteOption" name="action_option" value="delete" class="custom-control-input">
-                                    <label class="custom-control-label font-weight-bold text-danger" for="deleteOption">
-                                        Eliminar trabajadores y empresa
-                                    </label>
+                                    <label class="custom-control-label font-weight-bold text-danger" for="deleteOption">{{ _('Eliminar trabajadores y empresa') }}</label>
                                 </div>
                                 <div class="small text-danger ml-4">
-                                    Se archivarán los {{ operarios|length }} trabajadores. Esta acción es destructiva.
+                                    {{ _('Se archivarán los') }} {{ operarios|length }} {{ _('trabajadores. Esta acción es destructiva.') }}
                                 </div>
                             </div>
                         </div>
 
                         <div class="d-flex justify-content-between align-items-center">
-                            <a href="{{ url_for('admin.companies') }}" class="btn btn-link text-muted px-0">Cancelar</a>
+                            <a href="{{ url_for('admin.companies') }}" class="btn btn-link text-muted px-0">{{ _('Cancelar') }}</a>
                             <button type="submit" class="btn btn-danger font-weight-bold px-4">
-                                Confirmar y Aplicar
+                                {{ _('Confirmar y Aplicar') }}
                             </button>
                         </div>
                     </form>
@@ -143,8 +141,8 @@
                         <div class="d-flex align-items-center">
                             <i class="fas fa-check-circle fa-2x mr-3 text-success"></i>
                             <div>
-                                <strong>Limpieza segura:</strong> No hay trabajadores asociados.<br>
-                                La empresa se puede eliminar sin efectos colaterales.
+                                <strong>{{ _('Limpieza segura:') }}</strong> {{ _('No hay trabajadores asociados.') }}<br>
+                                {{ _('La empresa se puede eliminar sin efectos colaterales.') }}
                             </div>
                         </div>
                     </div>
@@ -153,10 +151,9 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="action_option" value="none">
                         <div class="d-flex justify-content-center gap-3 mt-4">
-                            <a href="{{ url_for('admin.companies') }}" class="btn btn-light border text-muted mr-2">Cancelar</a>
+                            <a href="{{ url_for('admin.companies') }}" class="btn btn-light border text-muted mr-2">{{ _('Cancelar') }}</a>
                             <button type="submit" class="btn btn-danger px-4 font-weight-bold">
-                                <i class="fas fa-trash-alt mr-2"></i> Eliminar Definitivamente
-                            </button>
+                                <i class="fas fa-trash-alt mr-2"></i>{{ _('Eliminar Definitivamente') }}</button>
                         </div>
                     </form>
                 {% endif %}

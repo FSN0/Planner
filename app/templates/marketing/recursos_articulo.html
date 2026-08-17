@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale }}">
 <head>
     {% set page_title = article.title ~ ' — SignaPlan' %}
     {% set meta_description = article.description %}
@@ -18,6 +18,7 @@
       "headline": {{ article.title|tojson }},
       "description": {{ article.description|tojson }},
       "dateModified": {{ article.updated|tojson }},
+      "inLanguage": "{{ locale_meta.bcp47 if locale_meta is defined else 'es-ES' }}",
       "author": { "@type": "Organization", "name": "SignaPlan" },
       "publisher": {
         "@type": "Organization",
@@ -27,13 +28,13 @@
           "url": "{{ marketing_origin() }}{{ url_for('static', filename='img/brand/favicon-192.png') }}"
         }
       },
-      "mainEntityOfPage": "{{ marketing_url(url_for('marketing.recurso', slug=slug)) }}"
+      "mainEntityOfPage": "{{ marketing_url(mkt_url('marketing.recurso', slug=slug)) }}"
     }
     </script>
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% with variant='horizontal', width=150, height=26 %}
               {% include "components/_brand_logo.html" %}
             {% endwith %}
@@ -42,23 +43,23 @@
     </header>
 
     <article class="mkt-article">
-        <p class="mkt-article-meta"><a href="{{ url_for('marketing.recursos_index') }}">Guías</a> · Actualizado {{ article.updated }}</p>
+        <p class="mkt-article-meta"><a href="{{ mkt_url('marketing.recursos_index') }}">{{ _('Guías') }}</a> · {{ _('Actualizado') }} {{ article.updated }}</p>
         <h1>{{ article.h1 }}</h1>
         <div class="mkt-article-body">
             {{ article.body_html|safe }}
         </div>
         <p class="mkt-article-cta">
-            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta gratuita</a>
-            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.contacto') }}">Contacto</a>
+            <a class="mkt-btn mkt-btn-primary" href="{{ mkt_url('marketing.alta') }}">{{ _('Crear cuenta gratuita') }}</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ mkt_url('marketing.contacto') }}">{{ _('Contacto') }}</a>
         </p>
     </article>
 
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
         <span>
-            <a href="/">Inicio</a> ·
-            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a> ·
-            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a>
+            <a href="{{ mkt_home() }}">{{ _('Inicio') }}</a> ·
+            <a href="{{ mkt_url('marketing.soluciones_index') }}">{{ _('Soluciones') }}</a> ·
+            <a href="{{ mkt_url('marketing.recursos_index') }}">{{ _('Guías') }}</a>
         </span>
     </footer>
     {% include "components/_cookie_banner.html" %}

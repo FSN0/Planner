@@ -2,7 +2,7 @@
 {% macro stat_chip(label, value, tone='') %}
 <div class="sync-preview-stat sync-preview-stat--{{ tone }}">
   <span class="sync-preview-stat-val">{{ value }}</span>
-  <span class="sync-preview-stat-lbl">{{ label }}</span>
+  <span class="sync-preview-stat-lbl">{{ _(label) }}</span>
 </div>
 {% endmacro %}
 
@@ -10,7 +10,7 @@
 {% if razones %}
 <ul class="sync-preview-razones mb-0">
   {% for r in razones %}
-  <li>{{ r }}</li>
+  <li>{{ _(r) }}</li>
   {% endfor %}
 </ul>
 {% endif %}

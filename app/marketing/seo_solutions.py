@@ -206,13 +206,28 @@ matutino de “¿quién se lleva cuál?”.</p>
 }
 
 
-def list_solutions():
-    items = [
-        {"slug": slug, **{k: v for k, v in meta.items() if k not in ("body_html", "faq")}}
-        for slug, meta in SOLUTIONS.items()
-    ]
+def list_solutions(locale: str = None):
+    from app.marketing.seo_i18n import localize_solution
+    from app.services.i18n_service import get_locale
+
+    loc = locale or get_locale()
+    items = []
+    for slug, meta in SOLUTIONS.items():
+        localized = localize_solution(meta, slug, loc)
+        items.append(
+            {
+                "slug": slug,
+                **{k: v for k, v in localized.items() if k not in ("body_html", "faq")},
+            }
+        )
     return sorted(items, key=lambda x: (x.get("priority", 99), x["slug"]))
 
 
-def get_solution(slug: str):
-    return SOLUTIONS.get(slug)
+def get_solution(slug: str, locale: str = None):
+    from app.marketing.seo_i18n import localize_solution
+    from app.services.i18n_service import get_locale
+
+    solution = SOLUTIONS.get(slug)
+    if solution is None:
+        return None
+    return localize_solution(solution, slug, locale or get_locale())

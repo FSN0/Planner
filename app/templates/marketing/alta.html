@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale|default('es') }}">
 <head>
-    {% set page_title = 'Crear cuenta gratuita — SignaPlan' %}
-    {% set meta_description = 'Crea el espacio de tu constructora en SignaPlan. Sin tarjeta. Planificador de personal, fichaje en obra y flota.' %}
+    {% set page_title = _('seo.alta.title') %}
+    {% set meta_description = _('seo.alta.description') %}
     {% set canonical_path = url_for('marketing.alta') %}
     {% include "components/_marketing_seo_head.html" %}
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
@@ -11,7 +11,7 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% include "components/_brand_logo.html" %}
         </a>
         {% include "components/_marketing_nav.html" %}
@@ -19,10 +19,10 @@
 
     <section class="mkt-section" style="max-width: 560px; margin: 0 auto;">
         <div class="mkt-section-header">
-            <h2>Crea el espacio de tu empresa</h2>
+            <h2>{{ _('alta.heading') }}</h2>
             <p>
-                Sin tarjeta. Tu URL será
-                <strong><span id="preview-sub">tuempresa</span>.{{ base_domain }}</strong>.
+                {{ _('alta.sub') }}
+                <strong><span id="preview-sub">{{ _('alta.preview_placeholder') }}</span>.{{ base_domain }}</strong>.
             </p>
         </div>
 
@@ -36,11 +36,11 @@
 
         <form method="POST" class="mkt-hero-card" style="text-align: left;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label class="font-weight-bold">Nombre de la empresa</label>
+            <label class="font-weight-bold">{{ _('alta.company_name') }}</label>
             <input type="text" name="nombre_empresa" id="nombre_empresa" class="form-control mb-3" required
-                   value="{{ form.get('nombre_empresa', '') }}" placeholder="Construcciones López">
+                   value="{{ form.get('nombre_empresa', '') }}" placeholder="{{ _('Construcciones López') }}">
 
-            <label class="font-weight-bold">Subdominio</label>
+            <label class="font-weight-bold">{{ _('alta.subdomain') }}</label>
             <div class="input-group mb-3">
                 <input type="text" name="subdominio" id="subdominio" class="form-control" required
                        pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]"
@@ -51,44 +51,44 @@
                 </div>
             </div>
 
-            <label class="font-weight-bold">Correo del administrador</label>
+            <label class="font-weight-bold">{{ _('alta.admin_email') }}</label>
             <input type="email" name="admin_email" class="form-control mb-3" required
                    value="{{ form.get('admin_email', '') }}"
                    autocapitalize="none" autocomplete="username">
 
-            <label class="font-weight-bold">Contraseña</label>
+            <label class="font-weight-bold">{{ _('Contraseña') }}</label>
             <input type="password" name="admin_password" class="form-control mb-3" required
                    minlength="8" autocomplete="new-password">
 
-            <label class="font-weight-bold">Repite la contraseña</label>
+            <label class="font-weight-bold">{{ _('alta.password2') }}</label>
             <input type="password" name="admin_password2" class="form-control mb-3" required
                    minlength="8" autocomplete="new-password">
 
             <div class="mb-2">
                 <label>
                     <input type="checkbox" name="acepta_privacidad" value="1" required>
-                    He leído la
-                    <a href="{{ url_for('marketing.legal', slug='privacidad') }}" target="_blank">política de privacidad</a>
+                    {{ _('alta.privacy_1') }}
+                    <a href="{{ mkt_url('marketing.legal', slug='privacidad') }}" target="_blank">{{ _('alta.privacy_2') }}</a>
                 </label>
             </div>
             <div class="mb-4">
                 <label>
                     <input type="checkbox" name="acepta_condiciones" value="1" required>
-                    Acepto las
-                    <a href="{{ url_for('marketing.legal', slug='condiciones') }}" target="_blank">condiciones de uso</a>
+                    {{ _('alta.terms_1') }}
+                    <a href="{{ mkt_url('marketing.legal', slug='condiciones') }}" target="_blank">{{ _('alta.terms_2') }}</a>
                 </label>
             </div>
 
-            <button type="submit" class="mkt-btn mkt-btn-primary" style="width: 100%;">Crear cuenta gratuita</button>
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width: 100%;">{{ _('hero.cta_primary') }}</button>
         </form>
     </section>
 
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
         <span>
-            <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">Aviso legal</a> ·
-            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a> ·
-            <a href="{{ url_for('marketing.legal', slug='cookies') }}">Cookies</a>
+            <a href="{{ mkt_url('marketing.legal', slug='aviso-legal') }}">{{ _('footer.legal') }}</a> ·
+            <a href="{{ mkt_url('marketing.legal', slug='privacidad') }}">{{ _('footer.privacy') }}</a> ·
+            <a href="{{ mkt_url('marketing.legal', slug='cookies') }}">{{ _('footer.cookies') }}</a>
         </span>
     </footer>
 
@@ -110,8 +110,9 @@
           .replace(/-+$/g, '');
       }
 
+      var fallback = {{ _('alta.preview_placeholder')|tojson }};
       function refrescarPreview() {
-        var valor = (sub.value || '').trim() || slugify(nombre.value) || 'tuempresa';
+        var valor = (sub.value || '').trim() || slugify(nombre.value) || fallback;
         preview.textContent = valor;
       }
 

@@ -28,8 +28,13 @@
         {% for worker in free_workers %}
             {% set comp = worker.empresa_obj if worker.empresa_obj else worker.company_rel %}
             {% set border_color = comp.color if comp else '#cbd5e1' %}
-            {% set comp_code = comp.code if comp else 'Ext' %}
-            {% set comp_name = comp.nombre if comp else _('Sin Empresa') %}
+            {% if comp %}
+            {% set comp_code = comp.code %}
+            {% set comp_name = comp.nombre %}
+            {% else %}
+            {% set comp_code = _('Ext') %}
+            {% set comp_name = _('Sin Empresa') %}
+            {% endif %}
             
             {# CAMBIO: AÑADIDOS DATOS DE EMPRESA AL DATASET #}
             <div class="worker-chip filterable-worker bg-white shadow-sm mb-2 p-2 rounded" 
@@ -103,8 +108,13 @@
             {% for worker in busy_workers %}
                 {% set comp = worker.empresa_obj if worker.empresa_obj else worker.company_rel %}
                 {% set border_color = comp.color if comp else '#cbd5e1' %}
-                {% set comp_code = comp.code if comp else 'Ext' %}
-                {% set comp_name = comp.nombre if comp else _('Sin Empresa') %}
+                {% if comp %}
+                {% set comp_code = comp.code %}
+                {% set comp_name = comp.nombre %}
+                {% else %}
+                {% set comp_code = _('Ext') %}
+                {% set comp_name = _('Sin Empresa') %}
+                {% endif %}
                 
                 {# CAMBIO: AÑADIDOS DATOS DE EMPRESA AL DATASET TAMBIÉN AQUÍ #}
                 <div class="worker-chip filterable-worker mb-2 p-2 rounded" 
@@ -136,7 +146,17 @@
             {% endfor %}
         {% endif %}
 
-        {% if not free_workers and not busy_workers %}
+        {% if current_user.role == 'admin' %}
+            <div class="kanban-libres-start{% if free_workers or busy_workers %} kanban-libres-start--shortcut{% endif %}">
+                {% if not free_workers and not busy_workers %}
+                <p class="kanban-libres-start-title">{{ _('Añade personal') }}</p>
+                <p class="kanban-libres-start-sub">{{ _('Aquí saldrán los operarios libres para arrastrarlos a las obras.') }}</p>
+                {% endif %}
+                <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.create_user', next='tablero') }}">
+                    <i class="fas fa-user-plus"></i> {{ _('Añadir personal') }}
+                </a>
+            </div>
+        {% elif not free_workers and not busy_workers %}
             <div class="text-center text-muted small mt-5">
                 <i class="fas fa-users mb-2" style="font-size: 1.5rem; opacity: 0.3;"></i><br>
                 {{ _('No hay operarios.') }}

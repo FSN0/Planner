@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Editar Empresa{% endblock %}
+{% block title %}{{ _('Editar Empresa') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -17,7 +17,7 @@
         <a href="{{ url_for('admin.companies') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
           <i class="fas fa-arrow-left"></i>
         </a>
-        <h1 class="page-toolbar-title">Editar subcontrata</h1>
+        <h1 class="page-toolbar-title">{{ _('Editar subcontrata') }}</h1>
       </div>
     </div>
 
@@ -31,42 +31,42 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-row">
           <div class="form-group col-md-4">
-            <label class="admin-form-label">Código interno</label>
+            <label class="admin-form-label">{{ _('Código interno') }}</label>
             <input type="text" name="code" class="form-control" value="{{ company.code }}" required>
-            <small class="form-text text-muted" style="font-size: 0.72rem;">Identificador único</small>
+            <small class="form-text text-muted" style="font-size: 0.72rem;">{{ _('Identificador único') }}</small>
           </div>
           <div class="form-group col-md-8">
-            <label class="admin-form-label">Nombre fiscal / comercial</label>
+            <label class="admin-form-label">{{ _('Nombre fiscal / comercial') }}</label>
             <input type="text" name="nombre" class="form-control" value="{{ company.nombre }}" required>
           </div>
         </div>
 
         <div class="form-group">
-          <label class="admin-form-label">NIF / CIF</label>
+          <label class="admin-form-label">{{ _('NIF / CIF') }}</label>
           <input type="text" name="nif" class="form-control" value="{{ company.nif }}">
         </div>
 
         <div class="form-group">
-          <label class="admin-form-label">Descripción</label>
+          <label class="admin-form-label">{{ _('Descripción') }}</label>
           <textarea name="descripcion" class="form-control" rows="2">{{ company.descripcion }}</textarea>
         </div>
 
         <div class="form-row">
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Gremio / especialidad</label>
+            <label class="admin-form-label">{{ _('Gremio / especialidad') }}</label>
             <input type="text" name="gremio" class="form-control" value="{{ company.gremio }}">
           </div>
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Email de contacto</label>
+            <label class="admin-form-label">{{ _('Email de contacto') }}</label>
             <input type="email" name="email" class="form-control" value="{{ company.email }}">
           </div>
         </div>
 
         <div class="form-group">
-          <label class="admin-form-label">Color identificativo</label>
+          <label class="admin-form-label">{{ _('Color identificativo') }}</label>
           <div class="d-flex align-items-center">
             <input type="color" name="color" class="form-control form-control-color mr-2" style="height: 32px; width: 48px; padding: 2px;" value="{{ company.color }}">
-            <span class="text-muted" style="font-size: 0.72rem;">Usado en calendario y tablero</span>
+            <span class="text-muted" style="font-size: 0.72rem;">{{ _('Usado en calendario y tablero') }}</span>
           </div>
         </div>
 
@@ -77,8 +77,8 @@
               <span class="slider"></span>
             </label>
             <div>
-              <label for="isInternalCheck" class="admin-form-switch-label" style="cursor: pointer;">Empresa interna (propia)</label>
-              <p class="admin-form-switch-hint">La empresa y sus trabajadores se consideran «de la casa»</p>
+              <label for="isInternalCheck" class="admin-form-switch-label" style="cursor: pointer;">{{ _('Empresa interna (propia)') }}</label>
+              <p class="admin-form-switch-hint">{{ _('La empresa y sus trabajadores se consideran «de la casa»') }}</p>
             </div>
           </div>
         </div>
@@ -86,10 +86,9 @@
         <div class="admin-form-actions">
           <div></div>
           <div class="admin-form-actions-right">
-            <a href="{{ url_for('admin.companies') }}" class="btn-admin-link">Cancelar</a>
+            <a href="{{ url_for('admin.companies') }}" class="btn-admin-link">{{ _('Cancelar') }}</a>
             <button type="submit" class="btn-admin btn-admin-primary">
-              <i class="fas fa-save"></i> Guardar
-            </button>
+              <i class="fas fa-save"></i>{{ _('Guardar') }}</button>
           </div>
         </div>
       </form>

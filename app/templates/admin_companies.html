@@ -64,13 +64,13 @@
             </tr>
             <tr class="filter-row">
               <th></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 1, this.value)" placeholder="…" title="Filtrar código"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 2, this.value)" placeholder="…" title="Filtrar nombre"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 3, this.value)" placeholder="…" title="Filtrar NIF"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 4, this.value)" placeholder="…" title="Filtrar gremio"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 5, this.value)" placeholder="…" title="Filtrar email"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 6, this.value)" placeholder="…" title="Filtrar tipo"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 7, this.value)" placeholder="…" title="Filtrar valoración"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 1, this.value)" placeholder="…" title="{{ _('Filtrar código') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 2, this.value)" placeholder="…" title="{{ _('Filtrar nombre') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 3, this.value)" placeholder="…" title="{{ _('Filtrar NIF') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 4, this.value)" placeholder="…" title="{{ _('Filtrar gremio') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 5, this.value)" placeholder="…" title="{{ _('Filtrar email') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 6, this.value)" placeholder="…" title="{{ _('Filtrar tipo') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 7, this.value)" placeholder="…" title="{{ _('Filtrar valoración') }}"></th>
               <th></th>
             </tr>
           </thead>
@@ -87,8 +87,8 @@
               <td data-sort-value="{{ (c.gremio or '')|lower }}">{{ c.gremio or '—' }}</td>
               <td data-sort-value="{{ (c.email or '')|lower }}">{{ c.email or '—' }}</td>
               <td data-sort-value="{{ 'interna' if c.is_internal else 'externa' }}">
-                {% if c.is_internal %}<span class="badge-soft badge-soft-blue">Interna</span>
-                {% else %}<span class="badge-soft badge-soft-slate">Externa</span>{% endif %}
+                {% if c.is_internal %}<span class="badge-soft badge-soft-blue">{{ _('Interna') }}</span>
+                {% else %}<span class="badge-soft badge-soft-slate">{{ _('Externa') }}</span>{% endif %}
               </td>
               {% set ns = namespace(total=0, count=0) %}
               {% for u in c.users %}
@@ -99,19 +99,19 @@
               {% endfor %}
               {% set avg_score = (ns.total / ns.count)|round(1) if ns.count > 0 else 0 %}
               <td data-sort-tier="{{ 1 if ns.count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(avg_score) if ns.count > 0 else '' }}">
-                <a href="{{ url_for('admin.personal', company_id=c.id) }}{{ '#internos' if c.is_internal else '#operarios' }}" class="table-link-primary" title="Ver personal">
+                <a href="{{ url_for('admin.personal', company_id=c.id) }}{{ '#internos' if c.is_internal else '#operarios' }}" class="table-link-primary" title="{{ _('Ver personal') }}">
                   {% if ns.count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ avg_score }} <span class="text-muted">({{ ns.count }})</span>{% else %}—{% endif %}
                 </a>
               </td>
               <td class="col-actions">
                 <div class="table-actions">
-                  <a href="{{ url_for('admin.edit_company', company_id=c.id) }}" class="btn-table-action" title="Configurar"><i class="fas fa-cog"></i></a>
-                  <a href="{{ url_for('admin.confirm_delete_company', company_id=c.id) }}" class="btn-table-action btn-table-action--danger" title="Eliminar"><i class="fas fa-trash-alt"></i></a>
+                  <a href="{{ url_for('admin.edit_company', company_id=c.id) }}" class="btn-table-action" title="{{ _('Configurar') }}"><i class="fas fa-cog"></i></a>
+                  <a href="{{ url_for('admin.confirm_delete_company', company_id=c.id) }}" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash-alt"></i></a>
                 </div>
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="9" class="table-empty-state"><i class="fas fa-building"></i>Sin empresas registradas.</td></tr>
+            <tr><td colspan="9" class="table-empty-state"><i class="fas fa-building"></i>{{ _('Sin empresas registradas.') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -122,7 +122,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="{{ url_for('static', filename='js/common.js') }}?v=20260817a"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -141,18 +141,18 @@ function bulkDeleteCompanies() {
     var ids = getCheckedIds('companiesTable', 'company-checkbox');
     if (!ids.length) return;
     Swal.fire({
-        title: '¿Eliminar empresas seleccionadas?',
-        html: 'Se eliminarán <strong>' + ids.length + '</strong> empresa(s) y sus operarios asociados quedarán archivados.',
+        title: {{ _('¿Eliminar empresas seleccionadas?')|tojson }},
+        html: {{ _('Se eliminarán <strong>{n}</strong> empresa(s) y sus operarios asociados quedarán archivados.')|tojson }}.replace('{n}', ids.length),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#dc2626',
-        confirmButtonText: 'Sí, eliminar'
+        confirmButtonText: {{ _('Sí, eliminar')|tojson }}
     }).then(function(r) {
         if (!r.isConfirmed) return;
-        Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); }});
+        Swal.fire({ title: {{ _('Procesando...')|tojson }}, allowOutsideClick: false, didOpen: function() { Swal.showLoading(); }});
         bulkJsonPost('/admin/api/companies/batch_delete', { company_ids: ids }).then(function(data) {
-            if (data.success) Swal.fire('Hecho', data.message, 'success').then(function() { location.reload(); });
-            else Swal.fire('Error', data.message, 'error');
+            if (data.success) Swal.fire({{ _('Hecho')|tojson }}, data.message, 'success').then(function() { location.reload(); });
+            else Swal.fire({{ _('Error')|tojson }}, data.message, 'error');
         });
     });
 }

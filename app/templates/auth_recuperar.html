@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale|default('es') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recuperar contraseña - {{ tenant_name }}</title>
+    <title>{{ _('Recuperar contraseña') }} - {{ tenant_name }}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body class="layout-auth d-flex align-items-center justify-content-center" style="min-height: 100vh; background-color: #f4f6f9;">
     <div class="auth-card p-4 shadow-sm bg-white rounded" style="width: 100%; max-width: 400px; border-top: 4px solid #007bff;">
-        <h1 class="h4 text-center mb-2">Recuperar contraseña</h1>
+        <h1 class="h4 text-center mb-2">{{ _('Recuperar contraseña') }}</h1>
         <p class="text-center text-muted small mb-4">{{ tenant_name }}</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -24,14 +24,14 @@
         <form method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group mb-3">
-                <label class="small font-weight-bold text-secondary" for="email">Correo</label>
+                <label class="small font-weight-bold text-secondary" for="email">{{ _('Correo') }}</label>
                 <input type="email" name="email" id="email" class="form-control" required
                        autocapitalize="none" autocomplete="username">
             </div>
-            <button type="submit" class="btn btn-primary w-100">Enviar enlace</button>
+            <button type="submit" class="btn btn-primary w-100">{{ _('Enviar enlace') }}</button>
         </form>
         <p class="text-center small mt-3 mb-0">
-            <a href="{{ url_for('auth.login') }}">Volver al inicio de sesión</a>
+            <a href="{{ url_for('auth.login') }}">{{ _('Volver al inicio de sesión') }}</a>
         </p>
     </div>
 </body>

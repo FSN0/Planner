@@ -12,6 +12,7 @@ from app.models import User
 from app.services.email_service import send_email
 from app.services.email_verification_service import generar_token
 from app.services.signup_service import url_acceso_tenant
+from app.services.i18n_service import translate, get_locale, DEFAULT_LOCALE
 
 
 def _enlace_verificacion(tenant, email):
@@ -41,6 +42,7 @@ def enviar_enlaces_acceso(email, matches):
 
     lineas = []
     items_html = []
+    loc = get_locale() or DEFAULT_LOCALE
     try:
         for m in matches:
             tenant = m['tenant']
@@ -52,18 +54,26 @@ def enviar_enlaces_acceso(email, matches):
             if not verified:
                 verify_url = _enlace_verificacion(tenant, email)
 
-            bloque = f'- {nombre}\n  Entrar: {url}'
+            bloque = translate('- {nombre}\n  Entrar: {url}', loc, nombre=nombre, url=url)
             html_extra = ''
             if verify_url:
-                bloque += f'\n  Verificar correo: {verify_url}'
-                html_extra = (
-                    f'<br><a href="{verify_url}">Verificar correo</a> '
-                    f'<span style="color:#64748b">(pendiente)</span>'
+                bloque += translate('\n  Verificar correo: {url}', loc, url=verify_url)
+                html_extra = translate(
+                    '<br><a href="{url}">Verificar correo</a> '
+                    '<span style="color:#64748b">(pendiente)</span>',
+                    loc,
+                    url=verify_url,
                 )
             lineas.append(bloque)
             items_html.append(
-                f'<li><strong>{nombre}</strong><br>'
-                f'<a href="{url}">Entrar en la empresa</a>{html_extra}</li>'
+                translate(
+                    '<li><strong>{nombre}</strong><br>'
+                    '<a href="{url}">Entrar en la empresa</a>{extra}</li>',
+                    loc,
+                    nombre=nombre,
+                    url=url,
+                    extra=html_extra,
+                )
             )
     finally:
         try:
@@ -71,23 +81,29 @@ def enviar_enlaces_acceso(email, matches):
         except Exception:
             pass
 
-    texto = (
-        f'Hola,\n\n'
-        f'Has solicitado acceso a SignaPlan con {email}.\n'
-        f'Estas son las empresas donde puedes entrar:\n\n'
-        + '\n\n'.join(lineas)
-        + '\n\nSi no has pedido este correo, ignóralo.\n'
+    texto = translate(
+        'Hola,\n\n'
+        'Has solicitado acceso a SignaPlan con {email}.\n'
+        'Estas son las empresas donde puedes entrar:\n\n'
+        '{lineas}\n\n'
+        'Si no has pedido este correo, ignóralo.\n',
+        loc,
+        email=email,
+        lineas='\n\n'.join(lineas),
     )
-    html = (
-        f'<p>Hola,</p>'
-        f'<p>Has solicitado acceso a <strong>SignaPlan</strong> con '
-        f'<strong>{email}</strong>.</p>'
-        f'<p>Estas son las empresas donde puedes entrar:</p>'
-        f'<ul>{"".join(items_html)}</ul>'
-        f'<p>Si no has pedido este correo, ignóralo.</p>'
+    html = translate(
+        '<p>Hola,</p>'
+        '<p>Has solicitado acceso a <strong>SignaPlan</strong> con '
+        '<strong>{email}</strong>.</p>'
+        '<p>Estas son las empresas donde puedes entrar:</p>'
+        '<ul>{items}</ul>'
+        '<p>Si no has pedido este correo, ignóralo.</p>',
+        loc,
+        email=email,
+        items=''.join(items_html),
     )
     return bool(send_email(
-        'Tu acceso a SignaPlan',
+        translate('Tu acceso a SignaPlan', loc),
         [email],
         texto,
         html_body=html,

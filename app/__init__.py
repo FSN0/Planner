@@ -35,6 +35,9 @@ def is_safe_schema_name(name):
 
 
 def create_app():
+    from app.services.i18n_service import install_flask_flash_i18n
+    install_flask_flash_i18n()
+
     app = Flask(__name__)
     app.config.from_object(Config)
 
@@ -83,6 +86,14 @@ def create_app():
         )
 
         host = normalize_host(request.host)
+
+        # SEO: un solo host indexable. Si Caddy no redirige www, la app sí.
+        if host == 'www.signaplan.com':
+            from app.services.seo_origin_service import marketing_origin
+            dest = marketing_origin() + request.full_path
+            if dest.endswith('?'):
+                dest = dest[:-1]
+            return redirect(dest, code=301)
 
         # IP / localhost sin subdominio → marketing (igual que producción).
         es_ip = bool(host) and all(p.isdigit() for p in host.split('.')) and host.count('.') == 3
@@ -160,14 +171,28 @@ def create_app():
 
     @app.context_processor
     def inject_i18n():
+        from flask import url_for as _url_for
         from app.services.i18n_service import (
             _,
             frontend_catalog,
             get_locale,
+            hreflang_links,
+            locale_href,
+            locale_meta,
+            locale_og,
+            marketing_path,
             role_label,
             LOCALE_LABELS,
             SUPPORTED_LOCALES,
         )
+
+        def mkt_url(endpoint, **values):
+            path = _url_for(endpoint, **values)
+            return marketing_path(path, get_locale())
+
+        def mkt_home():
+            return marketing_path('/', get_locale())
+
         return dict(
             _=_,
             current_locale=get_locale(),
@@ -175,6 +200,13 @@ def create_app():
             supported_locales=SUPPORTED_LOCALES,
             locale_labels=LOCALE_LABELS,
             role_label=role_label,
+            locale_meta=locale_meta(),
+            locale_og=locale_og,
+            hreflang_links=hreflang_links,
+            locale_href=locale_href,
+            marketing_path=marketing_path,
+            mkt_url=mkt_url,
+            mkt_home=mkt_home,
         )
 
     # Exponemos el token CSRF en una cookie legible por JS (patrón double-submit)
@@ -206,21 +238,17 @@ def create_app():
             pass
 
     @app.after_request
-    def translate_html_ui(response):
-        """Traduce textos de interfaz del HTML al idioma activo."""
+    def _set_content_language(response):
+        """Idioma real de la respuesta (SEO + cookie si vino de /en/...)."""
         try:
-            from app.services.i18n_service import get_locale, translate_html_document
-            if get_locale() == 'es':
-                return response
-            ctype = (response.content_type or '').lower()
-            if 'text/html' not in ctype:
-                return response
-            if request.path.startswith('/static'):
-                return response
-            html = response.get_data(as_text=True)
-            translated = translate_html_document(html)
-            if translated != html:
-                response.set_data(translated)
+            from app.services.i18n_service import get_locale, set_locale_cookie
+            loc = get_locale()
+            response.headers.setdefault('Content-Language', loc)
+            from app.services.tenant_domain_service import is_marketing_host, normalize_host
+            if request.environ.get('HTTP_X_SIGNAPLAN_LOCALE') or is_marketing_host(
+                normalize_host(request.host)
+            ):
+                set_locale_cookie(response, loc)
         except Exception:
             pass
         return response
@@ -279,9 +307,12 @@ def create_app():
         marketing_origin=marketing_origin,
         marketing_url=marketing_url,
     )
+    from app.services.i18n_service import translate_log_action, translate_log_detail
     app.jinja_env.filters['format_dt'] = format_datetime
     app.jinja_env.filters['format_time'] = format_time
     app.jinja_env.filters['format_date'] = format_date
+    app.jinja_env.filters['tlog_action'] = translate_log_action
+    app.jinja_env.filters['tlog_detail'] = translate_log_detail
 
     # Importación local de constantes para evitar referencias circulares
     from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL
@@ -303,6 +334,7 @@ def create_app():
                 tenant_has_integrations=False,
                 tenant_has_registro_jornada=True,
                 tenant_has_fichaje_operario=False,
+                muestra_auditoria_fichajes=False,
                 tenant_has_avisos_laborales=False,
                 mostrar_onboarding=False,
                 onboarding_import_done={},
@@ -405,6 +437,7 @@ def create_app():
         tenant_has_integrations = False
         tenant_has_registro_jornada = True
         tenant_has_fichaje_operario = False
+        muestra_auditoria_fichajes = False
         tenant_has_avisos_laborales = False
         if current_user.is_authenticated:
             tenant = getattr(g, 'current_tenant', None)
@@ -421,6 +454,13 @@ def create_app():
                 )
                 from app.services.tenant_modules import has_avisos_laborales
                 tenant_has_avisos_laborales = has_avisos_laborales(tenant)
+                try:
+                    from app.services.fichaje_operario_service import (
+                        tenant_muestra_auditoria_fichajes,
+                    )
+                    muestra_auditoria_fichajes = tenant_muestra_auditoria_fichajes()
+                except Exception:
+                    muestra_auditoria_fichajes = False
 
         from app.services.permission_service import (
             user_can, is_laboral, is_admin, can_resolve_fichajes,
@@ -479,6 +519,7 @@ def create_app():
                     'mostrar_onboarding': mostrar_onboarding,
                     'tenant_has_onboarding': tenant_has_onboarding,
                     'onboarding_completo': onboarding_completo,
+                    'muestra_auditoria_fichajes': muestra_auditoria_fichajes,
                 })
             except Exception:
                 sidebar_nav = None
@@ -493,6 +534,7 @@ def create_app():
             tenant_has_integrations=tenant_has_integrations,
             tenant_has_registro_jornada=tenant_has_registro_jornada,
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
+            muestra_auditoria_fichajes=muestra_auditoria_fichajes,
             tenant_has_avisos_laborales=tenant_has_avisos_laborales,
             tenant_has_onboarding=tenant_has_onboarding,
             onboarding_completo=onboarding_completo,
@@ -546,5 +588,11 @@ def create_app():
         if current_user.is_authenticated:
             return redirect_by_role(current_user)
         return redirect(url_for('auth.login'))
+
+    from app.i18n.middleware import MarketingLocaleMiddleware
+    from app.services.i18n_service import DEFAULT_LOCALE, SUPPORTED_LOCALES
+    app.wsgi_app = MarketingLocaleMiddleware(
+        app.wsgi_app, SUPPORTED_LOCALES, DEFAULT_LOCALE
+    )
 
     return app

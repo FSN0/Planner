@@ -17,6 +17,7 @@ from app.services.config_service import set_tenant_config, get_tenant_config
 from app.sync.dispatcher import get_sync_adapter
 from app.decorators import roles_required
 from app.services.permission_service import can_resolve_fichajes, is_laboral, laboral_auditoria_sections
+from app.services.i18n_service import translate
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
 
@@ -150,7 +151,7 @@ def odoo_save_config():
 @roles_required(ROLE_ADMIN)
 def odoo_test_connection():
     if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
     result = test_odoo_connection()
     return jsonify({
         'success': result['connected'],
@@ -173,7 +174,7 @@ def api_save_config():
     data = request.get_json() or {}
     try:
         SyncConfigService.save_config(data)
-        return jsonify({'success': True, 'message': 'Configuración guardada.'})
+        return jsonify({'success': True, 'message': translate('Configuración guardada.')})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 400
@@ -194,7 +195,7 @@ def api_run_sync(task_name):
         'vehiculos-retro': 'vehículos retrospectivos',
     }
     if task_name not in labels:
-        return jsonify({'success': False, 'message': 'Módulo desconocido'}), 400
+        return jsonify({'success': False, 'message': translate('Módulo desconocido')}), 400
     try:
         from app.celery_worker import (
             auto_sync_obras, auto_sync_empleados, auto_sync_subcontratas,
@@ -215,7 +216,10 @@ def api_run_sync(task_name):
         tasks[task_name].delay()
         return jsonify({
             'success': True,
-            'message': f'Sincronización automática de {labels[task_name]} lanzada en segundo plano.',
+            'message': translate(
+                'Sincronización automática de {modulo} lanzada en segundo plano.',
+                modulo=translate(labels[task_name]),
+            ),
         })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -669,7 +673,8 @@ def commit_empleados():
 @login_required
 def auditoria_fichajes():
     from app.services.permission_service import user_can
-    if not user_can(current_user, 'auditoria_fichajes', 'r'):
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    if not user_can(current_user, 'auditoria_fichajes', 'r') or not tenant_muestra_auditoria_fichajes():
         flash("Acceso denegado.", "danger")
         return redirect(url_for('main.index'))
     
@@ -901,9 +906,12 @@ def resolver_fichaje():
     from datetime import datetime
     
     if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    if not tenant_muestra_auditoria_fichajes():
+        return jsonify({'success': False, 'error': translate('Acceso denegado.')}), 403
     if not can_resolve_fichajes(current_user):
-        return jsonify({'success': False, 'error': 'Resolución deshabilitada para este perfil.'}), 403
+        return jsonify({'success': False, 'error': translate('Resolución deshabilitada para este perfil.')}), 403
         
     data = request.json
     registro_id = data.get('registro_id')
@@ -911,13 +919,13 @@ def resolver_fichaje():
     
     registro = RegistroFichaje.query.get(registro_id)
     if not registro:
-        return jsonify({'success': False, 'error': 'Registro no encontrado'}), 404
+        return jsonify({'success': False, 'error': translate('Registro no encontrado')}), 404
         
     # Seguridad Backend: Evitar que un jefe resuelva un registro de otra obra
     if current_user.role == 'jefe_obra':
         obras_del_jefe = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()]
         if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
-            return jsonify({'success': False, 'error': 'No tienes permisos sobre este registro.'}), 403
+            return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
 
     try:
         registro.resuelto_por_id = current_user.id
@@ -1087,29 +1095,32 @@ def reabrir_fichaje():
     from app.utils.timezone_utils import utc_now
 
     if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    if not tenant_muestra_auditoria_fichajes():
+        return jsonify({'success': False, 'error': translate('Acceso denegado.')}), 403
     if not can_resolve_fichajes(current_user):
-        return jsonify({'success': False, 'error': 'Resolución deshabilitada para este perfil.'}), 403
+        return jsonify({'success': False, 'error': translate('Resolución deshabilitada para este perfil.')}), 403
 
     data = request.get_json(silent=True) or {}
     registro_id = data.get('registro_id')
     registro = RegistroFichaje.query.get(registro_id)
     if not registro:
-        return jsonify({'success': False, 'error': 'Registro no encontrado'}), 404
+        return jsonify({'success': False, 'error': translate('Registro no encontrado')}), 404
 
     if current_user.role == 'jefe_obra':
         obras_del_jefe = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()]
         if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
-            return jsonify({'success': False, 'error': 'No tienes permisos sobre este registro.'}), 403
+            return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
 
     if registro.estado not in _ESTADOS_RESUELTOS:
-        return jsonify({'success': False, 'error': 'Solo se pueden reabrir registros ya resueltos.'}), 400
+        return jsonify({'success': False, 'error': translate('Solo se pueden reabrir registros ya resueltos.')}), 400
 
     previo = (registro.estado_antes_resolucion or '').strip()
     if not previo or previo in _ESTADOS_RESUELTOS:
         return jsonify({
             'success': False,
-            'error': 'No hay clasificación previa guardada (decisiones antiguas no se pueden reabrir).',
+            'error': translate('No hay clasificación previa guardada (decisiones antiguas no se pueden reabrir).'),
         }), 400
 
     try:
@@ -1140,7 +1151,7 @@ def reabrir_fichaje():
         return jsonify({
             'success': True,
             'estado': previo,
-            'aviso': (
+            'aviso': translate(
                 'Clasificación restaurada. Si la resolución cambió el cuadrante '
                 '(mover/añadir/borrar), revisa las asignaciones a mano.'
             ),
@@ -1162,18 +1173,18 @@ def _puede_editar_marcas():
 def listar_marcas_dia():
     """Lista eventos del ledger de un trabajador/día (para corregir)."""
     if not _puede_editar_marcas():
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
     from datetime import datetime as dt
     from app.services.fichaje_admin_service import FichajeAdminError, listar_eventos_dia
 
     user_id = request.args.get('user_id', type=int)
     fecha_raw = (request.args.get('fecha') or '').strip()
     if not user_id or not fecha_raw:
-        return jsonify({'success': False, 'error': 'Indica trabajador y fecha.'}), 400
+        return jsonify({'success': False, 'error': translate('Indica trabajador y fecha.')}), 400
     try:
         fecha = dt.strptime(fecha_raw, '%Y-%m-%d').date()
     except ValueError:
-        return jsonify({'success': False, 'error': 'Fecha no válida.'}), 400
+        return jsonify({'success': False, 'error': translate('Fecha no válida.')}), 400
     try:
         eventos = listar_eventos_dia(user_id, fecha)
     except FichajeAdminError as exc:
@@ -1186,7 +1197,7 @@ def listar_marcas_dia():
 def registrar_marca_auditoria():
     """Alta manual de entrada/salida/pausa (libro append-only + motivo)."""
     if not _puede_editar_marcas():
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
     from datetime import datetime as dt
     from app.services.fichaje_admin_service import (
         FichajeAdminError,
@@ -1200,7 +1211,7 @@ def registrar_marca_auditoria():
         try:
             fecha_lab = dt.strptime(data['fecha_laboral'], '%Y-%m-%d').date()
         except ValueError:
-            return jsonify({'success': False, 'error': 'Fecha laboral no válida.'}), 400
+            return jsonify({'success': False, 'error': translate('Fecha laboral no válida.')}), 400
     try:
         evento = registrar_marca_manual(
             user_id=data.get('user_id'),
@@ -1239,7 +1250,7 @@ def registrar_marca_auditoria():
 def corregir_marca_auditoria():
     """Anula la marca original y registra la corregida (ambas quedan en el libro)."""
     if not _puede_editar_marcas():
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
     from app.services.fichaje_admin_service import FichajeAdminError, corregir_marca
     from app.utils import register_log
 
@@ -1276,7 +1287,7 @@ def corregir_marca_auditoria():
 def anular_marca_auditoria():
     """Anula una marca sin crear otra (queda la huella de anulación)."""
     if not _puede_editar_marcas():
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
     from app.services.fichaje_admin_service import FichajeAdminError, anular_marca
     from app.utils import register_log
 
@@ -1309,7 +1320,7 @@ def anular_marca_auditoria():
 @login_required
 def sync_fichajes_manual():
     if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'No autorizado'}), 403
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
         
     try:
         data = request.get_json() or {}
@@ -1349,7 +1360,7 @@ def preview_vehiculos():
 @roles_required(ROLE_ADMIN)
 def commit_vehiculos():
     if not _require_odoo_module():
-        return jsonify({'success': False, 'error': 'Módulo Odoo no habilitado'}), 403
+        return jsonify({'success': False, 'error': translate('Módulo Odoo no habilitado')}), 403
     try:
         from app.services.vehicle_sync_service import apply_diff
         data = request.get_json() or {}
@@ -1617,13 +1628,13 @@ def auditoria_vehiculos():
 def auditoria_vehiculos_visto():
     """Marca una anomalía de flota como vista (informativo; no resuelve)."""
     if not _require_odoo_module():
-        return jsonify({'success': False, 'error': 'Módulo Odoo no habilitado'}), 403
+        return jsonify({'success': False, 'error': translate('Módulo Odoo no habilitado')}), 403
 
     data = request.get_json(silent=True) or {}
     kind = (data.get('kind') or request.form.get('kind') or '').strip().lower()
     clave = (data.get('clave') or request.form.get('clave') or '').strip()
     if not kind or not clave:
-        return jsonify({'success': False, 'error': 'Faltan kind y clave'}), 400
+        return jsonify({'success': False, 'error': translate('Faltan kind y clave')}), 400
 
     try:
         from app.services.vehicle_anomaly_service import marcar_anomalia_vista
@@ -1647,7 +1658,7 @@ def auditoria_vehiculos_visto():
 def sync_vehiculos_manual():
     """Fuerza sync de flota + uso desde viajes tms.shipment (borra basura del rango)."""
     if not _require_odoo_module():
-        return jsonify({'success': False, 'error': 'Módulo Odoo no habilitado'}), 403
+        return jsonify({'success': False, 'error': translate('Módulo Odoo no habilitado')}), 403
     try:
         from app.services.vehicle_sync_service import (
             apply_diff, purge_registros_uso, sync_odometros,
@@ -1700,9 +1711,9 @@ def get_timeline_dia(user_id, fecha_str):
     from app.services.person_day_timeline_service import build_person_day_timeline
 
     if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
-        return jsonify({'success': False, 'error': 'Acceso denegado'}), 403
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
     data = build_person_day_timeline(user_id, fecha_str)
     if not data:
-        return jsonify({'success': False, 'error': 'Operario no encontrado'}), 404
+        return jsonify({'success': False, 'error': translate('Operario no encontrado')}), 404
     return jsonify(data)

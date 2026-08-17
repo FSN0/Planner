@@ -38,6 +38,7 @@ from app.services.fichaje_operario_service import (
 )
 from app.services.pin_auth_service import PinAuthError, autenticar_por_pin
 from app.utils.timezone_utils import format_datetime, format_time, today_local
+from app.services.i18n_service import translate
 
 operarios_bp = Blueprint('operarios', __name__, url_prefix='/mi')
 
@@ -83,14 +84,14 @@ def _solo_perfiles_con_jornada():
         return redirect(url_for('operarios.entrar', next=request.path))
 
     if current_user.role not in ROLES_CON_FICHAJE:
-        flash('Tu perfil no tiene área de fichaje.', 'warning')
+        flash(translate('Tu perfil no tiene área de fichaje.'), 'warning')
         return redirect(url_for('main.dashboard'))
 
     # Matriz de permisos: el rol operario puede tener fichaje desactivado por tenant.
     if current_user.role == ROLE_OPERARIO:
         from app.services.permission_service import user_can
         if not user_can(current_user, 'operario_fichaje', 'r'):
-            flash('Tu perfil no tiene acceso al fichaje.', 'warning')
+            flash(translate('Tu perfil no tiene acceso al fichaje.'), 'warning')
             return redirect(url_for('auth.login'))
 
     # PIN provisional: solo puede cambiar PIN o salir.
@@ -212,7 +213,7 @@ def entrar():
 @operarios_bp.route('/salir')
 def salir():
     logout_user()
-    flash('Sesión cerrada', 'info')
+    flash(translate('Sesión cerrada'), 'info')
     return redirect(url_for('operarios.entrar'))
 
 
@@ -250,12 +251,12 @@ def definir_pin():
     )
 
     if not getattr(g, 'current_tenant', None):
-        flash('Accede desde la URL de tu empresa.', 'warning')
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
         return redirect(url_for('operarios.entrar'))
 
     token = (request.values.get('t') or '').strip()
     if not token:
-        flash('El enlace para definir el PIN no es válido.', 'danger')
+        flash(translate('El enlace para definir el PIN no es válido.'), 'danger')
         return redirect(url_for('operarios.entrar'))
 
     # Validación temprana en GET para mostrar error claro si el token caducó.
@@ -278,7 +279,7 @@ def definir_pin():
             if current_user.is_authenticated:
                 logout_user()
             login_user(user, remember=True)
-            flash('PIN guardado. Ya puedes fichar.', 'success')
+            flash(translate('PIN guardado. Ya puedes fichar.'), 'success')
             return redirect(url_for('operarios.inicio'))
         except PinAuthError as exc:
             db.session.rollback()
@@ -324,7 +325,7 @@ def cambiar_pin():
                     request.form.get('pin_nuevo2'),
                 )
             db.session.commit()
-            flash('PIN actualizado.', 'success')
+            flash(translate('PIN actualizado.'), 'success')
             return redirect(url_for('operarios.inicio'))
         except PinAuthError as exc:
             db.session.rollback()
@@ -353,7 +354,7 @@ def ausencias():
     if current_user.role == ROLE_OPERARIO:
         need = 'w' if request.method == 'POST' else 'r'
         if not user_can(current_user, 'operario_ausencias', need):
-            flash('No tienes permiso para gestionar ausencias.', 'warning')
+            flash(translate('No tienes permiso para gestionar ausencias.'), 'warning')
             return redirect(url_for('operarios.inicio'))
 
     if request.method == 'POST':
@@ -362,7 +363,7 @@ def ausencias():
             leave_id = request.form.get('leave_id', type=int)
             try:
                 delete_manual_leave(leave_id, current_user)
-                flash('Solicitud cancelada.', 'success')
+                flash(translate('Solicitud cancelada.'), 'success')
             except Exception as exc:
                 flash(str(exc), 'danger')
             return redirect(url_for('operarios.ausencias'))
@@ -387,7 +388,9 @@ def ausencias():
                 target_date=leave.fecha_inicio,
             )
             flash(
-                'Solicitud enviada. Queda pendiente de que oficina o RRHH la aprueben.',
+                translate(
+                    'Solicitud enviada. Queda pendiente de que oficina o RRHH la aprueben.'
+                ),
                 'success',
             )
         except Exception as exc:
@@ -417,7 +420,7 @@ def api_fichar():
     if debe_cambiar_pin(current_user):
         return jsonify({
             'ok': False,
-            'error': 'Debes cambiar el PIN antes de fichar.',
+            'error': translate('Debes cambiar el PIN antes de fichar.'),
             'must_change_pin': True,
         }), 403
 
@@ -440,7 +443,7 @@ def api_fichar():
         current_app.logger.exception('Fallo al registrar un fichaje desde la PWA')
         return jsonify({
             'ok': False,
-            'error': 'No se ha podido registrar el fichaje. Inténtalo de nuevo.',
+            'error': translate('No se ha podido registrar el fichaje. Inténtalo de nuevo.'),
         }), 500
 
     return jsonify({
@@ -478,7 +481,7 @@ def api_conformar():
         current_app.logger.exception('Fallo al registrar conforme de jornada')
         return jsonify({
             'ok': False,
-            'error': 'No se ha podido registrar el conforme. Inténtalo de nuevo.',
+            'error': translate('No se ha podido registrar el conforme. Inténtalo de nuevo.'),
         }), 500
 
     return jsonify({
@@ -508,7 +511,7 @@ def _rango_solicitado():
         if request.args.get('hasta'):
             hasta = datetime.strptime(request.args['hasta'], '%Y-%m-%d').date()
     except ValueError:
-        flash('Las fechas indicadas no son válidas; se muestra el último mes.', 'warning')
+        flash(translate('Las fechas indicadas no son válidas; se muestra el último mes.'), 'warning')
         return today_local() - timedelta(days=30), today_local()
 
     if desde > hasta:

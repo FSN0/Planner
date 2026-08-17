@@ -1,295 +1,95 @@
 # app/services/i18n_service.py
 #
-# Idioma de la plataforma: cookie / preferencia de usuario / país / Accept-Language.
-# Catálogo propio para no depender de compilar .mo en cada despliegue.
+# Un solo motor: catálogos JSON por idioma + lookup explícito (_ / translate / SP_T).
+# Añadir un idioma = app/i18n/locales/{code}.json + entrada en registry.json.
+# Claves nuevas (SEO, legal, JS) pueden ir en app/i18n/extra/{code}.json; se fusionan al cargar.
+# El español de plantilla es el msgid (estilo gettext). Las claves dotted son marketing/SEO.
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
+
 from flask import g, has_request_context, request, session
 
-from app.services.i18n_catalog_app import APP_UI_EN, APP_UI_FR, APP_UI_PT
+_APP_DIR = Path(__file__).resolve().parents[1]
+_I18N_DIR = _APP_DIR / 'i18n'
+_LOCALES_DIR = _I18N_DIR / 'locales'
+_REGISTRY_PATH = _I18N_DIR / 'registry.json'
 
-SUPPORTED_LOCALES = ('es', 'en', 'pt', 'fr')
+_REGISTRY = {}
+_CATALOG = {}
+SUPPORTED_LOCALES = ('es',)
 DEFAULT_LOCALE = 'es'
+LOCALE_LABELS = {'es': 'Español'}
+_COUNTRY_LOCALE = {}
+_LOCALE_META = {}
 
-MONTHS_ES = (
-    '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-)
-WEEKDAYS_SHORT_ES = ('DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB')
 
-LOCALE_LABELS = {
-    'es': 'Español',
-    'en': 'English',
-    'pt': 'Português',
-    'fr': 'Français',
-}
+def _load_json(path: Path) -> dict:
+    data = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(data, dict):
+        raise TypeError(f'{path} must be a JSON object')
+    return data
 
-# País (ISO) → idioma por defecto al entrar.
-COUNTRY_LOCALE = {
-    'ES': 'es', 'MX': 'es', 'AR': 'es', 'CO': 'es', 'CL': 'es', 'PE': 'es',
-    'EC': 'es', 'UY': 'es', 'PY': 'es', 'BO': 'es', 'CR': 'es', 'PA': 'es',
-    'GT': 'es', 'HN': 'es', 'SV': 'es', 'NI': 'es', 'DO': 'es', 'VE': 'es',
-    'PT': 'pt', 'BR': 'pt',
-    'FR': 'fr', 'BE': 'fr', 'LU': 'fr', 'MC': 'fr',
-    'US': 'en', 'GB': 'en', 'IE': 'en', 'CA': 'en', 'AU': 'en', 'NZ': 'en',
-    'DE': 'en', 'NL': 'en', 'IT': 'en', 'AT': 'en', 'CH': 'en', 'SE': 'en',
-    'NO': 'en', 'DK': 'en', 'FI': 'en', 'PL': 'en', 'CZ': 'en', 'RO': 'en',
-}
 
-# Claves de marketing / UI compartida. Ampliar según se traduzca el producto.
-_CATALOG = {
-    'es': {
-        'nav.features': 'Funciones',
-        'nav.access': 'Acceso clientes',
-        'nav.integrations': 'Integraciones',
-        'nav.signup': 'Crear cuenta',
-        'nav.cta': 'Empezar gratis',
-        'nav.lang': 'Idioma',
-        'hero.brand': 'SignaPlan',
-        'hero.headline': 'Quién va a cada obra. Quién ficha. Qué coche está libre.',
-        'hero.sub': (
-            'Cuadrante de personal, fichaje en el tajo y flota en la misma herramienta. '
-            'Para constructoras PYME: no es un ERP de presupuestos. Alta sin tarjeta.'
-        ),
-        'hero.cta_primary': 'Crear cuenta gratuita',
-        'hero.cta_secondary': 'Ver cómo encaja',
-        'hero.proof': 'Sin tarjeta · Espacio propio en minutos',
-        'suite.title': 'No es solo fichaje. Es el conjunto.',
-        'suite.sub': (
-            'Planificación, fichaje y flota en la misma herramienta: '
-            'menos ir y venir entre apps y más control del día a día en obra.'
-        ),
-        'suite.plan.title': 'Cuadrante de personal',
-        'suite.plan.body': 'Quién va a cada tajo cada día. No es un Gantt ni un ERP: es el tablero de peones.',
-        'suite.clock.title': 'Fichaje en obra',
-        'suite.clock.body': 'DNI + PIN en el móvil. Pausas, conforme del trabajador e informe listo para inspección.',
-        'suite.fleet.title': 'Flota y coches libres',
-        'suite.fleet.body': 'Asignación de vehículos alineada con ausencias y el cuadrante de personal.',
-        'erp.title': 'Integraciones con tu ERP',
-        'erp.body': (
-            'Conectamos SignaPlan con Odoo y otros ERPs como proyecto a medida: '
-            'personal, obras, ausencias o fichajes según tu sistema. '
-            'Cuéntanos qué usáis y lo diseñamos juntos.'
-        ),
-        'erp.cta': 'Hablar de una integración',
-        'legal.title': 'Registro de jornada con trazabilidad',
-        'legal.body': (
-            'Libro append-only con cadena de hashes, pausas, conforme digital del trabajador '
-            'y PDF/CSV con huella. Documentación laboral sin Excel eterno.'
-        ),
-        'access.title': '¿Ya eres cliente?',
-        'access.body': (
-            'Cada empresa tiene su propia URL. Si no la recuerdas o no te llegó el correo '
-            'de verificación, pide el acceso con tu email.'
-        ),
-        'access.example': 'tuempresa.signaplan.com',
-        'access.cta': 'Entrar / recuperar acceso',
-        'cta.title': 'Pon el día a día de obra en orden',
-        'cta.body': 'Empieza gratis. Si quieres una demo con tu equipo, escríbenos.',
-        'cta.mail': 'Hablar con nosotros',
-        'nav.login': 'Entrar',
-        'footer.login': 'Entrar',
-        'footer.contact': 'Contacto',
-        'footer.legal': 'Aviso legal',
-        'footer.privacy': 'Privacidad',
-        'footer.cookies': 'Cookies',
-        'footer.terms': 'Condiciones',
-        'footer.dpa': 'Encargo de tratamiento',
-        'alta.title': 'Crea tu espacio SignaPlan',
-        'pref.language_saved': 'Idioma actualizado.',
-        'role.admin': 'Admin',
-        'role.jefe_obra': 'Jefe de obra',
-        'role.operario': 'Operario',
-        'role.laboral': 'Laboral',
-        'role.rrhh': 'RRHH',
-    },
-    'en': {
-        'nav.features': 'Features',
-        'nav.access': 'Customer access',
-        'nav.integrations': 'Integrations',
-        'nav.signup': 'Create account',
-        'nav.cta': 'Start free',
-        'nav.lang': 'Language',
-        'hero.brand': 'SignaPlan',
-        'hero.headline': 'Plan the site. Clock in on the field. Run the fleet.',
-        'hero.sub': (
-            'One platform for crew scheduling, mobile time clock with an immutable '
-            'working-time ledger, and vehicles — built for construction day-to-day.'
-        ),
-        'hero.cta_primary': 'Create free account',
-        'hero.cta_secondary': 'See how it fits',
-        'hero.proof': 'No card · Your own workspace in minutes',
-        'suite.title': 'Not just time clocking. The full stack.',
-        'suite.sub': (
-            'Scheduling, time clocking and fleet in one place — '
-            'less switching between apps, more control of the site day.'
-        ),
-        'suite.plan.title': 'Site planner',
-        'suite.plan.body': 'Who goes where each day. A clear board for office and site managers.',
-        'suite.clock.title': 'On-site clocking',
-        'suite.clock.body': 'ID + PIN on the phone. Breaks, worker confirmation and inspection-ready reports.',
-        'suite.fleet.title': 'Fleet & free cars',
-        'suite.fleet.body': 'Vehicle assignment aligned with leave and the crew schedule.',
-        'erp.title': 'ERP integrations',
-        'erp.body': (
-            'We connect SignaPlan to Odoo and other ERPs as a custom project: '
-            'people, sites, leave or time clocking to match your system. '
-            'Tell us what you use and we will design it with you.'
-        ),
-        'erp.cta': 'Talk about an integration',
-        'legal.title': 'Working-time record with traceability',
-        'legal.body': (
-            'Append-only ledger with hash chain, breaks, digital worker confirmation '
-            'and PDF/CSV fingerprint. Labour documentation without endless spreadsheets.'
-        ),
-        'access.title': 'Already a customer?',
-        'access.body': (
-            'Each company has its own URL. If you forgot it or never got the verification '
-            'email, request access with your address.'
-        ),
-        'access.example': 'yourcompany.signaplan.com',
-        'access.cta': 'Sign in / recover access',
-        'cta.title': 'Get the site day under control',
-        'cta.body': 'Start free. Want a guided demo with your team? Email us.',
-        'cta.mail': 'Talk to us',
-        'nav.login': 'Sign in',
-        'footer.login': 'Sign in',
-        'footer.contact': 'Contact',
-        'footer.legal': 'Legal notice',
-        'footer.privacy': 'Privacy',
-        'footer.cookies': 'Cookies',
-        'footer.terms': 'Terms',
-        'footer.dpa': 'Data processing',
-        'alta.title': 'Create your SignaPlan workspace',
-        'pref.language_saved': 'Language updated.',
-    },
-    'pt': {
-        'nav.features': 'Funções',
-        'nav.access': 'Acesso clientes',
-        'nav.integrations': 'Integrações',
-        'nav.signup': 'Criar conta',
-        'nav.cta': 'Começar grátis',
-        'nav.lang': 'Idioma',
-        'hero.brand': 'SignaPlan',
-        'hero.headline': 'Planeie a obra. Registe o ponto no campo. Controle a frota.',
-        'hero.sub': (
-            'Uma plataforma para planeamento de equipas, ponto móvel com registo de jornada '
-            'inalterável e veículos — feita para o dia a dia da construção.'
-        ),
-        'hero.cta_primary': 'Criar conta gratuita',
-        'hero.cta_secondary': 'Ver como encaixa',
-        'hero.proof': 'Sem cartão · O seu espaço em minutos',
-        'suite.title': 'Não é só ponto. É o conjunto.',
-        'suite.sub': (
-            'Planeamento, ponto e frota na mesma ferramenta: '
-            'menos ir e vir entre apps e mais controlo do dia a dia na obra.'
-        ),
-        'suite.plan.title': 'Planeador de obra',
-        'suite.plan.body': 'Quem vai a cada frente cada dia. Quadro claro para escritório e chefes.',
-        'suite.clock.title': 'Ponto na obra',
-        'suite.clock.body': 'Documento + PIN no telemóvel. Pausas, conforme do trabalhador e relatório para inspeção.',
-        'suite.fleet.title': 'Frota e carros livres',
-        'suite.fleet.body': 'Atribuição de veículos alinhada com ausências e o quadro de pessoal.',
-        'erp.title': 'Integrações com o seu ERP',
-        'erp.body': (
-            'Ligamos o SignaPlan ao Odoo e a outros ERPs como projeto à medida: '
-            'pessoal, obras, ausências ou ponto conforme o seu sistema. '
-            'Diga-nos o que usam e desenhamos juntos.'
-        ),
-        'erp.cta': 'Falar de uma integração',
-        'legal.title': 'Registo de jornada com rastreabilidade',
-        'legal.body': (
-            'Livro append-only com cadeia de hashes, pausas, conforme digital '
-            'e PDF/CSV com impressão digital. Documentação laboral sem Excel eterno.'
-        ),
-        'access.title': 'Já é cliente?',
-        'access.body': (
-            'Cada empresa tem o seu URL. Se não o lembrar ou não recebeu o email '
-            'de verificação, peça o acesso com o seu endereço.'
-        ),
-        'access.example': 'suaempresa.signaplan.com',
-        'access.cta': 'Entrar / recuperar acesso',
-        'cta.title': 'Organize o dia a dia da obra',
-        'cta.body': 'Comece grátis. Quer uma demo com a sua equipa? Escreva-nos.',
-        'cta.mail': 'Falar connosco',
-        'nav.login': 'Entrar',
-        'footer.login': 'Entrar',
-        'footer.contact': 'Contacto',
-        'footer.legal': 'Aviso legal',
-        'footer.privacy': 'Privacidade',
-        'footer.cookies': 'Cookies',
-        'footer.terms': 'Condições',
-        'footer.dpa': 'Encarregado do tratamento',
-        'alta.title': 'Crie o seu espaço SignaPlan',
-        'pref.language_saved': 'Idioma atualizado.',
-    },
-    'fr': {
-        'nav.features': 'Fonctions',
-        'nav.access': 'Accès clients',
-        'nav.integrations': 'Intégrations',
-        'nav.signup': 'Créer un compte',
-        'nav.cta': 'Commencer gratuitement',
-        'nav.lang': 'Langue',
-        'hero.brand': 'SignaPlan',
-        'hero.headline': 'Planifiez le chantier. Pointez sur le terrain. Gérez la flotte.',
-        'hero.sub': (
-            'Une plateforme pour le planning des équipes, le pointage mobile avec registre '
-            'inaltérable et les véhicules — pensée pour le quotidien du BTP.'
-        ),
-        'hero.cta_primary': 'Créer un compte gratuit',
-        'hero.cta_secondary': 'Voir comment ça s’intègre',
-        'hero.proof': 'Sans carte · Votre espace en quelques minutes',
-        'suite.title': 'Pas seulement le pointage. L’ensemble.',
-        'suite.sub': (
-            'Planning, pointage et flotte dans le même outil : '
-            'moins d’allers-retours entre apps, plus de contrôle du quotidien sur chantier.'
-        ),
-        'suite.plan.title': 'Planning de chantier',
-        'suite.plan.body': 'Qui va où chaque jour. Un tableau clair pour le bureau et les chefs.',
-        'suite.clock.title': 'Pointage sur site',
-        'suite.clock.body': 'Pièce d’identité + PIN sur le téléphone. Pauses, accord du salarié et rapport d’inspection.',
-        'suite.fleet.title': 'Flotte et véhicules libres',
-        'suite.fleet.body': 'Affectation des véhicules alignée sur les absences et le planning.',
-        'erp.title': 'Intégrations avec votre ERP',
-        'erp.body': (
-            'Nous connectons SignaPlan à Odoo et à d’autres ERP en projet sur mesure : '
-            'personnel, chantiers, absences ou pointage selon votre système. '
-            'Dites-nous ce que vous utilisez, nous le concevons avec vous.'
-        ),
-        'erp.cta': 'Parler d’une intégration',
-        'legal.title': 'Registre du temps de travail traçable',
-        'legal.body': (
-            'Registre append-only avec chaîne de hachage, pauses, confirmation numérique '
-            'et PDF/CSV empreinté. Documentation sociale sans Excel éternel.'
-        ),
-        'access.title': 'Déjà client ?',
-        'access.body': (
-            'Chaque entreprise a sa propre URL. Si vous l’avez oubliée ou n’avez pas reçu '
-            'l’e-mail de vérification, demandez l’accès avec votre adresse.'
-        ),
-        'access.example': 'votreentreprise.signaplan.com',
-        'access.cta': 'Se connecter / récupérer l’accès',
-        'cta.title': 'Mettez le chantier sous contrôle',
-        'cta.body': 'Commencez gratuitement. Envie d’une démo avec votre équipe ? Écrivez-nous.',
-        'cta.mail': 'Nous contacter',
-        'nav.login': 'Connexion',
-        'footer.login': 'Connexion',
-        'footer.contact': 'Contact',
-        'footer.legal': 'Mentions légales',
-        'footer.privacy': 'Confidentialité',
-        'footer.cookies': 'Cookies',
-        'footer.terms': 'Conditions',
-        'footer.dpa': 'Sous-traitance',
-        'alta.title': 'Créez votre espace SignaPlan',
-        'pref.language_saved': 'Langue mise à jour.',
-    },
-}
+def _reload_catalogs() -> None:
+    global _REGISTRY, _CATALOG, SUPPORTED_LOCALES, DEFAULT_LOCALE
+    global LOCALE_LABELS, _COUNTRY_LOCALE, _LOCALE_META
 
-# Panel: msgid = texto español de las plantillas.
-_CATALOG['en'].update(APP_UI_EN)
-_CATALOG['pt'].update(APP_UI_PT)
-_CATALOG['fr'].update(APP_UI_FR)
+    _REGISTRY = _load_json(_REGISTRY_PATH)
+    DEFAULT_LOCALE = str(_REGISTRY.get('default') or 'es')
+    meta = _REGISTRY.get('locales') or {}
+    _LOCALE_META = {str(k): dict(v) for k, v in meta.items()}
+    _COUNTRY_LOCALE = {
+        str(k).upper(): str(v)
+        for k, v in (_REGISTRY.get('country_locale') or {}).items()
+    }
+
+    files = {
+        p.stem: {str(k): str(v) for k, v in _load_json(p).items()}
+        for p in sorted(_LOCALES_DIR.glob('*.json'))
+        if p.stem
+    }
+    # es siempre existe como idioma fuente aunque el JSON solo tenga claves dotted.
+    codes = [DEFAULT_LOCALE]
+    for code in _LOCALE_META:
+        if code == DEFAULT_LOCALE:
+            continue
+        if code in files:
+            codes.append(code)
+    SUPPORTED_LOCALES = tuple(codes)
+    LOCALE_LABELS = {
+        code: str((_LOCALE_META.get(code) or {}).get('label') or code)
+        for code in SUPPORTED_LOCALES
+    }
+    _CATALOG.clear()
+    for code in SUPPORTED_LOCALES:
+        _CATALOG[code] = files.get(code) or {}
+
+    extra_dir = _I18N_DIR / 'extra'
+    if extra_dir.is_dir():
+        for p in extra_dir.glob('*.json'):
+            extra = {str(k): str(v) for k, v in _load_json(p).items()}
+            _CATALOG.setdefault(p.stem, {}).update(extra)
+
+
+_reload_catalogs()
+
+
+class _SafeMap(dict):
+    def __missing__(self, key):
+        return '{' + str(key) + '}'
+
+
+def supported_locales():
+    return SUPPORTED_LOCALES
+
+
+def locale_meta(code=None):
+    loc = normalize_locale(code) or get_locale()
+    return dict(_LOCALE_META.get(loc) or _LOCALE_META.get(DEFAULT_LOCALE) or {})
 
 
 def normalize_locale(value):
@@ -316,23 +116,52 @@ def locale_from_accept_language(header):
 def locale_from_country(country_code):
     if not country_code:
         return None
-    return COUNTRY_LOCALE.get(str(country_code).strip().upper())
+    mapped = _COUNTRY_LOCALE.get(str(country_code).strip().upper())
+    return normalize_locale(mapped)
+
+
+def _marketing_url_locale():
+    if not has_request_context():
+        return None
+    raw = request.environ.get('HTTP_X_SIGNAPLAN_LOCALE')
+    return normalize_locale(raw)
 
 
 def detect_request_locale(user=None):
     """
-    Orden: ?lang → cookie → sesión → preferencia usuario → país → Accept-Language → es.
+    Marketing: el idioma lo fija la URL (/en/..., /fr/...). Así Google indexa
+    una URL por lengua y no una cookie. Cookie/sesión solo recuerdan la elección
+    para el panel (subdominio de cliente).
+
+    Panel: ?lang → cookie → sesión → usuario → país → Accept-Language → es.
     """
+    marketing = False
     if has_request_context():
+        try:
+            from app.services.tenant_domain_service import is_marketing_host, normalize_host
+            marketing = is_marketing_host(normalize_host(request.host))
+        except Exception:
+            marketing = False
+
+        url_loc = _marketing_url_locale()
+        if url_loc:
+            return url_loc
+
         q = normalize_locale(request.args.get('lang'))
-        if q:
+        if q and not marketing:
             return q
+
         cookie = normalize_locale(request.cookies.get('signaplan_lang'))
-        if cookie:
+        if cookie and not marketing:
             return cookie
         sess = normalize_locale(session.get('locale'))
-        if sess:
+        if sess and not marketing:
             return sess
+
+        if marketing:
+            # URL sin prefijo = español canónico (x-default). No mutar por
+            # Accept-Language: Googlebot pediría EN sobre la URL en ES.
+            return DEFAULT_LOCALE
 
     if user is not None and getattr(user, 'is_authenticated', False):
         pref = normalize_locale(getattr(user, 'locale', None))
@@ -361,27 +190,27 @@ def get_locale():
     return DEFAULT_LOCALE
 
 
-def translate(key, locale=None):
-    """
-    Traduce una clave (nav.features) o un msgid en español de plantilla (Tablero).
-    Si falta la traducción, cae al español / al propio texto.
-    """
+def translate(key, locale=None, **kwargs):
+    """Traduce msgid (texto ES o clave dotted). Fallback: el propio msgid."""
     if key is None:
         return ''
     key = str(key)
     loc = normalize_locale(locale) or get_locale()
     bag = _CATALOG.get(loc) or {}
-    if key in bag:
-        return bag[key]
-    if loc != DEFAULT_LOCALE:
-        es_bag = _CATALOG.get(DEFAULT_LOCALE) or {}
-        if key in es_bag:
-            return es_bag[key]
-    return key
+    text = bag.get(key)
+    if text is None and loc != DEFAULT_LOCALE:
+        text = (_CATALOG.get(DEFAULT_LOCALE) or {}).get(key)
+    if text is None:
+        text = key
+    if kwargs:
+        try:
+            return text.format_map(_SafeMap(kwargs))
+        except Exception:
+            return text
+    return text
 
 
 def role_label(role):
-    """Etiqueta de rol según idioma activo."""
     key = f'role.{role}' if role else ''
     labeled = translate(key)
     if labeled != key:
@@ -389,12 +218,12 @@ def role_label(role):
     return (role or '').replace('_', ' ').title()
 
 
-def _(key):
-    return translate(key)
+def _(key, **kwargs):
+    return translate(key, **kwargs)
 
 
 def frontend_catalog(locale=None):
-    """Catálogo ligero expuesto al frontend para JS y scripts inline."""
+    """Mapa msgid → texto del idioma activo, para window.SP_T."""
     loc = normalize_locale(locale) or get_locale()
     bag = dict(_CATALOG.get(DEFAULT_LOCALE) or {})
     if loc != DEFAULT_LOCALE:
@@ -403,124 +232,371 @@ def frontend_catalog(locale=None):
 
 
 def month_name(month, locale=None):
-    """Nombre de mes 1–12 en el idioma activo (msgid español capitalizado)."""
     try:
         m = int(month)
     except (TypeError, ValueError):
         return ''
+    months = (
+        '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    )
     if m < 1 or m > 12:
         return ''
-    return translate(MONTHS_ES[m], locale)
+    return translate(months[m], locale)
 
 
 def weekday_short(dt, locale=None):
-    """Abreviatura de día (DOM/LUN…) según idioma. dt.weekday(): lun=0."""
+    names = ('DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB')
     idx = (dt.weekday() + 1) % 7
-    return translate(WEEKDAYS_SHORT_ES[idx], locale)
+    return translate(names[idx], locale)
 
 
-_PAIR_CACHE = {}
+def date_format(locale=None):
+    return locale_meta(locale).get('date') or '%d/%m/%Y'
 
 
-def _translation_pairs(locale):
-    """Pares (español, traducido) ordenados de más largo a más corto.
+def datetime_format(locale=None):
+    return locale_meta(locale).get('datetime') or '%d/%m/%Y %H:%M'
 
-    Short catalog keys (buttons, labels) are excluded here so the HTML
-    document pass cannot corrupt longer phrases; translate()/_() still use them.
-    """
-    loc = normalize_locale(locale) or DEFAULT_LOCALE
-    if loc == DEFAULT_LOCALE:
-        return []
-    cached = _PAIR_CACHE.get(loc)
-    if cached is not None:
-        return cached
-    bag = dict(_CATALOG.get(DEFAULT_LOCALE) or {})
-    bag.update(_CATALOG.get(loc) or {})
-    # Solo frases cuyo msgid es texto español visible (no claves tipo nav.x)
-    pairs = []
-    for src, dst in bag.items():
-        if not src or not dst or src == dst:
-            continue
-        if '.' in src and src.split('.', 1)[0] in (
-            'nav', 'hero', 'suite', 'erp', 'legal', 'access', 'cta', 'footer', 'alta',
-            'pref', 'role',
-        ):
-            continue
-        pairs.append((src, dst))
-    pairs.sort(key=lambda item: len(item[0]), reverse=True)
-    # HTML auto-replace must not use short tokens: they corrupt longer phrases
-    # (e.g. "Todas"->"Toutes" inside "Todas las obras"; "Desde" inside hints).
-    MIN_HTML_LEN = 14
-    long_srcs = [s for s, _ in pairs if len(s) >= MIN_HTML_LEN]
-    filtered = []
-    for src, dst in pairs:
-        if len(src) < MIN_HTML_LEN:
-            continue
-        # skip if this src is a proper substring of a longer catalog phrase
-        if any(src != other and src in other for other in long_srcs):
-            continue
-        filtered.append((src, dst))
-    pairs = filtered
-    _PAIR_CACHE[loc] = pairs
-    return pairs
 
-def translate_html_document(html, locale=None):
-    """
-    Sustituye textos de interfaz en español dentro del HTML renderizado.
-
-    Así no hace falta envolver a mano cada plantilla: menús, títulos, logs,
-    botones y etiquetas pasan al idioma activo. No toca JSON de APIs.
-    Nombres de obra / datos que mete el usuario no están en el catálogo → no se tocan.
-    """
-    import re
-
+def marketing_path(path, locale=None):
+    """Prefija /en, /pt, /fr a una ruta de marketing. ES no lleva prefijo."""
     loc = normalize_locale(locale) or get_locale()
-    if loc == DEFAULT_LOCALE or not html:
-        return html
-
-    pairs = _translation_pairs(loc)
-    if not pairs:
-        return html
-
-    # No tocar lógica JS ni CSS: protegemos <script>…</script> y <style>…</style>.
-    placeholders = []
-
-    def _park(match):
-        placeholders.append(match.group(0))
-        return f'<!--SP_I18N_{len(placeholders) - 1}-->'
-
-    protected = re.sub(
-        r'(?is)<(script|style)\b[^>]*>.*?</\1>',
-        _park,
-        html,
-    )
-
-    # Siempre límites de palabra: evita «Nombre» → «Name» dentro de «Nombres».
-    boundary = r'A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9'
-    for src, dst in pairs:
-        if src not in protected:
+    raw = path or '/'
+    if raw.startswith('http://') or raw.startswith('https://'):
+        return raw
+    if not raw.startswith('/'):
+        raw = '/' + raw
+    # Evitar doble prefijo si ya viene localizado.
+    for code in SUPPORTED_LOCALES:
+        if code == DEFAULT_LOCALE:
             continue
-        protected = re.sub(
-            rf'(?<![{boundary}]){re.escape(src)}(?![{boundary}])',
-            dst,
-            protected,
+        if raw == f'/{code}' or raw.startswith(f'/{code}/'):
+            raw = raw[len(code) + 1:] or '/'
+            break
+    if loc == DEFAULT_LOCALE:
+        return raw
+    if raw == '/':
+        return f'/{loc}/'
+    return f'/{loc}{raw}'
+
+
+def locale_href(target_locale, path=None):
+    """URL de la misma página de marketing en otro idioma."""
+    if path is None and has_request_context():
+        path = request.path
+    return marketing_path(path or '/', target_locale)
+
+
+def hreflang_links(path=None):
+    """Pares (hreflang, path) incluyendo x-default."""
+    if path is None and has_request_context():
+        path = request.path
+    path = path or '/'
+    links = []
+    for code in SUPPORTED_LOCALES:
+        links.append((code, marketing_path(path, code)))
+    links.append(('x-default', marketing_path(path, DEFAULT_LOCALE)))
+    return links
+
+
+def _cookie_domain():
+    if not has_request_context():
+        return None
+    try:
+        from app.services.tenant_domain_service import normalize_host
+        host = normalize_host(request.host)
+    except Exception:
+        host = (request.host or '').split(':')[0].lower()
+    if host == 'signaplan.com' or host.endswith('.signaplan.com'):
+        return '.signaplan.com'
+    return None
+
+
+_LOG_ASSIGN_RANGE = re.compile(
+    r"^(Asignado|Desasignado) (.+) → '(.+)' "
+    r"\((\d{2}/\d{2}/\d{4}) → (\d{2}/\d{2}/\d{4}), (\d+) días\)\.(?: (.+))?$"
+)
+_LOG_ASSIGN_ONE = re.compile(
+    r"^(Asignado|Desasignado) (.+) → '(.+)' \((\d{2}/\d{2}/\d{4})\)\.(?: (.+))?$"
+)
+_LOG_VEH_RANGE = re.compile(
+    r"^Vehículo (.+) → (.+) \((\d{2}/\d{2}/\d{4}) → (\d{2}/\d{2}/\d{4}), (\d+) días\)\. "
+    r"(Asignado|Desasignado)\.(?: (.+))?$"
+)
+_LOG_VEH_ONE = re.compile(
+    r"^Vehículo (.+) → (.+) \((\d{2}/\d{2}/\d{4})\)\. "
+    r"(Asignado|Desasignado)\.(?: (.+))?$"
+)
+_LOG_EMAIL_IP = re.compile(r'^Correo verificado tras alta\. IP: (.+)$')
+_LOG_OVERWRITE_N = re.compile(r'^Incluye sobreescritura de (\d+) día\(s\)\.$')
+_LOG_FICHAJE_ACTION = re.compile(r'^Fichaje físico \[(.+)\]$')
+_LOG_RESOLUCION_ACTION = re.compile(r'^Resolución de Fichaje: (.+)$')
+_LOG_CAMBIO_MASIVO = re.compile(r'^Cambio masivo a (.+)$')
+_LOG_FICHO = re.compile(
+    r'^El operario fichó en (.+?)\. Entrada: (.+) / Salida: (.+?)(?: Notas: (.+))?$'
+)
+_LOG_IGNORA_PLAN = re.compile(
+    r"^Se ignora el fichaje en '(.+)' \(estaba planificado en '(.+)'\)\.$"
+)
+_LOG_IGNORA_FICHAJE = re.compile(r"^Se ignora el fichaje en '(.+)'\.$")
+_LOG_IGNORA_INC = re.compile(r"^Se ignora la incidencia en '(.+)'\.$")
+_LOG_CUADRANTE = re.compile(r"^Cuadrante actualizado: de '(.+)' a '(.+)'\.$")
+_LOG_REASIGNADO = re.compile(r"^Reasignado a '(.+)'\.$")
+_LOG_ACEPTA_SIN = re.compile(r"^Se acepta el fichaje sin planificar en '(.+)'\.$")
+_LOG_ACEPTA_DESV = re.compile(
+    r"^Se acepta el fichaje con desviación de plan en '(.+)'\.$"
+)
+_LOG_ANADIDA_ASIG = re.compile(
+    r"^Añadida asignación en '(.+)' \(pluriempleo\)\.$"
+)
+_LOG_ELIMINA_PLAN = re.compile(
+    r"^Se elimina la planificación en '(.+)' \(el operario no fichó en esa obra\)\.$"
+)
+_LOG_AUSENCIA_CONF = re.compile(r"^Ausencia confirmada: no acudió a '(.+)'\.$")
+_FICHAJE_APP_SUFFIX = ' (Fichaje en App)'
+
+
+def translate_log_action(action, locale=None):
+    """Traduce la acción de un SystemLog (etiqueta estable o plantilla)."""
+    if not action:
+        return ''
+    m = _LOG_FICHAJE_ACTION.match(action)
+    if m:
+        return translate(
+            'Fichaje físico [{estado}]', locale, estado=translate(m.group(1), locale)
+        )
+    m = _LOG_RESOLUCION_ACTION.match(action)
+    if m:
+        return translate(
+            'Resolución de Fichaje: {accion}', locale, accion=translate(m.group(1), locale)
+        )
+    m = _LOG_CAMBIO_MASIVO.match(action)
+    if m:
+        return translate(
+            'Cambio masivo a {estado}', locale, estado=translate(m.group(1), locale)
+        )
+    return translate(action, locale)
+
+
+def translate_log_detail(detail, locale=None):
+    """Traduce el detalle de un SystemLog. Los nombres propios se conservan."""
+    if not detail:
+        return ''
+    exact = translate(detail, locale)
+    if exact != detail:
+        return exact
+
+    m = _LOG_ASSIGN_RANGE.match(detail)
+    if m:
+        verbo, name, label, fi, ff, ndias, extra = m.groups()
+        text = translate(
+            "{verbo} {name} → '{label}' ({fi} → {ff}, {n} días).",
+            locale,
+            verbo=translate(verbo, locale),
+            name=name,
+            label=label,
+            fi=fi,
+            ff=ff,
+            n=ndias,
+        )
+        if extra:
+            text = f'{text} {translate_log_detail(extra, locale)}'
+        return text
+
+    m = _LOG_ASSIGN_ONE.match(detail)
+    if m:
+        verbo, name, label, date, extra = m.groups()
+        text = translate(
+            "{verbo} {name} → '{label}' ({date}).",
+            locale,
+            verbo=translate(verbo, locale),
+            name=name,
+            label=label,
+            date=date,
+        )
+        if extra:
+            text = f'{text} {translate_log_detail(extra, locale)}'
+        return text
+
+    m = _LOG_VEH_RANGE.match(detail)
+    if m:
+        label, name, fi, ff, ndias, verbo, extra = m.groups()
+        text = translate(
+            'Vehículo {label} → {name} ({fi} → {ff}, {n} días). {verbo}.',
+            locale,
+            label=label,
+            name=name,
+            fi=fi,
+            ff=ff,
+            n=ndias,
+            verbo=translate(verbo, locale),
+        )
+        if extra:
+            text = f'{text} {translate_log_detail(extra, locale)}'
+        return text
+
+    m = _LOG_VEH_ONE.match(detail)
+    if m:
+        label, name, date, verbo, extra = m.groups()
+        text = translate(
+            'Vehículo {label} → {name} ({date}). {verbo}.',
+            locale,
+            label=label,
+            name=name,
+            date=date,
+            verbo=translate(verbo, locale),
+        )
+        if extra:
+            text = f'{text} {translate_log_detail(extra, locale)}'
+        return text
+
+    m = _LOG_EMAIL_IP.match(detail)
+    if m:
+        ip = m.group(1)
+        ip_disp = translate(ip, locale) if ip == 'Desconocida' else ip
+        return translate('Correo verificado tras alta. IP: {ip}', locale, ip=ip_disp)
+
+    m = _LOG_OVERWRITE_N.match(detail)
+    if m:
+        return translate(
+            'Incluye sobreescritura de {n} día(s).', locale, n=m.group(1)
         )
 
-    def _restore(match):
-        idx = int(match.group(1))
-        return placeholders[idx]
+    m = _LOG_FICHO.match(detail)
+    if m:
+        label, entrada, salida, notas = m.groups()
+        text = translate(
+            'El operario fichó en {label}. Entrada: {entrada} / Salida: {salida}',
+            locale,
+            label=label,
+            entrada=entrada,
+            salida=salida,
+        )
+        if notas:
+            text = f"{text} {translate('Notas: {note}', locale, note=notas)}"
+        return text
 
-    return re.sub(r'<!--SP_I18N_(\d+)-->', _restore, protected)
+    m = _LOG_IGNORA_PLAN.match(detail)
+    if m:
+        return translate(
+            "Se ignora el fichaje en '{real}' (estaba planificado en '{plan}').",
+            locale,
+            real=m.group(1),
+            plan=m.group(2),
+        )
+    m = _LOG_IGNORA_FICHAJE.match(detail)
+    if m:
+        return translate(
+            "Se ignora el fichaje en '{label}'.", locale, label=m.group(1)
+        )
+    m = _LOG_IGNORA_INC.match(detail)
+    if m:
+        return translate(
+            "Se ignora la incidencia en '{label}'.", locale, label=m.group(1)
+        )
+    m = _LOG_CUADRANTE.match(detail)
+    if m:
+        return translate(
+            "Cuadrante actualizado: de '{origen}' a '{destino}'.",
+            locale,
+            origen=m.group(1),
+            destino=m.group(2),
+        )
+    m = _LOG_REASIGNADO.match(detail)
+    if m:
+        return translate("Reasignado a '{label}'.", locale, label=m.group(1))
+    m = _LOG_ACEPTA_SIN.match(detail)
+    if m:
+        return translate(
+            "Se acepta el fichaje sin planificar en '{label}'.",
+            locale,
+            label=m.group(1),
+        )
+    m = _LOG_ACEPTA_DESV.match(detail)
+    if m:
+        return translate(
+            "Se acepta el fichaje con desviación de plan en '{label}'.",
+            locale,
+            label=m.group(1),
+        )
+    m = _LOG_ANADIDA_ASIG.match(detail)
+    if m:
+        return translate(
+            "Añadida asignación en '{label}' (pluriempleo).",
+            locale,
+            label=m.group(1),
+        )
+    m = _LOG_ELIMINA_PLAN.match(detail)
+    if m:
+        return translate(
+            "Se elimina la planificación en '{label}' (el operario no fichó en esa obra).",
+            locale,
+            label=m.group(1),
+        )
+    m = _LOG_AUSENCIA_CONF.match(detail)
+    if m:
+        return translate(
+            "Ausencia confirmada: no acudió a '{label}'.",
+            locale,
+            label=m.group(1),
+        )
+
+    if ' | ' in detail and detail.startswith('Obra:'):
+        chunks = []
+        for part in detail.split(' | '):
+            if ': ' in part:
+                key, val = part.split(': ', 1)
+                chunks.append(f'{translate(key, locale)}: {val}')
+            else:
+                chunks.append(part)
+        return ' | '.join(chunks)
+
+    return detail
+
+
+def translate_log_actor(autor, locale=None):
+    """Traduce actores de sistema; conserva nombres de persona."""
+    if not autor or autor == '-':
+        return autor or ''
+    if autor.endswith(_FICHAJE_APP_SUFFIX):
+        name = autor[: -len(_FICHAJE_APP_SUFFIX)]
+        return f"{name} ({translate('Fichaje en App', locale)})"
+    return translate(autor, locale)
 
 
 def set_locale_cookie(response, locale):
     loc = normalize_locale(locale) or DEFAULT_LOCALE
-    response.set_cookie(
-        'signaplan_lang',
-        loc,
+    kwargs = dict(
         max_age=365 * 24 * 3600,
         samesite='Lax',
-        secure=False,
+        secure=has_request_context() and request.is_secure,
         path='/',
     )
+    domain = _cookie_domain()
+    if domain:
+        kwargs['domain'] = domain
+    response.set_cookie('signaplan_lang', loc, **kwargs)
     return response
+
+
+def locale_og(code=None):
+    meta = _LOCALE_META.get(normalize_locale(code) or get_locale()) or {}
+    return str(meta.get('og') or 'es_ES')
+
+
+def install_flask_flash_i18n():
+    """Traduce flash() sin tocar cada ruta. Si el mensaje ya está traducido, se deja igual."""
+    import flask
+
+    if getattr(flask.flash, '_signaplan_i18n', False):
+        return
+    original = flask.flash
+
+    def flash(message, *args, **kwargs):
+        if isinstance(message, str):
+            message = translate(message)
+        return original(message, *args, **kwargs)
+
+    flash._signaplan_i18n = True
+    flask.flash = flash

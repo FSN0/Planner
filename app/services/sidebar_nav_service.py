@@ -419,7 +419,9 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_AUDITORIA_VEH:
         return user_can(user, 'auditoria_vehiculos', 'r') and bool(ctx.get('tenant_has_odoo'))
     if item_id == ITEM_AUDITORIA_FICH:
-        return user_can(user, 'auditoria_fichajes', 'r')
+        if not user_can(user, 'auditoria_fichajes', 'r'):
+            return False
+        return bool(ctx.get('muestra_auditoria_fichajes'))
     if item_id == ITEM_REGISTRO_JORNADA:
         return user_can(user, 'registro_jornada', 'r') and bool(ctx.get('tenant_has_registro_jornada'))
     if item_id == ITEM_INTEGRACIONES:

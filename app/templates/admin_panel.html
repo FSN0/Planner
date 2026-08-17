@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Panel de administrador{% endblock %}
+{% block title %}{{ _('Panel de administrador') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -26,10 +26,12 @@
           <i class="fas fa-user-plus"></i> {{ _('Solicitudes') }}
           {% if solicitudes_abiertas %}<span class="badge-soft badge-soft-amber ml-1">{{ solicitudes_abiertas }}</span>{% endif %}
         </a>
+        {% if muestra_auditoria_fichajes %}
         <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-user-clock"></i> {{ _('Auditoría') }}
           {% if audit_pendientes_total %}<span class="badge-soft badge-soft-red ml-1">{{ audit_pendientes_total }}</span>{% endif %}
         </a>
+        {% endif %}
         {% if tenant_has_integrations %}
         <a href="{{ url_for('sync.panel') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-plug"></i> {{ _('Integraciones') }}
@@ -81,6 +83,7 @@
           <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} {{ _('pendientes') }} · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} {{ _('en proceso') }}</span>
         </div>
       </article>
+      {% if muestra_auditoria_fichajes %}
       <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
         <div>
@@ -89,6 +92,7 @@
           <span class="dashboard-kpi-meta">{{ audit_conflictos }} {{ _('desv.') }} · {{ audit_paracaidistas }} {{ _('sin plan.') }} · {{ audit_ausencias }} {{ _('aus.') }}</span>
         </div>
       </article>
+      {% endif %}
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--green"><i class="fas fa-calendar-day"></i></div>
         <div>
@@ -97,6 +101,7 @@
           <span class="dashboard-kpi-meta">{{ _('asignaciones') }} · {{ ocupacion_pct }}% {{ _('plantilla ocupada') }}</span>
         </div>
       </article>
+      {% if muestra_auditoria_fichajes %}
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--slate"><i class="fas fa-fingerprint"></i></div>
         <div>
@@ -105,6 +110,7 @@
           <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} {{ _('incidencias') }}</span>{% endif %}</span>
         </div>
       </article>
+      {% endif %}
     </section>
 
     {# —— Gráficos + ocupación —— #}
@@ -267,7 +273,7 @@
     </div>
 
     {# —— Hoy: planificado vs fichado —— #}
-    {% if hoy_en_obra %}
+    {% if hoy_en_obra and muestra_auditoria_fichajes %}
     <section class="admin-panel dashboard-panel" style="margin-top:1rem;">
       <div class="dashboard-panel-head">
         <div>
@@ -306,7 +312,7 @@
               </td>
               <td>
                 {% if f.estado == 'ok' %}
-                  <span class="badge-soft badge-soft-green">OK</span>
+                  <span class="badge-soft badge-soft-green">{{ _('OK') }}</span>
                 {% elif f.estado == 'otra_obra' %}
                   <span class="badge-soft badge-soft-amber">{{ _('Otra obra') }}</span>
                 {% else %}
@@ -328,6 +334,7 @@
 
     {# —— Alertas auditoría + actividad —— #}
     <div class="dashboard-bottom-grid">
+      {% if muestra_auditoria_fichajes %}
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
           <h2 class="admin-panel-title"><i class="fas fa-user-clock text-danger mr-1"></i> {{ _('Incidencias de fichaje') }}</h2>
@@ -335,6 +342,7 @@
         </div>
         {% include 'components/_dashboard_incidencias.html' %}
       </section>
+      {% endif %}
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
@@ -347,11 +355,11 @@
           <li>
             <span class="dashboard-activity-time">{{ log.timestamp|format_dt }}</span>
             <span class="dashboard-activity-body">
-              <strong>{{ log.action }}</strong>
-              <span class="text-muted">— {{ (log.detail or '')|truncate(80) }}</span>
+              <strong>{{ log.action|tlog_action }}</strong>
+              <span class="text-muted">— {{ (log.detail or '')|tlog_detail|truncate(80) }}</span>
             </span>
             {% if log.user %}
-            <span class="badge-soft badge-soft-gray">{{ log.user.name }}</span>
+            <span class="badge-soft badge-soft-gray">{{ _(log.user.name) }}</span>
             {% endif %}
           </li>
           {% endfor %}
@@ -362,7 +370,7 @@
         {% if last_sync %}
         <div class="dashboard-sync-foot">
           <i class="fas fa-sync-alt text-muted"></i>
-          {{ _('Última sync') }} <strong>{{ last_sync.tipo }}</strong>
+          {{ _('Última sync') }} <strong>{{ _(last_sync.tipo) }}</strong>
           · {{ last_sync.fecha|format_dt }}
           {% if last_sync.errores %}
           <span class="dashboard-sync-errors-wrap ml-1" tabindex="0">
@@ -419,7 +427,7 @@ function dashboardResolverFichaje(id, accion) {
           if (!restantes.length) window.location.reload();
         }, 300);
       } else {
-        alert('Error: ' + data.error);
+        alert({{ _('Error')|tojson }} + ': ' + (data.error || {{ _('Error desconocido')|tojson }}));
         if (row) {
           row.style.opacity = '1';
           row.style.pointerEvents = 'auto';

@@ -1,77 +1,38 @@
 {% extends "marketing/legal_base.html" %}
 {% block legal_content %}
-<h2>1. Objeto</h2>
+<h2>{{ _('legal.condiciones.h1') }}</h2>
+<p>{{ _('legal.condiciones.p1', name=legal.razon_social) }}</p>
+
+<h2>{{ _('legal.condiciones.h2') }}</h2>
 <p>
-    Estas condiciones regulan el uso del servicio SignaPlan, software en la nube para
-    empresas (planificación de obra, personal, flota y registro de jornada), operado por
-    <strong>{{ legal.razon_social }}</strong>.
+    {{ _('legal.condiciones.p2a') }}
+    <a href="{{ mkt_url('marketing.legal', slug='privacidad') }}">{{ _('alta.privacy_2') }}</a>.
+    {{ _('legal.condiciones.p2b') }}
+</p>
+<p>{{ _('legal.condiciones.p3') }}</p>
+
+<h2>{{ _('legal.condiciones.h3') }}</h2>
+<p>{{ _('legal.condiciones.p4') }}</p>
+
+<h2>{{ _('legal.condiciones.h4') }}</h2>
+<p>
+    {{ _('legal.condiciones.p5a') }}
+    <a href="{{ mkt_url('marketing.legal', slug='encargado') }}">{{ _('legal.privacidad.dpa_link') }}</a>.
+    {{ _('legal.condiciones.p5b') }}
 </p>
 
-<h2>2. Alta y cuenta</h2>
-<p>
-    Al crear una cuenta aceptas estas condiciones y la
-    <a href="{{ url_for('marketing.legal', slug='privacidad') }}">política de privacidad</a>.
-    Debes facilitar datos veraces y custodiar las credenciales del administrador.
-    Eres responsable de la actividad de los usuarios que invites a tu espacio.
-</p>
-<p>
-    El alta puede ofrecerse sin tarjeta y con acceso a las funciones disponibles en la
-    plataforma en cada momento. SignaPlan podrá introducir planes de pago o límites
-    comunicándolos con antelación razonable; mientras no se active el cobro, no se
-    exigirá medio de pago para el uso descrito en la web.
-</p>
+<h2>{{ _('legal.condiciones.h5') }}</h2>
+<p>{{ _('legal.condiciones.p6') }}</p>
 
-<h2>3. Uso aceptable</h2>
-<p>
-    Queda prohibido usar el servicio para actividades ilícitas, vulnerar derechos de
-    terceros, intentar acceder a espacios de otros clientes, sobrecargar de forma abusiva
-    la infraestructura o eludir medidas de seguridad. SignaPlan podrá suspender cuentas
-    que incumplan estas reglas, avisando cuando sea razonable.
-</p>
+<h2>{{ _('legal.condiciones.h6') }}</h2>
+<p>{{ _('legal.condiciones.p7', name=legal.razon_social) }}</p>
 
-<h2>4. Datos de trabajadores y cumplimiento</h2>
-<p>
-    El cliente es el responsable del tratamiento de los datos de su plantilla y debe
-    disponer de base jurídica adecuada (relación laboral, información a trabajadores, etc.).
-    SignaPlan actúa como encargado según el
-    <a href="{{ url_for('marketing.legal', slug='encargado') }}">encargo de tratamiento</a>.
-    El registro de jornada y demás funciones de cumplimiento son herramientas de apoyo;
-    el cliente es quien debe asegurar el cumplimiento normativo en su organización.
-</p>
+<h2>{{ _('legal.condiciones.h7') }}</h2>
+<p>{{ _('legal.condiciones.p8') }}</p>
 
-<h2>5. Disponibilidad y cambios</h2>
-<p>
-    El servicio puede evolucionar (nuevas funciones, correcciones, mantenimiento). Se
-    avisará con antelación razonable de cambios sustanciales en estas condiciones o de
-    interrupciones programadas relevantes. SignaPlan no garantiza disponibilidad
-    ininterrumpida.
-</p>
+<h2>{{ _('legal.condiciones.h8') }}</h2>
+<p>{{ _('legal.condiciones.p9', email=legal.email) }}</p>
 
-<h2>6. Propiedad intelectual</h2>
-<p>
-    SignaPlan y el software asociado son propiedad de {{ legal.razon_social }} o de sus
-    licenciantes. El cliente recibe un derecho de uso no exclusivo, limitado a su
-    organización, mientras la cuenta esté activa.
-</p>
-
-<h2>7. Limitación de responsabilidad</h2>
-<p>
-    En la medida permitida por la ley, SignaPlan no responde de daños indirectos, lucro
-    cesante o pérdida de datos derivada de un uso indebido, de configuraciones del cliente
-    o de integraciones de terceros (p. ej. ERP). Nada en estas condiciones limita la
-    responsabilidad por dolo o por las obligaciones que la ley no permita excluir.
-</p>
-
-<h2>8. Duración y baja</h2>
-<p>
-    La relación se mantiene mientras la cuenta esté activa. El cliente puede solicitar la
-    baja escribiendo a <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>. Tras la baja,
-    se aplicará lo previsto en el encargo de tratamiento respecto a exportación y
-    supresión de datos.
-</p>
-
-<h2>9. Contacto</h2>
-<p>
-    <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>
-</p>
+<h2>{{ _('legal.condiciones.h9') }}</h2>
+<p><a href="mailto:{{ legal.email }}">{{ legal.email }}</a></p>
 {% endblock %}

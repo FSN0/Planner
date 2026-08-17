@@ -1,5 +1,6 @@
 /* Marcas manuales / corrección desde auditoría de fichajes */
 (function () {
+    var t = window.SP_T || function (key) { return key; };
     var selectedId = null;
 
     function csrfHeaders() {
@@ -51,10 +52,10 @@
         fetch(u.create, { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(payload) })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data.success) { toast('Marca registrada en el libro', true); setTimeout(function () { location.reload(); }, 700); }
-                else alert(data.error || 'Error');
+                if (data.success) { toast(t('Marca registrada en el libro'), true); setTimeout(function () { location.reload(); }, 700); }
+                else alert(data.error || t('Error'));
             })
-            .catch(function () { alert('Error de red'); });
+            .catch(function () { alert(t('Error de red')); });
     };
 
     window.cargarMarcasDia = function () {
@@ -62,28 +63,28 @@
         var uid = document.getElementById('corrUserId').value;
         var fecha = document.getElementById('corrFecha').value;
         var box = document.getElementById('corrLista');
-        if (!uid || !fecha) { alert('Indica trabajador y día'); return; }
-        box.innerHTML = '<span class="text-muted small">Cargando…</span>';
+        if (!uid || !fecha) { alert(t('Indica trabajador y día')); return; }
+        box.innerHTML = '<span class="text-muted small">' + t('Cargando…') + '</span>';
         fetch(u.list + '?user_id=' + encodeURIComponent(uid) + '&fecha=' + encodeURIComponent(fecha), {
             headers: csrfHeaders(),
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.success) {
-                    box.innerHTML = '<span class="text-danger small">' + (data.error || 'Error') + '</span>';
+                    box.innerHTML = '<span class="text-danger small">' + (data.error || t('Error')) + '</span>';
                     return;
                 }
                 if (!data.eventos.length) {
-                    box.innerHTML = '<span class="text-muted small">No hay marcas ese día.</span>';
+                    box.innerHTML = '<span class="text-muted small">' + t('No hay marcas ese día.') + '</span>';
                     return;
                 }
                 var labels = {
-                    entrada: 'Entrada', salida: 'Salida', pausa_inicio: 'Pausa',
-                    pausa_fin: 'Fin pausa', anulacion: 'Anulación', reasignacion_obra: 'Reasignación',
+                    entrada: t('Entrada'), salida: t('Salida'), pausa_inicio: t('Pausa'),
+                    pausa_fin: t('Fin pausa'), anulacion: t('Anulación'), reasignacion_obra: t('Reasignación'),
                 };
                 box.innerHTML = data.eventos.map(function (e) {
                     var disabled = e.editable ? '' : 'disabled';
-                    var badge = e.anulado ? ' <span class="badge badge-secondary">anulada</span>' : '';
+                    var badge = e.anulado ? ' <span class="badge badge-secondary">' + t('anulada') + '</span>' : '';
                     var tip = e.tipo === 'anulacion' ? ' (→ #' + e.evento_anulado_id + ')' : '';
                     return '<label class="d-block mb-1' + (e.anulado ? ' text-muted' : '') + '">'
                         + '<input type="radio" name="marcaSel" value="' + e.id + '" ' + disabled
@@ -105,12 +106,12 @@
                     });
                 });
             })
-            .catch(function () { box.innerHTML = '<span class="text-danger small">Error de red</span>'; });
+            .catch(function () { box.innerHTML = '<span class="text-danger small">' + t('Error de red') + '</span>'; });
     };
 
     window.corregirMarcaSeleccionada = function () {
         var u = urls();
-        if (!selectedId) { alert('Selecciona una marca editable'); return; }
+        if (!selectedId) { alert(t('Selecciona una marca editable')); return; }
         var payload = {
             evento_id: selectedId,
             ocurrido_en: (document.getElementById('corrOcurrido').value || '').replace('T', ' ') || null,
@@ -121,27 +122,27 @@
         fetch(u.fix, { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(payload) })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data.success) { toast('Marca corregida (original anulada)', true); setTimeout(function () { location.reload(); }, 700); }
-                else alert(data.error || 'Error');
+                if (data.success) { toast(t('Marca corregida (original anulada)'), true); setTimeout(function () { location.reload(); }, 700); }
+                else alert(data.error || t('Error'));
             })
-            .catch(function () { alert('Error de red'); });
+            .catch(function () { alert(t('Error de red')); });
     };
 
     window.anularMarcaSeleccionada = function () {
         var u = urls();
-        if (!selectedId) { alert('Selecciona una marca editable'); return; }
+        if (!selectedId) { alert(t('Selecciona una marca editable')); return; }
         var motivo = document.getElementById('corrMotivo').value;
-        if (!motivo || motivo.trim().length < 5) { alert('Indica un motivo (mín. 5 caracteres)'); return; }
-        if (!confirm('¿Anular esta marca? Quedará registrada la anulación en el libro.')) return;
+        if (!motivo || motivo.trim().length < 5) { alert(t('Indica un motivo (mín. 5 caracteres)')); return; }
+        if (!confirm(t('¿Anular esta marca? Quedará registrada la anulación en el libro.'))) return;
         fetch(u.cancel, {
             method: 'POST', headers: csrfHeaders(),
             body: JSON.stringify({ evento_id: selectedId, motivo: motivo }),
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data.success) { toast('Marca anulada', true); setTimeout(function () { location.reload(); }, 700); }
-                else alert(data.error || 'Error');
+                if (data.success) { toast(t('Marca anulada'), true); setTimeout(function () { location.reload(); }, 700); }
+                else alert(data.error || t('Error'));
             })
-            .catch(function () { alert('Error de red'); });
+            .catch(function () { alert(t('Error de red')); });
     };
 })();

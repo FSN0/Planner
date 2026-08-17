@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "sync/_preview_macros.html" import stat_chip, razon_list %}
-{% block title %}Preview: Obras{% endblock %}
+{% block title %}{{ _('Preview: Obras') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -15,17 +15,15 @@
 
     <header class="sync-preview-header">
       <div>
-        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
-        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
-        <p class="sync-preview-sub">Análisis en vivo desde Odoo · qué se importará, qué se omitirá y por qué.</p>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> {{ _('Panel Odoo') }}</a>
+        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ _(preview.modulo_label) }}</h1>
+        <p class="sync-preview-sub">{{ _('Análisis en vivo desde Odoo · qué se importará, qué se omitirá y por qué.') }}</p>
       </div>
       <div class="sync-preview-actions">
         <button class="btn-admin btn-admin-ghost" onclick="confirmSync('valid_only')">
-          <i class="fas fa-filter"></i> Guardar solo completos
-        </button>
+          <i class="fas fa-filter"></i>{{ _('Guardar solo completos') }}</button>
         <button class="btn-admin btn-admin-primary" onclick="confirmSync('all')">
-          <i class="fas fa-save"></i> Guardar todo
-        </button>
+          <i class="fas fa-save"></i>{{ _('Guardar todo') }}</button>
       </div>
     </header>
 
@@ -39,12 +37,12 @@
 
     {% if preview.incidencias %}
     <section class="sync-preview-section sync-preview-section--danger">
-      <h2 class="sync-preview-section-title"><i class="fas fa-exclamation-triangle"></i> Incidencias — requieren acción ({{ preview.incidencias|length }})</h2>
-      <p class="sync-preview-section-desc">Estos registros se <strong>omitirían en la sync automática</strong> hasta resolver el responsable.</p>
+      <h2 class="sync-preview-section-title"><i class="fas fa-exclamation-triangle"></i> {{ _('Incidencias — requieren acción') }} ({{ preview.incidencias|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Estos registros se <strong>omitirían en la sync automática</strong> hasta resolver el responsable.')|safe }}</p>
       <div class="sync-preview-table-wrap">
         <table class="sync-preview-table">
           <thead>
-            <tr><th>Acción</th><th>Código</th><th>Proyecto</th><th>Motivo / resolución</th><th>Jefe</th><th>Encargado</th></tr>
+            <tr><th>{{ _('Acción') }}</th><th>{{ _('Código') }}</th><th>{{ _('Proyecto') }}</th><th>{{ _('Motivo / resolución') }}</th><th>{{ _('Jefe') }}</th><th>{{ _('Encargado') }}</th></tr>
           </thead>
           <tbody>
             {% for obra in preview.incidencias %}
@@ -56,18 +54,18 @@
               <td class="{% if obra.warn_jefe %}sync-preview-cell--warn{% endif %}">
                 {% if obra.warn_jefe %}
                 <select class="form-control form-control-sm select2-personnel sync-jefe-select" data-odoo-id="{{ obra.odoo_id }}">
-                  <option value="">Asignar: {{ obra.jefe_odoo_raw }}</option>
+                  <option value="">{{ _('Asignar:') }} {{ obra.jefe_odoo_raw }}</option>
                   {% for j in jefes %}<option value="{{ j.id }}">{{ j.name }} {{ j.lastname }}</option>{% endfor %}
                 </select>
-                {% else %}<span class="text-success small">OK</span>{% endif %}
+                {% else %}<span class="text-success small">{{ _('OK') }}</span>{% endif %}
               </td>
               <td class="{% if obra.warn_encargado %}sync-preview-cell--warn{% endif %}">
                 {% if obra.warn_encargado %}
                 <select class="form-control form-control-sm select2-personnel sync-enc-select" data-odoo-id="{{ obra.odoo_id }}">
-                  <option value="">Asignar: {{ obra.enc_odoo_raw }}</option>
+                  <option value="">{{ _('Asignar:') }} {{ obra.enc_odoo_raw }}</option>
                   {% for e in encargados %}<option value="{{ e.id }}">{{ e.name }} {{ e.lastname }}</option>{% endfor %}
                 </select>
-                {% else %}<span class="text-success small">OK</span>{% endif %}
+                {% else %}<span class="text-success small">{{ _('OK') }}</span>{% endif %}
               </td>
             </tr>
             {% endfor %}
@@ -79,17 +77,17 @@
 
     {% if preview.listos %}
     <section class="sync-preview-section sync-preview-section--ok">
-      <h2 class="sync-preview-section-title"><i class="fas fa-check-circle"></i> Listos para importar ({{ preview.listos|length }})</h2>
+      <h2 class="sync-preview-section-title"><i class="fas fa-check-circle"></i> {{ _('Listos para importar') }} ({{ preview.listos|length }})</h2>
       <div class="sync-preview-table-wrap">
         <table class="sync-preview-table">
-          <thead><tr><th>Acción</th><th>Código</th><th>Proyecto</th><th>Cambios</th></tr></thead>
+          <thead><tr><th>{{ _('Acción') }}</th><th>{{ _('Código') }}</th><th>{{ _('Proyecto') }}</th><th>{{ _('Cambios') }}</th></tr></thead>
           <tbody>
             {% for obra in preview.listos %}
             <tr>
               <td><span class="sync-preview-badge sync-preview-badge--{{ obra.accion }}">{{ obra.accion|upper }}</span></td>
               <td><strong>{{ obra.codigo }}</strong></td>
               <td>{{ obra.nombre }}</td>
-              <td class="small">{% if obra.cambios %}{% for k,v in obra.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}{% else %}<span class="text-muted">Sin cambios de datos</span>{% endif %}</td>
+              <td class="small">{% if obra.cambios %}{% for k,v in obra.cambios.items() %}{{ _(k) }}: {{ v }}<br>{% endfor %}{% else %}<span class="text-muted">{{ _('Sin cambios de datos') }}</span>{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -100,7 +98,7 @@
 
     {% if preview.finalizadas %}
     <section class="sync-preview-section">
-      <h2 class="sync-preview-section-title"><i class="fas fa-flag-checkered"></i> A marcar como finalizadas ({{ preview.finalizadas|length }})</h2>
+      <h2 class="sync-preview-section-title"><i class="fas fa-flag-checkered"></i> {{ _('A marcar como finalizadas') }} ({{ preview.finalizadas|length }})</h2>
       <ul class="sync-preview-simple-list">
         {% for o in preview.finalizadas %}
         <li><strong>{{ o.codigo }}</strong> — {{ o.nombre }} <span class="text-muted small">({{ razon_list(o.razones)|striptags }})</span></li>
@@ -111,8 +109,8 @@
 
     {% if preview.validadas_manual %}
     <section class="sync-preview-section sync-preview-section--info">
-      <h2 class="sync-preview-section-title"><i class="fas fa-user-check"></i> Validadas manualmente ({{ preview.validadas_manual|length }})</h2>
-      <p class="sync-preview-section-desc">Responsables asignados en la app; Odoo no coincide pero se respeta tu elección.</p>
+      <h2 class="sync-preview-section-title"><i class="fas fa-user-check"></i> {{ _('Validadas manualmente') }} ({{ preview.validadas_manual|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Responsables asignados en la app; Odoo no coincide pero se respeta tu elección.') }}</p>
       <ul class="sync-preview-simple-list">
         {% for o in preview.validadas_manual %}<li><strong>{{ o.codigo }}</strong> — {{ o.nombre }}</li>{% endfor %}
       </ul>
@@ -121,7 +119,7 @@
 
     {% if preview.sin_cambios %}
     <details class="sync-preview-collapse">
-      <summary>{{ preview.sin_cambios|length }} obras sin cambios (ya sincronizadas)</summary>
+      <summary>{{ preview.sin_cambios|length }} {{ _('obras sin cambios (ya sincronizadas)') }}</summary>
       <div class="sync-preview-chips">
         {% for o in preview.sin_cambios %}<span class="badge-soft">{{ o.codigo }}</span>{% endfor %}
       </div>
@@ -164,14 +162,14 @@ function confirmSync(mode) {
         errores: {{ preview.stats.omitidos_auto }}
     };
     if (!finalPayload.nuevas.length && !finalPayload.actualizadas.length && !finalPayload.finalizadas.length) {
-        alert('No hay registros para guardar con este filtro.'); return;
+        alert({{ _('No hay registros para guardar con este filtro.')|tojson }}); return;
     }
     fetch("{{ url_for('sync.commit_obras') }}", {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalPayload)
     }).then(r => r.json()).then(data => {
-        if (data.success) { alert('Guardado correctamente.'); window.location.href = "{{ url_for('sync.odoo_panel') }}"; }
-        else alert('Error: ' + data.error);
+        if (data.success) { alert({{ _('Guardado correctamente.')|tojson }}); window.location.href = "{{ url_for('sync.odoo_panel') }}"; }
+        else alert({{ _('Error:')|tojson }} + ' ' + data.error);
     });
 }
 </script>

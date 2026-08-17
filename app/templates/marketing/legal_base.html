@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale|default('es') }}">
 <head>
-    {% set heading = page_title %}
-    {% set page_title = page_title ~ ' — SignaPlan' %}
-    {% set meta_description = 'Información legal de SignaPlan, software de planificación, fichaje y flota para constructoras.' %}
+    {% set heading = _(page_title) %}
+    {% set page_title = heading ~ ' — SignaPlan' %}
+    {% set meta_description = _('seo.legal.description') %}
     {% set canonical_path = url_for('marketing.legal', slug=legal_slug) if legal_slug is defined else request.path %}
     {% set legal_email = legal.email %}
     {% include "components/_marketing_seo_head.html" %}
@@ -18,22 +18,25 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">{% include "components/_brand_logo.html" %}</a>
+        <a class="mkt-brand" href="{{ mkt_home() }}">{% include "components/_brand_logo.html" %}</a>
         {% include "components/_marketing_nav.html" %}
     </header>
     <article class="legal-body">
         <h1>{{ heading }}</h1>
-        <p class="legal-meta">Última actualización: agosto 2026 · Contacto: <a href="mailto:{{ legal.email }}">{{ legal.email }}</a></p>
+        {% if current_locale and current_locale != 'es' %}
+        <p class="legal-meta">{{ _('legal.translation_notice') }}</p>
+        {% endif %}
+        <p class="legal-meta">{{ _('legal.updated') }} <a href="mailto:{{ legal.email }}">{{ legal.email }}</a></p>
         {% block legal_content %}{% endblock %}
     </article>
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
         <span>
-            <a href="{{ url_for('marketing.legal', slug='aviso-legal') }}">Aviso legal</a> ·
-            <a href="{{ url_for('marketing.legal', slug='privacidad') }}">Privacidad</a> ·
-            <a href="{{ url_for('marketing.legal', slug='cookies') }}">Cookies</a> ·
-            <a href="{{ url_for('marketing.legal', slug='condiciones') }}">Condiciones</a> ·
-            <a href="{{ url_for('marketing.legal', slug='encargado') }}">Encargo de tratamiento</a>
+            <a href="{{ mkt_url('marketing.legal', slug='aviso-legal') }}">{{ _('footer.legal') }}</a> ·
+            <a href="{{ mkt_url('marketing.legal', slug='privacidad') }}">{{ _('footer.privacy') }}</a> ·
+            <a href="{{ mkt_url('marketing.legal', slug='cookies') }}">{{ _('footer.cookies') }}</a> ·
+            <a href="{{ mkt_url('marketing.legal', slug='condiciones') }}">{{ _('footer.terms') }}</a> ·
+            <a href="{{ mkt_url('marketing.legal', slug='encargado') }}">{{ _('footer.dpa') }}</a>
         </span>
     </footer>
     {% include "components/_cookie_banner.html" %}

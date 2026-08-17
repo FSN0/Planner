@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale }}">
 <head>
-    {% set page_title = 'Guías SignaPlan — cuadrante, fichaje e inspección de jornada' %}
-    {% set meta_description = 'Cuadrante de personal de obra, fichaje en construcción, registro de jornada e inspección. Textos prácticos para constructoras, no jerga de ERP.' %}
+    {% set page_title = _('seo.recursos.title') %}
+    {% set meta_description = _('seo.recursos.description') %}
     {% set canonical_path = url_for('marketing.recursos_index') %}
     {% set legal_email = contact_email %}
     {% include "components/_marketing_seo_head.html" %}
@@ -13,7 +13,7 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% with variant='horizontal', width=150, height=26 %}
               {% include "components/_brand_logo.html" %}
             {% endwith %}
@@ -22,12 +22,12 @@
     </header>
 
     <section class="mkt-article">
-        <h1>Guías para constructoras</h1>
-        <p class="mkt-article-lead">Cuadrante, fichaje e inspección de jornada. El siguiente paso es <a href="{{ url_for('marketing.alta') }}">crear cuenta</a>, no descargar un Excel.</p>
+        <h1>{{ _('seo.recursos.h1') }}</h1>
+        <p class="mkt-article-lead">{{ _('seo.recursos.lead') }} <a href="{{ mkt_url('marketing.alta') }}">{{ _('nav.signup') }}</a>.</p>
         <ul class="mkt-article-list">
             {% for a in articles %}
             <li>
-                <a href="{{ url_for('marketing.recurso', slug=a.slug) }}"><strong>{{ a.h1 }}</strong></a>
+                <a href="{{ mkt_url('marketing.recurso', slug=a.slug) }}"><strong>{{ a.h1 }}</strong></a>
                 <span>{{ a.description }}</span>
             </li>
             {% endfor %}
@@ -36,7 +36,7 @@
 
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
-        <span><a href="/">Inicio</a> · <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a> · <a href="{{ url_for('marketing.contacto') }}">Contacto</a></span>
+        <span><a href="{{ mkt_home() }}">{{ _('Inicio') }}</a> · <a href="{{ mkt_url('marketing.soluciones_index') }}">{{ _('Soluciones') }}</a> · <a href="{{ mkt_url('marketing.contacto') }}">{{ _('Contacto') }}</a></span>
     </footer>
     {% include "components/_cookie_banner.html" %}
 </body>

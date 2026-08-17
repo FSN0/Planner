@@ -294,7 +294,7 @@ $(document).ready(function() {
         var obraId = $('#staffObraId').val();
         var role = $('#staffRoleType').val();
         var userId = $('#staffSelect').val(); 
-        var $btn = $('#modalEditStaff button.btn-primary').prop('disabled', true).text('Guardando...');
+        var $btn = $('#modalEditStaff button.btn-primary').prop('disabled', true).text(t('Guardando...'));
         
         $.ajax({
             url: '/admin/api/update_obra_staff', type: 'POST', contentType: 'application/json',
@@ -403,8 +403,14 @@ $(document).ready(function() {
             },
 
             stop: function(e, ui) {
+                var $wrap = $("#kanbanWorksWrapper");
+                var $start = $wrap.children('.kanban-start-obra');
+                if ($start.length) {
+                    $start.appendTo($wrap);
+                }
+
                 var orderedIds = [];
-                $("#kanbanWorksWrapper .kanban-col-wrapper").each(function() {
+                $wrap.children(".kanban-col-wrapper").each(function() {
                     orderedIds.push($(this).data('id'));
                 });
 

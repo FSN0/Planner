@@ -110,7 +110,7 @@
         <div class="modal-header">
           <i class="fas fa-book-open mr-2" style="color:#22c55e;font-size:1.2rem;"></i>
           <input type="text" id="verNotaTitulo" name="titulo" class="note-title-input" placeholder="{{ _('Título de la nota o reunión…') }}" required>
-          <button type="button" class="close ml-2" data-dismiss="modal" aria-label="Close">
+          <button type="button" class="close ml-2" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
@@ -184,6 +184,7 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
+var t = window.SP_T || function (key) { return key; };
 $(document).ready(function() {
     var dtLang = {es:'es-ES', en:'en-GB', pt:'pt-PT', fr:'fr-FR'}[window.SP_LOCALE || 'es'] || 'es-ES';
     $('#notasTable').DataTable({
@@ -201,7 +202,7 @@ $(document).ready(function() {
     $('.select2-modal').select2({
         theme: 'bootstrap4',
         dropdownParent: $('#modalVerNota'),
-        placeholder: "Buscar y seleccionar…",
+        placeholder: t('Buscar y seleccionar…'),
         allowClear: true,
         width: '100%'
     }).on('select2:unselecting', function() {
@@ -216,9 +217,9 @@ $(document).ready(function() {
     document.getElementById('verNotaPrivacidad').addEventListener('change', function() {
         let label = document.getElementById('verNotaPrivacidadLabel');
         if(this.checked) {
-            label.innerHTML = '<span class="text-warning"><i class="fas fa-lock mr-1"></i>Privada (solo tú)</span>';
+            label.innerHTML = '<span class="text-warning"><i class="fas fa-lock mr-1"></i>' + t('Privada (solo tú)') + '</span>';
         } else {
-            label.innerHTML = '<span class="text-success"><i class="fas fa-globe mr-1"></i>Pública (implicados)</span>';
+            label.innerHTML = '<span class="text-success"><i class="fas fa-globe mr-1"></i>' + t('Pública (implicados)') + '</span>';
         }
     });
 });
@@ -231,11 +232,11 @@ function toggleExpandirContenido() {
     if (metadatos.style.display === 'none') {
         $(metadatos).slideDown(250);
         textarea.classList.remove('is-expanded');
-        btn.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar contenido';
+        btn.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> ' + t('Ampliar contenido');
     } else {
         $(metadatos).slideUp(250);
         textarea.classList.add('is-expanded');
-        btn.innerHTML = '<i class="fas fa-compress-arrows-alt mr-1"></i> Mostrar metadatos';
+        btn.innerHTML = '<i class="fas fa-compress-arrows-alt mr-1"></i> ' + t('Mostrar metadatos');
     }
 }
 
@@ -244,7 +245,7 @@ function verNotaModal(notaId) {
     const textarea = document.getElementById('verNotaContenido');
     textarea.classList.remove('is-expanded');
     let btnExp = document.getElementById('btnExpandirContenido');
-    btnExp.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> Ampliar contenido';
+    btnExp.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> ' + t('Ampliar contenido');
 
     fetch(`/notas/${notaId}/datos`)
         .then(response => response.json())
@@ -266,12 +267,12 @@ function verNotaModal(notaId) {
 
                 $('#modalVerNota').modal('show');
             } else {
-                Swal.fire('Acceso denegado', data.message || 'No puedes ver esta nota.', 'error');
+                Swal.fire(t('Acceso denegado'), data.message || t('No puedes ver esta nota.'), 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            Swal.fire('Error', 'Fallo al cargar la nota.', 'error');
+            Swal.fire(t('Error'), t('Fallo al cargar la nota.'), 'error');
         });
 }
 
@@ -301,30 +302,30 @@ function guardarCambiosNotaGiga() {
         if (data.success) {
             Swal.fire({
                 toast: true, position: 'top-end', icon: 'success',
-                title: 'Cambios guardados', showConfirmButton: false, timer: 1500
+                title: t('Cambios guardados'), showConfirmButton: false, timer: 1500
             });
             $('#modalVerNota').modal('hide');
             setTimeout(() => window.location.reload(), 800);
         } else {
-            Swal.fire('Error', data.message, 'error');
+            Swal.fire(t('Error'), data.message, 'error');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        Swal.fire('Error', 'Fallo de conexión.', 'error');
+        Swal.fire(t('Error'), t('Fallo de conexión.'), 'error');
     });
 }
 
 function eliminarNota(notaId) {
     Swal.fire({
-        title: '¿Eliminar nota?',
-        text: "Esta acción no se puede deshacer.",
+        title: t('¿Eliminar nota?'),
+        text: t('Esta acción no se puede deshacer.'),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#dc2626',
         cancelButtonColor: '#64748b',
-        confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i> Sí, eliminar',
-        cancelButtonText: 'Cancelar'
+        confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i> ' + t('Sí, eliminar'),
+        cancelButtonText: t('Cancelar')
     }).then((result) => {
         if (result.isConfirmed) {
             $('#modalVerNota').modal('hide');
@@ -344,8 +345,8 @@ function eliminarNota(notaId) {
             .then(data => {
                 if (data.success) {
                     Swal.fire({
-                        title: 'Eliminada',
-                        text: 'La nota ha sido borrada.',
+                        title: t('Eliminada'),
+                        text: t('La nota ha sido borrada.'),
                         icon: 'success',
                         timer: 1500,
                         showConfirmButton: false
@@ -353,12 +354,12 @@ function eliminarNota(notaId) {
                         window.location.reload();
                     });
                 } else {
-                    Swal.fire('Error', data.message || 'No se pudo eliminar', 'error');
+                    Swal.fire(t('Error'), data.message || t('No se pudo eliminar'), 'error');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                Swal.fire('Error', 'Fallo en el servidor al intentar eliminar.', 'error');
+                Swal.fire(t('Error'), t('Fallo en el servidor al intentar eliminar.'), 'error');
             });
         }
     });

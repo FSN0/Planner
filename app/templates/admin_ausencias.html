@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Ausencias planificadas{% endblock %}
+{% block title %}{{ _('Ausencias planificadas') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -300,8 +300,8 @@
       <button type="button" class="aus-acc-toggle" aria-expanded="true">
         <span class="aus-acc-icon aus-acc-icon--red"><i class="fas fa-exclamation-triangle"></i></span>
         <span class="aus-acc-text">
-          <span class="aus-acc-title">Conflictos pendientes</span>
-          <span class="aus-acc-sub">Modo manual · requieren confirmación</span>
+          <span class="aus-acc-title">{{ _('Conflictos pendientes') }}</span>
+          <span class="aus-acc-sub">{{ _('Modo manual · requieren confirmación') }}</span>
         </span>
         <span class="aus-acc-count is-alert">{{ conflictos|length }}</span>
         <i class="fas fa-chevron-down aus-acc-chevron"></i>
@@ -312,18 +312,18 @@
             <thead>
               <tr class="header-row">
                 <th class="sortable-col" data-col-index="0" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Fecha</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Fecha') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Empleado</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Empleado') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Tipo</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Obra</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Obra') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
-                {% if puede_resolver %}<th class="text-right">Acción</th>{% endif %}
+                {% if puede_resolver %}<th class="text-right">{{ _('Acción') }}</th>{% endif %}
               </tr>
               <tr class="filter-row">
                 <th><input type="text" class="table-filter-input" onkeyup="filterTable('ausConflictosTable', 0, this.value)" placeholder="…"></th>
@@ -338,19 +338,19 @@
               <tr class="data-row">
                 <td class="font-weight-bold" data-sort-value="{{ c.fecha.strftime('%Y%m%d') }}">{{ c.fecha.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ c.user.name }} {{ c.user.lastname }}">{{ c.user.name }} {{ c.user.lastname }}</td>
-                <td data-sort-value="{{ c.ausencia.tipo }}"><span class="badge-soft badge-soft-blue">{{ c.ausencia.tipo }}</span></td>
+                <td data-sort-value="{{ c.ausencia.tipo }}"><span class="badge-soft badge-soft-blue">{{ _(c.ausencia.tipo) }}</span></td>
                 <td data-sort-value="{% if c.obra.codigo %}{{ c.obra.codigo }} {% endif %}{{ c.obra.nombre }}">{% if c.obra.codigo %}{{ c.obra.codigo }} — {% endif %}{{ c.obra.nombre }}</td>
                 {% if puede_resolver %}
                 <td class="text-right ausencias-conflicts-actions">
                   <form method="POST" action="{{ url_for('admin.ausencias_resolver_conflicto', conflict_id=c.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="decision" value="mantener_ausencia">
-                    <button type="submit" class="btn-admin btn-admin-sm">Mantener ausencia</button>
+                    <button type="submit" class="btn-admin btn-admin-sm">{{ _('Mantener ausencia') }}</button>
                   </form>
                   <form method="POST" action="{{ url_for('admin.ausencias_resolver_conflicto', conflict_id=c.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="decision" value="mantener_asignacion">
-                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-primary">Mantener asignación</button>
+                    <button type="submit" class="btn-admin btn-admin-sm btn-admin-primary">{{ _('Mantener asignación') }}</button>
                   </form>
                 </td>
                 {% endif %}
@@ -380,22 +380,22 @@
             <thead>
               <tr class="header-row">
                 <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Empleado</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Empleado') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Tipo</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="2" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Desde</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Desde') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="3" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Hasta</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Hasta') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Obras</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Obras') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
               </tr>
               <tr class="filter-row">
@@ -416,7 +416,7 @@
                   <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
                   {% else %}#{{ a.user_id }}{% endif %}
                 </td>
-                <td data-sort-value="{{ a.tipo }}"><strong>{{ a.tipo }}</strong></td>
+                <td data-sort-value="{{ a.tipo }}"><strong>{{ _(a.tipo) }}</strong></td>
                 <td data-sort-value="{{ a.fecha_inicio.strftime('%Y%m%d') }}">{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ a.fecha_fin.strftime('%Y%m%d') }}">{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{% for o in row.obras %}{{ o.codigo or o.nombre }} {% endfor %}">
@@ -426,9 +426,9 @@
                 </td>
                 <td data-sort-value="{{ a.estado }}">
                   {% if a.estado == 'aprobada' %}
-                  <span class="badge-soft badge-soft-green">Aprobada</span>
+                  <span class="badge-soft badge-soft-green">{{ _('Aprobada') }}</span>
                   {% else %}
-                  <span class="badge-soft badge-soft-blue">Pendiente</span>
+                  <span class="badge-soft badge-soft-blue">{{ _('Pendiente') }}</span>
                   {% endif %}
                 </td>
               </tr>
@@ -437,7 +437,7 @@
           </table>
         </div>
         {% else %}
-        <p class="aus-empty">Nadie de tu ámbito está de ausencia hoy.</p>
+        <p class="aus-empty">{{ _('Nadie de tu ámbito está de ausencia hoy.') }}</p>
         {% endif %}
       </div>
     </section>
@@ -459,25 +459,25 @@
             <thead>
               <tr class="header-row">
                 <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Empleado</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Empleado') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Tipo</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="2" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Desde</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Desde') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="3" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Hasta</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Hasta') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Días</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Días') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Obras</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Obras') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
               </tr>
               <tr class="filter-row">
@@ -499,7 +499,7 @@
                   <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
                   {% else %}#{{ a.user_id }}{% endif %}
                 </td>
-                <td data-sort-value="{{ a.tipo }}"><strong>{{ a.tipo }}</strong></td>
+                <td data-sort-value="{{ a.tipo }}"><strong>{{ _(a.tipo) }}</strong></td>
                 <td data-sort-value="{{ a.fecha_inicio.strftime('%Y%m%d') }}">{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ a.fecha_fin.strftime('%Y%m%d') }}">{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ a.dias if a.dias is not none else -1 }}">{{ a.dias if a.dias is not none else '—' }}</td>
@@ -510,9 +510,9 @@
                 </td>
                 <td data-sort-value="{{ a.estado }}">
                   {% if a.estado == 'aprobada' %}
-                  <span class="badge-soft badge-soft-green">Aprobada</span>
+                  <span class="badge-soft badge-soft-green">{{ _('Aprobada') }}</span>
                   {% else %}
-                  <span class="badge-soft badge-soft-blue">Pendiente</span>
+                  <span class="badge-soft badge-soft-blue">{{ _('Pendiente') }}</span>
                   {% endif %}
                 </td>
               </tr>
@@ -521,7 +521,7 @@
           </table>
         </div>
         {% else %}
-        <p class="aus-empty">No hay ausencias programadas que empiecen en los próximos {{ horizon_days }} días.</p>
+        <p class="aus-empty">{{ _('No hay ausencias programadas que empiecen en los próximos {n} días.', n=horizon_days) }}</p>
         {% endif %}
       </div>
     </section>
@@ -549,34 +549,34 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="ausencias-form-grid">
             <div class="config-field">
-              <label for="user_id">Empleado</label>
+              <label for="user_id">{{ _('Empleado') }}</label>
               <select name="user_id" id="user_id" class="form-control form-control-sm" required style="width:100%;"></select>
             </div>
             <div class="config-field">
-              <label for="fecha_inicio">Desde</label>
+              <label for="fecha_inicio">{{ _('Desde') }}</label>
               <input type="date" name="fecha_inicio" id="fecha_inicio" class="form-control form-control-sm" required>
             </div>
             <div class="config-field">
-              <label for="fecha_fin">Hasta</label>
+              <label for="fecha_fin">{{ _('Hasta') }}</label>
               <input type="date" name="fecha_fin" id="fecha_fin" class="form-control form-control-sm" required>
             </div>
             <div class="config-field">
-              <label for="tipo">Tipo</label>
+              <label for="tipo">{{ _('Tipo') }}</label>
               <input type="text" name="tipo" id="tipo" class="form-control form-control-sm" value="Vacaciones" list="tipos-ausencia">
               <datalist id="tipos-ausencia">
-                <option value="Vacaciones">
-                <option value="Puente">
-                <option value="Baja médica">
-                <option value="Permiso retribuido">
-                <option value="Falta justificada">
+                <option value="Vacaciones">{{ _('Vacaciones') }}</option>
+                <option value="Puente">{{ _('Puente') }}</option>
+                <option value="Baja médica">{{ _('Baja médica') }}</option>
+                <option value="Permiso retribuido">{{ _('Permiso retribuido') }}</option>
+                <option value="Falta justificada">{{ _('Falta justificada') }}</option>
               </datalist>
             </div>
             {% if current_user.role in ['admin', 'laboral'] %}
             <div class="config-field">
-              <label for="estado">Estado</label>
+              <label for="estado">{{ _('Estado') }}</label>
               <select name="estado" id="estado" class="form-control form-control-sm">
-                <option value="aprobada">Aprobada</option>
-                <option value="pendiente">Pendiente</option>
+                <option value="aprobada">{{ _('Aprobada') }}</option>
+                <option value="pendiente">{{ _('Pendiente') }}</option>
               </select>
             </div>
             {% endif %}
@@ -584,7 +584,7 @@
               <label>&nbsp;</label>
               <button type="submit" class="btn-admin btn-admin-primary">
                 <i class="fas fa-plus"></i>
-                {% if current_user.role == 'jefe_obra' %}Solicitar{% else %}Crear{% endif %}
+                {% if current_user.role == 'jefe_obra' %}{{ _('Solicitar') }}{% else %}{{ _('Crear') }}{% endif %}
               </button>
             </div>
           </div>
@@ -605,35 +605,35 @@
       </button>
       <div class="aus-acc-body">
         <div class="mb-3" style="display:flex;gap:.4rem;flex-wrap:wrap;">
-          <span class="btn-admin btn-admin-sm btn-admin-primary" style="pointer-events:none;">Aprobadas</span>
-          <span class="text-muted small align-self-center">Ausencias validadas que afectan a la planificación.</span>
+          <span class="btn-admin btn-admin-sm btn-admin-primary" style="pointer-events:none;">{{ _('Aprobadas') }}</span>
+          <span class="text-muted small align-self-center">{{ _('Ausencias validadas que afectan a la planificación.') }}</span>
         </div>
         <div class="aus-table-wrap">
           <table class="filterable-table admin-data-table mb-0" id="ausListadoTable">
             <thead>
               <tr class="header-row">
                 <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Empleado</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Empleado') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Tipo</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="2" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Desde</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Desde') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="3" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Hasta</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Hasta') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Días</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Días') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
                 <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)">
-                  <span class="sortable-label">Origen</span><i class="fas fa-sort sort-icon"></i>
+                  <span class="sortable-label">{{ _('Origen') }}</span><i class="fas fa-sort sort-icon"></i>
                 </th>
-                <th>Acciones</th>
+                <th>{{ _('Acciones') }}</th>
               </tr>
               <tr class="filter-row">
                 <th><input type="text" class="table-filter-input" onkeyup="filterTable('ausListadoTable', 0, this.value)" placeholder="…"></th>
@@ -654,42 +654,39 @@
                   <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
                   {% else %}#{{ a.user_id }}{% endif %}
                 </td>
-                <td data-sort-value="{{ a.tipo }}"><strong>{{ a.tipo }}</strong></td>
+                <td data-sort-value="{{ a.tipo }}"><strong>{{ _(a.tipo) }}</strong></td>
                 <td data-sort-value="{{ a.fecha_inicio.strftime('%Y%m%d') }}">{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ a.fecha_fin.strftime('%Y%m%d') }}">{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ a.dias if a.dias is not none else -1 }}">{{ a.dias if a.dias is not none else '—' }}</td>
                 <td data-sort-value="{{ a.estado }}">
                   {% if a.estado == 'aprobada' %}
-                  <span class="badge-soft badge-soft-green">Aprobada</span>
+                  <span class="badge-soft badge-soft-green">{{ _('Aprobada') }}</span>
                   {% elif a.estado == 'pendiente' %}
-                  <span class="badge-soft badge-soft-blue">Pendiente</span>
+                  <span class="badge-soft badge-soft-blue">{{ _('Pendiente') }}</span>
                   {% else %}
-                  <span class="badge-soft">{{ a.estado }}</span>
+                  <span class="badge-soft">{{ _(a.estado) }}</span>
                   {% endif %}
                 </td>
                 <td data-sort-value="{{ a.origen }}">{{ a.origen }}{% if a.external_id %} · {{ a.external_id }}{% endif %}</td>
                 <td style="white-space:nowrap;">
                   {% if a.origen == 'manual' and current_user.role in ['admin', 'laboral', 'rrhh', 'jefe_obra'] %}
                   <details>
-                    <summary class="btn-admin btn-admin-ghost" style="cursor:pointer;display:inline-block;padding:.2rem .5rem;font-size:.75rem;">Editar</summary>
+                    <summary class="btn-admin btn-admin-ghost" style="cursor:pointer;display:inline-block;padding:.2rem .5rem;font-size:.75rem;">{{ _('Editar') }}</summary>
                     <form method="POST" action="{{ url_for('admin.ausencias_editar', leave_id=a.id) }}" class="p-2 border rounded bg-white mt-1" style="min-width:14rem;">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                      <label class="small d-block mb-1">Tipo
-                        <input class="form-control form-control-sm" name="tipo" value="{{ a.tipo }}">
+                      <label class="small d-block mb-1">{{ _('Tipo') }}<input class="form-control form-control-sm" name="tipo" value="{{ a.tipo }}">
                       </label>
-                      <label class="small d-block mb-1">Desde
-                        <input class="form-control form-control-sm" type="date" name="fecha_inicio" value="{{ a.fecha_inicio.isoformat() }}">
+                      <label class="small d-block mb-1">{{ _('Desde') }}<input class="form-control form-control-sm" type="date" name="fecha_inicio" value="{{ a.fecha_inicio.isoformat() }}">
                       </label>
-                      <label class="small d-block mb-1">Hasta
-                        <input class="form-control form-control-sm" type="date" name="fecha_fin" value="{{ a.fecha_fin.isoformat() }}">
+                      <label class="small d-block mb-1">{{ _('Hasta') }}<input class="form-control form-control-sm" type="date" name="fecha_fin" value="{{ a.fecha_fin.isoformat() }}">
                       </label>
-                      <button type="submit" class="btn-admin btn-admin-primary btn-sm mt-1">Guardar</button>
+                      <button type="submit" class="btn-admin btn-admin-primary btn-sm mt-1">{{ _('Guardar') }}</button>
                     </form>
                   </details>
                   <form method="POST" action="{{ url_for('admin.ausencias_borrar', leave_id=a.id) }}" style="display:inline;"
-                        onsubmit="return confirm('¿Eliminar esta ausencia?');">
+                        onsubmit="return confirm({{ _('¿Eliminar esta ausencia?')|tojson }});">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-admin btn-admin-ghost" style="padding:.2rem .5rem;font-size:.75rem;color:#b91c1c;">Borrar</button>
+                    <button type="submit" class="btn-admin btn-admin-ghost" style="padding:.2rem .5rem;font-size:.75rem;color:#b91c1c;">{{ _('Borrar') }}</button>
                   </form>
                   {% else %}
                   <span class="text-muted small">—</span>
@@ -699,7 +696,7 @@
               {% else %}
               <tr>
                 <td colspan="8" class="table-empty-state" style="padding:1.25rem;">
-                  Sin ausencias en este filtro.
+                  {{ _('Sin ausencias en este filtro.') }}
                 </td>
               </tr>
               {% endfor %}
@@ -741,7 +738,7 @@
   var $el = $('#user_id');
   if (!$el.length || $el.hasClass('select2-hidden-accessible')) return;
   $el.select2({
-    placeholder: 'Buscar empleado por nombre…',
+    placeholder: {{ _('Buscar empleado por nombre…')|tojson }},
     allowClear: true,
     width: '100%',
     minimumInputLength: 0,

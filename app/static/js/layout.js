@@ -1,3 +1,5 @@
+var t = window.SP_T || function (key) { return key; };
+
 document.addEventListener("DOMContentLoaded", function() {
     
     // 1. Manejo del Preloader
@@ -60,7 +62,7 @@ function initPageNavLoading() {
         '<div class="sp-page-loading-bar" aria-hidden="true"></div>' +
         '<div class="sp-page-loading-card" role="status" aria-live="polite">' +
         '<div class="sp-page-loading-spinner" aria-hidden="true"></div>' +
-        '<span class="sp-page-loading-text">Cargando…</span>' +
+        '<span class="sp-page-loading-text">' + t('Cargando…') + '</span>' +
         "</div>";
     document.body.appendChild(bar);
 
@@ -89,7 +91,7 @@ function initPageNavLoading() {
         if (!href || href.charAt(0) === "#" || href.indexOf("javascript:") === 0) return;
         // Solo navegación misma origen / relativa
         if (/^https?:\/\//i.test(href) && href.indexOf(window.location.origin) !== 0) return;
-        show("Cargando…");
+        show(t("Cargando…"));
     }, true);
 
     window.addEventListener("pageshow", function () { hide(); });
@@ -188,14 +190,14 @@ function initSidebarConfig() {
             .then(function (res) {
                 saving = false;
                 if (!res.ok || !res.j.success) {
-                    alert((res.j && res.j.message) || "No se pudo guardar el menú");
+                    alert((res.j && res.j.message) || t("No se pudo guardar el menú"));
                     return;
                 }
                 if (cb) cb();
             })
             .catch(function () {
                 saving = false;
-                alert("Error de red al guardar el menú");
+                alert(t("Error de red al guardar el menú"));
             });
     }
 
@@ -273,9 +275,9 @@ function initSidebarConfig() {
             wrap.innerHTML =
                 '<div class="sidebar-section-head">' +
                 '<span class="sidebar-sec-handle" aria-hidden="true"><i class="fas fa-grip-vertical"></i></span>' +
-                '<input type="text" class="sidebar-section-title-input" value="Nueva sección" maxlength="60">' +
-                '<div class="sidebar-section-title">Nueva sección</div>' +
-                '<button type="button" class="sidebar-sec-remove" title="Eliminar sección"><i class="fas fa-trash-alt"></i></button>' +
+                '<input type="text" class="sidebar-section-title-input" value="' + t("Nueva sección") + '" maxlength="60">' +
+                '<div class="sidebar-section-title">' + t("Nueva sección") + '</div>' +
+                '<button type="button" class="sidebar-sec-remove" title="' + t("Eliminar sección") + '"><i class="fas fa-trash-alt"></i></button>' +
                 "</div>" +
                 '<ul class="sidebar-nav" data-section-items="' + id + '"></ul>';
             sectionsRoot.appendChild(wrap);
@@ -307,7 +309,7 @@ function initSidebarConfig() {
             if (!sec) return;
             var items = sec.querySelectorAll(":scope > .sidebar-nav > li[data-nav-id]");
             if (items.length) {
-                alert("Mueve o vacía las entradas antes de eliminar la sección.");
+                alert(t("Mueve o vacía las entradas antes de eliminar la sección."));
                 return;
             }
             sec.remove();

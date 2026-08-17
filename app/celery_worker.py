@@ -43,7 +43,7 @@ def _load_active_tenants():
     with db.engine.connect() as conn:
         rows = conn.execute(
             text(
-                'SELECT id, schema_name, subdominio, nombre '
+                'SELECT id, schema_name, subdominio, nombre, modulos_activos '
                 'FROM public.tenants WHERE is_active = true'
             )
         ).fetchall()
@@ -54,6 +54,7 @@ def _load_active_tenants():
             'schema_name': row[1],
             'subdominio': row[2],
             'nombre': row[3],
+            'modulos_activos': row[4] if isinstance(row[4], dict) else {},
         }
         for row in rows
     ]
@@ -68,22 +69,14 @@ def _bind_tenant_context(tenant_data):
         schema_name=tenant_data['schema_name'],
         subdominio=tenant_data['subdominio'],
         nombre=tenant_data.get('nombre', ''),
+        modulos_activos=tenant_data.get('modulos_activos') or {},
     )
     g.current_tenant = tenant
     return tenant
 
 
 def _tenant_has_odoo_module(tenant_data):
-    from sqlalchemy import text
-
-    with db.engine.connect() as conn:
-        row = conn.execute(
-            text('SELECT modulos_activos FROM public.tenants WHERE id = :id'),
-            {'id': tenant_data['id']},
-        ).fetchone()
-    if not row or not row[0]:
-        return False
-    modulos = row[0] if isinstance(row[0], dict) else {}
+    modulos = tenant_data.get('modulos_activos') or {}
     return bool(modulos.get('odoo'))
 
 

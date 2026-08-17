@@ -9,6 +9,7 @@ from flask import url_for
 from app import db
 # IMPORTANTE: Añadido RegistroFichaje a los imports
 from app.models import Obra, User, Asignacion, Solicitud, Company, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH, UserObraConfig, RegistroFichaje
+from app.services.oficina_obra_service import es_obra_oficina
 from app.utils.timezone_utils import today_local
 
 def parse_date(date_str):
@@ -253,6 +254,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
         'month_name': month_name,
         'header_days': header_days,
         'obra_data': obra_data,
+        'kanban_sin_obras': all(es_obra_oficina(o) for o in obras),
         'timeline_data': timeline_data,
         'free_workers': free_workers,
         'busy_workers': busy_workers,

@@ -8,47 +8,47 @@
                 <i class="fas fa-thumbtack mr-2 cursor-pointer btn-pin-obra {{ 'text-primary' if item.obra.is_pinned else 'text-muted-light' }}"
                    style="font-size: 0.85rem; transition: transform 0.2s;"
                    data-obra-id="{{ item.obra.id }}"
-                   title="{{ 'Desanclar' if item.obra.is_pinned else 'Anclar al inicio' }}">
+                   title="{{ _('Desanclar') if item.obra.is_pinned else _('Anclar al inicio') }}">
                 </i>
                 {% endif %}
 
                 <a href="{{ url_for('admin.obra_panel', obra_id=item.obra.id) }}"
                    class="header-title header-title-link text-truncate"
-                   title="{{ item.obra.nombre }} — Ver ficha de obra">
+                   title="{{ item.obra.nombre }} — {{ _('Ver ficha de obra') }}">
                     {{ item.obra.nombre }}
                 </a>
             </div>
         </div>
 
         <div class="header-subtitle mt-1">
-            <span>{{ item.obra.codigo or 'S/C' }}</span>
+            <span>{{ item.obra.codigo or _('S/C') }}</span>
             <span><strong>{{ item.workers|length }}</strong> / {{ item.obra.limite_trabajadores or '-' }}</span>
         </div>
 
         <div class="mt-2 pt-2 border-top border-white-50">
             <div class="d-flex align-items-center small mb-1 staff-row">
-                <i class="fas fa-user-tie mr-2 text-muted" title="Jefe de Obra" style="width: 14px; text-align: center;"></i>
+                <i class="fas fa-user-tie mr-2 text-muted" title="{{ _('Jefe de Obra') }}" style="width: 14px; text-align: center;"></i>
                 <span class="text-truncate{% if current_user.role == 'admin' %} editable-staff{% endif %}"
                       style="max-width: 200px; color: #334155;{% if current_user.role == 'admin' %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
-                      title="{% if current_user.role == 'admin' %}Clic para cambiar Jefe{% endif %}"
+                      title="{% if current_user.role == 'admin' %}{{ _('Clic para cambiar Jefe') }}{% endif %}"
                       data-obra-id="{{ item.obra.id }}"
                       data-obra-name="{{ item.obra.nombre }}"
                       data-role="jefe"
                       data-current-id="{{ item.obra.jefe_obra.id if item.obra.jefe_obra else '' }}">
-                     {{ item.obra.jefe_obra.name + ' ' + item.obra.jefe_obra.lastname if item.obra.jefe_obra else 'Sin jefe' }}
+                     {{ item.obra.jefe_obra.name + ' ' + item.obra.jefe_obra.lastname if item.obra.jefe_obra else _('Sin jefe') }}
                 </span>
             </div>
 
             <div class="d-flex align-items-center small staff-row">
-                <i class="fas fa-hard-hat mr-2 text-warning" title="Encargado" style="width: 14px; text-align: center;"></i>
+                <i class="fas fa-hard-hat mr-2 text-warning" title="{{ _('Encargado') }}" style="width: 14px; text-align: center;"></i>
                 <span class="text-truncate{% if current_user.role == 'admin' %} editable-staff{% endif %}"
                       style="max-width: 200px; color: #334155;{% if current_user.role == 'admin' %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
-                      title="{% if current_user.role == 'admin' %}Clic para cambiar Encargado{% endif %}"
+                      title="{% if current_user.role == 'admin' %}{{ _('Clic para cambiar Encargado') }}{% endif %}"
                       data-obra-id="{{ item.obra.id }}"
                       data-obra-name="{{ item.obra.nombre }}"
                       data-role="encargado"
                       data-current-id="{{ item.obra.encargado.id if item.obra.encargado else '' }}">
-                     {{ item.obra.encargado.name + ' ' + item.obra.encargado.lastname if item.obra.encargado else 'Sin encargado' }}
+                     {{ item.obra.encargado.name + ' ' + item.obra.encargado.lastname if item.obra.encargado else _('Sin encargado') }}
                 </span>
             </div>
         </div>
@@ -61,7 +61,7 @@
              data-worker-id="{{ worker.id }}"
              data-worker-name="{{ worker.name }} {{ worker.lastname }}"
              {% if worker.dni %}data-dni="{{ worker.dni }}"{% endif %}
-             {% if en_leave %}data-en-ausencia="1" title="{{ worker.temp_ausencia_tipo }} — sigue asignado"{% endif %}
+             {% if en_leave %}data-en-ausencia="1" title="{{ worker.temp_ausencia_tipo }} — {{ _('sigue asignado') }}"{% endif %}
              style="border-left-color: {{ '#7c3aed' if en_leave and worker.temp_ausencia_aprobada else ('#a78bfa' if en_leave else (worker.company_rel.color if worker.company_rel else '#ccc')) }}">
 
             <div class="d-flex justify-content-between align-items-center">
@@ -69,21 +69,21 @@
                     {% if current_user.role == 'admin' and worker.temp_estado_fichaje %}
                         {% set st = worker.temp_estado_fichaje %}
                         {% if st == 'Correcto' %}
-                            <span class="status-dot-kanban dot-success" title="Correcto"></span>
+                            <span class="status-dot-kanban dot-success" title="{{ _('Correcto') }}"></span>
                         {% elif st == 'Correcto_Automatico' %}
-                            <span class="status-dot-kanban dot-auto" title="Auto-Asignado"></span>
+                            <span class="status-dot-kanban dot-auto" title="{{ _('Auto-Asignado') }}"></span>
                         {% elif st == 'Exento_Ausencia' %}
-                            <span class="status-dot-kanban" style="background:#7c3aed;" title="Exento (ausencia planificada)"></span>
+                            <span class="status-dot-kanban" style="background:#7c3aed;" title="{{ _('Exento (ausencia planificada)') }}"></span>
                         {% elif st == 'Sobreescrito_RRHH' %}
-                            <span class="status-dot-kanban" style="background:#7c3aed;" title="Corregido por RRHH / ERP"></span>
+                            <span class="status-dot-kanban" style="background:#7c3aed;" title="{{ _('Corregido por RRHH / ERP') }}"></span>
                         {% elif st == 'Ausencia' or st == 'Pendiente' or st == 'Retraso' %}
-                            <span class="status-dot-kanban dot-warning" title="{{ st }}"></span>
+                            <span class="status-dot-kanban dot-warning" title="{{ _(st) }}"></span>
                         {% elif st == 'Conflicto' or st == 'Paracaidista' %}
-                            <span class="status-dot-kanban dot-danger" title="Conflicto"></span>
+                            <span class="status-dot-kanban dot-danger" title="{{ _('Conflicto') }}"></span>
                         {% elif st.startswith('Resuelto') or st == 'Cerrado_Multiobra' %}
-                            <span class="status-dot-kanban dot-success" title="Resuelto / correcto"></span>
+                            <span class="status-dot-kanban dot-success" title="{{ _('Resuelto / correcto') }}"></span>
                         {% else %}
-                            <span class="status-dot-kanban dot-secondary" title="Sin Registro"></span>
+                            <span class="status-dot-kanban dot-secondary" title="{{ _('Sin Registro') }}"></span>
                         {% endif %}
                     {% endif %}
 
@@ -121,7 +121,7 @@
                             {{ worker.company_rel.code }}
                         </a>
                     {% else %}
-                        <span>Ext</span>
+                        <span>{{ _('Ext') }}</span>
                     {% endif %}
                 </div>
             </div>

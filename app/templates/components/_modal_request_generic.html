@@ -3,10 +3,10 @@
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-hard-hat mr-2"></i>Solicitar Personal: 
+                    <i class="fas fa-hard-hat mr-2"></i>{{ _('Solicitar Personal') }}: 
                     <span id="reqObraLinkPlaceholder"></span>
                 </h5>
-                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
@@ -14,21 +14,21 @@
             <div class="modal-body">
                 <div class="alert alert-info py-2 small mb-2 shadow-sm border-info">
                     <i class="fas fa-mouse-pointer mr-1"></i>
-                    <strong>Instrucciones:</strong> Selecciona días o arrastra rangos en el calendario para añadir peticiones a la lista inferior.
+                    <strong>{{ _('Instrucciones') }}:</strong> {{ _('Selecciona días o arrastra rangos en el calendario para añadir peticiones a la lista inferior.') }}
                 </div>
 
                 <div id="reqCalendar" style="height: 350px; margin-bottom: 20px;"></div>
 
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="font-weight-bold mb-0">Lista de Peticiones a enviar</h6>
+                    <h6 class="font-weight-bold mb-0">{{ _('Lista de Peticiones a enviar') }}</h6>
                     <button type="button" class="btn btn-xs btn-outline-danger" id="btnClearAllRequests" style="display:none;">
-                        Borrar todo
+                        {{ _('Borrar todo') }}
                     </button>
                 </div>
 
                 <div id="requestsContainer" style="max-height: 250px; overflow-y: auto; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 10px;">
                     <p class="text-muted text-center small my-4" id="emptyRequestsMsg">
-                        No hay fechas seleccionadas.<br>Haz clic en el calendario para empezar.
+                        {{ _('No hay fechas seleccionadas.') }}<br>{{ _('Haz clic en el calendario para empezar.') }}
                     </p>
                 </div>
 
@@ -36,10 +36,9 @@
             </div>
             
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _('Cancelar') }}</button>
                 <button type="button" id="btnSendRequest" class="btn btn-primary">
-                    <i class="fas fa-paper-plane mr-1"></i> Enviar Solicitud
-                </button>
+                    <i class="fas fa-paper-plane mr-1"></i>{{ _('Enviar Solicitud') }}</button>
             </div>
         </div>
     </div>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Ficha: {{ company.nombre }}{% endblock %}
+{% block title %}{{ _('Ficha') }}: {{ company.nombre }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -100,7 +100,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817a"></script>
 <script>
 let companyCalendarInstance = null;
 

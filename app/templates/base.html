@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}Gestión de Obras{% endblock %}</title>
+    <title>{% block title %}{{ _('Gestión de Obras') }}{% endblock %}</title>
     <link rel="icon" href="{{ url_for('static', filename='img/brand/favicon-48.png') }}?v=20260807f" type="image/png" sizes="48x48">
     
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
@@ -111,7 +111,7 @@
 
     <script src="{{ url_for('static', filename='js/layout.js') }}?v=20260810b"></script>
     <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}?v=20260817a"></script>
 
     {# Select2 antes de extra_js: varios admin init usan $.fn.select2 #}
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -123,7 +123,7 @@
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title mb-0" id="modalNuevaNotaTitle"><i class="fas fa-pen-alt mr-2"></i>Redactar nota / reunión</h5>
+                    <h5 class="modal-title mb-0" id="modalNuevaNotaTitle"><i class="fas fa-pen-alt mr-2"></i>{{ _('Redactar nota / reunión') }}</h5>
                     <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
                 </div>
                 <div class="modal-body">
@@ -131,45 +131,44 @@
                         <input type="hidden" name="nota_id" id="notaGlobalId" value="">
                         <div class="row">
                             <div class="col-md-8 form-group">
-                                <label class="form-label-sm" for="notaGlobalTitulo">Título</label>
-                                <input type="text" class="form-control" id="notaGlobalTitulo" name="titulo" required placeholder="Ej. Visita obra Edificio Sur…">
+                                <label class="form-label-sm" for="notaGlobalTitulo">{{ _('Título') }}</label>
+                                <input type="text" class="form-control" id="notaGlobalTitulo" name="titulo" required placeholder="{{ _('Ej. Visita obra Edificio Sur…') }}">
                             </div>
                             <div class="col-md-4 form-group">
-                                <label class="form-label-sm" for="notaGlobalFecha">Fecha</label>
+                                <label class="form-label-sm" for="notaGlobalFecha">{{ _('Fecha') }}</label>
                                 <input type="date" class="form-control" name="fecha" id="notaGlobalFecha" required>
                             </div>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 form-group">
-                                <label class="form-label-sm" for="globalSelectObras"><i class="fas fa-hard-hat mr-1"></i> Obras implicadas</label>
+                                <label class="form-label-sm" for="globalSelectObras"><i class="fas fa-hard-hat mr-1"></i> {{ _('Obras implicadas') }}</label>
                                 <select class="form-control select2-modal" name="obras_ids[]" multiple="multiple" id="globalSelectObras" style="width: 100%;"></select>
                             </div>
                             <div class="col-md-6 form-group">
-                                <label class="form-label-sm" for="globalSelectUsers"><i class="fas fa-users mr-1"></i> Personas implicadas</label>
+                                <label class="form-label-sm" for="globalSelectUsers"><i class="fas fa-users mr-1"></i> {{ _('Personas implicadas') }}</label>
                                 <select class="form-control select2-modal" name="users_ids[]" multiple="multiple" id="globalSelectUsers" style="width: 100%;"></select>
                             </div>
                         </div>
 
                         <div class="form-group mb-0">
-                            <label class="form-label-sm" for="notaGlobalContenido">Contenido</label>
-                            <textarea class="form-control note-content-area" id="notaGlobalContenido" name="contenido" rows="5" required placeholder="Escribe aquí los detalles…" style="min-height:140px;"></textarea>
+                            <label class="form-label-sm" for="notaGlobalContenido">{{ _('Contenido') }}</label>
+                            <textarea class="form-control note-content-area" id="notaGlobalContenido" name="contenido" rows="5" required placeholder="{{ _('Escribe aquí los detalles…') }}" style="min-height:140px;"></textarea>
                         </div>
 
                         <div class="custom-control custom-switch mt-3">
                             <input type="checkbox" class="custom-control-input" id="esPrivadaSwitch" name="es_privada" value="true">
                             <label class="custom-control-label privacy-switch-label" for="esPrivadaSwitch">
-                                <i class="fas fa-lock text-warning mr-1"></i> Nota privada
-                                <span class="text-muted font-weight-normal small">(solo tú podrás verla)</span>
+                                <i class="fas fa-lock text-warning mr-1"></i> {{ _('Nota privada') }}
+                                <span class="text-muted font-weight-normal small">{{ _('(solo tú podrás verla)') }}</span>
                             </label>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cancelar') }}</button>
                     <button type="button" class="btn-admin btn-admin-primary" onclick="guardarNotaGlobal()">
-                        <i class="fas fa-save mr-1"></i> Guardar nota
-                    </button>
+                        <i class="fas fa-save mr-1"></i>{{ _('Guardar nota') }}</button>
                 </div>
             </div>
         </div>
@@ -182,8 +181,8 @@
             if(dateInput) dateInput.valueAsDate = new Date();
             
             // Inicializar Select2 en el modal
-            $('#globalSelectObras').select2({ placeholder: "Buscar obras...", allowClear: true, dropdownParent: $('#modalNuevaNota'), dropdownCssClass: 'admin-select2-dropdown' });
-            $('#globalSelectUsers').select2({ placeholder: "Buscar operarios/jefes...", allowClear: true, dropdownParent: $('#modalNuevaNota'), dropdownCssClass: 'admin-select2-dropdown' });
+            $('#globalSelectObras').select2({ placeholder: {{ _('Buscar obras...')|tojson }}, allowClear: true, dropdownParent: $('#modalNuevaNota'), dropdownCssClass: 'admin-select2-dropdown' });
+            $('#globalSelectUsers').select2({ placeholder: {{ _('Buscar operarios/jefes...')|tojson }}, allowClear: true, dropdownParent: $('#modalNuevaNota'), dropdownCssClass: 'admin-select2-dropdown' });
 
             // Cargar datos reales de Obras y Personas SIEMPRE
             fetch("{{ url_for('api_v6.recursos_activos') }}")
@@ -220,14 +219,14 @@
                 try { data = await r.json(); } catch (e) { data = null; }
                 if (r.status === 403 || (data && data.permission_denied)) {
                     const msg = (data && (data.message || data.error))
-                        || 'No tienes permisos de escritura para esta acción.';
-                    if (typeof Swal !== 'undefined') Swal.fire('Sin permiso', msg, 'warning');
+                        || {{ _('No tienes permisos de escritura para esta acción.')|tojson }};
+                    if (typeof Swal !== 'undefined') Swal.fire({{ _('Sin permiso')|tojson }}, msg, 'warning');
                     else alert(msg);
                     return;
                 }
                 if (!data) {
-                    const msg = 'No se pudo guardar la nota.';
-                    if (typeof Swal !== 'undefined') Swal.fire('Error', msg, 'error');
+                    const msg = {{ _('No se pudo guardar la nota.')|tojson }};
+                    if (typeof Swal !== 'undefined') Swal.fire({{ _('Error')|tojson }}, msg, 'error');
                     else alert(msg);
                     return;
                 }
@@ -236,18 +235,18 @@
                     if (window.location.pathname.includes('/notas')) window.location.reload();
                     else if (typeof Swal !== 'undefined') {
                         Swal.fire({ toast: true, position: 'top-end', icon: 'success',
-                            title: notaId ? 'Nota actualizada.' : 'Nota guardada.',
+                            title: notaId ? {{ _('Nota actualizada.')|tojson }} : {{ _('Nota guardada.')|tojson }},
                             showConfirmButton: false, timer: 1800 });
-                    } else alert(notaId ? 'Nota actualizada.' : 'Nota guardada.');
+                    } else alert(notaId ? {{ _('Nota actualizada.')|tojson }} : {{ _('Nota guardada.')|tojson }});
                 } else {
-                    const msg = data.message || data.error || 'Error al guardar';
-                    if (typeof Swal !== 'undefined') Swal.fire('Error', msg, 'error');
-                    else alert('Error: ' + msg);
+                    const msg = data.message || data.error || {{ _('Error al guardar')|tojson }};
+                    if (typeof Swal !== 'undefined') Swal.fire({{ _('Error')|tojson }}, msg, 'error');
+                    else alert({{ _('Error')|tojson }} + ': ' + msg);
                 }
             })
             .catch(() => {
-                const msg = 'Error de red al guardar la nota.';
-                if (typeof Swal !== 'undefined') Swal.fire('Error', msg, 'error');
+                const msg = {{ _('Error de red al guardar la nota.')|tojson }};
+                if (typeof Swal !== 'undefined') Swal.fire({{ _('Error')|tojson }}, msg, 'error');
                 else alert(msg);
             });
         }
@@ -257,7 +256,7 @@
             fetch(`/notas/${id}/datos`)
             .then(res => res.json())
             .then(data => {
-                if(!data.success) return alert("Error: " + data.message);
+                if(!data.success) return alert({{ _('Error')|tojson }} + ': ' + data.message);
                 
                 document.getElementById('notaGlobalId').value = data.id;
                 document.getElementById('notaGlobalTitulo').value = data.titulo;
@@ -270,7 +269,7 @@
                 $('#globalSelectUsers').val(data.users_ids).trigger('change');
                 
                 // Cambiar títulos para que quede claro que estamos editando
-                document.getElementById('modalNuevaNotaTitle').innerHTML = '<i class="fas fa-edit mr-2"></i>Editar nota';
+                document.getElementById('modalNuevaNotaTitle').innerHTML = '<i class="fas fa-edit mr-2"></i>' + {{ _('Editar nota')|tojson }};
                 
                 $('#modalNuevaNota').modal('show');
             });
@@ -283,19 +282,19 @@
             document.getElementById('notaGlobalFecha').valueAsDate = new Date();
             $('#globalSelectObras').val(null).trigger('change');
             $('#globalSelectUsers').val(null).trigger('change');
-            document.getElementById('modalNuevaNotaTitle').innerHTML = '<i class="fas fa-pen-alt mr-2"></i>Redactar nota / reunión';
+            document.getElementById('modalNuevaNotaTitle').innerHTML = '<i class="fas fa-pen-alt mr-2"></i>' + {{ _('Redactar nota / reunión')|tojson }};
         });
     </script>
     {% endif %}
 
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding_tour.css') }}?v=20260811b">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/onboarding_tour.css') }}?v=20260816f">
     <script>
       window.__ONB_IMPORT_DONE__ = {{ (onboarding_import_done or {})|tojson }};
       window.__ONB_FICHAJE_ASKED__ = {{ 'true' if onboarding_fichaje_asked else 'false' }};
       window.__ONB_FICHAJE_ACTIVO__ = {{ 'true' if onboarding_fichaje_activo else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260811b"></script>
+    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260816f"></script>
     {% endif %}
 </body>
 </html>

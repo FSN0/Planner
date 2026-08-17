@@ -1,46 +1,25 @@
 {% extends "marketing/legal_base.html" %}
 {% block legal_content %}
-<h2>1. Qué son las cookies</h2>
-<p>
-    Las cookies (y tecnologías similares) son pequeños archivos o datos que el navegador
-    almacena para que el sitio funcione (sesión, seguridad) o, en su caso, para medir uso.
-</p>
+<h2>{{ _('legal.cookies.h1') }}</h2>
+<p>{{ _('legal.cookies.p1') }}</p>
 
-<h2>2. Cookies que utilizamos</h2>
+<h2>{{ _('legal.cookies.h2') }}</h2>
 <ul>
-    <li><strong>Esenciales / técnicas:</strong> cookie de sesión de usuario, token CSRF
-        (protección frente a falsificación de peticiones), preferencias técnicas mínimas
-        del interfaz y el registro de tu decisión sobre cookies (<code>sp_cookie_consent</code>).
-        Son necesarias para prestar el servicio y no requieren consentimiento adicional.</li>
-    <li><strong>Analítica:</strong> solo si nos das permiso en el banner de cookies y si
-        tenemos configurado un identificador de Google Analytics. En ese caso se cargan
-        scripts de Google (gtag) para medir uso agregado del sitio comercial. Puedes
-        elegir «Solo esenciales» y no se cargarán.</li>
-    <li><strong>Marketing:</strong> no están activas por defecto. Si se incorporan en el
-        futuro (p. ej. píxeles publicitarios), se solicitará consentimiento previo y
-        esta política se actualizará.</li>
+    <li>{{ _('legal.cookies.li1') }}</li>
+    <li>{{ _('legal.cookies.li2') }}</li>
+    <li>{{ _('legal.cookies.li3') }}</li>
 </ul>
 
-<h2>3. Base jurídica</h2>
-<p>
-    Las cookies esenciales se basan en la necesidad de prestar el servicio solicitado
-    (art. 6.1.b RGPD / excepción técnica de la normativa de cookies). Las no esenciales
-    (analítica/marketing) se basan en tu consentimiento, que puedes retirar borrando
-    cookies del navegador o volviendo a elegir en el banner.
-</p>
+<h2>{{ _('legal.cookies.h3') }}</h2>
+<p>{{ _('legal.cookies.p2') }}</p>
 
-<h2>4. Cómo gestionarlas</h2>
-<p>
-    Puedes borrar o bloquear cookies desde la configuración de tu navegador. Si bloqueas
-    las esenciales, es posible que no puedas iniciar sesión o completar el alta.
-    En las páginas comerciales también puedes cambiar tu preferencia con el banner
-    de cookies (enlace «Cookies» del pie o borrando la cookie <code>sp_cookie_consent</code>).
-</p>
+<h2>{{ _('legal.cookies.h4') }}</h2>
+<p>{{ _('legal.cookies.p3') }}</p>
 
-<h2>5. Más información</h2>
+<h2>{{ _('legal.cookies.h5') }}</h2>
 <p>
-    Consulta también la
-    <a href="{{ url_for('marketing.legal', slug='privacidad') }}">política de privacidad</a>
-    o escribe a <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>.
+    {{ _('legal.cookies.p4') }}
+    <a href="{{ mkt_url('marketing.legal', slug='privacidad') }}">{{ _('alta.privacy_2') }}</a>
+    {{ _('legal.cookies.p4b', email=legal.email) }}
 </p>
 {% endblock %}

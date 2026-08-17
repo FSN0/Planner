@@ -1,18 +1,18 @@
 {% extends 'base.html' %}
-{% block title %}Resultados de la Importación{% endblock %}
+{% block title %}{{ _('Resultados de la Importación') }}{% endblock %}
 {% block content %}
 <div class="container mt-5">
-  <h2>Resultados de la Importación</h2>
+  <h2>{{ _('Resultados de la Importación') }}</h2>
   <div class="mb-3">
     <button class="btn btn-info" type="button" data-toggle="collapse" data-target="#importResults" aria-expanded="false" aria-controls="importResults">
-      Ver Detalles de Usuarios Importados
+      {{ _('Ver Detalles de Usuarios Importados') }}
     </button>
   </div>
   <div class="collapse" id="importResults">
     <table class="table table-striped">
       <thead>
         <tr>
-          <th>Email</th><th>Rol</th><th>Nombre</th><th>Apellidos</th><th>DNI</th><th>Empresa</th><th>Creó Empresa</th><th>Activo</th><th>Recibir Email</th>
+          <th>{{ _('Email') }}</th><th>{{ _('Rol') }}</th><th>{{ _('Nombre') }}</th><th>{{ _('Apellidos') }}</th><th>{{ _('DNI') }}</th><th>{{ _('Empresa') }}</th><th>{{ _('Creó Empresa') }}</th><th>{{ _('Activo') }}</th><th>{{ _('Recibir Email') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -24,9 +24,9 @@
           <td>{{ row.lastname }}</td>
           <td>{{ row.dni }}</td>
           <td>{{ row.empresa }}</td>
-          <td>{{ 'Sí' if row.company_created else 'No' }}</td>
-          <td>{{ 'Sí' if row.active else 'No' }}</td>
-          <td>{{ 'Sí' if row.receive_emails else 'No' }}</td>
+          <td>{{ _('Sí') if row.company_created else _('No') }}</td>
+          <td>{{ _('Sí') if row.active else _('No') }}</td>
+          <td>{{ _('Sí') if row.receive_emails else _('No') }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -34,7 +34,7 @@
   </div>
   {% if created_companies %}
   <div class="mt-4">
-    <h5>Empresas creadas:</h5>
+    <h5>{{ _('Empresas creadas:') }}</h5>
     <ul>
       {% for comp in created_companies %}
       <li>{{ comp }}</li>
@@ -42,6 +42,6 @@
     </ul>
   </div>
   {% endif %}
-  <a href="{{ url_for('admin.personal', tab='internos') }}" class="btn btn-secondary mt-3">Volver a Gestión de Personal</a>
+  <a href="{{ url_for('admin.personal', tab='internos') }}" class="btn btn-secondary mt-3">{{ _('Volver a Gestión de Personal') }}</a>
 </div>
 {% endblock %}

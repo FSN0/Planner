@@ -35,10 +35,10 @@
     </div>
 
     <p class="perm-hint">
-      <strong>R (Lectura)</strong> — ver el módulo (menú, listados, calendarios).<br>
-      <strong>W (Escritura)</strong> — crear, editar y mover (notas, asignaciones, arrastrar en planificador/tablero).<br>
-      <strong>X (Acción)</strong> — solo en módulos con acciones especiales (aprobar, resolver, reset contraseña/PIN, eliminar notas).
-      Si la columna X no tiene sentido en un módulo, déjala marcada igual que W o desmarcada; no cambia nada.
+      <strong>{{ _('R (Lectura)') }}</strong> — {{ _('ver el módulo (menú, listados, calendarios).') }}<br>
+      <strong>{{ _('W (Escritura)') }}</strong> — {{ _('crear, editar y mover (notas, asignaciones, arrastrar en planificador/tablero).') }}<br>
+      <strong>{{ _('X (Acción)') }}</strong> — {{ _('solo en módulos con acciones especiales (aprobar, resolver, reset contraseña/PIN, eliminar notas).') }}
+      {{ _('Si la columna X no tiene sentido en un módulo, déjala marcada igual que W o desmarcada; no cambia nada.') }}
     </p>
     <p class="perm-hint">
       {{ _('El jefe de obra sigue limitado a sus obras aunque tenga permiso de módulo.') }}
@@ -47,7 +47,7 @@
 
     <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">
       {% for role_key, role_label_txt in roles %}
-      <a href="{{ url_for('admin.permisos_roles', role=role_key) }}" class="{% if role_key == active_role %}is-active{% endif %}">{{ role_label_txt }}</a>
+      <a href="{{ url_for('admin.permisos_roles', role=role_key) }}" class="{% if role_key == active_role %}is-active{% endif %}">{{ _(role_label_txt) }}</a>
       {% endfor %}
     </nav>
 
@@ -67,7 +67,7 @@
           {% set ns = namespace(prev_group='') %}
           {% for module, label, group in modules %}
             {% if group != ns.prev_group %}
-            <tr><td colspan="4" class="perm-group">{{ group }}</td></tr>
+            <tr><td colspan="4" class="perm-group">{{ _(group) }}</td></tr>
             {% set ns.prev_group = group %}
             {% endif %}
             {% set locked = active_role == 'admin' and module in locked_modules %}
@@ -76,12 +76,12 @@
             {% set w_hint = write_hints.get(module) if write_hints is defined else none %}
             <tr class="{% if locked %}perm-locked{% endif %}">
               <td>
-                {{ label }}
+                {{ _(label) }}
                 {% if w_hint or x_hint %}
                 <div class="text-muted" style="font-size:0.72rem;font-weight:500;margin-top:0.15rem;">
-                  {% if w_hint %}<span title="W">W: {{ w_hint }}</span>{% endif %}
+                  {% if w_hint %}<span title="W">W: {{ _(w_hint) }}</span>{% endif %}
                   {% if w_hint and x_hint %} · {% endif %}
-                  {% if x_hint %}<span title="X">X: {{ x_hint }}</span>{% else %}<span class="text-muted">X: no aplica</span>{% endif %}
+                  {% if x_hint %}<span title="X">X: {{ _(x_hint) }}</span>{% else %}<span class="text-muted">{{ _('X: no aplica') }}</span>{% endif %}
                 </div>
                 {% endif %}
               </td>
@@ -90,13 +90,13 @@
                 {% if locked %}<input type="hidden" name="perm__{{ module }}__r" value="on">{% endif %}
               </td>
               <td class="perm-col">
-                <input type="checkbox" name="perm__{{ module }}__w" value="on" {% if flags.w %}checked{% endif %} {% if locked %}disabled{% endif %} title="{{ w_hint or 'Crear / editar' }}">
+                <input type="checkbox" name="perm__{{ module }}__w" value="on" {% if flags.w %}checked{% endif %} {% if locked %}disabled{% endif %} title="{{ _(w_hint) if w_hint else _('Crear / editar') }}">
                 {% if locked %}<input type="hidden" name="perm__{{ module }}__w" value="on">{% endif %}
               </td>
               <td class="perm-col">
                 <input type="checkbox" name="perm__{{ module }}__x" value="on" {% if flags.x %}checked{% endif %} {% if locked %}disabled{% endif %}
                        {% if not x_hint %}style="opacity:0.35"{% endif %}
-                       title="{{ x_hint or 'Sin acciones especiales en este módulo' }}">
+                       title="{{ _(x_hint) if x_hint else _('Sin acciones especiales en este módulo') }}">
                 {% if locked %}<input type="hidden" name="perm__{{ module }}__x" value="on">{% endif %}
               </td>
             </tr>

@@ -15,6 +15,7 @@ from app import db
 from app.models import User
 from app.services.tenant_domain_service import _RESERVED_SUBDOMAINS
 from app.services.tenant_service import provision_new_tenant
+from app.services.i18n_service import translate
 
 # Versiones publicadas de los textos legales (coinciden con /legal).
 LEGAL_PRIVACIDAD_VERSION = '2026-08'
@@ -52,22 +53,24 @@ def validar_subdominio(subdominio):
     subdominio = (subdominio or '').lower().strip()
     if not _SUB_RE.match(subdominio):
         raise SignupError(
-            'El subdominio solo puede tener letras minúsculas, números y guiones '
-            '(3–32 caracteres, sin empezar ni acabar en guion).'
+            translate(
+                'El subdominio solo puede tener letras minúsculas, números y guiones '
+                '(3–32 caracteres, sin empezar ni acabar en guion).'
+            )
         )
     if subdominio in _SUBDOMINIOS_BLOQUEADOS:
-        raise SignupError('Ese subdominio está reservado. Elige otro.')
+        raise SignupError(translate('Ese subdominio está reservado. Elige otro.'))
     if len(subdominio) < 3:
-        raise SignupError('El subdominio tiene que tener al menos 3 caracteres.')
+        raise SignupError(translate('El subdominio tiene que tener al menos 3 caracteres.'))
     return subdominio
 
 
 def validar_password(password, password2):
     password = password or ''
     if len(password) < 8:
-        raise SignupError('La contraseña tiene que tener al menos 8 caracteres.')
+        raise SignupError(translate('La contraseña tiene que tener al menos 8 caracteres.'))
     if password != (password2 or ''):
-        raise SignupError('Las contraseñas no coinciden.')
+        raise SignupError(translate('Las contraseñas no coinciden.'))
     return password
 
 
@@ -104,11 +107,11 @@ def registrar_empresa(
     admin_email = (admin_email or '').strip().lower()
 
     if not nombre_empresa or len(nombre_empresa) < 2:
-        raise SignupError('Indica el nombre de la empresa.')
+        raise SignupError(translate('Indica el nombre de la empresa.'))
     if not admin_email or '@' not in admin_email:
-        raise SignupError('Indica un correo válido para el administrador.')
+        raise SignupError(translate('Indica un correo válido para el administrador.'))
     if not acepta_privacidad or not acepta_condiciones:
-        raise SignupError('Debes aceptar la política de privacidad y las condiciones.')
+        raise SignupError(translate('Debes aceptar la política de privacidad y las condiciones.'))
 
     subdominio = validar_subdominio(subdominio)
     password = validar_password(admin_password, admin_password2)
@@ -128,7 +131,7 @@ def registrar_empresa(
             active=True,
         )
     except ValueError as exc:
-        raise SignupError(str(exc)) from exc
+        raise SignupError(translate(str(exc))) from exc
 
     # Consentimiento: qué versiones aceptó y cuándo (UTC).
     db.session.execute(text('SET search_path TO public'))

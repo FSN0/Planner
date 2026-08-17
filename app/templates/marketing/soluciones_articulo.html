@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale }}">
 <head>
     {% set page_title = solution.title ~ ' — SignaPlan' %}
     {% set meta_description = solution.description %}
@@ -19,6 +19,7 @@
       "description": {{ solution.description|tojson }},
       "dateModified": {{ solution.updated|tojson }},
       "isPartOf": { "@type": "WebSite", "name": "SignaPlan", "url": "{{ marketing_origin() }}/" },
+      "inLanguage": "{{ locale_meta.bcp47 if locale_meta is defined else 'es-ES' }}",
       "mainEntity": {
         "@type": "SoftwareApplication",
         "name": "SignaPlan",
@@ -48,7 +49,7 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% with variant='horizontal', width=150, height=26 %}
               {% include "components/_brand_logo.html" %}
             {% endwith %}
@@ -58,8 +59,8 @@
 
     <article class="mkt-article">
         <p class="mkt-article-meta">
-            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a>
-            · {{ solution.eyebrow }} · Actualizado {{ solution.updated }}
+            <a href="{{ mkt_url('marketing.soluciones_index') }}">{{ _('Soluciones') }}</a>
+            · {{ solution.eyebrow }} · {{ _('Actualizado') }} {{ solution.updated }}
         </p>
         <h1>{{ solution.h1 }}</h1>
         <div class="mkt-article-body">
@@ -68,7 +69,7 @@
 
         {% if solution.faq %}
         <section class="mkt-faq" aria-labelledby="faq-title">
-            <h2 id="faq-title">Preguntas frecuentes</h2>
+            <h2 id="faq-title">{{ _('Preguntas frecuentes') }}</h2>
             {% for item in solution.faq %}
             <details class="mkt-faq-item">
                 <summary>{{ item.q }}</summary>
@@ -79,15 +80,15 @@
         {% endif %}
 
         <p class="mkt-article-cta">
-            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta gratuita</a>
-            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.contacto') }}">Contacto</a>
+            <a class="mkt-btn mkt-btn-primary" href="{{ mkt_url('marketing.alta') }}">{{ _('Crear cuenta gratuita') }}</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ mkt_url('marketing.contacto') }}">{{ _('Contacto') }}</a>
         </p>
 
-        <nav class="mkt-related" aria-label="Otras soluciones">
-            <h2>También te puede interesar</h2>
+        <nav class="mkt-related" aria-label="{{ _('Otras soluciones') }}">
+            <h2>{{ _('También te puede interesar') }}</h2>
             <ul>
                 {% for s in related %}
-                <li><a href="{{ url_for('marketing.solucion', slug=s.slug) }}">{{ s.h1 }}</a></li>
+                <li><a href="{{ mkt_url('marketing.solucion', slug=s.slug) }}">{{ s.h1 }}</a></li>
                 {% endfor %}
             </ul>
         </nav>
@@ -96,9 +97,9 @@
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
         <span>
-            <a href="/">Inicio</a> ·
-            <a href="{{ url_for('marketing.soluciones_index') }}">Soluciones</a> ·
-            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a>
+            <a href="{{ mkt_home() }}">{{ _('Inicio') }}</a> ·
+            <a href="{{ mkt_url('marketing.soluciones_index') }}">{{ _('Soluciones') }}</a> ·
+            <a href="{{ mkt_url('marketing.recursos_index') }}">{{ _('Guías') }}</a>
         </span>
     </footer>
     {% include "components/_cookie_banner.html" %}

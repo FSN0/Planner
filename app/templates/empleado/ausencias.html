@@ -55,7 +55,7 @@
       <tbody>
         {% for a in ausencias %}
         <tr>
-          <td>{{ a.tipo }}</td>
+          <td>{{ _(a.tipo) }}</td>
           <td>{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
           <td>{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
           <td>
@@ -64,7 +64,7 @@
             {% elif a.estado == 'rechazada' %}{{ _('Rechazada') }}
             {% else %}{{ a.estado }}{% endif %}
             {% if a.origen in ('odoo', 'erp') %}
-              <span class="text-muted small">(ERP)</span>
+              <span class="text-muted small">({{ _('ERP') }})</span>
             {% endif %}
           </td>
           <td class="text-right">

@@ -16,6 +16,7 @@ from app.models import (
     Obra,
 )
 from app.utils.timezone_utils import today_local
+from app.services.i18n_service import translate
 
 
 @empleado_bp.before_request
@@ -23,13 +24,15 @@ def _solo_operario_con_web():
     if not current_user.is_authenticated:
         return None
     if current_user.role != ROLE_OPERARIO:
-        flash('Acceso no autorizado', 'danger')
+        flash(translate('Acceso no autorizado'), 'danger')
         return redirect(url_for('auth.login'))
     from app.services.permission_service import user_can
     if not user_can(current_user, 'operario_web', 'r'):
         flash(
-            'Tu perfil no tiene acceso al portal web. '
-            'Pide a administración que active el permiso de operario.',
+            translate(
+                'Tu perfil no tiene acceso al portal web. '
+                'Pide a administración que active el permiso de operario.'
+            ),
             'warning',
         )
         try:
@@ -41,8 +44,10 @@ def _solo_operario_con_web():
         return redirect(url_for('auth.login'))
     if not getattr(current_user, 'web_access', False):
         flash(
-            'Tu cuenta no tiene acceso a la plataforma web. '
-            'Usa el fichaje con DNI y PIN o pide acceso a administración.',
+            translate(
+                'Tu cuenta no tiene acceso a la plataforma web. '
+                'Usa el fichaje con DNI y PIN o pide acceso a administración.'
+            ),
             'warning',
         )
         try:
@@ -131,7 +136,7 @@ def fichar():
         abort(404)
 
     if debe_cambiar_pin(current_user):
-        flash('Debes cambiar el PIN antes de fichar.', 'warning')
+        flash(translate('Debes cambiar el PIN antes de fichar.'), 'warning')
         return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
 
     contexto = estado_para_pantalla(current_user)
@@ -171,7 +176,7 @@ def ausencias():
             leave_id = request.form.get('leave_id', type=int)
             try:
                 delete_manual_leave(leave_id, current_user)
-                flash('Solicitud cancelada.', 'success')
+                flash(translate('Solicitud cancelada.'), 'success')
             except Exception as exc:
                 flash(str(exc), 'danger')
             return redirect(url_for('empleado.ausencias'))
@@ -195,7 +200,7 @@ def ausencias():
                 target_date=leave.fecha_inicio,
             )
             flash(
-                'Solicitud enviada. Queda pendiente de aprobación.',
+                translate('Solicitud enviada. Queda pendiente de aprobación.'),
                 'success',
             )
         except Exception as exc:

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ cfg.title }}{% endblock %}
+{% block title %}{{ _(cfg.title) }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -59,36 +59,36 @@
 
         <div class="d-flex align-items-center mb-4">
           <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-sm btn-link text-muted pl-0">
-            <i class="fas fa-arrow-left"></i> {{ cfg.back_label }}
+            <i class="fas fa-arrow-left"></i> {{ _(cfg.back_label) }}
           </a>
         </div>
 
         <div class="import-steps">
-          <div class="import-step is-active">1. Subir archivo</div>
-          <div class="import-step">2. Mapear columnas</div>
-          <div class="import-step">3. Resultados</div>
+          <div class="import-step is-active">1. {{ _('Subir archivo') }}</div>
+          <div class="import-step">2. {{ _('Mapear columnas') }}</div>
+          <div class="import-step">3. {{ _('Resultados') }}</div>
         </div>
 
         <div class="admin-panel">
           <div class="import-intro" data-tour="import-intro">
-            <h2 class="admin-panel-title">{{ cfg.title }}</h2>
+            <h2 class="admin-panel-title">{{ _(cfg.title) }}</h2>
             <p class="import-intro-lead">
-              {{ cfg.intro_lead or cfg.subtitle }}
+              {{ _(cfg.intro_lead or cfg.subtitle) }}
             </p>
 
             <div class="import-help" data-tour="import-help">
               {% if cfg.help_html %}
-                {{ cfg.help_html|safe }}
+                {{ _(cfg.help_html)|safe }}
               {% elif cfg.help_blocks %}
                 {% for block in cfg.help_blocks %}
                 <p class="mb-2" style="font-size:0.86rem;color:#475569;line-height:1.45;">
-                  <strong style="color:#0f172a;">{{ block.title }}.</strong>
+                  <strong style="color:#0f172a;">{{ _(block.title) }}.</strong>
                   {{ block.body|safe }}
                 </p>
                 {% endfor %}
-                <p class="import-help-note">Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.</p>
+                <p class="import-help-note">{{ _('Formatos: .xlsx o .csv. En el siguiente paso podrás corregir el mapeo.') }}</p>
               {% else %}
-                <p class="mb-0" style="font-size:0.86rem;color:#475569;">{{ cfg.required_hint }}</p>
+                <p class="mb-0" style="font-size:0.86rem;color:#475569;">{{ _(cfg.required_hint) }}</p>
               {% endif %}
             </div>
           </div>
@@ -105,14 +105,14 @@
                 <input type="file" class="custom-file-input" id="file" name="file"
                        accept=".xlsx,.xls,.csv" required onchange="updateFileName(this)"
                        data-tour="import-file">
-                <label class="custom-file-label text-left" for="file" id="file-label">Seleccionar archivo…</label>
+                <label class="custom-file-label text-left" for="file" id="file-label">{{ _('Seleccionar archivo…') }}</label>
               </div>
             </div>
 
             <div class="d-flex justify-content-end">
-              <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-link text-muted mr-2">Cancelar</a>
+              <a href="{{ url_for(cfg.back_endpoint) }}" class="btn btn-link text-muted mr-2">{{ _('Cancelar') }}</a>
               <button type="submit" class="btn btn-primary px-4" data-tour="import-submit">
-                <i class="fas fa-upload mr-2"></i> Continuar
+                <i class="fas fa-upload mr-2"></i> {{ _('Continuar') }}
               </button>
             </div>
           </form>
@@ -125,7 +125,7 @@
 
 <script>
   function updateFileName(input) {
-    var fileName = input.files[0] ? input.files[0].name : 'Seleccionar archivo…';
+    var fileName = input.files[0] ? input.files[0].name : {{ _('Seleccionar archivo…')|tojson }};
     document.getElementById('file-label').innerText = fileName;
   }
 </script>

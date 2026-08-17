@@ -26,10 +26,12 @@
           <i class="fas fa-user-plus"></i> {{ _('Solicitudes') }}
           {% if solicitudes_abiertas %}<span class="badge-soft badge-soft-amber ml-1">{{ solicitudes_abiertas }}</span>{% endif %}
         </a>
+        {% if muestra_auditoria_fichajes %}
         <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-user-clock"></i> {{ _('Auditoría') }}
           {% if audit_pendientes_total %}<span class="badge-soft badge-soft-red ml-1">{{ audit_pendientes_total }}</span>{% endif %}
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -58,6 +60,7 @@
           <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} {{ _('pendientes') }} · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} {{ _('en proceso') }}</span>
         </div>
       </article>
+      {% if muestra_auditoria_fichajes %}
       <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
         <div>
@@ -74,6 +77,7 @@
           <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} {{ _('incidencias') }}</span>{% endif %}</span>
         </div>
       </article>
+      {% endif %}
     </section>
 
     <div class="dashboard-main-grid">
@@ -216,6 +220,7 @@
     </div>
 
     <div class="dashboard-bottom-grid">
+      {% if muestra_auditoria_fichajes %}
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
           <h2 class="admin-panel-title"><i class="fas fa-user-clock text-danger mr-1"></i> {{ _('Incidencias de fichaje') }}</h2>
@@ -223,6 +228,7 @@
         </div>
         {% include 'components/_dashboard_incidencias.html' %}
       </section>
+      {% endif %}
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
@@ -234,11 +240,11 @@
           <li>
             <span class="dashboard-activity-time">{{ log.timestamp|format_dt }}</span>
             <span class="dashboard-activity-body">
-              <strong>{{ log.action }}</strong>
-              <span class="text-muted">— {{ (log.detail or '')|truncate(80) }}</span>
+              <strong>{{ log.action|tlog_action }}</strong>
+              <span class="text-muted">— {{ (log.detail or '')|tlog_detail|truncate(80) }}</span>
             </span>
             {% if log.user %}
-            <span class="badge-soft badge-soft-gray">{{ log.user.name }}</span>
+            <span class="badge-soft badge-soft-gray">{{ _(log.user.name) }}</span>
             {% endif %}
           </li>
           {% endfor %}

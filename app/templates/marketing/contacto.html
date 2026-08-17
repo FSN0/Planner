@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale|default('es') }}">
 <head>
-    {% set page_title = 'Contacto — SignaPlan' %}
-    {% set meta_description = 'Habla con SignaPlan: demo, alta o integración con tu ERP. Software de cuadrante, fichaje y flota para constructoras.' %}
+    {% set page_title = _('seo.contacto.title') %}
+    {% set meta_description = _('seo.contacto.description') %}
     {% set canonical_path = url_for('marketing.contacto') %}
     {% include "components/_marketing_seo_head.html" %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,16 +12,16 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% include "components/_brand_logo.html" %}
         </a>
         {% include "components/_marketing_nav.html" %}
     </header>
 
     <section class="mkt-form-wrap">
-        <h1>Hablar con nosotros</h1>
+        <h1>{{ _('Hablar con nosotros') }}</h1>
         <p style="color:#64748b;margin-bottom:1.5rem;">
-            Cuéntanos qué necesitas (demo, integración, duda comercial) y te respondemos lo antes posible.
+            {{ _('contact.intro') }}
         </p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -32,32 +32,32 @@
           {% endif %}
         {% endwith %}
 
-        <form method="POST" action="{{ url_for('marketing.contacto') }}">
+        <form method="POST" action="{{ mkt_url('marketing.contacto') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {# Honeypot anti-spam #}
             <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
                    style="position:absolute;left:-9999px;opacity:0;" aria-hidden="true">
 
-            <label for="nombre" style="display:block;font-weight:600;margin-bottom:.35rem;">Nombre</label>
+            <label for="nombre" style="display:block;font-weight:600;margin-bottom:.35rem;">{{ _('Nombre') }}</label>
             <input type="text" name="nombre" id="nombre" required maxlength="120"
                    value="{{ form.nombre or '' }}"
                    style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
 
-            <label for="email" style="display:block;font-weight:600;margin-bottom:.35rem;">Tu correo</label>
+            <label for="email" style="display:block;font-weight:600;margin-bottom:.35rem;">{{ _('Tu correo') }}</label>
             <input type="email" name="email" id="email" required maxlength="120"
                    value="{{ form.email or '' }}"
                    style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
 
-            <label for="empresa" style="display:block;font-weight:600;margin-bottom:.35rem;">Empresa <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label>
+            <label for="empresa" style="display:block;font-weight:600;margin-bottom:.35rem;">{{ _('Empresa') }} <span style="font-weight:400;color:#94a3b8;">{{ _('(opcional)') }}</span></label>
             <input type="text" name="empresa" id="empresa" maxlength="160"
                    value="{{ form.empresa or '' }}"
                    style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
 
-            <label for="mensaje" style="display:block;font-weight:600;margin-bottom:.35rem;">Mensaje</label>
+            <label for="mensaje" style="display:block;font-weight:600;margin-bottom:.35rem;">{{ _('Mensaje') }}</label>
             <textarea name="mensaje" id="mensaje" required maxlength="4000" rows="6"
                       style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">{{ form.mensaje or '' }}</textarea>
 
-            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">Enviar mensaje</button>
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">{{ _('Enviar mensaje') }}</button>
         </form>
     </section>
 

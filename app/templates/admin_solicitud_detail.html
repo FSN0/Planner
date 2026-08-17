@@ -29,26 +29,25 @@
         </a>
         <h1 class="page-toolbar-title">Solicitud #{{ solicitud.id }}</h1>
         {% if solicitud.accion == 'DESASIGNAR' %}
-          <span class="badge-soft badge-soft-red">Salida</span>
+          <span class="badge-soft badge-soft-red">{{ _('Salida') }}</span>
         {% elif solicitud.tipo|lower == 'generica' %}
-          <span class="badge-soft badge-soft-gray">Genérica</span>
+          <span class="badge-soft badge-soft-gray">{{ _('Genérica') }}</span>
         {% else %}
-          <span class="badge-soft badge-soft-blue">Concreta</span>
+          <span class="badge-soft badge-soft-blue">{{ _('Concreta') }}</span>
         {% endif %}
         {% set est = solicitud.estado %}
-        {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">Pendiente</span>
-        {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">En proceso</span>
-        {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">Cumplida</span>
-        {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">Cerrada P.</span>
-        {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">Denegada</span>
+        {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
+        {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
+        {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
+        {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
+        {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
         {% endif %}
       </div>
       {% if solicitud.fecha_inicio %}
       <div class="page-toolbar-actions">
         <a href="{{ url_for('admin.obras_detailed', selected_date=solicitud.fecha_inicio.strftime('%Y-%m-%d')) }}"
            class="btn-admin btn-admin-ghost" target="_blank">
-          <i class="fas fa-th-large"></i> Tablero
-        </a>
+          <i class="fas fa-th-large"></i>{{ _('Tablero') }}</a>
       </div>
       {% endif %}
     </div>
@@ -72,7 +71,7 @@
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817a"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('candidateSearch');

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale }}">
 <head>
-    {% set page_title = 'Soluciones SignaPlan — cuadrante, fichaje en obra y flota' %}
-    {% set meta_description = 'Cuadrante de personal, fichaje y control horario en construcción, registro de jornada y flota. Sin montar un ERP. Alta gratuita.' %}
+    {% set page_title = _('seo.soluciones.title') %}
+    {% set meta_description = _('seo.soluciones.description') %}
     {% set canonical_path = url_for('marketing.soluciones_index') %}
     {% set legal_email = contact_email %}
     {% include "components/_marketing_seo_head.html" %}
@@ -13,7 +13,7 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% with variant='horizontal', width=150, height=26 %}
               {% include "components/_brand_logo.html" %}
             {% endwith %}
@@ -22,17 +22,13 @@
     </header>
 
     <section class="mkt-article mkt-soluciones">
-        <p class="mkt-article-meta">SignaPlan · Soluciones</p>
-        <h1>Organiza obra sin montar un ERP el primer día</h1>
-        <p class="mkt-article-lead">
-            Tres dolores reales de constructora: <strong>quién va a cada tajo</strong>,
-            <strong>quién ha fichado</strong> y <strong>qué coche está libre</strong>.
-            Elige el que más te duele ahora.
-        </p>
+        <p class="mkt-article-meta">SignaPlan · {{ _('Soluciones') }}</p>
+        <h1>{{ _('seo.soluciones.h1') }}</h1>
+        <p class="mkt-article-lead">{{ _('seo.soluciones.lead') }}</p>
         <ul class="mkt-soluciones-grid">
             {% for s in solutions %}
             <li>
-                <a href="{{ url_for('marketing.solucion', slug=s.slug) }}">
+                <a href="{{ mkt_url('marketing.solucion', slug=s.slug) }}">
                     <span class="mkt-soluciones-eyebrow">{{ s.eyebrow }}</span>
                     <strong>{{ s.h1 }}</strong>
                     <span>{{ s.description }}</span>
@@ -41,15 +37,15 @@
             {% endfor %}
         </ul>
         <p class="mkt-article-cta">
-            <a class="mkt-btn mkt-btn-primary" href="{{ url_for('marketing.alta') }}">Crear cuenta gratuita</a>
-            <a class="mkt-btn mkt-btn-ghost" href="{{ url_for('marketing.recursos_index') }}">Guías prácticas</a>
+            <a class="mkt-btn mkt-btn-primary" href="{{ mkt_url('marketing.alta') }}">{{ _('Crear cuenta gratuita') }}</a>
+            <a class="mkt-btn mkt-btn-ghost" href="{{ mkt_url('marketing.recursos_index') }}">{{ _('Guías prácticas') }}</a>
         </p>
-        <nav class="mkt-related" aria-label="Guías relacionadas">
-            <h2>Guías si vienes de Google</h2>
+        <nav class="mkt-related" aria-label="{{ _('Guías relacionadas') }}">
+            <h2>{{ _('seo.soluciones.from_google') }}</h2>
             <ul>
-                <li><a href="{{ url_for('marketing.recurso', slug='cuadrante-personal-obra') }}">Cuadrante de personal de obra</a></li>
-                <li><a href="{{ url_for('marketing.recurso', slug='inspeccion-trabajo-construccion') }}">Inspección de jornada en construcción</a></li>
-                <li><a href="{{ url_for('marketing.recurso', slug='software-constructoras') }}">Software para constructoras (sin ERP)</a></li>
+                <li><a href="{{ mkt_url('marketing.recurso', slug='cuadrante-personal-obra') }}">{{ _('landing.guide.cuadrante') }}</a></li>
+                <li><a href="{{ mkt_url('marketing.recurso', slug='inspeccion-trabajo-construccion') }}">{{ _('landing.guide.inspeccion') }}</a></li>
+                <li><a href="{{ mkt_url('marketing.recurso', slug='software-constructoras') }}">{{ _('landing.guide.software') }}</a></li>
             </ul>
         </nav>
     </section>
@@ -57,9 +53,9 @@
     <footer class="mkt-footer">
         <span>© {{ current_year }} SignaPlan</span>
         <span>
-            <a href="/">Inicio</a> ·
-            <a href="{{ url_for('marketing.recursos_index') }}">Guías</a> ·
-            <a href="{{ url_for('marketing.contacto') }}">Contacto</a>
+            <a href="{{ mkt_home() }}">{{ _('Inicio') }}</a> ·
+            <a href="{{ mkt_url('marketing.recursos_index') }}">{{ _('Guías') }}</a> ·
+            <a href="{{ mkt_url('marketing.contacto') }}">{{ _('Contacto') }}</a>
         </span>
     </footer>
     {% include "components/_cookie_banner.html" %}

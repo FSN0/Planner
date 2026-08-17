@@ -11,6 +11,7 @@ from urllib.parse import quote
 from app import db
 from app.models import User
 from app.services.email_service import send_email
+from app.services.i18n_service import translate, normalize_locale, get_locale, DEFAULT_LOCALE
 
 TOKEN_MAX_AGE = 86400 * 3  # 3 días
 _SALT = 'signaplan-email-verify'
@@ -24,7 +25,7 @@ def _serializer():
     from flask import current_app
     secret = current_app.config.get('SECRET_KEY')
     if not secret:
-        raise EmailVerificationError('SECRET_KEY no configurada.')
+        raise EmailVerificationError(translate('SECRET_KEY no configurada.'))
     return URLSafeTimedSerializer(secret_key=secret, salt=_SALT)
 
 
@@ -41,13 +42,13 @@ def leer_token(token, tenant_esperado):
         data = _serializer().loads(token, max_age=TOKEN_MAX_AGE)
     except SignatureExpired as exc:
         raise EmailVerificationError(
-            'El enlace de verificación ha caducado. Solicita uno nuevo.'
+            translate('El enlace de verificación ha caducado. Solicita uno nuevo.')
         ) from exc
     except BadSignature as exc:
-        raise EmailVerificationError('El enlace de verificación no es válido.') from exc
+        raise EmailVerificationError(translate('El enlace de verificación no es válido.')) from exc
 
     if int(data.get('tid') or 0) != int(tenant_esperado.id):
-        raise EmailVerificationError('Este enlace no corresponde a esta empresa.')
+        raise EmailVerificationError(translate('Este enlace no corresponde a esta empresa.'))
     return data
 
 
@@ -56,6 +57,14 @@ def _url_verificacion(tenant, token):
     return url_acceso_tenant(
         tenant, path=f'/auth/verificar-email?t={quote(token, safe="")}'
     )
+
+
+def _locale_for_user(user=None):
+    if user is not None:
+        loc = normalize_locale(getattr(user, 'locale', None))
+        if loc:
+            return loc
+    return get_locale() or DEFAULT_LOCALE
 
 
 def enviar_email_verificacion(tenant, user):
@@ -70,19 +79,28 @@ def enviar_email_verificacion(tenant, user):
 
     token = generar_token(user, tenant)
     url = _url_verificacion(tenant, token)
-    texto = (
-        f'Hola {user.name},\n\n'
-        f'Confirma tu correo para SignaPlan ({tenant.nombre}):\n\n{url}\n\n'
-        f'El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.\n'
+    loc = _locale_for_user(user)
+    texto = translate(
+        'Hola {name},\n\n'
+        'Confirma tu correo para SignaPlan ({tenant}):\n\n{url}\n\n'
+        'El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.\n',
+        loc,
+        name=user.name,
+        tenant=tenant.nombre,
+        url=url,
     )
-    html = (
-        f'<p>Hola {user.name},</p>'
-        f'<p>Confirma tu correo para <strong>SignaPlan</strong> ({tenant.nombre}).</p>'
-        f'<p><a href="{url}">Verificar correo</a></p>'
-        f'<p>El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.</p>'
+    html = translate(
+        '<p>Hola {name},</p>'
+        '<p>Confirma tu correo para <strong>SignaPlan</strong> ({tenant}).</p>'
+        '<p><a href="{url}">Verificar correo</a></p>'
+        '<p>El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.</p>',
+        loc,
+        name=user.name,
+        tenant=tenant.nombre,
+        url=url,
     )
     return bool(send_email(
-        f'Verifica tu correo — {tenant.nombre}',
+        translate('Verifica tu correo — {tenant}', loc, tenant=tenant.nombre),
         [user.email],
         texto,
         html_body=html,
@@ -99,7 +117,7 @@ def confirmar_email(token, tenant):
     db.session.execute(text(f'SET search_path TO {tenant.schema_name}, public'))
     user = User.query.filter_by(id=data['uid'], is_deleted=False).first()
     if not user or (user.email or '').strip().lower() != (data.get('email') or '').lower():
-        raise EmailVerificationError('No se ha podido verificar el correo.')
+        raise EmailVerificationError(translate('No se ha podido verificar el correo.'))
 
     user.email_verified = True
     db.session.commit()
@@ -114,7 +132,7 @@ def reenviar_verificacion(tenant, email=None, user=None):
     if user is None:
         email = (email or '').strip().lower()
         if not email:
-            raise EmailVerificationError('Indica tu correo.')
+            raise EmailVerificationError(translate('Indica tu correo.'))
         user = User.query.filter_by(email=email, is_deleted=False).first()
 
     if not user:
@@ -123,6 +141,8 @@ def reenviar_verificacion(tenant, email=None, user=None):
         return True
     if not enviar_email_verificacion(tenant, user):
         raise EmailVerificationError(
-            'No se ha podido enviar el correo. Prueba más tarde o contacta con soporte.'
+            translate(
+                'No se ha podido enviar el correo. Prueba más tarde o contacta con soporte.'
+            )
         )
     return True

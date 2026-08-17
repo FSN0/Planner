@@ -93,20 +93,20 @@
               <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Modelo') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Activo') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% if tenant_has_odoo %}
-              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Conductor Odoo</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="num" onclick="sortAdminTable(this)"><span class="sortable-label">Km</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Conductor Odoo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="num" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Km') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% endif %}
               <th class="col-actions"></th>
             </tr>
             <tr class="filter-row">
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 0, this.value)" placeholder="…" title="Filtrar matrícula"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 1, this.value)" placeholder="…" title="Filtrar nombre"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 2, this.value)" placeholder="…" title="Filtrar marca"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 3, this.value)" placeholder="…" title="Filtrar modelo"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 4, this.value)" placeholder="…" title="Filtrar activo"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 0, this.value)" placeholder="…" title="{{ _('Filtrar matrícula') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 1, this.value)" placeholder="…" title="{{ _('Filtrar nombre') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 2, this.value)" placeholder="…" title="{{ _('Filtrar marca') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 3, this.value)" placeholder="…" title="{{ _('Filtrar modelo') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 4, this.value)" placeholder="…" title="{{ _('Filtrar activo') }}"></th>
               {% if tenant_has_odoo %}
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 5, this.value)" placeholder="…" title="Filtrar conductor"></th>
-              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 6, this.value)" placeholder="…" title="Filtrar km"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 5, this.value)" placeholder="…" title="{{ _('Filtrar conductor') }}"></th>
+              <th><input type="text" class="table-filter-input" onkeyup="filterTable('vehiclesTable', 6, this.value)" placeholder="…" title="{{ _('Filtrar km') }}"></th>
               {% endif %}
               <th></th>
             </tr>
@@ -119,8 +119,8 @@
               <td data-sort-value="{{ (v.marca or '')|lower }}">{{ v.marca or '—' }}</td>
               <td data-sort-value="{{ (v.modelo or '')|lower }}">{{ v.modelo or '—' }}</td>
               <td data-sort-value="{{ 'activo' if v.active else 'inactivo' }}">
-                {% if v.active %}<span class="badge-soft badge-soft-green">Activo</span>
-                {% else %}<span class="badge-soft badge-soft-slate">Inactivo</span>{% endif %}
+                {% if v.active %}<span class="badge-soft badge-soft-green">{{ _('Activo') }}</span>
+                {% else %}<span class="badge-soft badge-soft-slate">{{ _('Inactivo') }}</span>{% endif %}
               </td>
               {% if tenant_has_odoo %}
               <td data-sort-value="{{ (v.odoo_driver_name or '')|lower }}">{{ v.odoo_driver_name or '—' }}</td>
@@ -130,12 +130,12 @@
               {% endif %}
               <td class="col-actions">
                 <div class="table-actions">
-                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="Ver ficha"><i class="fas fa-eye"></i></a>
-                  <a href="{{ url_for('admin.vehiculos_editar', vehiculo_id=v.id) }}" class="btn-table-action" title="Editar vehículo"><i class="fas fa-pen"></i></a>
+                  <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="{{ _('Ver ficha') }}"><i class="fas fa-eye"></i></a>
+                  <a href="{{ url_for('admin.vehiculos_editar', vehiculo_id=v.id) }}" class="btn-table-action" title="{{ _('Editar vehículo') }}"><i class="fas fa-pen"></i></a>
                   {% if current_user.role == 'admin' %}
                   <form method="POST" action="{{ url_for('admin.vehiculos_toggle', vehiculo_id=v.id) }}" style="display:inline;" onclick="event.stopPropagation();">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn-table-action" title="{{ 'Desactivar' if v.active else 'Activar' }}">
+                    <button type="submit" class="btn-table-action" title="{{ _('Desactivar') if v.active else _('Activar') }}">
                       <i class="fas fa-{{ 'toggle-on' if v.active else 'toggle-off' }}"></i>
                     </button>
                   </form>
@@ -148,9 +148,9 @@
               <td colspan="{{ 8 if tenant_has_odoo else 6 }}" class="table-empty-state">
                 <i class="fas fa-car"></i>
                 {% if current_user.role == 'admin' %}
-                Aún no hay vehículos. Usa el formulario de arriba para dar de alta el primero.
+                {{ _('Aún no hay vehículos. Usa el formulario de arriba para dar de alta el primero.') }}
                 {% else %}
-                Aún no hay vehículos en la flota.
+                {{ _('Aún no hay vehículos en la flota.') }}
                 {% endif %}
               </td>
             </tr>
@@ -164,7 +164,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="{{ url_for('static', filename='js/common.js') }}?v=20260817a"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     captureAdminTableOrder('vehiclesTable');

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Nueva solicitud' if modo == 'crear' else 'Editar solicitud' }}{% endblock %}
+{% block title %}{% if modo == 'crear' %}{{ _('Nueva solicitud') }}{% else %}{{ _('Editar solicitud') }}{% endif %}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -18,10 +18,10 @@
 
     <header class="admin-header">
       <div class="admin-header-title">
-        {{ 'Nueva solicitud de personal' if modo == 'crear' else 'Editar solicitud' }}
+        {{ _('Nueva solicitud de personal') if modo == 'crear' else _('Editar solicitud') }}
       </div>
       <div class="admin-header-subtitle">
-        Define qué personal necesitas para una obra.
+        {{ _('Define qué personal necesitas para una obra.') }}
       </div>
     </header>
 
@@ -32,23 +32,23 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="form-row">
             <div class="form-group col-md-3">
-              <label for="tipo">Tipo de solicitud</label>
+              <label for="tipo">{{ _('Tipo de solicitud') }}</label>
               <select id="tipo" name="tipo" class="form-control form-control-sm">
                 <option value="generica"
                   {% if tipo_default == 'generica' %}selected{% endif %}>
-                  Asignación de personal (genérica)
+                  {{ _('Asignación de personal (genérica)') }}
                 </option>
                 <option value="concreta"
                   {% if tipo_default == 'concreta' %}selected{% endif %}>
-                  Movimiento de operario (concreta)
+                  {{ _('Movimiento de operario (concreta)') }}
                 </option>
               </select>
             </div>
 
             <div class="form-group col-md-5">
-              <label for="obra_id">Obra</label>
+              <label for="obra_id">{{ _('Obra') }}</label>
               <select id="obra_id" name="obra_id" class="form-control form-control-sm">
-                <option value="">-- Selecciona obra --</option>
+                <option value="">{{ _('-- Selecciona obra --') }}</option>
                 {% for obra in obras %}
                   <option value="{{ obra.id }}"
                     {% if obra_default == obra.id %}selected{% endif %}>
@@ -59,14 +59,14 @@
             </div>
 
             <div class="form-group col-md-2">
-              <label for="fecha_inicio">Fecha inicio</label>
+              <label for="fecha_inicio">{{ _('Fecha inicio') }}</label>
               <input type="date" id="fecha_inicio" name="fecha_inicio"
                      class="form-control form-control-sm"
                      value="{{ fecha_inicio_default or '' }}">
             </div>
 
             <div class="form-group col-md-2">
-              <label for="fecha_fin">Fecha fin</label>
+              <label for="fecha_fin">{{ _('Fecha fin') }}</label>
               <input type="date" id="fecha_fin" name="fecha_fin"
                      class="form-control form-control-sm"
                      value="{{ fecha_fin_default or '' }}">
@@ -76,14 +76,14 @@
           {# Bloque para genéricas: oficio + cantidad #}
           <div class="form-row tipo-generica-row">
             <div class="form-group col-md-6">
-              <label for="perfil_categoria">Oficio / perfil solicitado</label>
+              <label for="perfil_categoria">{{ _('Oficio / perfil solicitado') }}</label>
               <input type="text" id="perfil_categoria" name="perfil_categoria"
                      class="form-control form-control-sm"
                      value="{{ perfil_default or '' }}"
-                     placeholder="Ej: Electricista, Encargado, Oficial 1ª...">
+                     placeholder="{{ _('Ej: Electricista, Encargado, Oficial 1ª...') }}">
             </div>
             <div class="form-group col-md-2">
-              <label for="cantidad_solicitada">Nº operarios</label>
+              <label for="cantidad_solicitada">{{ _('Nº operarios') }}</label>
               <input type="number" min="1" id="cantidad_solicitada" name="cantidad_solicitada"
                      class="form-control form-control-sm"
                      value="{{ cantidad_default or '' }}">
@@ -93,14 +93,14 @@
           {# Bloque para concretas: empleado concreto #}
           <div class="form-row tipo-concreta-row">
             <div class="form-group col-md-6">
-              <label for="empleado_id">Operario concreto</label>
+              <label for="empleado_id">{{ _('Operario concreto') }}</label>
               <select id="empleado_id" name="empleado_id"
                       class="form-control form-control-sm">
-                <option value="">-- Selecciona operario --</option>
+                <option value="">{{ _('-- Selecciona operario --') }}</option>
                 {% for e in empleados %}
                   <option value="{{ e.id }}"
                     {% if empleado_default == e.id %}selected{% endif %}>
-                    {{ e.name }} {{ e.lastname }} ({{ e.company or 'Interno' }})
+                    {{ e.name }} {{ e.lastname }} ({{ e.company or _('Interno') }})
                   </option>
                 {% endfor %}
               </select>
@@ -108,19 +108,15 @@
           </div>
 
           <div class="form-group">
-            <label for="notas">Notas para RRHH</label>
+            <label for="notas">{{ _('Notas para RRHH') }}</label>
             <textarea id="notas" name="notas"
                       rows="3" class="form-control form-control-sm"
-                      placeholder="Información adicional para RRHH o planificación...">{{ notas_default or '' }}</textarea>
+                      placeholder="{{ _('Información adicional para RRHH o planificación...') }}">{{ notas_default or '' }}</textarea>
           </div>
 
           <div class="mt-3 d-flex justify-content-between">
-            <a href="{{ url_for('admin.solicitudes_list') }}" class="btn btn-link">
-              Cancelar
-            </a>
-            <button type="submit" class="btn btn-primary">
-              Guardar solicitud
-            </button>
+            <a href="{{ url_for('admin.solicitudes_list') }}" class="btn btn-link">{{ _('Cancelar') }}</a>
+            <button type="submit" class="btn btn-primary">{{ _('Guardar solicitud') }}</button>
           </div>
         </form>
 

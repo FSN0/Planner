@@ -2,30 +2,39 @@
   <div class="row no-gutters">
     <div class="col-lg-8 col-xl-8 border-right">
       <div class="solicitud-resumen-body">
-        {% set emp_nom = (solicitud.empleado.name ~ ' ' ~ solicitud.empleado.lastname)|trim if solicitud.empleado else 'el operario' %}
-        {% set obra_nom = solicitud.obra.nombre if solicitud.obra else 'la obra' %}
-        {% if solicitud.comentarios and 'all_obra' in solicitud.comentarios and solicitud.accion == 'DESASIGNAR' %}
-          {% set rango_txt = solicitud.fecha_inicio.strftime('%d/%m/%Y') ~ ' en adelante' if solicitud.fecha_inicio else 'el periodo indicado' %}
-        {% elif solicitud.fecha_inicio and solicitud.fecha_fin %}
-          {% set rango_txt = 'del ' ~ solicitud.fecha_inicio.strftime('%d/%m/%Y') ~ ' al ' ~ solicitud.fecha_fin.strftime('%d/%m/%Y') %}
+        {% if solicitud.empleado %}
+          {% set emp_nom = (solicitud.empleado.name ~ ' ' ~ solicitud.empleado.lastname)|trim %}
         {% else %}
-          {% set rango_txt = 'el periodo indicado' %}
+          {% set emp_nom = _('el operario') %}
+        {% endif %}
+        {% if solicitud.obra %}
+          {% set obra_nom = solicitud.obra.nombre %}
+        {% else %}
+          {% set obra_nom = _('la obra') %}
+        {% endif %}
+        {% if solicitud.comentarios and 'all_obra' in solicitud.comentarios and solicitud.accion == 'DESASIGNAR' %}
+          {% if solicitud.fecha_inicio %}
+            {% set rango_txt = _('el {date} en adelante').format(date=solicitud.fecha_inicio.strftime('%d/%m/%Y')) %}
+          {% else %}
+            {% set rango_txt = _('el periodo indicado') %}
+          {% endif %}
+        {% elif solicitud.fecha_inicio and solicitud.fecha_fin %}
+          {% set rango_txt = _('del {start} al {end}').format(start=solicitud.fecha_inicio.strftime('%d/%m/%Y'), end=solicitud.fecha_fin.strftime('%d/%m/%Y')) %}
+        {% else %}
+          {% set rango_txt = _('el periodo indicado') %}
         {% endif %}
         <p class="solicitud-resumen-frase mb-3">
           {% if solicitud.accion == 'DESASIGNAR' %}
-            Solicitud para desasignar a <strong>{{ emp_nom }}</strong> de la obra <strong>{{ obra_nom }}</strong> {{ rango_txt }}.
+            {{ _('Solicitud para desasignar a {emp} de la obra {obra} {rango}.', emp=emp_nom, obra=obra_nom, rango=rango_txt) }}
           {% elif solicitud.tipo|lower == 'generica' %}
-            Solicitud de
-            <strong>{{ solicitud.cantidad_solicitada }}</strong>
-            {{ solicitud.perfil_categoria or 'persona(s)' }}
-            para la obra <strong>{{ obra_nom }}</strong> {{ rango_txt }}.
+            {{ _('Solicitud de {n} {perfil} para la obra {obra} {rango}.', n=solicitud.cantidad_solicitada, perfil=(solicitud.perfil_categoria or _('persona(s)')), obra=obra_nom, rango=rango_txt) }}
           {% else %}
-            Solicitud para asignar a <strong>{{ emp_nom }}</strong> a la obra <strong>{{ obra_nom }}</strong> {{ rango_txt }}.
+            {{ _('Solicitud para asignar a {emp} a la obra {obra} {rango}.', emp=emp_nom, obra=obra_nom, rango=rango_txt) }}
           {% endif %}
         </p>
         <div class="solicitud-meta-grid">
           <div class="solicitud-meta-item">
-            <label>Obra</label>
+            <label>{{ _('Obra') }}</label>
             {% if solicitud.obra %}
               <a href="{{ url_for('admin.obra_panel', obra_id=solicitud.obra.id) }}" class="table-link-primary">
                 <span class="cell-code">{{ solicitud.obra.codigo or solicitud.obra.id }}</span>
@@ -34,7 +43,7 @@
             {% else %}—{% endif %}
           </div>
           <div class="solicitud-meta-item">
-            <label>Jefe de obra</label>
+            <label>{{ _('Jefe de obra') }}</label>
             {% if solicitud.obra and solicitud.obra.jefe_obra %}
               <a href="{{ url_for('admin.worker_panel', user_id=solicitud.obra.jefe_obra.id) }}" class="table-link-primary">
                 {{ solicitud.obra.jefe_obra.name }} {{ solicitud.obra.jefe_obra.lastname }}
@@ -42,50 +51,50 @@
             {% else %}—{% endif %}
           </div>
           <div class="solicitud-meta-item">
-            <label>Rango</label>
+            <label>{{ _('Rango') }}</label>
             {% if solicitud.comentarios and 'all_obra' in solicitud.comentarios and solicitud.accion == 'DESASIGNAR' %}
-              <span class="text-danger font-weight-bold">{{ solicitud.fecha_inicio.strftime('%d/%m/%Y') }} — en adelante</span>
+              <span class="text-danger font-weight-bold">{{ solicitud.fecha_inicio.strftime('%d/%m/%Y') }} — {{ _('en adelante') }}</span>
             {% elif solicitud.fecha_inicio and solicitud.fecha_fin %}
               {{ solicitud.fecha_inicio.strftime('%d/%m/%Y') }} — {{ solicitud.fecha_fin.strftime('%d/%m/%Y') }}
             {% else %}—{% endif %}
           </div>
           <div class="solicitud-meta-item">
-            <label>Tipo</label>
+            <label>{{ _('Tipo') }}</label>
             {% if solicitud.tipo|lower == 'generica' %}
-              Asignación genérica
+              {{ _('Asignación genérica') }}
             {% elif solicitud.accion == 'DESASIGNAR' %}
-              Desasignación
+              {{ _('Desasignación') }}
             {% else %}
-              Movimiento concreto
+              {{ _('Movimiento concreto') }}
             {% endif %}
           </div>
 
           {% if solicitud.tipo|lower == 'generica' %}
           <div class="solicitud-meta-item">
-            <label>Progreso</label>
+            <label>{{ _('Progreso') }}</label>
             <span class="font-weight-bold">{{ solicitud.cantidad_cubierta }} / {{ solicitud.cantidad_solicitada }}</span>
           </div>
           <div class="solicitud-meta-item">
-            <label>Perfil</label>
-            {{ solicitud.perfil_categoria or 'Cualquiera' }}
+            <label>{{ _('Perfil') }}</label>
+            {{ solicitud.perfil_categoria or _('Cualquiera') }}
           </div>
           {% endif %}
 
           {% if solicitud.tipo|lower == 'concreta' and solicitud.empleado %}
           <div class="solicitud-meta-item solicitud-meta-item--full">
-            <label>Operario</label>
+            <label>{{ _('Operario') }}</label>
             <a href="{{ url_for('admin.worker_panel', user_id=solicitud.empleado.id) }}" class="table-link-primary font-weight-bold">
               {{ solicitud.empleado.name }} {{ solicitud.empleado.lastname }}
             </a>
             <span class="text-muted" style="font-size:0.72rem;">
-              — {{ solicitud.empleado.company_rel.nombre if solicitud.empleado.company_rel else 'Sin empresa' }}
+              — {{ solicitud.empleado.company_rel.nombre if solicitud.empleado.company_rel else _('Sin empresa') }}
             </span>
           </div>
           {% endif %}
 
           {% if solicitud_notas %}
           <div class="solicitud-meta-item solicitud-meta-item--full">
-            <label>Notas del jefe</label>
+            <label>{{ _('Notas del jefe') }}</label>
             <div class="solicitud-meta-notes">{{ solicitud_notas }}</div>
           </div>
           {% endif %}
@@ -93,16 +102,14 @@
 
         {% if solicitud.empleado_id %}
         <div class="solicitud-side-actions">
-          <span class="text-muted" style="font-size:0.68rem; font-weight:600; text-transform:uppercase;">Vista calendario:</span>
+          <span class="text-muted" style="font-size:0.68rem; font-weight:600; text-transform:uppercase;">{{ _('Vista calendario') }}:</span>
           <div class="btn-group btn-group-sm" role="group">
             <button type="button" class="btn-admin btn-admin-primary active" id="btn-view-obra"
                     onclick="switchCalendarView('obra', {{ solicitud.obra_id }}, 'empresas')">
-              <i class="fas fa-building"></i> Obra
-            </button>
+              <i class="fas fa-building"></i>{{ _('Obra') }}</button>
             <button type="button" class="btn-admin btn-admin-ghost" id="btn-view-worker"
                     onclick="switchCalendarView('worker', {{ solicitud.empleado_id }}, 'empleados')">
-              <i class="fas fa-user-hard-hat"></i> Operario
-            </button>
+              <i class="fas fa-user-hard-hat"></i>{{ _('Operario') }}</button>
           </div>
         </div>
         {% endif %}

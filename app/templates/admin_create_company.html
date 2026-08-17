@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Nueva Empresa{% endblock %}
+{% block title %}{{ _('Nueva Empresa') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -17,55 +17,55 @@
         <a href="{{ url_for('admin.companies') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
           <i class="fas fa-arrow-left"></i>
         </a>
-        <h1 class="page-toolbar-title">Nueva subcontrata</h1>
+        <h1 class="page-toolbar-title">{{ _('Nueva subcontrata') }}</h1>
       </div>
     </div>
 
     <section class="admin-panel admin-form-panel">
       <div class="admin-panel-header">
-        <h2 class="admin-panel-title">Nueva empresa</h2>
-        <span class="admin-panel-subtitle">Registra una subcontrata o entidad interna</span>
+        <h2 class="admin-panel-title">{{ _('Nueva empresa') }}</h2>
+        <span class="admin-panel-subtitle">{{ _('Registra una subcontrata o entidad interna') }}</span>
       </div>
 
       <form action="{{ url_for('admin.create_company') }}" method="POST">
         <div class="form-row">
           <div class="form-group col-md-4">
-            <label class="admin-form-label">Código interno</label>
-            <input type="text" name="code" class="form-control" placeholder="Ej: SOLTEC" required>
-            <small class="form-text text-muted" style="font-size: 0.72rem;">Identificador único</small>
+            <label class="admin-form-label">{{ _('Código interno') }}</label>
+            <input type="text" name="code" class="form-control" placeholder="{{ _('Ej: SOLTEC') }}" required>
+            <small class="form-text text-muted" style="font-size: 0.72rem;">{{ _('Identificador único') }}</small>
           </div>
           <div class="form-group col-md-8">
-            <label class="admin-form-label">Nombre fiscal</label>
-            <input type="text" name="nombre" class="form-control" placeholder="Nombre de la empresa" required>
+            <label class="admin-form-label">{{ _('Nombre fiscal') }}</label>
+            <input type="text" name="nombre" class="form-control" placeholder="{{ _('Nombre de la empresa') }}" required>
           </div>
         </div>
 
         <div class="form-group">
-          <label class="admin-form-label">NIF / CIF</label>
+          <label class="admin-form-label">{{ _('NIF / CIF') }}</label>
           <input type="text" name="nif" class="form-control" placeholder="A-12345678">
         </div>
 
         <div class="form-group">
-          <label class="admin-form-label">Descripción</label>
-          <textarea name="descripcion" class="form-control" rows="2" placeholder="Notas internas…"></textarea>
+          <label class="admin-form-label">{{ _('Descripción') }}</label>
+          <textarea name="descripcion" class="form-control" rows="2" placeholder="{{ _('Notas internas…') }}"></textarea>
         </div>
 
         <div class="form-row">
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Gremio</label>
-            <input type="text" name="gremio" class="form-control" placeholder="Ej: Electricidad">
+            <label class="admin-form-label">{{ _('Gremio') }}</label>
+            <input type="text" name="gremio" class="form-control" placeholder="{{ _('Ej: Electricidad') }}">
           </div>
           <div class="form-group col-md-6">
-            <label class="admin-form-label">Email</label>
+            <label class="admin-form-label">{{ _('Email') }}</label>
             <input type="email" name="email" class="form-control" placeholder="contacto@empresa.com">
           </div>
         </div>
 
         <div class="form-group">
-          <label class="admin-form-label">Color identificativo</label>
+          <label class="admin-form-label">{{ _('Color identificativo') }}</label>
           <div class="d-flex align-items-center">
             <input type="color" name="color" class="form-control form-control-color mr-2" style="height: 32px; width: 48px; padding: 2px;" value="{{ color_sugerido|default('#5b8def') }}">
-            <span class="text-muted" style="font-size: 0.72rem;">Usado en calendario y tablero (sugerido al azar; cámbialo si quieres)</span>
+            <span class="text-muted" style="font-size: 0.72rem;">{{ _('Usado en calendario y tablero (sugerido al azar; cámbialo si quieres)') }}</span>
           </div>
         </div>
 
@@ -76,8 +76,8 @@
               <span class="slider"></span>
             </label>
             <div>
-              <label for="isInternalCheck" class="admin-form-switch-label" style="cursor: pointer;">Empresa interna (propia)</label>
-              <p class="admin-form-switch-hint">La empresa y sus trabajadores se consideran «de la casa»</p>
+              <label for="isInternalCheck" class="admin-form-switch-label" style="cursor: pointer;">{{ _('Empresa interna (propia)') }}</label>
+              <p class="admin-form-switch-hint">{{ _('La empresa y sus trabajadores se consideran «de la casa»') }}</p>
             </div>
           </div>
         </div>
@@ -85,10 +85,9 @@
         <div class="admin-form-actions">
           <div></div>
           <div class="admin-form-actions-right">
-            <a href="{{ url_for('admin.companies') }}" class="btn-admin-link">Cancelar</a>
+            <a href="{{ url_for('admin.companies') }}" class="btn-admin-link">{{ _('Cancelar') }}</a>
             <button type="submit" class="btn-admin btn-admin-primary">
-              <i class="fas fa-plus"></i> Crear empresa
-            </button>
+              <i class="fas fa-plus"></i>{{ _('Crear empresa') }}</button>
           </div>
         </div>
       </form>

@@ -34,13 +34,15 @@
 {% block wrapper %}
 {% set is_edit = vehiculo is not none %}
 {% set v = vehiculo %}
+{% set return_to = return_to|default('') %}
+{% set cancel_url = cancel_url|default(url_for('admin.vehiculos')) %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
   <main class="admin-main admin-main--compact admin-form-page">
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <a href="{{ url_for('admin.vehiculos') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;" data-tour="veh-back">
+        <a href="{{ cancel_url }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;" data-tour="veh-back">
           <i class="fas fa-arrow-left"></i>
         </a>
         <h1 class="page-toolbar-title">{% if is_edit %}{{ _('Editar vehículo') }}{% else %}{{ _('Nuevo vehículo') }}{% endif %}</h1>
@@ -58,6 +60,9 @@
             id="vehiculoForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="from_form" value="1">
+        {% if return_to %}
+        <input type="hidden" name="next" value="{{ return_to }}">
+        {% endif %}
 
         <div class="form-group" data-tour="veh-nombre">
           <label class="admin-form-label">{{ _('Nombre') }} *</label>
@@ -107,7 +112,7 @@
             <i class="fas fa-save"></i>
             {% if is_edit %}{{ _('Guardar') }}{% else %}{{ _('Crear vehículo') }}{% endif %}
           </button>
-          <a href="{{ url_for('admin.vehiculos') }}" class="btn-admin btn-admin-ghost">{{ _('Cancelar') }}</a>
+          <a href="{{ cancel_url }}" class="btn-admin btn-admin-ghost">{{ _('Cancelar') }}</a>
         </div>
       </form>
     </section>

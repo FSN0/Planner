@@ -1,17 +1,17 @@
 <section class="admin-panel admin-panel-flush solicitud-plan-panel">
   <div class="admin-panel-body">
-    <h2 class="admin-panel-title"><i class="fas fa-users text-primary mr-1"></i> Planificación en el periodo</h2>
+    <h2 class="admin-panel-title"><i class="fas fa-users text-primary mr-1"></i> {{ _('Planificación en el periodo') }}</h2>
     <div class="solicitud-plan-split">
 
       <div class="solicitud-plan-col solicitud-plan-col--asignados">
-        <h3 class="solicitud-subsection-title">Asignados</h3>
+        <h3 class="solicitud-subsection-title">{{ _('Asignados') }}</h3>
         {% if asignaciones_resumen %}
           <div class="candidates-scroll-box">
             <table class="filterable-table admin-data-table mb-0" id="assignedTable">
               <thead>
                 <tr class="header-row">
-                  <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Trabajador</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col text-center" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)" style="width:2.5rem;"><span class="sortable-label">Días</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajador') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col text-center" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)" style="width:2.5rem;"><span class="sortable-label">{{ _('Días') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th style="width:22px;"></th>
                 </tr>
               </thead>
@@ -28,7 +28,7 @@
                     {% if es_admin %}
                       <button type="button" class="btn-unassign no-row-nav"
                               onclick="confirmUnassign('{{ item.worker.id }}', '{{ item.worker.name }} {{ item.worker.lastname }}')"
-                              title="Desasignar">
+                              title="{{ _('Desasignar') }}">
                         <i class="fas fa-times-circle" style="font-size:0.7rem;"></i>
                       </button>
                     {% endif %}
@@ -39,7 +39,7 @@
             </table>
           </div>
         {% else %}
-          <div class="text-muted text-center p-2 border rounded" style="font-size:0.72rem; background:#f8fafc;">Sin asignados</div>
+          <div class="text-muted text-center p-2 border rounded" style="font-size:0.72rem; background:#f8fafc;">{{ _('Sin asignados') }}</div>
         {% endif %}
       </div>
 
@@ -47,28 +47,28 @@
         <div class="solicitud-candidate-tools">
           <div class="solicitud-candidate-tools-row">
             <div>
-              <h3 class="solicitud-subsection-title d-inline mr-2">Candidatos</h3>
+              <h3 class="solicitud-subsection-title d-inline mr-2">{{ _('Candidatos') }}</h3>
               <span class="badge-soft badge-soft-gray" id="candidateCountBadge">{{ profile_candidates|length }}</span>
             </div>
             {% if profile_candidates %}
             <label class="solicitud-candidate-search mb-0" for="candidateSearch">
               <i class="fas fa-search" aria-hidden="true"></i>
               <input type="search" id="candidateSearch" class="solicitud-candidate-search-input no-row-nav"
-                     placeholder="Buscar trabajador…" autocomplete="off" aria-label="Buscar trabajador">
+                     placeholder="{{ _('Buscar trabajador…') }}" autocomplete="off" aria-label="{{ _('Buscar trabajador') }}">
             </label>
             {% endif %}
             <div class="solicitud-candidate-tools-actions">
             <button class="btn-admin btn-admin-ghost" type="button" id="btnToggleBusy"
                     data-state="visible" onclick="toggleRowVisibility('busy')" style="font-size:0.64rem; padding:0.2rem 0.4rem;">
-              <i class="fas fa-eye-slash"></i> Ocupados
+              <i class="fas fa-eye-slash"></i> {{ _('Ocupados') }}
             </button>
             <button class="btn-admin btn-admin-ghost" type="button" id="btnTogglePartial"
                     data-state="visible" onclick="toggleRowVisibility('partial')" style="font-size:0.64rem; padding:0.2rem 0.4rem;">
-              <i class="fas fa-eye-slash"></i> Parciales
+              <i class="fas fa-eye-slash"></i> {{ _('Parciales') }}
             </button>
             {% if solicitud.perfil_categoria %}
             <a href="{{ url_for('admin.solicitud_detail', solicitud_id=solicitud.id, ignore_profile=1) }}"
-               class="btn-admin btn-admin-ghost" style="font-size:0.64rem; padding:0.2rem 0.4rem;">Ver todos</a>
+               class="btn-admin btn-admin-ghost" style="font-size:0.64rem; padding:0.2rem 0.4rem;">{{ _('Ver todos') }}</a>
             {% endif %}
             </div>
           </div>
@@ -89,10 +89,10 @@
                   <thead>
                     <tr class="header-row">
                       <th style="width:22px;" class="text-center"><input type="checkbox" id="selectAll" class="no-row-nav"></th>
-                      <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Trabajador</span><i class="fas fa-sort sort-icon"></i></th>
-                      <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Especialidad</span><i class="fas fa-sort sort-icon"></i></th>
-                      <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Empresa</span><i class="fas fa-sort sort-icon"></i></th>
-                      <th class="sortable-col text-center" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)" style="width:4.5rem;"><span class="sortable-label">Disp.</span><i class="fas fa-sort sort-icon"></i></th>
+                      <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajador') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                      <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Especialidad') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                      <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                      <th class="sortable-col text-center" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)" style="width:4.5rem;"><span class="sortable-label">{{ _('Disp.') }}</span><i class="fas fa-sort sort-icon"></i></th>
                     </tr>
                     <tr class="filter-row">
                       <th></th>
@@ -123,9 +123,9 @@
                         {{ worker.company_rel.nombre if worker.company_rel else '—' }}
                       </td>
                       <td class="text-center" data-sort-value="{{ status }}">
-                        {% if status == 'BUSY' %}<span class="badge-soft badge-soft-red">Ocup.</span>
+                        {% if status == 'BUSY' %}<span class="badge-soft badge-soft-red">{{ _('Ocup.') }}</span>
                         {% elif status == 'PARTIAL' %}<span class="badge-soft badge-soft-amber">{{ state_info.days_busy }}/{{ total_days_req }}</span>
-                        {% else %}<span class="badge-soft badge-soft-green">Libre</span>{% endif %}
+                        {% else %}<span class="badge-soft badge-soft-green">{{ _('Libre') }}</span>{% endif %}
                       </td>
                     </tr>
                   {% endfor %}
@@ -144,10 +144,10 @@
                 </colgroup>
                 <thead>
                   <tr class="header-row">
-                    <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Trabajador</span><i class="fas fa-sort sort-icon"></i></th>
-                    <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Especialidad</span><i class="fas fa-sort sort-icon"></i></th>
-                    <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Empresa</span><i class="fas fa-sort sort-icon"></i></th>
-                    <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">Estado</span><i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajador') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Especialidad') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -162,9 +162,9 @@
                     <td data-sort-value="{{ (worker.especialidad or '')|lower }}">{{ worker.especialidad or '—' }}</td>
                     <td data-sort-value="{{ (worker.company_rel.nombre if worker.company_rel else '')|lower }}">{{ worker.company_rel.nombre if worker.company_rel else '—' }}</td>
                     <td data-sort-value="{{ status }}">
-                      {% if status == 'BUSY' %}<span class="badge-soft badge-soft-red">Ocup.</span>
-                      {% elif status == 'PARTIAL' %}<span class="badge-soft badge-soft-amber">Parcial</span>
-                      {% else %}<span class="badge-soft badge-soft-green">Libre</span>{% endif %}
+                      {% if status == 'BUSY' %}<span class="badge-soft badge-soft-red">{{ _('Ocup.') }}</span>
+                      {% elif status == 'PARTIAL' %}<span class="badge-soft badge-soft-amber">{{ _('Parcial') }}</span>
+                      {% else %}<span class="badge-soft badge-soft-green">{{ _('Libre') }}</span>{% endif %}
                     </td>
                   </tr>
                 {% endfor %}
@@ -173,7 +173,7 @@
             </div>
           {% endif %}
         {% else %}
-          <div class="text-muted text-center p-2 border rounded" style="font-size:0.72rem; background:#fffbeb;">Sin candidatos</div>
+          <div class="text-muted text-center p-2 border rounded" style="font-size:0.72rem; background:#fffbeb;">{{ _('Sin candidatos') }}</div>
         {% endif %}
       </div>
     </div>

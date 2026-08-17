@@ -27,9 +27,15 @@
 {% block wrapper %}
 {% set auditoria_sections = auditoria_sections if auditoria_sections is defined else visible_sections %}
 {% set visible_sections = auditoria_sections %}
-{% set fichaje_col = 'Fichaje Odoo' if tenant_has_odoo else 'Fichaje real' %}
-{% set sin_fichaje_lbl = 'Sin registro Odoo' if tenant_has_odoo else 'Sin fichaje' %}
-{% set toolbar_sub = 'Odoo vs planificación' if tenant_has_odoo else 'Plan vs fichaje' %}
+{% if tenant_has_odoo %}
+{% set fichaje_col = _('Fichaje Odoo') %}
+{% set sin_fichaje_lbl = _('Sin registro Odoo') %}
+{% set toolbar_sub = _('Odoo vs planificación') %}
+{% else %}
+{% set fichaje_col = _('Fichaje real') %}
+{% set sin_fichaje_lbl = _('Sin fichaje') %}
+{% set toolbar_sub = _('Plan vs fichaje') %}
+{% endif %}
 <div class="admin-shell auditoria-page">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact">
@@ -37,7 +43,7 @@
     <div class="page-toolbar">
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title">{{ _('Auditoría de fichajes') }}</h1>
-        <span class="page-toolbar-count">{{ _(toolbar_sub) }}</span>
+        <span class="page-toolbar-count">{{ toolbar_sub }}</span>
       </div>
       <div class="page-toolbar-actions">
         {% with tour_id='fichajes', tour_label=_('Tutorial fichajes'), tour_href=url_for('admin.personal', tour='fichajes', mode='solo') %}
@@ -133,18 +139,18 @@
                             <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td data-sort-value="{{ reg.user.lastname|lower }}">
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or 'Externo' }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
+                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or _('Externo') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
                                 </td>
                                 <td data-sort-value="{{ reg.obra_planificada.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.codigo }}</a>
+                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_planificada.nombre) }}">{{ reg.obra_planificada.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
                                     </div>
                                 </td>
                                 <td data-sort-value="{{ reg.obra_real.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_real.nombre }}">{{ reg.obra_real.codigo }}</a>
+                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_real.nombre) }}">{{ reg.obra_real.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
                                     </div>
@@ -158,11 +164,11 @@
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')" title="{{ _('Cambia la planificación a la obra donde fichó') }}">Mover</button>
-                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">+ Añadir</button>
-                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">Ignorar</button>
+                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')" title="{{ _('Cambia la planificación a la obra donde fichó') }}">{{ _('Mover') }}</button>
+                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">{{ _('+ Añadir') }}</button>
+                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">{{ _('Ignorar') }}</button>
                                     {% else %}
-                                    <span class="text-muted small">Solo lectura</span>
+                                    <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -213,12 +219,12 @@
                                 style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td data-sort-value="{{ reg.user.lastname|lower }}">
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
+                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ _('Ir al perfil') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
                                 </td>
-                                <td data-sort-value="libre"><span class="text-muted font-italic" style="font-size: 0.75rem;">Libre / Inercia</span></td>
+                                <td data-sort-value="libre"><span class="text-muted font-italic" style="font-size: 0.75rem;">{{ _('Libre / Inercia') }}</span></td>
                                 <td data-sort-value="{{ reg.obra_real.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_real.nombre }}">{{ reg.obra_real.codigo }}</a>
+                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_real.nombre) }}">{{ reg.obra_real.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
                                     </div>
@@ -232,10 +238,10 @@
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-primary btn-audit mr-1" data-tour="audit-aceptar" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="Asignar oficialmente a esta obra">Aceptar</button>
-                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="Ocultar esta alerta">Ignorar</button>
+                                    <button class="btn btn-outline-primary btn-audit mr-1" data-tour="audit-aceptar" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Asignar oficialmente a esta obra') }}">{{ _('Aceptar') }}</button>
+                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Ocultar esta alerta') }}">{{ _('Ignorar') }}</button>
                                     {% else %}
-                                    <span class="text-muted small">Solo lectura</span>
+                                    <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -279,24 +285,24 @@
                             <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td data-sort-value="{{ reg.user.lastname|lower }}">
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="Ir al perfil">{{ reg.user.name }} {{ reg.user.lastname }}</a>
+                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ _('Ir al perfil') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
                                 </td>
                                 <td data-sort-value="{{ reg.obra_planificada.nombre|lower }}">
                                     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="Ir a {{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.codigo }}</a>
+                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_planificada.nombre) }}">{{ reg.obra_planificada.codigo }}</a>
                                         <span class="text-muted flex-shrink-0 mr-1">-</span>
                                         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
                                     </div>
                                 </td>
-                                <td data-sort-value="ausencia"><span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> {{ _(sin_fichaje_lbl) }}</span></td>
+                                <td data-sort-value="ausencia"><span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> {{ sin_fichaje_lbl }}</span></td>
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'confirmar_ausencia')" title="Falta real (Mantiene la planificación)">Ausencia</button>
-                                    <button class="btn btn-outline-warning btn-audit text-dark mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'borrar_planificacion')" title="Elimina la planificación asignada para este día">Falta</button>
-                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="Oculta esta alerta sin realizar cambios">Ignorar</button>
+                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'confirmar_ausencia')" title="{{ _('Falta real (Mantiene la planificación)') }}">{{ _('Ausencia') }}</button>
+                                    <button class="btn btn-outline-warning btn-audit text-dark mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'borrar_planificacion')" title="{{ _('Elimina la planificación asignada para este día') }}">{{ _('Falta') }}</button>
+                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin realizar cambios') }}">{{ _('Ignorar') }}</button>
                                     {% else %}
-                                    <span class="text-muted small">Solo lectura</span>
+                                    <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
 
                                 </td>
@@ -349,9 +355,9 @@
                                 {% if datos|length >= 8 %}
                                 <td class="align-middle">
                                     {% if datos[6] == 'Borrado en Odoo' %}
-                                        <span class="badge-soft badge-soft-red"><i class="fas fa-trash-alt mr-1"></i>{{ datos[6] }}</span>
+                                        <span class="badge-soft badge-soft-red"><i class="fas fa-trash-alt mr-1"></i>{{ _(datos[6]) }}</span>
                                     {% else %}
-                                        <span class="badge-soft badge-soft-amber"><i class="fas fa-edit mr-1"></i>{{ datos[6] }}</span>
+                                        <span class="badge-soft badge-soft-amber"><i class="fas fa-edit mr-1"></i>{{ _(datos[6]) }}</span>
                                     {% endif %}
                                 </td>
                                 <td class="align-middle">
@@ -365,10 +371,10 @@
                                             {{ datos[4] }} — {{ datos[5] }}
                                         </a>
                                     {% else %}
-                                        <span class="text-danger font-weight-bold"><i class="fas fa-times mr-1"></i>Sin obra</span>
+                                        <span class="text-danger font-weight-bold"><i class="fas fa-times mr-1"></i>{{ _('Sin obra') }}</span>
                                     {% endif %}
                                 </td>
-                                <td class="align-middle text-muted small font-weight-bold">{{ datos[7] }}</td>
+                                <td class="align-middle text-muted small font-weight-bold">{{ _(datos[7]) }}</td>
                                 {% else %}
                                 <td colspan="4" class="align-middle text-muted">{{ reg.notas_resolucion }}</td>
                                 {% endif %}
@@ -422,24 +428,24 @@
                         </td>
                         <td>
                             {% if reg.estado == 'Correcto' %}
-                                <span class="font-weight-bold" style="font-size:0.75rem;" title="Validado directamente del calendario"><span class="status-dot dot-success"></span>Correcto</span>
+                                <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('Validado directamente del calendario') }}"><span class="status-dot dot-success"></span>{{ _('Correcto') }}</span>
                             {% elif reg.estado == 'Correcto_Automatico' %}
-                                <span class="font-weight-bold" style="font-size:0.75rem;" title="El sistema lo asignó por inercia del día anterior"><span class="status-dot dot-auto"></span>Inercia (Auto)</span>
+                                <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('El sistema lo asignó por inercia del día anterior') }}"><span class="status-dot dot-auto"></span>{{ _('Inercia (Auto)') }}</span>
                             {% elif reg.estado == 'Resuelto_Movido' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Reasignación manual' }}"><span class="status-dot dot-success"></span>Reasignado</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Reasignación manual') }}"><span class="status-dot dot-success"></span>{{ _('Reasignado') }}</span>
                             {% elif reg.estado == 'Resuelto_Asignado' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Asignación manual' }}"><span class="status-dot dot-success"></span>Asignado</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Asignación manual') }}"><span class="status-dot dot-success"></span>{{ _('Asignado') }}</span>
                             {% elif reg.estado == 'Resuelto_Dividido' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Multitarea manual' }}"><span class="status-dot dot-success"></span>Multitarea</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Multitarea manual') }}"><span class="status-dot dot-success"></span>{{ _('Multitarea') }}</span>
                             
                             {% elif reg.estado == 'Resuelto_Ausencia' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>Ausencia OK</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>{{ _('Ausencia OK') }}</span>
                             
                             {% elif reg.estado == 'Resuelto_Falta' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>Plan. Borrada</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>{{ _('Plan. Borrada') }}</span>
                             
                             {% else %}
-                                <span class="text-secondary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else 'Ignorado o Falta justificada' }}"><span class="status-dot dot-secondary"></span>Ignorado/Justif.</span>
+                                <span class="text-secondary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Ignorado o Falta justificada') }}"><span class="status-dot dot-secondary"></span>{{ _('Ignorado/Justif.') }}</span>
                             {% endif %}
                         </td>
                         <td>
@@ -452,7 +458,7 @@
                                             <span class="text-muted text-truncate" style="font-size: 0.75rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
                                         </div>
                                     {% else %}
-                                        <span class="text-muted font-italic text-center d-block" style="font-size: 0.75rem;">Sin Plan</span>
+                                        <span class="text-muted font-italic text-center d-block" style="font-size: 0.75rem;">{{ _('Sin Plan') }}</span>
                                     {% endif %}
                                 </div>
                                 <div class="text-center" style="width: 10%;">
@@ -466,7 +472,7 @@
                                             <span class="text-muted text-truncate" style="font-size: 0.75rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
                                         </div>
                                     {% else %}
-                                        <span class="text-muted font-italic text-center d-block" style="font-size: 0.75rem;">Falta</span>
+                                        <span class="text-muted font-italic text-center d-block" style="font-size: 0.75rem;">{{ _('Falta') }}</span>
                                     {% endif %}
                                 </div>
                             </div>
@@ -484,7 +490,7 @@
                                     <i class="fas fa-user-shield text-muted mr-1"></i>{{ reg.resuelto_por.name }}
                                 </a>
                             {% else %}
-                                <span class="text-muted font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-robot text-primary mr-1"></i>Sistema</span>
+                                <span class="text-muted font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-robot text-primary mr-1"></i>{{ _('Sistema') }}</span>
                             {% endif %}
                         </td>
                         <td class="text-muted" data-order="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '0' }}" data-sort-value="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '' }}">
@@ -518,13 +524,13 @@
 
     <div id="customToast">
         <i class="fas fa-spinner fa-spin text-info" id="toastIcon"></i>
-        <span id="toastMsg" class="font-weight-bold" style="font-size: 0.85rem;">Procesando…</span>
+        <span id="toastMsg" class="font-weight-bold" style="font-size: 0.85rem;">{{ _('Procesando…') }}</span>
     </div>
 
   </main>
 </div>
 
-{% with modal_id='modalTimelineFichaje', modal_title='Historial del Fichaje' %}
+{% with modal_id='modalTimelineFichaje', modal_title=_('Historial del Fichaje') %}
   {% include 'components/_person_day_timeline_modal.html' %}
 {% endwith %}
 
@@ -538,7 +544,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title"><i class="fas fa-clock mr-2"></i>{{ _('Registrar / corregir marca') }}</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <button type="button" class="close" data-dismiss="modal" aria-label="{{ _('Cerrar') }}"><span aria-hidden="true">&times;</span></button>
       </div>
       <div class="modal-body">
         <p class="text-muted small mb-3">
@@ -727,7 +733,7 @@ $(document).ready(function() {
         if (!dtCorrecciones) {
             dtCorrecciones = initAuditDataTable('correccionesTable', {
                 pageLength: 10,
-                lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, 'Todos']]
+                lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, {{ _('Todos')|tojson }}]]
             });
         }
     });
@@ -735,7 +741,7 @@ $(document).ready(function() {
         if (!dtHistorial) {
             dtHistorial = initAuditDataTable('historialTable', {
                 pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Todos']]
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, {{ _('Todos')|tojson }}]]
             });
         }
     });
@@ -797,7 +803,7 @@ function resolver(id, accion) {
                 }
             }, 300);
         } else {
-            alert("Error: " + data.error);
+            alert({{ _('Error:')|tojson }} + " " + data.error);
             if(row) {
                 row.style.opacity = '1';
                 row.style.transform = 'translateX(0)';
@@ -834,7 +840,7 @@ function reabrirResolucion(id, btn) {
             showToast(data.aviso || {{ _('Reabierto')|tojson }}, true);
             setTimeout(() => window.location.reload(), 700);
         } else {
-            alert("Error: " + (data.error || {{ _('No se pudo reabrir')|tojson }}));
+            alert({{ _('Error:')|tojson }} + " " + (data.error || {{ _('No se pudo reabrir')|tojson }}));
             if (btn) {
                 btn.disabled = false;
                 btn.style.opacity = '1';
@@ -856,7 +862,9 @@ function forzarSyncFichajes() {
     const diasSeleccionados = document.getElementById('diasSync').value;
     
     // Mostramos un mensaje u otro dependiendo de los días para dar feedback
-    let msj = diasSeleccionados === "0" ? "Revisando fichajes de hoy..." : `Revisando hoy y ${diasSeleccionados} días atrás...`;
+    let msj = diasSeleccionados === "0"
+        ? {{ _('Revisando fichajes de hoy...')|tojson }}
+        : {{ _('Revisando hoy y {n} días atrás...')|tojson }}.replace('{n}', diasSeleccionados);
     showToast(msj);
     
     fetch("{{ url_for('sync.sync_fichajes_manual') }}", {
@@ -867,18 +875,18 @@ function forzarSyncFichajes() {
     .then(res => res.json())
     .then(data => {
         if(data.success) {
-            showToast("¡Revisión y Sincronización completadas!", true);
+            showToast({{ _('¡Revisión y Sincronización completadas!')|tojson }}, true);
             setTimeout(() => {
                 window.location.reload();
             }, 800);
         } else {
-            alert("Error al conectar con Odoo: " + data.error);
+            alert({{ _('Error al conectar con Odoo:')|tojson }} + " " + data.error);
             document.getElementById('customToast').classList.remove('show');
         }
     })
     .catch(err => {
         console.error("Error en Fetch:", err);
-        alert("Fallo de red al intentar sincronizar.");
+        alert({{ _('Fallo de red al intentar sincronizar.')|tojson }});
         document.getElementById('customToast').classList.remove('show');
     });
 }
@@ -887,7 +895,7 @@ document.addEventListener('DOMContentLoaded', function () {
     PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
         modalId: 'modalTimelineFichaje',
         apiBase: '/sync/timeline_dia',
-        loadingMessage: 'Recopilando el día completo del operario...',
+        loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
     });
 });
 </script>

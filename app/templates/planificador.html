@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Planificador a Largo Plazo{% endblock %}
+{% block title %}{{ _('Planificador a Largo Plazo') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260816j">
 <style id="dynamic-sidebar-style"></style>
 {% endblock %}
 
@@ -84,17 +84,17 @@
             {% endfor %}
           </select>
         </div>
-        <span class="planificador-filter-or">o</span>
+        <span class="planificador-filter-or">{{ _('o') }}</span>
         <div class="planificador-obras-filter planificador-filter-control">
-          <span class="planificador-filter-control-label">Obras</span>
-          <select id="obrasSelect" class="form-control select2-multiple" multiple="multiple" aria-label="Filtrar por obras">
+          <span class="planificador-filter-control-label">{{ _('Obras') }}</span>
+          <select id="obrasSelect" class="form-control select2-multiple" multiple="multiple" aria-label="{{ _('Filtrar por obras') }}">
             {% for obra in todas_obras %}
             <option value="{{ obra.id }}" data-jefe="{{ obra.jefe_obra_id or '' }}">{% if obra.codigo %}{{ obra.codigo }} - {% endif %}{{ obra.nombre }}</option>
             {% endfor %}
           </select>
         </div>
         {% else %}
-        <span class="badge-soft badge-soft-blue"><i class="fas fa-hard-hat mr-1"></i>Mis obras</span>
+        <span class="badge-soft badge-soft-blue"><i class="fas fa-hard-hat mr-1"></i>{{ _('Mis obras') }}</span>
         <select id="jefeSelect" style="display: none;"><option value=""></option></select>
         <select id="obrasSelect" multiple="multiple" style="display: none;"></select>
         {% endif %}
@@ -102,16 +102,25 @@
     </div>
 
     <div class="planificador-container" data-tour="planif-grid">
-        <div id="col-resizer" title="Arrastrar para ajustar tamaño"></div>
-        <div id="col-resizer-ghost"></div>
-        <div id="planificador-calendar"></div>
+        <div class="planificador-calendar-wrap">
+            <div id="col-resizer" title="{{ _('Arrastrar para ajustar tamaño') }}"></div>
+            <div id="col-resizer-ghost"></div>
+            <div id="planificador-calendar"></div>
+        </div>
+        {% if current_user.role == ROLE_ADMIN %}
+        <div class="planificador-add-obra">
+            <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.create_obra', next='planificador') }}">
+                <i class="fas fa-plus"></i> {{ _('Añadir obra') }}
+            </a>
+        </div>
+        {% endif %}
     </div>
 
     <div id="planificador-item-tooltip" class="planificador-item-tooltip d-none" aria-hidden="true"></div>
 
     <div id="worker-popover" class="d-none planificador-worker-popover">
         <div class="planificador-popover-banner">
-            <button type="button" class="close planificador-popover-close" aria-label="Cerrar"
+            <button type="button" class="close planificador-popover-close" aria-label="{{ _('Cerrar') }}"
                     onclick="document.getElementById('worker-popover').classList.add('d-none');">
                 <span aria-hidden="true">&times;</span>
             </button>
@@ -140,12 +149,12 @@
 
             {% if current_user.role in ['admin', 'jefe_obra'] %}
             <div class="planificador-popover-actions">
-                <p class="planificador-popover-actions-title"><i class="fas fa-user-minus"></i> Desasignar</p>
+                <p class="planificador-popover-actions-title"><i class="fas fa-user-minus"></i>{{ _('Desasignar') }}</p>
                 <button type="button" class="btn btn-outline-danger btn-block mb-2 text-left" onclick="window.desasignarDesdePop('periodo'); return false;">
-                    <i class="fas fa-calendar-times mr-2"></i> Solo este bloque
+                    <i class="fas fa-calendar-times mr-2"></i> {{ _('Solo este bloque') }}
                 </button>
                 <button type="button" class="btn btn-outline-danger btn-block text-left mb-0" onclick="window.desasignarDesdePop('futuro'); return false;">
-                    <i class="fas fa-sign-out-alt mr-2"></i> Baja definitiva
+                    <i class="fas fa-sign-out-alt mr-2"></i> {{ _('Baja definitiva') }}
                 </button>
             </div>
             {% endif %}
@@ -158,38 +167,38 @@
 <div class="modal fade" id="modalConflicto" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="static">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content border-danger">
-            <div class="modal-header bg-danger text-white py-2"><h5 class="modal-title h6"><i class="fas fa-exclamation-triangle mr-2"></i>Conflicto Detectado</h5></div>
+            <div class="modal-header bg-danger text-white py-2"><h5 class="modal-title h6"><i class="fas fa-exclamation-triangle mr-2"></i>{{ _('Conflicto Detectado') }}</h5></div>
             <div class="modal-body text-center bg-light">
                 <p id="conflictoMsg" class="font-weight-bold text-dark mb-3"></p>
-                <p class="small text-muted mb-4">¿Cómo deseas proceder con esta planificación?</p>
+                <p class="small text-muted mb-4">{{ _('¿Cómo deseas proceder con esta planificación?') }}</p>
                 <div class="d-flex flex-column gap-2 px-3">
                     <button type="button" class="btn btn-outline-danger btn-block text-left mb-2 p-2 shadow-sm" onclick="resolveConflicto('overwrite')">
                         {% if current_user.role == ROLE_ADMIN %}
-                            <strong class="d-block"><i class="fas fa-skull-crossbones mr-2"></i>Sobrescribir Todo</strong>
-                            <span class="small text-muted">Desasigna al operario de sus obras anteriores en estos días.</span>
+                            <strong class="d-block"><i class="fas fa-skull-crossbones mr-2"></i>{{ _('Sobrescribir Todo') }}</strong>
+                            <span class="small text-muted">{{ _('Desasigna al operario de sus obras anteriores en estos días.') }}</span>
                         {% else %}
-                            <strong class="d-block"><i class="fas fa-exchange-alt mr-2"></i>Solicitar Traslado</strong>
-                            <span class="small text-muted">Pide sacar al operario de su obra actual para traerlo a la tuya.</span>
+                            <strong class="d-block"><i class="fas fa-exchange-alt mr-2"></i>{{ _('Solicitar Traslado') }}</strong>
+                            <span class="small text-muted">{{ _('Pide sacar al operario de su obra actual para traerlo a la tuya.') }}</span>
                         {% endif %}
                     </button>
                     
                     <button type="button" class="btn btn-outline-warning btn-block text-left mb-2 p-2 shadow-sm" onclick="resolveConflicto('keep_both')">
                         {% if current_user.role == ROLE_ADMIN %}
-                            <strong class="d-block"><i class="fas fa-clone mr-2"></i>Permitir Solapamiento</strong>
-                            <span class="small text-muted">Asigna al operario a ambas obras a la vez (Pluriempleo).</span>
+                            <strong class="d-block"><i class="fas fa-clone mr-2"></i>{{ _('Permitir Solapamiento') }}</strong>
+                            <span class="small text-muted">{{ _('Asigna al operario a ambas obras a la vez (Pluriempleo).') }}</span>
                         {% else %}
-                            <strong class="d-block"><i class="fas fa-user-plus mr-2"></i>Solicitar Compartir</strong>
-                            <span class="small text-muted">Pide al operario sin desasignarlo de su otra obra.</span>
+                            <strong class="d-block"><i class="fas fa-user-plus mr-2"></i>{{ _('Solicitar Compartir') }}</strong>
+                            <span class="small text-muted">{{ _('Pide al operario sin desasignarlo de su otra obra.') }}</span>
                         {% endif %}
                     </button>
                     
                     <button type="button" class="btn btn-outline-info btn-block text-left mb-2 p-2 shadow-sm" onclick="resolveConflicto('free_only')">
-                        <strong class="d-block"><i class="fas fa-puzzle-piece mr-2"></i>Asignar Solo Días Libres</strong>
-                        <span class="small text-muted">Ignora los días ocupados y solo usa los que tenga vacíos.</span>
+                        <strong class="d-block"><i class="fas fa-puzzle-piece mr-2"></i>{{ _('Asignar Solo Días Libres') }}</strong>
+                        <span class="small text-muted">{{ _('Ignora los días ocupados y solo usa los que tenga vacíos.') }}</span>
                     </button>
 
                     <button type="button" class="btn btn-white border btn-block text-left p-2" data-dismiss="modal">
-                        <strong class="text-secondary"><i class="fas fa-times mr-2"></i>Cancelar Acción</strong>
+                        <strong class="text-secondary"><i class="fas fa-times mr-2"></i>{{ _('Cancelar Acción') }}</strong>
                     </button>
                 </div>
             </div>
@@ -201,8 +210,8 @@
   <div class="modal-dialog modal-xl" role="document">
     <div class="modal-content">
       <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title"><i class="fas fa-calendar-alt mr-2"></i> Calendario del Operario</h5>
-        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+        <h5 class="modal-title"><i class="fas fa-calendar-alt mr-2"></i> {{ _('Calendario del Operario') }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
           <span aria-hidden="true">&times;</span>
         </button>
       </div>
@@ -221,6 +230,6 @@
 <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260810m"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817a"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260817a"></script>
 {% endblock %}

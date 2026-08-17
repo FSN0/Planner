@@ -1,23 +1,23 @@
 {# Banner de consentimiento de cookies (CMP ligero). Solo no-esenciales con OK. #}
 {% set ga_id = config.get('GOOGLE_ANALYTICS_ID') if config is defined else none %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/cookie-consent.css') }}">
-<div id="sp-cookie-banner" class="sp-cookie-banner" hidden role="dialog" aria-live="polite" aria-label="Cookies">
+<div id="sp-cookie-banner" class="sp-cookie-banner" hidden role="dialog" aria-live="polite" aria-label="{{ _('cookie.aria') }}">
   <div class="sp-cookie-inner">
     <p class="sp-cookie-text">
-      Usamos cookies esenciales para que el sitio funcione.
+      {{ _('cookie.essential') }}
       {% if ga_id %}
-      Con tu permiso también usamos cookies de analítica (Google Analytics) para mejorar el producto.
+      {{ _('cookie.analytics') }}
       {% else %}
-      Si en el futuro activamos analítica o marketing, te pediremos permiso aquí.
+      {{ _('cookie.future') }}
       {% endif %}
-      <a href="{{ url_for('marketing.legal', slug='cookies') }}">Más información</a>.
+      <a href="{{ mkt_url('marketing.legal', slug='cookies') if mkt_url is defined else url_for('marketing.legal', slug='cookies') }}">{{ _('cookie.more') }}</a>.
     </p>
     <div class="sp-cookie-actions">
-      <button type="button" class="sp-cookie-btn sp-cookie-btn-ghost" data-sp-cookie="essential">Solo esenciales</button>
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-ghost" data-sp-cookie="essential">{{ _('cookie.only_essential') }}</button>
       {% if ga_id %}
-      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="all">Aceptar todas</button>
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="all">{{ _('cookie.accept_all') }}</button>
       {% else %}
-      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="essential">Entendido</button>
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="essential">{{ _('cookie.ok') }}</button>
       {% endif %}
     </div>
   </div>

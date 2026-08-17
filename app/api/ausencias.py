@@ -10,6 +10,7 @@ from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
 from app.decorators import roles_required
 from app.services.permission_service import user_can, is_laboral
 from app.services.leave_service import create_manual_leave, estado_alta_por_rol
+from app.services.i18n_service import translate
 
 ausencias_api = Blueprint('ausencias_api', __name__)
 
@@ -23,7 +24,7 @@ def api_crear_ausencia():
     Jefe → pendiente; admin/laboral/rrhh → aprobada por defecto.
     """
     if is_laboral(current_user) and not user_can(current_user, 'ausencias', 'w'):
-        return jsonify({'success': False, 'error': 'Sin permiso.'}), 403
+        return jsonify({'success': False, 'error': translate('Sin permiso.')}), 403
 
     data = request.get_json(silent=True) or {}
     user_id = data.get('user_id') or data.get('worker_id')
@@ -33,7 +34,7 @@ def api_crear_ausencia():
     estado = estado_alta_por_rol(current_user, data.get('estado'))
 
     if not user_id or not fecha_inicio or not fecha_fin:
-        return jsonify({'success': False, 'error': 'Faltan empleado o fechas.'}), 400
+        return jsonify({'success': False, 'error': translate('Faltan empleado o fechas.')}), 400
 
     try:
         leave = create_manual_leave(
@@ -54,8 +55,8 @@ def api_crear_ausencia():
         'leave_id': leave.id,
         'estado': leave.estado,
         'message': (
-            'Solicitud de ausencia enviada (pendiente de validación).'
+            translate('Solicitud de ausencia enviada (pendiente de validación).')
             if leave.estado == 'pendiente'
-            else 'Ausencia registrada.'
+            else translate('Ausencia registrada.')
         ),
     })

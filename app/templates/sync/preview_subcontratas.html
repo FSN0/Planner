@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "sync/_preview_macros.html" import stat_chip, razon_list %}
-{% block title %}Preview: Subcontratas{% endblock %}
+{% block title %}{{ _('Preview: Subcontratas') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -14,11 +14,11 @@
 
     <header class="sync-preview-header">
       <div>
-        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
-        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
-        <p class="sync-preview-sub">Empresas subcontrata y contactos externos desde res.partner.</p>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> {{ _('Panel Odoo') }}</a>
+        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ _(preview.modulo_label) }}</h1>
+        <p class="sync-preview-sub">{{ _('Empresas subcontrata y contactos externos desde res.partner.') }}</p>
       </div>
-      <button class="btn-admin btn-admin-primary" id="btnCommit"><i class="fas fa-save"></i> Guardar todo</button>
+      <button class="btn-admin btn-admin-primary" id="btnCommit"><i class="fas fa-save"></i>{{ _('Guardar todo') }}</button>
     </header>
 
     <div class="sync-preview-stats">
@@ -31,11 +31,11 @@
 
     {% if preview.incidencias_empleados %}
     <section class="sync-preview-section sync-preview-section--warn">
-      <h2 class="sync-preview-section-title"><i class="fas fa-exclamation-circle"></i> Avisos al importar ({{ preview.incidencias_empleados|length }})</h2>
-      <p class="sync-preview-section-desc">Se importarán pero con ajustes automáticos de DNI.</p>
+      <h2 class="sync-preview-section-title"><i class="fas fa-exclamation-circle"></i> {{ _('Avisos al importar') }} ({{ preview.incidencias_empleados|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Se importarán pero con ajustes automáticos de DNI.') }}</p>
       {% for emp in preview.incidencias_empleados %}
       <article class="sync-preview-card">
-        <strong>{{ emp.name }} {{ emp.lastname }}</strong> — DNI {{ emp.dni }}
+        <strong>{{ emp.name }} {{ emp.lastname }}</strong> — {{ _('DNI') }} {{ emp.dni }}
         {{ razon_list(emp.razones) }}
       </article>
       {% endfor %}
@@ -44,27 +44,27 @@
 
     <div class="sync-preview-two-col">
       <section class="sync-preview-section sync-preview-section--ok">
-        <h2 class="sync-preview-section-title">Empresas listas ({{ preview.listos_empresas|length }})</h2>
+        <h2 class="sync-preview-section-title">{{ _('Empresas listas') }} ({{ preview.listos_empresas|length }})</h2>
         {% for emp in preview.listos_empresas %}
         <div class="sync-preview-card">
           <span class="sync-preview-badge sync-preview-badge--{{ emp.accion }}">{{ emp.accion|replace('_',' ')|upper }}</span>
           <strong>{{ emp.nombre }}</strong>
           {% if emp.cif %}<span class="text-muted small">({{ emp.cif }})</span>{% endif %}
-          {% if emp.cambios %}<div class="small mt-1">{% for k,v in emp.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}</div>{% endif %}
+          {% if emp.cambios %}<div class="small mt-1">{% for k,v in emp.cambios.items() %}{{ _(k) }}: {{ v }}<br>{% endfor %}</div>{% endif %}
         </div>
-        {% else %}<p class="text-muted small">Ninguna.</p>{% endfor %}
+        {% else %}<p class="text-muted small">{{ _('Ninguna.') }}</p>{% endfor %}
       </section>
 
       <section class="sync-preview-section sync-preview-section--ok">
-        <h2 class="sync-preview-section-title">Externos listos ({{ preview.listos_empleados|length }})</h2>
+        <h2 class="sync-preview-section-title">{{ _('Externos listos') }} ({{ preview.listos_empleados|length }})</h2>
         {% for emp in preview.listos_empleados %}
         <div class="sync-preview-card">
           <span class="sync-preview-badge sync-preview-badge--{{ emp.accion }}">{{ emp.accion|replace('_',' ')|upper }}</span>
           <strong>{{ emp.name }} {{ emp.lastname }}</strong>
-          <div class="small text-muted">{{ emp.dni }} · {{ emp.categoria_profesional or 'Externo' }}</div>
-          {% if emp.cambios %}<div class="small mt-1">{% for k,v in emp.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}</div>{% endif %}
+          <div class="small text-muted">{{ emp.dni }} · {{ emp.categoria_profesional or _('Externo') }}</div>
+          {% if emp.cambios %}<div class="small mt-1">{% for k,v in emp.cambios.items() %}{{ _(k) }}: {{ v }}<br>{% endfor %}</div>{% endif %}
         </div>
-        {% else %}<p class="text-muted small">Ninguno.</p>{% endfor %}
+        {% else %}<p class="text-muted small">{{ _('Ninguno.') }}</p>{% endfor %}
       </section>
     </div>
 
@@ -77,13 +77,13 @@
 <script>
 document.getElementById('btnCommit').addEventListener('click', function() {
     this.disabled = true;
-    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando…';
+    this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + {{ _('Guardando…')|tojson }};
     fetch("{{ url_for('sync.commit_subcontratas') }}", {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: document.getElementById('diffData').textContent
     }).then(r => r.json()).then(res => {
         if (res.success) window.location.href = "{{ url_for('sync.odoo_panel') }}";
-        else { alert('Error: ' + res.error); this.disabled = false; }
+        else { alert({{ _('Error:')|tojson }} + ' ' + res.error); this.disabled = false; }
     });
 });
 </script>

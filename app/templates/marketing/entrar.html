@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale|default('es') }}">
 <head>
-    {% set page_title = 'Entrar — SignaPlan' %}
-    {% set meta_description = 'Accede al espacio de tu empresa en SignaPlan. Si no recuerdas la URL, te la enviamos por correo.' %}
+    {% set page_title = _('seo.entrar.title') %}
+    {% set meta_description = _('seo.entrar.description') %}
     {% set canonical_path = url_for('marketing.entrar') %}
     {% include "components/_marketing_seo_head.html" %}
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,7 +12,7 @@
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% include "components/_brand_logo.html" %}
         </a>
         {% include "components/_marketing_nav.html" %}
@@ -20,12 +20,8 @@
 
     <section class="mkt-section" style="padding-top: 4rem;">
         <div class="mkt-section-header">
-            <h2>Entra en tu empresa</h2>
-            <p>
-                Indica el correo con el que te dieron de alta. Te enviaremos un email con el enlace
-                de acceso a tu empresa (o empresas). Si el correo de verificación no te llegó,
-                también incluiremos ese enlace.
-            </p>
+            <h2>{{ _('access.title') }}</h2>
+            <p>{{ _('access.body') }}</p>
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -36,19 +32,19 @@
           {% endif %}
         {% endwith %}
 
-        <form method="POST" action="{{ url_for('marketing.entrar') }}" style="max-width:28rem;margin:0 auto;">
+        <form method="POST" action="{{ mkt_url('marketing.entrar') }}" style="max-width:28rem;margin:0 auto;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label for="email" style="display:block;font-weight:600;margin-bottom:.4rem;">Correo electrónico</label>
+            <label for="email" style="display:block;font-weight:600;margin-bottom:.4rem;">{{ _('alta.admin_email') }}</label>
             <input type="email" name="email" id="email" required
                    value="{{ email or '' }}"
                    autocomplete="username" autocapitalize="none"
                    style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
-            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">Enviar enlace de acceso</button>
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">{{ _('Enviar enlace') }}</button>
         </form>
 
         <p style="text-align:center;margin-top:1.5rem;color:#64748b;font-size:.95rem;">
-            ¿No tienes cuenta? <a href="{{ url_for('marketing.alta') }}">Créala gratis</a>
-            · <a href="{{ url_for('marketing.contacto') }}">Contacto</a>
+            {{ _('entrar.no_account') }} <a href="{{ mkt_url('marketing.alta') }}">{{ _('nav.signup') }}</a>
+            · <a href="{{ mkt_url('marketing.contacto') }}">{{ _('footer.contact') }}</a>
         </p>
     </section>
     {% include "components/_cookie_banner.html" %}

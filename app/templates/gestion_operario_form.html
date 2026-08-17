@@ -48,9 +48,10 @@
 {% endblock %}
 
 {% block wrapper %}
-{% set role_actual = user.role if edit_mode and user.role else 'operario' %}
+{% set role_actual = user.role if edit_mode and user.role else (default_role|default('') or 'operario') %}
 {% set email_valor = user.email if edit_mode else '' %}
 {% set email_es_placeholder = email_valor and ('@local.signaplan' in email_valor or '@demo.signaplan' in email_valor) %}
+{% set return_to = return_to|default('') %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
@@ -80,6 +81,9 @@
 
       <form action="{{ action_url }}" method="POST" id="userCreateForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if return_to %}
+        <input type="hidden" name="next" value="{{ return_to }}">
+        {% endif %}
 
         <div class="form-group">
           <label class="admin-form-label">{{ _('Rol de sistema') }}</label>
@@ -294,7 +298,7 @@
                       onclick="this.form.nuevo_pin.required=false;">{{ _('Generar aleatorio') }}</button>
               <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
                       formnovalidate style="color:#b91c1c;"
-                      onclick="this.form.nuevo_pin.required=false;return confirm('¿Quitar el PIN?');">{{ _('Quitar') }}</button>
+                      onclick="this.form.nuevo_pin.required=false;return confirm({{ _('¿Quitar el PIN?')|tojson }});">{{ _('Quitar') }}</button>
             </div>
           </form>
         </div>

@@ -1,22 +1,23 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="{{ current_locale|default('es') }}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elige empresa — SignaPlan</title>
+    {% set page_title = _('entrar_selector.seo_title') %}
+    {% set meta_description = _('entrar_selector.seo_desc') %}
+    {% set noindex = true %}
+    {% include "components/_marketing_seo_head.html" %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
-        <a class="mkt-brand" href="/">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
             {% include "components/_brand_logo.html" %}
         </a>
     </header>
 
     <section class="mkt-section" style="padding-top: 4rem;">
         <div class="mkt-section-header">
-            <h2>Varias empresas</h2>
-            <p>El correo <strong>{{ email }}</strong> está en más de una empresa. Elige a cuál quieres entrar.</p>
+            <h2>{{ _('entrar_selector.h2') }}</h2>
+            <p>{{ _('entrar_selector.lead') }} <strong>{{ email }}</strong>.</p>
         </div>
 
         <ul style="list-style:none;padding:0;max-width:32rem;margin:0 auto;">
@@ -34,8 +35,9 @@
         </ul>
 
         <p style="text-align:center;margin-top:1.5rem;">
-            <a href="{{ url_for('marketing.entrar') }}">Usar otro correo</a>
+            <a href="{{ mkt_url('marketing.entrar') }}">{{ _('entrar_selector.other_email') }}</a>
         </p>
     </section>
+    {% include "components/_cookie_banner.html" %}
 </body>
 </html>

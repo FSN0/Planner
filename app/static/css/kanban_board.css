@@ -656,6 +656,64 @@ html, body {
 .flatpickr-day.has-work { font-weight: bold; position: relative; }
 .flatpickr-day.has-work::after { content: ''; position: absolute; bottom: 2px; left: 15%; width: 70%; height: 3px; background-color: #cbd5e1; border-radius: 2px; }
 
+.kanban-start-obra {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.obra-card--start {
+    border-style: dashed;
+    background: #f8fafc;
+    box-shadow: none;
+}
+.obra-card--start:hover {
+    box-shadow: none;
+}
+.obra-card--start .col-header {
+    background: transparent;
+    padding: 1rem 1.05rem 1.15rem;
+}
+.obra-card--start .header-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.45rem;
+}
+.obra-card-start-body {
+    margin: 0 0 1rem;
+    font-size: 0.82rem;
+    color: #64748b;
+    line-height: 1.45;
+    font-weight: 400;
+}
+.obra-card--shortcut .col-header {
+    padding: 0.85rem 1rem 1rem;
+}
+.obra-card--shortcut .header-title {
+    margin-bottom: 0.7rem;
+}
+.kanban-libres-start {
+    padding: 1rem 0.85rem 1.15rem;
+    text-align: left;
+}
+.kanban-libres-start-title {
+    margin: 0 0 0.35rem;
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #0f172a;
+}
+.kanban-libres-start-sub {
+    margin: 0 0 0.85rem;
+    font-size: 0.78rem;
+    color: #64748b;
+    line-height: 1.4;
+}
+.kanban-libres-start--shortcut {
+    margin-top: 0.35rem;
+    padding: 0.85rem 0.5rem 0.35rem;
+    border-top: 1px dashed #cbd5e1;
+}
+
 @media (max-width: 991.98px) {
     .kanban-libres-panel,
     .col-libres {

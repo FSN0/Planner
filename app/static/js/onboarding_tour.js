@@ -5,6 +5,7 @@
 (function (window, document) {
   'use strict';
 
+  var t = window.SP_T || function (key) { return key; };
   var STORAGE_KEY = 'signaplan_tour_v1';
   var PAD = 8;
 
@@ -39,7 +40,7 @@
 
   function setFichaje(activo) {
     if (window.SP_pageLoading) {
-      window.SP_pageLoading.show(activo ? 'Activando fichaje…' : 'Guardando…');
+      window.SP_pageLoading.show(activo ? t('Activando fichaje…') : t('Guardando…'));
     }
     return fetch('/admin/api/tour/fichaje', {
       method: 'POST',
@@ -90,7 +91,7 @@
     try {
       sessionStorage.setItem(
         'signaplan_tour_flash',
-        message || 'Tutorial guiado completado. Abajo ya puedes ver el resto de guías.'
+        t(message || 'Tutorial guiado completado. Abajo ya puedes ver el resto de guías.')
       );
     } catch (e) { /* ignore */ }
     window.location.href = '/admin/primeros-pasos?focus=guide&done=seed';
@@ -121,7 +122,7 @@
       saveState(null);
       if (message) {
         try {
-          sessionStorage.setItem('signaplan_tour_flash', message);
+          sessionStorage.setItem('signaplan_tour_flash', t(message));
         } catch (e) { /* ignore */ }
       }
       window.location.href = href;
@@ -287,12 +288,12 @@
     ui.card.style.zIndex = '20050';
     ui.card.style.display = '';
     ui.card.innerHTML =
-      '<div class="sp-tour-progress">Tutorial guiado · flota</div>' +
-      '<h3>¿Vais a usar vehículos?</h3>' +
-      '<p>Si sí, te enseñamos a dar de alta el primero. Si no, damos el tutorial guiado por terminado y volvemos a Primeros pasos.</p>' +
+      '<div class="sp-tour-progress">' + t('Tutorial guiado · flota') + '</div>' +
+      '<h3>' + t('¿Vais a usar vehículos?') + '</h3>' +
+      '<p>' + t('Si sí, te enseñamos a dar de alta el primero. Si no, damos el tutorial guiado por terminado y volvemos a Primeros pasos.') + '</p>' +
       '<div class="sp-tour-actions" style="flex-direction:column;align-items:stretch;">' +
-      '<button type="button" class="sp-tour-primary" data-act="fleet-yes">Sí, crear un vehículo</button>' +
-      '<button type="button" class="sp-tour-ghost" data-act="fleet-no">No, terminar tutorial</button>' +
+      '<button type="button" class="sp-tour-primary" data-act="fleet-yes">' + t('Sí, crear un vehículo') + '</button>' +
+      '<button type="button" class="sp-tour-ghost" data-act="fleet-no">' + t('No, terminar tutorial') + '</button>' +
       '</div>';
     ui.card.querySelector('[data-act="fleet-yes"]').onclick = function () {
       var prev = loadState() || {};
@@ -386,10 +387,10 @@
         ? 'Importación guiada lista. Puedes seguir importando más listados o abrir la Academia.'
         : 'Ya conoces el mapa con datos de ejemplo. Explora libremente; el banner te deja borrarlos cuando quieras.';
       ui.card.innerHTML =
-        '<h3>Guía terminada</h3><p>' + msg + '</p>' +
+        '<h3>' + t('Guía terminada') + '</h3><p>' + t(msg) + '</p>' +
         '<div class="sp-tour-actions">' +
-        '<button type="button" class="sp-tour-skip" data-act="hub">Ir a Academia</button>' +
-        '<button type="button" class="sp-tour-primary" data-act="done">Ir al tablero</button></div>';
+        '<button type="button" class="sp-tour-skip" data-act="hub">' + t('Ir a Academia') + '</button>' +
+        '<button type="button" class="sp-tour-primary" data-act="done">' + t('Ir al tablero') + '</button></div>';
       ui.card.querySelector('[data-act="hub"]').onclick = function () {
         teardown();
         window.location.href = hubReturnUrl(chapter);
@@ -406,7 +407,7 @@
         try {
           sessionStorage.setItem(
             'signaplan_tour_flash',
-            'Tutorial completado. Lo siguiente está justo debajo.'
+            t('Tutorial completado. Lo siguiente está justo debajo.')
           );
         } catch (e) { /* ignore */ }
         window.location.href = returnTo || hubReturnUrl(chapter);
@@ -421,8 +422,7 @@
     showDoneCard(
       didFichaje
         ? 'Guía completada: alta, obra, fichaje de prueba y cómo resolver la pelota roja en auditoría. Sigue en la Academia.'
-        : 'Hasta aquí la guía por ahora. Ya tienes trabajador y obra. ' +
-          'Más adelante puedes activar fichaje en Configuración. Sigue en la Academia.'
+        : 'Hasta aquí la guía por ahora. Ya tienes trabajador y obra. Más adelante puedes activar fichaje en Configuración. Sigue en la Academia.'
     );
   }
 
@@ -462,13 +462,13 @@
   }
 
   function sectionSkipLabel(chapter) {
-    if (chapter === 'trabajadores') return 'Saltar plantilla →';
-    if (chapter === 'obra') return 'Saltar obras →';
-    if (chapter === 'fichaje') return 'Saltar fichaje →';
-    if (chapter === 'import') return 'Saltar importación →';
-    if (chapter === 'demo') return 'Saltar exploración →';
-    if (isAcademiaChapter(chapter)) return 'Saltar tutorial →';
-    return 'Saltar sección →';
+    if (chapter === 'trabajadores') return t('Saltar plantilla →');
+    if (chapter === 'obra') return t('Saltar obras →');
+    if (chapter === 'fichaje') return t('Saltar fichaje →');
+    if (chapter === 'import') return t('Saltar importación →');
+    if (chapter === 'demo') return t('Saltar exploración →');
+    if (isAcademiaChapter(chapter)) return t('Saltar tutorial →');
+    return t('Saltar sección →');
   }
 
   /**
@@ -942,17 +942,17 @@
     ui.banner = document.createElement('div');
     ui.banner.className = 'sp-tour-banner';
     ui.banner.innerHTML =
-      '<p><strong>' + (opts.title || 'Guía en pausa') + '</strong> — ' +
-      (opts.body || 'Revisa el mapeo con calma. Cuando quieras, vuelve a la guía.') + '</p>' +
+      '<p><strong>' + t(opts.title || 'Guía en pausa') + '</strong> — ' +
+      t(opts.body || 'Revisa el mapeo con calma. Cuando quieras, vuelve a la guía.') + '</p>' +
       '<div class="sp-tour-actions">' +
-      '<button type="button" class="sp-tour-skip" data-act="skip">Saltar guía</button>' +
+      '<button type="button" class="sp-tour-skip" data-act="skip">' + t('Saltar guía') + '</button>' +
       '<button type="button" class="sp-tour-ghost" data-act="skip-section">' +
       sectionSkipLabel((loadState() || {}).chapter) + '</button>' +
       (opts.doneLabel
-        ? '<button type="button" class="sp-tour-primary" data-act="done">' + opts.doneLabel + '</button>'
+        ? '<button type="button" class="sp-tour-primary" data-act="done">' + t(opts.doneLabel) + '</button>'
         : '') +
       '<button type="button" class="sp-tour-primary" data-act="resume">' +
-      (opts.resumeLabel || 'Volver a la guía') + '</button>' +
+      t(opts.resumeLabel || 'Volver a la guía') + '</button>' +
       '</div>';
     document.body.appendChild(ui.banner);
     document.body.classList.add('sp-tour-banner-active');
@@ -1039,20 +1039,23 @@
         // Mostrar el mensaje aunque el ancla aún no esté en el DOM
         placeHole(null);
         placeCardNear(null);
+        var waitTitle = (typeof step.title === 'function') ? step.title() : (step.title || '');
+        var waitBody = (typeof step.body === 'function') ? step.body() : (step.body || '');
+        var waitNextLabel = (typeof step.nextLabel === 'function') ? step.nextLabel() : step.nextLabel;
         var waitHtml = '';
-        waitHtml += '<div class="sp-tour-progress">' + (step.progress || '') + '</div>';
-        waitHtml += '<h3>' + ((typeof step.title === 'function') ? step.title() : (step.title || '')) + '</h3>';
-        waitHtml += '<p>' + ((typeof step.body === 'function') ? step.body() : (step.body || '')) + '</p>';
+        waitHtml += '<div class="sp-tour-progress">' + t(step.progress || '') + '</div>';
+        waitHtml += '<h3>' + t(waitTitle) + '</h3>';
+        waitHtml += '<p>' + t(waitBody) + '</p>';
         waitHtml += '<div class="sp-tour-actions">';
         waitHtml += '<button type="button" class="sp-tour-skip" data-act="skip">' +
-          ((loadState() || {}).chapter === 'import' ? 'Salir de la guía' : 'Saltar guía') + '</button>';
+          t((loadState() || {}).chapter === 'import' ? 'Salir de la guía' : 'Saltar guía') + '</button>';
         if (!step.noSkipSection) {
           waitHtml += '<button type="button" class="sp-tour-ghost" data-act="skip-section">' +
             sectionSkipLabel((loadState() || {}).chapter) + '</button>';
         }
         if (step.waitClick || step.nextLabel || step.onNext) {
           waitHtml += '<button type="button" class="sp-tour-primary" data-act="next">' +
-            (step.nextLabel || (step.waitClick ? 'Ya lo hice →' : 'Siguiente')) + '</button>';
+            t(waitNextLabel || (step.waitClick ? 'Ya lo hice →' : 'Siguiente')) + '</button>';
         }
         waitHtml += '</div>';
         ui.card.innerHTML = waitHtml;
@@ -1106,9 +1109,9 @@
     var stepTitle = (typeof step.title === 'function') ? step.title() : (step.title || '');
     var stepBody = (typeof step.body === 'function') ? step.body() : (step.body || '');
     var stepNextLabel = (typeof step.nextLabel === 'function') ? step.nextLabel() : step.nextLabel;
-    html += '<div class="sp-tour-progress">' + (step.progress || '') + '</div>';
-    html += '<h3>' + stepTitle + '</h3>';
-    html += '<p>' + stepBody + '</p>';
+    html += '<div class="sp-tour-progress">' + t(step.progress || '') + '</div>';
+    html += '<h3>' + t(stepTitle) + '</h3>';
+    html += '<p>' + t(stepBody) + '</p>';
 
     var stackChoices = !!(step.choices && step.choices.length && step.choicesLayout === 'stack');
     if (stackChoices) {
@@ -1118,14 +1121,14 @@
         var done = !!c.done;
         html += '<button type="button" class="sp-tour-primary' + (done ? ' is-done' : '') +
           '" data-act="choice" data-i="' + i + '">' +
-          '<span>' + c.label + '</span>' +
+          '<span>' + t(c.label) + '</span>' +
           (done ? '<span class="sp-tour-choice-tick" aria-hidden="true">✓</span>' : '') +
           '</button>';
       });
       html += '</div>';
       html += '<div class="sp-tour-actions">';
       html += '<button type="button" class="sp-tour-skip" data-act="skip">' +
-      ((loadState() || {}).chapter === 'import' ? 'Salir de la guía' : 'Saltar guía') + '</button>';
+      t((loadState() || {}).chapter === 'import' ? 'Salir de la guía' : 'Saltar guía') + '</button>';
       if (!step.noSkipSection) {
         html += '<button type="button" class="sp-tour-ghost" data-act="skip-section">' +
           sectionSkipLabel((loadState() || {}).chapter) + '</button>';
@@ -1135,7 +1138,7 @@
       ui.card.classList.remove('is-wide');
       html += '<div class="sp-tour-actions">';
       html += '<button type="button" class="sp-tour-skip" data-act="skip">' +
-        ((loadState() || {}).chapter === 'import' ? 'Salir de la guía' : 'Saltar guía') + '</button>';
+        t((loadState() || {}).chapter === 'import' ? 'Salir de la guía' : 'Saltar guía') + '</button>';
       if (!step.noSkipSection) {
         var stNow = loadState() || {};
         html += '<button type="button" class="sp-tour-ghost" data-act="skip-section">' +
@@ -1144,22 +1147,22 @@
       if (step.choices && step.choices.length) {
         step.choices.forEach(function (c, i) {
           html += '<button type="button" class="sp-tour-primary" data-act="choice" data-i="' + i + '">' +
-            c.label + '</button>';
+            t(c.label) + '</button>';
         });
       } else if (step.waitClick) {
         html += '<button type="button" class="sp-tour-ghost" data-act="next">' +
-          (stepNextLabel || 'Ya lo hice →') + '</button>';
+          t(stepNextLabel || 'Ya lo hice →') + '</button>';
       } else if (step.primaryHref) {
         html += '<button type="button" class="sp-tour-primary" data-act="go">' +
-          (step.primaryLabel || 'Continuar') + '</button>';
+          t(step.primaryLabel || 'Continuar') + '</button>';
       } else if (step.reviewMode) {
         html += '<button type="button" class="sp-tour-primary" data-act="review">' +
-          (step.reviewLabel || 'Revisar →') + '</button>';
+          t(step.reviewLabel || 'Revisar →') + '</button>';
         html += '<button type="button" class="sp-tour-ghost" data-act="next">' +
-          (stepNextLabel || 'Terminar guía →') + '</button>';
+          t(stepNextLabel || 'Terminar guía →') + '</button>';
       } else {
         html += '<button type="button" class="sp-tour-next" data-act="next">' +
-          (stepNextLabel || 'Siguiente') + '</button>';
+          t(stepNextLabel || 'Siguiente') + '</button>';
       }
       html += '</div>';
     }
@@ -1236,7 +1239,7 @@
                 if (!ui.card || !step.gateFail) return;
                 var p = ui.card.querySelector('p');
                 if (p) {
-                  p.innerHTML = '<span style="color:#b45309;">' + step.gateFail + '</span>';
+                  p.innerHTML = '<span style="color:#b45309;">' + t(step.gateFail) + '</span>';
                 }
               }, 30);
               return;
@@ -1256,7 +1259,7 @@
             var st = loadState() || {};
             st.step = (typeof step.advanceTo === 'number') ? step.advanceTo : ((st.step || 0) + 1);
             saveState(st);
-            if (window.SP_pageLoading) window.SP_pageLoading.show('Cargando…');
+            if (window.SP_pageLoading) window.SP_pageLoading.show(t('Cargando…'));
             window.location.href = href;
             return;
           }
@@ -1305,9 +1308,9 @@
     ui.card.classList.add('is-modal');
     ui.card.style.transform = 'translateX(-50%)';
     ui.card.innerHTML =
-      '<h3>Guía en pausa</h3><p>' + message + '</p>' +
+      '<h3>' + t('Guía en pausa') + '</h3><p>' + t(message || '') + '</p>' +
       '<div class="sp-tour-actions">' +
-      '<button type="button" class="sp-tour-primary" data-act="ok">Entendido</button></div>';
+      '<button type="button" class="sp-tour-primary" data-act="ok">' + t('Entendido') + '</button></div>';
     ui.card.style.top = '30%';
     ui.card.style.left = '50%';
     ui.card.querySelector('[data-act="ok"]').onclick = function () { teardown(); };
@@ -1538,8 +1541,8 @@
     if (ui.card) {
       var h = ui.card.querySelector('h3');
       var p = ui.card.querySelector('p');
-      if (h) h.textContent = info.title;
-      if (p) p.innerHTML = info.explain;
+      if (h) h.textContent = t(info.title);
+      if (p) p.innerHTML = t(info.explain);
     }
     try {
       if (info.collapse && !info.collapse.classList.contains('show')) {
@@ -1734,7 +1737,7 @@
       if (scope.querySelector('.person-day-timeline-loading')) {
         return null; // aún cargando
       }
-      return 'Aquí se lee la historia del día. En este caso aún no hay eventos listados.';
+      return t('Aquí se lee la historia del día. En este caso aún no hay eventos listados.');
     }
 
     var hadPlan = false;
@@ -1764,14 +1767,14 @@
         var obraAuto = obraFromDesc(desc);
         if (hadPlan) {
           points.push(
-            'Fichó en otra' + (obraAuto ? ' (<strong>' + esc(obraAuto) + '</strong>)' : '') +
-            ': el sistema lo anota como <strong>autoasignación por fichaje físico</strong>.'
+            t('Fichó en otra') + (obraAuto ? ' (<strong>' + esc(obraAuto) + '</strong>)' : '') +
+            t(': el sistema lo anota como <strong>autoasignación por fichaje físico</strong>.')
           );
         } else {
           points.push(
-            'No estaba <strong>planificada</strong> en ninguna obra' +
-            (obraAuto ? ' y fichó en <strong>' + esc(obraAuto) + '</strong>' : '') +
-            ': cae como fichaje <strong>sin planificar</strong> (autoasignación por fichaje físico).'
+            t('No estaba <strong>planificada</strong> en ninguna obra') +
+            (obraAuto ? ' ' + t('y fichó en') + ' <strong>' + esc(obraAuto) + '</strong>' : '') +
+            t(': cae como fichaje <strong>sin planificar</strong> (autoasignación por fichaje físico).')
           );
         }
         return;
@@ -1782,36 +1785,36 @@
         hadPlan = true;
         var obraPlan = obraFromDesc(desc);
         points.push(
-          'Estaba <strong>planificada</strong>' +
-          (obraPlan ? ' en <strong>' + esc(obraPlan) + '</strong>' : ' en una obra') + '.'
+          t('Estaba <strong>planificada</strong>') +
+          (obraPlan ? ' ' + t('en') + ' <strong>' + esc(obraPlan) + '</strong>' : ' ' + t('en una obra')) + '.'
         );
         return;
       }
 
       if (/resoluci[oó]n de fichaje|reabrir resoluci/i.test(title)) {
         if (/mover/i.test(blob)) {
-          points.push('Tú resolviste con <strong>Mover</strong>: el cuadrante pasa a la obra del fichaje.');
+          points.push(t('Tú resolviste con <strong>Mover</strong>: el cuadrante pasa a la obra del fichaje.'));
         } else if (/a[ñn]adir|multi|pluri/i.test(blob)) {
-          points.push('Tú resolviste con <strong>Añadir</strong>: se mantiene la planificada y se suma la del fichaje.');
+          points.push(t('Tú resolviste con <strong>Añadir</strong>: se mantiene la planificada y se suma la del fichaje.'));
         } else if (/ignor/i.test(blob)) {
-          points.push('Tú resolviste con <strong>Ignorar</strong>: se oculta la alerta sin cambiar el plan.');
+          points.push(t('Tú resolviste con <strong>Ignorar</strong>: se oculta la alerta sin cambiar el plan.'));
         } else if (/acept/i.test(blob)) {
-          points.push('Tú resolviste con <strong>Aceptar</strong>: se asigna oficialmente a la obra del fichaje.');
+          points.push(t('Tú resolviste con <strong>Aceptar</strong>: se asigna oficialmente a la obra del fichaje.'));
         } else if (/borrar|error al planificar/i.test(blob)) {
-          points.push('Tú resolviste borrando la planificación que no encajaba.');
+          points.push(t('Tú resolviste borrando la planificación que no encajaba.'));
         } else {
-          points.push('Tú <strong>resolviste</strong> la incidencia en auditoría (<em>' + esc(title) + '</em>).');
+          points.push(t('Tú <strong>resolviste</strong> la incidencia en auditoría') + ' (<em>' + esc(title) + '</em>).');
         }
         return;
       }
 
       if (/entrada|salida|fichaje_app|fichaje en app|marca/i.test(blob) || /fichaje/i.test(title)) {
-        points.push('Queda el <strong>registro de fichaje</strong> (entrada/salida) de ese momento.');
+        points.push(t('Queda el <strong>registro de fichaje</strong> (entrada/salida) de ese momento.'));
         return;
       }
 
       if (/pausa/i.test(blob)) {
-        points.push('Hay una <strong>pausa</strong> registrada en la jornada.');
+        points.push(t('Hay una <strong>pausa</strong> registrada en la jornada.'));
         return;
       }
 
@@ -1820,10 +1823,10 @@
     });
 
     if (!points.length) {
-      return 'Aquí se lee la historia del día en orden. Abre cada evento del zoom para ver el detalle.';
+      return t('Aquí se lee la historia del día en orden. Abre cada evento del zoom para ver el detalle.');
     }
 
-    var html = 'En esta actividad (el zoom) aparece, en orden:<br>';
+    var html = t('En esta actividad (el zoom) aparece, en orden:') + '<br>';
     points.forEach(function (pt, i) {
       html += '<strong>' + (i + 1) + '.</strong> ' + pt + '<br>';
     });
@@ -1868,29 +1871,29 @@
     if (st.chapter === 'fichajes') {
       if (kind === 'dni') {
         return st.createdDni
-          ? ('Introduce el <strong>DNI</strong>: <strong>' + st.createdDni + '</strong>.')
-          : 'Introduce el <strong>DNI</strong>.';
+          ? (t('Introduce el') + ' <strong>DNI</strong>: <strong>' + st.createdDni + '</strong>.')
+          : t('Introduce el <strong>DNI</strong>.');
       }
       if (kind === 'pin') {
         return st.createdPin
-          ? ('Introduce el <strong>PIN</strong>: <strong>' + st.createdPin + '</strong>.')
-          : 'Introduce el <strong>PIN</strong>.';
+          ? (t('Introduce el') + ' <strong>PIN</strong>: <strong>' + st.createdPin + '</strong>.')
+          : t('Introduce el <strong>PIN</strong>.');
       }
       return '';
     }
     var dni = (st.createdDni || '').trim();
     var pin = (st.createdPin || '').trim();
     var name = (st.createdWorkerName || '').trim();
-    var who = name ? (' de <strong>' + name + '</strong>') : ' del operario que acabas de crear';
+    var who = name ? (' ' + t('de') + ' <strong>' + name + '</strong>') : (' ' + t('del operario que acabas de crear'));
     if (kind === 'dni') {
       return dni
-        ? ('Introduce el DNI' + who + ' (<strong>' + dni + '</strong>).')
-        : ('Introduce el DNI' + who + '.');
+        ? (t('Introduce el DNI') + who + ' (<strong>' + dni + '</strong>).')
+        : (t('Introduce el DNI') + who + '.');
     }
     if (kind === 'pin') {
       return pin
-        ? ('Introduce el PIN' + who + ' (<strong>' + pin + '</strong>).')
-        : ('Introduce el PIN' + who + ' (el que pusiste al crearlo).');
+        ? (t('Introduce el PIN') + who + ' (<strong>' + pin + '</strong>).')
+        : (t('Introduce el PIN') + who + ' ' + t('(el que pusiste al crearlo).'));
     }
     return '';
   }
@@ -1938,6 +1941,9 @@
       // 0 — ¿Fichar? (omitir si ya se decidió en el hub / demo / sesión)
       {
         when: function () {
+          if (window.__ONB_FICHAJE_ASKED__ || window.__ONB_FICHAJE_ACTIVO__) {
+            return false;
+          }
           var st = loadState();
           return !st || st.wantFichaje === null || typeof st.wantFichaje === 'undefined';
         },
@@ -2421,7 +2427,7 @@
           if (ui.card) {
             var p = ui.card.querySelector('p');
             if (p) {
-              p.innerHTML = 'Normalmente eliges (o te sale) la obra donde estás. Aquí, para el tutorial, dejamos <strong>Oficina</strong>.';
+              p.innerHTML = t('Normalmente eliges (o te sale) la obra donde estás. Aquí, para el tutorial, dejamos <strong>Oficina</strong>.');
             }
           }
           setTimeout(function () { ensureOficinaSelected(4); }, 200);
@@ -2469,7 +2475,7 @@
           if (ui.card) {
             var p = ui.card.querySelector('p');
             if (p) {
-              p.innerHTML = 'Has fichado en <strong>Oficina</strong>. En el tablero verás la marca según encaje o no con el plan; en auditoría resolvemos el desvío.';
+              p.innerHTML = t('Has fichado en <strong>Oficina</strong>. En el tablero verás la marca según encaje o no con el plan; en auditoría resolvemos el desvío.');
             }
           }
         },
@@ -2500,11 +2506,11 @@
                 green = qs('.kanban-col .worker-chip .dot-success, .kanban-col .worker-chip .dot-auto');
               }
               if (red) {
-                p.innerHTML = 'La marca está en <strong>rojo</strong>: fichó sin estar planificado (o hay conflicto). En el siguiente paso lo revisamos en Auditoría de fichajes.';
+                p.innerHTML = t('La marca está en <strong>rojo</strong>: fichó sin estar planificado (o hay conflicto). En el siguiente paso lo revisamos en Auditoría de fichajes.');
               } else if (green) {
-                p.innerHTML = 'La marca está en <strong>verde</strong>: el fichaje encaja con la planificación.';
+                p.innerHTML = t('La marca está en <strong>verde</strong>: el fichaje encaja con la planificación.');
               } else {
-                p.innerHTML = 'El operario está en la obra. Mira el punto de color: <strong>rojo</strong> = revisar en auditoría; <strong>verde</strong> = correcto.';
+                p.innerHTML = t('El operario está en la obra. Mira el punto de color: <strong>rojo</strong> = revisar en auditoría; <strong>verde</strong> = correcto.');
               }
             }
           }
@@ -2599,19 +2605,19 @@
             var h = ui.card.querySelector('h3');
             var p = ui.card.querySelector('p');
             if (info && info.kind === 'desviaciones') {
-              if (h) h.textContent = 'Desviaciones: tres acciones';
+              if (h) h.textContent = t('Desviaciones: tres acciones');
               if (p) {
                 p.innerHTML =
-                  '<strong>Mover</strong>: cambia el cuadrante a Oficina.<br>' +
-                  '<strong>+ Añadir</strong>: mantiene la planificada y añade Oficina.<br>' +
-                  '<strong>Ignorar</strong>: oculta la alerta sin tocar el plan.';
+                  t('<strong>Mover</strong>: cambia el cuadrante a Oficina.') + '<br>' +
+                  t('<strong>+ Añadir</strong>: mantiene la planificada y añade Oficina.') + '<br>' +
+                  t('<strong>Ignorar</strong>: oculta la alerta sin tocar el plan.');
               }
             } else {
-              if (h) h.textContent = 'Sin planificar: dos acciones';
+              if (h) h.textContent = t('Sin planificar: dos acciones');
               if (p) {
                 p.innerHTML =
-                  '<strong>Aceptar</strong>: asigna oficialmente a esa obra.<br>' +
-                  '<strong>Ignorar</strong>: oculta la alerta sin cambiar el cuadrante.';
+                  t('<strong>Aceptar</strong>: asigna oficialmente a esa obra.') + '<br>' +
+                  t('<strong>Ignorar</strong>: oculta la alerta sin cambiar el cuadrante.');
               }
             }
           }
@@ -2698,9 +2704,9 @@
       ensureImportEntity();
       var st = loadState() || {};
       var ent = st.importEntity || '';
-      if (ent === 'users') return 'Trabajadores';
-      if (ent === 'companies') return 'Empresas';
-      return 'Directorio';
+      if (ent === 'users') return t('Trabajadores');
+      if (ent === 'companies') return t('Empresas');
+      return t('Directorio');
     }
     function importNavSelector() {
       ensureImportEntity();
@@ -2753,21 +2759,21 @@
       ensureImportEntity();
       var st = loadState() || {};
       var ent = st.importEntity || 'obras';
-      if (ent === 'users') return 'Personal importado';
-      if (ent === 'companies') return 'Empresas importadas';
-      return 'Obras importadas';
+      if (ent === 'users') return t('Personal importado');
+      if (ent === 'companies') return t('Empresas importadas');
+      return t('Obras importadas');
     }
     function importListExplainBody() {
       ensureImportEntity();
       var st = loadState() || {};
       var ent = st.importEntity || 'obras';
       if (ent === 'users') {
-        return 'Este es el listado de personal que acabas de importar. Cada fila es una persona.';
+        return t('Este es el listado de personal que acabas de importar. Cada fila es una persona.');
       }
       if (ent === 'companies') {
-        return 'Este es el listado de empresas/subcontratas que acabas de importar. Cada fila es una empresa.';
+        return t('Este es el listado de empresas/subcontratas que acabas de importar. Cada fila es una empresa.');
       }
-      return 'Este es el listado de obras que acabas de importar. Cada fila es una obra.';
+      return t('Este es el listado de obras que acabas de importar. Cada fila es una obra.');
     }
 
     return [
@@ -3000,11 +3006,11 @@
         selector: '[data-tour="nav-directorio"]',
         manualTarget: true,
         noSkipSection: true,
-        title: function () { return 'Ve a ' + importDestinationLabel(); },
+        title: function () { return t('Ve a') + ' ' + importDestinationLabel(); },
         body: function () {
-          return 'En el menú de la <strong>izquierda</strong>, pulsa <strong>' +
+          return t('En el menú de la <strong>izquierda</strong>, pulsa') + ' <strong>' +
             importDestinationLabel() +
-            '</strong> para ver el listado.';
+            '</strong> ' + t('para ver el listado.');
         },
         progress: 'Importar · menú',
         waitClick: true,
@@ -3928,9 +3934,9 @@
                 if (ui.card) {
                   var h = ui.card.querySelector('h3');
                   var p = ui.card.querySelector('p');
-                  if (h) h.textContent = 'Señal de guardado';
+                  if (h) h.textContent = t('Señal de guardado');
                   if (p) {
-                    p.innerHTML = 'Arriba te confirma si hubo cambios o no. En el siguiente paso asignamos con <strong>doble clic</strong>.';
+                    p.innerHTML = t('Arriba te confirma si hubo cambios o no. En el siguiente paso asignamos con <strong>doble clic</strong>.');
                   }
                 }
                 setTimeout(advanceToDoubleClick, 1600);
@@ -4738,9 +4744,9 @@
             var p = ui.card.querySelector('p');
             if (p) {
               if (pin) {
-                p.innerHTML = 'Bloque de <strong>PIN de fichaje</strong>: guarda uno tú o envía enlace. Al hacerlo avanzamos al siguiente paso.';
+                p.innerHTML = t('Bloque de <strong>PIN de fichaje</strong>: guarda uno tú o envía enlace. Al hacerlo avanzamos al siguiente paso.');
               } else if (office) {
-                p.innerHTML = 'Este perfil no usa PIN. Cambia el rol a <strong>operario</strong> o vuelve a Personal y abre uno.';
+                p.innerHTML = t('Este perfil no usa PIN. Cambia el rol a <strong>operario</strong> o vuelve a Personal y abre uno.');
               }
             }
           }
@@ -4883,7 +4889,7 @@
           if (ui.card) {
             var p = ui.card.querySelector('p');
             if (p) {
-              p.innerHTML = 'Normalmente eliges (o te sale) la obra donde estás. Aquí, para el tutorial, dejamos <strong>Oficina</strong>.';
+              p.innerHTML = t('Normalmente eliges (o te sale) la obra donde estás. Aquí, para el tutorial, dejamos <strong>Oficina</strong>.');
             }
           }
           setTimeout(function () { ensureOficinaSelected(4); }, 200);
@@ -4969,11 +4975,11 @@
                 green = qs('.kanban-col .worker-chip .dot-success, .kanban-col .worker-chip .dot-auto');
               }
               if (red) {
-                p.innerHTML = 'Marca en <strong>rojo</strong>: el fichaje no encaja con el plan (desvío o conflicto). Ahora lo resolvemos en auditoría.';
+                p.innerHTML = t('Marca en <strong>rojo</strong>: el fichaje no encaja con el plan (desvío o conflicto). Ahora lo resolvemos en auditoría.');
               } else if (green) {
-                p.innerHTML = 'Marca en <strong>verde</strong>: el fichaje encaja con el plan. Aun así, en auditoría verás el rastro si hubo resolución.';
+                p.innerHTML = t('Marca en <strong>verde</strong>: el fichaje encaja con el plan. Aun así, en auditoría verás el rastro si hubo resolución.');
               } else {
-                p.innerHTML = 'Mira la marca del operario en la obra. <strong>Rojo</strong> = revisar en auditoría; <strong>verde</strong> = correcto.';
+                p.innerHTML = t('Mira la marca del operario en la obra. <strong>Rojo</strong> = revisar en auditoría; <strong>verde</strong> = correcto.');
               }
             }
           }
@@ -5059,19 +5065,19 @@
             var h = ui.card.querySelector('h3');
             var p = ui.card.querySelector('p');
             if (info && info.kind === 'desviaciones') {
-              if (h) h.textContent = 'Desviaciones: tres acciones';
+              if (h) h.textContent = t('Desviaciones: tres acciones');
               if (p) {
                 p.innerHTML =
-                  '<strong>Mover</strong>: cambia el cuadrante a Oficina.<br>' +
-                  '<strong>+ Añadir</strong>: mantiene la planificada y añade Oficina.<br>' +
-                  '<strong>Ignorar</strong>: oculta la alerta sin tocar el plan.';
+                  t('<strong>Mover</strong>: cambia el cuadrante a Oficina.') + '<br>' +
+                  t('<strong>+ Añadir</strong>: mantiene la planificada y añade Oficina.') + '<br>' +
+                  t('<strong>Ignorar</strong>: oculta la alerta sin tocar el plan.');
               }
             } else {
-              if (h) h.textContent = 'Sin planificar: dos acciones';
+              if (h) h.textContent = t('Sin planificar: dos acciones');
               if (p) {
                 p.innerHTML =
-                  '<strong>Aceptar</strong>: asigna oficialmente a esa obra.<br>' +
-                  '<strong>Ignorar</strong>: oculta la alerta sin cambiar el cuadrante.';
+                  t('<strong>Aceptar</strong>: asigna oficialmente a esa obra.') + '<br>' +
+                  t('<strong>Ignorar</strong>: oculta la alerta sin cambiar el cuadrante.');
               }
             }
           }
@@ -5231,7 +5237,7 @@
             var p = ui.card.querySelector('p');
             if (tip === null) {
               // Timeline aún cargando: reintentar
-              if (p) p.textContent = 'Cargando la actividad del día…';
+              if (p) p.textContent = t('Cargando la actividad del día…');
               ui.card.style.zIndex = '20050';
               if (ui.backdrop) ui.backdrop.style.zIndex = '20040';
               return false;

@@ -15,7 +15,7 @@
     <div class="page-toolbar">
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title">{{ _('Personal') }}</h1>
-        <span class="page-toolbar-count">{{ internos|length }} int. · {{ (operarios_activos|length) + (operarios_pendientes|length) }} ext.</span>
+        <span class="page-toolbar-count">{{ internos|length }} {{ _('int.') }} · {{ (operarios_activos|length) + (operarios_pendientes|length) }} {{ _('ext.') }}</span>
         {% if cupo and cupo.monetizacion_activa %}
         <span class="page-toolbar-count" title="{{ _('Operarios y jefes de obra activos') }}">
           {{ _('Plantilla') }} {{ cupo.usados }}{% if cupo.limite is not none %}/{{ cupo.limite }}{% endif %}
@@ -121,12 +121,12 @@
                 </tr>
                 <tr class="filter-row">
                   <th></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 1, this.value)" placeholder="…" title="Filtrar nombre"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 2, this.value)" placeholder="…" title="Filtrar email"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 3, this.value)" placeholder="…" title="Filtrar rol"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 4, this.value)" placeholder="…" title="Filtrar categoría"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 5, this.value)" placeholder="…" title="Filtrar valoración"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 6, this.value)" placeholder="…" title="Filtrar estado"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 1, this.value)" placeholder="…" title="{{ _('Filtrar nombre') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 2, this.value)" placeholder="…" title="{{ _('Filtrar email') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 3, this.value)" placeholder="…" title="{{ _('Filtrar rol') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 4, this.value)" placeholder="…" title="{{ _('Filtrar categoría') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 5, this.value)" placeholder="…" title="{{ _('Filtrar valoración') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 6, this.value)" placeholder="…" title="{{ _('Filtrar estado') }}"></th>
                   <th></th>
                 </tr>
               </thead>
@@ -148,7 +148,7 @@
                   {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
                   {% set r_count = active_ratings|length %}
                   <td data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
-                    <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary" title="Ver valoraciones">
+                    <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary" title="{{ _('Ver valoraciones') }}">
                       {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ user.reputation_score }} <span class="text-muted">({{ r_count }})</span>{% else %}—{% endif %}
                     </a>
                   </td>
@@ -208,12 +208,12 @@
                 </tr>
                 <tr class="filter-row">
                   <th></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 1, this.value)" placeholder="…"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 2, this.value)" placeholder="…"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 3, this.value)" placeholder="…"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 4, this.value)" placeholder="…"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 5, this.value)" placeholder="…"></th>
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 6, this.value)" placeholder="…"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 1, this.value)" placeholder="…" title="{{ _('Filtrar nombre') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 2, this.value)" placeholder="…" title="{{ _('Filtrar empresa') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 3, this.value)" placeholder="…" title="{{ _('Filtrar DNI') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 4, this.value)" placeholder="…" title="{{ _('Filtrar categoría') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 5, this.value)" placeholder="…" title="{{ _('Filtrar valoración') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 6, this.value)" placeholder="…" title="{{ _('Filtrar estado') }}"></th>
                   <th></th>
                 </tr>
               </thead>
@@ -374,7 +374,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="{{ url_for('static', filename='js/common.js') }}?v=20260817a"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
@@ -421,19 +421,19 @@ function bulkDeleteUsers(tableId, checkboxClass) {
     var ids = getCheckedIds(tableId, '.' + checkboxClass);
     if (!ids.length) return;
     Swal.fire({
-        title: '¿Eliminar seleccionados?',
-        text: 'Se eliminarán ' + ids.length + ' usuario(s).',
+        title: {{ _('¿Eliminar seleccionados?')|tojson }},
+        text: {{ _('Se eliminarán {n} usuario(s).')|tojson }}.replace('{n}', ids.length),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#dc2626',
         cancelButtonColor: '#64748b',
-        confirmButtonText: 'Sí, eliminar'
+        confirmButtonText: {{ _('Sí, eliminar')|tojson }}
     }).then(function(r) {
         if (!r.isConfirmed) return;
-        Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); }});
+        Swal.fire({ title: {{ _('Procesando...')|tojson }}, allowOutsideClick: false, didOpen: function() { Swal.showLoading(); }});
         bulkJsonPost('/admin/api/users/batch_delete', { user_ids: ids }).then(function(data) {
-            if (data.success) Swal.fire('Hecho', data.message, 'success').then(function() { location.reload(); });
-            else Swal.fire('Error', data.message, 'error');
+            if (data.success) Swal.fire({{ _('Hecho')|tojson }}, data.message, 'success').then(function() { location.reload(); });
+            else Swal.fire({{ _('Error')|tojson }}, data.message, 'error');
         });
     });
 }
@@ -442,17 +442,17 @@ function bulkDeactivateUsers(tableId, checkboxClass) {
     var ids = getCheckedIds(tableId, '.' + checkboxClass);
     if (!ids.length) return;
     Swal.fire({
-        title: '¿Desactivar seleccionados?',
-        text: 'Se desactivarán ' + ids.length + ' operario(s).',
+        title: {{ _('¿Desactivar seleccionados?')|tojson }},
+        text: {{ _('Se desactivarán {n} operario(s).')|tojson }}.replace('{n}', ids.length),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d97706',
-        confirmButtonText: 'Sí, desactivar'
+        confirmButtonText: {{ _('Sí, desactivar')|tojson }}
     }).then(function(r) {
         if (!r.isConfirmed) return;
         bulkJsonPost('/admin/api/users/batch_deactivate', { user_ids: ids }).then(function(data) {
-            if (data.success) Swal.fire('Hecho', data.message, 'success').then(function() { location.reload(); });
-            else Swal.fire('Error', data.message, 'error');
+            if (data.success) Swal.fire({{ _('Hecho')|tojson }}, data.message, 'success').then(function() { location.reload(); });
+            else Swal.fire({{ _('Error')|tojson }}, data.message, 'error');
         });
     });
 }
@@ -460,7 +460,7 @@ function bulkDeactivateUsers(tableId, checkboxClass) {
 $(document).on('click', '.schedule-btn', function(){
     $('#scheduleUserId').val($(this).data('user-id'));
     $('#scheduleAction').val($(this).data('action'));
-    $('#scheduleModalLabel').text($(this).data('action') === 'deactivate' ? 'Programar desactivación' : 'Programar aprobación');
+    $('#scheduleModalLabel').text($(this).data('action') === 'deactivate' ? {{ _('Programar desactivación')|tojson }} : {{ _('Programar aprobación')|tojson }});
     $('#scheduleModal').modal('show');
 });
 
@@ -471,8 +471,8 @@ $('#scheduleForm').submit(function(e){
         type: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({ action: $('#scheduleAction').val(), date: $('#scheduledDate').val() }),
-        success: function(r){ if(r.success){ alert(r.message); location.reload(); } else alert('Error: ' + r.error); },
-        error: function(){ alert('Error al programar.'); }
+        success: function(r){ if(r.success){ alert(r.message); location.reload(); } else alert({{ _('Error:')|tojson }} + ' ' + r.error); },
+        error: function(){ alert({{ _('Error al programar.')|tojson }}); }
     });
 });
 </script>

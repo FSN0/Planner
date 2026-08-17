@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "sync/_preview_macros.html" import stat_chip, razon_list %}
-{% block title %}Preview: Empleados{% endblock %}
+{% block title %}{{ _('Preview: Empleados') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -14,13 +14,12 @@
 
     <header class="sync-preview-header">
       <div>
-        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> Panel Odoo</a>
-        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ preview.modulo_label }}</h1>
-        <p class="sync-preview-sub">Empleados internos desde hr.employee · conflictos, omitidos y listos.</p>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> {{ _('Panel Odoo') }}</a>
+        <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ _(preview.modulo_label) }}</h1>
+        <p class="sync-preview-sub">{{ _('Empleados internos desde hr.employee · conflictos, omitidos y listos.') }}</p>
       </div>
       <button class="btn-admin btn-admin-primary" onclick="confirmSyncEmpleados()">
-        <i class="fas fa-save"></i> Guardar válidos
-      </button>
+        <i class="fas fa-save"></i>{{ _('Guardar válidos') }}</button>
     </header>
 
     <div class="sync-preview-stats">
@@ -32,12 +31,12 @@
 
     {% if preview.incidencias %}
     <section class="sync-preview-section sync-preview-section--danger">
-      <h2 class="sync-preview-section-title"><i class="fas fa-balance-scale"></i> Conflictos — omitidos en sync auto ({{ preview.incidencias|length }})</h2>
+      <h2 class="sync-preview-section-title"><i class="fas fa-balance-scale"></i> {{ _('Conflictos — omitidos en sync auto') }} ({{ preview.incidencias|length }})</h2>
       {% for emp in preview.incidencias %}
       <article class="sync-preview-card sync-preview-card--incident">
         <div class="sync-preview-card-head">
           <strong>{{ emp.name }} {{ emp.lastname }}</strong>
-          <span class="sync-preview-badge sync-preview-badge--actualizar">CONFLICTO</span>
+          <span class="sync-preview-badge sync-preview-badge--actualizar">{{ _('CONFLICTO') }}</span>
         </div>
         {{ razon_list(emp.razones) }}
         {% if emp.conflicto %}
@@ -45,17 +44,17 @@
           <div class="custom-control custom-radio">
             <input class="custom-control-input" type="radio" name="conflict_{{ emp.odoo_id }}" id="keep_actual_{{ emp.odoo_id }}" value="keep_actual" checked>
             <label class="custom-control-label" for="keep_actual_{{ emp.odoo_id }}">
-              Mantener <strong>{{ emp.conflicto.actual.nombre }}</strong> (ID {{ emp.conflicto.actual.id }})
+              {{ _('Mantener') }} <strong>{{ emp.conflicto.actual.nombre }}</strong> (ID {{ emp.conflicto.actual.id }})
             </label>
           </div>
           <div class="custom-control custom-radio">
             <input class="custom-control-input" type="radio" name="conflict_{{ emp.odoo_id }}" id="keep_blocker_{{ emp.odoo_id }}" value="keep_blocker">
             <label class="custom-control-label" for="keep_blocker_{{ emp.odoo_id }}">
-              Mantener <strong>{{ emp.conflicto.bloqueador.nombre }}</strong> (ID {{ emp.conflicto.bloqueador.id }})
+              {{ _('Mantener') }} <strong>{{ emp.conflicto.bloqueador.nombre }}</strong> (ID {{ emp.conflicto.bloqueador.id }})
             </label>
           </div>
           <button class="btn-admin btn-admin-danger btn-sm mt-2" onclick='resolveConflict({{ emp | tojson | safe }})'>
-            <i class="fas fa-wrench"></i> Resolver conflicto
+            <i class="fas fa-wrench"></i> {{ _('Resolver conflicto') }}
           </button>
         </div>
         {% endif %}
@@ -66,18 +65,18 @@
 
     {% if preview.omitidos_odoo %}
     <section class="sync-preview-section sync-preview-section--warn">
-      <h2 class="sync-preview-section-title"><i class="fas fa-filter"></i> No importados desde Odoo ({{ preview.omitidos_odoo|length }})</h2>
-      <p class="sync-preview-section-desc">Registros en Odoo que <strong>nunca entran</strong> al diff por reglas de filtrado.</p>
+      <h2 class="sync-preview-section-title"><i class="fas fa-filter"></i> {{ _('No importados desde Odoo') }} ({{ preview.omitidos_odoo|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Registros en Odoo que <strong>nunca entran</strong> al diff por reglas de filtrado.')|safe }}</p>
       <div class="sync-preview-table-wrap">
         <table class="sync-preview-table">
-          <thead><tr><th>Odoo ID</th><th>Nombre</th><th>Departamento</th><th>Motivo</th></tr></thead>
+          <thead><tr><th>{{ _('Odoo ID') }}</th><th>{{ _('Nombre') }}</th><th>{{ _('Departamento') }}</th><th>{{ _('Motivo') }}</th></tr></thead>
           <tbody>
             {% for o in preview.omitidos_odoo %}
             <tr>
               <td>#{{ o.odoo_id }}</td>
               <td>{{ o.nombre }}</td>
               <td>{{ o.departamento }}</td>
-              <td class="sync-preview-reasons">{{ o.motivo }}</td>
+              <td class="sync-preview-reasons">{{ _(o.motivo) }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -88,10 +87,10 @@
 
     {% if preview.listos %}
     <section class="sync-preview-section sync-preview-section--ok">
-      <h2 class="sync-preview-section-title"><i class="fas fa-check"></i> Listos para importar ({{ preview.listos|length }})</h2>
+      <h2 class="sync-preview-section-title"><i class="fas fa-check"></i> {{ _('Listos para importar') }} ({{ preview.listos|length }})</h2>
       <div class="sync-preview-table-wrap">
         <table class="sync-preview-table">
-          <thead><tr><th>Acción</th><th>Nombre</th><th>DNI</th><th>Rol</th><th>Cambios</th></tr></thead>
+          <thead><tr><th>{{ _('Acción') }}</th><th>{{ _('Nombre') }}</th><th>{{ _('DNI') }}</th><th>{{ _('Rol') }}</th><th>{{ _('Cambios') }}</th></tr></thead>
           <tbody>
             {% for emp in preview.listos %}
             <tr>
@@ -99,7 +98,7 @@
               <td>{{ emp.name }} {{ emp.lastname }}</td>
               <td>{{ emp.dni }}</td>
               <td>{{ emp.role }}</td>
-              <td class="small">{% if emp.cambios %}{% for k,v in emp.cambios.items() %}{{ k }}: {{ v }}<br>{% endfor %}{% else %}—{% endif %}</td>
+              <td class="small">{% if emp.cambios %}{% for k,v in emp.cambios.items() %}{{ _(k) }}: {{ v }}<br>{% endfor %}{% else %}—{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -110,7 +109,7 @@
 
     {% if preview.sin_cambios %}
     <details class="sync-preview-collapse">
-      <summary>{{ preview.sin_cambios|length }} empleados ya sincronizados</summary>
+      <summary>{{ preview.sin_cambios|length }} {{ _('empleados ya sincronizados') }}</summary>
       <div class="sync-preview-chips">
         {% for e in preview.sin_cambios %}<span class="badge-soft">{{ e.name }} {{ e.lastname }}</span>{% endfor %}
       </div>
@@ -125,14 +124,14 @@
 <script>
 function resolveConflict(empData) {
     let selectedRadio = document.querySelector(`input[name="conflict_${empData.odoo_id}"]:checked`);
-    if (!selectedRadio) { alert('Selecciona una opción.'); return; }
-    if (!confirm('¿Resolver conflicto? El usuario descartado se desactivará.')) return;
+    if (!selectedRadio) { alert({{ _('Selecciona una opción.')|tojson }}); return; }
+    if (!confirm({{ _('¿Resolver conflicto? El usuario descartado se desactivará.')|tojson }})) return;
     fetch("{{ url_for('sync.resolve_conflict_empleado') }}", {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emp: empData, action: selectedRadio.value })
     }).then(r => r.json()).then(data => {
         if (data.success) location.reload();
-        else alert('Error: ' + data.error);
+        else alert({{ _('Error:')|tojson }} + ' ' + data.error);
     });
 }
 
@@ -141,7 +140,7 @@ function confirmSyncEmpleados() {
     let cleanUpdates = payload.actualizados.filter(e => !e.conflicto);
     let conflictsCount = payload.actualizados.length - cleanUpdates.length;
     if (conflictsCount > 0) {
-        alert(`${conflictsCount} conflicto(s) pendiente(s). Se guardarán solo los válidos.`);
+        alert({{ _('{n} conflicto(s) pendiente(s). Se guardarán solo los válidos.')|tojson }}.replace('{n}', conflictsCount));
     }
     fetch("{{ url_for('sync.commit_empleados') }}", {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -150,7 +149,7 @@ function confirmSyncEmpleados() {
         if (data.success) {
             if (conflictsCount === 0) window.location.href = "{{ url_for('sync.odoo_panel') }}";
             else location.reload();
-        } else alert('Error: ' + data.error);
+        } else alert({{ _('Error:')|tojson }} + ' ' + data.error);
     });
 }
 </script>

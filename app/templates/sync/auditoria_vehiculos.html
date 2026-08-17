@@ -1,19 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Auditoría de vehículos{% endblock %}
+{% block title %}{{ _('Auditoría de vehículos') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% macro audit_sort_th(col, label, width='', align='', sort_type='') %}
-<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ label }}</span><i class="fas fa-sort sort-icon"></i></th>
+<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
 {% endmacro %}
 
 {% macro btn_visto(kind, clave, es_visto=false) %}
 {% if es_visto %}
-  <span class="text-muted small"><i class="fas fa-eye"></i> Visto</span>
+  <span class="text-muted small"><i class="fas fa-eye"></i>{{ _('Visto') }}</span>
 {% else %}
   <button type="button" class="btn-admin btn-admin-ghost btn-sm btn-anomalia-visto"
-          data-kind="{{ kind }}" data-clave="{{ clave }}" title="Marcar como visto">
-    <i class="fas fa-eye"></i> Visto
-  </button>
+          data-kind="{{ kind }}" data-clave="{{ clave }}" title="{{ _('Marcar como visto') }}">
+    <i class="fas fa-eye"></i>{{ _('Visto') }}</button>
 {% endif %}
 {% endmacro %}
 
@@ -22,7 +21,7 @@
 <div class="border-top px-3 py-2">
   <button type="button" class="btn-admin btn-admin-ghost btn-sm btn-toggle-historico"
           data-target="#{{ section_id }}Historico" aria-expanded="false">
-    <i class="fas fa-history"></i> Ver histórico ({{ visto_count }})
+    <i class="fas fa-history"></i> {{ _('Ver histórico') }} ({{ visto_count }})
   </button>
 </div>
 {% endif %}
@@ -50,7 +49,7 @@
     {% if reg.odoo_driver_name %}
       {{ reg.odoo_driver_name }}
       {% if reg.odoo_driver_partner_id %}
-        <span class="d-block text-muted small">partner #{{ reg.odoo_driver_partner_id }}</span>
+        <span class="d-block text-muted small">{{ _('partner') }} #{{ reg.odoo_driver_partner_id }}</span>
       {% endif %}
     {% else %}
       <span class="text-muted">—</span>
@@ -60,7 +59,7 @@
     {% if reg.qty_km is not none %}
       {{ '%.0f'|format(reg.qty_km) }} km
       {% if reg.valor is not none %}
-        <span class="d-block text-muted small">fin {{ '%.0f'|format(reg.valor) }}</span>
+        <span class="d-block text-muted small">{{ _('fin') }} {{ '%.0f'|format(reg.valor) }}</span>
       {% endif %}
     {% elif reg.valor is not none %}
       {{ '%.0f'|format(reg.valor) }} km
@@ -70,13 +69,13 @@
   </td>
   <td data-sort-value="{{ reg.estado }}">
     {% if reg.estado == 'mismatch_driver' %}
-      <span class="badge badge-danger">Conductor distinto</span>
+      <span class="badge badge-danger">{{ _('Conductor distinto') }}</span>
     {% elif reg.estado == 'sin_km' %}
-      <span class="badge badge-warning">Sin kilómetros</span>
+      <span class="badge badge-warning">{{ _('Sin kilómetros') }}</span>
     {% elif reg.estado == 'sin_planificar' %}
-      <span class="badge badge-info">Sin planificar</span>
+      <span class="badge badge-info">{{ _('Sin planificar') }}</span>
     {% else %}
-      <span class="badge badge-success">OK</span>
+      <span class="badge badge-success">{{ _('OK') }}</span>
     {% endif %}
   </td>
   <td class="text-center">
@@ -97,7 +96,7 @@
         {{ audit_sort_th(3, 'Conductor Odoo', '18%') }}
         {{ audit_sort_th(4, 'Km', '10%', 'right', 'num') }}
         {{ audit_sort_th(5, 'Estado', '14%') }}
-        <th style="width: 13%; text-align: center;">Acción</th>
+        <th style="width: 13%; text-align: center;">{{ _('Acción') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -108,7 +107,7 @@
   </table>
 </div>
 {% else %}
-<div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin registros en esta categoría</div>
+<div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i>{{ _('Sin registros en esta categoría') }}</div>
 {% endif %}
 {% endmacro %}
 
@@ -117,9 +116,9 @@
   <div class="auditoria-section-header card-header {% if not rows %}collapsed{% endif %}" data-target="#{{ collapse_id }}" role="button" aria-expanded="{{ 'true' if rows else 'false' }}">
     <h6 class="auditoria-section-title {{ title_class }} mb-0">
       <span class="section-icon-wrap {{ icon_mod }}"><i class="fas {{ icon }}"></i></span>
-      {{ title }}
+      {{ _(title) }}
       <span class="badge-count {{ badge_class }}">{{ rows|length }}</span>
-      {% if rows_visto %}<span class="badge-count text-muted" title="Vistos en histórico">+{{ rows_visto|length }} hist.</span>{% endif %}
+      {% if rows_visto %}<span class="badge-count text-muted" title="{{ _('Vistos en histórico') }}">+{{ rows_visto|length }} {{ _('hist.') }}</span>{% endif %}
     </h6>
     <i class="fas fa-chevron-down text-muted chevron-icon"></i>
   </div>
@@ -128,7 +127,7 @@
     {{ historico_toggle(collapse_id, rows_visto|length) }}
     {% if rows_visto %}
     <div id="{{ collapse_id }}Historico" class="collapse anomalia-historico">
-      <div class="px-3 pt-2 text-muted small">Histórico — {{ kind_label }} marcados como vistos</div>
+      <div class="px-3 pt-2 text-muted small">{{ _('Histórico — {kind} marcados como vistos', kind=_(kind_label)) }}</div>
       {{ tabla_odometros(collapse_id ~ 'HistTable', rows_visto, true) }}
     </div>
     {% endif %}
@@ -152,21 +151,19 @@
     <form method="GET" id="formAuditoriaVehiculos">
       <div class="page-toolbar">
         <div class="page-toolbar-left">
-          <h1 class="page-toolbar-title">Auditoría de vehículos</h1>
-          <span class="page-toolbar-count">Plan vs viajes Odoo (tms.shipment)</span>
+          <h1 class="page-toolbar-title">{{ _('Auditoría de vehículos') }}</h1>
+          <span class="page-toolbar-count">{{ _('Plan vs viajes Odoo (tms.shipment)') }}</span>
         </div>
         <div class="page-toolbar-actions" style="align-items:center; flex-wrap:wrap;">
-          <label class="mb-0 text-muted small" for="fechaDesde" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Desde</label>
+          <label class="mb-0 text-muted small" for="fechaDesde" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">{{ _('Desde') }}</label>
           <input type="date" id="fechaDesde" name="fecha_desde" class="form-control form-control-sm" value="{{ fecha_desde_default }}" style="width:auto;min-width:9.5rem;">
-          <label class="mb-0 text-muted small" for="fechaHasta" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Hasta</label>
+          <label class="mb-0 text-muted small" for="fechaHasta" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">{{ _('Hasta') }}</label>
           <input type="date" id="fechaHasta" name="fecha_hasta" class="form-control form-control-sm" value="{{ fecha_hasta_default }}" style="width:auto;min-width:9.5rem;">
           {% if current_user.role == 'admin' %}
           <button type="button" onclick="forzarSyncVehiculos(false)" class="btn-admin btn-admin-primary">
-            <i class="fas fa-sync-alt"></i> Sincronizar
-          </button>
-          <button type="button" onclick="forzarSyncVehiculos(true)" class="btn-admin btn-admin-ghost" title="Borra todo el histórico local de uso y regenera desde viajes">
-            <i class="fas fa-broom"></i> Limpiar y resync
-          </button>
+            <i class="fas fa-sync-alt"></i>{{ _('Sincronizar') }}</button>
+          <button type="button" onclick="forzarSyncVehiculos(true)" class="btn-admin btn-admin-ghost" title="{{ _('Borra todo el histórico local de uso y regenera desde viajes') }}">
+            <i class="fas fa-broom"></i>{{ _('Limpiar y resync') }}</button>
           <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-arrow-left"></i> {{ _('Sincronización Odoo') }}
           </a>
@@ -177,43 +174,42 @@
       <div class="admin-panel admin-panel-flush admin-panel--no-header mb-0" style="flex-shrink:0;">
         <div class="admin-filter-bar" style="border:1px solid var(--color-border-strong); border-radius:10px; overflow:hidden;">
           <div class="admin-filter-group">
-            <label for="filtroEstado">Estado</label>
+            <label for="filtroEstado">{{ _('Estado') }}</label>
             <select id="filtroEstado" name="estado" class="form-control custom-select">
-              <option value="all" {% if filtros.estado == 'all' %}selected{% endif %}>Todos</option>
+              <option value="all" {% if filtros.estado == 'all' %}selected{% endif %}>{{ _('Todos') }}</option>
               <option value="salto_km" {% if filtros.estado == 'salto_km' %}selected{% endif %}>{{ _('Saltos de odómetro') }}</option>
               <option value="desvio" {% if filtros.estado == 'desvio' %}selected{% endif %}>{{ _('Desvío km previsto') }}</option>
-              <option value="en_ausencia" {% if filtros.estado == 'en_ausencia' %}selected{% endif %}>Vehículo en ausencia</option>
-              <option value="vehiculo_distinto" {% if filtros.estado == 'vehiculo_distinto' %}selected{% endif %}>Vehículo distinto al plan</option>
-              <option value="mismatch_driver" {% if filtros.estado == 'mismatch_driver' %}selected{% endif %}>Conductor distinto</option>
-              <option value="sin_km" {% if filtros.estado == 'sin_km' %}selected{% endif %}>Sin kilómetros</option>
-              <option value="sin_planificar" {% if filtros.estado == 'sin_planificar' %}selected{% endif %}>Sin planificar</option>
-              <option value="ok" {% if filtros.estado == 'ok' %}selected{% endif %}>Solo OK</option>
+              <option value="en_ausencia" {% if filtros.estado == 'en_ausencia' %}selected{% endif %}>{{ _('Vehículo en ausencia') }}</option>
+              <option value="vehiculo_distinto" {% if filtros.estado == 'vehiculo_distinto' %}selected{% endif %}>{{ _('Vehículo distinto al plan') }}</option>
+              <option value="mismatch_driver" {% if filtros.estado == 'mismatch_driver' %}selected{% endif %}>{{ _('Conductor distinto') }}</option>
+              <option value="sin_km" {% if filtros.estado == 'sin_km' %}selected{% endif %}>{{ _('Sin kilómetros') }}</option>
+              <option value="sin_planificar" {% if filtros.estado == 'sin_planificar' %}selected{% endif %}>{{ _('Sin planificar') }}</option>
+              <option value="ok" {% if filtros.estado == 'ok' %}selected{% endif %}>{{ _('Solo OK') }}</option>
             </select>
           </div>
           <div class="admin-filter-group">
-            <label for="filtroOrden">Orden</label>
+            <label for="filtroOrden">{{ _('Orden') }}</label>
             <select id="filtroOrden" name="orden" class="form-control custom-select">
-              <option value="fecha_desc" {% if filtros.orden == 'fecha_desc' %}selected{% endif %}>Fecha desc</option>
-              <option value="fecha_asc" {% if filtros.orden == 'fecha_asc' %}selected{% endif %}>Fecha asc</option>
-              <option value="vehiculo_asc" {% if filtros.orden == 'vehiculo_asc' %}selected{% endif %}>Vehículo A-Z</option>
-              <option value="vehiculo_desc" {% if filtros.orden == 'vehiculo_desc' %}selected{% endif %}>Vehículo Z-A</option>
-              <option value="km_desc" {% if filtros.orden == 'km_desc' %}selected{% endif %}>Km desc</option>
-              <option value="km_asc" {% if filtros.orden == 'km_asc' %}selected{% endif %}>Km asc</option>
-              <option value="estado_asc" {% if filtros.orden == 'estado_asc' %}selected{% endif %}>Estado A-Z</option>
-              <option value="estado_desc" {% if filtros.orden == 'estado_desc' %}selected{% endif %}>Estado Z-A</option>
+              <option value="fecha_desc" {% if filtros.orden == 'fecha_desc' %}selected{% endif %}>{{ _('Fecha desc') }}</option>
+              <option value="fecha_asc" {% if filtros.orden == 'fecha_asc' %}selected{% endif %}>{{ _('Fecha asc') }}</option>
+              <option value="vehiculo_asc" {% if filtros.orden == 'vehiculo_asc' %}selected{% endif %}>{{ _('Vehículo A-Z') }}</option>
+              <option value="vehiculo_desc" {% if filtros.orden == 'vehiculo_desc' %}selected{% endif %}>{{ _('Vehículo Z-A') }}</option>
+              <option value="km_desc" {% if filtros.orden == 'km_desc' %}selected{% endif %}>{{ _('Km desc') }}</option>
+              <option value="km_asc" {% if filtros.orden == 'km_asc' %}selected{% endif %}>{{ _('Km asc') }}</option>
+              <option value="estado_asc" {% if filtros.orden == 'estado_asc' %}selected{% endif %}>{{ _('Estado A-Z') }}</option>
+              <option value="estado_desc" {% if filtros.orden == 'estado_desc' %}selected{% endif %}>{{ _('Estado Z-A') }}</option>
             </select>
           </div>
           <div class="admin-filter-group" style="flex:1 1 160px; min-width:140px;">
-            <label for="filtroQ">Buscar</label>
-            <input type="text" id="filtroQ" name="q" class="form-control" value="{{ filtros.q }}" placeholder="Vehículo, conductor…" style="min-width:12rem; width:100%;">
+            <label for="filtroQ">{{ _('Buscar') }}</label>
+            <input type="text" id="filtroQ" name="q" class="form-control" value="{{ filtros.q }}" placeholder="{{ _('Vehículo, conductor…') }}" style="min-width:12rem; width:100%;">
           </div>
           <div class="admin-filter-group" style="margin-left:auto; gap:0.4rem;">
             <button type="submit" class="btn-admin btn-admin-primary">
-              <i class="fas fa-filter"></i> Filtrar
-            </button>
-            <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">Limpiar</a>
-            <span class="page-toolbar-count" title="Registros en el rango filtrado">
-              {{ total_pendientes }} pend. · {{ total_filtrado }} reg. · {{ total_ok }} OK
+              <i class="fas fa-filter"></i>{{ _('Filtrar') }}</button>
+            <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">{{ _('Limpiar') }}</a>
+            <span class="page-toolbar-count" title="{{ _('Registros en el rango filtrado') }}">
+              {{ total_pendientes }} {{ _('pend.') }} · {{ total_filtrado }} {{ _('reg.') }} · {{ total_ok }} {{ _('OK') }}
             </span>
           </div>
         </div>
@@ -227,33 +223,33 @@
       <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseDesvios" title="{{ _('Desvío vs km previsto del viaje') }}">
         <i class="fas fa-percentage"></i> {{ desvios|length }} {{ _('desvío') }}
       </span>
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseEnAusencia" title="Vehículo planificado o reportado en día de ausencia aprobada">
-        <i class="fas fa-umbrella-beach"></i> {{ vehiculo_en_ausencia|length }} en ausencia
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseEnAusencia" title="{{ _('Vehículo planificado o reportado en día de ausencia aprobada') }}">
+        <i class="fas fa-umbrella-beach"></i> {{ vehiculo_en_ausencia|length }} {{ _('en ausencia') }}
       </span>
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseVehiculoDistinto" title="Planificado en un vehículo, reporta en otro">
-        <i class="fas fa-exchange-alt"></i> {{ vehiculo_distinto|length }} vehículo distinto
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseVehiculoDistinto" title="{{ _('Planificado en un vehículo, reporta en otro') }}">
+        <i class="fas fa-exchange-alt"></i> {{ vehiculo_distinto|length }} {{ _('vehículo distinto') }}
       </span>
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseMismatch" title="Conductor distinto">
-        <i class="fas fa-user-slash"></i> {{ mismatch|length }} conductor distinto
+      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseMismatch" title="{{ _('Conductor distinto') }}">
+        <i class="fas fa-user-slash"></i> {{ mismatch|length }} {{ _('conductor distinto') }}
       </span>
-      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSinKm" title="Sin kilómetros">
-        <i class="fas fa-tachometer-alt"></i> {{ sin_km|length }} sin km
+      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSinKm" title="{{ _('Sin kilómetros') }}">
+        <i class="fas fa-tachometer-alt"></i> {{ sin_km|length }} {{ _('sin km') }}
       </span>
-      <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSinPlan" title="Sin planificar">
-        <i class="fas fa-route"></i> {{ sin_planificar|length }} sin planificar
+      <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseSinPlan" title="{{ _('Sin planificar') }}">
+        <i class="fas fa-route"></i> {{ sin_planificar|length }} {{ _('sin planificar') }}
       </span>
-      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseOk" title="Histórico OK">
-        <i class="fas fa-check"></i> {{ historial_ok|length }} OK recientes
+      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseOk" title="{{ _('Histórico OK') }}">
+        <i class="fas fa-check"></i> {{ historial_ok|length }} {{ _('OK recientes') }}
       </span>
     </div>
     {% if umbrales_salto %}
     <p class="text-muted small mb-2" style="margin-top:-0.25rem;">
-      Umbrales: ≥ <strong>{{ umbrales_salto.km_dia }}</strong> km/día
-      · odómetro hacia atrás siempre
-      · desvío +≥ <strong>{{ umbrales_desvio.max_pct if umbrales_desvio else umbral_desvio }}</strong>%
+      {{ _('Umbrales:') }} ≥ <strong>{{ umbrales_salto.km_dia }}</strong> {{ _('km/día') }}
+      · {{ _('odómetro hacia atrás siempre') }}
+      · {{ _('desvío') }} +≥ <strong>{{ umbrales_desvio.max_pct if umbrales_desvio else umbral_desvio }}</strong>%
       / −≥ <strong>{{ umbrales_desvio.min_pct if umbrales_desvio else umbral_desvio }}</strong>%
       {% if current_user.role == 'admin' %}
-        · <a href="{{ url_for('admin.configuracion_global') }}">Configurar</a>
+        · <a href="{{ url_for('admin.configuracion_global') }}">{{ _('Configurar') }}</a>
       {% endif %}
     </p>
     {% endif %}
@@ -266,7 +262,7 @@
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-bolt"></i></span>
             {{ _('Saltos de odómetro') }}
             <span class="badge-count badge-count-danger">{{ saltos|length }}</span>
-            {% if saltos_visto %}<span class="badge-count text-muted" title="Vistos">+{{ saltos_visto|length }} hist.</span>{% endif %}
+            {% if saltos_visto %}<span class="badge-count text-muted" title="{{ _('Vistos') }}">+{{ saltos_visto|length }} {{ _('hist.') }}</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -283,7 +279,7 @@
                   {{ audit_sort_th(4, 'km/día', '9%', 'right', 'num') }}
                   {{ audit_sort_th(5, 'Conductor Odoo', '15%') }}
                   {{ audit_sort_th(6, 'Motivo', '16%') }}
-                  <th style="width: 13%; text-align: center;">Acción</th>
+                  <th style="width: 13%; text-align: center;">{{ _('Acción') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -291,7 +287,7 @@
                 <tr class="audit-data-row">
                   <td class="font-weight-bold" data-sort-value="{{ j.fecha_actual.strftime('%Y%m%d') }}">
                     {{ j.fecha_actual.strftime('%d/%m/%Y') }}
-                    <span class="d-block text-muted small">desde {{ j.fecha_anterior.strftime('%d/%m/%Y') }} ({{ j.delta_dias }}d)</span>
+                    <span class="d-block text-muted small">{{ _('desde') }} {{ j.fecha_anterior.strftime('%d/%m/%Y') }} ({{ j.delta_dias }}d)</span>
                   </td>
                   <td data-sort-value="{{ (j.vehiculo.matricula or j.vehiculo.nombre if j.vehiculo else '')|lower }}">
                     {% if j.vehiculo %}
@@ -312,9 +308,9 @@
                   <td>
                     {% for m in j.motivos %}
                       {% if m == 'odometro_atras' %}
-                        <span class="badge badge-danger">Odómetro atrás</span>
+                        <span class="badge badge-danger">{{ _('Odómetro atrás') }}</span>
                       {% elif m == 'km_dia' %}
-                        <span class="badge badge-danger">Km/día alto</span>
+                        <span class="badge badge-danger">{{ _('Km/día alto') }}</span>
                       {% else %}
                         <span class="badge badge-secondary">{{ m }}</span>
                       {% endif %}
@@ -327,7 +323,7 @@
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin saltos anómalos pendientes</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i>{{ _('Sin saltos anómalos pendientes') }}</div>
           {% endif %}
           {{ historico_toggle('collapseSaltos', saltos_visto|length) }}
           {% if saltos_visto %}
@@ -336,11 +332,11 @@
               <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
                 <thead>
                   <tr>
-                    <th style="width:12%;">Lectura</th>
-                    <th style="width:18%;">Vehículo</th>
-                    <th style="width:18%;">Δ km</th>
-                    <th style="width:20%;">Motivo</th>
-                    <th style="width:14%; text-align:center;">Acción</th>
+                    <th style="width:12%;">{{ _('Lectura') }}</th>
+                    <th style="width:18%;">{{ _('Vehículo') }}</th>
+                    <th style="width:18%;">{{ _('Δ km') }}</th>
+                    <th style="width:20%;">{{ _('Motivo') }}</th>
+                    <th style="width:14%; text-align:center;">{{ _('Acción') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,7 +363,7 @@
             <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-percentage"></i></span>
             {{ _('Desvío vs km previsto') }}
             <span class="badge-count badge-count-danger">{{ desvios|length }}</span>
-            {% if desvios_visto %}<span class="badge-count text-muted">+{{ desvios_visto|length }} hist.</span>{% endif %}
+            {% if desvios_visto %}<span class="badge-count text-muted">+{{ desvios_visto|length }} {{ _('hist.') }}</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -385,7 +381,7 @@
                   {{ audit_sort_th(5, 'Desvío %', '9%', 'right', 'num') }}
                   {{ audit_sort_th(6, 'Conductor', '14%') }}
                   {{ audit_sort_th(7, 'Planificado', '12%') }}
-                  <th style="width: 12%; text-align: center;">Acción</th>
+                  <th style="width: 12%; text-align: center;">{{ _('Acción') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -410,9 +406,9 @@
                   <td class="text-right font-weight-bold text-danger" data-sort-value="{{ a.desvio }}">
                     {% if a.desvio >= 0 %}+{% endif %}{{ '%.1f'|format(a.desvio) }}%
                     {% if a.lado == 'por_encima' %}
-                      <span class="d-block text-muted small">de más</span>
+                      <span class="d-block text-muted small">{{ _('de más') }}</span>
                     {% elif a.lado == 'por_debajo' %}
-                      <span class="d-block text-muted small">de menos</span>
+                      <span class="d-block text-muted small">{{ _('de menos') }}</span>
                     {% endif %}
                   </td>
                   <td>{{ a.conductor_odoo or '—' }}</td>
@@ -430,7 +426,7 @@
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin desvíos altos pendientes</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i>{{ _('Sin desvíos altos pendientes') }}</div>
           {% endif %}
           {{ historico_toggle('collapseDesvios', desvios_visto|length) }}
           {% if desvios_visto %}
@@ -439,11 +435,11 @@
               <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
                 <thead>
                   <tr>
-                    <th style="width:12%;">Fecha</th>
-                    <th style="width:20%;">Vehículo</th>
-                    <th style="width:14%;">Viaje</th>
-                    <th style="width:14%;">Desvío</th>
-                    <th style="width:14%; text-align:center;">Acción</th>
+                    <th style="width:12%;">{{ _('Fecha') }}</th>
+                    <th style="width:20%;">{{ _('Vehículo') }}</th>
+                    <th style="width:14%;">{{ _('Viaje') }}</th>
+                    <th style="width:14%;">{{ _('Desvío') }}</th>
+                    <th style="width:14%; text-align:center;">{{ _('Acción') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -467,10 +463,8 @@
       <div class="auditoria-section card-modern card" style="overflow: hidden;">
         <div class="auditoria-section-header card-header {% if not vehiculo_en_ausencia %}collapsed{% endif %}" data-target="#collapseEnAusencia" role="button" aria-expanded="{{ 'true' if vehiculo_en_ausencia else 'false' }}">
           <h6 class="auditoria-section-title text-danger mb-0">
-            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-umbrella-beach"></i></span>
-            Vehículo en día de ausencia
-            <span class="badge-count badge-count-danger">{{ vehiculo_en_ausencia|length }}</span>
-            {% if vehiculo_en_ausencia_visto %}<span class="badge-count text-muted">+{{ vehiculo_en_ausencia_visto|length }} hist.</span>{% endif %}
+            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-umbrella-beach"></i></span>{{ _('Vehículo en día de ausencia') }}<span class="badge-count badge-count-danger">{{ vehiculo_en_ausencia|length }}</span>
+            {% if vehiculo_en_ausencia_visto %}<span class="badge-count text-muted">+{{ vehiculo_en_ausencia_visto|length }} {{ _('hist.') }}</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -487,7 +481,7 @@
                   {{ audit_sort_th(4, 'Origen', '11%') }}
                   {{ audit_sort_th(5, 'Km', '9%', 'right', 'num') }}
                   {{ audit_sort_th(6, 'Conductor Odoo', '10%') }}
-                  <th style="width: 12%; text-align: center;">Acción</th>
+                  <th style="width: 12%; text-align: center;">{{ _('Acción') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -514,11 +508,11 @@
                   </td>
                   <td>
                     {% if a.fuente == 'ambos' %}
-                      <span class="badge badge-danger">Plan + Odoo</span>
+                      <span class="badge badge-danger">{{ _('Plan + Odoo') }}</span>
                     {% elif a.fuente == 'planificado' %}
-                      <span class="badge badge-warning">Planificado</span>
+                      <span class="badge badge-warning">{{ _('Planificado') }}</span>
                     {% else %}
-                      <span class="badge badge-secondary">Reportado Odoo</span>
+                      <span class="badge badge-secondary">{{ _('Reportado Odoo') }}</span>
                     {% endif %}
                   </td>
                   <td class="text-right" data-sort-value="{{ a.km if a.km is not none else '' }}">
@@ -532,7 +526,7 @@
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin vehículos en días de ausencia pendientes</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i>{{ _('Sin vehículos en días de ausencia pendientes') }}</div>
           {% endif %}
           {{ historico_toggle('collapseEnAusencia', vehiculo_en_ausencia_visto|length) }}
           {% if vehiculo_en_ausencia_visto %}
@@ -541,11 +535,11 @@
               <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
                 <thead>
                   <tr>
-                    <th style="width:12%;">Fecha</th>
-                    <th style="width:22%;">Operario</th>
-                    <th style="width:22%;">Vehículo</th>
-                    <th style="width:18%;">Ausencia</th>
-                    <th style="width:14%; text-align:center;">Acción</th>
+                    <th style="width:12%;">{{ _('Fecha') }}</th>
+                    <th style="width:22%;">{{ _('Operario') }}</th>
+                    <th style="width:22%;">{{ _('Vehículo') }}</th>
+                    <th style="width:18%;">{{ _('Ausencia') }}</th>
+                    <th style="width:14%; text-align:center;">{{ _('Acción') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -569,10 +563,8 @@
       <div class="auditoria-section card-modern card" style="overflow: hidden;">
         <div class="auditoria-section-header card-header {% if not vehiculo_distinto %}collapsed{% endif %}" data-target="#collapseVehiculoDistinto" role="button" aria-expanded="{{ 'true' if vehiculo_distinto else 'false' }}">
           <h6 class="auditoria-section-title text-danger mb-0">
-            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-exchange-alt"></i></span>
-            Vehículo distinto al planificado
-            <span class="badge-count badge-count-danger">{{ vehiculo_distinto|length }}</span>
-            {% if vehiculo_distinto_visto %}<span class="badge-count text-muted">+{{ vehiculo_distinto_visto|length }} hist.</span>{% endif %}
+            <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-exchange-alt"></i></span>{{ _('Vehículo distinto al planificado') }}<span class="badge-count badge-count-danger">{{ vehiculo_distinto|length }}</span>
+            {% if vehiculo_distinto_visto %}<span class="badge-count text-muted">+{{ vehiculo_distinto_visto|length }} {{ _('hist.') }}</span>{% endif %}
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -588,7 +580,7 @@
                   {{ audit_sort_th(3, 'Reportado Odoo', '20%') }}
                   {{ audit_sort_th(4, 'Km', '9%', 'right', 'num') }}
                   {{ audit_sort_th(5, 'Conductor Odoo', '10%') }}
-                  <th style="width: 12%; text-align: center;">Acción</th>
+                  <th style="width: 12%; text-align: center;">{{ _('Acción') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -625,7 +617,7 @@
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin cruces de vehículo pendientes</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i>{{ _('Sin cruces de vehículo pendientes') }}</div>
           {% endif %}
           {{ historico_toggle('collapseVehiculoDistinto', vehiculo_distinto_visto|length) }}
           {% if vehiculo_distinto_visto %}
@@ -634,11 +626,11 @@
               <table class="table table-audit mb-0" style="table-layout: fixed; width: 100%;">
                 <thead>
                   <tr>
-                    <th style="width:12%;">Fecha</th>
-                    <th style="width:22%;">Operario</th>
-                    <th style="width:22%;">Planificado</th>
-                    <th style="width:22%;">Reportado</th>
-                    <th style="width:14%; text-align:center;">Acción</th>
+                    <th style="width:12%;">{{ _('Fecha') }}</th>
+                    <th style="width:22%;">{{ _('Operario') }}</th>
+                    <th style="width:22%;">{{ _('Planificado') }}</th>
+                    <th style="width:22%;">{{ _('Reportado') }}</th>
+                    <th style="width:14%; text-align:center;">{{ _('Acción') }}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -666,9 +658,7 @@
       <div class="auditoria-section card-modern card" style="overflow: hidden;">
         <div class="auditoria-section-header card-header collapsed" data-target="#collapseOk" role="button" aria-expanded="false">
           <h6 class="auditoria-section-title text-muted mb-0">
-            <span class="section-icon-wrap"><i class="fas fa-archive"></i></span>
-            Histórico / OK recientes
-            <span class="badge-count">{{ historial_ok|length }}</span>
+            <span class="section-icon-wrap"><i class="fas fa-archive"></i></span>{{ _('Histórico / OK recientes') }}<span class="badge-count">{{ historial_ok|length }}</span>
           </h6>
           <i class="fas fa-chevron-down text-muted chevron-icon"></i>
         </div>
@@ -709,14 +699,14 @@
                     {% elif reg.valor is not none %}{{ '%.0f'|format(reg.valor) }} km
                     {% else %}—{% endif %}
                   </td>
-                  <td><span class="badge badge-success">OK</span></td>
+                  <td><span class="badge badge-success">{{ _('OK') }}</span></td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
           {% else %}
-          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> Sin registros en esta categoría</div>
+          <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i>{{ _('Sin registros en esta categoría') }}</div>
           {% endif %}
         </div>
       </div>
@@ -767,8 +757,8 @@ document.querySelectorAll('.btn-toggle-historico').forEach(function(btn) {
     btn.setAttribute('aria-expanded', open ? 'false' : 'true');
     var n = (btn.textContent.match(/\((\d+)\)/) || [])[1] || '';
     btn.innerHTML = open
-      ? '<i class="fas fa-history"></i> Ver histórico' + (n ? ' (' + n + ')' : '')
-      : '<i class="fas fa-history"></i> Ocultar histórico' + (n ? ' (' + n + ')' : '');
+      ? '<i class="fas fa-history"></i> ' + {{ _('Ver histórico')|tojson }} + (n ? ' (' + n + ')' : '')
+      : '<i class="fas fa-history"></i> ' + {{ _('Ocultar histórico')|tojson }} + (n ? ' (' + n + ')' : '');
   });
 });
 
@@ -808,12 +798,12 @@ document.addEventListener('click', function(e) {
       }
     } else {
       btn.disabled = false;
-      Swal.fire('Error', res.error || 'No se pudo marcar como visto', 'error');
+      Swal.fire({{ _('Error')|tojson }}, res.error || {{ _('No se pudo marcar como visto')|tojson }}, 'error');
     }
   })
   .catch(function(err) {
     btn.disabled = false;
-    Swal.fire('Error', String(err), 'error');
+    Swal.fire({{ _('Error')|tojson }}, String(err), 'error');
   });
 });
 
@@ -821,23 +811,23 @@ function forzarSyncVehiculos(limpiarTodo) {
   var desde = document.getElementById('fechaDesde').value;
   var hasta = document.getElementById('fechaHasta').value;
   if (!desde || !hasta) {
-    Swal.fire('Fechas', 'Indica desde y hasta.', 'warning');
+    Swal.fire({{ _('Fechas')|tojson }}, {{ _('Indica desde y hasta.')|tojson }}, 'warning');
     return;
   }
-  var titulo = limpiarTodo ? '¿Limpiar histórico y resincronizar?' : '¿Sincronizar vehículos?';
+  var titulo = limpiarTodo ? {{ _('¿Limpiar histórico y resincronizar?')|tojson }} : {{ _('¿Sincronizar vehículos?')|tojson }};
   var texto = limpiarTodo
-    ? 'Borra TODO el uso diario local (basura del odómetro) y regenera desde viajes tms.shipment del ' + desde + ' al ' + hasta + '.'
-    : 'Borra el uso del rango y lo regenera solo desde viajes tms.shipment (' + desde + ' → ' + hasta + ').';
+    ? {{ _('Borra TODO el uso diario local (basura del odómetro) y regenera desde viajes tms.shipment del {desde} al {hasta}.')|tojson }}.replace('{desde}', desde).replace('{hasta}', hasta)
+    : {{ _('Borra el uso del rango y lo regenera solo desde viajes tms.shipment ({desde} → {hasta}).')|tojson }}.replace('{desde}', desde).replace('{hasta}', hasta);
   Swal.fire({
     title: titulo,
     text: texto,
     icon: limpiarTodo ? 'warning' : 'question',
     showCancelButton: true,
-    confirmButtonText: limpiarTodo ? 'Limpiar y sincronizar' : 'Sincronizar',
-    cancelButtonText: 'Cancelar'
+    confirmButtonText: limpiarTodo ? {{ _('Limpiar y sincronizar')|tojson }} : {{ _('Sincronizar')|tojson }},
+    cancelButtonText: {{ _('Cancelar')|tojson }}
   }).then(function(result) {
     if (!result.isConfirmed) return;
-    Swal.fire({ title: 'Sincronizando…', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
+    Swal.fire({ title: {{ _('Sincronizando…')|tojson }}, allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
     fetch('{{ url_for("sync.sync_vehiculos_manual") }}', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -853,28 +843,28 @@ function forzarSyncVehiculos(limpiarTodo) {
         var odo = res.odometros || {};
         var est = odo.estados || {};
         var msg =
-          'Rango sync: ' + (odo.desde || '?') + ' → ' + (odo.hasta || '?') + '\n' +
-          'Viajes Odoo: ' + (odo.viajes || 0) +
-          ' · Aplicados: ' + (odo.viajes_aplicados || 0) +
-          ' · Días únicos: ' + (odo.dias_unicos || 0) +
+          {{ _('Rango sync:')|tojson }} + ' ' + (odo.desde || '?') + ' → ' + (odo.hasta || '?') + '\n' +
+          {{ _('Viajes Odoo:')|tojson }} + ' ' + (odo.viajes || 0) +
+          ' · ' + {{ _('Aplicados:')|tojson }} + ' ' + (odo.viajes_aplicados || 0) +
+          ' · ' + {{ _('Días únicos:')|tojson }} + ' ' + (odo.dias_unicos || 0) +
           ' (' + (odo.min_dia || '?') + ' → ' + (odo.max_dia || '?') + ')\n' +
-          'Registros día: ' + (odo.upserts || 0) +
-          ' · Sin planificar: ' + (est.sin_planificar || 0) +
-          ' · Vehículos nuevos: ' + (odo.vehiculos_auto_creados || 0);
-        if (odo.borrados) msg += '\nBorrados: ' + odo.borrados;
-        if (res.purgados_totales) msg += ' · Purgados totales: ' + res.purgados_totales;
+          {{ _('Registros día:')|tojson }} + ' ' + (odo.upserts || 0) +
+          ' · ' + {{ _('Sin planificar:')|tojson }} + ' ' + (est.sin_planificar || 0) +
+          ' · ' + {{ _('Vehículos nuevos:')|tojson }} + ' ' + (odo.vehiculos_auto_creados || 0);
+        if (odo.borrados) msg += '\n' + {{ _('Borrados:')|tojson }} + ' ' + odo.borrados;
+        if (res.purgados_totales) msg += ' · ' + {{ _('Purgados totales:')|tojson }} + ' ' + res.purgados_totales;
         if ((odo.dias_unicos || 0) < 10 && (odo.viajes || 0) > 100) {
-          msg += '\n\n⚠ Las fechas de los viajes en Odoo salen casi todas el mismo día. Revisa SyncLog.';
+          msg += '\n\n⚠ ' + {{ _('Las fechas de los viajes en Odoo salen casi todas el mismo día. Revisa SyncLog.')|tojson }};
         }
-        Swal.fire({ title: 'Listo', html: '<pre style="text-align:left;white-space:pre-wrap;font-size:13px;">' + msg + '</pre>', icon: 'success' }).then(function() {
+        Swal.fire({ title: {{ _('Listo')|tojson }}, html: '<pre style="text-align:left;white-space:pre-wrap;font-size:13px;">' + msg + '</pre>', icon: 'success' }).then(function() {
           location.reload();
         });
       } else {
-        Swal.fire('Error', res.error || 'Falló la sync', 'error');
+        Swal.fire({{ _('Error')|tojson }}, res.error || {{ _('Falló la sync')|tojson }}, 'error');
       }
     })
     .catch(function(e) {
-      Swal.fire('Error', String(e), 'error');
+      Swal.fire({{ _('Error')|tojson }}, String(e), 'error');
     });
   });
 }

@@ -17,6 +17,7 @@ from app.services.external_auth_service import (
 )
 from app.services.soltec_sso_service import SoltecSsoError, verify_soltec_sso_token
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
+from app.services.i18n_service import translate
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -94,12 +95,11 @@ def _redirect_authenticated_user():
     if destino:
         return redirect(destino)
     logout_user()
-    flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
+    flash(translate('Tu perfil no tiene acceso a la aplicación.'), 'warning')
     return redirect(url_for('auth.login'))
 
 
 def _complete_login(user, remember, *, source, success_message=None):
-    from app.services.i18n_service import translate
     from app.utils import register_log
 
     user.auth_source_last = source
@@ -147,7 +147,7 @@ def verificar_email():
     )
 
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de tu empresa.', 'warning')
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
         return redirect(url_for('main.dashboard'))
 
     token = request.args.get('t') or ''
@@ -168,7 +168,7 @@ def verificar_email():
     )
     user = User.query.get(user.id)
     if user is None:
-        flash('No se ha podido abrir la sesión. Entra con tu correo y contraseña.', 'warning')
+        flash(translate('No se ha podido abrir la sesión. Entra con tu correo y contraseña.'), 'warning')
         return redirect(url_for('auth.login'))
 
     login_user(user, remember=True)
@@ -191,7 +191,7 @@ def verificar_email():
         except Exception:
             pass
 
-    flash('Correo verificado. Bienvenido a SignaPlan.', 'success')
+    flash(translate('Correo verificado. Bienvenido a SignaPlan.'), 'success')
     try:
         destino = _destino_por_rol(user)
     except Exception:
@@ -218,10 +218,8 @@ def reenviar_verificacion():
         EmailVerificationError,
         reenviar_verificacion as _reenviar,
     )
-    from app.services.i18n_service import translate
-
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de tu empresa.', 'warning')
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
         return redirect(url_for('main.dashboard'))
 
     try:
@@ -246,8 +244,6 @@ def reenviar_verificacion():
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit('10 per minute; 50 per hour', methods=['POST'])
 def login():
-    from app.services.i18n_service import translate
-
     if current_user.is_authenticated:
         return _redirect_authenticated_user()
 
@@ -257,7 +253,7 @@ def login():
             return redirect(url_for('marketing.entrar'))
         if host == 'localhost':
             return redirect(url_for('superadmin.dashboard'))
-        flash('Por favor, accede desde la URL específica de tu empresa.', 'warning')
+        flash(translate('Por favor, accede desde la URL específica de tu empresa.'), 'warning')
         return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
@@ -384,11 +380,10 @@ def login():
 @auth_bp.route('/sso/soltec', methods=['GET'])
 @limiter.limit('20 per minute; 100 per hour')
 def sso_soltec():
-    from app.services.i18n_service import translate
     from app.utils import register_log
 
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de tu empresa.', 'warning')
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
         return redirect(url_for('main.dashboard'))
 
     token = request.args.get('t') or request.args.get('token') or ''
@@ -462,7 +457,6 @@ def logout():
     logout_user()
     session.pop('email_pending_verification', None)
     session.pop('superadmin_impersonation', None)
-    from app.services.i18n_service import translate
     flash(translate('Sesión cerrada'), 'info')
     return redirect(url_for('auth.login'))
 
@@ -472,7 +466,7 @@ def logout():
 def recuperar():
     """Pide el correo y, si existe, envía el enlace de restablecimiento."""
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de tu empresa para recuperar la contraseña.', 'info')
+        flash(translate('Accede desde la URL de tu empresa para recuperar la contraseña.'), 'info')
         return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
@@ -495,7 +489,9 @@ def recuperar():
             )
         # Mensaje único: no delata si el correo existe.
         flash(
-            'Si el correo está registrado, recibirás un enlace para restablecer la contraseña.',
+            translate(
+                'Si el correo está registrado, recibirás un enlace para restablecer la contraseña.'
+            ),
             'info',
         )
         return redirect(url_for('auth.login'))
@@ -510,7 +506,7 @@ def recuperar():
 @limiter.limit('10 per minute; 30 per hour', methods=['POST'])
 def recuperar_token(token):
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de tu empresa.', 'warning')
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
         return redirect(url_for('main.dashboard'))
 
     from app.services.password_reset_service import (
@@ -533,7 +529,7 @@ def recuperar_token(token):
                 request.form.get('password'),
                 request.form.get('password2'),
             )
-            flash('Contraseña actualizada. Ya puedes iniciar sesión.', 'success')
+            flash(translate('Contraseña actualizada. Ya puedes iniciar sesión.'), 'success')
             return redirect(url_for('auth.login'))
         except PasswordResetError as exc:
             flash(str(exc), 'danger')
@@ -559,7 +555,7 @@ def impersonate():
     from app.services.superadmin_ops_service import leer_token_impersonacion
 
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash('Accede desde la URL de la empresa.', 'warning')
+        flash(translate('Accede desde la URL de la empresa.'), 'warning')
         return redirect(url_for('main.dashboard'))
 
     token = request.args.get('t') or ''
@@ -571,7 +567,7 @@ def impersonate():
 
     user = User.query.filter_by(id=user_id, is_deleted=False).first()
     if user is None or not user.is_active:
-        flash('No se ha podido abrir la sesión de soporte.', 'danger')
+        flash(translate('No se ha podido abrir la sesión de soporte.'), 'danger')
         return redirect(url_for('auth.login'))
 
     if current_user.is_authenticated:
@@ -582,7 +578,10 @@ def impersonate():
     session['superadmin_impersonation'] = True
     session['email_pending_verification'] = False
     flash(
-        f'Has entrado como {user.name} {user.lastname} (soporte SignaPlan).',
+        translate(
+            'Has entrado como {name} (soporte SignaPlan).',
+            name=f'{user.name} {user.lastname}',
+        ),
         'warning',
     )
     destino = _destino_por_rol(user)

@@ -1,13 +1,13 @@
-{# Cabecera SEO/marketing compartida.
-   Params opcionales: page_title, meta_description, canonical_path, og_type, noindex
-   Canónica SIEMPRE en el origen público (apex), no en el Host de la petición.
-#}
+{# Cabecera SEO/marketing. Canónica e hreflang en el origen público (apex). #}
 {% set _title = page_title or ('SignaPlan — ' + _('hero.headline')) %}
 {% set _desc = meta_description or _('hero.sub') %}
-{% set _canon = canonical_url or marketing_url(canonical_path or request.path) %}
+{% set _path = canonical_path or request.path %}
+{% set _canon = canonical_url or marketing_url(marketing_path(_path, current_locale)) %}
 {% set _origin = marketing_origin() %}
 {% set _og_img = _origin + url_for('static', filename='img/brand/logo-horizontal.png') %}
 {% set _mark = url_for('static', filename='img/brand/favicon-192.png') %}
+{% set _og_loc = locale_meta.og if locale_meta is defined else 'es_ES' %}
+{% set _in_lang = locale_meta.bcp47 if locale_meta is defined else 'es-ES' %}
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ _title }}</title>
@@ -18,12 +18,18 @@
 <meta name="robots" content="index,follow,max-image-preview:large">
 {% endif %}
 <link rel="canonical" href="{{ _canon }}">
+{% for code, alt_path in hreflang_links(_path) %}
+<link rel="alternate" hreflang="{{ code }}" href="{{ marketing_url(alt_path) }}">
+{% endfor %}
 <link rel="icon" href="{{ url_for('static', filename='img/brand/favicon-48.png') }}?v=20260807f" type="image/png" sizes="48x48">
 <link rel="icon" href="{{ url_for('static', filename='img/brand/favicon-192.png') }}?v=20260807f" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/brand/apple-touch-icon.png') }}?v=20260807f">
 <meta property="og:type" content="{{ og_type|default('website') }}">
 <meta property="og:site_name" content="SignaPlan">
-<meta property="og:locale" content="{{ {'es':'es_ES','en':'en_US','pt':'pt_PT','fr':'fr_FR'}.get(current_locale|default('es'), 'es_ES') }}">
+<meta property="og:locale" content="{{ _og_loc }}">
+{% for code in supported_locales if code != current_locale %}
+<meta property="og:locale:alternate" content="{{ locale_og(code) }}">
+{% endfor %}
 <meta property="og:title" content="{{ _title }}">
 <meta property="og:description" content="{{ _desc }}">
 <meta property="og:url" content="{{ _canon }}">
@@ -54,8 +60,8 @@
       "@id": "{{ _origin }}/#website",
       "url": "{{ _origin }}/",
       "name": "SignaPlan",
-      "publisher": { "@id": "{{ _origin }}/#organization" },
-      "inLanguage": "es"
+      "inLanguage": "{{ _in_lang }}",
+      "publisher": { "@id": "{{ _origin }}/#organization" }
     },
     {
       "@type": "SoftwareApplication",
@@ -63,6 +69,7 @@
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Web",
       "url": "{{ _origin }}/",
+      "inLanguage": "{{ _in_lang }}",
       "description": {{ _desc|tojson }},
       "offers": {
         "@type": "Offer",

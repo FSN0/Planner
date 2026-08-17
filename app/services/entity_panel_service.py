@@ -188,7 +188,7 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
 
     for a in planned:
         v = vehiculos.get(a.vehiculo_id)
-        label = v.label() if v else f"Vehículo #{a.vehiculo_id}"
+        label = v.label() if v else _tf('Vehículo #{n}', n=a.vehiculo_id)
         odo = odo_on_planned.get((a.vehiculo_id, a.fecha))
         km = None
         if odo:
@@ -259,7 +259,7 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
         if r.fecha in day_map:
             continue
         v = vehiculos.get(r.vehiculo_id)
-        label = v.label() if v else f"Vehículo #{r.vehiculo_id}"
+        label = v.label() if v else _tf('Vehículo #{n}', n=r.vehiculo_id)
         km = r.qty_km if r.qty_km is not None else (r.valor if r.valor is not None else None)
         day_map[r.fecha] = {
             'label': label,
@@ -396,7 +396,7 @@ def get_vehicle_panel_stats(vehiculo):
         if matched:
             conductor_hoy = f'{matched.name} {matched.lastname}'
         elif (odo_hoy.odoo_driver_name or '').strip():
-            conductor_hoy = f'{odo_hoy.odoo_driver_name.strip()} (no está en el programa)'
+            conductor_hoy = _tf('{name} (no está en el programa)', name=odo_hoy.odoo_driver_name.strip())
         else:
             conductor_hoy = 'Uso Odoo (sin conductor)'
 
@@ -611,10 +611,10 @@ def get_vehicle_history_rows(vehiculo, days=30):
             operario = f'{matched.name} {matched.lastname}'
             origen = 'odoo'
         elif odo and (odo.odoo_driver_name or '').strip():
-            operario = f'{odo.odoo_driver_name.strip()} (no está en el programa)'
+            operario = _tf('{name} (no está en el programa)', name=odo.odoo_driver_name.strip())
             origen = 'odoo_externo'
         elif odo:
-            operario = 'Uso Odoo (sin conductor)'
+            operario = _('Uso Odoo (sin conductor)')
             origen = 'odoo'
         else:
             operario = f'#{a.user_id}' if a else '—'
@@ -883,7 +883,7 @@ def get_worker_panel_stats(worker):
             'key': 'hoy',
             'label': 'Asignado hoy',
             'value': asignado_hoy,
-            'sub': f'{asignado_hoy} obra(s)' if asignado_hoy else 'Libre hoy',
+            'sub': _tf('{n} obra(s)', n=asignado_hoy) if asignado_hoy else 'Libre hoy',
             'icon': 'fa-calendar-day',
             'tone': 'green' if asignado_hoy else 'slate',
         },
@@ -899,7 +899,7 @@ def get_worker_panel_stats(worker):
             'key': 'obras_30',
             'label': 'Obras (30 días)',
             'value': obras_distintas_30,
-            'sub': f'{multi_obra_rows} días multi-obra' if multi_obra_rows else 'Sin pluriempleo',
+            'sub': _tf('{n} días multi-obra', n=multi_obra_rows) if multi_obra_rows else 'Sin pluriempleo',
             'icon': 'fa-building',
             'tone': 'amber' if multi_obra_rows else 'blue',
         },
@@ -907,7 +907,7 @@ def get_worker_panel_stats(worker):
             'key': 'fichajes',
             'label': 'Fichajes 30 días',
             'value': f'{fichaje_pct}%' if fichaje_pct is not None else '—',
-            'sub': f'{fichajes_alertas} incidencias' if fichajes_alertas else ('Sin datos' if not fichaje_total else 'Correctos'),
+            'sub': _tf('{n} incidencias', n=fichajes_alertas) if fichajes_alertas else ('Sin datos' if not fichaje_total else 'Correctos'),
             'icon': 'fa-fingerprint',
             'tone': 'red' if fichajes_alertas else ('green' if fichaje_pct and fichaje_pct >= 90 else 'slate'),
             'progress': fichaje_pct,
@@ -916,7 +916,7 @@ def get_worker_panel_stats(worker):
             'key': 'reputacion',
             'label': 'Reputación',
             'value': worker.reputation_score,
-            'sub': f'{ratings_count} valoraciones activas',
+            'sub': _tf('{n} valoraciones activas', n=ratings_count),
             'icon': 'fa-star',
             'tone': 'green' if worker.reputation_score > 0 else ('red' if worker.reputation_score < 0 else 'slate'),
         },
