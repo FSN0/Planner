@@ -9,6 +9,12 @@ def send_email(subject, recipients, text_body, html_body=None):
     """Envía correo. Devuelve True si salió; False si no hay destino o falla SMTP."""
     if not recipients:
         return False
+    if current_app.config.get('TESTING') or current_app.config.get('MAIL_SUPPRESS_SEND'):
+        current_app.logger.info(
+            'Correo no enviado (TESTING/MAIL_SUPPRESS_SEND): %s -> %s',
+            subject, recipients,
+        )
+        return True
     msg = Message(subject, sender=current_app.config.get('MAIL_DEFAULT_SENDER'), recipients=recipients)
     msg.body = text_body
     if html_body:

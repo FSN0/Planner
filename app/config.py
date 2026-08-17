@@ -35,6 +35,9 @@ class Config:
     MAIL_DEFAULT_SENDER = (
         os.environ.get('MAIL_DEFAULT_SENDER') or MAIL_USERNAME or 'info@signaplan.com'
     )
+    # Flask-Mail copia esto en init_app. Los tests lo activan vía pytest/conftest.
+    TESTING = _env_bool('TESTING', default=False)
+    MAIL_SUPPRESS_SEND = _env_bool('MAIL_SUPPRESS_SEND', default=False)
 
     # Configuración de Celery.
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/0')

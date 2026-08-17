@@ -1,17 +1,14 @@
 # app/services/email_verification_service.py
 #
-# Verificación de correo tras el alta autoservicio. El token lleva tenant_id +
-# user_id para no cruzar esquemas multi-tenant. Confirmar solo marca
-# email_verified; el acceso (active) ya está permitido tras el alta.
+# Enlaces viejos {subdominio}/auth/verificar-email?t= (alta anterior).
+# El alta nueva confirma en signaplan.com/alta/confirmar y crea el tenant después.
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import text
-from urllib.parse import quote
 
 from app import db
 from app.models import User
-from app.services.email_service import send_email
-from app.services.i18n_service import translate, normalize_locale, get_locale, DEFAULT_LOCALE
+from app.services.i18n_service import translate
 
 TOKEN_MAX_AGE = 86400 * 3  # 3 días
 _SALT = 'signaplan-email-verify'
@@ -29,14 +26,6 @@ def _serializer():
     return URLSafeTimedSerializer(secret_key=secret, salt=_SALT)
 
 
-def generar_token(user, tenant):
-    return _serializer().dumps({
-        'uid': user.id,
-        'tid': tenant.id,
-        'email': (user.email or '').strip().lower(),
-    })
-
-
 def leer_token(token, tenant_esperado):
     try:
         data = _serializer().loads(token, max_age=TOKEN_MAX_AGE)
@@ -52,64 +41,9 @@ def leer_token(token, tenant_esperado):
     return data
 
 
-def _url_verificacion(tenant, token):
-    from app.services.signup_service import url_acceso_tenant
-    return url_acceso_tenant(
-        tenant, path=f'/auth/verificar-email?t={quote(token, safe="")}'
-    )
-
-
-def _locale_for_user(user=None):
-    if user is not None:
-        loc = normalize_locale(getattr(user, 'locale', None))
-        if loc:
-            return loc
-    return get_locale() or DEFAULT_LOCALE
-
-
-def enviar_email_verificacion(tenant, user):
-    """
-    Envía el enlace de verificación. Devuelve True si el correo salió;
-    False si falló el envío (la cuenta sigue creada).
-    """
-    if not user or not user.email:
-        return False
-    if getattr(user, 'email_verified', False):
-        return True
-
-    token = generar_token(user, tenant)
-    url = _url_verificacion(tenant, token)
-    loc = _locale_for_user(user)
-    texto = translate(
-        'Hola {name},\n\n'
-        'Confirma tu correo para SignaPlan ({tenant}):\n\n{url}\n\n'
-        'El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.\n',
-        loc,
-        name=user.name,
-        tenant=tenant.nombre,
-        url=url,
-    )
-    html = translate(
-        '<p>Hola {name},</p>'
-        '<p>Confirma tu correo para <strong>SignaPlan</strong> ({tenant}).</p>'
-        '<p><a href="{url}">Verificar correo</a></p>'
-        '<p>El enlace caduca en 3 días. Si no has creado esta cuenta, ignora este mensaje.</p>',
-        loc,
-        name=user.name,
-        tenant=tenant.nombre,
-        url=url,
-    )
-    return bool(send_email(
-        translate('Verifica tu correo — {tenant}', loc, tenant=tenant.nombre),
-        [user.email],
-        texto,
-        html_body=html,
-    ))
-
-
 def confirmar_email(token, tenant):
     """
-    Marca email_verified=True. No toca active (el admin ya puede entrar).
+    Marca email_verified=True en un tenant que ya existía.
     Devuelve el User en el esquema del tenant.
     """
     data = leer_token(token, tenant)
@@ -122,27 +56,3 @@ def confirmar_email(token, tenant):
     user.email_verified = True
     db.session.commit()
     return user
-
-
-def reenviar_verificacion(tenant, email=None, user=None):
-    """
-    Reenvía el correo de verificación. Si ya está verificado, no hace nada
-    (sin delatar el estado hacia fuera cuando se llama solo con email).
-    """
-    if user is None:
-        email = (email or '').strip().lower()
-        if not email:
-            raise EmailVerificationError(translate('Indica tu correo.'))
-        user = User.query.filter_by(email=email, is_deleted=False).first()
-
-    if not user:
-        return False
-    if getattr(user, 'email_verified', False):
-        return True
-    if not enviar_email_verificacion(tenant, user):
-        raise EmailVerificationError(
-            translate(
-                'No se ha podido enviar el correo. Prueba más tarde o contacta con soporte.'
-            )
-        )
-    return True

@@ -24,8 +24,12 @@ def _parse_fecha(fecha_obj):
 SYSTEM_ACTOR = "Sistema Automático"
 SYSTEM_ACTIONS = {
     "Auto-asignación por Fichaje Físico",
+    # Legacy: aceptar Paracaidista/Conflicto con «Añadir» se grababa así
+    # sin autor. Los logs nuevos usan «Resolución de Fichaje: Añadir».
     "Actualización de Cuadrante (Auto)",
 }
+ACTION_ANADIR = "Resolución de Fichaje: Añadir"
+ACTION_CUADRANTE_AUTO_LEGACY = "Actualización de Cuadrante (Auto)"
 
 format_obra_label = CoreAssignmentService.format_obra_label
 
@@ -40,6 +44,7 @@ ACTION_TITLE_ALIASES = {
     "Resolución de Fichaje: Error al Planificar": "Borrar Planificación",
     "Resolución de Fichaje: Error Al Planificar": "Borrar Planificación",
     "Resolución de Fichaje: Borrar Planificacion": "Resolución de Fichaje: Borrar Planificación",
+    ACTION_CUADRANTE_AUTO_LEGACY: ACTION_ANADIR,
 }
 
 LEGACY_SHORT_FICHAJE_DETAILS = {
@@ -124,17 +129,69 @@ def _enrich_legacy_fichaje_detail(log, detail):
     return detail
 
 
+def _infer_anadir_auditor(log):
+    """
+    Logs viejos de «Añadir» se grabaron como Actualización de Cuadrante (Auto)
+    con user_id vacío. El autor está en la resolución de fichaje hermana.
+    """
+    if (log.action or "") != ACTION_CUADRANTE_AUTO_LEGACY:
+        return None, None
+    if not log.target_user_id or not log.target_date:
+        return None, None
+
+    sibling = (
+        SystemLog.query.filter_by(
+            category="fichajes",
+            action=ACTION_ANADIR,
+            target_user_id=log.target_user_id,
+            target_date=log.target_date,
+        )
+        .filter(SystemLog.user_id.isnot(None))
+        .order_by(SystemLog.timestamp.desc())
+        .first()
+    )
+    if sibling and sibling.user:
+        if log.timestamp and sibling.timestamp:
+            delta = abs((log.timestamp - sibling.timestamp).total_seconds())
+            if delta > 30:
+                sibling = None
+        if sibling and sibling.user:
+            name = f"{sibling.user.name} {sibling.user.lastname}".strip()
+            return name, sibling.user_id
+
+    registro = (
+        RegistroFichaje.query.filter_by(
+            user_id=log.target_user_id,
+            fecha=log.target_date,
+        )
+        .filter(RegistroFichaje.resuelto_por_id.isnot(None))
+        .filter(RegistroFichaje.estado.in_(("Resuelto_Asignado", "Resuelto_Dividido")))
+        .order_by(RegistroFichaje.fecha_auditoria.desc())
+        .first()
+    )
+    if registro and registro.resuelto_por_id:
+        auditor = User.query.get(registro.resuelto_por_id)
+        if auditor:
+            name = f"{auditor.name} {auditor.lastname}".strip()
+            return name, auditor.id
+    return None, None
+
+
 def _resolve_actor(log, user):
     action = log.action or ""
-    if action in SYSTEM_ACTIONS or "(Auto)" in action:
-        return SYSTEM_ACTOR
     if log.category == "fichaje_app":
-        return f"{user.name} {user.lastname} (Fichaje en App)"
-    if log.category == "planificacion" and "(Auto)" in action:
-        return SYSTEM_ACTOR
+        return (
+            f"{user.name} {user.lastname} (Fichaje en App)",
+            user.id if user else None,
+        )
     if log.user:
-        return f"{log.user.name} {log.user.lastname}".strip()
-    return "Sistema"
+        return f"{log.user.name} {log.user.lastname}".strip(), log.user_id
+    inferred_name, inferred_id = _infer_anadir_auditor(log)
+    if inferred_name:
+        return inferred_name, inferred_id
+    if action in SYSTEM_ACTIONS or "(Auto)" in action:
+        return SYSTEM_ACTOR, None
+    return "Sistema", None
 
 
 def _lookup_obra(fragment, cache):
@@ -355,13 +412,7 @@ def _build_hito(log, user, obra_cache):
         log.detail, obra_cache, user, log.target_date, log.timestamp, log
     )
     style, prioridad = _category_style(log)
-    autor = _resolve_actor(log, user)
-
-    actor_user_id = None
-    if autor != SYSTEM_ACTOR and log.user_id:
-        actor_user_id = log.user_id
-    elif log.category == "fichaje_app":
-        actor_user_id = user.id
+    autor, actor_user_id = _resolve_actor(log, user)
 
     local_ts = format_datetime(log.timestamp, "%Y-%m-%d %H:%M:%S")
     return {
@@ -629,8 +680,6 @@ def build_person_day_timeline_range(user_id, fecha_inicio, fecha_fin):
         "fecha_fin": fecha_fin.strftime("%d/%m/%Y"),
         "fecha_inicio_iso": fecha_inicio.strftime("%Y-%m-%d"),
         "fecha_fin_iso": fecha_fin.strftime("%Y-%m-%d"),
-        "estado_actual": (
-            translate("1 día") if num_days == 1 else translate("{n} días", n=num_days)
-        ),
+        "estado_actual": days[0]["estado_actual"] if num_days == 1 else None,
         "days": days,
     }

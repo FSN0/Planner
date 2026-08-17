@@ -40,6 +40,11 @@ def create_app():
 
     app = Flask(__name__)
     app.config.from_object(Config)
+    # Config.TESTING se evalúa al importar el módulo; leer el env aquí
+    # para que Flask-Mail no intente SMTP en pytest.
+    if os.environ.get('TESTING', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+        app.config['TESTING'] = True
+        app.config['MAIL_SUPPRESS_SEND'] = True
 
     if app.config.get('BEHIND_PROXY'):
         from werkzeug.middleware.proxy_fix import ProxyFix

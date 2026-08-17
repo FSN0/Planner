@@ -9,6 +9,8 @@ from flask import (
     Response,
     abort,
     flash,
+    jsonify,
+    make_response,
     redirect,
     render_template,
     request,
@@ -93,6 +95,23 @@ def render_landing():
     )
 
 
+def _pendiente_page(email, subdomain, email_enviado, reserva=None):
+    html = render_template(
+        'marketing/alta_pendiente.html',
+        current_year=datetime.utcnow().year,
+        email=email,
+        subdomain=subdomain,
+        base_domain=_alta_base_domain(),
+        email_enviado=email_enviado,
+        estado_url=url_for('marketing.alta_estado'),
+    )
+    resp = make_response(html)
+    if reserva is not None:
+        from app.services.signup_service import attach_wait_cookie
+        attach_wait_cookie(resp, reserva)
+    return resp
+
+
 @marketing_bp.route('/alta', methods=['GET', 'POST'])
 @limiter.limit('5 per minute; 20 per hour', methods=['POST'])
 def alta():
@@ -102,7 +121,7 @@ def alta():
     if request.method == 'POST':
         try:
             admin_email = (request.form.get('admin_email') or '').strip().lower()
-            tenant, email_enviado = registrar_empresa(
+            reserva, email_enviado = registrar_empresa(
                 nombre_empresa=request.form.get('nombre_empresa'),
                 subdominio=request.form.get('subdominio'),
                 admin_email=admin_email,
@@ -114,20 +133,13 @@ def alta():
             if not email_enviado:
                 flash(
                     translate(
-                        'Tu espacio se ha creado, pero no hemos podido enviar el correo '
-                        'de verificación. Puedes reenviarlo desde esta página o desde tu panel.'
+                        'Hemos reservado el subdominio, pero no hemos podido enviar el correo '
+                        'de confirmación. Reenvíalo desde esta página.'
                     ),
                     'warning',
                 )
-            from app.services.signup_service import url_acceso_tenant
-            return render_template(
-                'marketing/alta_pendiente.html',
-                current_year=datetime.utcnow().year,
-                email=admin_email,
-                subdomain=tenant.subdominio,
-                base_domain=_alta_base_domain(),
-                email_enviado=email_enviado,
-                login_url=url_acceso_tenant(tenant, path='/auth/login'),
+            return _pendiente_page(
+                admin_email, reserva.subdominio, email_enviado, reserva=reserva
             )
         except SignupError as exc:
             flash(str(exc), 'danger')
@@ -145,6 +157,72 @@ def alta():
         form=request.form if request.method == 'POST' else {},
         base_domain=_alta_base_domain(),
     )
+
+
+@marketing_bp.route('/alta/estado')
+@limiter.limit('30 per minute')
+def alta_estado():
+    """Poll de la pestaña «Revisa tu correo»: no provisiona, no filtra emails."""
+    _require_marketing()
+    from app.services.signup_service import COOKIE_NAME, estado_reserva, reserva_desde_cookie
+
+    reserva = reserva_desde_cookie(request.cookies.get(COOKIE_NAME))
+    return jsonify(estado_reserva(reserva))
+
+
+@marketing_bp.route('/alta/confirmar', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 30 per hour')
+def alta_confirmar():
+    """
+    GET: muestra el botón (los prefetches de Outlook no deben crear el tenant).
+    POST: crea el espacio y deja que la pestaña del ordenador continue sola.
+    """
+    _require_marketing()
+    from app.services.signup_service import (
+        SignupError,
+        confirmar_reserva,
+        inspeccionar_reserva,
+        url_ticket_tenant,
+        _tenant_de_reserva,
+    )
+
+    token = (request.values.get('t') or '').strip()
+    if not token:
+        flash(translate('Falta el enlace de confirmación.'), 'danger')
+        return _mkt_redirect('marketing.alta')
+
+    def _confirmar_view(reserva, tenant=None, creating=False):
+        ready = tenant is not None
+        ticket_url = url_ticket_tenant(reserva, tenant) if ready else ''
+        return render_template(
+            'marketing/alta_confirmar.html',
+            current_year=datetime.utcnow().year,
+            token=token,
+            subdomain=reserva.subdominio,
+            base_domain=_alta_base_domain(),
+            ready=ready,
+            creating=creating,
+            ticket_url=ticket_url,
+        )
+
+    if request.method == 'GET':
+        try:
+            reserva = inspeccionar_reserva(token)
+        except SignupError as exc:
+            flash(str(exc), 'danger')
+            return _mkt_redirect('marketing.alta')
+        if reserva.status == 'ready':
+            return _confirmar_view(reserva, _tenant_de_reserva(reserva))
+        if reserva.status == 'provisioning':
+            return _confirmar_view(reserva, creating=True)
+        return _confirmar_view(reserva)
+
+    try:
+        reserva, tenant = confirmar_reserva(token)
+    except SignupError as exc:
+        flash(str(exc), 'danger')
+        return _mkt_redirect('marketing.alta')
+    return _confirmar_view(reserva, tenant, creating=tenant is None)
 
 
 def _alta_base_domain():
@@ -166,8 +244,7 @@ def entrar():
     from app.services.tenant_email_lookup_service import buscar_tenants_por_email
 
     mensaje_generico = translate(
-        'Si hay una cuenta con ese correo, te hemos enviado un email con el acceso '
-        'a tu empresa (y el enlace de verificación si aún no lo confirmaste). '
+        'Si hay una cuenta o una alta pendiente con ese correo, te hemos enviado un email. '
         'Revisa la bandeja de entrada y el spam.'
     )
 
@@ -193,6 +270,11 @@ def entrar():
             enviar_enlaces_acceso(email, matches)
         except Exception:
             pass
+    try:
+        from app.services.signup_service import reenviar_reservas_por_email
+        reenviar_reservas_por_email(email)
+    except Exception:
+        pass
     flash(mensaje_generico, 'info')
     return render_template(
         'marketing/entrar.html',
@@ -204,59 +286,29 @@ def entrar():
 @marketing_bp.route('/reenviar-verificacion', methods=['POST'])
 @limiter.limit('3 per minute; 10 per hour')
 def reenviar_verificacion():
-    """Reenvío desde marketing (post-alta) sin estar logueado en el tenant."""
+    """Reenvío desde la pantalla de espera, sin tenant creado todavía."""
     _require_marketing()
-    from sqlalchemy import text
-
-    from app import db
-    from app.models import Tenant
-    from app.services.email_verification_service import (
-        EmailVerificationError,
-        reenviar_verificacion as _reenviar,
-    )
+    from app.services.signup_service import COOKIE_NAME, reenviar_confirmacion, reserva_desde_cookie
 
     email = (request.form.get('email') or '').strip().lower()
     subdomain = (request.form.get('subdomain') or '').strip().lower()
     if not email or not subdomain:
-        flash(translate('Faltan datos para reenviar la verificación.'), 'danger')
-        return _mkt_redirect('marketing.alta')
-
-    tenant = Tenant.query.filter_by(subdominio=subdomain, is_active=True).first()
-    if not tenant:
-        # Mismo mensaje genérico: no delatar existencia
-        flash(
-            translate(
-                'Si la cuenta existe y el correo está pendiente, te hemos enviado un nuevo enlace.'
-            ),
-            'info',
-        )
+        flash(translate('Faltan datos para reenviar la confirmación.'), 'danger')
         return _mkt_redirect('marketing.alta')
 
     try:
-        db.session.execute(text(f'SET search_path TO {tenant.schema_name}, public'))
-        _reenviar(tenant, email=email)
-        flash(
-            translate(
-                'Si el correo está pendiente de verificación, te hemos enviado un nuevo enlace. '
-                'Revisa también spam.'
-            ),
-            'info',
-        )
-    except EmailVerificationError as exc:
-        flash(str(exc), 'danger')
+        reenviar_confirmacion(email, subdomain)
     except Exception:
-        flash(translate('No se ha podido reenviar el correo ahora. Prueba más tarde.'), 'danger')
-
-    from app.services.signup_service import url_acceso_tenant
-    return render_template(
-        'marketing/alta_pendiente.html',
-        current_year=datetime.utcnow().year,
-        email=email,
-        subdomain=tenant.subdominio,
-        base_domain=_alta_base_domain(),
-        email_enviado=True,
-        login_url=url_acceso_tenant(tenant, path='/auth/login'),
+        pass
+    flash(
+        translate(
+            'Si el correo está pendiente de confirmación, te hemos enviado un nuevo enlace. '
+            'Revisa también spam.'
+        ),
+        'info',
     )
+    reserva = reserva_desde_cookie(request.cookies.get(COOKIE_NAME))
+    return _pendiente_page(email, subdomain, True, reserva=reserva)
 
 
 @marketing_bp.route('/contacto', methods=['GET', 'POST'])

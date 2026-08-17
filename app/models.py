@@ -64,7 +64,55 @@ class Tenant(db.Model):
     
     def __repr__(self):
         return f'<Tenant {self.nombre} - Subdominio: {self.subdominio}>'
-    
+
+
+class SignupReservation(db.Model):
+    """
+    Alta pública pendiente de confirmar el correo.
+    El tenant (schema) no existe hasta pulsar confirmar: así un email falso
+    no deja un espacio usable ni quema el subdominio para siempre.
+    """
+    __tablename__ = 'signup_reservations'
+    __table_args__ = (
+        db.Index(
+            'uq_signup_reservations_subdominio_live',
+            'subdominio',
+            unique=True,
+            postgresql_where=db.text(
+                "status IN ('pending', 'provisioning', 'ready')"
+            ),
+        ),
+        db.Index('ix_signup_reservations_admin_email', 'admin_email'),
+        {'schema': 'public'},
+    )
+
+    STATUS_PENDING = 'pending'
+    STATUS_PROVISIONING = 'provisioning'
+    STATUS_READY = 'ready'
+    STATUS_FAILED = 'failed'
+    STATUS_EXPIRED = 'expired'
+
+    id = db.Column(db.Integer, primary_key=True)
+    subdominio = db.Column(db.String(50), nullable=False)
+    nombre_empresa = db.Column(db.String(100), nullable=False)
+    admin_email = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    locale = db.Column(db.String(8), nullable=True)
+    legal_privacidad_version = db.Column(db.String(32), nullable=True)
+    legal_condiciones_version = db.Column(db.String(32), nullable=True)
+    status = db.Column(
+        db.String(20), nullable=False, default=STATUS_PENDING, server_default='pending'
+    )
+    tenant_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    error_message = db.Column(db.String(255), nullable=True)
+
+    def __repr__(self):
+        return f'<SignupReservation {self.subdominio} {self.status}>'
+
+
 def generate_random_color():
     """Genera un color pastel aleatorio para las obras/empresas."""
     palette = ["#a8d5ba", "#f4d06f", "#f7a072", "#d291bc", "#b8a9c9",
@@ -147,7 +195,8 @@ class User(UserMixin, db.Model):
     # Estados y Ciclo de vida
     active = db.Column(db.Boolean, default=False)  # Aprobado por RRHH (para operarios)
     is_deleted = db.Column(db.Boolean, default=False)  # Soft delete
-    # Alta autoservicio: False hasta confirmar el enlace del correo.
+    # En el alta nueva el admin nace ya verificado. En cuentas antiguas
+    # puede quedar False; no bloquea el login.
     email_verified = db.Column(
         db.Boolean, nullable=False, default=False, server_default='false'
     )

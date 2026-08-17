@@ -76,7 +76,7 @@
 
   function hubReturnUrl(chapter) {
     var id = chapter ? academiaIdForChapter(chapter) : null;
-    if (id && id !== 'seed' && id !== 'demo' && id !== 'import') {
+    if (id && id !== 'seed' && id !== 'import') {
       return '/admin/primeros-pasos?focus=tour&id=' + encodeURIComponent(id);
     }
     if (id === 'seed' || chapter === 'trabajadores' || chapter === 'obra' || chapter === 'fichaje') {
@@ -217,8 +217,9 @@
     });
     document.body.classList.add('sp-tour-active');
     // Import se queda en el hub (modal de elección).
-    // Demo: ya no arranca exploración; el hub muestra "ya tienes material".
-    if (ch === 'demo' && pathIs(/\/admin\/primeros-pasos/)) {
+    // «demo» ya no es un overlay: solo marca que se generaron ejemplos.
+    if (ch === 'demo') {
+      saveState(null);
       return;
     }
     // Capítulos cortos: si el ancla del menú no está, ir directo a la URL
@@ -375,7 +376,7 @@
 
     markAcademiaDone(chapter);
 
-    if (chapter === 'import' || chapter === 'demo') {
+    if (chapter === 'import') {
       ensureUi();
       clearTargets();
       placeHole(null);
@@ -383,9 +384,7 @@
       ui.card.style.transform = 'translateX(-50%)';
       ui.card.style.top = '28%';
       ui.card.style.left = '50%';
-      var msg = chapter === 'import'
-        ? 'Importación guiada lista. Puedes seguir importando más listados o abrir la Academia.'
-        : 'Ya conoces el mapa con datos de ejemplo. Explora libremente; el banner te deja borrarlos cuando quieras.';
+      var msg = 'Importación guiada lista. Puedes seguir importando más listados o abrir la Academia.';
       ui.card.innerHTML =
         '<h3>' + t('Guía terminada') + '</h3><p>' + t(msg) + '</p>' +
         '<div class="sp-tour-actions">' +
@@ -437,7 +436,6 @@
   function academiaIdForChapter(ch) {
     if (ch === 'trabajadores' || ch === 'obra' || ch === 'fichaje') return 'seed';
     if (ch === 'import') return 'import';
-    if (ch === 'demo') return 'demo';
     if (ch === 'auditoria_fichajes' || ch === 'registro_jornada') return 'fichajes';
     if (isAcademiaChapter(ch)) return ch;
     return null;
@@ -466,7 +464,6 @@
     if (chapter === 'obra') return t('Saltar obras →');
     if (chapter === 'fichaje') return t('Saltar fichaje →');
     if (chapter === 'import') return t('Saltar importación →');
-    if (chapter === 'demo') return t('Saltar exploración →');
     if (isAcademiaChapter(chapter)) return t('Saltar tutorial →');
     return t('Saltar sección →');
   }
@@ -540,11 +537,6 @@
     if (chapter === 'import') {
       // Salir limpio: sin cartel encima ni pantalla a oscuras
       stopTour({});
-      return;
-    }
-
-    if (chapter === 'demo') {
-      pauseAtChapterEnd();
       return;
     }
 
@@ -3081,126 +3073,6 @@
     ];
   }
 
-  function stepsDemo() {
-    return [
-      {
-        when: function () {
-          return pathIs(/\/admin\/obras_detailed/) ||
-            (new URLSearchParams(window.location.search || '')).get('tour') === 'demo';
-        },
-        manualTarget: true,
-        title: 'Tablero con datos de ejemplo',
-        body: 'Esto es el día a día: obras y gente planificada. Son datos demo — puedes mover, fichar y romper sin miedo.',
-        progress: 'Demo · tablero',
-        nextLabel: 'Siguiente',
-        onShow: function () {
-          var main = qs('main') || qs('.admin-main');
-          if (main && _visibleRect(main)) {
-            placeHole(main.querySelector('.kanban, .obras-detailed, .tablero') || main);
-            placeCardNear(main);
-          } else {
-            placeCardModal();
-          }
-        },
-        onNext: function () {
-          var st = loadState() || {};
-          st.step = 1;
-          saveState(st);
-          run();
-        },
-      },
-      {
-        when: function () {
-          return !pathIs(/\/admin\/obras(\/|$|\?)/) && !pathIs(/\/admin\/personal/) &&
-            !pathIs(/\/sync\/auditoria/);
-        },
-        selector: '[data-tour="nav-directorio"]',
-        title: 'Directorio de obras',
-        body: 'Desde aquí gestionas el catálogo de obras (crear, importar, archivar). Pulsa Directorio.',
-        progress: 'Demo · directorio',
-        waitClick: true,
-        advanceTo: 2,
-        ifMissing: 'wait',
-      },
-      {
-        when: function () { return pathIs(/\/admin\/obras(\/|$|\?)/); },
-        selector: 'main',
-        title: 'Listado de obras',
-        body: 'Aquí están las obras demo. Más adelante crearás las tuyas reales o las importarás desde Excel.',
-        progress: 'Demo · obras',
-        nextLabel: 'Ver trabajadores →',
-        onNext: function () {
-          var st = loadState() || {};
-          st.step = 3;
-          saveState(st);
-          run();
-        },
-      },
-      {
-        when: function () { return !pathIs(/\/admin\/personal/) && !pathIs(/\/sync\/auditoria/); },
-        selector: '[data-tour="nav-trabajadores"]',
-        title: 'Trabajadores',
-        body: 'Plantilla interna y externa. Pulsa Trabajadores para ver los operarios de ejemplo.',
-        progress: 'Demo · personal',
-        waitClick: true,
-        advanceTo: 4,
-        ifMissing: 'wait',
-      },
-      {
-        when: function () { return pathIs(/\/admin\/personal/); },
-        selector: 'main',
-        title: 'Tu plantilla demo',
-        body: 'Cada operario puede tener PIN para fichar en /mi. En la guía interactiva lo harás con uno real tuyo.',
-        progress: 'Demo · plantilla',
-        nextLabel: 'Ver auditoría →',
-        onNext: function () {
-          var st = loadState() || {};
-          st.step = 5;
-          saveState(st);
-          run();
-        },
-      },
-      {
-        when: function () { return !pathIs(/\/sync\/auditoria/); },
-        selector: '[data-tour="nav-auditoria-fichajes"]',
-        title: 'Auditoría de fichajes',
-        body: 'Aquí revisas fichajes sin planificar, desviaciones y ausencias. Pulsa Auditoría fichajes.',
-        progress: 'Demo · auditoría',
-        waitClick: true,
-        advanceTo: 6,
-        ifMissing: 'skip',
-      },
-      {
-        when: function () {
-          var st = loadState();
-          return pathIs(/\/sync\/auditoria/) || (st && (st.step || 0) >= 6 && (st.step || 0) < 7);
-        },
-        modal: true,
-        title: 'Listo para explorar',
-        body: 'Con el mapa claro: tablero, directorio, trabajadores y auditoría. Sigue toqueteando o entra al tablero y cierra Primeros pasos.',
-        progress: 'Demo · fin',
-        nextLabel: 'Terminar guía →',
-        onNext: function () {
-          var st = loadState() || {};
-          st.step = 7;
-          saveState(st);
-          run();
-        },
-      },
-      {
-        when: function () {
-          var st = loadState();
-          return !!(st && (st.step || 0) >= 7);
-        },
-        title: '',
-        body: '',
-        onShow: function () {
-          pauseAtChapterEnd();
-        },
-      },
-    ];
-  }
-
   function stepsTableroBasico() {
     return [
       {
@@ -5444,7 +5316,6 @@
     if (state.chapter === 'obra') return stepsObra();
     if (state.chapter === 'fichaje') return stepsFichaje();
     if (state.chapter === 'import') return stepsImport();
-    if (state.chapter === 'demo') return stepsDemo();
     if (state.chapter === 'tablero_basico') return stepsTableroBasico();
     if (state.chapter === 'planificador_multi') return stepsPlanificadorMulti();
     if (state.chapter === 'fichajes') return stepsFichajes();
@@ -5503,7 +5374,13 @@
     // Import users: if step>=20 and user clicked Continuar, hand off on next advance
     // Patch step 20 to hand off via custom next
     var step = pickStep();
-    if (!step) return;
+    if (!step) {
+      if (state.chapter === 'demo') {
+        saveState(null);
+        teardown();
+      }
+      return;
+    }
 
     // Rewrite import continuar
     if (state.chapter === 'trabajadores' && (state.step || 0) >= 20 && pathIs(/\/admin\/import_users/)) {
@@ -5597,16 +5474,6 @@
       stDone.step = 7;
       stDone.pendingComplete = false;
       saveState(stDone);
-      run();
-      return true;
-    }
-    if (tour === 'demo') {
-      var stDemo = loadState() || {};
-      stDemo.active = true;
-      stDemo.chapter = 'demo';
-      stDemo.step = 0;
-      stDemo.pendingComplete = false;
-      saveState(stDemo);
       run();
       return true;
     }

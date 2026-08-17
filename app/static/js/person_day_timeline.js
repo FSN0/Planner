@@ -17,9 +17,16 @@ window.PersonDayTimeline = (function () {
         return `<a href="${escapeHtml(url)}" class="pdt-link pdt-link-user" target="_blank" rel="noopener">${escapeHtml(name)}</a>`;
     }
 
+    function canonEstado(estado) {
+        const raw = (estado || '').trim();
+        if (!raw) return 'Sin_Registro';
+        if (raw === 'Sin registro' || raw === 'Sin fichaje') return 'Sin_Registro';
+        return raw;
+    }
+
     function applyEstadoBadge(el, estado) {
         if (!el) return;
-        const raw = estado || 'Sin_Registro';
+        const raw = canonEstado(estado);
         const FE = window.SPFichajeEstado;
         const value = FE && FE.labelDeEstado ? FE.labelDeEstado(raw) : t(raw.replace(/_/g, ' '));
         el.textContent = value;
@@ -92,16 +99,10 @@ window.PersonDayTimeline = (function () {
     }
 
     function renderDaySection(day) {
-        const estadoRaw = day.estado_actual || '';
-        const estado = estadoRaw.replace(/_/g, ' ');
-        let estadoClass = 'badge-soft person-day-timeline-estado badge-soft-gray';
-        if (estado.includes('Correcto') || estado.startsWith('Resuelto')) estadoClass = 'badge-soft person-day-timeline-estado badge-soft-green';
-        else if (estado === 'Paracaidista' || estado === 'Conflicto') estadoClass = 'badge-soft person-day-timeline-estado badge-soft-amber';
-        else if (estado.includes('Ausencia') || estado === 'Conflicto') estadoClass = 'badge-soft person-day-timeline-estado badge-soft-red';
-        else if (estado.includes('Asignado') || estado.includes('RRHH') || estado.includes('Actividad')) {
-            estadoClass = 'badge-soft person-day-timeline-estado badge-soft-blue';
-        }
-        const estadoLabel = t(estadoRaw) !== estadoRaw ? t(estadoRaw) : t(estado);
+        const raw = canonEstado(day.estado_actual || '');
+        const FE = window.SPFichajeEstado;
+        const badge = FE && FE.badgeClass ? FE.badgeClass(raw) : 'badge-soft-gray';
+        const estadoLabel = FE && FE.labelDeEstado ? FE.labelDeEstado(raw) : t(raw.replace(/_/g, ' '));
 
         return `
             <section class="person-day-timeline-day" data-fecha-iso="${escapeHtml(day.fecha_iso || '')}">
@@ -109,7 +110,7 @@ window.PersonDayTimeline = (function () {
                     <span class="person-day-timeline-day-date">
                         <i class="fas fa-calendar-day mr-1"></i>${escapeHtml(day.fecha || '')}
                     </span>
-                    <span class="${estadoClass}">${escapeHtml(estadoLabel || '—')}</span>
+                    <span class="badge-soft person-day-timeline-estado ${badge}">${escapeHtml(estadoLabel || '—')}</span>
                 </header>
                 <div class="person-day-timeline-day-body">
                     ${renderHitosHTML(day)}
@@ -146,7 +147,12 @@ window.PersonDayTimeline = (function () {
             const estadoEl = meta.querySelector('[data-timeline-estado]');
             setEmpleadoElement(empleadoEl, data);
             if (fechaEl) fechaEl.textContent = data.fecha || '';
-            applyEstadoBadge(estadoEl, data.estado_actual);
+            if (estadoEl) {
+                const wrap = estadoEl.closest('.person-day-timeline-meta-item');
+                const multiDay = !!(data.days && data.days.length > 1);
+                if (wrap) wrap.hidden = multiDay;
+                if (!multiDay) applyEstadoBadge(estadoEl, data.estado_actual);
+            }
         }
 
         const content = container.querySelector('[data-timeline-content]') || container;

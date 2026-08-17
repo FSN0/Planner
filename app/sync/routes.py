@@ -982,7 +982,7 @@ def resolver_fichaje():
                 if not existe:
                     CoreAssignmentService.asignar(
                         registro.user_id, registro.obra_real_id, registro.fecha,
-                        None, "Actualización de Cuadrante (Auto)"
+                        current_user.id, "Resolución de Fichaje: Añadir",
                     )
 
             # Paracaidista: el fichaje ya ocurrió en obra_real. Al aceptar hay que

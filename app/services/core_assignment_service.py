@@ -22,21 +22,13 @@ class CoreAssignmentService:
         return codigo or nombre or f"Obra #{obra.id}"
 
     @staticmethod
-    def _is_system_action(contexto_origen):
-        return (
-            contexto_origen in (
-                "Auto-asignación por Fichaje Físico",
-                "Actualización de Cuadrante (Auto)",
-            )
-            or "(Auto)" in (contexto_origen or "")
-        )
-
-    @staticmethod
     def asignar(user_id, obra_id, fecha, autor_id, contexto_origen,
                 detalle_extra=None, *, company_id=None, solicitud_id=None,
                 registrar_log=True):
         """
         Crea una Asignacion. Por defecto registra SystemLog del día.
+        autor_id es quien decide (auditor, planificador). None = proceso
+        desatendido (p. ej. auto-asignación por fichaje físico).
         En lotes (rangos) pasar registrar_log=False y llamar registrar_log_rango.
         """
         nueva = Asignacion(
@@ -113,10 +105,9 @@ class CoreAssignmentService:
         if detalle_extra:
             detail = f"{detail} {detalle_extra}"
 
-        log_user_id = None if CoreAssignmentService._is_system_action(contexto_origen) else autor_id
         db.session.add(SystemLog(
             timestamp=utc_now(),
-            user_id=log_user_id,
+            user_id=autor_id,
             category='planificacion',
             action=contexto_origen,
             detail=detail,
@@ -138,11 +129,9 @@ class CoreAssignmentService:
         if detalle_extra:
             detail = f"{detail} {detalle_extra}"
 
-        log_user_id = None if CoreAssignmentService._is_system_action(contexto_origen) else autor_id
-
         db.session.add(SystemLog(
             timestamp=utc_now(),
-            user_id=log_user_id,
+            user_id=autor_id,
             category='planificacion',
             action=contexto_origen,
             detail=detail,

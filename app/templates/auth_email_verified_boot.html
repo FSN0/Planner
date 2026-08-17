@@ -55,8 +55,8 @@
 <body>
   <div class="boot" role="status" aria-live="polite">
     <div class="boot-spinner" aria-hidden="true"></div>
-    <h1>{{ _('Correo verificado') }}</h1>
-    <p>{{ _('Preparando tu espacio…') }}</p>
+    <h1>{{ titulo or _('Correo verificado') }}</h1>
+    <p>{{ subtitulo or _('Preparando tu espacio…') }}</p>
     <p style="margin-top:1rem"><a href="{{ destino }}">{{ _('Continuar') }}</a></p>
   </div>
   <script>

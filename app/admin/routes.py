@@ -162,22 +162,6 @@ def _bloquear_operario_en_admin():
         return redirect(url_for('operarios.inicio'))
 
 
-def _exige_email_verificado_para_usuarios():
-    """Hasta verificar el correo del admin no se pueden crear/invitar usuarios."""
-    if (
-        current_user.is_authenticated
-        and current_user.role == ROLE_ADMIN
-        and hasattr(current_user, 'email_verified')
-        and not current_user.email_verified
-    ):
-        flash(translate('Verifica tu correo electrónico antes de dar de alta o invitar usuarios. '
-            'Puedes reenviar el enlace desde el aviso de la parte superior.'),
-            'warning',
-        )
-        return False
-    return True
-
-
 _RETURN_TO_ENDPOINTS = {
     'tablero': 'admin.obras_detailed',
     'planificador': 'admin.planificador_jo',
@@ -2758,9 +2742,6 @@ def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to=
 @login_required
 @roles_required(ROLE_ADMIN)
 def create_user():
-    if not _exige_email_verificado_para_usuarios():
-        return redirect(url_for("admin.personal"))
-
     if request.method == "POST":
         import secrets
 
@@ -2978,8 +2959,6 @@ def delete_obra(obra_id):
 @roles_required(ROLE_ADMIN)
 def import_users():
     if request.method == "POST":
-        if not _exige_email_verificado_para_usuarios():
-            return redirect(url_for("admin.import_users"))
         return _handle_import_upload_post("users")
     return _render_import_upload("users")
 
@@ -2988,8 +2967,6 @@ def import_users():
 @login_required
 @roles_required(ROLE_ADMIN)
 def import_users_preview():
-    if not _exige_email_verificado_para_usuarios():
-        return redirect(url_for("admin.import_users"))
     return _handle_import_preview("users")
 
 
@@ -2997,8 +2974,6 @@ def import_users_preview():
 @login_required
 @roles_required(ROLE_ADMIN)
 def import_users_confirm():
-    if not _exige_email_verificado_para_usuarios():
-        return redirect(url_for("admin.import_users"))
     return _handle_import_confirm("users")
 
 

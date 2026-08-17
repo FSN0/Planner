@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="{{ current_locale|default('es') }}">
 <head>
-    {% set page_title = _('alta_pendiente.seo_title_verify') if email_enviado else _('alta_pendiente.seo_title_created') %}
+    {% set page_title = _('alta_pendiente.seo_title_verify') %}
     {% set meta_description = _('alta_pendiente.seo_desc') %}
     {% set noindex = true %}
     {% include "components/_marketing_seo_head.html" %}
@@ -20,7 +20,7 @@
             {{ _('alta_pendiente.created_space') }} <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
             {{ _('alta_pendiente.sent_link') }} <strong>{{ email }}</strong>.
         </p>
-        <p>{{ _('alta_pendiente.verify_later') }}</p>
+        <p id="alta-wait-msg">{{ _('alta_pendiente.verify_later') }}</p>
         {% else %}
         <h1>{{ _('alta_pendiente.h1_created') }}</h1>
         <p>
@@ -28,7 +28,7 @@
             {{ _('alta_pendiente.email_failed') }}
             <strong>{{ email }}</strong>.
         </p>
-        <p>{{ _('alta_pendiente.login_anyway') }}</p>
+        <p id="alta-wait-msg">{{ _('alta_pendiente.email_failed_hint') }}</p>
         {% endif %}
 
         <form method="POST" action="{{ mkt_url('marketing.reenviar_verificacion') }}"
@@ -52,11 +52,6 @@
           {% endif %}
         {% endwith %}
 
-        <p style="margin-top:1.5rem;">
-            <a class="mkt-btn mkt-btn-primary" href="{{ login_url }}">
-                {{ _('alta_pendiente.go_login') }}
-            </a>
-        </p>
         <p style="margin-top:1.25rem;color:#64748b;font-size:.95rem;">
             {{ _('alta_pendiente.if_lost') }}
             <a href="{{ mkt_url('marketing.entrar') }}"><strong>{{ _('nav.login') }}</strong></a>
@@ -67,5 +62,34 @@
         <span>© {{ current_year }} SignaPlan</span>
     </footer>
     {% include "components/_cookie_banner.html" %}
+    <script>
+    (function () {
+      var url = {{ (estado_url or '/alta/estado')|tojson }};
+      var msg = document.getElementById('alta-wait-msg');
+      var tries = 0;
+      var redirecting = {{ _('alta_pendiente.redirecting')|tojson }};
+      var failed = {{ _('alta_pendiente.poll_failed')|tojson }};
+      function tick() {
+        fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data && data.status === 'ready' && data.ticket_url) {
+              if (msg) msg.textContent = redirecting;
+              window.location.replace(data.ticket_url);
+              return;
+            }
+            if (data && data.status === 'failed' && msg) {
+              msg.textContent = failed;
+            }
+            tries += 1;
+            window.setTimeout(tick, tries < 40 ? 2500 : 8000);
+          })
+          .catch(function () {
+            window.setTimeout(tick, 8000);
+          });
+      }
+      window.setTimeout(tick, 2500);
+    })();
+    </script>
 </body>
 </html>

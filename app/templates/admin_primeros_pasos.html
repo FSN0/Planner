@@ -675,14 +675,13 @@
           ({{ demo_cantidades.obras }} {{ _('obras') }},
           {{ demo_cantidades.empleados }} {{ _('personas') }},
           {{ demo_cantidades.vehiculos }} {{ _('vehículos') }})
-          {{ _('y te enseñamos lo esencial del tablero. Luego puedes borrarlos con un clic.') }}
+          {{ _('y luego puedes seguir con los tutoriales de abajo. Cuando quieras, los borras con un clic.') }}
         </p>
         <ol class="onb-steps">
           <li><span class="n">1</span><div>{{ _('Una pregunta rápida al empezar (configuración)') }}</div></li>
           <li><span class="n">2</span><div>{{ _('Crear los datos de ejemplo') }}</div></li>
-          <li><span class="n">3</span><div>{{ _('Recorrido corto por el tablero y lo básico') }}</div></li>
         </ol>
-        <button type="button" class="onb-cta onb-cta--demo" id="onb-demo-open">{{ _('Generar ejemplos y empezar →') }}</button>
+        <button type="button" class="onb-cta onb-cta--demo" id="onb-demo-open">{{ _('Generar ejemplos →') }}</button>
         {% endif %}
       </div>
 
@@ -1122,9 +1121,11 @@
 
   function openDemoModal() {
     if (demoActiva) {
-      markStart('demo');
-      if (window.SP_pageLoading) window.SP_pageLoading.show('Abriendo tablero…');
-      window.location.href = '/admin/obras_detailed?tour=demo';
+      var next = document.getElementById('onb-next');
+      if (next) {
+        next.classList.add('is-focus');
+        try { next.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+      }
       return;
     }
     if (!modal) return;
@@ -1203,10 +1204,6 @@
       markStart('import');
       window.SignaPlanTour.start('import');
       return;
-    }
-    if (tour === 'demo') {
-      markStart('demo');
-      window.SignaPlanTour.start('demo');
     }
   }
   if (document.readyState === 'loading') {

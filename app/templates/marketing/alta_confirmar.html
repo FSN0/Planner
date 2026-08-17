@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="{{ current_locale|default('es') }}">
+<head>
+    {% set page_title = _('alta_confirmar.seo_title') %}
+    {% set meta_description = _('alta_confirmar.seo_desc') %}
+    {% set noindex = true %}
+    {% include "components/_marketing_seo_head.html" %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}">
+    {% if creating %}
+    <meta http-equiv="refresh" content="3">
+    {% endif %}
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
+            {% include "components/_brand_logo.html" %}
+        </a>
+    </header>
+    <section class="mkt-form-wrap">
+        {% if ready %}
+        <h1>{{ _('alta_confirmar.ready_h1') }}</h1>
+        <p>
+            {{ _('alta_pendiente.created_space') }} <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
+        </p>
+        <p>{{ _('alta_confirmar.stay_on_pc') }}</p>
+        {% if ticket_url %}
+        <p style="margin-top:1.5rem;">
+            <a class="mkt-btn mkt-btn-secondary" href="{{ ticket_url }}">{{ _('alta_confirmar.open_here') }}</a>
+        </p>
+        {% endif %}
+        {% elif creating %}
+        <h1>{{ _('alta_confirmar.busy_h1') }}</h1>
+        <p>{{ _('alta_confirmar.busy_lead') }}</p>
+        {% else %}
+        <h1>{{ _('alta_confirmar.h1') }}</h1>
+        <p>
+            {{ _('alta_confirmar.lead') }}
+            <strong>{{ subdomain }}</strong>{% if base_domain %}.{{ base_domain }}{% endif %}.
+        </p>
+        <form method="POST" action="{{ mkt_url('marketing.alta_confirmar') }}" style="margin-top:1.5rem;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="t" value="{{ token }}">
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">
+                {{ _('alta_confirmar.cta') }}
+            </button>
+        </form>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="mkt-alert mkt-alert-{{ category if category != 'error' else 'danger' }}" style="margin-top:1rem;">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    </section>
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+    </footer>
+    {% include "components/_cookie_banner.html" %}
+</body>
+</html>

@@ -5,7 +5,7 @@
 from sqlalchemy import text
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from app.models import Tenant
+from app.models import SignupReservation, Tenant
 from app.services.billing_service import debe_pasar_por_pasarela, esta_exento_de_cobro
 from app.services.password_reset_service import (
     aplicar_nueva_password,
@@ -30,6 +30,7 @@ class TestSignupValidacion:
         html = resp.get_data(as_text=True)
         assert 'Crear cuenta' in html
         assert 'privacidad' in html.lower()
+        assert 'Hasta que lo confirmes, el espacio no se crea' in html
 
     def test_alta_tambien_en_localhost(self, client):
         resp = client.get('/alta', headers={'Host': 'localhost'})
@@ -45,7 +46,9 @@ class TestSignupValidacion:
         assert sugerir_subdominio('Paquito') == 'paquito'
         assert sugerir_subdominio('Construcciones López') == 'construcciones-lopez'
 
-    def test_alta_crea_tenant(self, client, session, app):
+    def test_alta_reserva_no_crea_tenant(self, client, session, app):
+        session.execute(text('DROP SCHEMA IF EXISTS tenant_demofirma CASCADE'))
+        session.execute(text("DELETE FROM public.signup_reservations WHERE subdominio = 'demofirma'"))
         session.execute(text("DELETE FROM public.tenants WHERE subdominio = 'demofirma'"))
         session.commit()
 
@@ -67,8 +70,35 @@ class TestSignupValidacion:
         html = resp.get_data(as_text=True)
         assert 'admin@demofirma.test' in html
         assert 'demofirma' in html
-        # Si el SMTP de test no entrega, la pantalla dice «Cuenta creada».
-        assert ('Revisa tu correo' in html) or ('Cuenta creada' in html)
+        assert ('Revisa tu correo' in html) or ('No hemos podido enviar el correo' in html)
+        assert 'Ir al acceso de tu empresa' not in html
+
+        assert Tenant.query.filter_by(subdominio='demofirma').first() is None
+        reserva = SignupReservation.query.filter_by(subdominio='demofirma').first()
+        assert reserva is not None
+        assert reserva.status == SignupReservation.STATUS_PENDING
+        assert reserva.admin_email == 'admin@demofirma.test'
+
+        from app.services.signup_service import generar_token_reserva
+        token = generar_token_reserva(reserva)
+
+        peek = client.get(
+            '/alta/confirmar',
+            headers={'Host': 'signaplan.com'},
+            query_string={'t': token},
+        )
+        assert peek.status_code == 200
+        assert Tenant.query.filter_by(subdominio='demofirma').first() is None
+        assert 'Confirmar y crear mi espacio' in peek.get_data(as_text=True)
+
+        confirm = client.post(
+            '/alta/confirmar',
+            headers={'Host': 'signaplan.com'},
+            data={'t': token},
+            follow_redirects=False,
+        )
+        assert confirm.status_code == 200
+        assert 'Tu espacio está listo' in confirm.get_data(as_text=True)
 
         tenant = Tenant.query.filter_by(subdominio='demofirma').first()
         assert tenant is not None
@@ -86,7 +116,7 @@ class TestSignupValidacion:
         admin = User.query.filter_by(email='admin@demofirma.test').first()
         assert admin is not None
         assert admin.active is True
-        assert admin.email_verified is False
+        assert admin.email_verified is True
 
         def _cfg(clave):
             row = ConfiguracionGlobal.query.filter_by(clave=clave).first()
@@ -100,8 +130,15 @@ class TestSignupValidacion:
         assert oficina.is_deleted is False
         session.execute(text('SET search_path TO public'))
 
-        # Limpieza del esquema creado por el alta
-        session.execute(text('DROP SCHEMA IF EXISTS tenant_demofirma CASCADE'))
+        poll = client.get('/alta/estado', headers={'Host': 'signaplan.com'})
+        assert poll.status_code == 200
+        body = poll.get_json()
+        assert body['status'] == 'ready'
+        assert 'ticket_url' in body
+        assert 'demofirma' in body['ticket_url']
+
+        session.execute(text(f'DROP SCHEMA IF EXISTS {tenant.schema_name} CASCADE'))
+        session.execute(text("DELETE FROM public.signup_reservations WHERE subdominio = 'demofirma'"))
         session.execute(text("DELETE FROM public.tenants WHERE subdominio = 'demofirma'"))
         session.commit()
 

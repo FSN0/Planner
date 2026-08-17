@@ -42,10 +42,33 @@ def _puede_login_web(user):
     return user.role not in LOGIN_BLOCKED_ROLES
 
 
-def _marcar_email_pendiente(user):
-    pending = hasattr(user, 'email_verified') and not user.email_verified
-    session['email_pending_verification'] = pending
-    return pending
+def _complete_login(user, remember, *, source, success_message=None):
+    from app.utils import register_log
+
+    user.auth_source_last = source
+    db.session.add(user)
+    db.session.flush()
+
+    login_user(user, remember=remember)
+    session['tenant_id'] = g.current_tenant.id
+    db.session.commit()
+    register_log(
+        user_id=user.id,
+        category='accesos',
+        action='Inicio de Sesión',
+        detail=(
+            f"Login exitoso vía {source} desde IP: {request.remote_addr or 'Desconocida'}"
+        ),
+    )
+    flash(success_message or translate('Inicio de sesión exitoso'), 'success')
+
+    destino = _destino_por_rol(user)
+    if destino:
+        return redirect(destino)
+
+    logout_user()
+    flash(translate('Tu perfil no tiene acceso a la aplicación.'), 'warning')
+    return render_template('login.html', **_login_page_context())
 
 
 def _login_page_context():
@@ -59,7 +82,6 @@ def _login_page_context():
     return {
         'tenant_name': g.current_tenant.nombre,
         'fichaje_activo': fichaje_activo,
-        'show_resend_verification': True,
         'prefill_email': prefill,
     }
 
@@ -99,48 +121,64 @@ def _redirect_authenticated_user():
     return redirect(url_for('auth.login'))
 
 
-def _complete_login(user, remember, *, source, success_message=None):
-    from app.utils import register_log
+@auth_bp.route('/ticket')
+@limiter.limit('10 per minute; 30 per hour')
+def signup_ticket():
+    """Entrada corta tras confirmar el alta (pestaña del ordenador)."""
+    from app.services.signup_service import SignupError, leer_ticket_acceso
 
-    user.auth_source_last = source
-    db.session.add(user)
-    db.session.flush()
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
+        return redirect(url_for('main.dashboard'))
 
-    login_user(user, remember=remember)
+    try:
+        user_id = leer_ticket_acceso(request.args.get('t') or '', g.current_tenant)
+    except SignupError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('auth.login'))
+
+    from sqlalchemy import text
+    db.session.execute(text(f'SET search_path TO {g.current_tenant.schema_name}, public'))
+    user = User.query.filter_by(id=user_id, is_deleted=False).first()
+    if user is None or not user.is_active:
+        flash(translate('No se ha podido abrir la sesión. Entra con tu correo y contraseña.'), 'warning')
+        return redirect(url_for('auth.login'))
+
+    if current_user.is_authenticated:
+        logout_user()
+
+    login_user(user, remember=True)
     session['tenant_id'] = g.current_tenant.id
-    pending = _marcar_email_pendiente(user)
-    db.session.commit()
-    register_log(
-        user_id=user.id,
-        category='accesos',
-        action='Inicio de Sesión',
-        detail=(
-            f"Login exitoso vía {source} desde IP: {request.remote_addr or 'Desconocida'}"
-        ),
-    )
-    if pending:
-        flash(
-            translate(
-                'Inicio de sesión correcto. Verifica tu correo cuando puedas.'
+    try:
+        from app.utils import register_log
+        register_log(
+            user_id=user.id,
+            category='accesos',
+            action='Inicio de Sesión',
+            detail=(
+                f'Login por ticket de alta. IP: {request.remote_addr or "Desconocida"}'
             ),
-            'info',
         )
-    else:
-        flash(success_message or translate('Inicio de sesión exitoso'), 'success')
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
-    destino = _destino_por_rol(user)
-    if destino:
-        return redirect(destino)
-
-    logout_user()
-    flash(translate('Tu perfil no tiene acceso a la aplicación.'), 'warning')
-    return render_template('login.html', **_login_page_context())
+    destino = _destino_por_rol(user) or url_for('admin.panel')
+    return render_template(
+        'auth_email_verified_boot.html',
+        destino=destino,
+        titulo=translate('Entrando en SignaPlan'),
+        subtitulo=translate('Preparando tu espacio…'),
+    )
 
 
 @auth_bp.route('/verificar-email')
 @limiter.limit('10 per minute; 30 per hour')
 def verificar_email():
-    """Confirma el correo del admin tras el alta y abre sesión en el tenant."""
+    """Enlace antiguo al subdominio. El alta nueva confirma en /alta/confirmar."""
     from app.services.email_verification_service import (
         EmailVerificationError,
         confirmar_email,
@@ -155,7 +193,6 @@ def verificar_email():
         user = confirmar_email(token, g.current_tenant)
     except EmailVerificationError as exc:
         flash(str(exc), 'danger')
-        session['show_resend_verification'] = True
         return redirect(url_for('auth.login'))
 
     if current_user.is_authenticated:
@@ -173,7 +210,6 @@ def verificar_email():
 
     login_user(user, remember=True)
     session['tenant_id'] = g.current_tenant.id
-    session['email_pending_verification'] = False
     try:
         from app.utils import register_log
         register_log(
@@ -208,37 +244,6 @@ def verificar_email():
     # Pantalla mínima inmediata: el destino (p.ej. Primeros pasos) puede tardar;
     # así el usuario ve feedback en cuanto abre el enlace del correo.
     return render_template('auth_email_verified_boot.html', destino=destino)
-
-
-@auth_bp.route('/reenviar-verificacion', methods=['POST'])
-@limiter.limit('3 per minute; 10 per hour')
-def reenviar_verificacion():
-    """Reenvía el correo de verificación (logueado o con email en el formulario)."""
-    from app.services.email_verification_service import (
-        EmailVerificationError,
-        reenviar_verificacion as _reenviar,
-    )
-    if not hasattr(g, 'current_tenant') or not g.current_tenant:
-        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
-        return redirect(url_for('main.dashboard'))
-
-    try:
-        if current_user.is_authenticated:
-            _reenviar(g.current_tenant, user=current_user)
-        else:
-            _reenviar(g.current_tenant, email=request.form.get('email'))
-        flash(
-            translate(
-                'Si el correo está pendiente de verificación, te hemos enviado un nuevo enlace.'
-            ),
-            'info',
-        )
-    except EmailVerificationError as exc:
-        flash(str(exc), 'danger')
-
-    if current_user.is_authenticated:
-        return redirect(request.referrer or url_for('admin.panel'))
-    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -455,7 +460,6 @@ def sso_soltec():
 @login_required
 def logout():
     logout_user()
-    session.pop('email_pending_verification', None)
     session.pop('superadmin_impersonation', None)
     flash(translate('Sesión cerrada'), 'info')
     return redirect(url_for('auth.login'))
@@ -576,7 +580,6 @@ def impersonate():
     login_user(user, remember=False)
     session['tenant_id'] = g.current_tenant.id
     session['superadmin_impersonation'] = True
-    session['email_pending_verification'] = False
     flash(
         translate(
             'Has entrado como {name} (soporte SignaPlan).',

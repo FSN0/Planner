@@ -17,12 +17,14 @@ def provision_new_tenant(
     modulos_activos=None,
     email_verified=True,
     active=True,
+    password_hash=None,
+    locale=None,
 ):
     """
     Registra un nuevo cliente, construye su esquema aislado, crea su empresa matriz y su primer administrador.
 
-    email_verified/active: True en superadmin y demos; el alta pública deja
-    active=True y email_verified=False (entrar sí; verificar refuerza confianza).
+    email_verified/active: True en superadmin, demos y alta pública ya confirmada.
+    password_hash: si viene, no se vuelve a hashear (reserva de alta).
     """
     subdominio = (subdominio or '').lower().strip()
     # Validación estricta: solo letras minúsculas, números y guiones.
@@ -101,9 +103,10 @@ def provision_new_tenant(
         db.session.flush() # Flush para que la base de datos le asigne un ID sin cerrar la transacción
 
         # 8. Crear el administrador asignado a esta nueva empresa
+        hashed = password_hash or generate_password_hash(admin_password)
         admin_user = User(
             email=admin_email,
-            password_hash=generate_password_hash(admin_password),
+            password_hash=hashed,
             role=ROLE_ADMIN,
             name="Administrador",
             lastname=nombre_empresa,
@@ -111,6 +114,7 @@ def provision_new_tenant(
             active=bool(active),
             email_verified=bool(email_verified),
             company_id=empresa_interna.id,  # vinculamos al admin con la empresa
+            locale=locale,
         )
         db.session.add(admin_user)
         db.session.commit()

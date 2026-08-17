@@ -76,6 +76,7 @@ def app(database_url):
     # Crear la aplicación
     app = create_app()
     app.config['TESTING'] = True
+    app.config['MAIL_SUPPRESS_SEND'] = True
     app.config['WTF_CSRF_ENABLED'] = False
     app.config['WTF_CSRF_CHECK_DEFAULT'] = False
     app.config['RATELIMIT_ENABLED'] = False
@@ -196,8 +197,10 @@ def _tenant_schemas(db):
         from sqlalchemy import MetaData
         metadata = MetaData()
         
+        # Tablas que viven solo en public (no se copian al schema del tenant).
+        _public_only = {'tenants', 'signup_reservations'}
         for table in db.metadata.sorted_tables:
-            if table.name != 'tenants':
+            if table.name not in _public_only:
                 table.to_metadata(metadata, schema=schema_name)
         
         metadata.create_all(bind=db.engine)

@@ -17,16 +17,6 @@ class CoreVehicleAssignmentService:
         return vehiculo.label()
 
     @staticmethod
-    def _is_system_action(contexto_origen):
-        return (
-            contexto_origen in (
-                "Auto-asignación por Fichaje Físico",
-                "Actualización de Cuadrante (Auto)",
-            )
-            or "(Auto)" in (contexto_origen or "")
-        )
-
-    @staticmethod
     def asignar(vehiculo_id, user_id, fecha, autor_id, contexto_origen,
                 detalle_extra=None, *, solicitud_id=None, overwrite=False,
                 registrar_log=True):
@@ -146,10 +136,9 @@ class CoreVehicleAssignmentService:
         if detalle_extra:
             detail = f"{detail} {detalle_extra}"
 
-        log_user_id = None if CoreVehicleAssignmentService._is_system_action(contexto_origen) else autor_id
         db.session.add(SystemLog(
             timestamp=utc_now(),
-            user_id=log_user_id,
+            user_id=autor_id,
             category='planificacion',
             action=contexto_origen,
             detail=detail,
@@ -174,11 +163,9 @@ class CoreVehicleAssignmentService:
         if detalle_extra:
             detail = f"{detail} {detalle_extra}"
 
-        log_user_id = None if CoreVehicleAssignmentService._is_system_action(contexto_origen) else autor_id
-
         db.session.add(SystemLog(
             timestamp=utc_now(),
-            user_id=log_user_id,
+            user_id=autor_id,
             category='planificacion',
             action=contexto_origen,
             detail=detail,
