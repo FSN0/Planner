@@ -42,7 +42,9 @@
         <h3><i class="fas fa-bell text-primary mr-1"></i> {{ _('Notificaciones visuales en sidebar') }}</h3>
         <div class="logs-prefs-checks">
           <label><input type="checkbox" name="pref_accesos" {% if 'accesos' in active_prefs %}checked{% endif %}> {{ _('Accesos') }}</label>
+          {% if tenant_has_valoraciones %}
           <label><input type="checkbox" name="pref_valoraciones" {% if 'valoraciones' in active_prefs %}checked{% endif %}> {{ _('Valoraciones') }}</label>
+          {% endif %}
           <label><input type="checkbox" name="pref_planificacion" {% if 'planificacion' in active_prefs %}checked{% endif %}> {{ _('Planificación') }}</label>
           {% if tenant_has_avisos_laborales %}
           <label><input type="checkbox" name="pref_solicitud" {% if 'solicitud' in active_prefs %}checked{% endif %}> {{ _('Solicitud') }}</label>

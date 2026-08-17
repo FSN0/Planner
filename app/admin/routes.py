@@ -1563,6 +1563,9 @@ def edit_company(company_id):
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def rate_worker():
+    from app.services.tenant_modules import has_valoraciones
+    if not has_valoraciones():
+        return jsonify({'success': False, 'message': translate('Módulo no activo')}), 404
     data = request.get_json()
     worker_id = data.get('worker_id')
     score = data.get('score') 
@@ -1606,6 +1609,9 @@ def _can_manage_rating(rating):
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def update_rating(rating_id):
+    from app.services.tenant_modules import has_valoraciones
+    if not has_valoraciones():
+        return jsonify({'success': False, 'message': translate('Módulo no activo')}), 404
     rating = Rating.query.get_or_404(rating_id)
     if not _can_manage_rating(rating):
         return jsonify({'success': False, 'message': translate('No autorizado')}), 403
@@ -1640,6 +1646,9 @@ def update_rating(rating_id):
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def delete_rating(rating_id):
+    from app.services.tenant_modules import has_valoraciones
+    if not has_valoraciones():
+        return jsonify({'success': False, 'message': translate('Módulo no activo')}), 404
     rating = Rating.query.get_or_404(rating_id)
     if not _can_manage_rating(rating):
         return jsonify({'success': False, 'message': translate('No autorizado')}), 403
@@ -1666,6 +1675,10 @@ def delete_rating(rating_id):
 @login_required
 @roles_required(ROLE_ADMIN) # Solo Admin puede resetear
 def reset_worker_ratings(user_id):
+    from app.services.tenant_modules import has_valoraciones
+    if not has_valoraciones():
+        flash(translate('Módulo no activo.'), 'warning')
+        return redirect(url_for('admin.worker_panel', user_id=user_id))
     worker = User.query.get_or_404(user_id)
     
     # Marcamos todos los ratings actuales como inactivos (histórico)
@@ -1688,6 +1701,10 @@ def reset_worker_ratings(user_id):
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def worker_ratings_history(user_id):
+    from app.services.tenant_modules import has_valoraciones
+    if not has_valoraciones():
+        flash(translate('Módulo no activo.'), 'warning')
+        return redirect(url_for('admin.worker_panel', user_id=user_id))
     worker = User.query.get_or_404(user_id)
     # Mostramos TODOS (activos e inactivos) ordenados por fecha
     ratings = Rating.query.filter_by(user_id=worker.id).order_by(Rating.created_at.desc()).all()
@@ -2298,7 +2315,6 @@ def create_obra():
                 fecha_inicio=parse_date(fecha_inicio),
                 fecha_fin=parse_date(fecha_fin),
                 estado=estado,
-                limite_trabajadores=0,
                 jefe_obra_id=int(jefe_obra_id),
                 encargado_id=int(encargado_id) if encargado_id else None,
                 color=color,
@@ -2382,7 +2398,6 @@ def edit_obra(obra_id):
         obra.nombre = nombre
         obra.descripcion = (request.form.get("descripcion") or "").strip() or None
         obra.ubicacion = (request.form.get("ubicacion") or "").strip() or None
-        obra.url_prl = (request.form.get("url_prl") or "").strip() or None
         obra.color = request.form.get("color") or obra.color
 
         old_estado = obra.estado
@@ -2395,10 +2410,6 @@ def edit_obra(obra_id):
             obra.fecha_inicio = parse_date(f_inicio)
         if f_fin:
             obra.fecha_fin = parse_date(f_fin)
-
-        # Legacy: ya no se edita en UI
-        if obra.limite_trabajadores is None:
-            obra.limite_trabajadores = 0
 
         enc_id = (request.form.get("encargado_id") or "").strip()
         obra.encargado_id = int(enc_id) if enc_id else None
@@ -3315,55 +3326,57 @@ def api_planificador_events():
     # =====================================================================
     # --- INYECTAR SOLICITUDES TRASLÚCIDAS EN EL PLANIFICADOR ---
     # =====================================================================
-    solicitudes = Solicitud.query.filter(
-        Solicitud.obra_id.in_(obras_ids),
-        Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-        Solicitud.fecha_inicio <= end_date,
-        Solicitud.fecha_fin >= start_date
-    ).all()
+    from app.services.tenant_modules import jefe_sin_buzon_solicitudes
+    if not jefe_sin_buzon_solicitudes(current_user):
+        solicitudes = Solicitud.query.filter(
+            Solicitud.obra_id.in_(obras_ids),
+            Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+            Solicitud.fecha_inicio <= end_date,
+            Solicitud.fecha_fin >= start_date
+        ).all()
 
-    for sol in solicitudes:
-        accion = getattr(sol, 'accion', 'ASIGNAR')
-        is_baja = (accion == 'DESASIGNAR')
-        if company_ids:
-            if sol.tipo == 'CONCRETA' and sol.empleado:
-                sol_comp_id = sol.empleado.company_id or 0
-                if sol_comp_id not in company_ids: continue
-            elif sol.tipo == 'GENERICA':
-                sol_comp_id = sol.perfil_empresa_id or 0
-                if sol_comp_id not in company_ids: continue
-                
-        # 1. Definir Colores (Sólido para el borde y texto, Traslúcido para el fondo)
-        if is_baja:
-            color_fuerte = "#ef4444" # Rojo
-            color_suave = "rgba(239, 68, 68, 0.10)"
-        else:
-            color_fuerte = "#f59e0b" # Naranja
-            color_suave = "rgba(245, 158, 11, 0.10)"
+        for sol in solicitudes:
+            accion = getattr(sol, 'accion', 'ASIGNAR')
+            is_baja = (accion == 'DESASIGNAR')
+            if company_ids:
+                if sol.tipo == 'CONCRETA' and sol.empleado:
+                    sol_comp_id = sol.empleado.company_id or 0
+                    if sol_comp_id not in company_ids: continue
+                elif sol.tipo == 'GENERICA':
+                    sol_comp_id = sol.perfil_empresa_id or 0
+                    if sol_comp_id not in company_ids: continue
 
-        # 2. Definir Título
-        if sol.tipo == 'CONCRETA':
-            emp_name = sol.empleado.name if sol.empleado else '?'
-            title = f"{'Solicitud de Baja' if is_baja else 'FALTA'}: {emp_name}"
-        else:
-            faltan = sol.cantidad_solicitada - sol.cantidad_cubierta
-            if faltan <= 0: continue
-            title = f"FALTAN: {faltan} ({sol.perfil_categoria or 'Cualquiera'})"
+            # 1. Definir Colores (Sólido para el borde y texto, Traslúcido para el fondo)
+            if is_baja:
+                color_fuerte = "#ef4444" # Rojo
+                color_suave = "rgba(239, 68, 68, 0.10)"
+            else:
+                color_fuerte = "#f59e0b" # Naranja
+                color_suave = "rgba(245, 158, 11, 0.10)"
 
-        # 3. Crear el estilo CSS directo para vis.js
-        estilo_solicitud = f"background-color: {color_suave} !important; border: 2px dashed {color_fuerte} !important; color: {color_fuerte} !important;"
+            # 2. Definir Título
+            if sol.tipo == 'CONCRETA':
+                emp_name = sol.empleado.name if sol.empleado else '?'
+                title = f"{'Solicitud de Baja' if is_baja else 'FALTA'}: {emp_name}"
+            else:
+                faltan = sol.cantidad_solicitada - sol.cantidad_cubierta
+                if faltan <= 0: continue
+                title = f"FALTAN: {faltan} ({sol.perfil_categoria or 'Cualquiera'})"
 
-        events.append({
-            "id": f"solicitud_{sol.id}",
-            "resourceId": str(sol.obra_id),
-            "title": title,
-            "start": sol.fecha_inicio.strftime("%Y-%m-%d"),
-            "end": (sol.fecha_fin + timedelta(days=1)).strftime("%Y-%m-%d"),
-            "style": estilo_solicitud,
-            "worker_id": "REQUEST",
-            "editable": False, 
-            "solicitud_id": sol.id 
-        })
+            # 3. Crear el estilo CSS directo para vis.js
+            estilo_solicitud = f"background-color: {color_suave} !important; border: 2px dashed {color_fuerte} !important; color: {color_fuerte} !important;"
+
+            events.append({
+                "id": f"solicitud_{sol.id}",
+                "resourceId": str(sol.obra_id),
+                "title": title,
+                "start": sol.fecha_inicio.strftime("%Y-%m-%d"),
+                "end": (sol.fecha_fin + timedelta(days=1)).strftime("%Y-%m-%d"),
+                "style": estilo_solicitud,
+                "worker_id": "REQUEST",
+                "editable": False,
+                "solicitud_id": sol.id
+            })
         
     # =====================================================================
     # --- INYECTAR FESTIVOS COMO FONDO GLOBAL ---
@@ -3394,10 +3407,12 @@ def search_workers():
     q = request.args.get('q', '').lower()
     plain = request.args.get('plain') in ('1', 'true', 'yes')
 
-    # 1. Opción Genérica (solo solicitudes; no en alta de ausencias)
+    # 1. Opción Genérica (solo solicitudes; no en alta de ausencias ni si el jefe asigna directo)
     results = []
     if not plain:
-        results.append({"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"})
+        from app.services.tenant_modules import jefe_sin_buzon_solicitudes
+        if not jefe_sin_buzon_solicitudes(current_user):
+            results.append({"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"})
 
     # 2. Buscar en BD
     query = User.query.filter(User.active == True, User.is_deleted == False)
@@ -3440,8 +3455,15 @@ def configuracion_global():
         flash(translate("Acceso denegado. Área exclusiva de administración."), "danger")
         return redirect(url_for('main.dashboard'))
         
-    from app.models import Festivo, ConfiguracionGlobal
+    from app.models import Festivo, ConfiguracionGlobal, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
     from app.services.plan_service import monetizacion_activa
+    from app.services.tenant_modules import (
+        conforme_jornada_activo,
+        has_auditoria_vehiculos,
+        hora_corte_activa,
+        hora_corte_destinatario_ids,
+        jefes_asignan_directo,
+    )
     festivos = Festivo.query.order_by(Festivo.fecha.asc()).all()
     
     # Cargamos TODAS las configuraciones en un diccionario
@@ -3452,6 +3474,14 @@ def configuracion_global():
     limite_custodia = int(configs_dict.get('limite_custodia', 15))
     
     tenant_modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
+    office_users = (
+        User.query.filter(
+            User.role.in_([ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]),
+            User.is_deleted.is_(False),
+        )
+        .order_by(User.name, User.lastname)
+        .all()
+    )
 
     return render_template(
         'admin_configuracion.html',
@@ -3461,6 +3491,12 @@ def configuracion_global():
         monetizacion_activa=monetizacion_activa(),
         tenant_has_fichaje_operario=bool(tenant_modulos.get('fichaje_operario')),
         tenant_has_onboarding=bool(tenant_modulos.get('onboarding')),
+        tenant_has_auditoria_vehiculos=has_auditoria_vehiculos(),
+        jefes_asignan_directo=jefes_asignan_directo(),
+        hora_corte_activa=hora_corte_activa(),
+        hora_corte_destinatario_ids=hora_corte_destinatario_ids(),
+        conforme_jornada_activo=conforme_jornada_activo(),
+        office_users=office_users,
     )
 
 
@@ -3605,6 +3641,32 @@ def update_config():
         if limite and str(limite).isdigit():
             _upsert('limite_custodia', limite)
 
+        from app.services.tenant_modules import (
+            CONFIG_HORA_CORTE_ACTIVA,
+            CONFIG_HORA_CORTE_DESTINATARIOS,
+            CONFIG_JEFES_ASIGNAN_DIRECTO,
+        )
+        _upsert(
+            CONFIG_JEFES_ASIGNAN_DIRECTO,
+            'True' if request.form.get('jefes_asignan_directo') else 'False',
+        )
+        _upsert(
+            CONFIG_HORA_CORTE_ACTIVA,
+            'True' if request.form.get('hora_corte_activa') else 'False',
+        )
+        from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
+        allowed_dest = {
+            int(u.id) for u in User.query.filter(
+                User.role.in_([ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]),
+                User.is_deleted.is_(False),
+            ).all()
+        }
+        dest_ids = [
+            str(int(x)) for x in request.form.getlist('hora_corte_destinatarios')
+            if str(x).isdigit() and int(x) in allowed_dest
+        ]
+        _upsert(CONFIG_HORA_CORTE_DESTINATARIOS, ','.join(dest_ids))
+
     if 'fichajes' in section_keys:
         primer_fichaje_val = 'True' if request.form.get('aceptar_primer_fichaje') else 'False'
         _upsert('aceptar_primer_fichaje', primer_fichaje_val)
@@ -3644,43 +3706,49 @@ def update_config():
                 _upsert(CONFIG_OBRA_OFICINA, 'True' if oficina_on else 'False')
                 sincronizar_obra_oficina(oficina_on)
 
+        from app.services.tenant_modules import CONFIG_CONFORME_JORNADA
+        _upsert(
+            CONFIG_CONFORME_JORNADA,
+            'True' if request.form.get('conforme_jornada_activo') else 'False',
+        )
+
     if 'ausencias' in section_keys:
         jefe_resuelve = 'True' if request.form.get('ausencias_jefe_puede_resolver') else 'False'
         _upsert('ausencias_jefe_puede_resolver', jefe_resuelve)
-
-        auto_res = request.form.get('ausencias_auto_resolucion') or 'overlay'
-        if auto_res not in ('overlay', 'none', 'prefer_leave', 'prefer_assignment'):
-            auto_res = 'overlay'
-        _upsert('ausencias_auto_resolucion', auto_res)
+        _upsert('ausencias_auto_resolucion', 'prefer_leave')
+        from app.services.leave_service import release_assignments_blocked_by_leave
+        release_assignments_blocked_by_leave(autor_id=current_user.id)
 
     if 'laboral' in section_keys:
         laboral_resuelve = 'True' if request.form.get('laboral_puede_resolver_fichajes') else 'False'
         _upsert('laboral_puede_resolver_fichajes', laboral_resuelve)
 
     if 'vehiculos' in section_keys:
-        from app.services.vehicle_anomaly_service import (
-            DEFAULT_DESVIO_MAX_PCT,
-            DEFAULT_DESVIO_MIN_PCT,
-            DEFAULT_THRESHOLDS,
-        )
-        _upsert_int_cfg(
-            'vehiculo_salto_km_dia',
-            request.form.get('vehiculo_salto_km_dia'),
-            DEFAULT_THRESHOLDS['vehiculo_salto_km_dia'],
-            min_v=50, max_v=5000,
-        )
-        _upsert_int_cfg(
-            'vehiculo_desvio_max_pct',
-            request.form.get('vehiculo_desvio_max_pct'),
-            DEFAULT_DESVIO_MAX_PCT,
-            min_v=1, max_v=500,
-        )
-        _upsert_int_cfg(
-            'vehiculo_desvio_min_pct',
-            request.form.get('vehiculo_desvio_min_pct'),
-            DEFAULT_DESVIO_MIN_PCT,
-            min_v=1, max_v=500,
-        )
+        from app.services.tenant_modules import has_auditoria_vehiculos as _has_aud_veh
+        if _has_aud_veh():
+            from app.services.vehicle_anomaly_service import (
+                DEFAULT_DESVIO_MAX_PCT,
+                DEFAULT_DESVIO_MIN_PCT,
+                DEFAULT_THRESHOLDS,
+            )
+            _upsert_int_cfg(
+                'vehiculo_salto_km_dia',
+                request.form.get('vehiculo_salto_km_dia'),
+                DEFAULT_THRESHOLDS['vehiculo_salto_km_dia'],
+                min_v=50, max_v=5000,
+            )
+            _upsert_int_cfg(
+                'vehiculo_desvio_max_pct',
+                request.form.get('vehiculo_desvio_max_pct'),
+                DEFAULT_DESVIO_MAX_PCT,
+                min_v=1, max_v=500,
+            )
+            _upsert_int_cfg(
+                'vehiculo_desvio_min_pct',
+                request.form.get('vehiculo_desvio_min_pct'),
+                DEFAULT_DESVIO_MIN_PCT,
+                min_v=1, max_v=500,
+            )
 
     if 'emails' in section_keys:
         eventos_email = [
@@ -4074,7 +4142,10 @@ def acknowledge_all_laboral_system_logs():
 @roles_required(ROLE_ADMIN)
 def save_log_preferences():
     from app.models import LogPreference
-    categorias = ['accesos', 'valoraciones', 'planificacion', 'obras', 'fichajes', 'solicitud']
+    from app.services.tenant_modules import has_valoraciones
+    categorias = ['accesos', 'planificacion', 'obras', 'fichajes', 'solicitud']
+    if has_valoraciones():
+        categorias.insert(1, 'valoraciones')
     
     for cat in categorias:
         pref = LogPreference.query.filter_by(user_id=current_user.id, category=cat).first()

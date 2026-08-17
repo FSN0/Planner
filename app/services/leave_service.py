@@ -287,11 +287,8 @@ def jefe_puede_resolver_ausencias() -> bool:
 
 
 def auto_resolucion_ausencias() -> str:
-    """overlay (default) | none | prefer_leave | prefer_assignment"""
-    raw = (get_tenant_config('ausencias_auto_resolucion', default='overlay') or 'overlay').strip()
-    if raw not in ('overlay', 'none', 'prefer_leave', 'prefer_assignment'):
-        return 'overlay'
-    return raw
+    """Siempre se libera el cuadrante: baja y asignación no conviven."""
+    return 'prefer_leave'
 
 
 def release_assignments_blocked_by_leave(
@@ -582,9 +579,7 @@ def release_vehicles_blocked_by_leave(
 
 def detect_and_upsert_conflicts(date_from=None, date_to=None):
     """
-    Registra solapes asignación + ausencia aprobada.
-    Modo overlay (default): mantiene la asignación y marca el solape como overlay
-    (sin pendientes manuales ni desasignación).
+    Registra solapes asignación + ausencia aprobada y libera el cuadrante.
     """
     if not date_from:
         date_from = today_local() - timedelta(days=7)
@@ -652,9 +647,8 @@ def detect_and_upsert_conflicts(date_from=None, date_to=None):
 
             day = day + timedelta(days=1)
 
-    # Vehículos: a diferencia de obra, la ausencia libera el coche sin pedir OK.
+    # Vehículos y personal: de baja no figura en el cuadrante.
     release_vehicles_blocked_by_leave(date_from=date_from, date_to=date_to)
-    # Personal: solo si el tenant eligió «liberar asignación» (prefer_leave).
     if auto_resolucion_ausencias() == 'prefer_leave':
         release_assignments_blocked_by_leave(date_from=date_from, date_to=date_to)
 
@@ -726,9 +720,10 @@ def create_manual_leave(
     )
     db.session.add(leave)
     db.session.flush()
+    leave_id = leave.id
     detect_and_upsert_conflicts(date_from=fecha_inicio, date_to=fecha_fin)
     db.session.commit()
-    return leave
+    return AusenciaPlanificada.query.get(leave_id)
 
 
 def solicitar_ausencia_propia(

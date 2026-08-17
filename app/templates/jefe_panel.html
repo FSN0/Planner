@@ -22,10 +22,12 @@
         <a href="{{ url_for('jefe.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-primary">
           <i class="fas fa-th-large"></i> {{ _('Tablero') }}
         </a>
+        {% if not jefes_asignan_directo %}
         <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-user-plus"></i> {{ _('Solicitudes') }}
           {% if solicitudes_abiertas %}<span class="badge-soft badge-soft-amber ml-1">{{ solicitudes_abiertas }}</span>{% endif %}
         </a>
+        {% endif %}
         {% if muestra_auditoria_fichajes %}
         <a href="{{ url_for('sync.auditoria_fichajes') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-user-clock"></i> {{ _('Auditoría') }}
@@ -52,6 +54,7 @@
           <span class="dashboard-kpi-meta">{{ asignaciones_hoy }} {{ _('asignaciones en mis obras') }}</span>
         </div>
       </article>
+      {% if not jefes_asignan_directo %}
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--amber"><i class="fas fa-clipboard-list"></i></div>
         <div>
@@ -60,6 +63,7 @@
           <span class="dashboard-kpi-meta">{{ solicitudes_por_estado.get('PENDIENTE', 0) }} {{ _('pendientes') }} · {{ solicitudes_por_estado.get('EN_PROCESO', 0) }} {{ _('en proceso') }}</span>
         </div>
       </article>
+      {% endif %}
       {% if muestra_auditoria_fichajes %}
       <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
@@ -91,6 +95,7 @@
         </div>
       </section>
 
+      {% if not jefes_asignan_directo %}
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
           <h2 class="admin-panel-title">{{ _('Solicitudes por estado') }}</h2>
@@ -112,6 +117,7 @@
           </ul>
         </div>
       </section>
+      {% endif %}
 
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
@@ -137,6 +143,7 @@
     </div>
 
     <div class="dashboard-tables-grid">
+      {% if not jefes_asignan_directo %}
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
           <h2 class="admin-panel-title"><i class="fas fa-user-plus text-primary mr-1"></i> {{ _('Solicitudes recientes') }}</h2>
@@ -187,6 +194,7 @@
         <p class="table-empty-state"><i class="fas fa-inbox"></i>{{ _('Sin solicitudes en tus obras') }}</p>
         {% endif %}
       </section>
+      {% endif %}
 
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">

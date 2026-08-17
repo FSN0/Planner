@@ -22,7 +22,7 @@
 
         <div class="header-subtitle mt-1">
             <span>{{ item.obra.codigo or _('S/C') }}</span>
-            <span><strong>{{ item.workers|length }}</strong> / {{ item.obra.limite_trabajadores or '-' }}</span>
+            <span><strong>{{ item.workers|length }}</strong></span>
         </div>
 
         <div class="mt-2 pt-2 border-top border-white-50">
@@ -98,7 +98,7 @@
                 </div>
 
                 {% set rep = worker.reputation_score %}
-                {% if rep != 0 %}
+                {% if tenant_has_valoraciones and rep != 0 %}
                     <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}"
                           style="font-size: 0.65rem; padding: 1px 5px;">
                         {{ '+' if rep > 0 }}{{ rep }}

@@ -508,6 +508,8 @@ def confirmar_reserva(token):
                 'fichaje_operario': True,
                 'registro_jornada': True,
                 'onboarding': True,
+                'notas': False,
+                'auditoria_vehiculos': False,
             },
             email_verified=True,
             active=True,

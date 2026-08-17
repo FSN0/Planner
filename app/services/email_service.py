@@ -476,6 +476,7 @@ def enviar_super_reporte_diario():
     """
     from app.utils.timezone_utils import today_local
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    from app.services.tenant_modules import hora_corte_destinatario_ids
 
     if not tenant_muestra_auditoria_fichajes():
         return
@@ -516,8 +517,18 @@ def enviar_super_reporte_diario():
     # ==========================================
     # CORREO GLOBAL PARA LOS ADMINISTRADORES
     # ==========================================
-    admins = User.query.filter_by(role='admin', active=True).all()
-    admin_users = [a for a in admins if a.email]
+    # Destinatarios: los marcados en Ajustes. Si no hay lista, todos los admin (legado).
+    dest_ids = hora_corte_destinatario_ids()
+    if dest_ids:
+        admin_users = [
+            u for u in User.query.filter(
+                User.id.in_(dest_ids),
+                User.active.is_(True),
+            ).all()
+            if u.email and not getattr(u, 'is_deleted', False)
+        ]
+    else:
+        admin_users = [a for a in User.query.filter_by(role='admin', active=True).all() if a.email]
 
     if admin_users:
         from app.services.i18n_service import translate
@@ -599,6 +610,10 @@ def enviar_super_reporte_diario():
                 translate('Contenido en HTML.', loc),
                 html_body=html_admin,
             )
+
+    # Correos por obra al jefe: solo si no hay lista explícita de destinatarios.
+    if dest_ids:
+        return
 
     # ==========================================
     # CORREOS ESPECÍFICOS PARA CADA JEFE DE OBRA

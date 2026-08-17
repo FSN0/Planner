@@ -22,6 +22,7 @@ from app.services.onboarding_service import (
     tenant_tiene_registro_jornada,
 )
 from app.services.permission_service import user_can
+from app.services.tenant_modules import has_auditoria_vehiculos
 
 CONFIG_TOURS = 'academia_tours'
 CONFIG_ONBOARDING_PATH = 'onboarding_path'  # guide | demo | skip
@@ -342,7 +343,7 @@ def _module_visible(module: str, user) -> bool:
         return True
     if module == 'registro_jornada' and not tenant_tiene_registro_jornada():
         return False
-    if module == 'auditoria_vehiculos' and not _modulos().get('odoo'):
+    if module == 'auditoria_vehiculos' and not has_auditoria_vehiculos():
         return False
     try:
         return user_can(user, module, 'r')

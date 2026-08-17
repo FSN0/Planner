@@ -660,9 +660,6 @@ def get_obra_panel_stats(obra):
         .scalar() or 0
     )
 
-    limite = obra.limite_trabajadores or 0
-    ocupacion_pct = round(operarios_hoy / limite * 100) if limite > 0 else None
-
     dias_mes = (
         Asignacion.query.filter(
             Asignacion.obra_id == obra_id,
@@ -733,10 +730,10 @@ def get_obra_panel_stats(obra):
             'key': 'operarios_hoy',
             'label': 'Operarios hoy',
             'value': operarios_hoy,
-            'sub': _tf('Cupo {n}', n=limite) if limite else 'Sin límite definido',
+            'sub': 'Asignados a esta obra',
             'icon': 'fa-users',
-            'tone': 'green' if limite and operarios_hoy >= limite else ('amber' if limite and operarios_hoy >= limite * 0.85 else 'green'),
-            'progress': min(100, ocupacion_pct) if ocupacion_pct is not None else None,
+            'tone': 'green',
+            'progress': None,
         },
         {
             'key': 'empresas_hoy',
@@ -912,23 +909,27 @@ def get_worker_panel_stats(worker):
             'tone': 'red' if fichajes_alertas else ('green' if fichaje_pct and fichaje_pct >= 90 else 'slate'),
             'progress': fichaje_pct,
         },
-        {
+    ]
+
+    from app.services.tenant_modules import has_valoraciones
+    if has_valoraciones():
+        stats.append({
             'key': 'reputacion',
             'label': 'Reputación',
             'value': worker.reputation_score,
             'sub': _tf('{n} valoraciones activas', n=ratings_count),
             'icon': 'fa-star',
             'tone': 'green' if worker.reputation_score > 0 else ('red' if worker.reputation_score < 0 else 'slate'),
-        },
-        {
-            'key': 'solicitudes',
-            'label': 'Solicitudes',
-            'value': solicitudes_abiertas,
-            'sub': 'Abiertas vinculadas',
-            'icon': 'fa-clipboard-list',
-            'tone': 'amber' if solicitudes_abiertas else 'slate',
-        },
-    ]
+        })
+
+    stats.append({
+        'key': 'solicitudes',
+        'label': 'Solicitudes',
+        'value': solicitudes_abiertas,
+        'sub': 'Abiertas vinculadas',
+        'icon': 'fa-clipboard-list',
+        'tone': 'amber' if solicitudes_abiertas else 'slate',
+    })
 
     if proxima:
         stats.append({
@@ -992,7 +993,9 @@ def get_company_panel_stats(company):
 
     avg_rating = None
     ratings_count = 0
-    if worker_ids:
+    from app.services.tenant_modules import has_valoraciones
+    show_ratings = has_valoraciones()
+    if show_ratings and worker_ids:
         row = (
             db.session.query(func.avg(Rating.score), func.count(Rating.id))
             .filter(Rating.user_id.in_(worker_ids), Rating.is_active.is_(True))
@@ -1073,7 +1076,9 @@ def get_company_panel_stats(company):
             'icon': 'fa-calendar-check',
             'tone': 'slate',
         },
-        {
+    ]
+    if show_ratings:
+        stats.append({
             'key': 'valoracion',
             'label': 'Valoración media',
             'value': avg_rating if avg_rating is not None else '—',
@@ -1081,7 +1086,8 @@ def get_company_panel_stats(company):
             'icon': 'fa-star',
             'tone': 'amber' if avg_rating else 'slate',
             'href': personal_url if ratings_count else None,
-        },
+        })
+    stats.extend([
         {
             'key': 'solicitudes',
             'label': 'Solicitudes',
@@ -1098,7 +1104,7 @@ def get_company_panel_stats(company):
             'icon': 'fa-exclamation-triangle',
             'tone': 'red' if fichajes_alertas else 'green',
         },
-    ]
+    ])
 
     return {
         'stats': stats,

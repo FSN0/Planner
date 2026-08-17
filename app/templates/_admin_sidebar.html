@@ -137,15 +137,6 @@
   <div class="sidebar-spacer"></div>
 
   <div class="sidebar-footer-block">
-    <form action="{{ url_for('main.update_user_timezone') }}" method="POST" class="sidebar-tz-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="sidebar-tz-label" for="sidebar-timezone"><i class="fas fa-globe-europe"></i> {{ _('Zona horaria') }}</label>
-      <select id="sidebar-timezone" name="timezone" class="sidebar-tz-select" onchange="this.form.submit()">
-        {% for tz_code, tz_label in timezone_options %}
-        <option value="{{ tz_code }}" {% if user_timezone == tz_code %}selected{% endif %}>{{ tz_label }}</option>
-        {% endfor %}
-      </select>
-    </form>
     <a href="{{ url_for('auth.logout') }}" class="sidebar-link sidebar-link--logout">
       <i class="fas fa-sign-out-alt fa-fw"></i><span>{{ _('Cerrar sesión') }}</span>
     </a>

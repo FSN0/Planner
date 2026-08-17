@@ -59,10 +59,19 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
             'req_count': len(leave_dates),
         }
 
+    from app.services.tenant_modules import jefes_asignan_directo
+
+    jefe_directo = (
+        actor_user.role == ROLE_JEFE
+        and jefes_asignan_directo()
+    )
+    if actor_user.role == ROLE_JEFE and target_obra.jefe_obra_id != actor_user.id:
+        return {'success': False, 'error': 'No tienes permiso sobre la obra destino.'}
+
     # ==========================================
-    # LÓGICA DE ADMINISTRADOR (Modo Dios)
+    # ADMIN, O JEFE CON ASIGNACIÓN DIRECTA
     # ==========================================
-    if actor_user.role == ROLE_ADMIN:
+    if actor_user.role == ROLE_ADMIN or jefe_directo:
         if mode in ['check', 'pure_check']:
             conflict_details = {}
             count_conflict = 0
@@ -318,11 +327,13 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
         if already_on_target:
             continue
 
-        CoreAssignmentService.asignar(
+        creada = CoreAssignmentService.asignar(
             worker_id, obra_id, d, actor_id, "Planificación Manual",
             company_id=company_id, solicitud_id=solicitud_id,
             registrar_log=False,
         )
+        if not creada:
+            continue
         assigned_dates.append(d)
         count += 1
 
@@ -404,7 +415,9 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
     rows = [(int(a.user_id), int(a.obra_id), a.fecha) for a in asignaciones]
     fechas_con_asignacion = [fecha for _, _, fecha in rows]
     
-    if actor_user.role == ROLE_JEFE:
+    from app.services.tenant_modules import jefes_asignan_directo as _jefes_directo
+
+    if actor_user.role == ROLE_JEFE and not _jefes_directo():
         if not fechas_con_asignacion:
             return {'success': False, 'message': 'El trabajador no tiene asignaciones en este periodo.'}
             

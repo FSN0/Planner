@@ -796,6 +796,10 @@ class UniversalCalendarManager {
         }, 150);
     }
 
+    _allowGenericoRequest() {
+        return !(window.JEFES_ASIGNAN_DIRECTO && window.SP_USER_ROLE === 'jefe_obra');
+    }
+
     _renderMultiWorkerSelect(container, prefill) {
         this._destroySelect2In(container);
         container.innerHTML = `
@@ -809,7 +813,7 @@ class UniversalCalendarManager {
             <select id="${this.panelId}-select" class="d-none" aria-hidden="true"><option></option></select>
         `;
         const list = document.getElementById(`${this.panelId}-workers-list`);
-        this._addWorkerRow(list, { allowGenerico: true, prefill: prefill || null });
+        this._addWorkerRow(list, { allowGenerico: this._allowGenericoRequest(), prefill: prefill || null });
         const addBtn = document.getElementById(`${this.panelId}-add-worker`);
         if (addBtn) {
             addBtn.addEventListener('click', () => {
@@ -1075,10 +1079,11 @@ class UniversalCalendarManager {
                         tipo: tipo || TIPO_VACACIONES,
                     }),
                 })
-                .then((r) => r.json())
-                .then((res) => {
-                    if (!res.success) {
-                        if (typeof Swal !== 'undefined') Swal.fire(t('Error'), res.error || t('No se pudo guardar'), 'error');
+                .then((r) => r.json().then((res) => ({ ok: r.ok, res })).catch(() => ({ ok: false, res: null })))
+                .then(({ ok, res }) => {
+                    if (!ok || !res || !res.success) {
+                        const msg = (res && (res.error || res.message)) || t('No se pudo guardar');
+                        if (typeof Swal !== 'undefined') Swal.fire(t('Error'), msg, 'error');
                         return;
                     }
                     if (typeof Swal !== 'undefined') {

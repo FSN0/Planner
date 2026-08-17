@@ -2,8 +2,7 @@
 #
 # Convención del proyecto:
 #   - Los DateTime en BD se almacenan como naive UTC.
-#   - La visualización convierte UTC → zona del usuario (o la global si no tiene).
-#   - La lógica de negocio ("hoy", cortes horarios) usa la zona global de la app.
+#   - Visualización y lógica de negocio ("hoy", cortes) usan la zona del tenant.
 
 from datetime import datetime, date, timezone
 from functools import lru_cache
@@ -54,14 +53,7 @@ def invalidate_app_timezone_cache():
 
 
 def get_user_timezone(user=None):
-    """Zona horaria efectiva para visualización."""
-    try:
-        from flask_login import current_user
-        u = user or (current_user if current_user.is_authenticated else None)
-        if u and getattr(u, 'timezone', None):
-            return _safe_zone(u.timezone)
-    except Exception:
-        pass
+    """Zona horaria efectiva: siempre la del tenant (un huso por empresa)."""
     return get_app_timezone()
 
 

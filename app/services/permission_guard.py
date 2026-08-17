@@ -196,6 +196,10 @@ def enforce_sync_permissions():
 
 
 def enforce_notas_permissions():
+    from app.services.tenant_modules import has_notas
+    if not has_notas():
+        flash('Este espacio no tiene el módulo de notas.', 'warning')
+        return redirect(url_for('main.dashboard'))
     return enforce_rules(_NOTAS_RULES)
 
 

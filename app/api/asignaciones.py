@@ -619,6 +619,12 @@ def api_planificador_action():
             return jsonify(batch_result)
 
         if str(worker_id) == 'GENERICO':
+            from app.services.tenant_modules import jefe_sin_buzon_solicitudes
+            if jefe_sin_buzon_solicitudes(current_user):
+                return jsonify({
+                    "success": False,
+                    "error": translate("Asigna personas concretas en el cuadrante. El buzón de solicitudes no aplica para jefes de obra."),
+                })
             detalles = data.get('detalles', 'Personal Genérico')
             cantidad_pedida = int(data.get('cantidad', 1))
             

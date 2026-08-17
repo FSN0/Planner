@@ -58,7 +58,6 @@ def asegurar_obra_oficina():
             color=COLOR_OFICINA,
             is_deleted=False,
             external_ids={'sistema': 'oficina'},
-            limite_trabajadores=0,
         )
         db.session.add(obra)
         db.session.flush()

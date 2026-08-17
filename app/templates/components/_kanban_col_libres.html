@@ -75,7 +75,7 @@
                     </div>
                     
                     {% set rep = worker.reputation_score %}
-                    {% if rep != 0 %}
+                    {% if tenant_has_valoraciones and rep != 0 %}
                         <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}" 
                               style="font-size: 0.6rem; padding: 1px 4px;">
                             {{ '+' if rep > 0 }}{{ rep }}

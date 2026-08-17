@@ -19,6 +19,8 @@ MODULOS_DISPONIBLES = {
     'odoo_alta': 'Alta Odoo (Fichajes Soltec / SSO)',
     # Personalizaciones por cliente (no producto genérico)
     'avisos_laborales': 'Avisos laborales en Logs (click acusar Planificación/Solicitud)',
+    'notas': 'Notas / reuniones (centro de mando)',
+    'auditoria_vehiculos': 'Auditoría de km / anomalías de flota',
 }
 
 # Solo adaptadores realmente implementados en app/sync/adapters/.
@@ -178,6 +180,8 @@ def create_tenant():
                 'fichaje_operario': False,
                 'registro_jornada': True,
                 'onboarding': False,
+                'notas': False,
+                'auditoria_vehiculos': False,
             },
         )
         flash(f"Inquilino '{nombre}' creado. El administrador ya puede iniciar sesión.", "success")

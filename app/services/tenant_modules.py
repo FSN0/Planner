@@ -21,6 +21,12 @@ def current_tenant():
     return None
 
 
+def is_soltec_tenant(tenant=None):
+    tenant = tenant if tenant is not None else current_tenant()
+    sub = (getattr(tenant, 'subdominio', None) or '').strip().lower()
+    return sub == 'soltec'
+
+
 def get_modulos_activos(tenant=None):
     tenant = tenant if tenant is not None else current_tenant()
     if not tenant:
@@ -36,6 +42,14 @@ def module_enabled(key, tenant=None, *, default=False):
     return bool(mods.get(key))
 
 
+def _soltec_fallback(key, tenant=None):
+    """Si la clave no está en JSON, Soltec conserva el extra histórico."""
+    mods = get_modulos_activos(tenant)
+    if key in mods:
+        return bool(mods.get(key))
+    return is_soltec_tenant(tenant)
+
+
 def has_avisos_laborales(tenant=None):
     """
     Click para acusar/reactivar logs de Planificación y Solicitud + badge laboral.
@@ -44,9 +58,98 @@ def has_avisos_laborales(tenant=None):
     modulos_activos['avisos_laborales']=True. Si la clave no existe, se mantiene
     el comportamiento histórico solo para el tenant cuyo subdominio es «soltec».
     """
-    mods = get_modulos_activos(tenant)
-    if 'avisos_laborales' in mods:
-        return bool(mods.get('avisos_laborales'))
-    tenant = tenant if tenant is not None else current_tenant()
-    sub = (getattr(tenant, 'subdominio', None) or '').strip().lower()
-    return sub == 'soltec'
+    return _soltec_fallback('avisos_laborales', tenant)
+
+
+def has_notas(tenant=None):
+    """Centro de notas / reuniones. Apagado en el SaaS genérico."""
+    return _soltec_fallback('notas', tenant)
+
+
+def has_valoraciones(tenant=None):
+    """Puntuación de operarios: va en el producto, no es módulo a medida."""
+    return True
+
+
+def has_auditoria_vehiculos(tenant=None):
+    """
+    Auditoría de km / anomalías de flota (odómetro, TMS).
+    El cuadrante de coches es producto; esto es extra a medida.
+    """
+    return _soltec_fallback('auditoria_vehiculos', tenant)
+
+
+# --- Ajustes de tenant (ConfiguracionGlobal), no módulos superadmin ---
+
+CONFIG_JEFES_ASIGNAN_DIRECTO = 'jefes_asignan_directo'
+CONFIG_HORA_CORTE_ACTIVA = 'hora_corte_activa'
+CONFIG_HORA_CORTE_DESTINATARIOS = 'hora_corte_destinatarios'
+CONFIG_CONFORME_JORNADA = 'conforme_jornada_activo'
+
+
+def _config_flag(clave, *, default_generic, default_soltec):
+    from app.services.config_service import get_tenant_config
+
+    raw = get_tenant_config(clave, default=None)
+    if raw is None:
+        return bool(default_soltec if is_soltec_tenant() else default_generic)
+    return str(raw).strip().lower() in ('true', '1', 'yes', 'on')
+
+
+def jefes_asignan_directo():
+    """
+    True: el jefe mueve gente/coches en el cuadrante (SaaS genérico).
+    False: el jefe pide y oficina confirma (flujo Soltec).
+    """
+    return _config_flag(
+        CONFIG_JEFES_ASIGNAN_DIRECTO,
+        default_generic=True,
+        default_soltec=False,
+    )
+
+
+def jefe_sin_buzon_solicitudes(user=None):
+    """True si este usuario es jefe y el tenant asigna en el cuadrante (sin buzón)."""
+    from app.models import ROLE_JEFE
+
+    u = user
+    if u is None and has_request_context():
+        try:
+            from flask_login import current_user
+            if getattr(current_user, 'is_authenticated', False):
+                u = current_user
+        except Exception:
+            u = None
+    if not u or getattr(u, 'role', None) != ROLE_JEFE:
+        return False
+    return jefes_asignan_directo()
+
+
+def hora_corte_activa():
+    """Marca ausencias de fichaje y manda el resumen diario al llegar la hora."""
+    return _config_flag(
+        CONFIG_HORA_CORTE_ACTIVA,
+        default_generic=False,
+        default_soltec=True,
+    )
+
+
+def hora_corte_destinatario_ids():
+    from app.services.config_service import get_tenant_config
+
+    raw = get_tenant_config(CONFIG_HORA_CORTE_DESTINATARIOS, default='') or ''
+    ids = []
+    for part in str(raw).split(','):
+        part = part.strip()
+        if part.isdigit():
+            ids.append(int(part))
+    return ids
+
+
+def conforme_jornada_activo():
+    """Firma del trabajador sobre la jornada. Apagada hasta que el cliente la pida."""
+    return _config_flag(
+        CONFIG_CONFORME_JORNADA,
+        default_generic=False,
+        default_soltec=False,
+    )

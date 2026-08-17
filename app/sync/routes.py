@@ -50,6 +50,11 @@ def _require_odoo_module():
     return True
 
 
+def _require_auditoria_vehiculos():
+    from app.services.tenant_modules import has_auditoria_vehiculos
+    return bool(_tenant_modulos().get('odoo') and has_auditoria_vehiculos())
+
+
 def _require_integration_access():
     if not _tenant_has_integrations():
         return False
@@ -1388,7 +1393,7 @@ def commit_vehiculos():
 @roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def auditoria_vehiculos():
     """Auditoría informativa plan vs odómetro Odoo (sin acciones de resolución)."""
-    if not _require_odoo_module():
+    if not _require_auditoria_vehiculos():
         return redirect(url_for('admin.panel'))
 
     from app.utils.timezone_utils import today_local
@@ -1627,7 +1632,7 @@ def auditoria_vehiculos():
 @roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def auditoria_vehiculos_visto():
     """Marca una anomalía de flota como vista (informativo; no resuelve)."""
-    if not _require_odoo_module():
+    if not _require_auditoria_vehiculos():
         return jsonify({'success': False, 'error': translate('Módulo Odoo no habilitado')}), 403
 
     data = request.get_json(silent=True) or {}

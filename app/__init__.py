@@ -1,5 +1,5 @@
 import os
-from flask import Flask, redirect, url_for, request, g, abort, current_app, session
+from flask import Flask, redirect, url_for, request, g, abort, current_app, session, has_app_context
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
@@ -8,7 +8,8 @@ from flask_wtf import CSRFProtect
 from flask_wtf.csrf import generate_csrf
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from sqlalchemy import text
+from sqlalchemy import event, text
+from sqlalchemy.orm import Session as SASession
 from .config import Config
 import logging
 import re
@@ -32,6 +33,20 @@ _SCHEMA_SAFE_RE = re.compile(r'^[a-z0-9_]+$')
 def is_safe_schema_name(name):
     """Valida que un nombre de esquema solo contenga caracteres seguros."""
     return bool(name) and bool(_SCHEMA_SAFE_RE.match(name))
+
+
+def _restore_tenant_search_path(session, transaction, connection):
+    """Reaplica el schema del tenant al abrir transacción (pool / post-commit)."""
+    if not has_app_context():
+        return
+    tenant = getattr(g, 'current_tenant', None)
+    schema = getattr(tenant, 'schema_name', None)
+    if schema and is_safe_schema_name(schema):
+        connection.execute(text(f'SET search_path TO {schema}, public'))
+
+
+if not event.contains(SASession, 'after_begin', _restore_tenant_search_path):
+    event.listen(SASession, 'after_begin', _restore_tenant_search_path)
 
 
 def create_app():
@@ -341,6 +356,10 @@ def create_app():
                 tenant_has_fichaje_operario=False,
                 muestra_auditoria_fichajes=False,
                 tenant_has_avisos_laborales=False,
+                tenant_has_notas=False,
+                tenant_has_valoraciones=False,
+                tenant_has_auditoria_vehiculos=False,
+                jefes_asignan_directo=False,
                 mostrar_onboarding=False,
                 onboarding_import_done={},
                 onboarding_fichaje_asked=False,
@@ -399,19 +418,21 @@ def create_app():
 
                     # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
                     elif current_user.role == ROLE_JEFE:
-                        from sqlalchemy import or_
-                        from app.models import Obra
-                        pending_count = Solicitud.query.join(Obra).filter(
-                            or_(
-                                Solicitud.requested_by_id == current_user.id,
-                                Obra.jefe_obra_id == current_user.id,
-                            ),
-                            Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                        ).count()
-                        pending_count += SolicitudVehiculo.query.filter(
-                            SolicitudVehiculo.requested_by_id == current_user.id,
-                            SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                        ).count()
+                        from app.services.tenant_modules import jefes_asignan_directo as _jefe_directo
+                        if not _jefe_directo():
+                            from sqlalchemy import or_
+                            from app.models import Obra
+                            pending_count = Solicitud.query.join(Obra).filter(
+                                or_(
+                                    Solicitud.requested_by_id == current_user.id,
+                                    Obra.jefe_obra_id == current_user.id,
+                                ),
+                                Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                            ).count()
+                            pending_count += SolicitudVehiculo.query.filter(
+                                SolicitudVehiculo.requested_by_id == current_user.id,
+                                SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                            ).count()
 
                     session[_badge_key] = {
                         't': _now,
@@ -444,6 +465,10 @@ def create_app():
         tenant_has_fichaje_operario = False
         muestra_auditoria_fichajes = False
         tenant_has_avisos_laborales = False
+        tenant_has_notas = False
+        tenant_has_valoraciones = False
+        tenant_has_auditoria_vehiculos = False
+        jefes_asignan_directo = False
         if current_user.is_authenticated:
             tenant = getattr(g, 'current_tenant', None)
             if tenant:
@@ -457,8 +482,18 @@ def create_app():
                 tenant_has_fichaje_operario = bool(
                     modulos_activos.get('fichaje_operario')
                 )
-                from app.services.tenant_modules import has_avisos_laborales
+                from app.services.tenant_modules import (
+                    has_avisos_laborales,
+                    has_auditoria_vehiculos,
+                    has_notas,
+                    has_valoraciones,
+                    jefes_asignan_directo as _jefes_asignan_directo,
+                )
                 tenant_has_avisos_laborales = has_avisos_laborales(tenant)
+                tenant_has_notas = has_notas(tenant)
+                tenant_has_valoraciones = has_valoraciones(tenant)
+                tenant_has_auditoria_vehiculos = has_auditoria_vehiculos(tenant)
+                jefes_asignan_directo = _jefes_asignan_directo()
                 try:
                     from app.services.fichaje_operario_service import (
                         tenant_muestra_auditoria_fichajes,
@@ -521,6 +556,10 @@ def create_app():
                     'tenant_has_integrations': tenant_has_integrations,
                     'tenant_has_registro_jornada': tenant_has_registro_jornada,
                     'tenant_has_avisos_laborales': tenant_has_avisos_laborales,
+                    'tenant_has_notas': tenant_has_notas,
+                    'tenant_has_valoraciones': tenant_has_valoraciones,
+                    'tenant_has_auditoria_vehiculos': tenant_has_auditoria_vehiculos,
+                    'jefes_asignan_directo': jefes_asignan_directo,
                     'mostrar_onboarding': mostrar_onboarding,
                     'tenant_has_onboarding': tenant_has_onboarding,
                     'onboarding_completo': onboarding_completo,
@@ -541,6 +580,10 @@ def create_app():
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
             muestra_auditoria_fichajes=muestra_auditoria_fichajes,
             tenant_has_avisos_laborales=tenant_has_avisos_laborales,
+            tenant_has_notas=tenant_has_notas,
+            tenant_has_valoraciones=tenant_has_valoraciones,
+            tenant_has_auditoria_vehiculos=tenant_has_auditoria_vehiculos,
+            jefes_asignan_directo=jefes_asignan_directo,
             tenant_has_onboarding=tenant_has_onboarding,
             onboarding_completo=onboarding_completo,
             mostrar_onboarding=mostrar_onboarding,

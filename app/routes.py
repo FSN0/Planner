@@ -5,7 +5,6 @@ from flask import Blueprint, redirect, url_for, request, flash, g
 from flask_login import login_required, current_user, logout_user
 from app import db
 from app.models import ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL
-from app.utils.timezone_utils import is_valid_timezone, get_app_timezone, timezone_label
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 from app.services.i18n_service import translate
 from app.marketing.routes import render_landing
@@ -37,23 +36,6 @@ def dashboard():
         flash(translate('Tu perfil no tiene acceso a la aplicación.'), 'warning')
         return redirect(url_for('auth.login'))
     return redirect(url_for('auth.login'))
-
-
-@main_bp.route('/preferencias/zona-horaria', methods=['POST'])
-@login_required
-def update_user_timezone():
-    tz = (request.form.get('timezone') or '').strip()
-    if not tz or not is_valid_timezone(tz):
-        flash(translate('Zona horaria no válida.'), 'danger')
-        return redirect(request.referrer or url_for('main.dashboard'))
-
-    current_user.timezone = tz
-    db.session.commit()
-    flash(
-        translate('Zona horaria actualizada: {tz}', tz=timezone_label(tz)),
-        'success',
-    )
-    return redirect(request.referrer or url_for('main.dashboard'))
 
 
 @main_bp.route('/preferencias/idioma', methods=['GET', 'POST'])

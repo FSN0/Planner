@@ -99,6 +99,8 @@
     <script>
         window.SP_LOCALE = {{ current_locale|default('es')|tojson }};
         window.SP_I18N = {{ frontend_i18n|tojson }};
+        window.SP_USER_ROLE = {{ (current_user.role if current_user.is_authenticated else '')|tojson }};
+        window.JEFES_ASIGNAN_DIRECTO = {{ (jefes_asignan_directo|default(false))|tojson }};
         window.SP_T = function (key) {
             if (key === null || key === undefined) return '';
             key = String(key);

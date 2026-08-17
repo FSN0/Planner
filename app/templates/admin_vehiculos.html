@@ -57,7 +57,7 @@
         <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-car-side"></i> {{ _('Coches libres') }}
         </a>
-        {% if current_user.role == 'admin' and tenant_has_odoo %}
+        {% if current_user.role == 'admin' and tenant_has_odoo and tenant_has_auditoria_vehiculos %}
         <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-clipboard-check"></i> {{ _('Auditoría') }}
         </a>

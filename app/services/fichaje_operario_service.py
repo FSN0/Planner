@@ -372,6 +372,9 @@ def puede_conformar_jornada(user_id, fecha):
     Solo se puede conformar un día cerrado (con salida) y sin conforme previo.
     Así el informe puede mostrar la aceptación del interesado.
     """
+    from app.services.tenant_modules import conforme_jornada_activo
+    if not conforme_jornada_activo():
+        return False
     if dia_tiene_conforme(user_id, fecha):
         return False
     estado = jornada_abierta(user_id, fecha)
@@ -392,6 +395,9 @@ def conformar_jornada(user, fecha=None, ip=None, dispositivo=None):
     """
     if not fichaje_operario_activo():
         raise FichajeLedgerError('El fichaje desde el móvil no está activado en tu empresa.')
+    from app.services.tenant_modules import conforme_jornada_activo
+    if not conforme_jornada_activo():
+        raise FichajeLedgerError('Tu empresa no usa la firma de jornada.')
 
     fecha = fecha or today_local()
     if not puede_conformar_jornada(user.id, fecha):

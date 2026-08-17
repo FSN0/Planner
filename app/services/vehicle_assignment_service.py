@@ -51,8 +51,8 @@ def process_vehicle_assignment_action(
     *, notas=None, overwrite_mode='check', accion='ASIGNAR',
 ):
     """
-    ADMIN: asigna/desasigna directamente vía CoreVehicleAssignmentService.
-    JEFE: crea SolicitudVehiculo (siempre petición).
+    ADMIN (y jefe si jefes_asignan_directo): muta el cuadrante.
+    JEFE sin esa opción: crea SolicitudVehiculo.
 
     overwrite_mode: 'check' | 'overwrite' | 'only_free'
       - mismo usuario+vehículo ese día → skip
@@ -74,10 +74,16 @@ def process_vehicle_assignment_action(
     accion = (accion or 'ASIGNAR').upper()
     mode = overwrite_mode or 'check'
 
+    from app.services.tenant_modules import jefes_asignan_directo
+
+    puede_directo = actor_user.role == ROLE_ADMIN or (
+        actor_user.role == ROLE_JEFE and jefes_asignan_directo()
+    )
+
     # ==========================================
-    # ADMIN
+    # ADMIN, O JEFE CON ASIGNACIÓN DIRECTA
     # ==========================================
-    if actor_user.role == ROLE_ADMIN:
+    if puede_directo:
         if accion == 'DESASIGNAR':
             count = 0
             done_dates = []
@@ -213,7 +219,7 @@ def process_vehicle_assignment_action(
         }
 
     # ==========================================
-    # JEFE → siempre solicitud
+    # JEFE → solicitud (si no asigna en directo)
     # ==========================================
     if actor_user.role == ROLE_JEFE:
         # Días ya cubiertos por el mismo par se omiten de la petición.

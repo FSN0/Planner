@@ -30,7 +30,14 @@ class CoreAssignmentService:
         autor_id es quien decide (auditor, planificador). None = proceso
         desatendido (p. ej. auto-asignación por fichaje físico).
         En lotes (rangos) pasar registrar_log=False y llamar registrar_log_rango.
+
+        No crea la fila si ese día hay ausencia aprobada (baja y cuadrante
+        no conviven). Devuelve None en ese caso.
         """
+        from app.services.leave_service import user_has_approved_leave
+        if user_has_approved_leave(user_id, fecha):
+            return None
+
         nueva = Asignacion(
             user_id=user_id,
             obra_id=obra_id,

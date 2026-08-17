@@ -25,7 +25,6 @@ from app.models import (
     EVENTO_PAUSA_INICIO,
     EVENTO_REASIGNACION_OBRA,
     EVENTO_SALIDA,
-    ORIGEN_KIOSCO,
     ORIGEN_PWA,
     ORIGENES_EVENTO_FICHAJE,
     ORIGENES_REQUIEREN_MOTIVO,
@@ -37,7 +36,7 @@ from app.utils.timezone_utils import get_app_timezone, utc_now, utc_to_local
 
 # Solo en estos orígenes ficha la persona por sí misma; en el resto el autor
 # es quien introduce el dato y hay que dejarlo explícito.
-_ORIGENES_AUTOFICHAJE = (ORIGEN_PWA, ORIGEN_KIOSCO)
+_ORIGENES_AUTOFICHAJE = (ORIGEN_PWA,)
 
 
 class FichajeLedgerError(Exception):

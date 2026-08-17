@@ -47,7 +47,9 @@
             <col style="width: 11%">
             <col style="width: 20%">
             <col style="width: 8%">
+            {% if tenant_has_valoraciones %}
             <col style="width: 9%">
+            {% endif %}
             <col class="col-actions-fixed">
           </colgroup>
           <thead>
@@ -59,7 +61,9 @@
               <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Gremio') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              {% if tenant_has_valoraciones %}
               <th class="sortable-col" data-col-index="7" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              {% endif %}
               <th class="col-actions"></th>
             </tr>
             <tr class="filter-row">
@@ -70,7 +74,9 @@
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 4, this.value)" placeholder="…" title="{{ _('Filtrar gremio') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 5, this.value)" placeholder="…" title="{{ _('Filtrar email') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 6, this.value)" placeholder="…" title="{{ _('Filtrar tipo') }}"></th>
+              {% if tenant_has_valoraciones %}
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 7, this.value)" placeholder="…" title="{{ _('Filtrar valoración') }}"></th>
+              {% endif %}
               <th></th>
             </tr>
           </thead>
@@ -90,6 +96,7 @@
                 {% if c.is_internal %}<span class="badge-soft badge-soft-blue">{{ _('Interna') }}</span>
                 {% else %}<span class="badge-soft badge-soft-slate">{{ _('Externa') }}</span>{% endif %}
               </td>
+              {% if tenant_has_valoraciones %}
               {% set ns = namespace(total=0, count=0) %}
               {% for u in c.users %}
                 {% if u.reputation_score and u.reputation_score > 0 %}
@@ -103,6 +110,7 @@
                   {% if ns.count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ avg_score }} <span class="text-muted">({{ ns.count }})</span>{% else %}—{% endif %}
                 </a>
               </td>
+              {% endif %}
               <td class="col-actions">
                 <div class="table-actions">
                   <a href="{{ url_for('admin.edit_company', company_id=c.id) }}" class="btn-table-action" title="{{ _('Configurar') }}"><i class="fas fa-cog"></i></a>
@@ -111,7 +119,7 @@
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="9" class="table-empty-state"><i class="fas fa-building"></i>{{ _('Sin empresas registradas.') }}</td></tr>
+            <tr><td colspan="{{ 9 if tenant_has_valoraciones else 8 }}" class="table-empty-state"><i class="fas fa-building"></i>{{ _('Sin empresas registradas.') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>

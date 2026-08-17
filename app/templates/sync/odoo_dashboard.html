@@ -263,8 +263,10 @@
           <a href="{{ url_for('sync.preview_vehiculos') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader({{ _('Vehículos')|tojson }})">
             <i class="fas fa-search"></i> {{ _('Preview') }}
           </a>
+          {% if tenant_has_auditoria_vehiculos %}
           <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost btn-sm">
             <i class="fas fa-car"></i>{{ _('Auditoría') }}</a>
+          {% endif %}
           <button type="button" class="btn-admin btn-admin-ghost btn-sm" onclick="runSyncNow('vehiculos-retro')">
             <i class="fas fa-history"></i> {{ _('Retro ahora') }}
           </button>

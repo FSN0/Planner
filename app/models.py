@@ -207,7 +207,6 @@ class User(UserMixin, db.Model):
     
     # Configuración
     receive_emails = db.Column(db.Boolean, default=True)
-    timezone = db.Column(db.String(64), nullable=True)
     # Idioma de interfaz (es, en, pt, fr). None → detección automática.
     locale = db.Column(db.String(8), nullable=True)
     # Preferencias del menú lateral: secciones, orden, títulos, ocultos.
@@ -423,10 +422,6 @@ class Obra(db.Model):
     
     # Estado y Gestión
     estado = db.Column(db.String(20), default='PLANIFICADA')
-    limite_trabajadores = db.Column(db.Integer, nullable=False, default=0)
-    
-    # PRL (Enlace externo)
-    url_prl = db.Column(db.String(255), nullable=True)
     
     # Responsable (Usuario Interno)
     jefe_obra_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -574,7 +569,7 @@ TIPOS_MARCA_DE_TIEMPO = (
 
 # --- ORÍGENES DE UN EVENTO ---
 ORIGEN_PWA = 'pwa'
-ORIGEN_KIOSCO = 'kiosco'
+ORIGEN_KIOSCO = 'kiosco'  # histórico; no se ofrece en producto
 ORIGEN_ERP = 'erp'
 ORIGEN_ADMIN = 'admin'
 ORIGEN_IMPORTACION = 'importacion'

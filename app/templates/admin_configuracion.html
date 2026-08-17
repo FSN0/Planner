@@ -75,7 +75,9 @@
       <a href="#cfg-fichajes">{{ _('Fichajes') }}</a>
       <a href="#cfg-ausencias">{{ _('Ausencias') }}</a>
       <a href="#cfg-laboral">{{ _('Laboral') }}</a>
+      {% if tenant_has_auditoria_vehiculos %}
       <a href="#cfg-vehiculos">{{ _('Vehículos') }}</a>
+      {% endif %}
       <a href="#cfg-festivos">{{ _('Festivos') }}</a>
       <a href="#cfg-emails">{{ _('Correos') }}</a>
       {% if tenant_has_onboarding %}
@@ -96,7 +98,7 @@
           <div class="config-block-icon config-block-icon--blue"><i class="fas fa-clock"></i></div>
           <div>
             <h2>{{ _('Horario y planificación') }}</h2>
-            <p>{{ _('Zona horaria del tenant, corte diario y custodia del jefe de obra') }}</p>
+            <p>{{ _('Zona horaria de la empresa, corte diario, quién asigna y a quién avisa el resumen') }}</p>
           </div>
         </header>
         <div class="config-block-body">
@@ -111,19 +113,94 @@
                   <option value="{{ tz_code }}" {% if configs.get('zona_horaria', 'Europe/Madrid') == tz_code %}selected{% endif %}>{{ tz_label }}</option>
                   {% endfor %}
                 </select>
-                <p class="config-field-hint">{{ _('Afecta a fichajes, sync Odoo y tareas programadas') }}</p>
-              </div>
-              <div class="config-field">
-                <label for="hora_limite_entrada">{{ _('Hora límite de entrada') }}</label>
-                <input type="time" id="hora_limite_entrada" name="hora_limite_entrada" class="form-control form-control-sm font-weight-bold" value="{{ configs.get('hora_limite_entrada', '08:30') }}" required>
-                <p class="config-field-hint">{{ _('Corte para marcar ausencias y enviar el resumen diario (se comprueba cada 5 minutos durante todo el día)') }}</p>
+                <p class="config-field-hint">{{ _('Afecta a fichajes, el «hoy» del cuadrante y las tareas programadas. Es la misma para toda la empresa.') }}</p>
               </div>
               <div class="config-field">
                 <label for="limite_custodia">{{ _('Custodia del jefe (días)') }}</label>
                 <input type="number" id="limite_custodia" name="limite_custodia" class="form-control form-control-sm text-center font-weight-bold" value="{{ limite_custodia }}" min="0" required>
-                <p class="config-field-hint">{{ _('Días que el jefe puede reasignar a un operario tras su último día en su obra') }}</p>
+                <p class="config-field-hint">{{ _('Días que el jefe puede reasignar a un operario tras su último día en su obra (solo si los jefes piden en vez de asignar).') }}</p>
               </div>
             </div>
+
+            <div class="config-switch-box mt-4">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="jefes_asignan_directo" name="jefes_asignan_directo"
+                       {% if jefes_asignan_directo %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">{{ _('Los jefes de obra asignan en el cuadrante') }}</p>
+                <p class="admin-form-switch-hint mb-0">
+                  {{ _('Activado: el jefe mueve a su gente y sus coches, y no usa el buzón de solicitudes. Desactivado: el jefe pide y oficina confirma.') }}
+                </p>
+              </div>
+            </div>
+
+            <div class="config-switch-box mt-4">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="hora_corte_activa" name="hora_corte_activa"
+                       {% if hora_corte_activa %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">{{ _('Aviso diario a la hora límite de entrada') }}</p>
+                <p class="admin-form-switch-hint mb-0">
+                  {{ _('Marca quién no ha fichado y envía el resumen por correo. Apagado por defecto; actívalo si lo necesitáis.') }}
+                </p>
+              </div>
+            </div>
+
+            <div id="cfg-hora-corte-extras" class="{% if not hora_corte_activa %}d-none{% endif %}">
+              <div class="config-fields-grid mt-3">
+              <div class="config-field">
+                <label for="hora_limite_entrada">{{ _('Hora límite de entrada') }}</label>
+                <input type="time" id="hora_limite_entrada" name="hora_limite_entrada" class="form-control form-control-sm font-weight-bold" value="{{ configs.get('hora_limite_entrada', '08:30') }}">
+                <p class="config-field-hint">{{ _('A esa hora se revisa quién no ha fichado (se comprueba cada 5 minutos).') }}</p>
+              </div>
+              </div>
+              <p class="config-section-label mt-3">{{ _('Quién recibe el correo') }}</p>
+              <p class="config-field-hint">{{ _('Elige personas de oficina. Esta lista es de toda la empresa. Si no marcas a nadie, se envía a los administradores.') }}</p>
+              <div class="config-email-table mt-2">
+                <table class="filterable-table admin-data-table mb-0">
+                  <thead>
+                    <tr class="header-row">
+                      <th style="width:3rem;"></th>
+                      <th>{{ _('Persona') }}</th>
+                      <th>{{ _('Rol') }}</th>
+                      <th>{{ _('Email') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for u in office_users %}
+                    <tr>
+                      <td>
+                        <input type="checkbox" name="hora_corte_destinatarios" value="{{ u.id }}"
+                               {% if u.id in hora_corte_destinatario_ids %}checked{% endif %}
+                               {% if not u.email %}disabled{% endif %}>
+                      </td>
+                      <td class="font-weight-bold">{{ u.name }} {{ u.lastname }}</td>
+                      <td>{{ _(u.role) }}</td>
+                      <td>{% if u.email %}{{ u.email }}{% else %}<span class="text-muted">{{ _('Sin email') }}</span>{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                      <td colspan="4" class="table-empty-state">{{ _('No hay usuarios de oficina todavía.') }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <script>
+            (function () {
+              var master = document.getElementById('hora_corte_activa');
+              var extras = document.getElementById('cfg-hora-corte-extras');
+              if (!master || !extras) return;
+              master.addEventListener('change', function () {
+                extras.classList.toggle('d-none', !master.checked);
+              });
+            })();
+            </script>
             <div class="config-block-actions">
               <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar horario') }}</button>
             </div>
@@ -215,6 +292,19 @@
                 </p>
               </div>
             </div>
+            <div class="config-switch-box mt-4">
+              <label class="admin-form-switch">
+                <input type="checkbox" id="conforme_jornada_activo" name="conforme_jornada_activo"
+                       {% if conforme_jornada_activo %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <div>
+                <p class="admin-form-switch-label mb-0">{{ _('Pedir firma de jornada al trabajador') }}</p>
+                <p class="admin-form-switch-hint mb-0">
+                  {{ _('Al terminar el día, el operario puede confirmar que entrada, pausas y salida son correctas. Apagado por defecto.') }}
+                </p>
+              </div>
+            </div>
             </div>
             <script>
             (function () {
@@ -242,23 +332,16 @@
           <div class="config-block-icon config-block-icon--violet"><i class="fas fa-umbrella-beach"></i></div>
           <div>
             <h2>{{ _('Ausencias') }}</h2>
-            <p>{{ _('Qué hacer cuando Odoo marca vacaciones / baja y hay alguien asignado ese día') }}</p>
+            <p>{{ _('Si alguien está de baja o vacaciones, no aparece asignado a ninguna obra ese día.') }}</p>
           </div>
         </header>
         <div class="config-block-body">
           <form action="{{ url_for('admin.update_config') }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="form_section" value="ausencias">
-            <div class="config-field">
-              <label for="ausencias_auto_resolucion">{{ _('Cuando hay ausencia y asignación el mismo día') }}</label>
-              <select id="ausencias_auto_resolucion" name="ausencias_auto_resolucion" class="form-control form-control-sm custom-select">
-                <option value="overlay" {% if configs.get('ausencias_auto_resolucion', 'overlay') == 'overlay' %}selected{% endif %}>{{ _('Mantener la asignación y marcar vacaciones en el calendario (recomendado con Odoo)') }}</option>
-                <option value="prefer_leave" {% if configs.get('ausencias_auto_resolucion') == 'prefer_leave' %}selected{% endif %}>{{ _('Liberar la asignación (como con vehículos): el trabajador queda libre esos días') }}</option>
-                <option value="none" {% if configs.get('ausencias_auto_resolucion') == 'none' %}selected{% endif %}>{{ _('Manual: crear conflicto para confirmar a mano') }}</option>
-                <option value="prefer_assignment" {% if configs.get('ausencias_auto_resolucion') == 'prefer_assignment' %}selected{% endif %}>{{ _('Ignorar la ausencia ese día (no marcar en calendario)') }}</option>
-              </select>
-              <p class="config-field-hint">{{ _('Odoo manda en las ausencias aprobadas. No se envía email al jefe por este motivo.') }}</p>
-            </div>
+            <p class="config-field-hint mb-3">
+              {{ _('Al aprobar una ausencia se libera el cuadrante (igual que el coche). No se puede asignar a obra a alguien con baja aprobada.') }}
+            </p>
             <div class="config-switch-box mt-3 mb-0">
               <label class="admin-form-switch">
                 <input type="checkbox" id="ausencias_jefe_puede_resolver" name="ausencias_jefe_puede_resolver"
@@ -267,7 +350,7 @@
               </label>
               <div>
                 <p class="admin-form-switch-label mb-0">{{ _('El jefe de obra puede resolver conflictos de ausencias') }}</p>
-                <p class="admin-form-switch-hint mb-0">{{ _('Solo tiene efecto si arriba eliges el modo Manual.') }}</p>
+                <p class="admin-form-switch-hint mb-0">{{ _('Si quedan conflictos antiguos pendientes, el jefe puede resolverlos. Lo nuevo se libera solo.') }}</p>
               </div>
             </div>
             <div class="config-block-actions">
@@ -308,7 +391,8 @@
         </div>
       </section>
 
-      {# —— 5. Vehículos —— #}
+      {% if tenant_has_auditoria_vehiculos %}
+      {# —— 5. Vehículos (módulo a medida: km / anomalías) —— #}
       <section class="config-block" id="cfg-vehiculos">
         <header class="config-block-head">
           <div class="config-block-icon config-block-icon--amber"><i class="fas fa-car"></i></div>
@@ -360,6 +444,7 @@
           </form>
         </div>
       </section>
+      {% endif %}
 
       {# —— 6. Festivos —— #}
       <section class="config-block" id="cfg-festivos">

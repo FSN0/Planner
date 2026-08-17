@@ -13,6 +13,7 @@ from flask import has_request_context, request, url_for
 from flask_login import current_user
 
 from app import db
+from app.models import ROLE_JEFE
 from app.services.i18n_service import _
 from app.services.permission_service import is_laboral, user_can
 
@@ -403,12 +404,14 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_PLANIFICADOR:
         return user_can(user, 'planificador', 'r')
     if item_id == ITEM_REUNIONES:
-        return user_can(user, 'reuniones', 'r')
+        return user_can(user, 'reuniones', 'r') and bool(ctx.get('tenant_has_notas'))
     if item_id == ITEM_TRABAJADORES:
         return user_can(user, 'trabajadores', 'r')
     if item_id == ITEM_SUBCONTRATAS:
         return user_can(user, 'subcontratas', 'r')
     if item_id == ITEM_SOLICITUDES:
+        if getattr(user, 'role', None) == ROLE_JEFE and ctx.get('jefes_asignan_directo'):
+            return False
         return user_can(user, 'solicitudes', 'r')
     if item_id == ITEM_AUSENCIAS:
         return user_can(user, 'ausencias', 'r')
@@ -417,7 +420,11 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_COCHES_LIBRES:
         return user_can(user, 'vehiculos_libres', 'r')
     if item_id == ITEM_AUDITORIA_VEH:
-        return user_can(user, 'auditoria_vehiculos', 'r') and bool(ctx.get('tenant_has_odoo'))
+        return (
+            user_can(user, 'auditoria_vehiculos', 'r')
+            and bool(ctx.get('tenant_has_auditoria_vehiculos'))
+            and bool(ctx.get('tenant_has_odoo'))
+        )
     if item_id == ITEM_AUDITORIA_FICH:
         if not user_can(user, 'auditoria_fichajes', 'r'):
             return False

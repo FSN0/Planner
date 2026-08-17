@@ -50,13 +50,19 @@ def api_crear_ausencia():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(exc)}), 400
 
+    if leave is None:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': translate('No se pudo guardar la ausencia.')}), 500
+
+    leave_id = leave.id
+    leave_estado = leave.estado
     return jsonify({
         'success': True,
-        'leave_id': leave.id,
-        'estado': leave.estado,
+        'leave_id': leave_id,
+        'estado': leave_estado,
         'message': (
             translate('Solicitud de ausencia enviada (pendiente de validación).')
-            if leave.estado == 'pendiente'
+            if leave_estado == 'pendiente'
             else translate('Ausencia registrada.')
         ),
     })

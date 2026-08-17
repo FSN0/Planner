@@ -110,6 +110,8 @@ class TestSignupValidacion:
         assert (tenant.modulos_activos or {}).get('fichaje_operario') is True
         assert (tenant.modulos_activos or {}).get('onboarding') is True
         assert (tenant.modulos_activos or {}).get('registro_jornada') is True
+        assert (tenant.modulos_activos or {}).get('notas') is False
+        assert (tenant.modulos_activos or {}).get('auditoria_vehiculos') is False
 
         session.execute(text(f'SET search_path TO {tenant.schema_name}'))
         from app.models import ConfiguracionGlobal, Obra, User

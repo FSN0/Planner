@@ -82,10 +82,14 @@ def laboral_auditoria_sections(user) -> set:
 def laboral_log_categories(user) -> list:
     if is_laboral(user):
         return list(LABORAL_LOG_CATEGORIES)
-    return [
+    cats = [
         'accesos', 'valoraciones', 'planificacion', 'obras', 'fichajes',
         'solicitud', 'persona_obra',
     ]
+    from app.services.tenant_modules import has_valoraciones
+    if not has_valoraciones():
+        cats = [c for c in cats if c != 'valoraciones']
+    return cats
 
 
 def _checkbox_on(form_data, key: str) -> bool:

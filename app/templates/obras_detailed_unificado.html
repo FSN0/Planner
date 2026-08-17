@@ -113,6 +113,7 @@
     </div>
   </div>
 
+{% if tenant_has_valoraciones %}
 <div class="modal fade entity-rating-modal" id="ratingModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -147,6 +148,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 <div class="modal fade" id="modalMoveToLibres" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog modal-xl" role="document">
     <div class="modal-content">
@@ -201,6 +203,7 @@
   ];
 
   // Funciones rápidas para el rating (el resto está en kanban_logic.js pero esto asegura funcionamiento en modal)
+  {% if tenant_has_valoraciones %}
   function openRatingModal(workerId, workerName) {
       $('#ratingWorkerId').val(workerId);
       $('#ratingWorkerName').text(workerName);
@@ -208,6 +211,7 @@
       $('.rating-btn').removeClass('active');
       $('#ratingModal').modal('show');
   }
+  {% endif %}
   
   // Delegación de eventos para rating botones se mueve a kanban_logic o script global
 </script>
@@ -222,7 +226,7 @@
     </script>
   
   <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817a"></script>
+  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817c"></script>
   
   
   <script src="https://cdn.jsdelivr.net/npm/dom-autoscroller@2.3.4/dist/dom-autoscroller.min.js"></script>
@@ -236,6 +240,7 @@
     </script>
   <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260816i"></script>
   
+  {% if tenant_has_valoraciones %}
   <script>
     $(document).on('click', '.rating-btn', function() {
         $('.rating-btn').removeClass('active');
@@ -259,6 +264,7 @@
         });
     }
   </script>
+  {% endif %}
 
 
 

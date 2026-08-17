@@ -957,7 +957,6 @@ def _commit_obra(parsed: dict) -> dict:
         fecha_inicio=fecha_inicio,
         fecha_fin=fecha_fin,
         estado=_estado_obra_import(fecha_inicio, fecha_fin),
-        limite_trabajadores=50,
         jefe_obra_id=None,
         fecha_importacion=datetime.utcnow(),
     )

@@ -195,6 +195,10 @@ def verificar_hora_corte():
         from app.utils.timezone_utils import now_local, today_local
 
         def _run_for_tenant(_tenant_data):
+            from app.services.tenant_modules import hora_corte_activa
+            if not hora_corte_activa():
+                return
+
             conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
             hora_str = conf_hora.valor if conf_hora else "08:30"
             hora_corte = datetime.strptime(hora_str, "%H:%M").time()

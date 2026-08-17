@@ -62,16 +62,6 @@
               </span>
             </div>
             <div class="entity-meta-item">
-              <span class="entity-meta-item-label">{{ _('Plataforma PRL') }}</span>
-              <span class="entity-meta-item-value">
-                {% if obra.url_prl %}
-                  <a href="{{ obra.url_prl }}" target="_blank" rel="noopener">{{ _('Enlace externo') }} <i class="fas fa-external-link-alt small"></i></a>
-                {% else %}
-                  <span class="entity-meta-item-value--muted">{{ _('Sin asignar') }}</span>
-                {% endif %}
-              </span>
-            </div>
-            <div class="entity-meta-item">
               <span class="entity-meta-item-label">{{ _('Estado') }}</span>
               <span class="entity-meta-item-value">
                 {% set estado_lower = (obra.estado or '')|lower %}
@@ -95,13 +85,6 @@
                 → {% if obra.fecha_fin %}{{ obra.fecha_fin.strftime('%d/%m/%Y') }}{% else %}{{ _('En curso') }}{% endif %}
               </span>
             </div>
-            <div class="entity-meta-item">
-              <span class="entity-meta-item-label">{{ _('Cupo máximo') }}</span>
-              <span class="entity-meta-item-value">{{ obra.limite_trabajadores or _('Sin límite') }}</span>
-            </div>
-
-            <div class="entity-meta-divider"></div>
-
             <div class="entity-meta-item">
               <span class="entity-meta-item-label">{{ _('Jefe de obra') }}</span>
               <span class="entity-meta-item-value">
@@ -171,7 +154,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817a"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817c"></script>
 <script>
 let obraCalendarInstance = null;
 const CURRENT_OBRA_ID = {{ obra.id }};

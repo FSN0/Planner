@@ -333,40 +333,10 @@ document.addEventListener('DOMContentLoaded', function() {
             icon.style.fontSize = '10px';
             btn.appendChild(icon);
 
-            // --- NUEVO: BOTÓN A LA APP DE COSTES ---
-            var btnCostes = document.createElement('a');
-            btnCostes.href = window.location.protocol + '//' + window.location.hostname + ':4999/obra/' + group.id;
-            btnCostes.target = '_blank';
-            btnCostes.title = t('Ver Hoja de Costes (BIM)');
-            btnCostes.style.position = 'absolute';
-            // Lo ponemos a 28px de la derecha para que quede justo a la izquierda del ojo mágico
-            btnCostes.style.right = '28px'; 
-            btnCostes.style.top = '50%';
-            btnCostes.style.transform = 'translateY(-50%)';
-            btnCostes.style.width = '20px';
-            btnCostes.style.height = '20px';
-            btnCostes.style.background = '#f0fdf4'; // Fondo verdecito claro
-            btnCostes.style.border = '1px solid #bbf7d0';
-            btnCostes.style.borderRadius = '4px';
-            btnCostes.style.cursor = 'pointer';
-            btnCostes.style.display = 'flex';
-            btnCostes.style.alignItems = 'center';
-            btnCostes.style.justifyContent = 'center';
-            btnCostes.style.textDecoration = 'none';
-            btnCostes.style.zIndex = '10';
-
-            var iconCostes = document.createElement('i');
-            iconCostes.className = 'fas fa-euro-sign';
-            iconCostes.style.color = '#16a34a'; // Verde oscuro
-            iconCostes.style.fontSize = '10px';
-            btnCostes.appendChild(iconCostes);
-            // ---------------------------------------
-
             container.appendChild(dragHandle);
             container.appendChild(titleEl);
             container.appendChild(codeEl);
-            container.appendChild(btnCostes); // Añadimos el nuevo botón al contenedor
-            container.appendChild(btn);       // El ojo mágico al final
+            container.appendChild(btn);
 
             return container;
         },
@@ -625,7 +595,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 compEl.className = 'text-muted';
                 
                 document.getElementById('wp-role').textContent = t('Haz clic en el botón inferior para gestionarla.');
-                document.getElementById('wp-rating').innerHTML = '';
+                let ratingClear = document.getElementById('wp-rating');
+                if (ratingClear) ratingClear.innerHTML = '';
 
                 // 2. Ocultamos automáticamente los botones de "Desasignar" (¡SIN usar la palabra button!)
                 let btnsDesasignar = popover.querySelectorAll('[onclick*="desasignarDesdePop"]');
@@ -677,7 +648,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('wp-role').textContent = roleText;
                 
                let ratingEl = document.getElementById('wp-rating');
-                
+                if (ratingEl) {
                 // Comprobamos que nota exista de verdad (así permitimos el 0 y los números negativos)
                 if (item.nota !== null && item.nota !== undefined && item.nota !== "") {
                     
@@ -692,6 +663,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     ratingEl.innerHTML = `<span class="text-muted">${t('Sin valoraciones')}</span>`;
                 }
                 ratingEl.href = `/admin/worker/${item.worker_id}/ratings_history`;
+                }
 
                 // 1. Ocultamos el botón de "Ver Solicitud" si estuviera visible
                 let btnVerSol = document.getElementById('btn-ver-solicitud');
