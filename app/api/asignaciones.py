@@ -29,6 +29,14 @@ from app.services.i18n_service import translate
 asignaciones_api = Blueprint('asignaciones_api', __name__)
 
 
+def _assignment_mode_from_payload(data, default='check'):
+    """overwrite solo después de que el usuario elija en el pop-up de conflicto."""
+    mode = (data or {}).get('overwrite_mode', default) or default
+    if mode == 'overwrite' and not (data or {}).get('conflict_resolved'):
+        return 'check'
+    return mode
+
+
 def _parse_workers_payload(data):
     """
     Normaliza multi-trabajador desde el planificador.
@@ -214,7 +222,7 @@ def api_assign_worker():
         worker_id = int(data.get("worker_id"))
         target_obra_id = int(data.get("target_obra_id") or data.get("obra_id"))
         selected_dates = data.get("selected_dates")
-        mode = data.get("overwrite_mode", "check")
+        mode = _assignment_mode_from_payload(data, "check")
 
         if not selected_dates and data.get("selected_date"):
             start_str = data.get("selected_date")
@@ -316,6 +324,7 @@ def api_solicitud_asignar_parcial(solicitud_id):
                 int(worker_id), solicitud.obra_id,
                 fechas_ok[0], fechas_ok[-1], count_processed,
                 current_user.id, "Resolución de Solicitud de Baja", False,
+                fechas=fechas_ok,
             )
         
         # Mandamos recalcular al motor puro de coberturas
@@ -469,7 +478,7 @@ def api_planificador_action():
     original_start_str = data.get('original_start')
     original_end_str = data.get('original_end')
     include_weekends = data.get('include_weekends', False)
-    overwrite_mode = data.get('overwrite_mode', 'check')
+    overwrite_mode = _assignment_mode_from_payload(data, 'check')
     notas = (data.get('notas') or '').strip() or None
 
     if target_obra_id is None:
@@ -534,6 +543,7 @@ def api_planificador_action():
                             min(fechas_a_borrar), max(fechas_a_borrar), len(fechas_a_borrar),
                             current_user.id, "Planificación Manual", False,
                             detalle_extra="Recorte de rango desde planificador.",
+                            fechas=fechas_a_borrar,
                         )
                     db.session.commit()
                     
@@ -723,6 +733,7 @@ def api_solicitud_asignar_candidatos(solicitud_id):
                         int(wid), solicitud.obra_id,
                         fechas[0], fechas[-1], len(asignaciones_a_borrar),
                         current_user.id, "Resolución de Solicitud de Baja", False,
+                        fechas=fechas,
                     )
                     count_exito += 1
                     
@@ -839,6 +850,7 @@ def api_solicitud_desasignar_candidato(solicitud_id):
             worker_id, solicitud.obra_id,
             fechas_sorted[0], fechas_sorted[-1], count,
             current_user.id, "Desasignación de Candidato", False,
+            fechas=fechas_sorted,
         )
     
     for d_obj in fechas_eliminadas:

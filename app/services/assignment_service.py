@@ -131,6 +131,24 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
         if target_obra.jefe_obra_id != actor_user.id:
             return {'success': False, 'error': 'No tienes permiso sobre la obra destino.'}
 
+        # Misma resolución del pop-up de conflicto que admin (tras elegir en el modal).
+        if mode == 'overwrite':
+            return _handle_direct_assignment(actor_user, worker, target_obra, valid_dates, overwrite=True, solicitud_id=solicitud_id)
+        if mode == 'keep_both':
+            return _handle_direct_assignment(actor_user, worker, target_obra, valid_dates, overwrite=False, solicitud_id=solicitud_id)
+        if mode == 'only_free':
+            free_dates = []
+            for d in valid_dates:
+                asigs = Asignacion.query.filter_by(user_id=worker.id, fecha=d).all()
+                asigs_reales = [a for a in asigs if a.obra_id != target_obra.id]
+                if not asigs_reales:
+                    free_dates.append(d)
+            if free_dates:
+                res = _handle_direct_assignment(actor_user, worker, target_obra, free_dates, overwrite=False, solicitud_id=solicitud_id)
+                res['message'] = f"Asignados {len(free_dates)} día(s) libre(s). Los ocupados en otras obras se ignoraron."
+                return res
+            return {'success': True, 'action': 'assigned', 'message': 'No quedaban días libres. No se asignó nada nuevo.'}
+
         conf_custodia = ConfiguracionGlobal.query.filter_by(clave='limite_custodia').first()
         limite_dias = int(conf_custodia.valor) if conf_custodia and conf_custodia.valor.isdigit() else 15
 
@@ -156,6 +174,7 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
 
         dias_auto = []
         dias_solicitud = []
+        dias_conflicto = []
         conflict_details = {} 
         obras_origen_traslado = set() 
         
@@ -171,27 +190,48 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
                     if cat_name not in conflict_details: conflict_details[cat_name] = []
                     conflict_details[cat_name].append(d.strftime('%d/%m'))
             else:
-                es_mio = False
                 nombres_ajenas = []
+                otras_propias = []
                 for a in asigs_dia:
+                    if a.obra_id == target_obra.id:
+                        continue
                     obra_ocupada = Obra.query.get(a.obra_id)
-                    if obra_ocupada and obra_ocupada.jefe_obra_id == actor_user.id:
-                        es_mio = True
-                        if obra_ocupada.id != target_obra.id:
-                            obras_origen_traslado.add(obra_ocupada.nombre)
-                    elif obra_ocupada:
+                    if not obra_ocupada:
+                        continue
+                    if obra_ocupada.jefe_obra_id == actor_user.id:
+                        otras_propias.append(obra_ocupada.nombre)
+                        obras_origen_traslado.add(obra_ocupada.nombre)
+                    else:
                         nombres_ajenas.append(obra_ocupada.nombre)
-                        
-                if es_mio:
-                    tiene_custodia = True 
-                    dias_auto.append(d) 
-                else:
-                    dias_solicitud.append(d) 
-                    obra_str = " / ".join(list(set(nombres_ajenas))) if nombres_ajenas else "Otra Obra"
+
+                if nombres_ajenas:
+                    dias_solicitud.append(d)
+                    obra_str = " / ".join(list(set(nombres_ajenas)))
                     if obra_str not in conflict_details: conflict_details[obra_str] = []
                     conflict_details[obra_str].append(d.strftime('%d/%m'))
+                elif otras_propias:
+                    # Otra obra mía: conflicto, no traslado silencioso.
+                    dias_conflicto.append(d)
+                    tiene_custodia = True
+                    obra_str = " / ".join(list(set(otras_propias)))
+                    if obra_str not in conflict_details: conflict_details[obra_str] = []
+                    conflict_details[obra_str].append(d.strftime('%d/%m'))
+                else:
+                    tiene_custodia = True
                     
         if mode in ['check', 'pure_check']:
+            if dias_conflicto:
+                return {
+                    'success': False,
+                    'conflict': True,
+                    'conflict_type': 'admin_hard',
+                    'message': (
+                        f'El trabajador ya está ocupado {len(dias_conflicto)} día(s) '
+                        'en estas fechas en otras obras.'
+                    ),
+                    'conflict_details': conflict_details,
+                    'req_count': len(dias_conflicto),
+                }
             if dias_auto and dias_solicitud:
                 return {
                     'success': False,
@@ -346,6 +386,7 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
                 f"Incluye sobreescritura de {len(deleted_info)} día(s)."
                 if deleted_info else None
             ),
+            fechas=assigned_dates,
         )
     elif deleted_info:
         CoreAssignmentService.registrar_log_rango(
@@ -355,6 +396,7 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
             len(deleted_info),
             actor_id, "Planificación Manual", True,
             detalle_extra=f"Limpieza de {len(deleted_info)} día(s) en otras obras.",
+            fechas=[d for _, _, d in deleted_info],
         )
 
     for o_id, w_id, d_del in deleted_info:
@@ -453,6 +495,7 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
             worker_id, obra_id_for_log,
             fechas_objs[0], fechas_objs[-1], count,
             actor_user.id, 'Planificación Manual', False,
+            fechas=fechas_objs,
         )
     
     for d_obj in date_objs:

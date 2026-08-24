@@ -7,6 +7,7 @@
 from app import db
 from app.utils.timezone_utils import utc_now
 from app.models import Asignacion, SystemLog, Obra, User
+from app.services.log_coverage import attach_coverage, expand_contiguous
 
 
 class CoreAssignmentService:
@@ -89,29 +90,58 @@ class CoreAssignmentService:
     @staticmethod
     def registrar_log_rango(user_id, obra_id, fecha_inicio, fecha_fin, n_dias,
                             autor_id, contexto_origen, es_alta,
-                            detalle_extra=None):
-        """Una sola entrada de log para un rango de asignación/desasignación."""
-        if not n_dias or n_dias < 1:
-            return
-        if n_dias == 1 and fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
+                            detalle_extra=None, fechas=None):
+        """
+        UNA entrada de SystemLog por acción (el listado de Planificación
+        no se llena con un renglón por día). Persona a día proyecta esa
+        fila sobre cada jornada cubierta. El cuadrante se puede borrar;
+        este log no.
+        """
+        days = sorted({d for d in (fechas or []) if d})
+        if not days:
+            if not fecha_inicio or not n_dias or n_dias < 1:
+                return
+            last = fecha_fin or fecha_inicio
+            span = (last - fecha_inicio).days + 1
+            if n_dias == 1:
+                days = [fecha_inicio]
+            elif n_dias == span:
+                days = expand_contiguous(fecha_inicio, last)
+            else:
+                CoreAssignmentService._registrar_log_rango_compacto(
+                    user_id, obra_id, fecha_inicio, last, n_dias,
+                    autor_id, contexto_origen, es_alta, detalle_extra,
+                )
+                return
+
+        if len(days) == 1:
             CoreAssignmentService._registrar_log(
-                user_id, obra_id, fecha_inicio, autor_id, contexto_origen,
+                user_id, obra_id, days[0], autor_id, contexto_origen,
                 es_alta=es_alta, detalle_extra=detalle_extra,
             )
             return
 
+        CoreAssignmentService._registrar_log_rango_compacto(
+            user_id, obra_id, days[0], days[-1], len(days),
+            autor_id, contexto_origen, es_alta, detalle_extra,
+            fechas=days,
+        )
+
+    @staticmethod
+    def _registrar_log_rango_compacto(user_id, obra_id, fecha_inicio, fecha_fin,
+                                      n_dias, autor_id, contexto_origen, es_alta,
+                                      detalle_extra=None, fechas=None):
         verbo = "Asignado" if es_alta else "Desasignado"
         obra = Obra.query.get(obra_id)
         user = User.query.get(user_id)
         obra_label = CoreAssignmentService.format_obra_label(obra)
         user_nombre = f"{user.name} {user.lastname}" if user else f"ID {user_id}"
-
         fi = fecha_inicio.strftime('%d/%m/%Y') if fecha_inicio else '?'
         ff = fecha_fin.strftime('%d/%m/%Y') if fecha_fin else '?'
         detail = f"{verbo} {user_nombre} → '{obra_label}' ({fi} → {ff}, {n_dias} días)."
         if detalle_extra:
             detail = f"{detail} {detalle_extra}"
-
+        detail = attach_coverage(detail, fechas)
         db.session.add(SystemLog(
             timestamp=utc_now(),
             user_id=autor_id,

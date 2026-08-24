@@ -503,8 +503,8 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
                     <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-solo"><i class="fas fa-shield-alt"></i> ${t('Solo mis días (Ignorar conflicto)')}</button>
                     <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">${t('Cancelar acción')}</button>
                 `;
-                container.querySelector('#btn-todo').onclick = () => { Swal.close(); payload.overwrite_mode = 'assign_and_request'; onRetryCallback(payload); };
-                container.querySelector('#btn-solo').onclick = () => { Swal.close(); payload.overwrite_mode = 'only_custody'; onRetryCallback(payload); };
+                container.querySelector('#btn-todo').onclick = () => { Swal.close(); payload.overwrite_mode = 'assign_and_request'; payload.conflict_resolved = true; onRetryCallback(payload); };
+                container.querySelector('#btn-solo').onclick = () => { Swal.close(); payload.overwrite_mode = 'only_custody'; payload.conflict_resolved = true; onRetryCallback(payload); };
             } else {
                 container.innerHTML = `
                     <button type="button" class="admin-swal-btn admin-swal-btn-danger" id="btn-over"><i class="fas fa-eraser"></i> ${t('Sobrescribir (Quitar de otras obras)')}</button>
@@ -512,9 +512,9 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
                     <button type="button" class="admin-swal-btn admin-swal-btn-primary" id="btn-free"><i class="fas fa-calendar-check"></i> ${t('Asignar solo días libres')}</button>
                     <button type="button" class="admin-swal-btn admin-swal-btn-ghost" id="btn-cancel">${t('Cancelar acción')}</button>
                 `;
-                container.querySelector('#btn-over').onclick = () => { Swal.close(); payload.overwrite_mode = 'overwrite'; onRetryCallback(payload); };
-                container.querySelector('#btn-pluri').onclick = () => { Swal.close(); payload.overwrite_mode = 'keep_both'; onRetryCallback(payload); };
-                container.querySelector('#btn-free').onclick = () => { Swal.close(); payload.overwrite_mode = 'only_free'; onRetryCallback(payload); };
+                container.querySelector('#btn-over').onclick = () => { Swal.close(); payload.overwrite_mode = 'overwrite'; payload.conflict_resolved = true; onRetryCallback(payload); };
+                container.querySelector('#btn-pluri').onclick = () => { Swal.close(); payload.overwrite_mode = 'keep_both'; payload.conflict_resolved = true; onRetryCallback(payload); };
+                container.querySelector('#btn-free').onclick = () => { Swal.close(); payload.overwrite_mode = 'only_free'; payload.conflict_resolved = true; onRetryCallback(payload); };
             }
             container.querySelector('#btn-cancel').onclick = () => { Swal.close(); if(onCancelCallback) onCancelCallback(); };
         }

@@ -7,6 +7,7 @@ from markupsafe import Markup, escape
 
 from app.models import User, SystemLog, RegistroFichaje, Obra
 from app.services.core_assignment_service import CoreAssignmentService
+from app.services.log_coverage import planif_detail_covers_day, strip_coverage
 from app.utils.timezone_utils import format_datetime, format_time
 
 MAX_TIMELINE_RANGE_DAYS = 31
@@ -386,7 +387,8 @@ def _append_fichaje_notes_from_registro(log, detail):
 
 
 def _build_detail_html(text, obra_cache, subject_user, target_date=None, log_timestamp=None, log=None):
-    plain = _enrich_legacy_fichaje_detail(log, text or "") if log else (text or "")
+    plain = strip_coverage(text or "")
+    plain = _enrich_legacy_fichaje_detail(log, plain) if log else plain
     plain = _append_fichaje_notes_from_registro(log, plain) if log else plain
     plain = _normalize_detail_obras(plain, obra_cache)
     plain = _normalize_fichaje_times_in_detail(plain, target_date, log_timestamp)
@@ -431,6 +433,28 @@ def _build_hito(log, user, obra_cache):
     }
 
 
+def _extra_planificacion_logs_covering(user_id, fecha_obj, already_ids=None):
+    """
+    Un rango de cuadrante es UN SystemLog (target_date = primer día).
+    El histórico de un día posterior proyecta esa misma fila (autor y hora reales).
+    """
+    already_ids = set(already_ids or [])
+    q = (
+        SystemLog.query.filter_by(target_user_id=user_id, category="planificacion")
+        .filter(SystemLog.target_date.isnot(None))
+        .filter(SystemLog.target_date <= fecha_obj)
+        .filter(SystemLog.target_date >= fecha_obj - timedelta(days=400))
+        .order_by(SystemLog.timestamp.asc())
+    )
+    extra = []
+    for log in q.all():
+        if log.id in already_ids:
+            continue
+        if planif_detail_covers_day(log.detail, fecha_obj):
+            extra.append(log)
+    return extra
+
+
 def _planificacion_log_covers_obra(logs, obra):
     if not obra:
         return False
@@ -460,16 +484,19 @@ def _synthetic_asignacion_hito(user, obra, fecha_obj, created_at=None, source_id
         f"Asignado {user_nombre} → '{label}' "
         f"({fecha_obj.strftime('%d/%m/%Y')})."
     )
-    ts = created_at
-    if not ts:
-        ts = datetime.combine(fecha_obj, datetime.min.time()) + timedelta(hours=6)
-    local_ts = format_datetime(ts, "%Y-%m-%d %H:%M:%S")
     style = CATEGORY_STYLES["planificacion"]
+    if created_at:
+        local_ts = format_datetime(created_at, "%Y-%m-%d %H:%M:%S")
+        fecha_txt = format_datetime(created_at, "%d/%m %H:%M")
+    else:
+        # Sin timestamp real: no inventar hora (antes: 06:00 UTC → 08:00 en verano).
+        local_ts = fecha_obj.strftime("%Y-%m-%d") + " 00:00:00"
+        fecha_txt = fecha_obj.strftime("%d/%m")
     return {
         "id": f"asig-{source_id or obra.id}-{fecha_obj.isoformat()}",
         "sort_time": local_ts,
         "prioridad": 2,
-        "fecha": format_datetime(ts, "%d/%m %H:%M"),
+        "fecha": fecha_txt,
         "icon_class": style["icon"],
         "icon_color": style["color"],
         "titulo": "Planificación",
@@ -576,6 +603,10 @@ def build_person_day_timeline(user_id, fecha_obj):
         SystemLog.query.filter_by(target_user_id=user_id, target_date=fecha_obj)
         .order_by(SystemLog.timestamp.asc())
         .all()
+    )
+    already_ids = [log.id for log in logs_del_dia]
+    logs_del_dia = list(logs_del_dia) + _extra_planificacion_logs_covering(
+        user_id, fecha_obj, already_ids
     )
 
     obra_cache = {}

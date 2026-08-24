@@ -39,6 +39,141 @@ $(document).ready(function() {
         }
     }
 
+    function initKanbanWorksPan() {
+        var wrap = document.getElementById('kanbanWorksWrapper');
+        var stage = document.getElementById('kanbanWorksStage');
+        var btnLeft = document.getElementById('kanbanWorksEdgeLeft');
+        var btnRight = document.getElementById('kanbanWorksEdgeRight');
+        if (!wrap || !stage) return;
+
+        var EDGE = 72;
+        var CARD = 296;
+        var lastX = 0;
+        var holdDir = 0;
+        var raf = null;
+
+        function wheelPx(e, axis) {
+            var v = axis === 'x' ? e.deltaX : e.deltaY;
+            if (e.deltaMode === 1) v *= 16;
+            if (e.deltaMode === 2) {
+                v *= axis === 'x' ? wrap.clientWidth : wrap.clientHeight;
+            }
+            return v;
+        }
+        function maxScroll() {
+            return Math.max(0, wrap.scrollWidth - wrap.clientWidth);
+        }
+        function isDragging() {
+            return document.body.classList.contains('kanban-is-dragging');
+        }
+        function setDisabled(btn, on) {
+            if (!btn) return;
+            btn.disabled = on;
+            btn.classList.toggle('is-disabled', on);
+        }
+        function updateEdges() {
+            var max = maxScroll();
+            var overflowing = max > 4;
+            stage.classList.toggle('is-overflow-x', overflowing);
+            var sl = wrap.scrollLeft;
+            stage.classList.toggle('is-overflow-left', overflowing && sl > 4);
+            stage.classList.toggle('is-overflow-right', overflowing && sl < max - 4);
+            setDisabled(btnLeft, !overflowing || sl <= 4);
+            setDisabled(btnRight, !overflowing || sl >= max - 4);
+        }
+        function scrollBy(dx) {
+            wrap.scrollLeft += dx;
+            updateEdges();
+        }
+
+        function dragDir() {
+            if (!isDragging()) return 0;
+            var rect = stage.getBoundingClientRect();
+            if (lastX < rect.left - 24 || lastX > rect.right + 24) return 0;
+            var leftDist = lastX - rect.left;
+            var rightDist = rect.right - lastX;
+            if (leftDist < EDGE) return -Math.max(0.25, 1 - (leftDist / EDGE));
+            if (rightDist < EDGE) return Math.max(0.25, 1 - (rightDist / EDGE));
+            return 0;
+        }
+        function tick() {
+            var dir = holdDir || dragDir();
+            if (dir) scrollBy(dir * 22);
+            if (holdDir || isDragging()) {
+                raf = requestAnimationFrame(tick);
+            } else {
+                raf = null;
+            }
+        }
+        function startLoop() {
+            if (!raf) raf = requestAnimationFrame(tick);
+        }
+
+        wrap.addEventListener('scroll', updateEdges, { passive: true });
+        wrap.addEventListener('wheel', function (e) {
+            var dx = wheelPx(e, 'x');
+            var dy = wheelPx(e, 'y');
+            if (maxScroll() <= 4) return;
+            if (e.shiftKey && Math.abs(dy) >= Math.abs(dx) && Math.abs(dy) >= 0.1) {
+                e.preventDefault();
+                scrollBy(dy);
+                return;
+            }
+            if (Math.abs(dx) < 0.1) return;
+            if (Math.abs(dx) <= Math.abs(dy)) return;
+            e.preventDefault();
+            scrollBy(dx);
+        }, { passive: false });
+
+        function bindHold(btn, dir) {
+            if (!btn) return;
+            var delay = null;
+            var from = 0;
+            var stop = function () {
+                if (delay) {
+                    clearTimeout(delay);
+                    delay = null;
+                }
+                holdDir = 0;
+            };
+            btn.addEventListener('pointerdown', function (e) {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+                from = Date.now();
+                delay = setTimeout(function () {
+                    delay = null;
+                    holdDir = dir;
+                    startLoop();
+                }, 280);
+            });
+            btn.addEventListener('pointerup', function () {
+                var wasHold = !delay;
+                stop();
+                if (!wasHold && Date.now() - from < 280) scrollBy(dir * CARD);
+            });
+            btn.addEventListener('pointercancel', stop);
+        }
+        bindHold(btnLeft, -1);
+        bindHold(btnRight, 1);
+        document.addEventListener('pointerup', function () { holdDir = 0; });
+
+        document.addEventListener('pointermove', function (e) {
+            lastX = e.clientX;
+            if (isDragging()) startLoop();
+        }, { passive: true });
+
+        if (typeof ResizeObserver !== 'undefined') {
+            var ro = new ResizeObserver(updateEdges);
+            ro.observe(wrap);
+            ro.observe(stage);
+        }
+        window.addEventListener('resize', updateEdges, { passive: true });
+        stage.kanbanSyncPan = updateEdges;
+        updateEdges();
+        requestAnimationFrame(updateEdges);
+    }
+
     // =========================================================================
     // 1. EVENTOS: DRAG & DROP — soltar en la obra asigna el día del tablero
     // =========================================================================
@@ -71,8 +206,14 @@ $(document).ready(function() {
     if (!kanbanReadonly) {
     $(".worker-chip").draggable({
         revert: "invalid", helper: "clone", appendTo: "body", zIndex: 9999, scroll: false,
-        start: function() { $(this).addClass('dragging-source'); },
-        stop: function() { $(this).removeClass('dragging-source'); }
+        start: function() {
+            $(this).addClass('dragging-source');
+            document.body.classList.add('kanban-is-dragging');
+        },
+        stop: function() {
+            $(this).removeClass('dragging-source');
+            document.body.classList.remove('kanban-is-dragging');
+        }
     });
 
     $(".worker-list-body").droppable({
@@ -452,13 +593,8 @@ $(document).ready(function() {
         });
     };
 
-    // AutoScroll del Kanban
-    try {
-        autoScroll([document.querySelector('#kanbanContainer')], {
-            margin: 50, maxSpeed: 20, scrollWhenOutside: true,
-            autoScroll: () => Boolean($('.ui-draggable-dragging').length)
-        });
-    } catch(e) { }
+    // Scroll horizontal de obras (flechas, barra pegada, bordes al arrastrar)
+    initKanbanWorksPan();
 
     // Filtros Kanban
     var activeFilters = [];
@@ -486,11 +622,16 @@ $(document).ready(function() {
         activeFilters.length > 0 ? $('#btnClearFilters').show() : $('#btnClearFilters').hide();
     }
     function applyKanbanFilters() {
-        if (activeFilters.length === 0) return $('.filterable-obra').show();
-        $('.filterable-obra').each(function() {
-            var text = ($(this).data('search-text') || "").toLowerCase();
-            activeFilters.some(t => text.includes(t)) ? $(this).show() : $(this).hide();
-        });
+        if (activeFilters.length === 0) {
+            $('.filterable-obra').show();
+        } else {
+            $('.filterable-obra').each(function() {
+                var text = ($(this).data('search-text') || "").toLowerCase();
+                activeFilters.some(t => text.includes(t)) ? $(this).show() : $(this).hide();
+            });
+        }
+        var stage = document.getElementById('kanbanWorksStage');
+        if (stage && typeof stage.kanbanSyncPan === 'function') stage.kanbanSyncPan();
     }
 
     // =========================================================================
@@ -535,9 +676,11 @@ $(document).ready(function() {
             start: function(e, ui) {
                 ui.placeholder.height(ui.item.outerHeight());
                 ui.placeholder.width(ui.item.outerWidth());
+                document.body.classList.add('kanban-is-dragging');
             },
 
             stop: function(e, ui) {
+                document.body.classList.remove('kanban-is-dragging');
                 var $wrap = $("#kanbanWorksWrapper");
                 var $start = $wrap.children('.kanban-start-obra');
                 if ($start.length) {

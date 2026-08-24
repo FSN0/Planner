@@ -476,6 +476,7 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
                     fechas[0], fechas[-1], len(fechas),
                     user_actor.id, "Traslado desde solicitud de baja", False,
                     detalle_extra=f"Origen obra {solicitud.obra_id} → destino {target_obra_id}",
+                    fechas=fechas,
                 )
 
             result = process_assignment_action(
@@ -514,6 +515,7 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
                     solicitud.empleado_id, solicitud.obra_id,
                     fechas[0], fechas[-1], count,
                     user_actor.id, "Aprobación de Solicitud de Baja", False,
+                    fechas=fechas,
                 )
             mensaje = f"Devolución aprobada. Se han eliminado {count} asignaciones."
 

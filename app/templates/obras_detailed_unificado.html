@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}{{ _('Tablero de Planificación') }}{% endblock %}
-{% block body_class %}layout-admin{% endblock %}
+{% block body_class %}layout-admin kanban-page{% endblock %}
 
 {% block extra_css %}
   {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260817a">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260819c">
 {% endblock %}
 
 {% block wrapper %}
@@ -41,6 +41,17 @@
         
         {% include "components/_kanban_col_libres.html" %}
 
+        <div class="kanban-works-stage" id="kanbanWorksStage">
+        <div class="kanban-works-hud" aria-hidden="false">
+            <button type="button" class="kanban-works-edge kanban-works-edge--left" id="kanbanWorksEdgeLeft"
+                    aria-label="{{ _('Obras anteriores') }}" title="{{ _('Obras anteriores') }}">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button type="button" class="kanban-works-edge kanban-works-edge--right" id="kanbanWorksEdgeRight"
+                    aria-label="{{ _('Más obras') }}" title="{{ _('Más obras') }}">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
         <div class="kanban-works-wrapper" id="kanbanWorksWrapper" data-tour="tablero-obras">
             {% set kanban_sin_obras = kanban_sin_obras if kanban_sin_obras is defined else (obra_data|length) == 0 %}
             {% for item in obra_data %}
@@ -71,6 +82,7 @@
               </div>
             </div>
             {% endif %}
+        </div>
         </div>
     </div>
 
@@ -228,16 +240,13 @@
   <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817e"></script>
   
   
-  <script src="https://cdn.jsdelivr.net/npm/dom-autoscroller@2.3.4/dist/dom-autoscroller.min.js"></script>
-
-
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         // Variable global de seguridad para JS
         window.CURRENT_USER_ROLE = "{{ current_user.role }}";
         window.KANBAN_READONLY = {{ 'true' if view_mode == 'readonly' else 'false' }};
     </script>
-  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260817b"></script>
+  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260819b"></script>
   
   {% if tenant_has_valoraciones %}
   <script>

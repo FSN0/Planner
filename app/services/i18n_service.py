@@ -383,6 +383,10 @@ def translate_log_detail(detail, locale=None):
     """Traduce el detalle de un SystemLog. Los nombres propios se conservan."""
     if not detail:
         return ''
+    from app.services.log_coverage import strip_coverage
+    detail = strip_coverage(detail)
+    if not detail:
+        return ''
     exact = translate(detail, locale)
     if exact != detail:
         return exact

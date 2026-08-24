@@ -366,6 +366,7 @@ def release_assignments_blocked_by_leave(
                     f'{len(items)} día(s) liberados automáticamente '
                     f'por ausencia aprobada.'
                 ),
+                fechas=fechas,
             )
 
     return liberados

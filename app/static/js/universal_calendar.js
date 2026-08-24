@@ -1377,7 +1377,7 @@ class UniversalCalendarManager {
                     end_date: endVal,
                     original_start: this.activeEvent.extendedProps.real_original_start,
                     original_end: this.activeEvent.extendedProps.real_original_end ? moment(this.activeEvent.extendedProps.real_original_end).subtract(1, 'days').format('YYYY-MM-DD') : null,
-                    overwrite_mode: 'overwrite', 
+                    overwrite_mode: 'check',
                     include_weekends: includeWeekends
                 };
 

@@ -40,8 +40,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!timeline) return;
         var page = document.querySelector('.planificador-page');
         var top = timeline.getBoundingClientRect().top;
-        var pageBottom = page ? page.getBoundingClientRect().bottom : window.innerHeight;
-        var fill = Math.floor(pageBottom - top - 2);
+        var fill = 200;
+        if (page && timeline) {
+            var pageRect = page.getBoundingClientRect();
+            var calTopInPage = timeline.getBoundingClientRect().top - pageRect.top + page.scrollTop;
+            fill = Math.floor(page.clientHeight - calTopInPage - 2);
+        }
         var content = 160;
         if (last) {
             content = Math.ceil(last.getBoundingClientRect().bottom - top + 10);
@@ -202,6 +206,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const calendarRoot = document.getElementById('planificador-calendar');
         if (!calendarRoot) return;
 
+        // Dentro del Gantt (personas): rueda = zoom de vis.
+        // Columna de obras o Ctrl/Cmd + rueda: scroll de página.
+        // Fuera del calendario: scroll nativo de la página.
         calendarRoot.addEventListener('wheel', function(event) {
             const onLeftColumn = !!event.target.closest('.vis-panel.vis-left, .vis-labelset, .vis-label');
             const wantsPageScroll = onLeftColumn || event.ctrlKey || event.metaKey;
@@ -557,8 +564,9 @@ document.addEventListener('DOMContentLoaded', function() {
             let startStr = startReal.format('YYYY-MM-DD');
             let endStr = endReal.format('YYYY-MM-DD');
             let sameObra = String(oldGroup) === String(item.group);
-            // Traslado entre obras = sobrescribir origen (es lo que el usuario pretende al arrastrar).
-            let moveMode = sameObra ? 'check' : 'overwrite';
+            // Siempre check: si pisa otra obra debe salir el pop-up de conflicto
+            // (pluri / quitar la otra / solo libres / cancelar). Nunca overwrite silencioso.
+            let moveMode = 'check';
 
             pendingAction = { 
                 worker_id: item.worker_id, 
@@ -1198,7 +1206,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // CORREGIDO: Eliminamos la función duplicada
     window.resolveConflicto = function(mode) { 
-        pendingAction.overwrite_mode = mode; 
+        pendingAction.overwrite_mode = mode;
+        pendingAction.conflict_resolved = true;
         $('#modalConflicto').modal('hide'); 
         ejecutarAccionAPI(null, loadTimelineData); 
     };
