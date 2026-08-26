@@ -244,16 +244,22 @@
         if (ui.card) ui.card.style.display = 'none';
         if (ui.backdrop) ui.backdrop.style.display = 'none';
         try { placeHole(null); } catch (eHide) { /* ignore */ }
-        var hint = '<p class="sp-tour-conflict-hint">' +
-          t('Esta persona ya está en otra obra en parte de esas fechas.') + ' ' +
-          t('<strong>Sobrescribir</strong>: la saca de la otra obra.') + ' ' +
-          t('<strong>Pluriempleo</strong>: queda en las dos.') + ' ' +
-          t('<strong>Asignar solo días libres</strong>: lo habitual aquí; solo pone los días que no pisa.') + ' ' +
-          t('<strong>Cancelar</strong>: no cambia nada.') +
-          '</p>';
-        data = Object.assign({}, data || {}, {
-          message: hint + ((data && data.message) || ''),
-        });
+        var tipo = (data && (data.conflict_type || data.conflict_type)) || '';
+        var esAusencia = tipo === 'leave' || tipo === 'leave'
+          || !!(data && Array.isArray(data.leave_dates) && data.leave_dates.length);
+        // Ausencia: el modal ya dice Entendido / gestiona la baja. No mezclar con pluriempleo.
+        if (!esAusencia) {
+          var hint = '<p class="sp-tour-conflict-hint">' +
+            t('Esta persona ya está en otra obra en parte de esas fechas.') + ' ' +
+            t('<strong>Sobrescribir</strong>: la saca de la otra obra.') + ' ' +
+            t('<strong>Pluriempleo</strong>: queda en las dos.') + ' ' +
+            t('<strong>Asignar solo días libres</strong>: lo habitual aquí; solo pone los días que no pisa.') + ' ' +
+            t('<strong>Cancelar</strong>: no cambia nada.') +
+            '</p>';
+          data = Object.assign({}, data || {}, {
+            message: hint + ((data && data.message) || ''),
+          });
+        }
       }
       return orig.call(this, data, payload, onRetry, onCancel);
     };

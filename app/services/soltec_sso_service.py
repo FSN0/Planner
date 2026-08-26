@@ -3,15 +3,15 @@ import hashlib
 import hmac
 import json
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
-from app.models import _utc_now
 from app.services.config_service import get_tenant_config
 
 
 SSO_ALG = 'HS256'
 SSO_AUD = 'planner'
 SSO_TENANT = 'soltec'
+CLOCK_SKEW_SECONDS = 60
 _USED_JTIS = {}
 
 
@@ -57,12 +57,14 @@ def _expected_issuer():
 
 
 def verify_soltec_sso_token(token):
-    token = (token or '').strip()
+    token = (token or '').strip().strip('"').replace(' ', '+')
     if not soltec_sso_enabled():
         raise SoltecSsoError('SSO Soltec desactivado.')
     secret = _shared_secret()
     if not secret:
         raise SoltecSsoError('Falta la clave compartida SSO.')
+    if not token:
+        raise SoltecSsoError('Falta el token SSO (parámetro t).')
     parts = token.split('.')
     if len(parts) != 3:
         raise SoltecSsoError('Token SSO mal formado.')
@@ -74,7 +76,12 @@ def verify_soltec_sso_token(token):
         signing_input,
         hashlib.sha256,
     ).digest()
-    if not hmac.compare_digest(_b64url_encode(expected_sig), signature_b64):
+    got_sig = signature_b64.rstrip('=')
+    try:
+        sig_ok = hmac.compare_digest(_b64url_encode(expected_sig), got_sig)
+    except (TypeError, ValueError):
+        sig_ok = False
+    if not sig_ok:
         raise SoltecSsoError('Firma SSO inválida.')
 
     try:
@@ -86,13 +93,13 @@ def verify_soltec_sso_token(token):
     if header.get('alg') != SSO_ALG:
         raise SoltecSsoError('Algoritmo SSO no soportado.')
 
-    now_ts = int(_utc_now().timestamp())
+    now_ts = int(datetime.now(timezone.utc).timestamp())
     exp = int(payload.get('exp') or 0)
-    if not exp or exp < now_ts:
+    if not exp or exp < now_ts - CLOCK_SKEW_SECONDS:
         raise SoltecSsoError('Token SSO caducado.')
 
     nbf = int(payload.get('nbf') or 0)
-    if nbf and nbf > now_ts + 5:
+    if nbf and nbf > now_ts + CLOCK_SKEW_SECONDS:
         raise SoltecSsoError('Token SSO aún no válido.')
 
     if payload.get('aud') != SSO_AUD:

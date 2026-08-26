@@ -95,6 +95,32 @@ def demo_cantidades():
     }
 
 
+def ids_libres_tutorial(users, n=4):
+    """Primeros del listado Libres (orden por nombre, como el tablero). El tutorial arrastra el primero."""
+    ordered = sorted(
+        users,
+        key=lambda u: (
+            (getattr(u, 'name', None) or ''),
+            (getattr(u, 'lastname', None) or ''),
+            getattr(u, 'id', 0) or 0,
+        ),
+    )
+    return {u.id for u in ordered[:n]}
+
+
+def ids_libres_tutorial(users, n=4):
+    """Primeros del listado Libres (orden por nombre, como el tablero). El tutorial arrastra el primero."""
+    ordered = sorted(
+        users,
+        key=lambda u: (
+            (getattr(u, 'name', None) or ''),
+            (getattr(u, 'lastname', None) or ''),
+            getattr(u, 'id', 0) or 0,
+        ),
+    )
+    return {u.id for u in ordered[:n]}
+
+
 def demo_activa():
     return str(get_tenant_config(CONFIG_DEMO_ACTIVA, default='False')) == 'True'
 
@@ -335,6 +361,9 @@ def generar_datos_demo(actor_user=None, activar_fichaje=None):
         externos.append(ex)
 
     plantilla = operarios + externos
+    # El tutorial pide arrastrar el primer chip de Libres: esos no pueden estar
+    # de vacaciones hoy ni asignados a una obra (si no sale el modal de ausencia).
+    ids_libres_tutorial_hoy = ids_libres_tutorial(plantilla, 4)
 
     obras = []
     for i in range(qty['obras']):
@@ -365,10 +394,11 @@ def generar_datos_demo(actor_user=None, activar_fichaje=None):
         db.session.flush()
         vehiculos.append(v)
 
-    # Vacaciones que CUBREN hoy (2–4 personas)
+    # Vacaciones que CUBREN hoy (2–4 personas), nunca sobre los Libres del tutorial.
     de_vacaciones = {}  # user_id -> (ini, fin)
-    n_vac_hoy = min(3, max(1, len(operarios) // 8))
-    for op in random.sample(operarios, k=n_vac_hoy):
+    pool_vac_hoy = [o for o in operarios if o.id not in ids_libres_tutorial_hoy]
+    n_vac_hoy = min(3, max(1, len(pool_vac_hoy) // 8))
+    for op in random.sample(pool_vac_hoy, k=min(n_vac_hoy, len(pool_vac_hoy))):
         ini = hoy - timedelta(days=random.randint(1, 3))
         fin = hoy + timedelta(days=random.randint(2, 6))
         leave = AusenciaPlanificada(
@@ -423,6 +453,8 @@ def generar_datos_demo(actor_user=None, activar_fichaje=None):
         cursor = 0
         for op in plantilla:
             if _en_vacaciones(op.id, dia):
+                continue
+            if dia == hoy and op.id in ids_libres_tutorial_hoy:
                 continue
             if random.random() < 0.28:
                 continue

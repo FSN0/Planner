@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, g, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, session, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -400,17 +400,29 @@ def sso_soltec():
     try:
         claims = verify_soltec_sso_token(token)
     except SoltecSsoError as exc:
+        current_app.logger.warning(
+            'SSO Soltec rechazado: %s (param_t=%s)',
+            exc,
+            'si' if (token or '').strip() else 'no',
+        )
         register_log(
             user_id=None,
             category='accesos',
             action='SSO Soltec rechazado',
             detail=f"{str(exc)} IP: {request.remote_addr or 'Desconocida'}",
         )
-        flash(translate('Credenciales inválidas'), 'danger')
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        flash(translate(str(exc)), 'danger')
         return redirect(url_for('auth.login'))
 
     user = User.query.filter(db.func.lower(User.email) == claims['email'].lower()).first()
     if not user:
+        current_app.logger.warning(
+            'SSO Soltec sin usuario: %s', claims['email']
+        )
         register_log(
             user_id=None,
             category='accesos',
@@ -420,7 +432,14 @@ def sso_soltec():
                 f"IP: {request.remote_addr or 'Desconocida'}"
             ),
         )
-        flash(translate('Credenciales inválidas'), 'danger')
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        flash(
+            translate('Este correo no tiene usuario en Planner.'),
+            'danger',
+        )
         return redirect(url_for('auth.login'))
 
     if not _puede_login_web(user):
@@ -433,6 +452,10 @@ def sso_soltec():
                 f"IP: {request.remote_addr or 'Desconocida'}"
             ),
         )
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         flash(
             translate(
                 'Tu perfil no tiene acceso a la aplicación. Contacta con administración.'
