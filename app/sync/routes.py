@@ -98,7 +98,7 @@ def odoo_panel():
         'soltec_sso_issuer': get_tenant_config('soltec_sso_issuer', default='soltec_satellite'),
         'soltec_sso_portal_url': get_tenant_config(
             'soltec_sso_portal_url',
-            default='https://portal.soltecgrupo.es',
+            default='https://portal-soltecgrupo.vercel.app',
         ),
         'soltec_sso_has_secret': bool(
             get_tenant_config('soltec_sso_shared_secret', default='')

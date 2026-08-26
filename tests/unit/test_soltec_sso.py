@@ -114,7 +114,7 @@ class TestMintPortalSsoToken:
             return_value=SECRET,
         ), patch(
             'app.services.soltec_sso_service._portal_base_url',
-            return_value='https://portal.soltecgrupo.es',
+            return_value='https://portal-soltecgrupo.vercel.app',
         ):
             token = mint_portal_sso_token('JGarcia@SoltecGrupo.es')
             header_b64, payload_b64, sig_b64 = token.split('.')
@@ -137,7 +137,7 @@ class TestMintPortalSsoToken:
             assert _b64url_encode(expected) == sig_b64
 
             url = build_portal_sso_redirect_url('jgarcia@soltecgrupo.es')
-            assert url.startswith('https://portal.soltecgrupo.es/auth/sso?t=')
+            assert url.startswith('https://portal-soltecgrupo.vercel.app/auth/sso?t=')
 
     def test_bloqueado_si_no_disponible(self):
         with patch(
