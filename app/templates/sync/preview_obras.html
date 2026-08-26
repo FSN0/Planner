@@ -136,10 +136,10 @@
 $(function(){ $('.select2-personnel').select2({ width: '100%' }); });
 
 function confirmSync(mode) {
-    let payload = {{ diff | tojson | safe }};
+    let payload = {{ diff | tojson | safe }} || {};
     function processList(list) {
         let validItems = [];
-        list.forEach(obra => {
+        (list || []).forEach(obra => {
             let selectJefe = document.querySelector(`.sync-jefe-select[data-odoo-id="${obra.odoo_id}"]`);
             let selectEnc = document.querySelector(`.sync-enc-select[data-odoo-id="${obra.odoo_id}"]`);
             let isComplete = true;
@@ -158,7 +158,7 @@ function confirmSync(mode) {
     let finalPayload = {
         nuevas: processList(payload.nuevas),
         actualizadas: processList(payload.actualizadas),
-        finalizadas: payload.finalizadas,
+        finalizadas: payload.finalizadas || [],
         errores: {{ preview.stats.omitidos_auto }}
     };
     if (!finalPayload.nuevas.length && !finalPayload.actualizadas.length && !finalPayload.finalizadas.length) {
@@ -167,9 +167,12 @@ function confirmSync(mode) {
     fetch("{{ url_for('sync.commit_obras') }}", {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalPayload)
-    }).then(r => r.json()).then(data => {
-        if (data.success) { alert({{ _('Guardado correctamente.')|tojson }}); window.location.href = "{{ url_for('sync.odoo_panel') }}"; }
-        else alert({{ _('Error:')|tojson }} + ' ' + data.error);
+    }).then(r => r.json().then(data => ({ ok: r.ok, data })).catch(() => ({ ok: false, data: { error: {{ _('Respuesta inválida del servidor.')|tojson }} } })))
+    .then(({ data }) => {
+        if (data && data.success) { alert({{ _('Guardado correctamente.')|tojson }}); window.location.href = "{{ url_for('sync.odoo_panel') }}"; }
+        else alert({{ _('Error:')|tojson }} + ' ' + ((data && (data.error || data.message)) || {{ _('Error desconocido')|tojson }}));
+    }).catch(function () {
+        alert({{ _('Error:')|tojson }} + ' ' + {{ _('Fallo de red al guardar las obras.')|tojson }});
     });
 }
 </script>

@@ -35,54 +35,66 @@ def _set_odoo_external_id(entity, odoo_id):
 def run_auto_sync_obras():
     t0 = time.time()
     ahora = utc_now()
-    service = get_sync_adapter()
-    diff = service.get_diff_obras()
-    nuevas_limpias = [o for o in diff['nuevas'] if not o.get('warn_jefe') and not o.get('warn_encargado')]
-    act_limpias = [o for o in diff['actualizadas'] if not o.get('warn_jefe') and not o.get('warn_encargado')]
-    errores = (len(diff['nuevas']) - len(nuevas_limpias)) + (len(diff['actualizadas']) - len(act_limpias))
+    try:
+        service = get_sync_adapter()
+        diff = service.get_diff_obras()
+        nuevas_limpias = [o for o in diff['nuevas'] if not o.get('warn_jefe') and not o.get('warn_encargado')]
+        act_limpias = [o for o in diff['actualizadas'] if not o.get('warn_jefe') and not o.get('warn_encargado')]
+        errores = (len(diff['nuevas']) - len(nuevas_limpias)) + (len(diff['actualizadas']) - len(act_limpias))
 
-    for obj in nuevas_limpias:
-        f_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
-        db.session.add(Obra(
-            external_ids={'odoo': str(obj['odoo_id'])},
-            codigo=obj['codigo'], nombre=obj['nombre'],
-            descripcion=obj.get('cliente', ''), fecha_inicio=f_inicio, estado='Pendiente',
-            jefe_obra_id=obj.get('jefe_obra_id'), encargado_id=obj.get('encargado_id'),
-            fecha_importacion=ahora,
+        for obj in nuevas_limpias:
+            f_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
+            db.session.add(Obra(
+                external_ids={'odoo': str(obj['odoo_id'])},
+                codigo=obj['codigo'], nombre=obj['nombre'],
+                descripcion=obj.get('cliente', ''), fecha_inicio=f_inicio, estado='Pendiente',
+                jefe_obra_id=obj.get('jefe_obra_id'), encargado_id=obj.get('encargado_id'),
+                fecha_importacion=ahora,
+            ))
+
+        for obj in act_limpias:
+            obra = Obra.query.get(obj['local_id'])
+            if obra:
+                _set_odoo_external_id(obra, obj['odoo_id'])
+                obra.codigo = obj['codigo']
+                obra.nombre = obj['nombre']
+                obra.descripcion = obj.get('cliente', '')
+                obra.fecha_importacion = ahora
+                if obj.get('fecha_inicio'):
+                    obra.fecha_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date()
+                if obj.get('jefe_obra_id'):
+                    obra.jefe_obra_id = obj['jefe_obra_id']
+                if obj.get('encargado_id'):
+                    obra.encargado_id = obj['encargado_id']
+
+        for obj in diff['finalizadas']:
+            obra = Obra.query.get(obj['local_id'])
+            if obra:
+                obra.estado = 'Finalizada'
+                obra.fecha_fin = ahora.date()
+                obra.fecha_importacion = ahora
+
+        detalle = f"Sync automática obras. {errores} omitida(s) por responsables sin resolver." if errores else "Sync automática obras completada."
+        db.session.add(SyncLog(
+            fecha=ahora, tipo='Obras', modo='Automático',
+            nuevos=len(nuevas_limpias), actualizados=len(act_limpias),
+            finalizados=len(diff['finalizadas']), errores=errores,
+            detalles=detalle, estado=_log_estado(errores),
+            duracion_ms=int((time.time() - t0) * 1000),
         ))
-
-    for obj in act_limpias:
-        obra = Obra.query.get(obj['local_id'])
-        if obra:
-            _set_odoo_external_id(obra, obj['odoo_id'])
-            obra.codigo = obj['codigo']
-            obra.nombre = obj['nombre']
-            obra.descripcion = obj.get('cliente', '')
-            obra.fecha_importacion = ahora
-            if obj.get('fecha_inicio'):
-                obra.fecha_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date()
-            if obj.get('jefe_obra_id'):
-                obra.jefe_obra_id = obj['jefe_obra_id']
-            if obj.get('encargado_id'):
-                obra.encargado_id = obj['encargado_id']
-
-    for obj in diff['finalizadas']:
-        obra = Obra.query.get(obj['local_id'])
-        if obra:
-            obra.estado = 'Finalizada'
-            obra.fecha_fin = ahora.date()
-            obra.fecha_importacion = ahora
-
-    detalle = f"Sync automática obras. {errores} omitida(s) por responsables sin resolver." if errores else "Sync automática obras completada."
-    db.session.add(SyncLog(
-        fecha=ahora, tipo='Obras', modo='Automático',
-        nuevos=len(nuevas_limpias), actualizados=len(act_limpias),
-        finalizados=len(diff['finalizadas']), errores=errores,
-        detalles=detalle, estado=_log_estado(errores),
-        duracion_ms=int((time.time() - t0) * 1000),
-    ))
-    db.session.commit()
-    return {'nuevos': len(nuevas_limpias), 'actualizados': len(act_limpias), 'omitidos': errores}
+        db.session.commit()
+        return {'nuevos': len(nuevas_limpias), 'actualizados': len(act_limpias), 'omitidos': errores}
+    except Exception as e:
+        db.session.rollback()
+        db.session.add(SyncLog(
+            fecha=utc_now(), tipo='Obras', modo='Automático',
+            nuevos=0, actualizados=0, finalizados=0, errores=1,
+            detalles='Fallo en sincronización automática de obras.',
+            estado='error', mensaje_error=str(e),
+            duracion_ms=int((time.time() - t0) * 1000),
+        ))
+        db.session.commit()
+        raise
 
 
 def run_auto_sync_empleados():

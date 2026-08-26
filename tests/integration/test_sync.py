@@ -352,3 +352,139 @@ class TestSyncLog:
         logs = SyncLog.query.filter(SyncLog.detalles.like('%ERROR%')).all()
         assert len(logs) > 0
         assert 'Error de conexión' in logs[0].detalles
+
+
+class TestCommitObras:
+    def test_commit_only_nuevas_does_not_crash(
+        self, authenticated_client, session, tenant_soltec
+    ):
+        """Guardar obras nuevas no debe petar por un 'obra' sin asignar."""
+        tenant_soltec.modulos_activos = {
+            **(tenant_soltec.modulos_activos or {}),
+            'odoo': True,
+        }
+        session.add(tenant_soltec)
+        session.commit()
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+        resp = authenticated_client.post('/sync/commit_obras', json={
+            'nuevas': [{
+                'odoo_id': 777,
+                'codigo': 'T26/999',
+                'nombre': 'Obra nueva test',
+                'cliente': 'Cliente',
+                'fecha_inicio': '2026-08-01',
+                'jefe_obra_id': None,
+                'encargado_id': None,
+            }],
+            'actualizadas': [],
+            'finalizadas': [],
+            'errores': 0,
+        })
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        body = resp.get_json()
+        assert body and body.get('success') is True
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+        obra = Obra.query.filter_by(codigo='T26/999').first()
+        assert obra is not None
+        assert (obra.external_ids or {}).get('odoo') == '777'
+
+
+class TestOdooObrasAdapter:
+    def test_get_diff_obras_tolerates_false_odoo_values(
+        self, session, tenant_soltec, app
+    ):
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+        from flask import g
+        from app.sync.adapters.odoo_soltec import Adapter
+
+        adapter = Adapter.__new__(Adapter)
+        adapter.tenant_id = tenant_soltec.id
+        adapter.db_name = 'db'
+        adapter.uid = 2
+        adapter.pwd = 'x'
+        adapter._emp_resolve_cache = {}
+        adapter.models = Mock()
+
+        def execute_kw(*args, **kwargs):
+            model = args[3]
+            method = args[4]
+            if model == 'bim.project.state':
+                return [{'id': 6, 'name': 'Ejecución'}]
+            if model == 'bim.project' and method == 'fields_get':
+                return {
+                    'id': {}, 'name': {}, 'nombre': {}, 'customer_id': {},
+                    'date_ini': {}, 'nexecution_manager': {}, 'encargado_obra': {},
+                }
+            if model == 'hr.employee' and method == 'fields_get':
+                return {'id': {}, 'name': {}, 'work_contact_id': {}, 'user_id': {}}
+            if model == 'bim.project' and method == 'search_read':
+                return [{
+                    'id': 555,
+                    'name': False,
+                    'nombre': False,
+                    'customer_id': False,
+                    'date_ini': False,
+                    'nexecution_manager': False,
+                    'encargado_obra': False,
+                }]
+            return []
+
+        adapter.models.execute_kw.side_effect = execute_kw
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            diff = adapter.get_diff_obras()
+
+        assert len(diff['nuevas']) == 1
+        nueva = diff['nuevas'][0]
+        assert nueva['odoo_id'] == 555
+        assert nueva['codigo'] == 'ODOO-555'
+        assert nueva['nombre'] == 'ODOO-555'
+        assert nueva['cliente'] == ''
+        assert nueva['fecha_inicio'] is None
+        assert nueva['warn_jefe'] is False
+        assert nueva['warn_encargado'] is False
+
+
+class TestMasterSyncSchedule:
+    def test_catches_up_if_missed_night_window(
+        self, session, tenant_soltec, app, mocker
+    ):
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+        from flask import g
+        from app.models import ConfiguracionGlobal
+        from app.services.sync_config_service import SyncConfigService
+
+        for clave, valor in (
+            ('sync_last_master_date', '2026-07-30'),
+            ('sync_master_hour', '3'),
+            ('sync_master_minute', '0'),
+            ('sync_obras_enabled', 'true'),
+        ):
+            row = ConfiguracionGlobal.query.filter_by(clave=clave).first()
+            if row:
+                row.valor = valor
+            else:
+                session.add(ConfiguracionGlobal(clave=clave, valor=valor))
+        session.commit()
+
+        morning = datetime(2026, 8, 26, 10, 28, 0)
+        mocker.patch('app.services.sync_config_service.now_local', return_value=morning)
+        mocker.patch('app.services.sync_config_service.today_local', return_value=morning.date())
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            assert SyncConfigService.should_run_master_sync() is True
+
+        before = datetime(2026, 8, 26, 2, 0, 0)
+        mocker.patch('app.services.sync_config_service.now_local', return_value=before)
+        mocker.patch('app.services.sync_config_service.today_local', return_value=before.date())
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            assert SyncConfigService.should_run_master_sync() is False
+

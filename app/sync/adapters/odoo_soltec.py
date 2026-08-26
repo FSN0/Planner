@@ -1,10 +1,13 @@
 import xmlrpc.client
+import logging
 import os
 import re
 from app import db
 from app.models import Obra, User, Company, Vehiculo
 from app.sync.adapters.base import BaseSyncAdapter
 from app.services.config_service import get_tenant_config
+
+logger = logging.getLogger(__name__)
 
 class Adapter(BaseSyncAdapter):
     def __init__(self, tenant_id: int):
@@ -27,6 +30,7 @@ class Adapter(BaseSyncAdapter):
             if not self.uid:
                 raise ValueError("Credenciales de Odoo incorrectas para este inquilino.")
             self.models = xmlrpc.client.ServerProxy(f'{self.url}/xmlrpc/2/object')
+            self._emp_resolve_cache = {}
         except Exception as e:
             if "Credenciales de Odoo" in str(e):
                 raise e
@@ -191,51 +195,108 @@ class Adapter(BaseSyncAdapter):
             })
         return leaves
 
+    def _odoo_text(self, value):
+        """Odoo XML-RPC usa False para char/date vacíos; no son strings."""
+        if value in (None, False):
+            return ''
+        return str(value).strip()
+
+    def _odoo_date(self, value):
+        text = self._odoo_text(value)
+        return text[:10] if text else None
+
+    def _bim_ejecucion_domain(self):
+        """Proyectos en ejecución. El id 6 es el histórico de Soltec; se resuelve por nombre."""
+        state_id = 6
+        try:
+            rows = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'bim.project.state', 'search_read',
+                [[('name', 'ilike', 'Ejecuci')]],
+                {'fields': ['id', 'name'], 'limit': 5},
+            )
+            if isinstance(rows, list) and rows:
+                state_id = rows[0]['id']
+        except Exception as exc:
+            logger.warning(
+                "[Odoo Adapter - Tenant %s] No se pudo resolver bim.project.state: %s",
+                self.tenant_id, exc,
+            )
+        return [['state_id', '=', state_id], ['active', '=', True]]
+
     def get_diff_obras(self):
-        domain = [['state_id', '=', 6], ['active', '=', True]]
-        fields = ['id', 'name', 'nombre', 'customer_id', 'date_ini', 'nexecution_manager', 'encargado_obra']
-        odoo_obras = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'bim.project', 'search_read', [domain], {'fields': fields})
-        
+        wanted = [
+            'id', 'name', 'nombre', 'customer_id', 'date_ini',
+            'nexecution_manager', 'encargado_obra', 'x_studio_encargado',
+        ]
+        available = self._odoo_fields_get('bim.project') or {}
+        fields = [f for f in wanted if f == 'id' or f in available] or ['id', 'name']
+        domain = self._bim_ejecucion_domain()
+        try:
+            odoo_obras = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'bim.project', 'search_read',
+                [domain],
+                {'fields': fields},
+            )
+        except Exception as exc:
+            logger.error(
+                "[Odoo Adapter - Tenant %s] search_read bim.project falló: %s",
+                self.tenant_id, exc,
+            )
+            raise
+
+        if not isinstance(odoo_obras, list):
+            raise ConnectionError("Respuesta inválida de Odoo para bim.project.")
+
         diff = {'nuevas': [], 'actualizadas': [], 'sin_cambios': [], 'finalizadas': [], 'validadas_manual': []}
         active_odoo_ids = []
 
         for obra in odoo_obras:
             active_odoo_ids.append(obra['id'])
-            raw_name = obra.get('name', '')
-            
-            import re
+            raw_name = self._odoo_text(obra.get('name'))
             match = re.match(r'^([A-Z0-9]+/[0-9]+)', raw_name)
             if match:
                 codigo_limpio = match.group(1)
             else:
-                codigo_limpio = raw_name.split(' ')[0][:20]
-            
-            nombre_limpio = obra.get('nombre') or raw_name
+                codigo_limpio = (raw_name.split(' ')[0] if raw_name else f"ODOO-{obra['id']}")[:20]
 
-            local_obra = Obra.query.filter(
-                (Obra.external_ids['odoo'].astext == str(obra['id'])) | 
-                (Obra.codigo == codigo_limpio)
-            ).first()
-            cliente_name = obra.get('customer_id')[1] if obra.get('customer_id') else ''
-            jefe_id, warn_jefe = self._resolve_employee(obra.get('nexecution_manager'))
-            enc_id, warn_enc = self._resolve_employee(obra.get('encargado_obra'))
-            
+            nombre_limpio = self._odoo_text(obra.get('nombre')) or raw_name or codigo_limpio
+            _, cliente_name = self._m2o_id_name(obra.get('customer_id'))
+            cliente_name = self._odoo_text(cliente_name)
+
+            jefe_field = obra.get('nexecution_manager')
+            enc_field = obra.get('x_studio_encargado') or obra.get('encargado_obra')
+            enc_as_partner = not bool(obra.get('x_studio_encargado'))
+            jefe_id, warn_jefe = self._resolve_employee(jefe_field, as_partner=True)
+            enc_id, warn_enc = self._resolve_employee(enc_field, as_partner=enc_as_partner)
+            _, jefe_raw = self._m2o_id_name(jefe_field)
+            _, enc_raw = self._m2o_id_name(enc_field)
+
             parsed_data = {
                 'odoo_id': obra['id'],
-                'codigo': codigo_limpio, 
-                'nombre': nombre_limpio, 
+                'codigo': codigo_limpio,
+                'nombre': nombre_limpio,
                 'cliente': cliente_name,
-                'fecha_inicio': obra.get('date_ini'),
-                'estado': 'Pendiente', 
+                'fecha_inicio': self._odoo_date(obra.get('date_ini')),
+                'estado': 'Pendiente',
                 'jefe_obra_id': jefe_id,
                 'warn_jefe': warn_jefe,
                 'encargado_id': enc_id,
                 'warn_encargado': warn_enc,
-                'jefe_odoo_raw': obra.get('nexecution_manager')[1] if obra.get('nexecution_manager') else '',
-                'enc_odoo_raw': obra.get('encargado_obra')[1] if obra.get('encargado_obra') else '',
+                'jefe_odoo_raw': self._odoo_text(jefe_raw),
+                'enc_odoo_raw': self._odoo_text(enc_raw),
                 'cambios': {}
             }
-            
+
+            local_obra = Obra.query.filter(
+                Obra.is_deleted.is_(False),
+                (
+                    (Obra.external_ids['odoo'].astext == str(obra['id'])) |
+                    (Obra.codigo == codigo_limpio)
+                ),
+            ).first()
+
             if local_obra:
                 parsed_data['local_id'] = local_obra.id
                 es_validacion_manual = False
@@ -261,7 +322,8 @@ class Adapter(BaseSyncAdapter):
                 if local_obra.jefe_obra_id != jefe_id and not warn_jefe: parsed_data['cambios']['Jefe Obra'] = "Actualizado desde Odoo"
                 if local_obra.encargado_id != enc_id and not warn_enc: parsed_data['cambios']['Encargado'] = "Actualizado desde Odoo"
 
-                if parsed_data['cambios'] or not local_obra.external_ids.get('odoo') or warn_jefe or warn_enc:
+                ext_ids = local_obra.external_ids or {}
+                if parsed_data['cambios'] or not ext_ids.get('odoo') or warn_jefe or warn_enc:
                     diff['actualizadas'].append(parsed_data)
                 elif es_validacion_manual:
                     diff['validadas_manual'].append(parsed_data)
@@ -270,19 +332,28 @@ class Adapter(BaseSyncAdapter):
             else:
                 diff['nuevas'].append(parsed_data)
 
-        # Búsqueda correcta con JSONB para obras finalizadas
-        obras_locales_activas = Obra.query.filter(Obra.external_ids.has_key('odoo'), Obra.estado != 'Finalizada').all()
+        obras_locales_activas = Obra.query.filter(
+            Obra.is_deleted.is_(False),
+            Obra.external_ids.has_key('odoo'),
+            Obra.estado != 'Finalizada',
+        ).all()
         for local in obras_locales_activas:
-            odoo_id_local = local.external_ids.get('odoo')
-            if int(odoo_id_local) not in active_odoo_ids:
+            odoo_id_local = (local.external_ids or {}).get('odoo')
+            if odoo_id_local in (None, '', False):
+                continue
+            try:
+                odoo_id_int = int(odoo_id_local)
+            except (TypeError, ValueError):
+                continue
+            if odoo_id_int not in active_odoo_ids:
                 diff['finalizadas'].append({
                     'local_id': local.id,
-                    'odoo_id': int(odoo_id_local),
+                    'odoo_id': odoo_id_int,
                     'codigo': local.codigo,
                     'nombre': local.nombre,
                     'estado_anterior': local.estado
                 })
-                
+
         return diff
     
     def get_diff_empleados(self):
@@ -373,27 +444,83 @@ class Adapter(BaseSyncAdapter):
                 
         return diff
 
-    def _resolve_employee(self, odoo_field):
-        if not odoo_field: return None, False
+    def _resolve_employee(self, odoo_field, as_partner=True):
+        if not odoo_field:
+            return None, False
 
-        emp_id, emp_name = odoo_field[0], odoo_field[1]
-        domain = ['|', '|', ('user_id', '=', emp_id), ('id', '=', emp_id), ('name', '=', emp_name)]
-        emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': ['id', 'identification_id'], 'limit': 1})
-        
+        emp_id, emp_name = self._m2o_id_name(odoo_field)
+        if not emp_id and not emp_name:
+            return None, False
+
+        cache = getattr(self, '_emp_resolve_cache', None)
+        if cache is None:
+            self._emp_resolve_cache = {}
+            cache = self._emp_resolve_cache
+        cache_key = (bool(as_partner), emp_id, emp_name)
+        if cache_key in cache:
+            return cache[cache_key]
+
+        result = self._resolve_employee_uncached(emp_id, emp_name, as_partner=as_partner)
+        cache[cache_key] = result
+        return result
+
+    def _resolve_employee_uncached(self, emp_id, emp_name, as_partner=True):
+        emp_fields = getattr(self, '_hr_employee_fields', None)
+        if emp_fields is None:
+            emp_fields = self._odoo_fields_get('hr.employee') or {}
+            self._hr_employee_fields = emp_fields
+
+        # Consultas en cascada (no un OR gigante): address_id es la sede de la
+        # empresa y mezclarlo en el dominio devolvía empleados aleatorios.
+        candidate_domains = []
+        if emp_id:
+            if as_partner:
+                # Solo contactos reales del empleado. related_partner_id en Soltec
+                # responde basura a search_read y no se puede usar.
+                for fname in ('work_contact_id', 'user_partner_id'):
+                    if fname in emp_fields:
+                        candidate_domains.append([(fname, '=', emp_id)])
+            else:
+                candidate_domains.append([('id', '=', emp_id)])
+                if 'user_id' in emp_fields:
+                    candidate_domains.append([('user_id', '=', emp_id)])
+        if emp_name:
+            candidate_domains.append([('name', '=', emp_name)])
+
+        emps = []
+        for domain in candidate_domains:
+            try:
+                emps = self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'hr.employee', 'search_read',
+                    [domain],
+                    {'fields': ['id', 'identification_id', 'name'], 'limit': 1},
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Odoo Adapter - Tenant %s] hr.employee lookup falló domain=%s: %s",
+                    self.tenant_id, domain, exc,
+                )
+                emps = []
+            if emps:
+                break
+
         if emps:
-            dni = emps[0].get('identification_id')
+            dni = emps[0].get('identification_id') or None
+            if dni in (False, ''):
+                dni = None
             real_id = emps[0]['id']
-            
+
             if dni:
                 local_user = User.query.filter(
                     (User.external_ids['odoo'].astext == str(real_id)) | (User.dni == dni)
                 ).first()
             else:
                 local_user = User.query.filter(User.external_ids['odoo'].astext == str(real_id)).first()
-            
-            if local_user: 
+
+            if local_user:
                 return local_user.id, False
-                
+
         return None, True
     
     def get_diff_subcontratas(self):
@@ -521,7 +648,11 @@ class Adapter(BaseSyncAdapter):
 
     def _m2o_id_name(self, val):
         if isinstance(val, (list, tuple)) and len(val) >= 2:
-            return val[0], val[1]
+            raw_id, raw_name = val[0], val[1]
+            return (
+                None if raw_id in (False, None) else raw_id,
+                None if raw_name in (False, None) else raw_name,
+            )
         return None, None
 
     def get_diff_vehiculos(self):

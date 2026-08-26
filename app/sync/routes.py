@@ -310,6 +310,8 @@ def preview_obras():
             jefes=jefes_locales, encargados=encargados_locales,
         )
     except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception('Fallo al previsualizar obras Odoo')
         flash(f"Error Odoo: {str(e)}", "danger")
         return redirect(url_for('sync.odoo_panel'))
 
@@ -371,7 +373,14 @@ def commit_obras():
             if obra:
                 obra.estado = 'Finalizada'
                 obra.fecha_fin = ahora.date() 
-                obra.fecha_importacion = ahora  # <--- ACTUALIZAMOS LA FECHA AQUÍ
+                obra.fecha_importacion = ahora
+                from app.utils import register_log
+                register_log(
+                    user_id=current_user.id,
+                    category='obras',
+                    action='Finalizar Obra (Sincronización)',
+                    detail=f"Obra marcada como Finalizada automáticamente por Odoo: '{obra.nombre}'"
+                )
                 
         # --- AÑADIR REGISTRO DE HISTORIAL ---
         db.session.add(SyncLog(
@@ -384,14 +393,6 @@ def commit_obras():
             errores=data.get('errores', 0),
             detalles="Sincronización manual de obras completada."
         ))
-        # ------------------------------------
-        from app.utils import register_log
-        register_log(
-            user_id=current_user.id,
-            category='obras',
-            action='Finalizar Obra (Sincronización)',
-            detail=f"Obra marcada como Finalizada automáticamente por Odoo: '{obra.nombre}'"
-        )
                 
         db.session.commit()
         return jsonify({'success': True})

@@ -219,7 +219,7 @@ class SyncConfigService:
             return False
         now = now_local()
         target = now.replace(hour=cfg['master_hour'], minute=cfg['master_minute'], second=0, microsecond=0)
-        if abs((now - target).total_seconds()) > 300:
+        if now < target:
             return False
         last = cls._get_raw('sync_last_master_date', '')
         return last != today_local().isoformat()
