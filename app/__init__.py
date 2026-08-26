@@ -351,6 +351,7 @@ def create_app():
                 modulos_activos={},
                 tenant_has_odoo=False,
                 tenant_has_odoo_alta=False,
+                tenant_has_soltec_portal_sso=False,
                 tenant_has_integrations=False,
                 tenant_has_registro_jornada=True,
                 tenant_has_fichaje_operario=False,
@@ -461,6 +462,7 @@ def create_app():
         modulos_activos = {}
         tenant_has_odoo = False
         tenant_has_odoo_alta = False
+        tenant_has_soltec_portal_sso = False
         tenant_has_integrations = False
         tenant_has_registro_jornada = True
         tenant_has_fichaje_operario = False
@@ -477,6 +479,11 @@ def create_app():
                 tenant_has_odoo = bool(modulos_activos.get('odoo'))
                 tenant_has_odoo_alta = bool(modulos_activos.get('odoo_alta'))
                 tenant_has_integrations = tenant_has_odoo or tenant_has_odoo_alta
+                try:
+                    from app.services.soltec_sso_service import soltec_portal_sso_available
+                    tenant_has_soltec_portal_sso = soltec_portal_sso_available()
+                except Exception:
+                    tenant_has_soltec_portal_sso = False
                 tenant_has_registro_jornada = bool(
                     modulos_activos.get('registro_jornada', True)
                 )
@@ -558,6 +565,7 @@ def create_app():
                     'unread_laboral_count': unread_laboral_count,
                     'tenant_has_odoo': tenant_has_odoo,
                     'tenant_has_odoo_alta': tenant_has_odoo_alta,
+                    'tenant_has_soltec_portal_sso': tenant_has_soltec_portal_sso,
                     'tenant_has_integrations': tenant_has_integrations,
                     'tenant_has_registro_jornada': tenant_has_registro_jornada,
                     'tenant_has_avisos_laborales': tenant_has_avisos_laborales,
@@ -581,6 +589,7 @@ def create_app():
             modulos_activos=modulos_activos,
             tenant_has_odoo=tenant_has_odoo,
             tenant_has_odoo_alta=tenant_has_odoo_alta,
+            tenant_has_soltec_portal_sso=tenant_has_soltec_portal_sso,
             tenant_has_integrations=tenant_has_integrations,
             tenant_has_registro_jornada=tenant_has_registro_jornada,
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,

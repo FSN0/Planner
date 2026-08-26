@@ -10,9 +10,14 @@ import pytest
 
 from app.services.soltec_sso_service import (
     CLOCK_SKEW_SECONDS,
+    PORTAL_AUD,
+    PORTAL_ISS,
     SoltecSsoError,
     _USED_JTIS,
+    _b64url_decode,
     _b64url_encode,
+    build_portal_sso_redirect_url,
+    mint_portal_sso_token,
     verify_soltec_sso_token,
 )
 
@@ -97,3 +102,47 @@ class TestVerifySoltecSsoToken:
             exp=now + 60,
         ))
         assert verify_soltec_sso_token(token)['email'] == 'jgarcia@soltecgrupo.es'
+
+
+class TestMintPortalSsoToken:
+    def test_claims_y_firma(self):
+        with patch(
+            'app.services.soltec_sso_service.soltec_portal_sso_available',
+            return_value=True,
+        ), patch(
+            'app.services.soltec_sso_service._shared_secret',
+            return_value=SECRET,
+        ), patch(
+            'app.services.soltec_sso_service._portal_base_url',
+            return_value='https://portal.soltecgrupo.es',
+        ):
+            token = mint_portal_sso_token('JGarcia@SoltecGrupo.es')
+            header_b64, payload_b64, sig_b64 = token.split('.')
+            payload = json.loads(_b64url_decode(payload_b64).decode('utf-8'))
+            assert payload['iss'] == PORTAL_ISS
+            assert payload['aud'] == PORTAL_AUD
+            assert payload['tenant'] == 'soltec'
+            assert payload['email'] == 'jgarcia@soltecgrupo.es'
+            assert payload['exp'] - payload['iat'] == 60
+            assert payload['jti']
+
+            # Misma clave: firma válida recalculando
+            import hashlib
+            import hmac
+            expected = hmac.new(
+                SECRET.encode('utf-8'),
+                f'{header_b64}.{payload_b64}'.encode('ascii'),
+                hashlib.sha256,
+            ).digest()
+            assert _b64url_encode(expected) == sig_b64
+
+            url = build_portal_sso_redirect_url('jgarcia@soltecgrupo.es')
+            assert url.startswith('https://portal.soltecgrupo.es/auth/sso?t=')
+
+    def test_bloqueado_si_no_disponible(self):
+        with patch(
+            'app.services.soltec_sso_service.soltec_portal_sso_available',
+            return_value=False,
+        ):
+            with pytest.raises(SoltecSsoError, match='no disponible'):
+                mint_portal_sso_token('jgarcia@soltecgrupo.es')

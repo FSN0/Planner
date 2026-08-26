@@ -90,6 +90,7 @@
                   <span class="sidebar-item-handle" aria-hidden="true"><i class="fas fa-grip-vertical"></i></span>
                   <a href="{{ item['href'] }}"
                      class="sidebar-link {% if item['active'] %}is-active{% endif %}"
+                     {% if item.get('external') %}target="_blank" rel="noopener"{% endif %}
                      {% if item['data_tour'] %}data-tour="{{ item['data_tour'] }}"{% endif %}>
                     <i class="fas {{ item['icon'] }} fa-fw"></i>
                     <span>{{ item['label'] }}</span>

@@ -15,7 +15,11 @@ from app.services.external_auth_service import (
     log_external_auth_result,
     verify_external_password,
 )
-from app.services.soltec_sso_service import SoltecSsoError, verify_soltec_sso_token
+from app.services.soltec_sso_service import (
+    SoltecSsoError,
+    build_portal_sso_redirect_url,
+    verify_soltec_sso_token,
+)
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 from app.services.i18n_service import translate
 
@@ -482,6 +486,59 @@ def sso_soltec():
         source='sso_soltec',
         success_message=translate('Inicio de sesión exitoso'),
     )
+
+
+@auth_bp.route('/sso/portal', methods=['GET'])
+@login_required
+@limiter.limit('20 per minute; 100 per hour')
+def sso_portal():
+    """Planner → Portal Soltec (JWT saliente). Solo tenant soltec + SSO ON."""
+    from app.utils import register_log
+
+    if not hasattr(g, 'current_tenant') or not g.current_tenant:
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
+        return redirect(url_for('main.dashboard'))
+
+    if not _puede_login_web(current_user):
+        flash(
+            translate(
+                'Tu perfil no tiene acceso a la aplicación. Contacta con administración.'
+            ),
+            'warning',
+        )
+        return redirect(url_for('main.dashboard'))
+
+    try:
+        destino = build_portal_sso_redirect_url(current_user.email)
+    except SoltecSsoError as exc:
+        current_app.logger.warning('SSO Portal denegado: %s', exc)
+        register_log(
+            user_id=current_user.id,
+            category='accesos',
+            action='SSO Portal denegado',
+            detail=f"{str(exc)} IP: {request.remote_addr or 'Desconocida'}",
+        )
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        flash(translate(str(exc)), 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    register_log(
+        user_id=current_user.id,
+        category='accesos',
+        action='SSO Portal salida',
+        detail=(
+            f"Redirect a Portal para {current_user.email}. "
+            f"IP: {request.remote_addr or 'Desconocida'}"
+        ),
+    )
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return redirect(destino)
 
 
 @auth_bp.route('/logout')

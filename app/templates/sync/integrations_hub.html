@@ -119,6 +119,23 @@
         </div>
       </div>
       {% endif %}
+
+      {% if tenant_has_soltec_portal_sso %}
+      <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-0">
+          <div class="card-body">
+            <h3 class="h5 mb-2" style="color: #0f766e;"><i class="fas fa-external-link-alt"></i> {{ _('Portal Soltec') }}</h3>
+            <p class="text-muted small mb-3">
+              {{ _('Entrada directa al Portal Soltec con tu sesión del Planner (SSO).') }}
+            </p>
+            <span class="badge badge-success mb-3">{{ _('SSO activo') }}</span>
+            <a href="{{ url_for('auth.sso_portal') }}" class="btn btn-outline-primary btn-block">
+              {{ _('Abrir Portal') }}
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endif %}
     </div>
     {% endif %}
   </main>

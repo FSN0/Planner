@@ -96,6 +96,10 @@ def odoo_panel():
         ),
         'soltec_sso_enabled': get_tenant_config('soltec_sso_enabled', default='false'),
         'soltec_sso_issuer': get_tenant_config('soltec_sso_issuer', default='soltec_satellite'),
+        'soltec_sso_portal_url': get_tenant_config(
+            'soltec_sso_portal_url',
+            default='https://portal.soltecgrupo.es',
+        ),
         'soltec_sso_has_secret': bool(
             get_tenant_config('soltec_sso_shared_secret', default='')
         ),
@@ -140,6 +144,9 @@ def odoo_save_config():
         soltec_sso_secret = (request.form.get('soltec_sso_shared_secret') or '').strip()
         if soltec_sso_secret:
             set_tenant_config('soltec_sso_shared_secret', soltec_sso_secret, encriptar=True)
+        portal_url = (request.form.get('soltec_sso_portal_url') or '').strip().rstrip('/')
+        if portal_url:
+            set_tenant_config('soltec_sso_portal_url', portal_url)
 
         modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
         motor = modulos.get('odoo_adapter') or 'odoo_soltec'

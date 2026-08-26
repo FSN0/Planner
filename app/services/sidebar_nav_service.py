@@ -34,6 +34,7 @@ ITEM_AUDITORIA_VEH = 'auditoria_vehiculos'
 ITEM_AUDITORIA_FICH = 'auditoria_fichajes'
 ITEM_REGISTRO_JORNADA = 'registro_jornada'
 ITEM_INTEGRACIONES = 'integraciones'
+ITEM_SOLTEC_PORTAL = 'soltec_portal'
 ITEM_PRIMEROS_PASOS = 'primeros_pasos'
 ITEM_CONFIGURACION = 'configuracion'
 ITEM_PERMISOS = 'permisos'
@@ -55,6 +56,7 @@ ALL_ITEM_KEYS = (
     ITEM_AUDITORIA_FICH,
     ITEM_REGISTRO_JORNADA,
     ITEM_INTEGRACIONES,
+    ITEM_SOLTEC_PORTAL,
     ITEM_PRIMEROS_PASOS,
     ITEM_CONFIGURACION,
     ITEM_PERMISOS,
@@ -95,6 +97,7 @@ def _default_sections_blueprint() -> list[dict]:
             'items': [
                 ITEM_PRIMEROS_PASOS,
                 ITEM_CONFIGURACION,
+                ITEM_SOLTEC_PORTAL,
                 ITEM_REUNIONES,
                 ITEM_LOGS,
             ],
@@ -289,6 +292,16 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': _ep() in ('sync.panel', 'sync.odoo_panel'),
             'data_tour': None,
         },
+        ITEM_SOLTEC_PORTAL: {
+            'id': ITEM_SOLTEC_PORTAL,
+            'label': str(_('Portal Soltec')),
+            'icon': 'fa-external-link-alt',
+            'kind': 'link',
+            'href': url_for('auth.sso_portal'),
+            'active': False,
+            'data_tour': None,
+            'external': False,
+        },
         ITEM_PRIMEROS_PASOS: {
             'id': ITEM_PRIMEROS_PASOS,
             'label': str(_('Academia')) if ctx.get('onboarding_completo') else str(_('Primeros pasos')),
@@ -396,6 +409,15 @@ def _integration_children(ctx: dict) -> list[dict]:
             'active': False,
             'external': True,
         })
+    if ctx.get('tenant_has_soltec_portal_sso'):
+        kids.append({
+            'id': 'soltec_portal',
+            'label': str(_('Portal Soltec')),
+            'icon': 'fa-external-link-alt',
+            'href': url_for('auth.sso_portal'),
+            'active': False,
+            'external': False,
+        })
     if ctx.get('tenant_has_integrations'):
         kids.append({
             'id': 'integ_all',
@@ -453,6 +475,8 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
         if user_can(user, 'configuracion', 'r'):
             return False
         return user_can(user, 'integraciones', 'r')
+    if item_id == ITEM_SOLTEC_PORTAL:
+        return bool(ctx.get('tenant_has_soltec_portal_sso'))
     if item_id == ITEM_PRIMEROS_PASOS:
         if not user_can(user, 'primeros_pasos', 'r'):
             return False
