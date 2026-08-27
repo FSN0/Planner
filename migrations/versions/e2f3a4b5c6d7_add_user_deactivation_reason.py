@@ -68,7 +68,7 @@ def upgrade():
                     external_ids ? 'odoo'
                     AND NULLIF(TRIM(external_ids->>'odoo'), '') IS NOT NULL
                   )
-                THEN COALESCE(deactivated_at, NOW() AT TIMESTAMP)
+                THEN COALESCE(deactivated_at, NOW())
                 ELSE deactivated_at
             END
             WHERE COALESCE(active, false) = false
