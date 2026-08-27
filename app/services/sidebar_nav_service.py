@@ -35,6 +35,7 @@ ITEM_AUDITORIA_FICH = 'auditoria_fichajes'
 ITEM_REGISTRO_JORNADA = 'registro_jornada'
 ITEM_INTEGRACIONES = 'integraciones'
 ITEM_SOLTEC_PORTAL = 'soltec_portal'
+ITEM_ODOO_ALTA = 'odoo_alta'
 ITEM_PRIMEROS_PASOS = 'primeros_pasos'
 ITEM_CONFIGURACION = 'configuracion'
 ITEM_PERMISOS = 'permisos'
@@ -56,6 +57,7 @@ ALL_ITEM_KEYS = (
     ITEM_AUDITORIA_FICH,
     ITEM_REGISTRO_JORNADA,
     ITEM_INTEGRACIONES,
+    ITEM_ODOO_ALTA,
     ITEM_SOLTEC_PORTAL,
     ITEM_PRIMEROS_PASOS,
     ITEM_CONFIGURACION,
@@ -90,6 +92,11 @@ def _default_sections_blueprint() -> list[dict]:
             'items': [ITEM_AUDITORIA_FICH, ITEM_REGISTRO_JORNADA, ITEM_AUDITORIA_VEH],
         },
         {
+            'id': 'sec_soltec',
+            'title': str(_('Soltec')),
+            'items': [ITEM_ODOO_ALTA, ITEM_SOLTEC_PORTAL],
+        },
+        {
             'id': 'sec_sys',
             'title': str(_('Sistema')),
             # Permisos va como submenú de Configuración (no ítem suelto).
@@ -97,7 +104,6 @@ def _default_sections_blueprint() -> list[dict]:
             'items': [
                 ITEM_PRIMEROS_PASOS,
                 ITEM_CONFIGURACION,
-                ITEM_SOLTEC_PORTAL,
                 ITEM_REUNIONES,
                 ITEM_LOGS,
             ],
@@ -114,6 +120,8 @@ def _is_stock_v1_layout(sections: list) -> bool:
     """True si las prefs parecen el menú stock anterior (antes del rediseño)."""
     ids = {str(s.get('id')) for s in sections if isinstance(s, dict)}
     if 'sec_gestion' in ids or 'sec_solicitudes' in ids or 'sec_audit' in ids:
+        return False
+    if 'sec_soltec' in ids:
         return False
     # Layout viejo tenía Personal + Vehículos + Jornada
     return 'sec_personal' in ids and 'sec_fleet' in ids and 'sec_jornada' in ids
@@ -292,6 +300,16 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': _ep() in ('sync.panel', 'sync.odoo_panel'),
             'data_tour': None,
         },
+        ITEM_ODOO_ALTA: {
+            'id': ITEM_ODOO_ALTA,
+            'label': str(_('Alta Odoo')),
+            'icon': 'fa-address-book',
+            'kind': 'link',
+            'href': url_for('admin.sso_odoo_contactos'),
+            'active': False,
+            'data_tour': None,
+            'external': True,
+        },
         ITEM_SOLTEC_PORTAL: {
             'id': ITEM_SOLTEC_PORTAL,
             'label': str(_('Portal Soltec')),
@@ -390,8 +408,9 @@ def _config_children(ctx: dict) -> list[dict]:
 
 def _integration_children(ctx: dict) -> list[dict]:
     """Legacy: el hub es ahora un enlace; se mantiene por si hay prefs antiguas."""
+    u = ctx.get('user') or current_user
     kids = []
-    if ctx.get('tenant_has_odoo'):
+    if ctx.get('tenant_has_odoo') and user_can(u, 'sync_odoo', 'r'):
         kids.append({
             'id': 'odoo_sync',
             'label': str(_('Sincronización Odoo')),
@@ -400,7 +419,7 @@ def _integration_children(ctx: dict) -> list[dict]:
             'active': _ep() == 'sync.odoo_panel',
             'external': False,
         })
-    if ctx.get('tenant_has_odoo_alta'):
+    if ctx.get('tenant_has_odoo_alta') and user_can(u, 'soltec_alta_odoo', 'r'):
         kids.append({
             'id': 'odoo_alta',
             'label': str(_('Alta Odoo')),
@@ -409,7 +428,7 @@ def _integration_children(ctx: dict) -> list[dict]:
             'active': False,
             'external': True,
         })
-    if ctx.get('tenant_has_soltec_portal_sso'):
+    if ctx.get('tenant_has_soltec_portal_sso') and user_can(u, 'soltec_portal', 'r'):
         kids.append({
             'id': 'soltec_portal',
             'label': str(_('Portal Soltec')),
@@ -418,7 +437,7 @@ def _integration_children(ctx: dict) -> list[dict]:
             'active': False,
             'external': False,
         })
-    if ctx.get('tenant_has_integrations'):
+    if ctx.get('tenant_has_integrations') and user_can(u, 'integraciones', 'r'):
         kids.append({
             'id': 'integ_all',
             'label': str(_('Ver todas')),
@@ -475,8 +494,16 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
         if user_can(user, 'configuracion', 'r'):
             return False
         return user_can(user, 'integraciones', 'r')
+    if item_id == ITEM_ODOO_ALTA:
+        return (
+            bool(ctx.get('tenant_has_odoo_alta'))
+            and user_can(user, 'soltec_alta_odoo', 'r')
+        )
     if item_id == ITEM_SOLTEC_PORTAL:
-        return bool(ctx.get('tenant_has_soltec_portal_sso'))
+        return (
+            bool(ctx.get('tenant_has_soltec_portal_sso'))
+            and user_can(user, 'soltec_portal', 'r')
+        )
     if item_id == ITEM_PRIMEROS_PASOS:
         if not user_can(user, 'primeros_pasos', 'r'):
             return False

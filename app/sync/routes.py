@@ -252,6 +252,9 @@ def resolve_conflict_empleado():
         def retirar_usuario(u):
             u.active = False
             u.is_deleted = True
+            u.deactivation_reason = 'deleted'
+            from app.utils.timezone_utils import utc_now
+            u.deactivated_at = utc_now()
             u.dni = f"DEL-{u.id}"
             if u.email:
                 u.email = f"del-{u.id}@borrado.local"
@@ -451,6 +454,7 @@ def commit_subcontratas():
                 ext_ids['odoo'] = str(obj['odoo_id'])
                 comp.external_ids = ext_ids
                 comp.nombre = obj['nombre']
+                comp.active = True
                 mapa_empresas[obj['odoo_id']] = comp.id
                 db.session.add(comp)
 
@@ -464,6 +468,7 @@ def commit_subcontratas():
             mapa_empresas[obj['odoo_id']] = nueva_comp.id
 
         # 2. ACTUALIZAR EMPLEADOS (Seguro Anti-Colisiones DNI)
+        from app.services.employee_baja_service import aplicar_baja_por_odoo, reactivar
         for obj in data.get('empleados', {}).get('actualizados', []):
             user = User.query.get(obj['local_id'])
             if user:
@@ -494,6 +499,10 @@ def commit_subcontratas():
                     if odoo_c_id in mapa_empresas:
                         user.company_id = mapa_empresas[odoo_c_id]
                 # ---------------------------------------------------
+                if not user.active:
+                    reactivar(user, actor_id=current_user.id, commit=False)
+                else:
+                    user.active = True
 
         # 3. NUEVOS EMPLEADOS (Seguro Anti-Colisiones DNI + Memoria de Transacción)
         dnis_en_transaccion = set() # Memoria temporal por si en el mismo guardado vienen varios repetidos
@@ -545,13 +554,22 @@ def commit_subcontratas():
             )
             db.session.add(nuevo_user)
 
+        emp_baja = data.get('empleados', {}).get('desactivados') or []
+        for obj in emp_baja:
+            local_id = obj.get('local_id')
+            if local_id:
+                aplicar_baja_por_odoo(local_id, actor_id=current_user.id, commit=False)
+
         total_nuevos = len(data.get('empresas', {}).get('nuevas', [])) + len(data.get('empleados', {}).get('nuevos', []))
         total_act = len(data.get('empresas', {}).get('actualizadas', [])) + len(data.get('empleados', {}).get('actualizados', []))
-        
+        detalle = "Sincronización de subcontratas y externos."
+        if emp_baja:
+            detalle = f"{detalle} {len(emp_baja)} baja(s)."
+
         db.session.add(SyncLog(
             fecha=ahora, tipo='Subcontratas', modo='Manual',
             nuevos=total_nuevos, actualizados=total_act,
-            finalizados=0, errores=0, detalles="Sincronización de subcontratas y externos."
+            finalizados=len(emp_baja), errores=0, detalles=detalle
         ))
 
         db.session.commit()
@@ -624,7 +642,11 @@ def commit_empleados():
                     user.email = obj['email']
 
                 user.company_id = default_company_id
-                user.active = True
+                from app.services.employee_baja_service import reactivar
+                if not user.active:
+                    reactivar(user, actor_id=current_user.id, commit=False)
+                else:
+                    user.active = True
                 user.is_deleted = False
                 db.session.add(user)
 
@@ -662,19 +684,27 @@ def commit_empleados():
                 company_id=default_company_id,
                 password_hash=generate_password_hash(dni_limpio),
             ))
-                
-        # --- AÑADIR REGISTRO DE HISTORIAL ---
+
+        from app.services.employee_baja_service import aplicar_baja_por_odoo
+        emp_baja = data.get('desactivados') or []
+        for obj in emp_baja:
+            local_id = obj.get('local_id')
+            if local_id:
+                aplicar_baja_por_odoo(local_id, actor_id=current_user.id, commit=False)
+
+        detalle = "Sincronización manual de empleados completada."
+        if emp_baja:
+            detalle = f"{detalle} {len(emp_baja)} baja(s)."
         db.session.add(SyncLog(
             fecha=ahora,
             tipo='Empleados',
             modo='Manual',
             nuevos=len(data.get('nuevos', [])),
-            actualizados=len(data.get('actualizadas', [])),
-            finalizados=0,
+            actualizados=len(data.get('actualizados', [])),
+            finalizados=len(emp_baja),
             errores=data.get('errores', 0),
-            detalles="Sincronización manual de empleados completada."
+            detalles=detalle,
         ))
-        # ------------------------------------
 
         db.session.commit()
         return jsonify({'success': True})

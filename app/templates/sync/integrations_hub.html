@@ -88,7 +88,7 @@
     </section>
     {% else %}
     <div class="row mt-3">
-      {% if modulos_activos.get('odoo') %}
+      {% if modulos_activos.get('odoo') and user_can(current_user, 'sync_odoo', 'r') %}
       <div class="col-md-6 col-lg-4 mb-3">
         <div class="card h-100 shadow-sm border-0">
           <div class="card-body">
@@ -103,7 +103,7 @@
       </div>
       {% endif %}
 
-      {% if modulos_activos.get('odoo_alta') %}
+      {% if modulos_activos.get('odoo_alta') and user_can(current_user, 'soltec_alta_odoo', 'r') %}
       <div class="col-md-6 col-lg-4 mb-3">
         <div class="card h-100 shadow-sm border-0">
           <div class="card-body">
@@ -120,7 +120,7 @@
       </div>
       {% endif %}
 
-      {% if tenant_has_soltec_portal_sso %}
+      {% if tenant_has_soltec_portal_sso and user_can(current_user, 'soltec_portal', 'r') %}
       <div class="col-md-6 col-lg-4 mb-3">
         <div class="card h-100 shadow-sm border-0">
           <div class="card-body">

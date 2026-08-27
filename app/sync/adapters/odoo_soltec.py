@@ -356,12 +356,101 @@ class Adapter(BaseSyncAdapter):
 
         return diff
     
+    def _odoo_read_active_map(self, model, ids, fields=None):
+        """Lee registros aunque estén archivados. Devuelve {id: active_bool}."""
+        ids = [int(i) for i in ids if i is not None]
+        if not ids:
+            return {}
+        wanted = fields or ['id', 'active', 'name']
+        try:
+            rows = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                model, 'search_read',
+                [[['id', 'in', ids]]],
+                {'fields': wanted, 'context': {'active_test': False}},
+            ) or []
+        except Exception as exc:
+            logger.warning(
+                "[Odoo Adapter - Tenant %s] No se pudo leer %s inactivos: %s",
+                self.tenant_id, model, exc,
+            )
+            return {}
+        out = {}
+        for row in rows:
+            rid = row.get('id')
+            if rid is None:
+                continue
+            out[int(rid)] = {
+                'active': bool(row.get('active', True)),
+                'name': row.get('name') or '',
+            }
+        return out
+
+    def _users_with_odoo_link(self, *, externos=False):
+        """Usuarios locales con external_ids.odoo (no soft-deleted)."""
+        q = User.query.filter(
+            User.is_deleted.is_(False),
+            User.external_ids['odoo'].astext.isnot(None),
+            User.external_ids['odoo'].astext != '',
+        )
+        users = q.all()
+        result = []
+        for u in users:
+            is_ext = bool(u.company_rel and not u.company_rel.is_internal)
+            if externos and is_ext:
+                result.append(u)
+            elif not externos and not is_ext:
+                result.append(u)
+        return result
+
+    def _append_desactivados_empleados(self, diff, seen_odoo_ids):
+        """
+        Baja solo con vínculo Odoo + lectura puntual (active=False o borrado).
+        No usa «ausente del pull por departamento» para evitar falsos positivos.
+        """
+        desactivados = []
+        candidatos = [
+            u for u in self._users_with_odoo_link(externos=False)
+            if u.active and str(u.external_ids.get('odoo')) not in seen_odoo_ids
+        ]
+        odoo_ids = []
+        for u in candidatos:
+            try:
+                odoo_ids.append(int(u.external_ids.get('odoo')))
+            except (TypeError, ValueError):
+                continue
+        active_map = self._odoo_read_active_map('hr.employee', odoo_ids)
+        for u in candidatos:
+            try:
+                oid = int(u.external_ids.get('odoo'))
+            except (TypeError, ValueError):
+                continue
+            info = active_map.get(oid)
+            if info is not None and info.get('active'):
+                # Activo en Odoo pero fuera del filtro de departamentos → no baja.
+                continue
+            desactivados.append({
+                'odoo_id': oid,
+                'local_id': u.id,
+                'name': u.name,
+                'lastname': u.lastname or '',
+                'dni': u.dni,
+                'email': u.email,
+                'role': u.role,
+                'motivo': 'inactivo_odoo' if info is not None else 'eliminado_odoo',
+                'cambios': {
+                    'Estado': 'Activo ➔ Baja (Odoo)',
+                },
+            })
+        diff['desactivados'] = desactivados
+
     def get_diff_empleados(self):
         domain = [['active', '=', True]]
         fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id']
         odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
         
-        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': []}
+        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'desactivados': []}
+        seen_odoo_ids = set()
         
         departamentos_permitidos = [
             'Administración G', 'Administración S', 'Compras', 'Dirección',
@@ -411,6 +500,7 @@ class Adapter(BaseSyncAdapter):
                 'cambios': {},
                 'bloqueos': []
             }
+            seen_odoo_ids.add(str(emp['id']))
             
             if local_user:
                 data['local_id'] = local_user.id
@@ -433,6 +523,8 @@ class Adapter(BaseSyncAdapter):
                 if local_user.role != role: data['cambios']['Rol'] = f"{local_user.role} ➔ {role}"
                 if (local_user.categoria_profesional or '') != categoria: 
                     data['cambios']['Categoría'] = f"{local_user.categoria_profesional or 'Ninguna'} ➔ {categoria}"
+                if not local_user.active:
+                    data['cambios']['Estado'] = 'Inactivo ➔ Activo (reincorporación)'
                 
                 # Búsqueda correcta en JSONB
                 if data['cambios'] or not local_user.external_ids.get('odoo'):
@@ -441,7 +533,8 @@ class Adapter(BaseSyncAdapter):
                     diff['sin_cambios'].append(data)
             else:
                 diff['nuevos'].append(data)
-                
+
+        self._append_desactivados_empleados(diff, seen_odoo_ids)
         return diff
 
     def _resolve_employee(self, odoo_field, as_partner=True):
@@ -523,6 +616,42 @@ class Adapter(BaseSyncAdapter):
 
         return None, True
     
+    def _append_desactivados_subcontratas(self, diff, seen_odoo_ids):
+        desactivados = []
+        candidatos = [
+            u for u in self._users_with_odoo_link(externos=True)
+            if u.active and str(u.external_ids.get('odoo')) not in seen_odoo_ids
+        ]
+        odoo_ids = []
+        for u in candidatos:
+            try:
+                odoo_ids.append(int(u.external_ids.get('odoo')))
+            except (TypeError, ValueError):
+                continue
+        active_map = self._odoo_read_active_map('res.partner', odoo_ids)
+        for u in candidatos:
+            try:
+                oid = int(u.external_ids.get('odoo'))
+            except (TypeError, ValueError):
+                continue
+            info = active_map.get(oid)
+            if info is not None and info.get('active'):
+                continue
+            desactivados.append({
+                'odoo_id': oid,
+                'local_id': u.id,
+                'name': u.name,
+                'lastname': u.lastname or '',
+                'dni': u.dni,
+                'email': u.email,
+                'role': u.role,
+                'motivo': 'inactivo_odoo' if info is not None else 'eliminado_odoo',
+                'cambios': {
+                    'Estado': 'Activo ➔ Baja (Odoo)',
+                },
+            })
+        diff['empleados']['desactivados'] = desactivados
+
     def get_diff_subcontratas(self):
         domain_empresas = [
             ('is_company', '=', True),
@@ -532,10 +661,12 @@ class Adapter(BaseSyncAdapter):
         
         diff = {
             'empresas': {'nuevas': [], 'actualizadas': []},
-            'empleados': {'nuevos': [], 'actualizados': []}
+            'empleados': {'nuevos': [], 'actualizados': [], 'desactivados': []}
         }
         
         if not odoo_empresas:
+            # Aun sin empresas en el pull, evaluar bajas de vinculados.
+            self._append_desactivados_subcontratas(diff, set())
             return diff
 
         empresa_ids = [e['id'] for e in odoo_empresas]
@@ -546,6 +677,8 @@ class Adapter(BaseSyncAdapter):
             ('active', '=', True)
         ]
         odoo_contactos = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'res.partner', 'search_read', [domain_contactos], {'fields': ['id', 'name', 'email', 'vat', 'function', 'parent_id']})
+
+        seen_odoo_ids = set()
 
         for o_emp in odoo_empresas:
             local_comp = Company.query.filter(Company.external_ids['odoo'].astext == str(o_emp['id'])).first()
@@ -562,6 +695,8 @@ class Adapter(BaseSyncAdapter):
             if local_comp:
                 data_emp['local_id'] = local_comp.id
                 if local_comp.nombre != o_emp['name']: data_emp['cambios']['Nombre'] = f"{local_comp.nombre} ➔ {o_emp['name']}"
+                if not getattr(local_comp, 'active', True):
+                    data_emp['cambios']['Estado'] = 'Inactiva ➔ Activa (reincorporación)'
                 if data_emp['cambios'] or not local_comp.external_ids.get('odoo'):
                     diff['empresas']['actualizadas'].append(data_emp)
             else:
@@ -597,6 +732,7 @@ class Adapter(BaseSyncAdapter):
                 'odoo_company_id': odoo_company_id,
                 'cambios': {}
             }
+            seen_odoo_ids.add(str(o_cont['id']))
             
             if local_user:
                 data_cont['local_id'] = local_user.id
@@ -614,12 +750,16 @@ class Adapter(BaseSyncAdapter):
                 
                 if local_odoo_company != odoo_company_id:
                     data_cont['cambios']['Empresa'] = "Auto-corrección de empresa huérfana"
+
+                if not local_user.active:
+                    data_cont['cambios']['Estado'] = 'Inactivo ➔ Activo (reincorporación)'
                 
                 if data_cont['cambios'] or not local_user.external_ids.get('odoo'):
                     diff['empleados']['actualizados'].append(data_cont)
             else:
                 diff['empleados']['nuevos'].append(data_cont)
-                
+
+        self._append_desactivados_subcontratas(diff, seen_odoo_ids)
         return diff
 
     # ------------------------------------------------------------------

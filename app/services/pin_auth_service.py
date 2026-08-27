@@ -120,9 +120,8 @@ def asignar_pin(user, pin, *, must_change=False, notify=False, actor=None):
     pin = validar_pin(pin)
     user.pin_hash = generate_password_hash(pin)
     user.pin_must_change = bool(must_change)
-    # Sin activo no pueden fichar: al darles PIN se asume que quieres que entren
-    if hasattr(user, 'active') and not user.active:
-        user.active = True
+    # No reactivar automáticamente: una baja (manual u Odoo) debe revertirse
+    # marcando de nuevo «Usuario activo», no al asignar PIN.
     if notify:
         notificar_definir_pin_por_email(user, actor=actor)
     return user

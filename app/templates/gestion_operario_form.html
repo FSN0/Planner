@@ -227,7 +227,11 @@
                 </label>
                 <div>
                   <p class="admin-form-switch-label">{{ _('Usuario activo') }}</p>
-                  <p class="admin-form-switch-hint">{{ _('Puede ser asignado a obras') }}</p>
+                  {% if edit_mode and not user.active %}
+                  <p class="admin-form-switch-hint">{{ user.inactive_reason_label }}</p>
+                  {% else %}
+                  <p class="admin-form-switch-hint">{{ _('Si lo desactivas, se da de baja: no podrá fichar ni asignarse, pero el historial se conserva y se liberan las asignaciones futuras.') }}</p>
+                  {% endif %}
                 </div>
               </div>
               <div class="admin-form-switch-row">

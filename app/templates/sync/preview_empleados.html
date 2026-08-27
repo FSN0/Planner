@@ -24,6 +24,7 @@
 
     <div class="sync-preview-stats">
       {{ stat_chip('Listos', preview.stats.listos, 'ok') }}
+      {{ stat_chip('Bajas', preview.stats.desactivados, 'warn') }}
       {{ stat_chip('Conflictos', preview.stats.incidencias, 'danger') }}
       {{ stat_chip('Omitidos Odoo', preview.stats.omitidos_odoo, 'warn') }}
       {{ stat_chip('Sin cambios', preview.stats.sin_cambios, 'muted') }}
@@ -107,6 +108,21 @@
     </section>
     {% endif %}
 
+    {% if preview.desactivados %}
+    <section class="sync-preview-section sync-preview-section--warn">
+      <h2 class="sync-preview-section-title"><i class="fas fa-user-slash"></i> {{ _('Bajas detectadas') }} ({{ preview.desactivados|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Se desactivarán en la plataforma conservando el historial y liberando asignaciones futuras.') }}</p>
+      {% for emp in preview.desactivados %}
+      <article class="sync-preview-card">
+        <strong>{{ emp.name }} {{ emp.lastname }}</strong>
+        <span class="sync-preview-badge sync-preview-badge--actualizar">{{ _('BAJA') }}</span>
+        <div class="small text-muted">{{ emp.dni }} · {{ emp.motivo or '' }}</div>
+        {{ razon_list(emp.razones) }}
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
+
     {% if preview.sin_cambios %}
     <details class="sync-preview-collapse">
       <summary>{{ preview.sin_cambios|length }} {{ _('empleados ya sincronizados') }}</summary>
@@ -144,7 +160,12 @@ function confirmSyncEmpleados() {
     }
     fetch("{{ url_for('sync.commit_empleados') }}", {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nuevos: payload.nuevos, actualizados: cleanUpdates, errores: conflictsCount })
+        body: JSON.stringify({
+            nuevos: payload.nuevos,
+            actualizados: cleanUpdates,
+            desactivados: payload.desactivados || [],
+            errores: conflictsCount
+        })
     }).then(r => r.json()).then(data => {
         if (data.success) {
             if (conflictsCount === 0) window.location.href = "{{ url_for('sync.odoo_panel') }}";

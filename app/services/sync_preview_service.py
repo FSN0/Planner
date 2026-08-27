@@ -101,6 +101,15 @@ def analyze_empleados_preview(diff):
         else:
             listos.append({**emp, 'accion': 'actualizar', 'razones': []})
 
+    desactivados = [{
+        **d,
+        'accion': 'desactivar',
+        'razones': [
+            'Se desactivará en la plataforma (historial intacto) y se liberarán '
+            'asignaciones futuras vía solicitud de baja automática.'
+        ],
+    } for d in diff.get('desactivados', [])]
+
     omitidos_odoo = [{**o, 'accion': 'omitido_odoo'} for o in diff.get('omitidos', [])]
 
     sin_cambios = [{**e, 'accion': 'sin_cambios', 'razones': [
@@ -112,8 +121,9 @@ def analyze_empleados_preview(diff):
         'incidencias': len(incidencias),
         'omitidos_auto': len(omitidos_auto),
         'omitidos_odoo': len(omitidos_odoo),
+        'desactivados': len(desactivados),
         'sin_cambios': len(sin_cambios),
-        'total_accion': len(listos) + len(incidencias) + len(diff.get('nuevos', [])),
+        'total_accion': len(listos) + len(incidencias) + len(desactivados),
     }
 
     return {
@@ -125,6 +135,7 @@ def analyze_empleados_preview(diff):
         'incidencias': incidencias,
         'omitidos_auto': omitidos_auto,
         'omitidos_odoo': omitidos_odoo,
+        'desactivados': desactivados,
         'sin_cambios': sin_cambios,
     }
 
@@ -158,6 +169,15 @@ def analyze_subcontratas_preview(diff):
     for emp in diff.get('empleados', {}).get('actualizados', []):
         listos_empleados.append({**emp, 'accion': 'actualizar_externo', 'razones': []})
 
+    desactivados = [{
+        **d,
+        'accion': 'desactivar',
+        'razones': [
+            'Se desactivará (historial intacto). Si no queda personal activo, '
+            'la empresa subcontrata se archivará.'
+        ],
+    } for d in diff.get('empleados', {}).get('desactivados', [])]
+
     sin_cambios = []
 
     stats = {
@@ -168,6 +188,7 @@ def analyze_subcontratas_preview(diff):
         'empresas_act': len(diff.get('empresas', {}).get('actualizadas', [])),
         'externos_nuevos': len(diff.get('empleados', {}).get('nuevos', [])),
         'externos_act': len(diff.get('empleados', {}).get('actualizados', [])),
+        'desactivados': len(desactivados),
     }
 
     return {
@@ -179,6 +200,7 @@ def analyze_subcontratas_preview(diff):
         'incidencias_empresas': incidencias_empresas,
         'listos_empleados': listos_empleados,
         'incidencias_empleados': incidencias_empleados,
+        'desactivados': desactivados,
         'omitidos_auto': omitidos_auto,
         'sin_cambios': sin_cambios,
     }

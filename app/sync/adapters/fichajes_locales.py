@@ -31,7 +31,8 @@ class Adapter(BaseSyncAdapter):
         return {
             'nuevos': [],
             'actualizados': [],
-            'sin_cambios': []
+            'sin_cambios': [],
+            'desactivados': [],
         }
 
     def get_fichajes_diarios(self, fecha_str=None) -> list:
@@ -44,5 +45,5 @@ class Adapter(BaseSyncAdapter):
     def get_diff_subcontratas(self) -> dict:
         return {
             'empresas': {'nuevas': [], 'actualizadas': []},
-            'empleados': {'nuevos': [], 'actualizados': []},
+            'empleados': {'nuevos': [], 'actualizados': [], 'desactivados': []},
         }

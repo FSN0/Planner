@@ -162,7 +162,7 @@
                   {% endif %}
                   <td data-sort-value="{{ 'activo' if user.active else 'inactivo' }}">
                     {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
-                    {% else %}<span class="badge-soft badge-soft-slate"><span class="status-dot gray"></span> {{ _('Inactivo') }}</span>{% endif %}
+                    {% else %}<span class="badge-soft badge-soft-slate" title="{{ user.inactive_reason_label }}"><span class="status-dot gray"></span> {{ _('Inactivo') }}</span>{% endif %}
                   </td>
                   <td class="col-actions">
                     <div class="table-actions">

@@ -233,7 +233,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
             busy_workers.append(w)
 
     jefes_list = User.query.filter(User.role.in_([ROLE_JEFE, ROLE_ADMIN]), User.is_deleted==False, User.active==True).all()
-    companies_list = Company.query.all()
+    companies_list = Company.query.filter_by(active=True).all()
     companies_dict = {c.code: c.nombre for c in companies_list}
     company_colors = {c.code: c.color for c in companies_list}
 

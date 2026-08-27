@@ -90,7 +90,8 @@
                 {% if worker.active %}
                   <span class="entity-status-badge entity-status-badge--active">{{ _('Activo') }}</span>
                 {% else %}
-                  <span class="entity-status-badge entity-status-badge--inactive">{{ _('Inactivo') }}</span>
+                  <span class="entity-status-badge entity-status-badge--inactive"
+                        title="{{ worker.inactive_reason_label }}">{{ _('Inactivo') }}</span>
                 {% endif %}
               </span>
             </div>

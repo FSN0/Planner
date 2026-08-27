@@ -9,6 +9,7 @@ from app.services.config_service import get_tenant_config
 from app.services.log_notification_service import LABORAL_LOG_CATEGORIES
 from app.services.permission_catalog import (
     ADMIN_LOCKED_MODULES,
+    SSO_READ_ONLY_MODULES,
     default_actions,
     default_matrix_rows,
     module_keys,
@@ -202,21 +203,35 @@ def _ensure_table() -> bool:
 
 
 def ensure_role_permissions(force: bool = False) -> int:
-    """Si no hay filas (o force), siembra defaults. Devuelve filas creadas/actualizadas."""
+    """Siembra defaults si vacío; siempre añade módulos nuevos del catálogo."""
     if not _ensure_table():
         return 0
     existing = RolePermission.query.count()
-    if existing and not force:
-        return 0
+    created = 0
     if force:
         RolePermission.query.delete()
         db.session.flush()
-    created = 0
+        existing = 0
+    if not existing or force:
+        for row in default_matrix_rows():
+            db.session.add(RolePermission(**row))
+            created += 1
+        db.session.commit()
+        _clear_perm_cache()
+        return created
+
+    # Catálogo ampliado: insertar filas que falten sin tocar las existentes
     for row in default_matrix_rows():
+        found = RolePermission.query.filter_by(
+            role=row['role'], module=row['module']
+        ).first()
+        if found:
+            continue
         db.session.add(RolePermission(**row))
         created += 1
-    db.session.commit()
-    _clear_perm_cache()
+    if created:
+        db.session.commit()
+        _clear_perm_cache()
     return created
 
 
@@ -270,6 +285,7 @@ def can_write_assignments(user) -> bool:
 def user_can(user, module: str, action: str) -> bool:
     """
     Comprueba permiso de módulo. action in r|w|x.
+    X se trata como escritura (compatibilidad con código antiguo).
     Admin puede perder módulos vía matriz, excepto configuracion/permisos (anti-lockout).
     """
     if not user or not getattr(user, 'is_authenticated', False):
@@ -277,6 +293,9 @@ def user_can(user, module: str, action: str) -> bool:
     action = (action or '').lower()[:1]
     if action not in ('r', 'w', 'x'):
         return False
+    # X ≡ W: ya no hay columna de ejecución en la UI
+    if action == 'x':
+        action = 'w'
     module = normalize_module(module)
     role = getattr(user, 'role', None)
     if not role:
@@ -287,11 +306,14 @@ def user_can(user, module: str, action: str) -> bool:
         return True
 
     allowed = _actions_for(role, module)
+    # Filas antiguas: can_execute sin can_write → contar como escritura
+    if action == 'w' and 'w' not in allowed and 'x' in allowed:
+        allowed = frozenset(set(allowed) | {'w'})
     if action not in allowed:
         return False
 
     # Gate extra histórico: resolver fichajes laboral
-    if module == 'auditoria_fichajes' and action == 'x' and role in ROLES_LABORAL_LIKE:
+    if module == 'auditoria_fichajes' and action == 'w' and role in ROLES_LABORAL_LIKE:
         return laboral_puede_resolver_fichajes()
 
     return True
@@ -300,7 +322,7 @@ def user_can(user, module: str, action: str) -> bool:
 def can_resolve_fichajes(user) -> bool:
     if not user or not getattr(user, 'is_authenticated', False):
         return False
-    if user_can(user, 'auditoria_fichajes', 'x'):
+    if user_can(user, 'auditoria_fichajes', 'w'):
         if is_laboral(user):
             return laboral_puede_resolver_fichajes()
         return True
@@ -327,7 +349,7 @@ def roles_with_module(module: str, action: str = 'r') -> tuple:
 def save_role_matrix(role: str, form_data) -> int:
     """
     Persiste checkboxes del form para un rol.
-    form_data keys: perm__{module}__r / __w / __x
+    form_data keys: perm__{module}__r / __w
     Devuelve nº de módulos actualizados.
     """
     if not _ensure_table():
@@ -340,18 +362,19 @@ def save_role_matrix(role: str, form_data) -> int:
     for module in module_keys():
         can_r = _checkbox_on(form_data, f'perm__{module}__r')
         can_w = _checkbox_on(form_data, f'perm__{module}__w')
-        can_x = _checkbox_on(form_data, f'perm__{module}__x')
-        if can_w or can_x:
+        if module in SSO_READ_ONLY_MODULES:
+            can_w = False
+        if can_w:
             can_r = True
         if role == ROLE_ADMIN and module in ADMIN_LOCKED_MODULES:
-            can_r = can_w = can_x = True
+            can_r = can_w = True
         row = RolePermission.query.filter_by(role=role, module=module).first()
         if not row:
             row = RolePermission(role=role, module=module)
             db.session.add(row)
         row.can_read = bool(can_r)
         row.can_write = bool(can_w)
-        row.can_execute = bool(can_x)
+        row.can_execute = bool(can_w)  # legado alineado con escritura
         updated += 1
     db.session.commit()
     _clear_perm_cache()
@@ -361,18 +384,17 @@ def save_role_matrix(role: str, form_data) -> int:
 
 
 def matrix_for_role(role: str) -> dict:
-    """module -> {r,w,x bools} para la UI."""
+    """module -> {r,w bools} para la UI."""
     ensure_role_permissions()
     out = {}
-    # Pantalla de edición: no reutilizar cache a medias de la misma request
     _clear_perm_cache()
     for module in module_keys():
         actions = _actions_for(role, module)
         if role == ROLE_ADMIN and module in ADMIN_LOCKED_MODULES:
-            actions = frozenset('rwx')
+            actions = frozenset('rw')
+        has_w = 'w' in actions or 'x' in actions
         out[module] = {
-            'r': 'r' in actions,
-            'w': 'w' in actions,
-            'x': 'x' in actions,
+            'r': 'r' in actions or has_w,
+            'w': has_w,
         }
     return out

@@ -26,6 +26,7 @@
       {{ stat_chip('Empresas act.', preview.stats.empresas_act, 'ok') }}
       {{ stat_chip('Externos nuevos', preview.stats.externos_nuevos, 'ok') }}
       {{ stat_chip('Externos act.', preview.stats.externos_act, 'ok') }}
+      {{ stat_chip('Bajas', preview.stats.desactivados, 'warn') }}
       {{ stat_chip('Avisos DNI', preview.incidencias_empleados|length, 'warn') }}
     </div>
 
@@ -67,6 +68,20 @@
         {% else %}<p class="text-muted small">{{ _('Ninguno.') }}</p>{% endfor %}
       </section>
     </div>
+
+    {% if preview.desactivados %}
+    <section class="sync-preview-section sync-preview-section--warn">
+      <h2 class="sync-preview-section-title"><i class="fas fa-user-slash"></i> {{ _('Bajas de externos') }} ({{ preview.desactivados|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Se desactivarán conservando historial. Si no queda personal activo, la empresa se archivará.') }}</p>
+      {% for emp in preview.desactivados %}
+      <article class="sync-preview-card">
+        <strong>{{ emp.name }} {{ emp.lastname }}</strong>
+        <div class="small text-muted">{{ emp.dni }} · {{ emp.motivo or '' }}</div>
+        {{ razon_list(emp.razones) }}
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
 
   </main>
 </div>

@@ -1,6 +1,7 @@
 """Catálogo de módulos de la app (navegación + portales).
 
-Cada módulo se configura por rol en RolePermission (R/W/X).
+Cada módulo se configura por rol en RolePermission (Lectura / Escritura).
+La antigua X (ejecutar) se unifica con Escritura.
 """
 from __future__ import annotations
 
@@ -22,7 +23,11 @@ PERMISSION_MODULES = (
     ('auditoria_vehiculos', 'Auditoría vehículos', 'Vehículos'),
     ('auditoria_fichajes', 'Auditoría fichajes', 'Jornada'),
     ('registro_jornada', 'Registro de jornada', 'Jornada'),
-    ('integraciones', 'Integraciones', 'Sistema'),
+    # Integraciones: hub + cada integración (permisos independientes entre sí)
+    ('integraciones', 'Integraciones (hub)', 'Integraciones'),
+    ('sync_odoo', 'Sincronización Odoo', 'Integraciones'),
+    ('soltec_alta_odoo', 'Alta Odoo', 'Integraciones'),
+    ('soltec_portal', 'Portal Soltec', 'Integraciones'),
     ('primeros_pasos', 'Primeros pasos', 'Sistema'),
     ('configuracion', 'Configuración', 'Sistema'),
     ('permisos', 'Permisos por rol', 'Sistema'),
@@ -49,28 +54,29 @@ PERMISSION_ROLES = (
     (ROLE_OPERARIO, 'Operario'),
 )
 
-# Defaults = comportamiento histórico de la app
-# value: frozenset of 'r','w','x' or empty
+# Defaults = comportamiento histórico. Solo r/w (x ≡ w).
 _DEFAULTS = {
-    ROLE_ADMIN: {m: frozenset('rwx') for m, _, _ in PERMISSION_MODULES},
+    ROLE_ADMIN: {m: frozenset('rw') for m, _, _ in PERMISSION_MODULES},
     ROLE_JEFE: {
         'inicio': frozenset('r'),
-        'tablero': frozenset('rwx'),
+        'tablero': frozenset('rw'),
         'directorio': frozenset('r'),
-        'planificador': frozenset('rwx'),
-        'reuniones': frozenset('rwx'),
-        'solicitudes': frozenset('rwx'),
-        'ausencias': frozenset('rwx'),
-        'vehiculos': frozenset('rwx'),
+        'planificador': frozenset('rw'),
+        'reuniones': frozenset('rw'),
+        'solicitudes': frozenset('rw'),
+        'ausencias': frozenset('rw'),
+        'vehiculos': frozenset('rw'),
         'vehiculos_libres': frozenset('r'),
-        'auditoria_fichajes': frozenset('rwx'),
-        'integraciones': frozenset('r'),  # alta Odoo si el tenant lo tiene
+        'auditoria_fichajes': frozenset('rw'),
+        # Atajos SSO (no requieren hub Integraciones)
+        'soltec_alta_odoo': frozenset('r'),
+        'soltec_portal': frozenset('r'),
     },
     ROLE_LABORAL: {
         'inicio': frozenset('r'),
-        'ausencias': frozenset('rwx'),
-        'auditoria_fichajes': frozenset('rwx'),
-        'logs': frozenset('rwx'),
+        'ausencias': frozenset('rw'),
+        'auditoria_fichajes': frozenset('rw'),
+        'logs': frozenset('rw'),
         'tablero': frozenset('r'),
         'auditoria_vehiculos': frozenset('r'),
         'vehiculos': frozenset('r'),
@@ -79,9 +85,9 @@ _DEFAULTS = {
     },
     ROLE_RRHH: {
         'inicio': frozenset('r'),
-        'ausencias': frozenset('rwx'),
-        'auditoria_fichajes': frozenset('rwx'),
-        'logs': frozenset('rwx'),
+        'ausencias': frozenset('rw'),
+        'auditoria_fichajes': frozenset('rw'),
+        'logs': frozenset('rw'),
         'tablero': frozenset('r'),
         'auditoria_vehiculos': frozenset('r'),
         'vehiculos': frozenset('r'),
@@ -89,11 +95,9 @@ _DEFAULTS = {
         'trabajadores': frozenset('r'),
     },
     ROLE_OPERARIO: {
-        'operario_fichaje': frozenset('rwx'),
+        'operario_fichaje': frozenset('rw'),
         'operario_calendario': frozenset('r'),
-        'operario_ausencias': frozenset('rwx'),
-        # Portal web: el rol puede; cada ficha sigue necesitando web_access.
-        # Si una empresa no quiere ningún operario en web, desmarca este módulo.
+        'operario_ausencias': frozenset('rw'),
         'operario_web': frozenset('r'),
     },
 }
@@ -120,46 +124,65 @@ def default_matrix_rows():
     for role, _label in PERMISSION_ROLES:
         for module, _mlabel, _group in PERMISSION_MODULES:
             actions = default_actions(role, module)
+            can_w = 'w' in actions
             rows.append({
                 'role': role,
                 'module': module,
                 'can_read': 'r' in actions,
-                'can_write': 'w' in actions,
-                'can_execute': 'x' in actions,
+                'can_write': can_w,
+                # Columna legada: se mantiene alineada con escritura
+                'can_execute': can_w,
             })
     return rows
 
 
-# Módulos que el admin no puede quitarse a sí mismo (evitar auto-lockout)
 ADMIN_LOCKED_MODULES = frozenset({'configuracion', 'permisos'})
 
-# Dónde X tiene efecto real (el resto: X ≈ W o no aplica).
-# Se muestra en la UI de permisos para no confundir.
-MODULE_EXECUTE_HINTS = {
-    'trabajadores': 'Reset contraseña / PIN',
-    'reuniones': 'Eliminar notas',
-    'solicitudes': 'Resolver / aprobar solicitudes',
-    'ausencias': 'Aprobar / resolver conflictos',
-    'auditoria_fichajes': 'Resolver incidencias de fichaje',
-    'auditoria_vehiculos': 'Resolver auditoría de flota',
-}
+# Módulos SSO: la escritura no aporta (abrir el enlace = lectura)
+SSO_READ_ONLY_MODULES = frozenset({'soltec_alta_odoo', 'soltec_portal'})
 
 MODULE_WRITE_HINTS = {
     'planificador': 'Mover y asignar en el Gantt',
     'tablero': 'Arrastrar en kanban / editar calendario de obra',
-    'reuniones': 'Crear y editar notas',
-    'trabajadores': 'Alta / editar fichas',
+    'reuniones': 'Crear, editar y eliminar notas',
+    'trabajadores': 'Alta / editar fichas; reset contraseña y PIN',
     'vehiculos': 'Asignar y editar flota',
     'directorio': 'Crear / editar obras',
     'subcontratas': 'Crear / editar empresas',
-    'solicitudes': 'Crear solicitudes',
-    'ausencias': 'Crear / gestionar ausencias',
+    'solicitudes': 'Crear y resolver solicitudes',
+    'ausencias': 'Crear / aprobar ausencias y conflictos',
+    'auditoria_fichajes': 'Resolver incidencias y sincronizar',
+    'auditoria_vehiculos': 'Resolver auditoría de flota',
+    'integraciones': 'Acciones del hub (si las hay)',
+    'sync_odoo': 'Preview, sincronizar, guardar configuración',
+    'soltec_alta_odoo': 'No necesario: con Lectura basta para abrir',
+    'soltec_portal': 'No necesario: con Lectura basta para abrir',
+    'logs': 'Marcar / gestionar avisos',
+    'configuracion': 'Guardar ajustes del espacio',
+    'permisos': 'Cambiar la matriz de permisos',
+    'operario_fichaje': 'Fichar en la PWA',
+    'operario_ausencias': 'Solicitar ausencias',
 }
 
-
-def module_execute_hint(module: str) -> str | None:
-    return MODULE_EXECUTE_HINTS.get(normalize_module(module))
+MODULE_READ_HINTS = {
+    'integraciones': 'Ver el listado de integraciones',
+    'sync_odoo': 'Entrar al centro de sincronización Odoo',
+    'soltec_alta_odoo': 'Abrir el panel de altas Odoo',
+    'soltec_portal': 'Abrir el portal Soltec',
+}
 
 
 def module_write_hint(module: str) -> str | None:
     return MODULE_WRITE_HINTS.get(normalize_module(module))
+
+
+def module_read_hint(module: str) -> str | None:
+    return MODULE_READ_HINTS.get(normalize_module(module))
+
+
+# Compat imports antiguos
+MODULE_EXECUTE_HINTS = {}
+
+
+def module_execute_hint(module: str) -> str | None:
+    return None

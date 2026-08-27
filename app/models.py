@@ -142,6 +142,8 @@ class Company(db.Model):
     
     # Flag clave para distinguir personal propio de subcontratado
     is_internal = db.Column(db.Boolean, nullable=False, default=False)
+    # Archivo sin borrado: baja de subcontrata / sin personal activo.
+    active = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
     
     def __repr__(self):
         return f'<Company {self.nombre} ({self.code})>'
@@ -195,6 +197,9 @@ class User(UserMixin, db.Model):
     # Estados y Ciclo de vida
     active = db.Column(db.Boolean, default=False)  # Aprobado por RRHH (para operarios)
     is_deleted = db.Column(db.Boolean, default=False)  # Soft delete
+    # Motivo de inactividad: pending | manual | odoo | deleted
+    deactivation_reason = db.Column(db.String(40), nullable=True)
+    deactivated_at = db.Column(db.DateTime, nullable=True)
     # En el alta nueva el admin nace ya verificado. En cuentas antiguas
     # puede quedar False; no bloquea el login.
     email_verified = db.Column(
@@ -229,6 +234,50 @@ class User(UserMixin, db.Model):
         iniciar sesión.
         """
         return bool(self.active) and not bool(self.is_deleted)
+
+    @property
+    def inactive_reason_label(self):
+        """Texto para tooltip cuando el usuario no está operativo."""
+        from app.services.i18n_service import translate
+
+        if self.active and not self.is_deleted:
+            return ''
+
+        if self.is_deleted or self.deactivation_reason == 'deleted':
+            base = translate('Eliminado (archivado)')
+        elif self.scheduled_activation_date and not self.active:
+            base = translate(
+                'Activación programada para el {fecha}',
+                fecha=self.scheduled_activation_date.strftime('%d/%m/%Y'),
+            )
+            return base
+        elif self.deactivation_reason == 'odoo':
+            base = translate('Baja por sincronización Odoo')
+        elif self.deactivation_reason == 'manual':
+            base = translate('Baja manual')
+        elif self.deactivation_reason == 'pending':
+            # Seguridad: vinculado a Odoo no es «pendiente de alta»
+            ext = self.external_ids or {}
+            if ext.get('odoo'):
+                base = translate('Baja por sincronización Odoo')
+            else:
+                base = translate('Pendiente de activación')
+        else:
+            ext = self.external_ids or {}
+            if ext.get('odoo') and not self.active:
+                base = translate('Baja por sincronización Odoo')
+            else:
+                base = translate('Inactivo (motivo no registrado)')
+
+        if self.deactivated_at and (
+            self.deactivation_reason in ('manual', 'odoo', 'deleted')
+            or (
+                (self.external_ids or {}).get('odoo')
+                and self.deactivation_reason in (None, '', 'pending')
+            )
+        ):
+            return f"{base} · {self.deactivated_at.strftime('%d/%m/%Y')}"
+        return base
 
     @property
     def reputation_score(self):
@@ -267,13 +316,15 @@ class User(UserMixin, db.Model):
         Marca al usuario como eliminado, libera su DNI (añadiendo sufijo)
         y elimina asignaciones futuras para liberar planificación.
         """
-        from app.utils.timezone_utils import today_local
+        from app.utils.timezone_utils import today_local, utc_now
         today = today_local()
         new_dni = f"{self.dni}-del-{self.id}"
         self.dni = new_dni[:20]
         
         self.is_deleted = True
         self.active = False
+        self.deactivation_reason = 'deleted'
+        self.deactivated_at = utc_now()
         self.scheduled_activation_date = None
         self.scheduled_deactivation_date = None
 

@@ -488,3 +488,203 @@ class TestMasterSyncSchedule:
             session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
             assert SyncConfigService.should_run_master_sync() is False
 
+
+class TestEmployeeBajaService:
+    """Baja manual / Odoo: historial intacto, asignaciones futuras liberadas."""
+
+    def test_dar_de_baja_libera_futuro_y_conserva_dni(
+        self, session, tenant_soltec, user_admin, user_operario, obra_activa, app
+    ):
+        from flask import g
+        from datetime import timedelta
+        from app.models import Asignacion, Solicitud
+        from app.services.employee_baja_service import dar_de_baja
+        from app.utils.timezone_utils import today_local
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            today = today_local()
+            fut = today + timedelta(days=3)
+            session.add(Asignacion(
+                user_id=user_operario.id,
+                obra_id=obra_activa.id,
+                fecha=fut,
+                company_id=user_operario.company_id,
+            ))
+            session.commit()
+
+            dni_antes = user_operario.dni
+            result = dar_de_baja(
+                user_operario,
+                actor_id=user_admin.id,
+                motivo='manual',
+                commit=True,
+            )
+
+            assert result['changed'] is True
+            assert result['liberadas'] == 1
+            assert user_operario.active is False
+            assert user_operario.dni == dni_antes
+            assert user_operario.is_deleted is False
+            assert user_operario.deactivation_reason == 'manual'
+            assert user_operario.deactivated_at is not None
+            assert 'Baja manual' in user_operario.inactive_reason_label
+            assert Asignacion.query.filter_by(
+                user_id=user_operario.id, fecha=fut
+            ).first() is None
+            sol = Solicitud.query.filter_by(
+                empleado_id=user_operario.id, accion='DESASIGNAR', estado='CUMPLIDA'
+            ).first()
+            assert sol is not None
+            assert 'Baja' in (sol.notas or '')
+
+    def test_baja_externo_archiva_empresa_sin_activos(
+        self, session, tenant_soltec, company_subcontrata, user_admin, app
+    ):
+        from flask import g
+        from werkzeug.security import generate_password_hash
+        from app.services.employee_baja_service import dar_de_baja, reactivar
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            ext = User(
+                email='ext-baja@test.com',
+                password_hash=generate_password_hash('x'),
+                role='operario',
+                name='Ext',
+                lastname='Uno',
+                dni='EX999001A',
+                company_id=company_subcontrata.id,
+                active=True,
+                email_verified=True,
+            )
+            session.add(ext)
+            session.commit()
+
+            dar_de_baja(ext, actor_id=user_admin.id, commit=True)
+            session.refresh(company_subcontrata)
+            assert company_subcontrata.active is False
+
+            reactivar(ext, actor_id=user_admin.id, commit=True)
+            session.refresh(company_subcontrata)
+            assert ext.active is True
+            assert company_subcontrata.active is True
+
+
+class TestOdooEmpleadosDesactivados:
+    def test_desactivados_solo_si_odoo_inactivo_o_faltante(
+        self, session, tenant_soltec, company_internal, user_operario, app
+    ):
+        from flask import g
+        from app.sync.adapters.odoo_soltec import Adapter
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            user_operario.external_ids = {'odoo': '9001'}
+            session.add(user_operario)
+            session.commit()
+
+            adapter = Adapter.__new__(Adapter)
+            adapter.tenant_id = tenant_soltec.id
+            adapter.db_name = 'db'
+            adapter.uid = 2
+            adapter.pwd = 'x'
+            adapter.models = Mock()
+
+            def execute_kw(*args, **kwargs):
+                model = args[3]
+                method = args[4]
+                if model == 'hr.employee' and method == 'search_read':
+                    domain = args[5][0] if len(args) > 5 else []
+                    # Pull activos de departamentos: vacío
+                    if domain and domain[0] == ['active', '=', True]:
+                        return []
+                    # Lectura puntual con active_test=False
+                    return [{'id': 9001, 'active': False, 'name': 'Juan Operario'}]
+                return []
+
+            adapter.models.execute_kw.side_effect = execute_kw
+            diff = adapter.get_diff_empleados()
+
+            assert len(diff['desactivados']) == 1
+            assert diff['desactivados'][0]['local_id'] == user_operario.id
+            assert diff['desactivados'][0]['motivo'] == 'inactivo_odoo'
+
+    def test_no_baja_si_activo_fuera_de_departamento(
+        self, session, tenant_soltec, company_internal, user_operario, app
+    ):
+        """Activo en Odoo pero no entra en el filtro de departamentos → no baja."""
+        from flask import g
+        from app.sync.adapters.odoo_soltec import Adapter
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            user_operario.external_ids = {'odoo': '9002'}
+            session.add(user_operario)
+            session.commit()
+
+            adapter = Adapter.__new__(Adapter)
+            adapter.tenant_id = tenant_soltec.id
+            adapter.db_name = 'db'
+            adapter.uid = 2
+            adapter.pwd = 'x'
+            adapter.models = Mock()
+
+            def execute_kw(*args, **kwargs):
+                model = args[3]
+                method = args[4]
+                if model == 'hr.employee' and method == 'search_read':
+                    domain = args[5][0] if len(args) > 5 else []
+                    if domain and domain[0] == ['active', '=', True]:
+                        return []
+                    return [{'id': 9002, 'active': True, 'name': 'Juan Operario'}]
+                return []
+
+            adapter.models.execute_kw.side_effect = execute_kw
+            diff = adapter.get_diff_empleados()
+            assert diff['desactivados'] == []
+
+    def test_run_auto_sync_aplica_baja(
+        self, session, tenant_soltec, company_internal, user_operario, app, mocker
+    ):
+        from flask import g
+        from app.services.sync_runner_service import run_auto_sync_empleados
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            user_operario.external_ids = {'odoo': '9003'}
+            session.add(user_operario)
+            session.commit()
+
+            mock_adapter = Mock()
+            mock_adapter.get_diff_empleados.return_value = {
+                'nuevos': [],
+                'actualizados': [],
+                'sin_cambios': [],
+                'desactivados': [{
+                    'odoo_id': 9003,
+                    'local_id': user_operario.id,
+                    'name': user_operario.name,
+                    'lastname': user_operario.lastname,
+                }],
+            }
+            mocker.patch(
+                'app.services.sync_runner_service.get_sync_adapter',
+                return_value=mock_adapter,
+            )
+
+            result = run_auto_sync_empleados()
+            session.refresh(user_operario)
+            assert result['desactivados'] == 1
+            assert user_operario.active is False
+

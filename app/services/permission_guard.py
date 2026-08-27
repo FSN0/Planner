@@ -26,8 +26,8 @@ _ADMIN_RULES = (
     ('/admin/system_logs', 'logs', 'r', {'POST': 'w'}),
     ('/admin/logs', 'logs', 'r', {'POST': 'w'}),
     ('/admin/personal', 'trabajadores', 'r', {'POST': 'w'}),
-    ('/admin/reset_password', 'trabajadores', 'x', {'POST': 'x'}),
-    ('/admin/reset_pin', 'trabajadores', 'x', {'POST': 'x'}),
+    ('/admin/reset_password', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/reset_pin', 'trabajadores', 'w', {'POST': 'w'}),
     ('/admin/companies', 'subcontratas', 'r', {'POST': 'w'}),
     ('/admin/company', 'subcontratas', 'r', {'POST': 'w'}),
     ('/admin/obras', 'directorio', 'r', {'POST': 'w'}),
@@ -35,12 +35,19 @@ _ADMIN_RULES = (
     ('/admin/panel', 'inicio', 'r', {}),
     ('/admin/worker', 'trabajadores', 'r', {'POST': 'w'}),
     ('/admin/obra', 'tablero', 'r', {'POST': 'w'}),
+    ('/admin/sso/odoo_contactos', 'soltec_alta_odoo', 'r', {}),
 )
 
 _SYNC_RULES = (
     ('/sync/auditoria-vehiculos', 'auditoria_vehiculos', 'r', {'POST': 'w'}),
-    ('/sync/auditoria', 'auditoria_fichajes', 'r', {'POST': 'x'}),
-    ('/sync/odoo', 'integraciones', 'r', {'POST': 'w'}),
+    ('/sync/auditoria', 'auditoria_fichajes', 'r', {'POST': 'w'}),
+    # Previews y commits = escritura del centro Odoo
+    ('/sync/preview', 'sync_odoo', 'w', {'POST': 'w'}),
+    ('/sync/commit', 'sync_odoo', 'w', {'POST': 'w'}),
+    ('/sync/resolve_conflict', 'sync_odoo', 'w', {'POST': 'w'}),
+    ('/sync/api/run', 'sync_odoo', 'w', {'POST': 'w'}),
+    ('/sync/odoo', 'sync_odoo', 'r', {'POST': 'w'}),
+    ('/sync/fichajes_manual', 'auditoria_fichajes', 'w', {'POST': 'w'}),
     ('/sync', 'integraciones', 'r', {'POST': 'w'}),
 )
 
@@ -62,12 +69,18 @@ _EMPLEADO_RULES = (
     ('/empleado', 'operario_web', 'r', {}),
 )
 
+# Auth: atajos SSO salientes (defensa en profundidad; la ruta también chequea user_can)
+_AUTH_RULES = (
+    ('/auth/sso/portal', 'soltec_portal', 'r', {}),
+)
+
 _ALL_RULE_SETS = (
     _ADMIN_RULES,
     _SYNC_RULES,
     _NOTAS_RULES,
     _JEFE_RULES,
     _EMPLEADO_RULES,
+    _AUTH_RULES,
 )
 
 
@@ -77,7 +90,8 @@ def _match_rule(rules, path: str, method: str):
         if not path.startswith(prefix):
             continue
         rest = path[len(prefix):]
-        if rest and not rest.startswith('/') and not rest.startswith('?'):
+        # Continuación válida: fin de path, query, subruta /, o sufijo _ (preview_obras)
+        if rest and not rest.startswith(('/', '?', '_')):
             continue
         action = overrides.get(method, default_action)
         if method in ('PUT', 'PATCH', 'DELETE') and method not in overrides:
@@ -133,10 +147,8 @@ def _wants_json_response() -> bool:
 
 
 def _deny_message(action: str | None = None) -> str:
-    if action == 'x':
-        return 'No tienes permiso de acción (X) para esto.'
-    if action == 'w':
-        return 'No tienes permisos de escritura para esta acción.'
+    if action in ('x', 'w'):
+        return 'No tienes permiso de escritura para esta acción.'
     if action == 'r':
         return 'No tienes permiso para ver este módulo.'
     return 'Acceso no autorizado'
@@ -210,3 +222,7 @@ def enforce_jefe_permissions():
 
 def enforce_empleado_permissions():
     return enforce_rules(_EMPLEADO_RULES, redirect_to='auth.login')
+
+
+def enforce_auth_permissions():
+    return enforce_rules(_AUTH_RULES)

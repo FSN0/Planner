@@ -28,6 +28,12 @@ auth_bp = Blueprint('auth', __name__)
 LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO,)
 
 
+@auth_bp.before_request
+def _enforce_auth_module_permissions():
+    from app.services.permission_guard import enforce_auth_permissions
+    return enforce_auth_permissions()
+
+
 def _puede_login_web(user):
     """
     El operario solo entra al portal web si:
@@ -494,6 +500,11 @@ def sso_soltec():
 def sso_portal():
     """Planner → Portal Soltec (JWT saliente). Solo tenant soltec + SSO ON."""
     from app.utils import register_log
+    from app.services.permission_service import user_can
+
+    if not user_can(current_user, 'soltec_portal', 'r'):
+        flash(translate('No tienes permiso para abrir el Portal Soltec.'), 'danger')
+        return redirect(url_for('main.dashboard'))
 
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
         flash(translate('Accede desde la URL de tu empresa.'), 'warning')

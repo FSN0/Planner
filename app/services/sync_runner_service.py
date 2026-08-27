@@ -104,9 +104,12 @@ def run_auto_sync_empleados():
     diff = service.get_diff_empleados()
     emp_nuevos = diff['nuevos']
     emp_act = [e for e in diff['actualizados'] if not e.get('conflicto')]
+    emp_baja = diff.get('desactivados') or []
     errores = len(diff['actualizados']) - len(emp_act)
-    default_company = Company.query.first()
+    default_company = Company.query.filter_by(is_internal=True).first() or Company.query.first()
     default_company_id = default_company.id if default_company else None
+
+    from app.services.employee_baja_service import aplicar_baja_por_odoo, reactivar
 
     for obj in emp_nuevos:
         db.session.add(User(
@@ -126,17 +129,33 @@ def run_auto_sync_empleados():
             user.lastname = obj['lastname']
             user.role = obj['role']
             user.categoria_profesional = obj.get('categoria_profesional', user.categoria_profesional)
+            if not user.active:
+                reactivar(user, commit=False)
+            else:
+                user.active = True
+
+    for obj in emp_baja:
+        local_id = obj.get('local_id')
+        if local_id:
+            aplicar_baja_por_odoo(local_id, commit=False)
 
     detalle = f"Sync automática empleados. {errores} omitido(s) por conflictos DNI/email." if errores else "Sync automática empleados completada."
+    if emp_baja:
+        detalle = f"{detalle} {len(emp_baja)} baja(s)."
     db.session.add(SyncLog(
         fecha=ahora, tipo='Empleados', modo='Automático',
         nuevos=len(emp_nuevos), actualizados=len(emp_act),
-        finalizados=0, errores=errores,
+        finalizados=len(emp_baja), errores=errores,
         detalles=detalle, estado=_log_estado(errores),
         duracion_ms=int((time.time() - t0) * 1000),
     ))
     db.session.commit()
-    return {'nuevos': len(emp_nuevos), 'actualizados': len(emp_act), 'omitidos': errores}
+    return {
+        'nuevos': len(emp_nuevos),
+        'actualizados': len(emp_act),
+        'desactivados': len(emp_baja),
+        'omitidos': errores,
+    }
 
 
 def run_auto_sync_subcontratas():
@@ -145,16 +164,25 @@ def run_auto_sync_subcontratas():
     service = get_sync_adapter()
     diff = service.get_diff_subcontratas()
     mapa_empresas = {}
+    emp_baja = (diff.get('empleados') or {}).get('desactivados') or []
+
+    from app.services.employee_baja_service import aplicar_baja_por_odoo, reactivar
 
     for obj in diff['empresas']['actualizadas']:
         comp = Company.query.get(obj['local_id'])
         if comp:
             _set_odoo_external_id(comp, obj['odoo_id'])
             comp.nombre = obj['nombre']
+            if not getattr(comp, 'active', True):
+                comp.active = True
             mapa_empresas[obj['odoo_id']] = comp.id
 
     for obj in diff['empresas']['nuevas']:
-        nueva = Company(external_ids={'odoo': str(obj['odoo_id'])}, nombre=obj['nombre'])
+        nueva = Company(
+            external_ids={'odoo': str(obj['odoo_id'])},
+            nombre=obj['nombre'],
+            active=True,
+        )
         db.session.add(nueva)
         db.session.flush()
         mapa_empresas[obj['odoo_id']] = nueva.id
@@ -176,6 +204,10 @@ def run_auto_sync_subcontratas():
                         mapa_empresas[odoo_c_id] = comp.id
                 if odoo_c_id in mapa_empresas:
                     user.company_id = mapa_empresas[odoo_c_id]
+            if not user.active:
+                reactivar(user, commit=False)
+            else:
+                user.active = True
 
     dnis_en_tx = set()
     for obj in diff['empleados']['nuevos']:
@@ -199,16 +231,29 @@ def run_auto_sync_subcontratas():
             password_hash=generate_password_hash(secrets.token_urlsafe(24)),
         ))
 
+    for obj in emp_baja:
+        local_id = obj.get('local_id')
+        if local_id:
+            aplicar_baja_por_odoo(local_id, commit=False)
+
     tot_n = len(diff['empresas']['nuevas']) + len(diff['empleados']['nuevos'])
     tot_a = len(diff['empresas']['actualizadas']) + len(diff['empleados']['actualizados'])
+    detalle = "Sync automática subcontratas completada."
+    if emp_baja:
+        detalle = f"{detalle} {len(emp_baja)} baja(s)."
     db.session.add(SyncLog(
         fecha=ahora, tipo='Subcontratas', modo='Automático',
-        nuevos=tot_n, actualizados=tot_a, finalizados=0, errores=0,
-        detalles="Sync automática subcontratas completada.",
+        nuevos=tot_n, actualizados=tot_a, finalizados=len(emp_baja), errores=0,
+        detalles=detalle,
         estado='ok', duracion_ms=int((time.time() - t0) * 1000),
     ))
     db.session.commit()
-    return {'nuevos': tot_n, 'actualizados': tot_a, 'omitidos': 0}
+    return {
+        'nuevos': tot_n,
+        'actualizados': tot_a,
+        'desactivados': len(emp_baja),
+        'omitidos': 0,
+    }
 
 
 def run_fichajes_retro_sync(days=None, modo='Automático'):

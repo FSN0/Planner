@@ -1828,7 +1828,7 @@ def personal():
     operarios_pendientes = base_operarios.filter(User.active == False).order_by(User.name).all()
 
     # Para el dropdown de filtros en la vista
-    companies = Company.query.filter_by(is_internal=False).all()
+    companies = Company.query.filter_by(is_internal=False, active=True).all()
 
     from app.services.plan_service import resumen_cupo
     cupo = resumen_cupo()
@@ -1852,11 +1852,15 @@ def personal():
 @login_required
 @roles_required(ROLE_ADMIN)
 def deactivate_operario(user_id):
+    from app.services.employee_baja_service import dar_de_baja
+
     user = User.query.get(user_id)
     if user and user.role == ROLE_OPERARIO:
-        user.active = False
-        db.session.commit()
-        flash(translate("Operario desactivado"), "success")
+        result = dar_de_baja(user, actor_id=current_user.id, motivo='manual', commit=True)
+        if result.get('changed'):
+            flash(translate("Operario dado de baja (historial conservado)"), "success")
+        else:
+            flash(translate("El operario ya estaba inactivo"), "info")
     else:
         flash(translate("Usuario no encontrado o rol inválido"), "danger")
     return redirect(request.referrer or url_for("admin.personal", tab="operarios"))
@@ -1867,7 +1871,9 @@ def deactivate_operario(user_id):
 @roles_required(ROLE_ADMIN)
 def edit_operario(user_id):
     user = User.query.get_or_404(user_id)
-    companies = Company.query.order_by(
+    companies = Company.query.filter(
+        or_(Company.active.is_(True), Company.id == user.company_id)
+    ).order_by(
         Company.is_internal.desc(), Company.nombre.asc()
     ).all()
 
@@ -1933,7 +1939,9 @@ def edit_operario(user_id):
                 cuenta_como_empleado,
                 exigir_cambio_cupo,
             )
+            from app.services.employee_baja_service import dar_de_baja, reactivar
 
+            was_active = bool(user.active)
             nuevo_active = request.form.get("active") == "on"
             ocupar_antes = cuenta_como_empleado(user)
             ocupar_despues = cuenta_como_empleado(
@@ -1955,7 +1963,6 @@ def edit_operario(user_id):
             else:
                 user.company_id = None
 
-            user.active = nuevo_active
             user.receive_emails = request.form.get("receive_emails") == "on"
             user.categoria_profesional = (
                 request.form.get("categoria_profesional") or ""
@@ -1969,6 +1976,16 @@ def edit_operario(user_id):
                 user.web_access = False
             else:
                 user.web_access = True
+
+            if was_active and not nuevo_active:
+                dar_de_baja(user, actor_id=current_user.id, motivo='manual', commit=False)
+            elif not was_active and nuevo_active:
+                reactivar(user, actor_id=current_user.id, commit=False)
+            else:
+                user.active = nuevo_active
+                if nuevo_active:
+                    user.deactivation_reason = None
+                    user.deactivated_at = None
 
             db.session.commit()
             flash(translate("Datos actualizados correctamente"), "success")
@@ -2821,9 +2838,14 @@ def _default_internal_company_id():
 
 
 def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to='', cancel_url=None, default_role=''):
-    companies = companies if companies is not None else Company.query.order_by(
-        Company.is_internal.desc(), Company.nombre.asc()
-    ).all()
+    if companies is None:
+        keep_id = getattr(user, 'company_id', None) if user else None
+        companies = Company.query.filter(
+            or_(Company.active.is_(True), Company.id == keep_id) if keep_id
+            else Company.active.is_(True)
+        ).order_by(
+            Company.is_internal.desc(), Company.nombre.asc()
+        ).all()
     return render_template(
         "gestion_operario_form.html",
         edit_mode=edit_mode,
@@ -2937,6 +2959,8 @@ def create_user():
             receive_emails=receive_emails,
             categoria_profesional=categoria,
             especialidad=especialidad,
+            deactivation_reason=None if active else 'pending',
+            deactivated_at=None,
         )
         db.session.add(new_user)
         db.session.flush()
@@ -3148,7 +3172,7 @@ def planificador_jo():
     # --- CAMBIO AQUÍ ---
     # Sacamos la consulta fuera del 'if' para que TODOS (Admins y Jefes)
     # reciban la lista de empresas y puedan usar el filtro.
-    empresas = Company.query.order_by(Company.nombre).all()
+    empresas = Company.query.filter_by(active=True).order_by(Company.nombre).all()
     
     if current_user.role in [ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH]:
         # Misma lógica que el API: no finalizadas / no borradas.
@@ -3629,10 +3653,11 @@ def reiniciar_guia_onboarding():
 def permisos_roles(role=None):
     from app.services.permission_catalog import (
         ADMIN_LOCKED_MODULES,
-        MODULE_EXECUTE_HINTS,
+        MODULE_READ_HINTS,
         MODULE_WRITE_HINTS,
         PERMISSION_MODULES,
         PERMISSION_ROLES,
+        SSO_READ_ONLY_MODULES,
     )
     from app.services.permission_service import (
         ensure_role_permissions,
@@ -3652,7 +3677,8 @@ def permisos_roles(role=None):
         active_role=active,
         matrix=matrix_for_role(active),
         locked_modules=ADMIN_LOCKED_MODULES,
-        execute_hints=MODULE_EXECUTE_HINTS,
+        sso_read_only_modules=SSO_READ_ONLY_MODULES,
+        read_hints=MODULE_READ_HINTS,
         write_hints=MODULE_WRITE_HINTS,
     )
 
@@ -4047,6 +4073,8 @@ def batch_delete_users():
 @login_required
 @roles_required(ROLE_ADMIN)
 def batch_deactivate_users():
+    from app.services.employee_baja_service import dar_de_baja
+
     data = request.get_json() or {}
     user_ids = data.get("user_ids", [])
     if not user_ids:
@@ -4056,8 +4084,9 @@ def batch_deactivate_users():
     for uid in user_ids:
         user = User.query.get(int(uid))
         if user and user.role == ROLE_OPERARIO and user.active:
-            user.active = False
-            updated += 1
+            result = dar_de_baja(user, actor_id=current_user.id, motivo='manual', commit=False)
+            if result.get('changed'):
+                updated += 1
     db.session.commit()
     return jsonify({"success": True, "message": translate("{n} operario(s) desactivado(s).", n=updated)})
 
@@ -4097,10 +4126,14 @@ def batch_delete_companies():
 
 @admin_bp.route("/sso/odoo_contactos")
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def sso_odoo_contactos():
     """SSO firmado hacia la app externa Alta Odoo (/sso_login)."""
     from app.utils.timezone_utils import utc_now
+    from app.services.permission_service import user_can
+
+    if not user_can(current_user, 'soltec_alta_odoo', 'r'):
+        flash(translate('No tienes permiso para abrir Alta Odoo.'), 'danger')
+        return redirect(url_for('main.dashboard'))
 
     sso_secret = current_app.config.get('SSO_SECRET_KEY')
     if not sso_secret:
