@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entrar — SignaPlan</title>
+<meta name="description" content="Accede al espacio de tu empresa en SignaPlan. Si no recuerdas la URL, te la enviamos por correo.">
+
+<meta name="robots" content="index,follow,max-image-preview:large">
+
+<link rel="canonical" href="https://signaplan.com/entrar">
+
+<link rel="alternate" hreflang="es" href="https://signaplan.com/entrar">
+
+<link rel="alternate" hreflang="en" href="https://signaplan.com/en/entrar">
+
+<link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/entrar">
+
+<link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/entrar">
+
+<link rel="alternate" hreflang="x-default" href="https://signaplan.com/entrar">
+
+<link rel="icon" href="/static/img/brand/favicon-48.png?v=20260807f" type="image/png" sizes="48x48">
+<link rel="icon" href="/static/img/brand/favicon-192.png?v=20260807f" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/static/img/brand/apple-touch-icon.png?v=20260807f">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SignaPlan">
+<meta property="og:locale" content="es_ES">
+
+<meta property="og:locale:alternate" content="en_GB">
+
+<meta property="og:locale:alternate" content="pt_PT">
+
+<meta property="og:locale:alternate" content="fr_FR">
+
+<meta property="og:title" content="Entrar — SignaPlan">
+<meta property="og:description" content="Accede al espacio de tu empresa en SignaPlan. Si no recuerdas la URL, te la enviamos por correo.">
+<meta property="og:url" content="https://signaplan.com/entrar">
+<meta property="og:image" content="https://signaplan.com/static/img/brand/logo-horizontal.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Entrar — SignaPlan">
+<meta name="twitter:description" content="Accede al espacio de tu empresa en SignaPlan. Si no recuerdas la URL, te la enviamos por correo.">
+<meta name="twitter:image" content="https://signaplan.com/static/img/brand/logo-horizontal.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://signaplan.com/#organization",
+      "name": "SignaPlan",
+      "url": "https://signaplan.com/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://signaplan.com/static/img/brand/favicon-192.png",
+        "width": 192,
+        "height": 192
+      },
+      "email": "info@signaplan.com"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://signaplan.com/#website",
+      "url": "https://signaplan.com/",
+      "name": "SignaPlan",
+      "inLanguage": "es-ES",
+      "publisher": { "@id": "https://signaplan.com/#organization" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "SignaPlan",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://signaplan.com/",
+      "inLanguage": "es-ES",
+      "description": "Accede al espacio de tu empresa en SignaPlan. Si no recuerdas la URL, te la enviamos por correo.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
+      "publisher": { "@id": "https://signaplan.com/#organization" }
+    }
+  ]
+}
+</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/marketing.css">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            
+
+
+
+  
+  
+  
+
+<img
+  class="sp-logo sp-logo--horizontal "
+  src="/static/img/brand/logo-horizontal.png?v=20260807e"
+  alt="SignaPlan"
+  width="180"
+  height="48"
+  decoding="async"
+/>
+        </a>
+        
+<nav class="mkt-nav-links">
+  <a href="/soluciones/">Soluciones</a>
+  <a href="/recursos/">Guías</a>
+  <a href="/contacto">Contacto</a>
+  <a href="/entrar">Entrar</a>
+  <div class="mkt-lang">
+    <label class="visually-hidden" for="mkt-lang">Idioma</label>
+    <select id="mkt-lang" onchange="window.location.href=this.value" aria-label="Idioma">
+      
+      <option value="/entrar" selected>
+        Español
+      </option>
+      
+      <option value="/en/entrar" >
+        English
+      </option>
+      
+      <option value="/pt/entrar" >
+        Português
+      </option>
+      
+      <option value="/fr/entrar" >
+        Français
+      </option>
+      
+    </select>
+  </div>
+  <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="/alta">Empezar gratis</a>
+</nav>
+    </header>
+
+    <section class="mkt-section" style="padding-top: 4rem;">
+        <div class="mkt-section-header">
+            <h2>¿Ya eres cliente?</h2>
+            <p>Cada empresa tiene su propia URL. Si no la recuerdas o no te llegó el correo de verificación, pide el acceso con tu email.</p>
+        </div>
+
+        
+          
+        
+
+        <form method="POST" action="/entrar" style="max-width:28rem;margin:0 auto;">
+            <input type="hidden" name="csrf_token" value="IjI3NTRlYzA4YjU2ODBkNTliZjAyODA4ZDMwOGE0YjcwNWZkZGY1Y2Ui.ao_7FA.vOicyScr8RqnlF7StqNB6lxoh70">
+            <label for="email" style="display:block;font-weight:600;margin-bottom:.4rem;">Correo del administrador</label>
+            <input type="email" name="email" id="email" required
+                   value=""
+                   autocomplete="username" autocapitalize="none"
+                   style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">Enviar enlace</button>
+        </form>
+
+        <p style="text-align:center;margin-top:1.5rem;color:#64748b;font-size:.95rem;">
+            ¿No tienes cuenta? <a href="/alta">Crear cuenta</a>
+            · <a href="/contacto">Contacto</a>
+        </p>
+    </section>
+    
+
+<link rel="stylesheet" href="/static/css/cookie-consent.css">
+<div id="sp-cookie-banner" class="sp-cookie-banner" hidden role="dialog" aria-live="polite" aria-label="Cookies">
+  <div class="sp-cookie-inner">
+    <p class="sp-cookie-text">
+      Usamos cookies esenciales para que el sitio funcione.
+      
+      Si en el futuro activamos analítica o marketing, te pediremos permiso aquí.
+      
+      <a href="/legal/cookies">Más información</a>.
+    </p>
+    <div class="sp-cookie-actions">
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-ghost" data-sp-cookie="essential">Solo esenciales</button>
+      
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="essential">Entendido</button>
+      
+    </div>
+  </div>
+</div>
+<script>
+  window.SP_COOKIE_CONFIG = {
+    gaId: "",
+    cookieName: 'sp_cookie_consent',
+    maxAgeDays: 180
+  };
+</script>
+<script src="/static/js/cookie-consent.js" defer></script>
+</body>
+</html>

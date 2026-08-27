@@ -50,16 +50,22 @@ LEGAL_PAGES = {
 
 
 def _legal_entity():
-    """Datos del titular. Sobreescribibles por env sin tocar plantillas."""
+    """Datos del titular. Sobreescribibles por env sin tocar plantillas.
+
+    En fase beta gratuita no publicamos la dirección postal del prestador:
+    LSSI exige contactar con el prestador (nombre + NIF + email), y con el
+    email de contacto se cumple. Cuando se contrate una dirección
+    profesional (apartado de Correos o similar) se rellena LEGAL_DOMICILIO
+    por env y aparece automáticamente en Aviso Legal y en el Encargo de
+    Tratamiento sin tocar plantillas.
+    """
     import os
     return {
         'razon_social': (
             os.environ.get('LEGAL_RAZON_SOCIAL') or 'Francisco Navarro Hernández'
         ).strip(),
         'nif': (os.environ.get('LEGAL_NIF') or '18461268L').strip(),
-        'domicilio': (
-            os.environ.get('LEGAL_DOMICILIO') or 'Calle La Ermita 23, Teruel'
-        ).strip(),
+        'domicilio': (os.environ.get('LEGAL_DOMICILIO') or '').strip(),
         'email': (
             os.environ.get('LEGAL_EMAIL')
             or 'info@signaplan.com'

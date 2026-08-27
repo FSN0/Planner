@@ -1,0 +1,928 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://signaplan.com/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/alta</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/alta"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/alta"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/alta"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/alta"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/alta"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/alta</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/alta"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/alta"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/alta"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/alta"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/alta"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/alta</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/alta"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/alta"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/alta"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/alta"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/alta"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/alta</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/alta"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/alta"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/alta"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/alta"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/alta"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/entrar</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/entrar"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/entrar"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/entrar"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/entrar"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/entrar"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/entrar</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/entrar"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/entrar"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/entrar"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/entrar"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/entrar"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/entrar</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/entrar"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/entrar"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/entrar"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/entrar"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/entrar"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/entrar</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/entrar"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/entrar"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/entrar"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/entrar"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/entrar"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/contacto</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/contacto"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/contacto"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/contacto"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/contacto"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/contacto"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/contacto</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/contacto"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/contacto"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/contacto"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/contacto"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/contacto"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/contacto</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/contacto"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/contacto"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/contacto"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/contacto"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/contacto"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/contacto</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/contacto"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/contacto"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/contacto"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/contacto"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/contacto"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/soluciones/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/soluciones/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/soluciones/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/soluciones/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/legal/aviso-legal</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/aviso-legal"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/legal/aviso-legal</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/aviso-legal"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/legal/aviso-legal</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/aviso-legal"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/legal/aviso-legal</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/aviso-legal"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/aviso-legal"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/legal/privacidad</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/privacidad"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/legal/privacidad</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/privacidad"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/legal/privacidad</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/privacidad"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/legal/privacidad</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/privacidad"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/privacidad"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/legal/cookies</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/cookies"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/legal/cookies</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/cookies"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/legal/cookies</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/cookies"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/legal/cookies</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/cookies"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/cookies"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/legal/encargado</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/encargado"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/legal/encargado</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/encargado"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/legal/encargado</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/encargado"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/legal/encargado</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/encargado"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/encargado"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/legal/condiciones</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/condiciones"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/legal/condiciones</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/condiciones"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/legal/condiciones</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/condiciones"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/legal/condiciones</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/legal/condiciones"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/legal/condiciones"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/soluciones/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/soluciones/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/soluciones/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/soluciones/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/soluciones/registro-jornada-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/soluciones/registro-jornada-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/soluciones/registro-jornada-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/soluciones/registro-jornada-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/registro-jornada-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/registro-jornada-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/soluciones/planificador-personal-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/soluciones/planificador-personal-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/soluciones/planificador-personal-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/soluciones/planificador-personal-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/planificador-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/planificador-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/soluciones/flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/soluciones/flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/soluciones/flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/soluciones/flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/soluciones/flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/soluciones/flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/planificador-de-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/planificador-de-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/planificador-de-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/planificador-de-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/planificador-de-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/planificador-de-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/planificador-de-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/planificador-de-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/planificador-de-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/cuadrante-personal-obra</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/cuadrante-personal-obra</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/cuadrante-personal-obra</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/cuadrante-personal-obra</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/cuadrante-personal-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/cuadrante-personal-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/fichaje-construccion</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/fichaje-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/fichaje-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/registro-jornada-laboral</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/registro-jornada-laboral</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/registro-jornada-laboral</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/registro-jornada-laboral</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/registro-jornada-laboral"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/registro-jornada-laboral"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/inspeccion-trabajo-construccion</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/inspeccion-trabajo-construccion</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/inspeccion-trabajo-construccion</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/inspeccion-trabajo-construccion</loc>
+    <lastmod>2026-08-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/inspeccion-trabajo-construccion"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/inspeccion-trabajo-construccion"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/gestion-flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/gestion-flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/gestion-flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/gestion-flota-obra</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/gestion-flota-obra"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/gestion-flota-obra"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/recursos/software-constructoras</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/software-constructoras"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/en/recursos/software-constructoras</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/software-constructoras"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/pt/recursos/software-constructoras</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/software-constructoras"/>
+  </url>
+  <url>
+    <loc>https://signaplan.com/fr/recursos/software-constructoras</loc>
+    <lastmod>2026-08-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es" href="https://signaplan.com/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://signaplan.com/en/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/recursos/software-constructoras"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://signaplan.com/recursos/software-constructoras"/>
+  </url>
+</urlset>

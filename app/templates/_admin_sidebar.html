@@ -141,6 +141,9 @@
     <a href="{{ url_for('auth.logout') }}" class="sidebar-link sidebar-link--logout">
       <i class="fas fa-sign-out-alt fa-fw"></i><span>{{ _('Cerrar sesión') }}</span>
     </a>
-    <div class="sidebar-footer">v2.0 · {{ current_user.company_code or _('Interno') }}</div>
+    <div class="sidebar-footer">
+      v2.0 · {{ current_user.company_code or _('Interno') }}
+      <span class="sidebar-plan-chip" title="{{ _('Ahora en beta gratuita. Cuando activemos planes de pago avisaremos con antelación y siempre habrá un plan gratuito para equipos pequeños.') }}">{{ _('Beta gratuita') }}</span>
+    </div>
   </div>
 </aside>

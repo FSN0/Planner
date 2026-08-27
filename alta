@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crear cuenta gratuita — SignaPlan</title>
+<meta name="description" content="Crea el espacio de tu constructora en SignaPlan. Sin tarjeta. Planificador de personal, fichaje en obra y flota.">
+
+<meta name="robots" content="index,follow,max-image-preview:large">
+
+<link rel="canonical" href="https://signaplan.com/alta">
+
+<link rel="alternate" hreflang="es" href="https://signaplan.com/alta">
+
+<link rel="alternate" hreflang="en" href="https://signaplan.com/en/alta">
+
+<link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/alta">
+
+<link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/alta">
+
+<link rel="alternate" hreflang="x-default" href="https://signaplan.com/alta">
+
+<link rel="icon" href="/static/img/brand/favicon-48.png?v=20260807f" type="image/png" sizes="48x48">
+<link rel="icon" href="/static/img/brand/favicon-192.png?v=20260807f" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/static/img/brand/apple-touch-icon.png?v=20260807f">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SignaPlan">
+<meta property="og:locale" content="es_ES">
+
+<meta property="og:locale:alternate" content="en_GB">
+
+<meta property="og:locale:alternate" content="pt_PT">
+
+<meta property="og:locale:alternate" content="fr_FR">
+
+<meta property="og:title" content="Crear cuenta gratuita — SignaPlan">
+<meta property="og:description" content="Crea el espacio de tu constructora en SignaPlan. Sin tarjeta. Planificador de personal, fichaje en obra y flota.">
+<meta property="og:url" content="https://signaplan.com/alta">
+<meta property="og:image" content="https://signaplan.com/static/img/brand/logo-horizontal.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Crear cuenta gratuita — SignaPlan">
+<meta name="twitter:description" content="Crea el espacio de tu constructora en SignaPlan. Sin tarjeta. Planificador de personal, fichaje en obra y flota.">
+<meta name="twitter:image" content="https://signaplan.com/static/img/brand/logo-horizontal.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://signaplan.com/#organization",
+      "name": "SignaPlan",
+      "url": "https://signaplan.com/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://signaplan.com/static/img/brand/favicon-192.png",
+        "width": 192,
+        "height": 192
+      },
+      "email": "info@signaplan.com"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://signaplan.com/#website",
+      "url": "https://signaplan.com/",
+      "name": "SignaPlan",
+      "inLanguage": "es-ES",
+      "publisher": { "@id": "https://signaplan.com/#organization" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "SignaPlan",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://signaplan.com/",
+      "inLanguage": "es-ES",
+      "description": "Crea el espacio de tu constructora en SignaPlan. Sin tarjeta. Planificador de personal, fichaje en obra y flota.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
+      "publisher": { "@id": "https://signaplan.com/#organization" }
+    }
+  ]
+}
+</script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/marketing.css">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            
+
+
+
+  
+  
+  
+
+<img
+  class="sp-logo sp-logo--horizontal "
+  src="/static/img/brand/logo-horizontal.png?v=20260807e"
+  alt="SignaPlan"
+  width="180"
+  height="48"
+  decoding="async"
+/>
+        </a>
+        
+<nav class="mkt-nav-links">
+  <a href="/soluciones/">Soluciones</a>
+  <a href="/recursos/">Guías</a>
+  <a href="/contacto">Contacto</a>
+  <a href="/entrar">Entrar</a>
+  <div class="mkt-lang">
+    <label class="visually-hidden" for="mkt-lang">Idioma</label>
+    <select id="mkt-lang" onchange="window.location.href=this.value" aria-label="Idioma">
+      
+      <option value="/alta" selected>
+        Español
+      </option>
+      
+      <option value="/en/alta" >
+        English
+      </option>
+      
+      <option value="/pt/alta" >
+        Português
+      </option>
+      
+      <option value="/fr/alta" >
+        Français
+      </option>
+      
+    </select>
+  </div>
+  <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="/alta">Empezar gratis</a>
+</nav>
+    </header>
+
+    <section class="mkt-section" style="max-width: 560px; margin: 0 auto;">
+        <div class="mkt-section-header">
+            <h2>Crea el espacio de tu empresa</h2>
+            <p>
+                Sin tarjeta. Tu URL será
+                <strong><span id="preview-sub">tuempresa</span>.signaplan.com</strong>.
+            </p>
+            <p style="color:#64748b;font-size:.9rem;margin-top:.35rem;">Te mandamos un enlace. Hasta que lo confirmes, el espacio no se crea.</p>
+        </div>
+
+        
+          
+        
+
+        <form method="POST" class="mkt-hero-card" style="text-align: left;">
+            <input type="hidden" name="csrf_token" value="ImZkNjRhMTdmMDk2NWFkMGM0ZWM4MmJkYTRjZjdkMGFiODc2MDNlMWEi.ao_7Dw.5vjjKROl0BOuNzMZBpukMrq8CrU">
+            <label class="font-weight-bold">Nombre de la empresa</label>
+            <input type="text" name="nombre_empresa" id="nombre_empresa" class="form-control mb-3" required
+                   value="" placeholder="Construcciones López">
+
+            <label class="font-weight-bold">Subdominio</label>
+            <div class="input-group mb-3">
+                <input type="text" name="subdominio" id="subdominio" class="form-control" required
+                       pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]"
+                       value="" placeholder="lopez"
+                       autocapitalize="none" autocomplete="off">
+                <div class="input-group-append">
+                    <span class="input-group-text">.signaplan.com</span>
+                </div>
+            </div>
+
+            <label class="font-weight-bold">Correo del administrador</label>
+            <input type="email" name="admin_email" class="form-control mb-3" required
+                   value=""
+                   autocapitalize="none" autocomplete="username">
+
+            <label class="font-weight-bold">Contraseña</label>
+            <input type="password" name="admin_password" class="form-control mb-3" required
+                   minlength="8" autocomplete="new-password">
+
+            <label class="font-weight-bold">Repite la contraseña</label>
+            <input type="password" name="admin_password2" class="form-control mb-3" required
+                   minlength="8" autocomplete="new-password">
+
+            <div class="mb-2">
+                <label>
+                    <input type="checkbox" name="acepta_privacidad" value="1" required>
+                    He leído la
+                    <a href="/legal/privacidad" target="_blank">política de privacidad</a>
+                </label>
+            </div>
+            <div class="mb-4">
+                <label>
+                    <input type="checkbox" name="acepta_condiciones" value="1" required>
+                    Acepto las
+                    <a href="/legal/condiciones" target="_blank">condiciones de uso</a>
+                </label>
+            </div>
+
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width: 100%;">Crear cuenta gratuita</button>
+        </form>
+    </section>
+
+    <footer class="mkt-footer">
+        <span>© 2026 SignaPlan</span>
+        <span>
+            <a href="/legal/aviso-legal">Aviso legal</a> ·
+            <a href="/legal/privacidad">Privacidad</a> ·
+            <a href="/legal/cookies">Cookies</a>
+        </span>
+    </footer>
+
+    <script>
+    (function () {
+      var nombre = document.getElementById('nombre_empresa');
+      var sub = document.getElementById('subdominio');
+      var preview = document.getElementById('preview-sub');
+      var tocado = false;
+
+      function slugify(texto) {
+        return (texto || '')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .replace(/-{2,}/g, '-')
+          .slice(0, 32)
+          .replace(/-+$/g, '');
+      }
+
+      var fallback = "tuempresa";
+      function refrescarPreview() {
+        var valor = (sub.value || '').trim() || slugify(nombre.value) || fallback;
+        preview.textContent = valor;
+      }
+
+      nombre.addEventListener('input', function () {
+        if (!tocado) {
+          sub.value = slugify(nombre.value);
+        }
+        refrescarPreview();
+      });
+      sub.addEventListener('input', function () {
+        tocado = true;
+        refrescarPreview();
+      });
+      refrescarPreview();
+    })();
+    </script>
+    
+
+<link rel="stylesheet" href="/static/css/cookie-consent.css">
+<div id="sp-cookie-banner" class="sp-cookie-banner" hidden role="dialog" aria-live="polite" aria-label="Cookies">
+  <div class="sp-cookie-inner">
+    <p class="sp-cookie-text">
+      Usamos cookies esenciales para que el sitio funcione.
+      
+      Si en el futuro activamos analítica o marketing, te pediremos permiso aquí.
+      
+      <a href="/legal/cookies">Más información</a>.
+    </p>
+    <div class="sp-cookie-actions">
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-ghost" data-sp-cookie="essential">Solo esenciales</button>
+      
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="essential">Entendido</button>
+      
+    </div>
+  </div>
+</div>
+<script>
+  window.SP_COOKIE_CONFIG = {
+    gaId: "",
+    cookieName: 'sp_cookie_consent',
+    maxAgeDays: 180
+  };
+</script>
+<script src="/static/js/cookie-consent.js" defer></script>
+</body>
+</html>

@@ -1,48 +1,24 @@
 {% extends "marketing/legal_base.html" %}
 {% block legal_content %}
-<h2>{{ _('legal.encargado.h1') }}</h2>
-<p>{{ _('legal.encargado.p1') }}</p>
+<h2>{{ _('Encargo de tratamiento durante la fase beta') }}</h2>
+<p>
+    {{ _('SignaPlan está en fase beta gratuita. Durante esta fase no ofrecemos un contrato de Encargo de Tratamiento (DPA) firmable: el servicio se presta a título gratuito y el tratamiento de datos como encargado se limita a lo estrictamente necesario para operar el producto (alojar los datos que introduce cada empresa cliente en su espacio aislado, ejecutar las funciones de planificación, fichaje, ausencias y flota, y hacer copias de seguridad).') }}
+</p>
+<p>
+    {{ _('Cuando se activen los planes de pago publicaremos aquí un DPA firmable acorde al artículo 28 del RGPD, con las mismas cláusulas de subencargados, medidas de seguridad, brechas, plazos y devolución/supresión de datos.') }}
+</p>
+
+<h2>{{ _('Compromisos básicos ya vigentes') }}</h2>
 <ul>
-    <li>{{ _('legal.encargado.li1') }}</li>
-    <li>{{ _('legal.encargado.li2', name=legal.razon_social) }}</li>
-</ul>
-<p>{{ _('legal.encargado.p2') }}</p>
-
-<h2>{{ _('legal.encargado.h2') }}</h2>
-<p>{{ _('legal.encargado.p3') }}</p>
-
-<h2>{{ _('legal.encargado.h3') }}</h2>
-<p>{{ _('legal.encargado.p4') }}</p>
-
-<h2>{{ _('legal.encargado.h4') }}</h2>
-<ul>
-    <li>{{ _('legal.encargado.li3') }}</li>
-    <li>{{ _('legal.encargado.li4') }}</li>
-    <li>{{ _('legal.encargado.li5') }}</li>
-    <li>{{ _('legal.encargado.li6') }}</li>
-    <li>{{ _('legal.encargado.li7') }}</li>
+    <li>{{ _('Cada empresa cliente tiene un espacio aislado (schema propio). No cruzamos datos entre clientes.') }}</li>
+    <li>{{ _('El acceso al servidor está limitado a lo necesario para operar y solucionar incidencias.') }}</li>
+    <li>{{ _('El libro de fichajes es append-only con cadena de hashes: no se pueden alterar registros a posteriori.') }}</li>
+    <li>{{ _('En caso de brecha de seguridad que afecte a datos de un cliente, se comunicará al administrador del espacio sin dilación indebida.') }}</li>
+    <li>{{ _('El cliente puede exportar sus datos (CSV/PDF) en cualquier momento desde el propio producto y solicitar la supresión de su espacio escribiendo al contacto indicado más abajo.') }}</li>
 </ul>
 
-<h2>{{ _('legal.encargado.h5') }}</h2>
-<ul>
-    <li>{{ _('legal.encargado.li8') }}</li>
-    <li>{{ _('legal.encargado.li9') }}</li>
-    <li>{{ _('legal.encargado.li10') }}</li>
-</ul>
-
-<h2>{{ _('legal.encargado.h6') }}</h2>
-<p>{{ _('legal.encargado.p5', email=legal.email) }}</p>
-
-<h2>{{ _('legal.encargado.h7') }}</h2>
-<p>{{ _('legal.encargado.p6') }}</p>
-
-<h2>{{ _('legal.encargado.h8') }}</h2>
-<p>{{ _('legal.encargado.p7') }}</p>
-
-<h2>{{ _('legal.encargado.h9') }}</h2>
+<h2>{{ _('Contacto') }}</h2>
 <p>
     <a href="mailto:{{ legal.email }}">{{ legal.email }}</a>
-    {% if legal.domicilio %} · {{ legal.domicilio }}{% endif %}
-    {% if legal.nif %} · {{ legal.nif }}{% endif %}
 </p>
 {% endblock %}

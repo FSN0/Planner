@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contacto — SignaPlan</title>
+<meta name="description" content="Habla con SignaPlan: demo, alta o integración con tu ERP. Software de cuadrante, fichaje y flota para constructoras.">
+
+<meta name="robots" content="index,follow,max-image-preview:large">
+
+<link rel="canonical" href="https://signaplan.com/contacto">
+
+<link rel="alternate" hreflang="es" href="https://signaplan.com/contacto">
+
+<link rel="alternate" hreflang="en" href="https://signaplan.com/en/contacto">
+
+<link rel="alternate" hreflang="pt" href="https://signaplan.com/pt/contacto">
+
+<link rel="alternate" hreflang="fr" href="https://signaplan.com/fr/contacto">
+
+<link rel="alternate" hreflang="x-default" href="https://signaplan.com/contacto">
+
+<link rel="icon" href="/static/img/brand/favicon-48.png?v=20260807f" type="image/png" sizes="48x48">
+<link rel="icon" href="/static/img/brand/favicon-192.png?v=20260807f" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/static/img/brand/apple-touch-icon.png?v=20260807f">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SignaPlan">
+<meta property="og:locale" content="es_ES">
+
+<meta property="og:locale:alternate" content="en_GB">
+
+<meta property="og:locale:alternate" content="pt_PT">
+
+<meta property="og:locale:alternate" content="fr_FR">
+
+<meta property="og:title" content="Contacto — SignaPlan">
+<meta property="og:description" content="Habla con SignaPlan: demo, alta o integración con tu ERP. Software de cuadrante, fichaje y flota para constructoras.">
+<meta property="og:url" content="https://signaplan.com/contacto">
+<meta property="og:image" content="https://signaplan.com/static/img/brand/logo-horizontal.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Contacto — SignaPlan">
+<meta name="twitter:description" content="Habla con SignaPlan: demo, alta o integración con tu ERP. Software de cuadrante, fichaje y flota para constructoras.">
+<meta name="twitter:image" content="https://signaplan.com/static/img/brand/logo-horizontal.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://signaplan.com/#organization",
+      "name": "SignaPlan",
+      "url": "https://signaplan.com/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://signaplan.com/static/img/brand/favicon-192.png",
+        "width": 192,
+        "height": 192
+      },
+      "email": "info@signaplan.com"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://signaplan.com/#website",
+      "url": "https://signaplan.com/",
+      "name": "SignaPlan",
+      "inLanguage": "es-ES",
+      "publisher": { "@id": "https://signaplan.com/#organization" }
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "SignaPlan",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://signaplan.com/",
+      "inLanguage": "es-ES",
+      "description": "Habla con SignaPlan: demo, alta o integraci\u00f3n con tu ERP. Software de cuadrante, fichaje y flota para constructoras.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
+      "publisher": { "@id": "https://signaplan.com/#organization" }
+    }
+  ]
+}
+</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/marketing.css">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="/">
+            
+
+
+
+  
+  
+  
+
+<img
+  class="sp-logo sp-logo--horizontal "
+  src="/static/img/brand/logo-horizontal.png?v=20260807e"
+  alt="SignaPlan"
+  width="180"
+  height="48"
+  decoding="async"
+/>
+        </a>
+        
+<nav class="mkt-nav-links">
+  <a href="/soluciones/">Soluciones</a>
+  <a href="/recursos/">Guías</a>
+  <a href="/contacto">Contacto</a>
+  <a href="/entrar">Entrar</a>
+  <div class="mkt-lang">
+    <label class="visually-hidden" for="mkt-lang">Idioma</label>
+    <select id="mkt-lang" onchange="window.location.href=this.value" aria-label="Idioma">
+      
+      <option value="/contacto" selected>
+        Español
+      </option>
+      
+      <option value="/en/contacto" >
+        English
+      </option>
+      
+      <option value="/pt/contacto" >
+        Português
+      </option>
+      
+      <option value="/fr/contacto" >
+        Français
+      </option>
+      
+    </select>
+  </div>
+  <a class="mkt-btn mkt-btn-primary mkt-btn-nav" href="/alta">Empezar gratis</a>
+</nav>
+    </header>
+
+    <section class="mkt-form-wrap">
+        <h1>Hablar con nosotros</h1>
+        <p style="color:#64748b;margin-bottom:1.5rem;">
+            Cuéntanos qué necesitas (demo, integración, duda comercial) y te respondemos lo antes posible.
+        </p>
+
+        
+          
+        
+
+        <form method="POST" action="/contacto">
+            <input type="hidden" name="csrf_token" value="IjJkNmQzYmNkYmFiMWM3MTJiMDNmYmM0ZDY3YWY2NzdkMTYyMmVhYjgi.ao_7Gg.5Q4DIgYefSTZX8qkjvFDbBw0aAc">
+            
+            <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
+                   style="position:absolute;left:-9999px;opacity:0;" aria-hidden="true">
+
+            <label for="nombre" style="display:block;font-weight:600;margin-bottom:.35rem;">Nombre</label>
+            <input type="text" name="nombre" id="nombre" required maxlength="120"
+                   value=""
+                   style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
+
+            <label for="email" style="display:block;font-weight:600;margin-bottom:.35rem;">Tu correo</label>
+            <input type="email" name="email" id="email" required maxlength="120"
+                   value=""
+                   style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
+
+            <label for="empresa" style="display:block;font-weight:600;margin-bottom:.35rem;">Empresa <span style="font-weight:400;color:#94a3b8;">(opcional)</span></label>
+            <input type="text" name="empresa" id="empresa" maxlength="160"
+                   value=""
+                   style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">
+
+            <label for="mensaje" style="display:block;font-weight:600;margin-bottom:.35rem;">Mensaje</label>
+            <textarea name="mensaje" id="mensaje" required maxlength="4000" rows="6"
+                      style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;"></textarea>
+
+            <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">Enviar mensaje</button>
+        </form>
+    </section>
+
+    <footer class="mkt-footer">
+        <span>© 2026 SignaPlan</span>
+    </footer>
+    
+
+<link rel="stylesheet" href="/static/css/cookie-consent.css">
+<div id="sp-cookie-banner" class="sp-cookie-banner" hidden role="dialog" aria-live="polite" aria-label="Cookies">
+  <div class="sp-cookie-inner">
+    <p class="sp-cookie-text">
+      Usamos cookies esenciales para que el sitio funcione.
+      
+      Si en el futuro activamos analítica o marketing, te pediremos permiso aquí.
+      
+      <a href="/legal/cookies">Más información</a>.
+    </p>
+    <div class="sp-cookie-actions">
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-ghost" data-sp-cookie="essential">Solo esenciales</button>
+      
+      <button type="button" class="sp-cookie-btn sp-cookie-btn-primary" data-sp-cookie="essential">Entendido</button>
+      
+    </div>
+  </div>
+</div>
+<script>
+  window.SP_COOKIE_CONFIG = {
+    gaId: "",
+    cookieName: 'sp_cookie_consent',
+    maxAgeDays: 180
+  };
+</script>
+<script src="/static/js/cookie-consent.js" defer></script>
+</body>
+</html>
