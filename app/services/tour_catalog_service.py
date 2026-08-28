@@ -70,9 +70,7 @@ INITIAL_TOUR_IDS = (
 
 # Tutoriales opcionales después del recorrido
 SHARED_TOUR_IDS = (
-    'calendario',
     'planificador_multi',
-    'fichajes',
     'flota',
 )
 
@@ -225,12 +223,12 @@ def catalog_definitions() -> list[dict]:
             'id': 'tablero_asignar',
             'phase': 1,
             'title': str(_('Asignar en el tablero')),
-            'blurb': str(_('Arrastra a alguien a una obra: queda asignado ese día.')),
+            'blurb': str(_('Arrastra un día y, en el calendario, un rango con persona y vehículo.')),
             'chapter_js': 'tablero_asignar',
             'entry_endpoint': 'admin.obras_detailed',
             'entry_args': {'tour': 'tablero_asignar', 'mode': 'solo'},
             'module': 'tablero',
-            'minutes': 3,
+            'minutes': 6,
             'requires': {},
             'soft': True,
             'inicial': True,
@@ -239,7 +237,7 @@ def catalog_definitions() -> list[dict]:
             'id': 'calendario',
             'phase': 1,
             'title': str(_('Calendario de la obra')),
-            'blurb': str(_('Rango de días y persona por nombre, sin arrastrar.')),
+            'blurb': str(_('Rango de días y persona por nombre (parte de Asignar en el tablero).')),
             'chapter_js': 'calendario',
             'entry_endpoint': 'admin.obras_detailed',
             'entry_args': {'tour': 'calendario', 'mode': 'solo'},
@@ -247,14 +245,15 @@ def catalog_definitions() -> list[dict]:
             'minutes': 4,
             'requires': {},
             'soft': True,
+            'hidden': True,
         },
         {
             'id': 'obra',
             'phase': 1,
             'title': str(_('Crear una obra')),
-            'blurb': str(_('Alta de una obra tuya, junto a las de ejemplo.')),
+            'blurb': str(_('Menú Obras, Nueva, y el alta de una obra tuya.')),
             'chapter_js': 'obra',
-            'entry_endpoint': 'admin.create_obra',
+            'entry_endpoint': 'admin.obras_detailed',
             'entry_args': {'tour': 'obra', 'mode': 'solo'},
             'module': 'directorio',
             'minutes': 3,
@@ -266,9 +265,9 @@ def catalog_definitions() -> list[dict]:
             'id': 'trabajadores',
             'phase': 1,
             'title': str(_('Crear una persona')),
-            'blurb': str(_('Alta de un trabajador tuyo, con PIN para fichar.')),
+            'blurb': str(_('Menú Trabajadores, Nuevo, y el alta con PIN para fichar.')),
             'chapter_js': 'trabajadores',
-            'entry_endpoint': 'admin.personal',
+            'entry_endpoint': 'admin.obras_detailed',
             'entry_args': {'tour': 'trabajadores', 'mode': 'solo'},
             'module': 'personal',
             'minutes': 3,
@@ -280,7 +279,7 @@ def catalog_definitions() -> list[dict]:
             'id': 'fichaje',
             'phase': 1,
             'title': str(_('Fichar')),
-            'blurb': str(_('Entra como esa persona: al fichar queda en el tablero.')),
+            'blurb': str(_('Entra con DNI y PIN, ficha, y mira el resultado en el tablero y en auditoría.')),
             'chapter_js': 'fichaje',
             'entry_endpoint': 'admin.obras_detailed',
             'entry_args': {'tour': 'fichaje', 'mode': 'solo'},
@@ -361,8 +360,8 @@ def catalog_definitions() -> list[dict]:
         {
             'id': 'fichajes',
             'phase': 2,
-            'title': str(_('Fichajes (PIN y auditoría)')),
-            'blurb': str(_('PIN, registro de jornada y auditoría.')),
+            'title': str(_('Fichajes a fondo')),
+            'blurb': str(_('PIN, una prueba de fichaje y la auditoría. Forma parte de Fichar.')),
             'chapter_js': 'fichajes',
             'entry_endpoint': 'admin.primeros_pasos',
             'entry_args': {'tour': 'fichajes', 'mode': 'solo'},
@@ -370,6 +369,7 @@ def catalog_definitions() -> list[dict]:
             'minutes': 12,
             'requires': {'fichaje_activo': True},
             'soft': True,
+            'hidden': True,
         },
         {
             'id': 'flota',
@@ -547,29 +547,72 @@ def _node_status(done: bool, available: bool = True) -> str:
     return STATUS_LOCKED
 
 
+def _sanitize_inicial_in_progress(chapters: list, progress: dict) -> bool:
+    """Solo el primer capítulo inicial no hecho puede quedar en curso."""
+    by_id = {c['id']: c for c in chapters}
+    seen_open = False
+    dirty = False
+    for tid in INITIAL_TOUR_IDS:
+        ch = by_id.get(tid)
+        if not ch:
+            continue
+        if ch.get('status') == STATUS_DONE:
+            continue
+        if not seen_open:
+            seen_open = True
+            continue
+        if ch.get('status') == STATUS_IN_PROGRESS:
+            ch['status'] = STATUS_AVAILABLE
+            stored = progress.get(tid)
+            if isinstance(stored, dict):
+                stored = dict(stored)
+                stored['status'] = STATUS_AVAILABLE
+                progress[tid] = stored
+                dirty = True
+    return dirty
+
+
 def build_caminitos(chapters: list, metrics: dict) -> dict:
     """Recorrido inicial único + tutoriales opcionales."""
     by_id = {c['id']: c for c in chapters}
     path = get_onboarding_path()
     bridge = bridge_progress(metrics)
     fichaje_on = bool(metrics.get('fichaje_activo'))
-    seed = by_id.get('seed') or {}
     demo = by_id.get('demo') or {}
     import_ch = by_id.get('import')
-    seed_done = seed.get('status') == STATUS_DONE
     demo_done = demo.get('status') == STATUS_DONE
 
     inicial = [by_id[tid] for tid in INITIAL_TOUR_IDS if tid in by_id]
-    shared = [by_id[tid] for tid in SHARED_TOUR_IDS if tid in by_id]
+    shared = [
+        by_id[tid] for tid in SHARED_TOUR_IDS
+        if tid in by_id and not by_id[tid].get('hidden')
+    ]
     advanced = [by_id[tid] for tid in ADVANCED_TOUR_IDS if tid in by_id]
     curriculum = curriculum_visibility(metrics, chapters)
     curriculum['visible'] = True
+
+    def _first_in_progress(groups):
+        for group in groups:
+            for ch in group:
+                if ch.get('status') == STATUS_IN_PROGRESS:
+                    return ch
+        return None
+
+    def _first_incomplete(group):
+        for ch in group:
+            if ch.get('status') != STATUS_DONE:
+                return ch
+        return None
+
+    guide_done = bool(inicial) and all(ch.get('status') == STATUS_DONE for ch in inicial)
+    resume = _first_incomplete(inicial) or _first_in_progress([shared, advanced])
 
     return {
         'path': path or 'demo',
         'bridge': bridge,
         'curriculum': curriculum,
-        'guide_done': seed_done,
+        'guide_done': guide_done,
+        'resume': resume,
         'demo_done': bool(demo_done or metrics.get('demo_activa')),
         'inicial': inicial,
         'trunk_a': inicial,
@@ -625,26 +668,16 @@ def evaluate_academia(user=None) -> dict:
         progress['import'] = {'status': STATUS_DONE, 'at': _utcnow_iso(), 'seen_unlock': True}
         dirty = True
 
-    # Recorrido inicial cerrado → los 5 capítulos (y el calendario del tablero) salen como hechos
+    # Cerrar el nag de onboarding / seed no implica haber hecho cada capítulo.
+    # Si saltaron a mitad, el progreso individual (hecho / en curso) se respeta.
     seed_done = (progress.get('seed') or {}).get('status') == STATUS_DONE
-    if seed_done or onboarding_marcado_completo():
-        if not seed_done:
-            progress['seed'] = {
-                'status': STATUS_DONE,
-                'at': _utcnow_iso(),
-                'seen_unlock': True,
-            }
-            dirty = True
-        for tid in list(INITIAL_TOUR_IDS) + ['calendario']:
-            cur = progress.get(tid) if isinstance(progress.get(tid), dict) else {}
-            if cur.get('status') != STATUS_DONE:
-                progress[tid] = {
-                    **cur,
-                    'status': STATUS_DONE,
-                    'at': cur.get('at') or _utcnow_iso(),
-                    'seen_unlock': True,
-                }
-                dirty = True
+    if onboarding_marcado_completo() and not seed_done:
+        progress['seed'] = {
+            'status': STATUS_DONE,
+            'at': _utcnow_iso(),
+            'seen_unlock': True,
+        }
+        dirty = True
 
     chapters = []
     newly_unlocked = []
@@ -689,6 +722,9 @@ def evaluate_academia(user=None) -> dict:
             'can_start': True,  # soft gate
         })
 
+    if _sanitize_inicial_in_progress(chapters, progress):
+        dirty = True
+
     if dirty:
         _save_progress(progress)
 
@@ -700,11 +736,20 @@ def evaluate_academia(user=None) -> dict:
 
     def _pick_next(candidates):
         for c in candidates:
-            if c['status'] in (STATUS_AVAILABLE, STATUS_IN_PROGRESS):
+            if c['status'] == STATUS_IN_PROGRESS:
+                return c
+        for c in candidates:
+            if c['status'] == STATUS_AVAILABLE:
                 return c
         for c in candidates:
             if c['status'] == STATUS_LOCKED and c.get('soft'):
                 return c
+        for c in candidates:
+            if c['status'] != STATUS_DONE:
+                return c
+        return None
+
+    def _first_incomplete(candidates):
         for c in candidates:
             if c['status'] != STATUS_DONE:
                 return c
@@ -718,7 +763,7 @@ def evaluate_academia(user=None) -> dict:
         and c['id'] not in advanced_set
         and not c.get('hidden')
     ]
-    next_ch = _pick_next(basics) or _pick_next(other) or _pick_next(advanced)
+    next_ch = _first_incomplete(basics) or _pick_next(other) or _pick_next(advanced)
 
     return {
         'enabled': True,
@@ -839,7 +884,7 @@ def chapter_by_js(chapter_js: str) -> Optional[str]:
         'tablero_basico': 'tablero_leer',
         'tablero_leer': 'tablero_leer',
         'tablero_asignar': 'tablero_asignar',
-        'calendario': 'calendario',
+        'calendario': 'tablero_asignar',
         'trabajadores': 'trabajadores',
         'obra': 'obra',
         'fichaje': 'fichaje',

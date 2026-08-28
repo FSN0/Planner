@@ -107,6 +107,73 @@ def module_keys():
     return [m for m, _, _ in PERMISSION_MODULES]
 
 
+def _tenant_modulos(tenant=None):
+    from app.services.tenant_modules import current_tenant, get_modulos_activos
+
+    return get_modulos_activos(tenant if tenant is not None else current_tenant())
+
+
+def _permission_row_enabled(module: str, tenant=None) -> bool:
+    """
+    False si el extra no está en este espacio: no se enseña ni se pisa al guardar.
+
+    Lo genérico (tablero, gente, flota…) va siempre. Lo a medida (Odoo, Portal
+    Soltec, notas, auditoría de km…) solo si el módulo está activo.
+    """
+    from app.services.tenant_modules import (
+        has_auditoria_vehiculos,
+        has_notas,
+        is_soltec_tenant,
+        jefes_asignan_directo,
+    )
+
+    mods = _tenant_modulos(tenant)
+    has_odoo = bool(mods.get('odoo'))
+    has_odoo_alta = bool(mods.get('odoo_alta'))
+    has_fichaje = bool(mods.get('fichaje_operario'))
+    has_onboarding = bool(mods.get('onboarding'))
+    has_registro = True if 'registro_jornada' not in mods else bool(mods.get('registro_jornada'))
+
+    if module == 'reuniones':
+        return has_notas(tenant)
+    if module == 'auditoria_vehiculos':
+        return has_auditoria_vehiculos(tenant)
+    if module == 'sync_odoo':
+        return has_odoo
+    if module == 'soltec_alta_odoo':
+        return has_odoo_alta
+    if module == 'soltec_portal':
+        return is_soltec_tenant(tenant) and has_odoo
+    if module == 'integraciones':
+        return has_odoo or has_odoo_alta
+    if module == 'primeros_pasos':
+        return has_onboarding
+    if module == 'operario_fichaje':
+        return has_fichaje
+    if module == 'auditoria_fichajes':
+        return has_fichaje or has_odoo
+    if module == 'registro_jornada':
+        return has_registro
+    if module == 'solicitudes':
+        try:
+            return not jefes_asignan_directo()
+        except Exception:
+            return is_soltec_tenant(tenant)
+    return True
+
+
+def visible_permission_modules(tenant=None):
+    """Filas de la matriz que este tenant puede ver y editar."""
+    return tuple(
+        row for row in PERMISSION_MODULES
+        if _permission_row_enabled(row[0], tenant)
+    )
+
+
+def visible_permission_keys(tenant=None):
+    return [m for m, _, _ in visible_permission_modules(tenant)]
+
+
 def normalize_module(module: str) -> str:
     key = (module or '').strip()
     return LEGACY_MODULE_ALIASES.get(key, key)

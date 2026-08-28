@@ -1,4 +1,6 @@
 """Defaults y helpers de la matriz de permisos por rol."""
+from types import SimpleNamespace
+
 from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
 from app.services.permission_catalog import (
     ADMIN_LOCKED_MODULES,
@@ -6,6 +8,7 @@ from app.services.permission_catalog import (
     default_matrix_rows,
     module_keys,
     normalize_module,
+    visible_permission_keys,
 )
 
 
@@ -61,3 +64,72 @@ def test_normalize_legacy_aliases():
 def test_default_matrix_rows_cover_all_roles_and_modules():
     rows = default_matrix_rows()
     assert len(rows) == len(module_keys()) * 5
+
+
+def _keys_for(monkeypatch, sub, mods, jefes_directo):
+    monkeypatch.setattr(
+        'app.services.tenant_modules.jefes_asignan_directo',
+        lambda: jefes_directo,
+    )
+    tenant = SimpleNamespace(subdominio=sub, modulos_activos=mods)
+    return set(visible_permission_keys(tenant))
+
+
+def test_generic_selfserve_hides_soltec_and_odoo_rows(monkeypatch):
+    keys = _keys_for(
+        monkeypatch, 'lopez',
+        {
+            'fichaje_operario': True,
+            'registro_jornada': True,
+            'onboarding': True,
+            'notas': False,
+            'auditoria_vehiculos': False,
+        },
+        jefes_directo=True,
+    )
+    assert 'tablero' in keys
+    assert 'trabajadores' in keys
+    assert 'operario_fichaje' in keys
+    assert 'auditoria_fichajes' in keys
+    assert 'registro_jornada' in keys
+    assert 'primeros_pasos' in keys
+    for extra in (
+        'soltec_portal', 'soltec_alta_odoo', 'sync_odoo', 'integraciones',
+        'reuniones', 'auditoria_vehiculos', 'solicitudes',
+    ):
+        assert extra not in keys
+
+
+def test_soltec_with_odoo_shows_custom_rows(monkeypatch):
+    keys = _keys_for(
+        monkeypatch, 'soltec',
+        {
+            'odoo': True,
+            'odoo_alta': True,
+            'fichaje_operario': True,
+            'notas': True,
+            'auditoria_vehiculos': True,
+            'onboarding': False,
+        },
+        jefes_directo=False,
+    )
+    assert 'soltec_portal' in keys
+    assert 'soltec_alta_odoo' in keys
+    assert 'sync_odoo' in keys
+    assert 'integraciones' in keys
+    assert 'reuniones' in keys
+    assert 'auditoria_vehiculos' in keys
+    assert 'solicitudes' in keys
+    assert 'primeros_pasos' not in keys
+
+
+def test_odoo_client_that_is_not_soltec_does_not_see_portal(monkeypatch):
+    keys = _keys_for(
+        monkeypatch, 'otra',
+        {'odoo': True, 'odoo_alta': False},
+        jefes_directo=True,
+    )
+    assert 'sync_odoo' in keys
+    assert 'integraciones' in keys
+    assert 'soltec_portal' not in keys
+    assert 'soltec_alta_odoo' not in keys

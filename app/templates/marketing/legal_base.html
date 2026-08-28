@@ -3,7 +3,7 @@
 <head>
     {% set heading = _(page_title) %}
     {% set page_title = heading ~ ' — SignaPlan' %}
-    {% set meta_description = _('seo.legal.description') %}
+    {% set meta_description = _('seo.legal.' ~ legal_slug ~ '.description') if legal_slug is defined else _('seo.legal.description') %}
     {% set canonical_path = url_for('marketing.legal', slug=legal_slug) if legal_slug is defined else request.path %}
     {% set legal_email = legal.email %}
     {% include "components/_marketing_seo_head.html" %}

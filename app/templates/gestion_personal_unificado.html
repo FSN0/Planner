@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 {% endblock %}
 
 {% block wrapper %}
@@ -113,12 +113,12 @@
               <thead>
                 <tr class="header-row">
                   <th class="col-check"><input type="checkbox" id="selectAllInternos" title="{{ _('Seleccionar todos') }}"></th>
-                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Rol') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-identity" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-mobile-hide" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Rol') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   {% if tenant_has_valoraciones %}
-                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   {% endif %}
                   <th class="sortable-col" data-col-index="{{ 6 if tenant_has_valoraciones else 5 }}" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="col-actions"></th>
@@ -141,12 +141,12 @@
                 <tr class="data-row" data-row-href="{{ url_for('admin.worker_panel', user_id=user.id) }}"
                     {% if user.role == 'operario' %}data-tour-user-row data-dni="{{ user.dni }}"{% endif %}>
                   <td class="col-check text-center"><input type="checkbox" class="interno-checkbox" value="{{ user.id }}"></td>
-                  <td data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
+                  <td class="col-identity" data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
                     <span class="font-weight-bold">{{ user.name }} {{ user.lastname }}</span>
                   </td>
-                  <td data-sort-value="{{ user.email|lower }}">{{ user.email }}</td>
-                  <td data-sort-value="{{ user.role|lower }}"><span class="badge-soft badge-soft-slate">{{ user.role|upper }}</span></td>
-                  <td data-sort-value="{{ (user.categoria_profesional or '')|lower }} {{ (user.especialidad or '')|lower }}">
+                  <td class="col-mobile-hide" data-sort-value="{{ user.email|lower }}">{{ user.email }}</td>
+                  <td class="col-mobile-hide" data-sort-value="{{ user.role|lower }}"><span class="badge-soft badge-soft-slate">{{ user.role|upper }}</span></td>
+                  <td class="col-mobile-hide" data-sort-value="{{ (user.categoria_profesional or '')|lower }} {{ (user.especialidad or '')|lower }}">
                     {% if user.categoria_profesional %}<span class="font-weight-bold">{{ user.categoria_profesional }}</span>{% endif %}
                     {% if user.especialidad %}<span class="text-muted d-block" style="font-size:0.68rem;">{{ user.especialidad }}</span>{% endif %}
                     {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
@@ -154,13 +154,13 @@
                   {% if tenant_has_valoraciones %}
                   {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
                   {% set r_count = active_ratings|length %}
-                  <td data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
+                  <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
                     <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary" title="{{ _('Ver valoraciones') }}">
                       {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ user.reputation_score }} <span class="text-muted">({{ r_count }})</span>{% else %}—{% endif %}
                     </a>
                   </td>
                   {% endif %}
-                  <td data-sort-value="{{ 'activo' if user.active else 'inactivo' }}">
+                  <td class="col-status" data-sort-value="{{ 'activo' if user.active else 'inactivo' }}">
                     {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
                     {% else %}<span class="badge-soft badge-soft-slate" title="{{ user.inactive_reason_label }}"><span class="status-dot gray"></span> {{ _('Inactivo') }}</span>{% endif %}
                   </td>
@@ -208,12 +208,12 @@
               <thead>
                 <tr class="header-row">
                   <th class="col-check"><input type="checkbox" id="selectAllExternos" title="{{ _('Seleccionar todos') }}"></th>
-                  <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-identity" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('DNI') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                  <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('DNI') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   {% if tenant_has_valoraciones %}
-                  <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   {% endif %}
                   <th class="sortable-col" data-col-index="{{ 6 if tenant_has_valoraciones else 5 }}" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="col-actions"></th>
@@ -235,14 +235,14 @@
                 {% for user in operarios_activos + operarios_pendientes %}
                 <tr class="data-row" data-row-href="{{ url_for('admin.worker_panel', user_id=user.id) }}">
                   <td class="col-check text-center"><input type="checkbox" class="externo-checkbox" value="{{ user.id }}"></td>
-                  <td data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
+                  <td class="col-identity" data-sort-value="{{ (user.name ~ ' ' ~ user.lastname)|lower }}">
                     <span class="font-weight-bold">{{ user.name }} {{ user.lastname }}</span>
                   </td>
                   <td data-sort-value="{{ (user.company_rel.nombre if user.company_rel else 'sin asignar')|lower }}">
                     {% if user.company_rel %}{{ user.company_rel.nombre }}{% else %}<span class="text-danger">{{ _('Sin asignar') }}</span>{% endif %}
                   </td>
-                  <td data-sort-value="{{ user.dni or '' }}">{{ user.dni or '—' }}</td>
-                  <td data-sort-value="{{ (user.categoria_profesional or '')|lower }}">
+                  <td class="col-mobile-hide" data-sort-value="{{ user.dni or '' }}">{{ user.dni or '—' }}</td>
+                  <td class="col-mobile-hide" data-sort-value="{{ (user.categoria_profesional or '')|lower }}">
                     {% if user.categoria_profesional %}{{ user.categoria_profesional }}{% endif %}
                     {% if user.especialidad %}<span class="text-muted d-block" style="font-size:0.68rem;">{{ user.especialidad }}</span>{% endif %}
                     {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
@@ -250,13 +250,13 @@
                   {% if tenant_has_valoraciones %}
                   {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
                   {% set r_count = active_ratings|length %}
-                  <td data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
+                  <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
                     <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary">
                       {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ user.reputation_score }} ({{ r_count }}){% else %}—{% endif %}
                     </a>
                   </td>
                   {% endif %}
-                  <td data-sort-value="{{ 'activo' if user.active else 'pendiente' }}">
+                  <td class="col-status" data-sort-value="{{ 'activo' if user.active else 'pendiente' }}">
                     {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
                     {% else %}<span class="badge-soft badge-soft-amber"><span class="status-dot" style="background:#f59e0b;"></span> {{ _('Pendiente') }}</span>{% endif %}
                   </td>

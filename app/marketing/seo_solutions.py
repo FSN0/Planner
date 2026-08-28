@@ -11,7 +11,7 @@ SOLUTIONS = {
         ),
         "h1": "Fichaje en construcción pensado para el tajo",
         "eyebrow": "Solución · Fichaje",
-        "updated": "2026-08-07",
+        "updated": "2026-08-27",
         "priority": 1,
         "keywords": "fichaje construcción, fichaje obra, control horario construcción móvil",
         "faq": [
@@ -31,7 +31,8 @@ SOLUTIONS = {
         "body_html": """
 <p>En obra el reloj de pared falla: se comparte, se olvida o simplemente no está.
 Necesitas un <strong>fichaje en construcción</strong> que el peón pueda usar
-donde esté el tajo, y que la oficina pueda revisar el mismo día.</p>
+donde esté el tajo, y que la oficina pueda revisar el mismo día. En SignaPlan
+es DNI + PIN en el móvil: sin terminal en caseta.</p>
 
 <h2>Qué suele romperse con el fichaje “de oficina”</h2>
 <ul>
@@ -44,15 +45,17 @@ donde esté el tajo, y que la oficina pueda revisar el mismo día.</p>
 <ul>
   <li><strong>Móvil en campo:</strong> identificación + PIN, pensado para uso rápido.</li>
   <li><strong>Pausas y jornada:</strong> no solo entrada/salida.</li>
-  <li><strong>Misma plataforma que el cuadrante:</strong> planificas peones y ves el fichaje sin saltar de herramienta.</li>
-  <li><strong>Trazabilidad:</strong> registro orientado a inspección y archivo, no a “borrar y ya”.</li>
+  <li><strong>Misma plataforma que el cuadrante:</strong> ves quién está asignado y qué ha registrado.</li>
+  <li><strong>Trazabilidad:</strong> registro orientado a inspección, no a “borrar y ya”.</li>
 </ul>
 
-<h2>Para quién es</h2>
-<p>Constructoras y empresas de obra (PYME) que ya pelean el día a día con WhatsApp
-y Excel, y quieren fichaje real sin montar un ERP entero el primer mes.</p>
+<h2>Para quién sí / no</h2>
+<p><strong>Sí:</strong> constructoras PYME que ya pelean el día con WhatsApp y quieren
+fichaje real sin montar un ERP el primer mes.</p>
+<p><strong>No:</strong> si buscas un reloj biométrico de pared o un control de presencia
+de oficina (torno, tarjeta). Esto está pensado para el tajo.</p>
 
-<p>Empieza con <a href="/alta">cuenta gratuita</a> o mira también
+<p>Empieza con <a href="/alta">cuenta gratuita</a> o mira
 <a href="/soluciones/registro-jornada-obra">registro de jornada en obra</a>,
 <a href="/recursos/inspeccion-trabajo-construccion">inspección en construcción</a>
 y el <a href="/soluciones/planificador-personal-obra">planificador de personal</a>.</p>
@@ -66,7 +69,7 @@ y el <a href="/soluciones/planificador-personal-obra">planificador de personal</
         ),
         "h1": "Planificador de personal de obra (cuadrante real)",
         "eyebrow": "Solución · Planificación",
-        "updated": "2026-08-07",
+        "updated": "2026-08-27",
         "priority": 2,
         "keywords": "planificador personal obra, cuadrante peones, planificar obras personal",
         "faq": [
@@ -86,30 +89,44 @@ y el <a href="/soluciones/planificador-personal-obra">planificador de personal</
         "body_html": """
 <p>Cuando buscas “planificador de obra”, Google te llena de ERP, Gantt y presupuestos.
 Si lo que te duele es <strong>quién mando mañana a cada tajo</strong>, necesitas un
-<strong>planificador de personal de obra</strong>: un cuadrante, no un banco de precios.</p>
+<strong>planificador de personal de obra</strong>: un cuadrante, no un banco de precios.
+SignaPlan es exactamente ese tablero.</p>
+
+<h2>Qué hace SignaPlan (no un Gantt)</h2>
+<ul>
+  <li>Asignar peones y jefes a obras por fechas, en un único calendario.</li>
+  <li>Que oficina y jefe de obra vean la misma versión: se acabó el «final_v7.xlsx».</li>
+  <li>Ver choques (doble obra, baja, vacaciones) antes de que salga el primer coche.</li>
+  <li>Ausencias en el mismo sitio que las asignaciones, no en otro Excel.</li>
+  <li>Cuando lo necesites: <a href="/soluciones/fichaje-construccion">fichaje</a> y
+      <a href="/soluciones/flota-obra">flota</a> sobre el mismo calendario.</li>
+</ul>
+
+<h2>Para quién sí / para quién no</h2>
+<p><strong>Sí:</strong> constructora o empresa de obra PYME (aprox. 5–80 personas en
+campo) que hoy reparte gente con WhatsApp y hojas. El jefe tiene que poder mover a
+alguien sin un curso.</p>
+<p><strong>No:</strong> si lo que buscas es presupuestar en BC3, certificar partidas o
+llevar la contabilidad. Eso es un ERP. SignaPlan no lo sustituye; puede convivir.</p>
+
+<h2>Cómo se usa el primer día</h2>
+<ol>
+  <li>Alta gratuita, sin tarjeta. Espacio propio (tuempresa.signaplan.com).</li>
+  <li>Obras y personal (aunque sea un listado corto).</li>
+  <li>Cuadrante a 2–4 semanas. Regla: los cambios se hacen aquí, no solo por mensaje.</li>
+</ol>
 
 <h2>El problema del Excel + WhatsApp</h2>
 <ul>
   <li>Versiones distintas en el PC del jefe y en el de administración.</li>
-  <li>Cambios de última hora que no llegan a todos.</li>
-  <li>Nadie ve conflictos (doble obra, baja, coche) hasta que ya es tarde.</li>
+  <li>Cambios de última hora que no llegan a quien conduce.</li>
+  <li>Nadie ve conflictos hasta que el tajo ya está a medias.</li>
 </ul>
-
-<h2>Qué hace SignaPlan aquí</h2>
-<ul>
-  <li>Asignar personal a obras por fechas, con vista clara.</li>
-  <li>Detectar choques antes de que el peón esté en el sitio equivocado.</li>
-  <li>Conectar con <a href="/soluciones/fichaje-construccion">fichaje</a> y
-      <a href="/soluciones/flota-obra">flota</a> cuando lo necesites.</li>
-</ul>
-
-<h2>No es un ERP completo (y está bien)</h2>
-<p>Si necesitas BC3, certificaciones y facturación, hay herramientas para eso.
-SignaPlan cubre el <em>día a día de gente y vehículos</em>. Puedes empezar por aquí
-y enlazar un ERP después si hace falta.</p>
 
 <p><a href="/alta">Crear cuenta gratuita</a> ·
-<a href="/recursos/cuadrante-personal-obra">Guía: cuadrante de personal</a></p>
+Guía (qué es un planificador de obra, no el producto):
+<a href="/recursos/planificador-de-obra">planificador de obra</a> ·
+<a href="/recursos/cuadrante-personal-obra">cuadrante de personal</a></p>
 """,
     },
     "registro-jornada-obra": {
@@ -120,7 +137,7 @@ y enlazar un ERP después si hace falta.</p>
         ),
         "h1": "Registro de jornada en obra con trazabilidad",
         "eyebrow": "Solución · Cumplimiento",
-        "updated": "2026-08-07",
+        "updated": "2026-08-27",
         "priority": 1,
         "keywords": "registro jornada obra, registro jornada construcción, control horario constructora",
         "faq": [
@@ -140,28 +157,33 @@ y enlazar un ERP después si hace falta.</p>
         "body_html": """
 <p>En construcción la jornada no pasa por una oficina fija. Por eso el
 <strong>registro de jornada en obra</strong> es uno de los dolores más buscados:
-hay que demostrar entradas, salidas y cambios con una traza creíble.</p>
+hay que demostrar entradas, salidas y cambios con una traza creíble. SignaPlan
+genera un libro de eventos ligado al fichaje en campo, no un Excel retocado el
+viernes.</p>
 
 <h2>Por qué ahora hay más ruido</h2>
 <p>Además de la obligación ya vigente, el debate público sobre registro
 <strong>digital e inalterable</strong> empuja a muchas constructoras a dejar el
-papel y el Excel. Conviene adelantarse con un sistema usable en campo.</p>
+papel. Conviene adelantarse con un sistema usable en el tajo.</p>
 
 <h2>Qué pedirle a una herramienta seria</h2>
 <ul>
   <li>Registro diario por trabajador (inicio / fin, y pausas si aplican).</li>
   <li>Que no sea trivial “borrar y reescribir” sin dejar huella.</li>
-  <li>Exportación para inspección o asesoría.</li>
-  <li>Que el peón pueda fichar en obra, no solo en oficina.</li>
+  <li>Exportación para inspección o asesoría (PDF/CSV).</li>
+  <li>Que el peón fiche en obra, no solo en oficina.</li>
 </ul>
 
 <h2>SignaPlan en este punto</h2>
-<p>El fichaje alimenta un registro con trazabilidad. Encaja con el
+<p>El fichaje alimenta un registro con trazabilidad (eventos encadenados). Encaja con el
 <a href="/soluciones/fichaje-construccion">fichaje en construcción</a> y con el
 <a href="/soluciones/planificador-personal-obra">cuadrante</a>.</p>
+<p>Esto no es asesoramiento jurídico: es la herramienta. El cumplimiento de plazos
+de conservación y de información a la plantilla es de la empresa y su asesoría.</p>
 
 <p><a href="/alta">Empezar gratis</a> ·
-<a href="/recursos/inspeccion-trabajo-construccion">Guía: inspección en obra</a></p>
+<a href="/recursos/inspeccion-trabajo-construccion">Guía: inspección en obra</a> ·
+<a href="/recursos/registro-jornada-laboral">Guía: registro de jornada</a></p>
 """,
     },
     "flota-obra": {
@@ -172,7 +194,7 @@ papel y el Excel. Conviene adelantarse con un sistema usable en campo.</p>
         ),
         "h1": "Flota de obra alineada con el personal",
         "eyebrow": "Solución · Flota",
-        "updated": "2026-08-07",
+        "updated": "2026-08-27",
         "priority": 3,
         "keywords": "flota obra, coches libres constructora, asignación vehículos obra",
         "faq": [
@@ -188,18 +210,23 @@ papel y el Excel. Conviene adelantarse con un sistema usable en campo.</p>
         "body_html": """
 <p>La furgoneta “libre” que nadie sabe dónde está es un clásico de obra.
 Una <strong>gestión de flota</strong> mínima pero útil responde: qué vehículo
-va con qué equipo, y qué queda libre cuando hay baja o cambio de tajo.</p>
+va con qué equipo, y qué queda libre cuando hay baja o cambio de tajo.
+SignaPlan no es un GPS: es asignación operativa sobre el mismo calendario
+que el personal.</p>
 
 <h2>Sin integrar personal, la flota miente</h2>
 <p>Listas de coches en un Excel aparte no ven ausencias ni el cuadrante.
-SignaPlan enlaza vehículos con el mismo mundo que el
+Si mueves peones y el coche sigue «por costumbre», pierdes mañanas. La flota
+debe mirar el mismo mundo que el
 <a href="/soluciones/planificador-personal-obra">planificador de personal</a>.</p>
 
 <h2>Para quién</h2>
 <p>Empresas con varias furgonetas o coches de empresa que ya sufren el caos
-matutino de “¿quién se lleva cuál?”.</p>
+matutino de “¿quién se lleva cuál?”. Si solo tenéis un vehículo, esto puede
+esperar: empieza por el cuadrante.</p>
 
 <p><a href="/alta">Probar SignaPlan</a> ·
+<a href="/recursos/gestion-flota-obra">Guía: gestión de flota en obra</a> ·
 <a href="/soluciones/">Ver todas las soluciones</a></p>
 """,
     },

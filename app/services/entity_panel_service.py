@@ -804,7 +804,7 @@ def get_obra_panel_stats(obra):
         'chart_14d': chart_14d,
         'chart_14d_max': max(chart_14d) if chart_14d else 1,
         'operarios_hoy': operarios_hoy,
-        'ocupacion_pct': ocupacion_pct,
+        'ocupacion_pct': None,
     }
 
 

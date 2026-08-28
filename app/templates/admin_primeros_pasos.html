@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <style>
   .onb-wrap { max-width: 980px; margin: 0 auto; }
   .onb-intro { margin-bottom: 1.15rem; }
@@ -149,6 +149,28 @@
     justify-content: center;
     font-size: 0.78rem;
   }
+  .onb-steps li.is-progress {
+    background: #f0f9ff;
+    border: 1px solid #7dd3fc;
+  }
+  .onb-steps li.is-focus-next {
+    outline: 2px solid #0ea5e9;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
+  }
+  .onb-step-progress {
+    display: inline-block;
+    margin-left: auto;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #0369a1;
+    background: #e0f2fe;
+    border-radius: 999px;
+    padding: 0.08rem 0.45rem;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  .onb-steps li.is-progress strong { color: #0c4a6e; }
   .onb-step-done {
     display: inline-block;
     margin-left: auto;
@@ -185,6 +207,7 @@
   .onb-steps li.is-clickable { cursor: pointer; }
   .onb-steps li.is-clickable:hover { background: #e0f2fe; }
   .onb-steps li.is-done.is-clickable:hover { background: #dcfce7; }
+  .onb-steps li.is-progress.is-clickable:hover { background: #e0f2fe; }
   .onb-steps li.is-clickable > a {
     display: flex;
     gap: 0.65rem;
@@ -218,6 +241,11 @@
     border-color: #86efac;
     background: #f0fdf4;
   }
+  .onb-tour.is-progress {
+    border-color: #38bdf8;
+    background: #f0f9ff;
+  }
+  .onb-tour.is-progress a { color: #0369a1; font-weight: 700; }
   /* Completado ahora: verde suave (no compite con el siguiente) */
   .onb-tour.is-just-done {
     border-color: #4ade80;
@@ -565,10 +593,13 @@
         <h1 class="page-toolbar-title" style="margin:0;">{% if show_start_cards %}{{ _('Primeros pasos') }}{% else %}{{ _('Academia') }}{% endif %}</h1>
         <p>
           {% if show_start_cards %}
-            {{ _('El tablero ya tiene una empresa de ejemplo. El recorrido es el mismo para todos: ver el día, asignar, crear una obra tuya, una persona y fichar. Puedes saltar un paso o todo el recorrido.') }}
+            {{ _('El tablero ya tiene una empresa de ejemplo. El recorrido es el mismo para todos: ver el día, asignar (incluye el calendario de la obra), crear una obra tuya, una persona y fichar (con auditoría). Puedes saltar un paso o todo el recorrido.') }}
           {% else %}
             {{ _('Tutoriales cortos para cuando quieras repasar.') }}
             {{ _('Los del recorrido inicial siguen aquí por si quieres repetir alguno. Nunca es tarde.') }}
+            {% if cam and cam.resume %}
+              {{ _('Si saltaste a mitad, el paso marcado es donde lo dejaste.') }}
+            {% endif %}
           {% endif %}
         </p>
       </div>
@@ -578,7 +609,7 @@
         <h3>{{ _('Recorrido inicial') if show_start_cards else _('Tutoriales del recorrido') }}</h3>
         <p>
           {% if show_start_cards %}
-            {{ _('Cinco capítulos seguidos. Al terminar uno, sigue el siguiente. El icono de calendario del tablero abre su propio tutorial si lo pulsas.') }}
+            {{ _('Cinco capítulos seguidos: tablero, asignar (con el calendario), crear una obra, crear una persona y fichar (con auditoría). Al terminar uno, sigue el siguiente.') }}
           {% else %}
             {{ _('Puedes repetir cualquiera, aunque ya lo hayas hecho.') }}
           {% endif %}
@@ -586,24 +617,39 @@
         <ol class="onb-steps">
           {% set inicial = cam.inicial if cam and cam.inicial else [] %}
           {% for ch in inicial %}
-          <li class="{% if ch.status == 'done' %}is-done{% endif %} is-clickable">
+          <li class="{% if ch.status == 'done' %}is-done{% elif ch.status == 'in_progress' %}is-progress{% endif %} is-clickable" data-tour-card="{{ ch.id }}">
             <a href="{% if show_start_cards and ch.chapter_js == 'tablero_leer' %}{{ url_for('admin.obras_detailed', tour='inicio') }}{% elif show_start_cards %}{{ url_for(ch.entry_endpoint, tour=ch.chapter_js, mode='full', track='inicio') }}{% else %}{{ ch.href }}{% endif %}"
                data-tour-start="{{ ch.chapter_js }}"
                data-tour-mode="{{ 'full' if show_start_cards else 'solo' }}"
                data-academia-id="{{ ch.id }}"
+               {% if ch.status == 'in_progress' %}data-tour-resume="1"{% endif %}
                {% if show_start_cards %}data-tour-track="inicio"{% endif %}>
               <span class="n">{{ loop.index }}</span>
               <div>
                 <strong>{{ ch.title }}</strong>
                 {% if ch.blurb %} — {{ ch.blurb }}{% endif %}
-                <em class="onb-step-go">{% if ch.status == 'done' %}{{ _('Repetir este paso →') }}{% else %}{{ _('Empezar este paso →') }}{% endif %}</em>
+                <em class="onb-step-go">{% if ch.status == 'done' %}{{ _('Repetir este paso →') }}{% elif ch.status == 'in_progress' %}{{ _('Continuar este paso →') }}{% else %}{{ _('Empezar este paso →') }}{% endif %}</em>
               </div>
-              {% if ch.status == 'done' %}<span class="onb-step-done">{{ _('Hecho') }}</span>{% endif %}
+              {% if ch.status == 'done' %}<span class="onb-step-done">{{ _('Hecho') }}</span>
+              {% elif ch.status == 'in_progress' %}<span class="onb-step-progress">{{ _('Te quedaste aquí') }}</span>{% endif %}
             </a>
           </li>
           {% endfor %}
         </ol>
-        {% if show_start_cards and not (cam and cam.guide_done) %}
+        {% if cam and cam.resume %}
+        <a class="onb-cta" href="{{ cam.resume.href }}"
+           data-tour-start="{{ cam.resume.chapter_js }}"
+           data-tour-resume="1"
+           data-academia-id="{{ cam.resume.id }}"
+           {% if cam.resume.id in ('tablero_leer', 'tablero_asignar', 'obra', 'trabajadores', 'fichaje') %}data-tour-track="inicio" data-tour-mode="full"{% else %}data-tour-mode="solo"{% endif %}>{{ _('Continuar donde lo dejaste →') }}</a>
+        {% if show_start_cards %}
+        <form method="post" style="display:inline;margin-left:.5rem;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="saltar">
+          <button type="submit" class="onb-cta onb-cta--muted">{{ _('Saltar el recorrido →') }}</button>
+        </form>
+        {% endif %}
+        {% elif show_start_cards and not (cam and cam.guide_done) %}
         <a class="onb-cta" href="{{ url_for('admin.obras_detailed', tour='inicio') }}">{{ _('Continuar el recorrido →') }}</a>
         <form method="post" style="display:inline;margin-left:.5rem;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -627,7 +673,7 @@
       <section class="onb-next {% if bridge and bridge.met %}is-ready{% endif %}" id="onb-next">
         <p class="onb-next-label">{{ _('Cuando quieras') }}</p>
         <h2>{{ _('Más tutoriales') }}</h2>
-        <p>{{ _('Calendario de obra, planificador, fichajes a fondo y flota. No hace falta hacerlos el primer día. Iremos añadiendo más aquí.') }}</p>
+        <p>{{ _('Planificador y flota. No hace falta hacerlos el primer día: el recorrido de arriba ya cubre tablero, calendario, obra, persona y fichaje. Iremos añadiendo más aquí.') }}</p>
 
         {% if cam.shared %}
         <details class="onb-more" open>
@@ -635,7 +681,7 @@
           <div class="onb-more-body">
             <div class="onb-tour-list">
             {% for ch in cam.shared %}
-            <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %}" data-tour-card="{{ ch.id }}">
+            <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %} {% if ch.status == 'in_progress' %}is-progress{% endif %}" data-tour-card="{{ ch.id }}">
               <div class="onb-tour-body">
                 <strong>{{ ch.title }}</strong>
                 <span>
@@ -646,8 +692,8 @@
               {% if ch.status == 'locked' %}
               <span class="onb-tour-wait" title="{{ ch.missing_msg or '' }}">{{ _('Aún no') }}</span>
               {% else %}
-              <a href="{{ ch.href }}" data-academia-id="{{ ch.id }}" data-chapter-js="{{ ch.chapter_js }}">
-                {% if ch.status == 'done' %}{{ _('Repetir') }}{% else %}{{ _('Empezar') }}{% endif %}
+              <a href="{{ ch.href }}" data-academia-id="{{ ch.id }}" data-chapter-js="{{ ch.chapter_js }}" data-tour-start="{{ ch.chapter_js }}" data-tour-mode="solo"{% if ch.status == 'in_progress' %} data-tour-resume="1"{% endif %}>
+                {% if ch.status == 'done' %}{{ _('Repetir') }}{% elif ch.status == 'in_progress' %}{{ _('Continuar') }}{% else %}{{ _('Empezar') }}{% endif %}
               </a>
               {% endif %}
             </div>
@@ -664,7 +710,7 @@
           <div class="onb-tour-list">
             {% if cam.advanced %}
             {% for ch in cam.advanced %}
-            <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %}" data-tour-card="{{ ch.id }}">
+            <div class="onb-tour {% if ch.status == 'locked' %}is-locked{% endif %} {% if ch.status == 'done' %}is-done{% endif %} {% if ch.status == 'in_progress' %}is-progress{% endif %}" data-tour-card="{{ ch.id }}">
               <div class="onb-tour-body">
                 <strong>{{ ch.title }}</strong>
                 <span>
@@ -672,8 +718,9 @@
                   {% if ch.status == 'locked' and ch.missing_msg %} · {{ ch.missing_msg }}{% endif %}
                 </span>
               </div>
-              <a href="{{ ch.href }}" data-academia-id="{{ ch.id }}" data-chapter-js="{{ ch.chapter_js }}">
+              <a href="{{ ch.href }}" data-academia-id="{{ ch.id }}" data-chapter-js="{{ ch.chapter_js }}" data-tour-start="{{ ch.chapter_js }}" data-tour-mode="solo"{% if ch.status == 'in_progress' %} data-tour-resume="1"{% endif %}>
                 {% if ch.status == 'done' %}{{ _('Repetir') }}
+                {% elif ch.status == 'in_progress' %}{{ _('Continuar') }}
                 {% elif ch.status == 'locked' %}{{ _('Abrir') }}
                 {% else %}{{ _('Empezar') }}{% endif %}
               </a>
@@ -836,10 +883,24 @@
       var card = document.querySelector('[data-tour-card="' + id + '"]');
       if (!card) {
         var link = document.querySelector('[data-academia-id="' + id + '"]');
-        card = link && link.closest ? link.closest('.onb-tour') : null;
+        card = link && link.closest ? (link.closest('.onb-tour') || link.closest('li')) : null;
       }
       if (card) card.classList.add(cls || 'is-just-done');
       return card;
+    }
+
+    if (focus === 'resume' && focusId) {
+      openTabLocal('guide');
+      var resumeCard = highlightCard(focusId, 'is-focus-next');
+      if (resumeCard && resumeCard.closest && resumeCard.closest('.onb-next')) {
+        openMore();
+      }
+      var scrollResume = resumeCard || document.querySelector('.onb-panel--guide') || next;
+      if (scrollResume) {
+        setTimeout(function () {
+          try { scrollResume.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        }, 80);
+      }
     }
 
     if (focus === 'guide' || params.get('done') === 'seed') {
@@ -902,6 +963,14 @@
       }
       if (params.get('demo') === '1') {
         openTab('demo');
+      }
+    } else if (!focus) {
+      var resumeHere = document.querySelector('.onb-steps li.is-progress, .onb-tour.is-progress');
+      if (resumeHere) {
+        resumeHere.classList.add('is-focus-next');
+        setTimeout(function () {
+          try { resumeHere.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        }, 80);
       }
     }
   })();

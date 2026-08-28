@@ -3,10 +3,10 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260824a">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260828d">
 <style id="dynamic-sidebar-style"></style>
 {% endblock %}
 
@@ -102,6 +102,22 @@
     </div>
 
     <div class="planificador-container" data-tour="planif-grid">
+        <div class="planificador-mobile-day" id="planificador-mobile-day">
+            <p class="planificador-mobile-day-lead">
+                {{ _('En el móvil ves el día. El timeline largo se usa en el ordenador.') }}
+            </p>
+            <div class="planificador-mobile-day-nav">
+                <button type="button" class="btn-admin btn-admin-ghost" id="pmd-prev" aria-label="{{ _('Día anterior') }}">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <input type="date" id="pmd-date" class="timeline-date-input" aria-label="{{ _('Fecha') }}">
+                <button type="button" class="btn-admin btn-admin-ghost" id="pmd-next" aria-label="{{ _('Día siguiente') }}">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+                <button type="button" class="btn-admin btn-admin-primary" id="pmd-today">{{ _('Hoy') }}</button>
+            </div>
+            <div id="pmd-list" class="planificador-mobile-day-list"></div>
+        </div>
         <div class="planificador-calendar-wrap">
             <div id="col-resizer" title="{{ _('Arrastrar para ajustar tamaño') }}"></div>
             <div id="col-resizer-ghost"></div>
@@ -232,5 +248,5 @@
 <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260824a"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260824b"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260828d"></script>
 {% endblock %}

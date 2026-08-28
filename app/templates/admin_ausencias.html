@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <style>
   /* Ancho completo del main (sin columna vacía a la derecha) */
   .admin-main.aus-page {
@@ -265,14 +265,14 @@
             <tbody>
               {% for leave in pendientes %}
               <tr class="data-row">
-                <td>
+                <td class="col-identity">
                   <a href="{{ url_for('admin.worker_panel', user_id=leave.user_id) }}">
                     {{ leave.user.name }} {{ leave.user.lastname }}
                   </a>
                 </td>
                 <td>{{ leave.fecha_inicio.strftime('%d/%m/%Y') }} — {{ leave.fecha_fin.strftime('%d/%m/%Y') }}</td>
-                <td><span class="badge-soft badge-soft-blue">{{ _(leave.tipo) }}</span></td>
-                <td class="text-right">
+                <td class="col-status"><span class="badge-soft badge-soft-blue">{{ _(leave.tipo) }}</span></td>
+                <td class="text-right no-row-nav">
                   {% if puede_validar_pendientes %}
                   <form method="POST" action="{{ url_for('admin.ausencias_aprobar', leave_id=leave.id) }}" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -337,11 +337,11 @@
               {% for c in conflictos %}
               <tr class="data-row">
                 <td class="font-weight-bold" data-sort-value="{{ c.fecha.strftime('%Y%m%d') }}">{{ c.fecha.strftime('%d/%m/%Y') }}</td>
-                <td data-sort-value="{{ c.user.name }} {{ c.user.lastname }}">{{ c.user.name }} {{ c.user.lastname }}</td>
-                <td data-sort-value="{{ c.ausencia.tipo }}"><span class="badge-soft badge-soft-blue">{{ _(c.ausencia.tipo) }}</span></td>
+                <td class="col-identity" data-sort-value="{{ c.user.name }} {{ c.user.lastname }}">{{ c.user.name }} {{ c.user.lastname }}</td>
+                <td class="col-status" data-sort-value="{{ c.ausencia.tipo }}"><span class="badge-soft badge-soft-blue">{{ _(c.ausencia.tipo) }}</span></td>
                 <td data-sort-value="{% if c.obra.codigo %}{{ c.obra.codigo }} {% endif %}{{ c.obra.nombre }}">{% if c.obra.codigo %}{{ c.obra.codigo }} — {% endif %}{{ c.obra.nombre }}</td>
                 {% if puede_resolver %}
-                <td class="text-right ausencias-conflicts-actions">
+                <td class="text-right no-row-nav ausencias-conflicts-actions">
                   <form method="POST" action="{{ url_for('admin.ausencias_resolver_conflicto', conflict_id=c.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="decision" value="mantener_ausencia">
@@ -411,7 +411,7 @@
               {% for row in en_curso_rows %}
               {% set a = row.leave %}
               <tr class="data-row">
-                <td data-sort-value="{% if a.user %}{{ a.user.name }} {{ a.user.lastname }}{% else %}{{ a.user_id }}{% endif %}">
+                <td class="col-identity" data-sort-value="{% if a.user %}{{ a.user.name }} {{ a.user.lastname }}{% else %}{{ a.user_id }}{% endif %}">
                   {% if a.user %}
                   <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
                   {% else %}#{{ a.user_id }}{% endif %}
@@ -424,7 +424,7 @@
                   <span class="aus-obra-chip" title="{{ o.nombre }}">{% if o.codigo %}{{ o.codigo }}{% else %}{{ o.nombre|truncate(16) }}{% endif %}</span>
                   {% else %}<span class="text-muted">—</span>{% endfor %}
                 </td>
-                <td data-sort-value="{{ a.estado }}">
+                <td class="col-status" data-sort-value="{{ a.estado }}">
                   {% if a.estado == 'aprobada' %}
                   <span class="badge-soft badge-soft-green">{{ _('Aprobada') }}</span>
                   {% else %}
@@ -494,7 +494,7 @@
               {% for row in proximas_rows %}
               {% set a = row.leave %}
               <tr class="data-row">
-                <td data-sort-value="{% if a.user %}{{ a.user.name }} {{ a.user.lastname }}{% else %}{{ a.user_id }}{% endif %}">
+                <td class="col-identity" data-sort-value="{% if a.user %}{{ a.user.name }} {{ a.user.lastname }}{% else %}{{ a.user_id }}{% endif %}">
                   {% if a.user %}
                   <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
                   {% else %}#{{ a.user_id }}{% endif %}
@@ -508,7 +508,7 @@
                   <span class="aus-obra-chip" title="{{ o.nombre }}">{% if o.codigo %}{{ o.codigo }}{% else %}{{ o.nombre|truncate(16) }}{% endif %}</span>
                   {% else %}<span class="text-muted">—</span>{% endfor %}
                 </td>
-                <td data-sort-value="{{ a.estado }}">
+                <td class="col-status" data-sort-value="{{ a.estado }}">
                   {% if a.estado == 'aprobada' %}
                   <span class="badge-soft badge-soft-green">{{ _('Aprobada') }}</span>
                   {% else %}
@@ -649,7 +649,7 @@
             <tbody>
               {% for a in ausencias %}
               <tr class="data-row">
-                <td data-sort-value="{% if a.user %}{{ a.user.name }} {{ a.user.lastname }}{% else %}{{ a.user_id }}{% endif %}">
+                <td class="col-identity" data-sort-value="{% if a.user %}{{ a.user.name }} {{ a.user.lastname }}{% else %}{{ a.user_id }}{% endif %}">
                   {% if a.user %}
                   <a href="{{ url_for('admin.worker_panel', user_id=a.user_id) }}">{{ a.user.name }} {{ a.user.lastname }}</a>
                   {% else %}#{{ a.user_id }}{% endif %}
@@ -658,7 +658,7 @@
                 <td data-sort-value="{{ a.fecha_inicio.strftime('%Y%m%d') }}">{{ a.fecha_inicio.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ a.fecha_fin.strftime('%Y%m%d') }}">{{ a.fecha_fin.strftime('%d/%m/%Y') }}</td>
                 <td data-sort-value="{{ a.dias if a.dias is not none else -1 }}">{{ a.dias if a.dias is not none else '—' }}</td>
-                <td data-sort-value="{{ a.estado }}">
+                <td class="col-status" data-sort-value="{{ a.estado }}">
                   {% if a.estado == 'aprobada' %}
                   <span class="badge-soft badge-soft-green">{{ _('Aprobada') }}</span>
                   {% elif a.estado == 'pendiente' %}
@@ -668,7 +668,7 @@
                   {% endif %}
                 </td>
                 <td data-sort-value="{{ a.origen }}">{{ a.origen }}{% if a.external_id %} · {{ a.external_id }}{% endif %}</td>
-                <td style="white-space:nowrap;">
+                <td class="no-row-nav" style="white-space:nowrap;">
                   {% if a.origen == 'manual' and current_user.role in ['admin', 'laboral', 'rrhh', 'jefe_obra'] %}
                   <details>
                     <summary class="btn-admin btn-admin-ghost" style="cursor:pointer;display:inline-block;padding:.2rem .5rem;font-size:.75rem;">{{ _('Editar') }}</summary>

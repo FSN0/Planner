@@ -814,12 +814,63 @@ body.kanban-is-dragging .kanban-works-stage.is-overflow-right .kanban-works-edge
     border-color: #3b82f6;
 }
 
-@media (max-width: 991.98px) {
+@media (max-width: 960px) {
     .kanban-libres-panel,
     .col-libres {
-        width: 14.5rem;
-        min-width: 14.5rem;
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        max-height: 11rem;
+        z-index: 1;
     }
-    .obra-card { width: 15.5rem; }
-    .timeline-header-top { flex-wrap: wrap; justify-content: center; }
+    .kanban-container {
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0.55rem 0.6rem 1rem;
+        gap: 0.55rem;
+    }
+    .kanban-works-hud,
+    .kanban-works-edge {
+        display: none !important;
+    }
+    .kanban-works-wrapper {
+        flex-direction: column;
+        overflow-x: hidden;
+        overflow-y: auto;
+        height: auto;
+        flex: 1;
+        padding-right: 0;
+        gap: 0.7rem;
+    }
+    .kanban-col-wrapper,
+    .obra-card {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+    .kanban-start-obra {
+        width: 100%;
+    }
+    .timeline-header-top {
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 0.45rem;
+        padding: 0.45rem 0.7rem;
+    }
+    .timeline-days-container {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        padding: 0.35rem 0.55rem 0.5rem;
+    }
+    .day-capsule {
+        flex: 0 0 auto;
+    }
+    .kanban-libres-body {
+        overflow-x: auto;
+    }
+    .kanban-filter-bar {
+        flex-wrap: wrap;
+        padding: 0.4rem 0.7rem 0.55rem;
+    }
 }

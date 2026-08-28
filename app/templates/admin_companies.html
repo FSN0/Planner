@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 {% endblock %}
 
 {% block wrapper %}
@@ -57,12 +57,12 @@
               <th class="col-check"><input type="checkbox" id="selectAllCompanies" title="{{ _('Seleccionar todas') }}"></th>
               <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Código') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('NIF') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Gremio') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('NIF') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Gremio') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% if tenant_has_valoraciones %}
-              <th class="sortable-col" data-col-index="7" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="7" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% endif %}
               <th class="col-actions"></th>
             </tr>
@@ -85,14 +85,14 @@
             <tr class="data-row" data-row-href="{{ url_for('admin.company_panel', company_id=c.id) }}">
               <td class="col-check text-center"><input type="checkbox" class="company-checkbox" value="{{ c.id }}"></td>
               <td data-sort-value="{{ c.code }}"><span class="cell-code">{{ c.code }}</span></td>
-              <td data-sort-value="{{ c.nombre|lower }}">
+                <td class="col-identity" data-sort-value="{{ c.nombre|lower }}">
                 <span class="status-dot" style="background-color: {{ c.color }};"></span>
                 <span class="font-weight-bold">{{ c.nombre }}</span>
               </td>
-              <td data-sort-value="{{ c.nif or '' }}">{{ c.nif or '—' }}</td>
-              <td data-sort-value="{{ (c.gremio or '')|lower }}">{{ c.gremio or '—' }}</td>
-              <td data-sort-value="{{ (c.email or '')|lower }}">{{ c.email or '—' }}</td>
-              <td data-sort-value="{{ 'interna' if c.is_internal else 'externa' }}">
+              <td class="col-mobile-hide" data-sort-value="{{ c.nif or '' }}">{{ c.nif or '—' }}</td>
+              <td class="col-mobile-hide" data-sort-value="{{ (c.gremio or '')|lower }}">{{ c.gremio or '—' }}</td>
+              <td class="col-mobile-hide" data-sort-value="{{ (c.email or '')|lower }}">{{ c.email or '—' }}</td>
+              <td class="col-status" data-sort-value="{{ 'interna' if c.is_internal else 'externa' }}">
                 {% if c.is_internal %}<span class="badge-soft badge-soft-blue">{{ _('Interna') }}</span>
                 {% else %}<span class="badge-soft badge-soft-slate">{{ _('Externa') }}</span>{% endif %}
               </td>
@@ -105,7 +105,7 @@
                 {% endif %}
               {% endfor %}
               {% set avg_score = (ns.total / ns.count)|round(1) if ns.count > 0 else 0 %}
-              <td data-sort-tier="{{ 1 if ns.count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(avg_score) if ns.count > 0 else '' }}">
+              <td class="col-mobile-hide" data-sort-tier="{{ 1 if ns.count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(avg_score) if ns.count > 0 else '' }}">
                 <a href="{{ url_for('admin.personal', company_id=c.id) }}{{ '#internos' if c.is_internal else '#operarios' }}" class="table-link-primary" title="{{ _('Ver personal') }}">
                   {% if ns.count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ avg_score }} <span class="text-muted">({{ ns.count }})</span>{% else %}—{% endif %}
                 </a>

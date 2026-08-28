@@ -30,6 +30,8 @@
     </style>
     <script>
         (function() {
+            var mobile = window.matchMedia && window.matchMedia('(max-width: 960px)').matches;
+            if (mobile) return;
             var isCollapsed = localStorage.getItem("sidebarCollapsed") === "1";
             if (isCollapsed) {
                 document.documentElement.classList.add('sidebar-collapsed');
@@ -116,7 +118,7 @@
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
 
-    <script src="{{ url_for('static', filename='js/layout.js') }}?v=20260810b"></script>
+    <script src="{{ url_for('static', filename='js/layout.js') }}?v=20260828f"></script>
     <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
     <script src="{{ url_for('static', filename='js/common.js') }}?v=20260824a"></script>
 
@@ -302,7 +304,7 @@
       window.__ONB_FICHAJE_ACTIVO__ = {{ 'true' if onboarding_fichaje_activo else 'false' }};
       window.__DEMO_DATA_ACTIVA__ = {{ 'true' if demo_data_activa else 'false' }};
     </script>
-    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260824c"></script>
+    <script src="{{ url_for('static', filename='js/onboarding_tour.js') }}?v=20260828c"></script>
     {% endif %}
 </body>
 </html>

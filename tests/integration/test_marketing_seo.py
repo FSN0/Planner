@@ -59,7 +59,36 @@ class TestSitemapRobots:
         body = client.get('/sitemap.xml', headers=MKT).get_data(as_text=True)
         assert '<loc>https://signaplan.com/recursos/cuadrante-personal-obra</loc>' in body
         assert '<loc>https://signaplan.com/recursos/inspeccion-trabajo-construccion</loc>' in body
+        assert '<loc>https://signaplan.com/recursos/erp-constructoras-gratis</loc>' in body
+        assert '<loc>https://signaplan.com/recursos/software-gestion-empresa-constructora</loc>' in body
+        assert '<loc>https://signaplan.com/recursos/programa-para-constructoras</loc>' in body
         assert '<lastmod>2026-08-16</lastmod>' in body
+
+    def test_aviso_y_condiciones_no_comparten_meta_description(self, client):
+        aviso = client.get('/legal/aviso-legal', headers=MKT).get_data(as_text=True)
+        cond = client.get('/legal/condiciones', headers=MKT).get_data(as_text=True)
+        assert 'titular del sitio' in aviso.lower() or 'Aviso legal de SignaPlan' in aviso
+        assert 'Condiciones de uso de SignaPlan' in cond
+        assert 'name="description" content="Aviso legal de SignaPlan' in aviso
+        assert 'name="description" content="Condiciones de uso de SignaPlan' in cond
+
+    def test_erp_gratis_y_programa_constructoras(self, client):
+        erp = client.get('/recursos/erp-constructoras-gratis', headers=MKT)
+        assert erp.status_code == 200
+        html = erp.get_data(as_text=True)
+        assert 'ERP para constructoras gratis' in html
+        assert 'rel="canonical" href="https://signaplan.com/recursos/erp-constructoras-gratis"' in html
+        prog = client.get('/recursos/programa-para-constructoras', headers=MKT)
+        assert prog.status_code == 200
+        assert 'programa para constructoras' in prog.get_data(as_text=True).lower()
+
+    def test_home_enlaza_guias_y_title_cuadrante(self, client):
+        html = client.get('/', headers=MKT).get_data(as_text=True)
+        assert 'Cuadrante, fichaje y flota para constructoras' in html
+        assert '/recursos/cuadrante-personal-obra' in html
+        assert '/recursos/inspeccion-trabajo-construccion' in html
+        assert '/recursos/erp-constructoras-gratis' in html
+        assert 'Soltec' not in html
 
     def test_robots_bloquea_preferencias_y_apunta_sitemap_apex(self, client):
         body = client.get('/robots.txt', headers=MKT).get_data(as_text=True)

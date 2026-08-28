@@ -196,7 +196,7 @@ class TestAcademia:
         assert hub_all_done({
             'caminitos': {
                 'inicial': [{'id': 'tablero_leer', 'status': 'done'}],
-                'shared': [{'id': 'calendario', 'status': 'done'}],
+                'shared': [{'id': 'planificador_multi', 'status': 'done'}],
                 'advanced': [{'id': 'coches_libres', 'status': 'done'}],
                 'side_import': {'id': 'import', 'status': 'available'},
             },
@@ -204,7 +204,7 @@ class TestAcademia:
         assert hub_all_done({
             'caminitos': {
                 'inicial': [{'id': 'tablero_leer', 'status': 'done'}],
-                'shared': [{'id': 'calendario', 'status': 'available'}],
+                'shared': [{'id': 'planificador_multi', 'status': 'available'}],
                 'advanced': [],
             },
         }) is False
@@ -240,7 +240,7 @@ class TestAcademia:
                 lambda user=None: {
                     'caminitos': {
                         'inicial': [{'id': 'tablero_leer', 'status': 'done'}],
-                        'shared': [{'id': 'calendario', 'status': 'done'}],
+                        'shared': [{'id': 'planificador_multi', 'status': 'done'}],
                         'advanced': [],
                     },
                 },

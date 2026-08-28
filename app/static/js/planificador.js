@@ -81,7 +81,100 @@ document.addEventListener('DOMContentLoaded', function() {
             window.AppItems.add(visible);
         }
         setTimeout(refreshPlanificadorLayout, 50);
+        if (typeof window.renderPlanificadorMobileDay === 'function') {
+            window.renderPlanificadorMobileDay();
+        }
     };
+
+    function pmdEsc(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function pmdShift(days) {
+        var input = document.getElementById('pmd-date');
+        if (!input || typeof moment === 'undefined') return;
+        var d = moment(input.value || undefined);
+        d.add(days, 'days');
+        input.value = d.format('YYYY-MM-DD');
+        window.renderPlanificadorMobileDay();
+    }
+
+    window.renderPlanificadorMobileDay = function() {
+        var list = document.getElementById('pmd-list');
+        var input = document.getElementById('pmd-date');
+        if (!list || typeof moment === 'undefined') return;
+        if (input && !input.value) input.value = moment().format('YYYY-MM-DD');
+        var day = moment((input && input.value) || undefined).startOf('day');
+        var dayEnd = day.clone().add(1, 'day');
+        var events = window.allEventsMaster || [];
+        var groups = window.allGroupsMaster || [];
+        var groupTitle = {};
+        groups.forEach(function (g) {
+            groupTitle[String(g.id)] = g.title || g.codigo || ('#' + g.id);
+        });
+
+        var byGroup = {};
+        events.forEach(function (ev) {
+            if (!ev || ev.type === 'background') return;
+            var start = moment(ev.start);
+            var end = moment(ev.end);
+            if (!start.isValid() || !end.isValid()) return;
+            if (!start.isBefore(dayEnd) || !end.isAfter(day)) return;
+            var gid = String(ev.group || ev.resourceId || '');
+            if (!gid) return;
+            if (!byGroup[gid]) byGroup[gid] = [];
+            byGroup[gid].push(ev);
+        });
+
+        var ids = Object.keys(byGroup);
+        if (!ids.length) {
+            list.innerHTML = '<p class="pmd-empty">' + t('Nadie asignado este día con los filtros actuales.') + '</p>';
+            return;
+        }
+        ids.sort(function (a, b) {
+            return (groupTitle[a] || a).localeCompare(groupTitle[b] || b);
+        });
+        list.innerHTML = ids.map(function (gid) {
+            var people = byGroup[gid].map(function (ev) {
+                var name = ev.title || ('#' + (ev.worker_id || ''));
+                var ds = moment(ev.start).format('DD/MM');
+                var de = moment(ev.end).subtract(1, 'day');
+                if (!de.isValid() || de.isBefore(moment(ev.start), 'day')) de = moment(ev.start);
+                var dates = ds === de.format('DD/MM') ? ds : (ds + ' – ' + de.format('DD/MM'));
+                var body = ev.worker_id
+                    ? '<a href="/admin/worker_panel/' + encodeURIComponent(ev.worker_id) + '">' + pmdEsc(name) + '</a>'
+                    : pmdEsc(name);
+                return '<div class="pmd-person"><span class="pmd-person-name">' + body +
+                    '</span><span class="pmd-person-dates">' + pmdEsc(dates) + '</span></div>';
+            }).join('');
+            var obraHref = '/admin/obra_panel/' + encodeURIComponent(gid);
+            return '<article class="pmd-obra"><div class="pmd-obra-title"><a href="' + obraHref + '">' +
+                pmdEsc(groupTitle[gid] || gid) + '</a><span class="pmd-obra-count">' +
+                byGroup[gid].length + '</span></div>' + people + '</article>';
+        }).join('');
+    };
+
+    (function bindPmd() {
+        var input = document.getElementById('pmd-date');
+        var prev = document.getElementById('pmd-prev');
+        var next = document.getElementById('pmd-next');
+        var todayBtn = document.getElementById('pmd-today');
+        if (!input) return;
+        if (!input.value && typeof moment !== 'undefined') input.value = moment().format('YYYY-MM-DD');
+        input.addEventListener('change', function () { window.renderPlanificadorMobileDay(); });
+        if (prev) prev.addEventListener('click', function () { pmdShift(-1); });
+        if (next) next.addEventListener('click', function () { pmdShift(1); });
+        if (todayBtn) {
+            todayBtn.addEventListener('click', function () {
+                if (typeof moment !== 'undefined') input.value = moment().format('YYYY-MM-DD');
+                window.renderPlanificadorMobileDay();
+            });
+        }
+    })();
 
     document.body.addEventListener('click', function(e) {
         let btn = e.target.closest('.btn-ojo-magico');

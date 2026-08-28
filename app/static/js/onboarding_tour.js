@@ -128,6 +128,8 @@
       welcomeDone: !!st.welcomeDone,
       sawCalendario: !!st.sawCalendario,
       obraCelebrate: !!st.obraCelebrate,
+      paused: !!st.paused,
+      resumeHref: st.resumeHref || null,
     };
     extra = extra || {};
     Object.keys(extra).forEach(function (k) { out[k] = extra[k]; });
@@ -148,10 +150,64 @@
     if (chapter === 'tablero_leer' || chapter === 'tablero_asignar' || chapter === 'calendario') {
       return '/admin/obras_detailed';
     }
-    if (chapter === 'obra') return '/admin/obras';
-    if (chapter === 'trabajadores') return '/admin/personal';
+    if (chapter === 'obra') return '/admin/obras_detailed';
+    if (chapter === 'trabajadores') return '/admin/obras_detailed';
     if (chapter === 'fichaje') return '/admin/obras_detailed';
     return '/admin/obras_detailed';
+  }
+
+  function inicioAcademiaChapter(st) {
+    st = st || loadState() || {};
+    var ch = st.chapter || '';
+    if (ch === 'calendario') {
+      return ((st.step || 0) >= 8) ? 'obra' : 'tablero_asignar';
+    }
+    return ch;
+  }
+
+  function resumeChaptersMatch(requested, stored) {
+    if (!requested) return true;
+    if (requested === stored) return true;
+    if (stored === 'calendario' && requested === 'tablero_asignar') return true;
+    if (stored === 'tablero_asignar' && requested === 'calendario') return true;
+    return false;
+  }
+
+  function normalizePausedTourState(st) {
+    st = st || {};
+    var path = window.location.pathname || '';
+    var ch = st.chapter || '';
+    if (ch === 'calendario' && (st.step || 0) >= 8) {
+      st.chapter = 'obra';
+      st.step = 0;
+      ch = 'obra';
+    } else if (ch === 'calendario') {
+      st.step = 0;
+    }
+    if (ch === 'obra' && /create_obra|import_obras/.test(path)) {
+      st.chapter = 'obra';
+      st.step = 0;
+    }
+    if (ch === 'trabajadores' && /create_user|import_users/.test(path)) {
+      st.chapter = 'trabajadores';
+      st.step = 0;
+    }
+    return st;
+  }
+
+  function pauseResumeHref(st, fromMi) {
+    st = st || {};
+    var ch = st.chapter || '';
+    if (fromMi) {
+      var chMi = ch === 'fichajes' ? 'fichajes' : 'fichaje';
+      return '/admin/tour/fichaje-probar?chapter=' + encodeURIComponent(chMi) +
+        (chMi === 'fichaje' ? '&oficina=0' : '');
+    }
+    if (ch === 'obra' || ch === 'trabajadores' || ch === 'tablero_leer' ||
+        ch === 'tablero_asignar' || ch === 'calendario') {
+      return '/admin/obras_detailed';
+    }
+    return (window.location.pathname || '') + (window.location.search || '');
   }
 
   function hereIsInicioChapter(next) {
@@ -172,6 +228,11 @@
   function goToInicioChapter(next, st, opts) {
     opts = opts || {};
     st = st || loadState() || {};
+    var i = inicioChapterIndex(next);
+    if (i > 0) {
+      markAcademiaDoneMany(INICIO_CHAIN.slice(0, i));
+    }
+    if (next) postTourStart(academiaIdForChapter(next) || next);
     saveState(copyTourFields(st, { chapter: next, step: 0, pendingComplete: false, active: true }));
     // Obras y trabajadores: el usuario pulsa el menú; no redirigimos.
     var stay = opts.stay === true || next === 'obra' || next === 'trabajadores';
@@ -207,6 +268,11 @@
   function calendarWorkerSelected() {
     var sel = qs('#assignmentModal.show .univ-worker-select');
     return !!(sel && String(sel.value || '').trim());
+  }
+
+  function calendarVehicleToggleOn() {
+    var tog = qs('#assignmentModal.show .univ-vehicle-toggle');
+    return !!(tog && tog.checked);
   }
 
   function calendarVehicleSelected() {
@@ -295,7 +361,7 @@
     }
     purgeTourFichaje(function () {
       markAcademiaDoneMany([
-        'seed', 'tablero_leer', 'tablero_asignar', 'calendario', 'obra', 'trabajadores', 'fichaje',
+        'seed', 'tablero_leer', 'tablero_asignar', 'obra', 'trabajadores', 'fichaje',
       ]).then(go, go);
       setTimeout(go, 2500);
     });
@@ -341,26 +407,97 @@
   }
 
   function postTourStart(id) {
-    if (!id) return;
+    if (!id) return Promise.resolve(false);
     var meta = document.querySelector('meta[name="csrf-token"]');
     var token = meta ? meta.getAttribute('content') : '';
-    fetch('/admin/api/tour/' + encodeURIComponent(id) + '/start', {
+    return fetch('/admin/api/tour/' + encodeURIComponent(id) + '/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
       credentials: 'same-origin',
       keepalive: true,
       body: '{}',
-    }).catch(function () { /* ignore */ });
+    }).then(function (r) {
+      return !!(r && r.ok);
+    }).catch(function () {
+      return false;
+    });
+  }
+
+  function academiaResumeUrl(chapter) {
+    var id = academiaIdForChapter(chapter);
+    var q = '/admin/primeros-pasos?focus=resume';
+    if (id) q += '&id=' + encodeURIComponent(id);
+    return q;
+  }
+
+  function pauseTourToAcademia(message) {
+    var st = normalizePausedTourState(loadState() || {});
+    var chapter = st.chapter || '';
+    if (chapter === 'blocked') chapter = '';
+    var mapped = inicioAcademiaChapter(st);
+    var id = academiaIdForChapter(mapped) || academiaIdForChapter(chapter);
+    var idx = inicioChapterIndex(mapped);
+    var prior = idx > 0 ? INICIO_CHAIN.slice(0, idx) : [];
+    var dest = academiaResumeUrl(mapped || chapter);
+    var fromMi = isMiEntrar() || isMiFichar();
+
+    st.active = false;
+    st.paused = true;
+    st.resumeHref = pauseResumeHref(st, fromMi);
+    saveState(st);
+    teardown();
+
+    function go() {
+      try {
+        sessionStorage.setItem(
+          'signaplan_tour_flash',
+          t(message || 'Tutorial en pausa. En la Academia ves en cuál te quedaste y puedes continuar.')
+        );
+      } catch (e) { /* ignore */ }
+      if (fromMi) {
+        window.location.href = '/mi/tour-volver-admin?next=' + encodeURIComponent(dest);
+        return;
+      }
+      window.location.href = dest;
+    }
+
+    var pending = [];
+    if (prior.length) pending.push(markAcademiaDoneMany(prior));
+    if (id) pending.push(postTourStart(id));
+    if (!pending.length) {
+      go();
+      return;
+    }
+    var done = false;
+    function once() {
+      if (done) return;
+      done = true;
+      go();
+    }
+    Promise.all(pending).then(once, once);
+    setTimeout(once, 2500);
+  }
+
+  function tryResumePaused(chapter) {
+    var st = loadState() || {};
+    if (!st.paused || !st.chapter) return false;
+    if (!resumeChaptersMatch(chapter, st.chapter)) return false;
+    st.active = true;
+    st.paused = false;
+    saveState(st);
+    var href = st.resumeHref || '';
+    var here = (window.location.pathname || '') + (window.location.search || '');
+    if (href && href !== here) {
+      window.location.href = href;
+      return true;
+    }
+    document.body.classList.add('sp-tour-active');
+    run();
+    return true;
   }
 
   function skipEntireInicio() {
-    function go() {
-      markAcademiaDone('seed');
-      teardown();
-      saveState(null);
-      postOnboardingDone();
-    }
-    purgeTourFichaje(go);
+    pauseTourToAcademia();
   }
 
   function onSkipEntire() {
@@ -369,16 +506,17 @@
       stopTour({});
       return;
     }
-    if (isInicioTrack(st)) {
-      skipEntireInicio();
-      return;
-    }
-    stopTour({ message: 'Guía omitida. Puedes retomarla desde Primeros pasos.' });
+    pauseTourToAcademia();
   }
 
   function resumeAfterCalendario() {
     var st = loadState() || {};
-    markAcademiaDone('calendario');
+    st.sawCalendario = true;
+    st.assignedOk = true;
+    if (isInicioTrack(st)) {
+      goToInicioChapter('obra', st, { stay: true });
+      return;
+    }
     var resume = st.chainResume;
     if (resume && resume.chapter) {
       saveState(copyTourFields(st, {
@@ -392,11 +530,7 @@
       run();
       return;
     }
-    if (st.mode === 'solo' || !isInicioTrack(st)) {
-      finishSoloAndReturn('Calendario de la obra visto. Puedes repetirlo desde la Academia.');
-      return;
-    }
-    goToInicioChapter('tablero_asignar', st);
+    finishSoloAndReturn('Calendario de la obra visto. Forma parte de Asignar en el tablero.');
   }
 
   function goHubAfterGuide(message) {
@@ -537,6 +671,8 @@
     }
     saveState(copyTourFields(prev, {
       active: true,
+      paused: false,
+      resumeHref: null,
       chapter: ch,
       step: typeof opts.step === 'number' ? opts.step : 0,
       mode: mode,
@@ -782,7 +918,8 @@
   }
 
   function academiaIdForChapter(ch) {
-    if (ch === 'tablero_leer' || ch === 'tablero_asignar' || ch === 'calendario' ||
+    if (ch === 'calendario') return 'tablero_asignar';
+    if (ch === 'tablero_leer' || ch === 'tablero_asignar' ||
         ch === 'obra' || ch === 'trabajadores' || ch === 'fichaje' ||
         ch === 'seed' || ch === 'demo') {
       return ch;
@@ -846,6 +983,11 @@
     }
 
     if (isInicioTrack(st)) {
+      var iSkip = inicioChapterIndex(chapter);
+      if (iSkip < 0 || iSkip >= INICIO_CHAIN.length - 1) {
+        pauseTourToAcademia();
+        return;
+      }
       advanceInicioChain();
       return;
     }
@@ -899,15 +1041,7 @@
     }
 
     if (chapter === 'fichaje') {
-      // Si la guía está en /mi como operario, restaurar admin y cerrar
-      if (isMiEntrar() || isMiFichar()) {
-        st.active = false;
-        st.chapter = 'blocked';
-        saveState(st);
-        window.location.href = '/mi/tour-volver-admin';
-        return;
-      }
-      pauseAtChapterEnd();
+      pauseTourToAcademia();
       return;
     }
 
@@ -918,7 +1052,7 @@
     }
 
     if (isAcademiaChapter(chapter)) {
-      pauseAtChapterEnd();
+      pauseTourToAcademia();
       return;
     }
 
@@ -926,7 +1060,7 @@
   }
 
   var ui = { backdrop: null, hole: null, card: null, banner: null };
-  var holeTrack = { el: null, els: null, opts: null, cardEl: null };
+  var holeTrack = { el: null, els: null, opts: null, cardEl: null, cardPlace: null };
 
   function teardown() {
     document.body.classList.remove('sp-tour-active');
@@ -968,9 +1102,7 @@
       } else if (holeTrack.el && holeTrack.el.getBoundingClientRect) {
         placeHole(holeTrack.el, true);
       }
-      if (holeTrack.cardEl && holeTrack.cardEl.getBoundingClientRect) {
-        placeCardNear(holeTrack.cardEl);
-      }
+      repositionTourCard();
     }
     function onScrollOrResize() {
       if (ticking) return;
@@ -1146,6 +1278,88 @@
     });
   }
 
+  function dataEntryCluster(el) {
+    if (!el || !el.closest) return el;
+    var login = el.closest('[data-tour="fichar-login"]');
+    if (login) {
+      return login.closest('.contenido') || login.closest('.entrar') || login;
+    }
+    var fichaje = el.closest('.fichaje');
+    if (fichaje) {
+      return fichaje.closest('.contenido') || fichaje;
+    }
+    return el.closest('.entrar') || el.closest('.contenido') || el;
+  }
+
+  function placeCardLeftOf(el) {
+    if (!ui.card) return;
+    var cluster = dataEntryCluster(el) || el;
+    holeTrack.cardEl = cluster && cluster.getBoundingClientRect ? cluster : (el || null);
+    holeTrack.cardPlace = 'left-of';
+    ui.card.classList.remove('is-modal');
+    ui.card.style.transform = '';
+    ui.card.style.display = '';
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var cardW = Math.min(360, vw - 24);
+    ui.card.style.width = cardW + 'px';
+    var estH = Math.min(280, Math.max(140, ui.card.offsetHeight || 180));
+    var top = 24;
+    var left = 12;
+    var gap = 16;
+    if (cluster && cluster.getBoundingClientRect) {
+      var r = cluster.getBoundingClientRect();
+      top = Math.max(12, Math.min(r.top, vh - estH - 12));
+      var leftPos = r.left - cardW - gap;
+      if (leftPos >= 12) {
+        left = leftPos;
+      } else if (r.right + gap + cardW <= vw - 12) {
+        left = r.right + gap;
+      } else {
+        left = Math.max(12, Math.min(r.left, vw - cardW - 12));
+        var below = r.bottom + 14;
+        var above = r.top - estH - 12;
+        if (below + Math.min(estH, 180) <= vh - 12) {
+          top = Math.min(below, vh - estH - 12);
+        } else if (above >= 12) {
+          top = above;
+        } else {
+          top = Math.max(12, Math.min(r.top, vh - estH - 12));
+        }
+      }
+    }
+    top = Math.max(12, Math.min(top, vh - Math.min(estH, vh - 24)));
+    left = Math.max(12, Math.min(left, vw - cardW - 12));
+    ui.card.style.top = top + 'px';
+    ui.card.style.left = left + 'px';
+  }
+
+  function repositionTourCard() {
+    var place = holeTrack.cardPlace;
+    var el = holeTrack.cardEl;
+    if (place === 'left-of') {
+      placeCardLeftOf(el);
+      return;
+    }
+    if (place === 'corner') {
+      placeCardCorner();
+      return;
+    }
+    if (place === 'bottom') {
+      placeCardDockBottom();
+      return;
+    }
+    if (place === 'kanban') {
+      placeCardClearOfKanban();
+      return;
+    }
+    if (place === 'away') {
+      placeCardOutside(el);
+      return;
+    }
+    if (el && el.getBoundingClientRect) placeCardNear(el);
+  }
+
   function placeCardNear(el) {
     if (!ui.card) return;
     if (el && el.getBoundingClientRect) holeTrack.cardEl = el;
@@ -1248,23 +1462,34 @@
 
   function placeCardForStep(step, el) {
     var mode = step.cardPlacement || (step.hero ? 'modal' : '');
+    holeTrack.cardPlace = mode || (el ? 'near' : '');
     if (mode === 'bottom') {
+      holeTrack.cardEl = null;
       placeCardDockBottom();
       return;
     }
+    if (mode === 'left-of') {
+      placeCardLeftOf(el);
+      return;
+    }
     if (mode === 'corner') {
+      holeTrack.cardEl = null;
       placeCardCorner();
       return;
     }
     if (mode === 'away') {
+      holeTrack.cardEl = el || null;
       placeCardOutside(el);
       return;
     }
     if (mode === 'kanban') {
+      holeTrack.cardEl = null;
       placeCardClearOfKanban();
       return;
     }
     if (step.modal || step.hero) {
+      holeTrack.cardEl = null;
+      holeTrack.cardPlace = 'modal';
       placeCardModal();
       return;
     }
@@ -1608,6 +1833,9 @@
       if (el) placeHole(el);
       else if (!step.manualTarget) placeHole(null);
       placeCardForStep(step, el);
+      if (step.cardPlacement === 'left-of') {
+        requestAnimationFrame(function () { placeCardForStep(step, el); });
+      }
     } else if (el) {
       placeHole(el);
       placeCardNear(el);
@@ -2349,10 +2577,8 @@
       collapse: '#collapseConflictos',
       title: 'Desviaciones de plan',
       body:
-        'Cuando alguien ficha en una obra distinta a la del cuadrante. ' +
-        '<strong>Mover</strong>: el cuadrante pasa a la obra del fichaje. ' +
-        '<strong>+ Añadir</strong>: se queda en las dos. ' +
-        '<strong>Ignorar</strong>: quitas la alerta y no tocas el plan.',
+        'Cuando alguien ficha en una obra distinta a la del cuadrante, la alerta aparece aquí. ' +
+        'Solo es para que sepas qué es esta sección: no hace falta pulsar nada de estas filas de ejemplo.',
     },
     paracaidistas: {
       root: '[data-tour="audit-paracaidistas"]',
@@ -2360,9 +2586,8 @@
       collapse: '#collapseParacaidistas',
       title: 'Fichajes sin planificar',
       body:
-        'Fichó sin tener obra ese día. ' +
-        '<strong>Aceptar</strong>: lo asigna oficialmente a esa obra. ' +
-        '<strong>Ignorar</strong>: oculta la alerta sin cambiar el cuadrante.',
+        'Fichó sin tener obra ese día. Esta sección agrupa esos casos. ' +
+        'No hace falta actuar sobre las filas de ejemplo.',
     },
     ausencias: {
       root: '[data-tour="audit-ausencias"]',
@@ -2370,10 +2595,8 @@
       collapse: '#collapseAusencias',
       title: 'Ausencias',
       body:
-        'Estaba planificado y no fichó. ' +
-        '<strong>Ausencia</strong>: confirma que no vino (el plan se mantiene). ' +
-        '<strong>Falta</strong>: quita la planificación de ese día. ' +
-        '<strong>Ignorar</strong>: oculta la alerta sin cambios.',
+        'Estaba planificado y no fichó. Aquí ves quién faltó respecto al cuadrante. ' +
+        'Si tu fichaje no ha caído aquí, no tienes que hacer nada en esta lista.',
     },
   };
 
@@ -2397,19 +2620,13 @@
     } catch (eOpen) { /* ignore */ }
 
     function paint() {
-      var scope = collapse || root || document;
-      var firstRow = scope.querySelector ? scope.querySelector('tr.audit-data-row, tr[data-tour-audit-row]') : null;
-      var buttons = firstRow
-        ? Array.prototype.slice.call(firstRow.querySelectorAll('button.btn-audit'))
-        : [];
-      var holeEls = buttons.length ? buttons : [toggle || root].filter(Boolean);
-      holeEls.forEach(function (el) { if (el) el.classList.add('sp-tour-target'); });
+      var holeEl = toggle || root;
       if (toggle) toggle.classList.add('sp-tour-target');
-      if (buttons.length >= 2) placeHoleUnion(buttons);
-      else if (toggle && _visibleRect(toggle)) placeHole(toggle);
+      else if (root) root.classList.add('sp-tour-target');
+      if (holeEl && _visibleRect(holeEl)) placeHole(holeEl);
       else if (root && _visibleRect(root)) placeHole(root);
       else placeHole(null);
-      placeCardOutside((firstRow && buttons.length) ? firstRow : (toggle || root));
+      placeCardOutside(holeEl || root);
       if (ui.card) {
         var h = ui.card.querySelector('h3');
         var p = ui.card.querySelector('p');
@@ -2523,14 +2740,13 @@
     }
 
     var resolveN = S;
-    var desvN = includeResolve ? S + 1 : S;
+    var introN = includeResolve ? S + 1 : S;
+    var desvN = introN + 1;
     var paraN = desvN + 1;
     var ausN = paraN + 1;
-    var corrN = ausN + 1;
-    var histN = corrN + 1;
-    var rowN = histN + 1;
-    var actN = rowN + 1;
-    var doneN = actN + 1;
+    var histN = ausN + 1;
+    var corrN = histN + 1;
+    var doneN = corrN + 1;
 
     var out = [];
 
@@ -2550,7 +2766,7 @@
             if (advanced) return;
             advanced = true;
             var st = loadState() || {};
-            st.step = desvN;
+            st.step = introN;
             st.auditResolved = true;
             if (info && info.kind) st.auditKind = info.kind;
             saveState(st);
@@ -2582,18 +2798,41 @@
                   t('<strong>Aceptar</strong>: asigna oficialmente a esa obra.') + '<br>' +
                   t('<strong>Ignorar</strong>: oculta la alerta sin cambiar el cuadrante.');
               }
+            } else if (info && info.kind === 'ausencias') {
+              if (h) h.textContent = t('Ausencias: qué puedes hacer');
+              if (p) {
+                p.innerHTML =
+                  t('<strong>Ausencia</strong>: confirma que no vino (el plan se mantiene).') + '<br>' +
+                  t('<strong>Falta</strong>: quita la planificación de ese día.') + '<br>' +
+                  t('<strong>Ignorar</strong>: oculta la alerta sin cambios.');
+              }
             }
           }
         },
         onNext: function () {
           var st = loadState() || {};
-          st.step = desvN;
+          st.step = introN;
           st.auditResolved = true;
           saveState(st);
           window.location.href = reloadAfterResolve();
         },
       });
     }
+
+    out.push({
+      when: band(introN),
+      modal: true,
+      title: 'Tour de la auditoría',
+      body: 'Te voy a hacer un tour completo por la auditoría de fichajes: las secciones, el histórico y cómo corregir una marca. Solo te he pedido una acción en la alerta que acabas de resolver; el resto es para que sepas qué hay en cada sitio.',
+      progress: prefix + ' · tour',
+      nextLabel: 'Empezar el tour →',
+      onShow: function () {
+        clearTargets();
+        placeHole(null);
+        placeCardModal();
+      },
+      onNext: go(desvN),
+    });
 
     [
       { n: desvN, kind: 'desviaciones', progress: prefix + ' · desviaciones' },
@@ -2613,12 +2852,42 @@
     });
 
     out.push({
+      when: band(histN),
+      manualTarget: true,
+      title: 'Histórico global',
+      body: 'Aquí quedan las decisiones ya resueltas, como la de quien acabas de fichar. No hace falta pulsar ninguna fila ahora: si algún día quieres el detalle, el clic en la persona abre la actividad del día.',
+      progress: prefix + ' · histórico',
+      nextLabel: 'Siguiente →',
+      onShow: function () {
+        clearTargets();
+        openAuditHistoricoSection();
+        var toggle = qs('[data-tour="audit-historico-toggle"]');
+        var root = qs('[data-tour="audit-historico"]');
+        setTimeout(function () {
+          var row = findHistoricoTourRow();
+          var target = row || toggle || root;
+          if (!target) {
+            placeHole(null);
+            placeCardModal();
+            return;
+          }
+          if (row) row.classList.add('sp-tour-target', 'sp-tour-highlight-user');
+          else target.classList.add('sp-tour-target');
+          try { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+          placeHole(target);
+          placeCardOutside(target);
+        }, 280);
+      },
+      onNext: go(corrN),
+    });
+
+    out.push({
       when: band(corrN),
       manualTarget: true,
       title: 'Registrar / corregir marca',
       body: 'Arriba a la derecha, <strong>Registrar / corregir marca</strong> sirve para añadir o cambiar un fichaje a mano (hora, obra, persona). No hace falta usarlo ahora: solo recuérdalo.',
       progress: prefix + ' · corregir',
-      nextLabel: 'Siguiente →',
+      nextLabel: 'Completar tutorial →',
       onShow: function () {
         clearTargets();
         var btn = qs('[data-tour="audit-corregir-marca"]');
@@ -2632,133 +2901,6 @@
           placeCardModal();
         }
       },
-      onNext: go(histN),
-    });
-
-    out.push({
-      when: band(histN),
-      manualTarget: true,
-      title: 'Histórico global',
-      body: 'Abre <strong>Histórico global</strong>: ahí quedan las decisiones ya resueltas. Pulsa la cabecera para expandirlo.',
-      progress: prefix + ' · histórico',
-      waitClick: true,
-      nextLabel: 'Continuar →',
-      onShow: function () {
-        clearTargets();
-        var toggle = qs('[data-tour="audit-historico-toggle"]');
-        var root = qs('[data-tour="audit-historico"]');
-        var collapse = qs('#collapseHistorial');
-        var target = toggle || root;
-        if (!target) {
-          placeHole(null);
-          placeCardModal();
-          return;
-        }
-        target.classList.add('sp-tour-target');
-        placeHole(target);
-        placeCardOutside(target);
-        var advanced = false;
-        function goRowStep() {
-          if (advanced) return;
-          advanced = true;
-          if (window.__spTourHistPoll) {
-            clearInterval(window.__spTourHistPoll);
-            window.__spTourHistPoll = null;
-          }
-          var st = loadState() || {};
-          st.step = rowN;
-          saveState(st);
-          setTimeout(function () { run(); }, 180);
-        }
-        function isOpen() {
-          return !!(collapse && collapse.classList.contains('show'));
-        }
-        if (isOpen()) {
-          goRowStep();
-          return;
-        }
-        function onShown() {
-          if (collapse) collapse.removeEventListener('shown.bs.collapse', onShown);
-          goRowStep();
-        }
-        if (collapse) collapse.addEventListener('shown.bs.collapse', onShown);
-        function onToggleClick() {
-          setTimeout(function () { if (isOpen()) goRowStep(); }, 280);
-        }
-        if (toggle) toggle.addEventListener('click', onToggleClick);
-        if (root && root !== toggle) root.addEventListener('click', onToggleClick);
-        if (window.__spTourHistPoll) clearInterval(window.__spTourHistPoll);
-        window.__spTourHistPoll = setInterval(function () {
-          if (isOpen()) goRowStep();
-        }, 250);
-      },
-      onNext: function () {
-        openAuditHistoricoSection();
-        var st = loadState() || {};
-        st.step = rowN;
-        saveState(st);
-        run();
-      },
-    });
-
-    out.push({
-      when: band(rowN),
-      manualTarget: true,
-      title: 'El histórico de una persona',
-      body: 'Haz <strong>clic en una fila</strong> (la de quien acabas de fichar, si está) para abrir la actividad completa del día.',
-      progress: prefix + ' · fila',
-      waitClick: true,
-      nextLabel: 'Ya abrí la actividad →',
-      onShow: function () {
-        clearTargets();
-        var collapse = qs('#collapseHistorial');
-        if (collapse && !collapse.classList.contains('show')) {
-          openAuditHistoricoSection();
-        }
-        var advanced = false;
-        function goTimeline() {
-          if (advanced) return;
-          advanced = true;
-          var st = loadState() || {};
-          st.step = actN;
-          saveState(st);
-          setTimeout(function () { run(); }, 500);
-        }
-        function bindRow(tries) {
-          tries = tries || 0;
-          var row = findHistoricoTourRow();
-          if (!row) {
-            if (tries < 20) setTimeout(function () { bindRow(tries + 1); }, 180);
-            return;
-          }
-          row.classList.add('sp-tour-target', 'sp-tour-highlight-user');
-          try { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
-          placeHole(row);
-          placeCardOutside(row);
-          row.addEventListener('click', goTimeline, { once: true });
-        }
-        setTimeout(function () { bindRow(0); }, 350);
-      },
-      onNext: function () {
-        var row = findHistoricoTourRow();
-        if (row) {
-          try { row.click(); } catch (e) { /* ignore */ }
-        }
-        var st = loadState() || {};
-        st.step = actN;
-        saveState(st);
-        setTimeout(function () { run(); }, 500);
-      },
-    });
-
-    out.push({
-      when: band(actN),
-      manualTarget: true,
-      title: 'Qué cuenta esta actividad',
-      body: 'Aquí se lee la historia del día, en orden.',
-      progress: prefix + ' · actividad',
-      nextLabel: 'Completar tutorial →',
-      onShow: function () { showAuditActivityTourCard(); },
       onNext: go(doneN),
     });
 
@@ -3466,7 +3608,7 @@
         body: 'Introduce el DNI del usuario que acabas de crear.',
         progress: 'Fichaje · DNI',
         nextLabel: 'Siguiente',
-        cardPlacement: 'corner',
+        cardPlacement: 'left-of',
         onShow: function () {
           prefillLoginField('dni');
           if (ui.card) {
@@ -3483,7 +3625,7 @@
         body: 'Introduce el PIN del usuario que acabas de crear.',
         progress: 'Fichaje · PIN',
         nextLabel: 'Siguiente',
-        cardPlacement: 'corner',
+        cardPlacement: 'left-of',
         onShow: function () {
           prefillLoginField('pin');
           if (ui.card) {
@@ -3502,7 +3644,7 @@
         waitClick: true,
         nextLabel: 'Ya entré →',
         advanceTo: 4,
-        cardPlacement: 'corner',
+        cardPlacement: 'left-of',
         onShow: function () {
           // Asegurar credenciales antes de enviar
           prefillLoginField('dni');
@@ -3529,7 +3671,7 @@
           return 'En el día a día aquí sale por defecto la obra en la que estás <strong>planificado</strong>. En este tutorial usamos <strong>Oficina</strong> para generar un desvío y verlo luego en auditoría.';
         },
         progress: 'Fichaje · obra',
-        cardPlacement: 'corner',
+        cardPlacement: 'left-of',
         onShow: function (el) {
           if (usesOwnObraFichaje()) {
             ensureCreatedObraSelected(8);
@@ -3557,7 +3699,7 @@
         progress: 'Fichaje · entrada',
         waitClick: true,
         advanceTo: 6,
-        cardPlacement: 'corner',
+        cardPlacement: 'left-of',
         onShow: function (el) {
           if (usesOwnObraFichaje()) {
             ensureCreatedObraSelected(8);
@@ -4455,7 +4597,7 @@
       {
         when: function () {
           var st = loadState() || {};
-          return pathIs(/obras_detailed/) && !assignmentModalOpen() && (st.step || 0) < 1;
+          return pathIs(/obras_detailed/) && !assignmentModalOpen() && (st.step || 0) < 8;
         },
         selector: '[data-tour="obra-calendar"], .btn-obra-calendar',
         title: 'Abre el calendario',
@@ -4529,6 +4671,38 @@
           var st = loadState() || {};
           return assignmentModalOpen() && (st.step || 0) >= 2 && (st.step || 0) < 3 && !assignmentConflictOpen();
         },
+        manualTarget: true,
+        title: 'Este es el bloque que acabas de crear',
+        body: 'Ese bloque del calendario es la <strong>nueva asignación</strong>. Abajo, en Nueva Asignación, tienes las mismas fechas.',
+        progress: 'Calendario · bloque',
+        noScroll: true,
+        noSkipSection: true,
+        cardPlacement: 'away',
+        nextLabel: 'Siguiente →',
+        onShow: function () {
+          clearTargets();
+          var cal = qs('#assignmentModal #modal-calendar-container, #modal-calendar-container');
+          var ghost = qs('#assignmentModal .fc-ghost-event, .fc-ghost-event');
+          if (ghost) {
+            ghost.classList.add('sp-tour-target');
+            placeHole(ghost);
+            placeCardOutside(cal || ghost);
+          } else if (cal) {
+            cal.classList.add('sp-tour-target');
+            placeHole(cal);
+            placeCardOutside(cal);
+          } else {
+            placeHole(null);
+            placeCardModal();
+          }
+        },
+        onNext: function () { advanceCal(3); },
+      },
+      {
+        when: function () {
+          var st = loadState() || {};
+          return assignmentModalOpen() && (st.step || 0) >= 3 && (st.step || 0) < 4 && !assignmentConflictOpen();
+        },
         selector: '#assignmentModal.show .univ-calendar-panel, .univ-calendar-panel',
         title: 'También desde Nueva Asignación',
         body: 'Abajo, en <strong>Nueva Asignación</strong>, puedes marcar el mismo rango con las fechas de inicio y fin, sin arrastrar en el calendario.',
@@ -4548,12 +4722,12 @@
             placeCardOutside(panel || target);
           }
         },
-        onNext: function () { advanceCal(3); },
+        onNext: function () { advanceCal(4); },
       },
       {
         when: function () {
           var st = loadState() || {};
-          return assignmentModalOpen() && (st.step || 0) >= 3 && (st.step || 0) < 4 && !assignmentConflictOpen();
+          return assignmentModalOpen() && (st.step || 0) >= 4 && (st.step || 0) < 5 && !assignmentConflictOpen();
         },
         selector: '#assignmentModal.show .univ-worker-select, .univ-worker-select',
         title: 'Elige a la persona',
@@ -4580,7 +4754,7 @@
               window.jQuery(document).on('change.spTourCalWorker', '#assignmentModal .univ-worker-select', function () {
                 if (calendarWorkerSelected()) {
                   window.jQuery(document).off('change.spTourCalWorker');
-                  advanceCal(4);
+                  advanceCal(5);
                 }
               });
             }
@@ -4590,38 +4764,42 @@
       {
         when: function () {
           var st = loadState() || {};
-          return assignmentModalOpen() && (st.step || 0) >= 4 && (st.step || 0) < 5 && !assignmentConflictOpen();
+          return assignmentModalOpen() && (st.step || 0) >= 5 && (st.step || 0) < 6 && !assignmentConflictOpen();
         },
         selector: '#assignmentModal.show .univ-vehicle-toggle, .univ-vehicle-toggle',
         title: 'Añade un vehículo',
-        body: 'Activa <strong>Asignar vehículo</strong> y elige un coche de la flota. Así el bloque lleva persona y flota.',
+        body: 'Activa <strong>Asignar vehículo</strong>. Luego te pediré que elijas el coche.',
         progress: 'Calendario · flota',
         noScroll: true,
         noSkipSection: true,
         hideNext: true,
         cardPlacement: 'away',
         ifMissing: 'wait',
-        requireGate: calendarVehicleSelected,
+        requireGate: calendarVehicleToggleOn,
         gateRetry: true,
-        gateFail: 'Activa «Asignar vehículo» y elige un coche.',
+        gateFail: 'Activa «Asignar vehículo».',
         onShow: function (el) {
-          var row = el && el.closest ? el.closest('.univ-worker-row-vehicle, .univ-worker-row') : null;
+          var row = el && el.closest ? el.closest('.univ-worker-row-vehicle, .custom-control') : null;
           var target = row || el;
           if (target) {
             target.classList.add('sp-tour-target');
             placeHole(target);
             placeCardOutside(target);
           }
+          if (calendarVehicleToggleOn()) {
+            advanceCal(6);
+            return;
+          }
           try {
             if (window.jQuery) {
-              window.jQuery(document).off('change.spTourCalVeh');
+              window.jQuery(document).off('change.spTourCalVehTog');
               window.jQuery(document).on(
-                'change.spTourCalVeh',
-                '#assignmentModal .univ-vehicle-toggle, #assignmentModal .univ-vehicle-select',
+                'change.spTourCalVehTog',
+                '#assignmentModal .univ-vehicle-toggle',
                 function () {
-                  if (calendarVehicleSelected()) {
-                    window.jQuery(document).off('change.spTourCalVeh');
-                    advanceCal(5);
+                  if (calendarVehicleToggleOn()) {
+                    window.jQuery(document).off('change.spTourCalVehTog');
+                    setTimeout(function () { advanceCal(6); }, 120);
                   }
                 }
               );
@@ -4632,7 +4810,53 @@
       {
         when: function () {
           var st = loadState() || {};
-          return assignmentModalOpen() && (st.step || 0) >= 5 && (st.step || 0) < 6 && !assignmentConflictOpen();
+          return assignmentModalOpen() && (st.step || 0) >= 6 && (st.step || 0) < 7 && !assignmentConflictOpen();
+        },
+        selector: '#assignmentModal.show .univ-vehicle-select, .univ-vehicle-select',
+        title: 'Elige el coche',
+        body: 'En el desplegable elige un vehículo de la flota. Así el bloque lleva persona y coche.',
+        progress: 'Calendario · coche',
+        noScroll: true,
+        noSkipSection: true,
+        hideNext: true,
+        cardPlacement: 'away',
+        ifMissing: 'wait',
+        requireGate: calendarVehicleSelected,
+        gateRetry: true,
+        gateFail: 'Elige un coche de la flota.',
+        onShow: function (el) {
+          var wrap = el && el.closest ? el.closest('.univ-vehicle-wrap, .univ-worker-row-vehicle') : null;
+          var target = wrap || el;
+          if (target) {
+            target.classList.add('sp-tour-target');
+            placeHole(target);
+            placeCardOutside(target);
+          }
+          if (calendarVehicleSelected()) {
+            advanceCal(7);
+            return;
+          }
+          try {
+            if (window.jQuery) {
+              window.jQuery(document).off('change.spTourCalVeh');
+              window.jQuery(document).on(
+                'change.spTourCalVeh',
+                '#assignmentModal .univ-vehicle-select',
+                function () {
+                  if (calendarVehicleSelected()) {
+                    window.jQuery(document).off('change.spTourCalVeh');
+                    advanceCal(7);
+                  }
+                }
+              );
+            }
+          } catch (e2) { /* ignore */ }
+        },
+      },
+      {
+        when: function () {
+          var st = loadState() || {};
+          return assignmentModalOpen() && (st.step || 0) >= 7 && (st.step || 0) < 8 && !assignmentConflictOpen();
         },
         selector: '#assignmentModal.show [id$="-save"]',
         title: 'Guarda la asignación',
@@ -4656,7 +4880,7 @@
               window.jQuery(document).on('sp-calendar-assigned.spTourCal', function () {
                 window.jQuery(document).off('sp-calendar-assigned.spTourCal');
                 var st = loadState() || {};
-                st.step = 6;
+                st.step = 8;
                 st.sawCalendario = true;
                 saveState(st);
                 setTimeout(function () { run(); }, 400);
@@ -4683,7 +4907,7 @@
       {
         when: function () {
           var st = loadState() || {};
-          return isInicioTrack(st) && (st.step || 0) >= 6;
+          return isInicioTrack(st) && (st.step || 0) >= 8;
         },
         modal: true,
         hero: true,
@@ -4710,7 +4934,7 @@
       {
         when: function () {
           var st = loadState() || {};
-          return !isInicioTrack(st) && (st.step || 0) >= 6;
+          return !isInicioTrack(st) && (st.step || 0) >= 8;
         },
         title: '',
         body: '',
@@ -6350,6 +6574,7 @@
         body: 'Introduce el DNI.',
         progress: 'Fichajes · DNI',
         nextLabel: 'Siguiente',
+        cardPlacement: 'left-of',
         onShow: function () {
           prefillLoginField('dni');
           if (ui.card) {
@@ -6365,6 +6590,7 @@
         body: 'Introduce el PIN.',
         progress: 'Fichajes · PIN acceso',
         nextLabel: 'Siguiente',
+        cardPlacement: 'left-of',
         onShow: function () {
           prefillLoginField('pin');
           if (ui.card) {
@@ -6382,6 +6608,7 @@
         waitClick: true,
         nextLabel: 'Ya entré →',
         advanceTo: 8,
+        cardPlacement: 'left-of',
         onShow: function () {
           prefillLoginField('dni');
           prefillLoginField('pin');
@@ -6402,6 +6629,7 @@
         body: 'En el día a día aquí sale por defecto la obra en la que estás <strong>planificado</strong>. En este tutorial usamos <strong>Oficina</strong> para generar un desvío y verlo luego en auditoría.',
         progress: 'Fichajes · obra',
         nextLabel: 'Siguiente',
+        cardPlacement: 'left-of',
         onShow: function (el) {
           ensureOficinaSelected(8);
           selectOficinaInFichajeSelect(el || qs('[data-tour="fichar-obra"], #obra'));
@@ -6425,6 +6653,7 @@
         progress: 'Fichajes · entrada',
         waitClick: true,
         nextLabel: 'Ya fiché →',
+        cardPlacement: 'left-of',
         onShow: function () {
           ensureOficinaSelected(6);
           var btn = qs('[data-tour="fichar-entrada"], [data-tipo="entrada"]');
@@ -6787,8 +7016,16 @@
       if (btn.getAttribute('data-tour-bound') === '1') return;
       btn.setAttribute('data-tour-bound', '1');
       btn.addEventListener('click', function (ev) {
-        ev.preventDefault();
         var chapter = btn.getAttribute('data-tour-start') || 'tablero_leer';
+        if (tryResumePaused(chapter)) {
+          ev.preventDefault();
+          return;
+        }
+        var href = btn.getAttribute('href');
+        if (btn.tagName === 'A' && href && href !== '#') {
+          return;
+        }
+        ev.preventDefault();
         var mode = btn.getAttribute('data-tour-mode') || '';
         var track = btn.getAttribute('data-tour-track') || '';
         startTour(chapter, {
@@ -6819,6 +7056,10 @@
     }
     if (tour === 'inicio') {
       var prevInicio = loadState();
+      if (prevInicio && prevInicio.paused && prevInicio.track === 'inicio') {
+        tryResumePaused(prevInicio.chapter);
+        return true;
+      }
       var midInicio = prevInicio && prevInicio.active && prevInicio.welcomeDone && prevInicio.track === 'inicio';
       if (midInicio) {
         document.body.classList.add('sp-tour-active');
@@ -6838,7 +7079,10 @@
     if (tour === 'tablero_leer' || tour === 'tablero_asignar' || tour === 'calendario' || tour === 'tablero_basico') {
       var chBoard = tour === 'tablero_basico' ? 'tablero_leer' : tour;
       var existingB = loadState();
-      if (existingB && existingB.active && existingB.chapter === chBoard) {
+      if (existingB && existingB.paused && tryResumePaused(chBoard)) return true;
+      if (existingB && existingB.active && (existingB.chapter === chBoard ||
+          (chBoard === 'tablero_asignar' && existingB.chapter === 'calendario') ||
+          (chBoard === 'calendario' && existingB.chapter === 'tablero_asignar'))) {
         document.body.classList.add('sp-tour-active');
         run();
         return true;
@@ -6899,6 +7143,7 @@
     }
     if (tour === 'trabajadores') {
       var existingT = loadState();
+      if (existingT && existingT.paused && tryResumePaused('trabajadores')) return true;
       if (existingT && existingT.active && existingT.chapter === 'trabajadores' && (existingT.step || 0) > 0) {
         document.body.classList.add('sp-tour-active');
         run();
@@ -6913,6 +7158,7 @@
     }
     if (tour === 'obra') {
       var existingO = loadState();
+      if (existingO && existingO.paused && tryResumePaused('obra')) return true;
       if (existingO && existingO.active && existingO.chapter === 'obra') {
         document.body.classList.add('sp-tour-active');
         run();
@@ -7006,6 +7252,7 @@
     skipSection: skipSection,
     run: run,
     loadState: loadState,
+    tryResumePaused: tryResumePaused,
   };
 
   if (document.readyState === 'loading') {

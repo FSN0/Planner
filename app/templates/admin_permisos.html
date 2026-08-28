@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <style>
   .perm-page .perm-role-tabs { display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem; }
   .perm-page .perm-role-tabs a {
@@ -42,7 +42,9 @@
     <p class="perm-hint">
       {{ _('El jefe de obra sigue limitado a sus obras aunque tenga permiso de módulo.') }}
       {{ _('Administrador no puede quitarse Configuración ni Permisos.') }}
+      {% if show_integration_perm_hint|default(false) %}
       {{ _('Altas Odoo y Portal Soltec no requieren permiso del hub de Integraciones.') }}
+      {% endif %}
     </p>
 
     <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">

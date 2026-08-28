@@ -300,7 +300,9 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
-  min-height: 0;
+  flex-shrink: 0;
+  min-height: auto;
+  width: 100%;
 }
 .page-toolbar-left {
   display: flex;
@@ -331,6 +333,7 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
 .page-toolbar-actions {
   display: flex;
   gap: 0.4rem;
+  flex-wrap: wrap;
   flex-shrink: 0;
 }
 .admin-main--compact .btn-admin {
@@ -3163,10 +3166,429 @@ body.layout-auth .navbar { display: none !important; }
 .nav-tabs .nav-link:hover { color: #111827 !important; border-bottom-color: #d1d5db; }
 
 /* Media Queries */
+.admin-mobile-top {
+  display: none;
+}
+.admin-nav-backdrop {
+  display: none;
+}
+.sidebar-close-mobile {
+  display: none;
+}
+
 @media (max-width: 960px) {
-  .admin-sidebar { display: none; }
-  .admin-main { padding: 1.25rem 1rem 5rem; }
+  .admin-shell {
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .admin-mobile-top {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-shrink: 0;
+    height: 2.75rem;
+    padding: 0 0.7rem;
+    background: #020617;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    color: #e2e8f0;
+    z-index: 90;
+  }
+  .admin-nav-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.12);
+    color: #f1f5f9;
+    font-size: 0.82rem;
+    font-weight: 650;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .admin-nav-open:hover,
+  .admin-nav-open:focus-visible {
+    background: rgba(148, 163, 184, 0.22);
+    outline: none;
+  }
+  .admin-mobile-top-brand {
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .admin-nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 30000;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+  html.sidebar-open .admin-nav-backdrop {
+    display: block;
+  }
+
+  .admin-sidebar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(20rem, 88vw);
+    min-width: min(20rem, 88vw);
+    z-index: 30010;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    box-shadow: none;
+  }
+  html.sidebar-open .admin-sidebar {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
+  }
+  html.sidebar-open .select2-container--open,
+  html.sidebar-open .select2-dropdown,
+  html.sidebar-open .planificador-empresas-menu {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  /* En móvil el menú es un cajón: ignorar el modo iconos del escritorio */
+  html.sidebar-collapsed .admin-sidebar {
+    width: min(20rem, 88vw);
+    min-width: min(20rem, 88vw);
+    padding: 0.75rem 0.65rem;
+  }
+  html.sidebar-collapsed .admin-logo-text,
+  html.sidebar-collapsed .sidebar-section-title,
+  html.sidebar-collapsed .sidebar-link > span:not(.sidebar-badge):not(.sidebar-badges),
+  html.sidebar-collapsed .sidebar-link-ext,
+  html.sidebar-collapsed .sidebar-badge,
+  html.sidebar-collapsed .sidebar-badges,
+  html.sidebar-collapsed .sidebar-footer,
+  html.sidebar-collapsed .sidebar-tz-form,
+  html.sidebar-collapsed .admin-user-chip,
+  html.sidebar-collapsed .sidebar-link--logout > span {
+    opacity: 1;
+    max-width: none;
+    overflow: visible;
+    visibility: visible;
+    pointer-events: auto;
+    margin: unset !important;
+    padding: unset !important;
+  }
+  html.sidebar-collapsed .admin-logo-mark { display: flex; }
+  html.sidebar-collapsed .admin-logo { justify-content: flex-start; }
+  html.sidebar-collapsed .admin-sidebar-head {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  html.sidebar-collapsed .sidebar-link {
+    justify-content: flex-start;
+    padding: 0.38rem 0.5rem;
+  }
+  .sidebar-toggle-btn { display: none; }
+
+  .sidebar-close-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sidebar-close-mobile:hover {
+    background: rgba(148, 163, 184, 0.14);
+    color: #e2e8f0;
+  }
+
+  .admin-main,
+  .admin-main--compact {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    padding: 0.7rem 0.85rem 5rem;
+  }
+
+  .page-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+  .page-toolbar-left {
+    flex-wrap: wrap;
+  }
+  .page-toolbar-title {
+    white-space: normal;
+  }
+  .page-toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .page-toolbar-actions .btn-admin {
+    flex: 0 1 auto;
+  }
+
+  .dashboard-page .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dashboard-page .dashboard-kpi {
+    min-width: 0;
+    overflow: hidden;
+  }
+
   .admin-actions-bar { left: 0; padding-left: 1rem; padding-right: 1rem; }
+
+  /* Tablas: swipe horizontal. No convertir filas en fichas. */
+  .admin-table-scroll,
+  .audit-table-wrap,
+  .aus-table-wrap,
+  .sync-preview-table-wrap,
+  .sync-log-table-wrap,
+  .ratings-table-wrap,
+  .admin-main--compact .admin-table-scroll,
+  .vl-page .admin-table-scroll,
+  .vehiculos-page .admin-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: none;
+  }
+  .vl-page .admin-table-scroll {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+  }
+
+  table.filterable-table.admin-data-table,
+  table.filterable-table.obras-table,
+  table.admin-data-table,
+  table.table-audit,
+  .auditoria-page table.table-audit {
+    table-layout: auto !important;
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+  }
+  table.filterable-table.admin-data-table thead .filter-row th,
+  table.filterable-table.obras-table thead .filter-row th {
+    max-width: none;
+  }
+}
+
+@media (max-width: 720px) {
+  /*
+    Lista de 2 líneas (como contactos del móvil):
+    1) nombre/título + estado a la derecha
+    2) el resto de datos, en una línea secundaria
+    Nada se queda fijo. No hay scroll horizontal vacío.
+  */
+  .admin-main--compact .admin-table-scroll,
+  .audit-table-wrap,
+  .aus-table-wrap,
+  .vl-page .admin-table-scroll,
+  .vehiculos-page .admin-table-scroll {
+    overflow-x: hidden !important;
+    overflow-y: visible;
+    max-height: none;
+  }
+
+  table.filterable-table.admin-data-table,
+  table.filterable-table.obras-table,
+  table.admin-data-table,
+  table.table-audit,
+  .auditoria-page table.table-audit {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    table-layout: auto !important;
+  }
+  table.admin-data-table thead,
+  table.table-audit thead,
+  table.admin-data-table colgroup,
+  table.table-audit colgroup {
+    display: none;
+  }
+  table.admin-data-table tbody,
+  table.table-audit tbody {
+    display: block;
+    width: 100%;
+  }
+
+  table.admin-data-table tbody tr,
+  table.table-audit tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.45rem;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.55rem 0.8rem;
+    margin: 0;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  table.admin-data-table tbody tr:last-child,
+  table.table-audit tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  table.admin-data-table tbody td,
+  table.table-audit tbody td {
+    display: block;
+    border: 0 !important;
+    padding: 0 !important;
+    margin: 0;
+    background: transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    line-height: 1.3;
+  }
+  table.admin-data-table tbody td .text-muted.d-block,
+  table.admin-data-table tbody td .veh-name-cell {
+    display: inline;
+    white-space: nowrap;
+  }
+
+  table.admin-data-table tbody td.col-check,
+  table.admin-data-table tbody td.col-mobile-omit,
+  table.table-audit tbody td.col-mobile-omit {
+    display: none !important;
+  }
+  #tableInternos td.col-actions,
+  #tableExternos td.col-actions,
+  #companiesTable td.col-actions,
+  #vehiclesTable td.col-actions,
+  #freeVehiclesTable td.col-actions,
+  #obrasTable td.col-actions {
+    display: none !important;
+  }
+
+  table.admin-data-table tbody td.col-identity,
+  table.table-audit tbody td.col-identity {
+    order: 1;
+    flex: 1 0 calc(100% - 7.4rem);
+    max-width: calc(100% - 7.4rem);
+    min-width: 0;
+    font-size: 0.9rem;
+    font-weight: 650;
+    color: #0f172a;
+  }
+  table.admin-data-table tbody td.col-status,
+  table.table-audit tbody td.col-status {
+    order: 2;
+    flex: 0 0 auto;
+    max-width: 7.2rem;
+    font-size: 0.75rem;
+  }
+  table.admin-data-table tbody td:not(.col-identity):not(.col-status):not(.col-check):not(.col-actions):not(.col-mobile-omit):not(.no-row-nav),
+  table.table-audit tbody td:not(.col-identity):not(.col-status):not(.col-check):not(.col-actions):not(.col-mobile-omit):not(.no-row-nav) {
+    order: 3;
+    flex: 0 1 auto;
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: #64748b;
+    max-width: 100%;
+  }
+  table.admin-data-table tbody td.table-empty-state,
+  table.admin-data-table tbody td[colspan],
+  table.table-audit tbody td[colspan] {
+    order: 1;
+    flex: 1 1 100%;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .jefe-trigger {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.72rem;
+    color: #64748b;
+    max-width: 100%;
+  }
+  .jefe-trigger-caret,
+  .jefe-trigger-icon {
+    display: none;
+  }
+
+  table.admin-data-table tbody td.no-row-nav,
+  #solicitudesVehiculoTable td.no-row-nav,
+  table.table-audit tbody td.no-row-nav,
+  table.table-audit tbody td:last-child {
+    order: 20;
+    flex: 1 1 100%;
+    max-width: 100%;
+    white-space: normal;
+    padding-top: 0.3rem !important;
+  }
+  #solicitudesVehiculoTable td.no-row-nav .btn-admin {
+    font-size: 0.72rem;
+    padding: 0.28rem 0.55rem;
+  }
+
+  /* Auditoría: persona + día arriba; plan vs fichaje debajo; botones al final */
+  .auditoria-page table.table-audit tbody td:nth-child(2) {
+    order: 1;
+    flex: 1 0 calc(100% - 6.2rem);
+    max-width: calc(100% - 6.2rem);
+    font-size: 0.9rem;
+    font-weight: 650;
+    color: #0f172a;
+  }
+  .auditoria-page table.table-audit tbody td:nth-child(1) {
+    order: 2;
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    color: #64748b;
+    max-width: 6rem;
+  }
+  .auditoria-page table.table-audit tbody td:nth-child(n+3) {
+    order: 3;
+    flex: 0 1 auto;
+    font-size: 0.72rem;
+    color: #64748b;
+    max-width: 100%;
+  }
+  .auditoria-page table.table-audit tbody td:last-child {
+    order: 20;
+    flex: 1 1 100%;
+    max-width: 100%;
+    white-space: normal;
+  }
+  .auditoria-page table.table-audit .btn-audit {
+    margin: 0.15rem 0.2rem 0 0;
+  }
+
+  .admin-filter-bar {
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+  .admin-filter-group {
+    flex: 1 1 9rem;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard-page .dashboard-kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }
 @media (min-width: 768px) {
   .admin-actions-bar { flex-direction: row; align-items: center; justify-content: space-between; }

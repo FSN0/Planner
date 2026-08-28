@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 {% endblock %}
 
 {% block wrapper %}
@@ -75,30 +75,30 @@
               <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+              <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Cliente') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+              <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Jefe') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+              <th class="sortable-col col-mobile-hide" data-col-index="6" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Inicio') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="7" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+              <th class="sortable-col col-mobile-hide" data-col-index="7" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Fin') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              <th class="sortable-col" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+              <th class="sortable-col col-mobile-hide" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Import.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               {% if not jefes_asignan_directo %}
-              <th class="sortable-col col-check" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
+              <th class="sortable-col col-mobile-hide" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Sols.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
               {% endif %}
-              <th class="col-actions"></th>
+              <th class="col-actions col-mobile-hide"></th>
             </tr>
             <tr class="filter-row">
               <th></th>
@@ -119,16 +119,16 @@
           <tbody id="obrasTableBody">
             {% for obra in obras %}
               <tr class="data-row" data-row-href="{{ url_for('admin.obra_panel', obra_id=obra.id) }}">
-                <td class="text-center">
+                <td class="col-check text-center">
                   <input type="checkbox" class="obra-checkbox" value="{{ obra.id }}">
                 </td>
                 <td data-sort-value="{{ obra.codigo or obra.id }}"><span class="cell-code">{{ obra.codigo or obra.id }}</span></td>
-                <td data-sort-value="{{ obra.nombre|lower }}">
+                <td class="col-identity" data-sort-value="{{ obra.nombre|lower }}">
                   <span class="font-weight-bold" title="{{ obra.nombre }}">{{ obra.nombre }}</span>
                 </td>
-                <td data-sort-value="{{ (obra.cliente or '')|lower }}">{{ obra.cliente or '—' }}</td>
+                <td class="col-mobile-hide" data-sort-value="{{ (obra.cliente or '')|lower }}">{{ obra.cliente or '—' }}</td>
 
-                <td class="editable-jefe-cell"
+                <td class="editable-jefe-cell col-mobile-hide"
                     data-obra-id="{{ obra.id }}"
                     data-jefe-id="{{ obra.jefe_obra_id or '' }}"
                     data-sort-value="{% if obra.jefe_obra %}{{ obra.jefe_obra.name }} {{ obra.jefe_obra.lastname }}{% else %}sin asignar{% endif %}">
@@ -143,7 +143,7 @@
                   </button>
                 </td>
 
-                <td data-sort-value="{{ obra.estado|lower }}">
+                <td class="col-status" data-sort-value="{{ obra.estado|lower }}">
                   {% if obra.estado == 'En Curso' %}
                     <span class="badge-soft badge-soft-green">
                       <span class="status-dot green"></span> {{ _('En curso') }}
@@ -158,11 +158,11 @@
                     </span>
                   {% endif %}
                 </td>
-                <td class="text-nowrap" data-sort-value="{{ obra.fecha_inicio.strftime('%Y%m%d') if obra.fecha_inicio else '' }}">{{ obra.fecha_inicio.strftime('%d/%m/%y') if obra.fecha_inicio else '—' }}</td>
-                <td class="text-nowrap" data-sort-value="{{ obra.fecha_fin.strftime('%Y%m%d') if obra.fecha_fin else '' }}">{{ obra.fecha_fin.strftime('%d/%m/%y') if obra.fecha_fin else '—' }}</td>
+                <td class="text-nowrap col-mobile-hide" data-sort-value="{{ obra.fecha_inicio.strftime('%Y%m%d') if obra.fecha_inicio else '' }}">{{ obra.fecha_inicio.strftime('%d/%m/%y') if obra.fecha_inicio else '—' }}</td>
+                <td class="text-nowrap col-mobile-hide" data-sort-value="{{ obra.fecha_fin.strftime('%Y%m%d') if obra.fecha_fin else '' }}">{{ obra.fecha_fin.strftime('%d/%m/%y') if obra.fecha_fin else '—' }}</td>
 
                 {% set sort_value = obra.fecha_importacion.strftime('%Y%m%d%H%M%S') if obra.fecha_importacion else '00000000000000' %}
-                <td class="text-center" data-sort-value="{{ sort_value }}">
+                <td class="text-center col-mobile-omit" data-sort-value="{{ sort_value }}">
                   {% if obra.fecha_importacion %}
                     <span class="badge-soft badge-soft-blue" title="{{ _('Importada a las {time}', time=obra.fecha_importacion|format_time) }}">
                       <i class="fas fa-cloud-download-alt"></i> {{ obra.fecha_importacion|format_dt('%d/%m/%y') }}
@@ -176,7 +176,7 @@
 
                 {% if not jefes_asignan_directo %}
                 {% set pends = obra.solicitudes|selectattr('estado', 'in', ['PENDIENTE','EN_PROCESO'])|list|length %}
-                <td class="text-center" data-sort-value="{{ '%04d'|format(pends) }}">
+                <td class="text-center col-mobile-omit" data-sort-value="{{ '%04d'|format(pends) }}">
                   {% if pends > 0 %}
                     <a href="{{ url_for('admin.solicitudes_list', obra_id=obra.id, estado='PENDIENTE') }}"
                        class="badge-notify" title="{{ _('Ver {n} solicitudes pendientes', n=pends) }}">{{ pends }}</a>
@@ -189,7 +189,7 @@
                 </td>
                 {% endif %}
 
-                <td class="text-center">
+                <td class="text-center col-actions col-mobile-hide">
                   <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn-icon-action" title="{{ _('Configurar obra') }}">
                     <i class="fas fa-cog"></i>
                   </a>

@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <style>
   .veh-toolbar-filters {
     display: flex;
@@ -87,14 +87,14 @@
           </colgroup>
           <thead>
             <tr class="header-row">
-              <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Matrícula') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-identity" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Matrícula') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Nombre') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Marca') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Modelo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Marca') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Modelo') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Activo') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% if tenant_has_odoo %}
-              <th class="sortable-col" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Conductor Odoo') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="6" data-sort="none" data-sort-type="num" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Km') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Conductor Odoo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="6" data-sort="none" data-sort-type="num" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Km') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% endif %}
               <th class="col-actions"></th>
             </tr>
@@ -114,17 +114,17 @@
           <tbody>
             {% for v in vehicles %}
             <tr class="data-row" data-row-href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}">
-              <td data-sort-value="{{ (v.matricula or '')|lower }}"><span class="cell-code">{{ v.matricula or '—' }}</span></td>
+              <td class="col-identity" data-sort-value="{{ (v.matricula or '')|lower }}"><span class="cell-code">{{ v.matricula or '—' }}</span></td>
               <td data-sort-value="{{ v.nombre|lower }}"><span class="font-weight-bold veh-name-cell">{{ v.nombre }}</span></td>
-              <td data-sort-value="{{ (v.marca or '')|lower }}">{{ v.marca or '—' }}</td>
-              <td data-sort-value="{{ (v.modelo or '')|lower }}">{{ v.modelo or '—' }}</td>
-              <td data-sort-value="{{ 'activo' if v.active else 'inactivo' }}">
+              <td class="col-mobile-hide" data-sort-value="{{ (v.marca or '')|lower }}">{{ v.marca or '—' }}</td>
+              <td class="col-mobile-hide" data-sort-value="{{ (v.modelo or '')|lower }}">{{ v.modelo or '—' }}</td>
+              <td class="col-status" data-sort-value="{{ 'activo' if v.active else 'inactivo' }}">
                 {% if v.active %}<span class="badge-soft badge-soft-green">{{ _('Activo') }}</span>
                 {% else %}<span class="badge-soft badge-soft-slate">{{ _('Inactivo') }}</span>{% endif %}
               </td>
               {% if tenant_has_odoo %}
-              <td data-sort-value="{{ (v.odoo_driver_name or '')|lower }}">{{ v.odoo_driver_name or '—' }}</td>
-              <td data-sort-value="{{ v.odoo_odometer_value if v.odoo_odometer_value is not none else '' }}">
+              <td class="col-mobile-hide" data-sort-value="{{ (v.odoo_driver_name or '')|lower }}">{{ v.odoo_driver_name or '—' }}</td>
+              <td class="col-mobile-hide" data-sort-value="{{ v.odoo_odometer_value if v.odoo_odometer_value is not none else '' }}">
                 {% if v.odoo_odometer_value is not none %}{{ '%.0f'|format(v.odoo_odometer_value) }}{% else %}—{% endif %}
               </td>
               {% endif %}

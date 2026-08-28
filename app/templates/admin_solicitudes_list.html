@@ -4,7 +4,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260810b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <style>
   .solicitudes-start {
     padding: 2.25rem 1.5rem !important;
@@ -120,13 +120,13 @@
           <table class="filterable-table admin-data-table mb-0" id="solicitudesVehiculoTable">
             <thead>
               <tr class="header-row">
-                <th>ID</th>
+                <th class="col-mobile-hide">ID</th>
                 <th>{{ _('Acción') }}</th>
                 <th>{{ _('Vehículo') }}</th>
                 <th>{{ _('Operario') }}</th>
-                <th>{{ _('Solicitante') }}</th>
-                <th>{{ _('Petición') }}</th>
-                <th>{{ _('Periodo') }}</th>
+                <th class="col-mobile-hide">{{ _('Solicitante') }}</th>
+                <th class="col-mobile-hide">{{ _('Petición') }}</th>
+                <th class="col-mobile-hide">{{ _('Periodo') }}</th>
                 <th>{{ _('Estado') }}</th>
                 {% if can_resolve_vehiculo %}<th class="text-right">{{ _('Acciones') }}</th>{% endif %}
               </tr>
@@ -134,7 +134,7 @@
             <tbody>
               {% for s in solicitudes_vehiculo %}
               <tr class="data-row">
-                <td><span class="cell-code">#{{ s.id }}</span></td>
+                <td class="col-mobile-omit"><span class="cell-code">#{{ s.id }}</span></td>
                 <td>
                   {% if s.accion == 'DESASIGNAR' %}
                     <span class="badge-soft badge-soft-red">{{ _('Desasignar') }}</span>
@@ -142,7 +142,7 @@
                     <span class="badge-soft badge-soft-blue">{{ _('Asignar') }}</span>
                   {% endif %}
                 </td>
-                <td>
+                <td class="col-identity">
                   {% if s.vehiculo %}{{ s.vehiculo.label() }}{% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td>
@@ -152,20 +152,20 @@
                     </a>
                   {% else %}—{% endif %}
                 </td>
-                <td>
+                <td class="col-mobile-hide">
                   {% if s.requested_by %}
                     {{ s.requested_by.name }} {{ s.requested_by.lastname }}
                   {% else %}—{% endif %}
                 </td>
-                <td class="text-muted">
+                <td class="text-muted col-mobile-hide">
                   {{ s.created_at|format_dt('%d/%m/%y') if s.created_at else '—' }}
                 </td>
-                <td>
+                <td class="col-mobile-hide">
                   {% if s.fecha_inicio %}
                     <span class="text-nowrap">{{ s.fecha_inicio.strftime('%d/%m') }}</span>–<span class="text-nowrap">{{ s.fecha_fin.strftime('%d/%m') }}</span>
                   {% else %}—{% endif %}
                 </td>
-                <td>
+                <td class="col-status">
                   {% set est = s.estado %}
                   {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
                   {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
@@ -223,15 +223,15 @@
           </colgroup>
           <thead>
             <tr class="header-row">
-              <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">ID</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Obra') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Jefe') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="4" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Petición') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col" data-col-index="5" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">ID</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-identity" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Obra') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Jefe') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Petición') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" data-sort-type="date" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajo') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Perfil / Operario') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col text-center" data-col-index="7" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Cobertura') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              <th class="sortable-col text-center" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Plazas') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col text-center col-mobile-hide" data-col-index="7" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Cobertura') }}</span><i class="fas fa-sort sort-icon"></i></th>
+              <th class="sortable-col text-center col-mobile-hide" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Plazas') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
             </tr>
             <tr class="filter-row">
@@ -252,10 +252,10 @@
               {% set stat = stats[s.id] %}
               {% set detail_url = url_for('admin.solicitud_detail', solicitud_id=s.id) %}
               <tr class="data-row" data-row-href="{{ detail_url }}">
-                <td data-sort-value="{{ s.id }}">
+                <td class="col-mobile-omit" data-sort-value="{{ s.id }}">
                   <span class="cell-code">#{{ s.id }}</span>
                 </td>
-                <td data-sort-value="{% if s.accion == 'DESASIGNAR' %}salida{% elif s.tipo == 'GENERICA' %}generica{% else %}concreta{% endif %}">
+                <td class="col-mobile-hide" data-sort-value="{% if s.accion == 'DESASIGNAR' %}salida{% elif s.tipo == 'GENERICA' %}generica{% else %}concreta{% endif %}">
                   {% if s.accion == 'DESASIGNAR' %}
                     <span class="badge-soft badge-soft-red">{{ _('Salida') }}</span>
                   {% elif s.tipo == 'GENERICA' %}
@@ -264,7 +264,7 @@
                     <span class="badge-soft badge-soft-blue">{{ _('Concreta') }}</span>
                   {% endif %}
                 </td>
-                <td data-sort-value="{{ s.obra.nombre|lower if s.obra else '' }}">
+                <td class="col-identity" data-sort-value="{{ s.obra.nombre|lower if s.obra else '' }}">
                   {% if s.obra %}
                     <a href="{{ url_for('admin.obra_panel', obra_id=s.obra.id) }}" class="table-link-primary" title="{{ s.obra.nombre }}">
                       <span class="cell-code">{{ s.obra.codigo or s.obra.id }}</span>
@@ -272,17 +272,17 @@
                     </a>
                   {% else %}—{% endif %}
                 </td>
-                <td data-sort-value="{% if s.obra and s.obra.jefe_obra %}{{ s.obra.jefe_obra.lastname|lower }}{% endif %}">
+                <td class="col-mobile-hide" data-sort-value="{% if s.obra and s.obra.jefe_obra %}{{ s.obra.jefe_obra.lastname|lower }}{% endif %}">
                   {% if s.obra and s.obra.jefe_obra %}
                     <a href="{{ url_for('admin.worker_panel', user_id=s.obra.jefe_obra.id) }}" class="table-link-primary">
                       {{ s.obra.jefe_obra.name }} {{ s.obra.jefe_obra.lastname }}
                     </a>
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
-                <td class="text-muted" data-sort-value="{{ s.created_at.strftime('%Y%m%d%H%M') if s.created_at else '' }}">
+                <td class="text-muted col-mobile-hide" data-sort-value="{{ s.created_at.strftime('%Y%m%d%H%M') if s.created_at else '' }}">
                   {{ s.created_at|format_dt('%d/%m/%y') if s.created_at else '—' }}
                 </td>
-                <td data-sort-value="{{ s.fecha_inicio.strftime('%Y%m%d') if s.fecha_inicio else '' }}">
+                <td class="col-mobile-hide" data-sort-value="{{ s.fecha_inicio.strftime('%Y%m%d') if s.fecha_inicio else '' }}">
                   {% if s.fecha_inicio %}
                     <span class="text-nowrap">{{ s.fecha_inicio.strftime('%d/%m') }}</span>–<span class="text-nowrap">{{ s.fecha_fin.strftime('%d/%m') }}</span>
                   {% else %}—{% endif %}
@@ -296,7 +296,7 @@
                     </a>
                   {% else %}—{% endif %}
                 </td>
-                <td class="text-center cell-progress no-row-nav" data-sort-value="{{ stat.pct if s.tipo == 'GENERICA' else (1 if s.estado == 'CUMPLIDA' else 0) }}">
+                <td class="text-center cell-progress no-row-nav col-mobile-omit" data-sort-value="{{ stat.pct if s.tipo == 'GENERICA' else (1 if s.estado == 'CUMPLIDA' else 0) }}">
                   {% if s.tipo == 'GENERICA' %}
                     <div class="small font-weight-bold">{{ stat.pct }}%</div>
                     <div class="progress-mini">
@@ -317,14 +317,14 @@
                     {% endif %}
                   {% endif %}
                 </td>
-                <td class="text-center" data-sort-value="{{ s.cantidad_cubierta if s.tipo == 'GENERICA' else 0 }}">
+                <td class="text-center col-mobile-omit" data-sort-value="{{ s.cantidad_cubierta if s.tipo == 'GENERICA' else 0 }}">
                   {% if s.tipo == 'GENERICA' %}
                     <span class="font-weight-bold">{{ s.cantidad_cubierta }}</span><span class="text-muted"> / {{ s.cantidad_solicitada }}</span>
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}
                 </td>
-                <td data-sort-value="{{ s.estado }}">
+                <td class="col-status" data-sort-value="{{ s.estado }}">
                   {% set est = s.estado %}
                   {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
                   {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>

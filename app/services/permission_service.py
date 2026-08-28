@@ -14,6 +14,7 @@ from app.services.permission_catalog import (
     default_matrix_rows,
     module_keys,
     normalize_module,
+    visible_permission_keys,
 )
 
 # Legacy export (tests / imports)
@@ -346,10 +347,12 @@ def roles_with_module(module: str, action: str = 'r') -> tuple:
     return tuple(found)
 
 
-def save_role_matrix(role: str, form_data) -> int:
+def save_role_matrix(role: str, form_data, modules=None) -> int:
     """
     Persiste checkboxes del form para un rol.
     form_data keys: perm__{module}__r / __w
+    Solo pisa los módulos visibles de este tenant: lo a medida que no tiene
+    no se apaga por un Guardar (los checkboxes no viajan en el POST).
     Devuelve nº de módulos actualizados.
     """
     if not _ensure_table():
@@ -359,7 +362,8 @@ def save_role_matrix(role: str, form_data) -> int:
         )
     ensure_role_permissions()
     updated = 0
-    for module in module_keys():
+    keys = list(modules) if modules is not None else visible_permission_keys()
+    for module in keys:
         can_r = _checkbox_on(form_data, f'perm__{module}__r')
         can_w = _checkbox_on(form_data, f'perm__{module}__w')
         if module in SSO_READ_ONLY_MODULES:

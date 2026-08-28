@@ -10,20 +10,60 @@ document.addEventListener("DOMContentLoaded", function() {
     // 1b. Indicador de navegación (sidebar / enlaces internos): feedback inmediato
     initPageNavLoading();
 
-    // 2. Lógica del Sidebar (Menú lateral)
+    // 2. Lógica del Sidebar (Menú lateral + cajón en móvil)
     var toggle = document.getElementById("sidebar-toggle");
-    
-    // Intentamos buscar el shell, si no existe usamos body o documentElement como fallback
-    // Ajusta '.admin-shell' si tu contenedor principal tiene otro nombre
-    var shell = document.querySelector(".admin-shell") || document.body; 
-    
+    var navOpen = document.getElementById("admin-nav-open");
+    var navClose = document.getElementById("sidebar-close-mobile");
+    var navBackdrop = document.getElementById("admin-nav-backdrop");
+    var sidebar = document.getElementById("admin-sidebar");
+
+    function isMobileNav() {
+        return window.matchMedia("(max-width: 960px)").matches;
+    }
+
+    function setMobileNav(open) {
+        document.documentElement.classList.toggle("sidebar-open", !!open);
+        if (navOpen) navOpen.setAttribute("aria-expanded", open ? "true" : "false");
+        if (navBackdrop) navBackdrop.hidden = !open;
+        if (open && typeof window.jQuery !== "undefined") {
+            try { window.jQuery(".select2-hidden-accessible").select2("close"); } catch (e) {}
+            try { window.jQuery(".dropdown-menu.show").removeClass("show"); } catch (e2) {}
+            try { window.jQuery(".dropdown.show").removeClass("show"); } catch (e3) {}
+        }
+    }
+
+    function closeMobileNav() { setMobileNav(false); }
+
     if (toggle) {
         toggle.addEventListener("click", function() {
+            if (isMobileNav()) {
+                closeMobileNav();
+                return;
+            }
             document.documentElement.classList.toggle("sidebar-collapsed");
             var isCollapsed = document.documentElement.classList.contains("sidebar-collapsed");
             localStorage.setItem("sidebarCollapsed", isCollapsed ? "1" : "0");
         });
     }
+    if (navOpen) {
+        navOpen.addEventListener("click", function() {
+            setMobileNav(!document.documentElement.classList.contains("sidebar-open"));
+        });
+    }
+    if (navClose) navClose.addEventListener("click", closeMobileNav);
+    if (navBackdrop) navBackdrop.addEventListener("click", closeMobileNav);
+    document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape") closeMobileNav();
+    });
+    if (sidebar) {
+        sidebar.addEventListener("click", function (ev) {
+            var a = ev.target.closest("a.sidebar-link[href]");
+            if (a && isMobileNav()) closeMobileNav();
+        });
+    }
+    window.addEventListener("resize", function () {
+        if (!isMobileNav()) closeMobileNav();
+    });
 
     document.querySelectorAll("[data-sidebar-subtoggle]").forEach(function(btn) {
         btn.addEventListener("click", function(ev) {

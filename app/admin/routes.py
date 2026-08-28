@@ -3655,9 +3655,9 @@ def permisos_roles(role=None):
         ADMIN_LOCKED_MODULES,
         MODULE_READ_HINTS,
         MODULE_WRITE_HINTS,
-        PERMISSION_MODULES,
         PERMISSION_ROLES,
         SSO_READ_ONLY_MODULES,
+        visible_permission_modules,
     )
     from app.services.permission_service import (
         ensure_role_permissions,
@@ -3670,16 +3670,21 @@ def permisos_roles(role=None):
     ensure_role_permissions()
     valid = {r for r, _ in PERMISSION_ROLES}
     active = role if role in valid else 'admin'
+    modules = visible_permission_modules()
+    visible_keys = {m for m, _, _ in modules}
     return render_template(
         'admin_permisos.html',
         roles=PERMISSION_ROLES,
-        modules=PERMISSION_MODULES,
+        modules=modules,
         active_role=active,
         matrix=matrix_for_role(active),
         locked_modules=ADMIN_LOCKED_MODULES,
         sso_read_only_modules=SSO_READ_ONLY_MODULES,
         read_hints=MODULE_READ_HINTS,
         write_hints=MODULE_WRITE_HINTS,
+        show_integration_perm_hint=bool(
+            visible_keys & {'soltec_alta_odoo', 'soltec_portal', 'sync_odoo', 'integraciones'}
+        ),
     )
 
 
