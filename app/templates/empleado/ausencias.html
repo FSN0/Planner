@@ -1,8 +1,8 @@
-{% extends "empleado/base.html" %}
-{% block title %}{{ _('Mis ausencias') }}{% endblock %}
+{% extends "empleado/_shell.html" %}
+{% block empleado_title %}{{ _('Vacaciones') }}{% endblock %}
 
-{% block content %}
-<section class="empleado-card">
+{% block empleado_content %}
+<section class="admin-panel">
   <h2>{{ _('Solicitar ausencia') }}</h2>
   <p class="empleado-muted">
     {{ _('La solicitud queda pendiente hasta que la apruebe oficina o RRHH. Las vacaciones que vienen del ERP ya están validadas y no hay que pedirlas aquí.') }}

@@ -411,6 +411,8 @@ def user_operario(session, tenant_soltec, company_internal, db):
         categoria_profesional="Oficial 1ª",
         active=True,
         email_verified=True,
+        web_access=True,
+        auth_mode='both',
     )
     session.add(user)
     session.commit()  # Commit para que esté disponible

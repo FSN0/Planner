@@ -189,6 +189,19 @@ def create_app():
             user = None
         g.locale = detect_request_locale(user=user)
 
+    @app.before_request
+    def _mantener_sesion_impersonacion():
+        """Evita que la cookie remember del admin rompa la suplantación."""
+        try:
+            from app.services.impersonation_service import (
+                impersonacion_activa,
+                reparar_sesion_impersonacion,
+            )
+            if impersonacion_activa():
+                reparar_sesion_impersonacion()
+        except Exception:
+            pass
+
     @app.context_processor
     def inject_i18n():
         from flask import url_for as _url_for
@@ -356,6 +369,9 @@ def create_app():
                 tenant_has_registro_jornada=True,
                 tenant_has_fichaje_operario=False,
                 muestra_auditoria_fichajes=False,
+                puede_ver_estado_fichaje=False,
+                impersonacion_activa=False,
+                impersonador_label=None,
                 tenant_has_avisos_laborales=False,
                 tenant_has_notas=False,
                 tenant_has_valoraciones=False,
@@ -467,6 +483,9 @@ def create_app():
         tenant_has_registro_jornada = True
         tenant_has_fichaje_operario = False
         muestra_auditoria_fichajes = False
+        puede_ver_estado_fichaje = False
+        impersonacion_activa = False
+        impersonador_label = None
         tenant_has_avisos_laborales = False
         tenant_has_notas = False
         tenant_has_valoraciones = False
@@ -509,6 +528,21 @@ def create_app():
                     muestra_auditoria_fichajes = tenant_muestra_auditoria_fichajes()
                 except Exception:
                     muestra_auditoria_fichajes = False
+                try:
+                    from app.services.fichaje_operario_service import usuario_ve_estado_fichaje
+                    puede_ver_estado_fichaje = usuario_ve_estado_fichaje(current_user)
+                except Exception:
+                    puede_ver_estado_fichaje = False
+                try:
+                    from app.services.impersonation_service import (
+                        impersonacion_activa as _impersonacion_activa,
+                        impersonador_label as _impersonador_label,
+                    )
+                    impersonacion_activa = _impersonacion_activa()
+                    impersonador_label = _impersonador_label()
+                except Exception:
+                    impersonacion_activa = False
+                    impersonador_label = None
 
         from app.services.permission_service import (
             user_can, is_laboral, is_admin, can_resolve_fichajes,
@@ -568,6 +602,7 @@ def create_app():
                     'tenant_has_soltec_portal_sso': tenant_has_soltec_portal_sso,
                     'tenant_has_integrations': tenant_has_integrations,
                     'tenant_has_registro_jornada': tenant_has_registro_jornada,
+                    'tenant_has_fichaje_operario': tenant_has_fichaje_operario,
                     'tenant_has_avisos_laborales': tenant_has_avisos_laborales,
                     'tenant_has_notas': tenant_has_notas,
                     'tenant_has_valoraciones': tenant_has_valoraciones,
@@ -578,6 +613,9 @@ def create_app():
                     'onboarding_completo': onboarding_completo,
                     'academia_visible': academia_visible,
                     'muestra_auditoria_fichajes': muestra_auditoria_fichajes,
+                    'puede_ver_estado_fichaje': puede_ver_estado_fichaje,
+                    'impersonacion_activa': impersonacion_activa,
+                    'impersonador_label': impersonador_label,
                 })
             except Exception:
                 sidebar_nav = None
@@ -594,6 +632,9 @@ def create_app():
             tenant_has_registro_jornada=tenant_has_registro_jornada,
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
             muestra_auditoria_fichajes=muestra_auditoria_fichajes,
+            puede_ver_estado_fichaje=puede_ver_estado_fichaje,
+            impersonacion_activa=impersonacion_activa,
+            impersonador_label=impersonador_label,
             tenant_has_avisos_laborales=tenant_has_avisos_laborales,
             tenant_has_notas=tenant_has_notas,
             tenant_has_valoraciones=tenant_has_valoraciones,
@@ -627,18 +668,8 @@ def create_app():
         elif user.role in (ROLE_LABORAL, ROLE_RRHH):
             return redirect(url_for('admin.panel_laboral'))
         elif user.role == ROLE_OPERARIO:
-            if getattr(user, 'web_access', False):
-                try:
-                    from app.services.permission_service import user_can
-                    if user_can(user, 'operario_web', 'r'):
-                        return redirect(url_for('empleado.inicio'))
-                except Exception:
-                    pass
-            from flask_login import logout_user
-            logout_user()
-            from flask import flash
-            flash('Tu perfil no tiene acceso a la aplicación.', 'warning')
-            return redirect(url_for('auth.login'))
+            from app.auth.routes import destino_portal_operario
+            return redirect(destino_portal_operario(user))
         return redirect(url_for('auth.login'))
 
     @login_manager.unauthorized_handler
@@ -650,6 +681,13 @@ def create_app():
     @app.errorhandler(403)
     def handle_forbidden(e):
         if current_user.is_authenticated:
+            try:
+                from app.services.impersonation_service import impersonacion_activa
+                if impersonacion_activa() and current_user.role == ROLE_OPERARIO:
+                    from app.auth.routes import destino_portal_operario
+                    return redirect(destino_portal_operario(current_user))
+            except Exception:
+                pass
             return redirect_by_role(current_user)
         return redirect(url_for('auth.login'))
 

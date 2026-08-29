@@ -81,7 +81,7 @@ def _solo_perfiles_con_jornada():
         return None
 
     if not current_user.is_authenticated:
-        return redirect(url_for('operarios.entrar', next=request.path))
+        return redirect(url_for('auth.login', next=request.path))
 
     if current_user.role not in ROLES_CON_FICHAJE:
         flash(translate('Tu perfil no tiene área de fichaje.'), 'warning')
@@ -91,8 +91,9 @@ def _solo_perfiles_con_jornada():
     if current_user.role == ROLE_OPERARIO:
         from app.services.permission_service import user_can
         if not user_can(current_user, 'operario_fichaje', 'r'):
+            from app.auth.routes import destino_portal_operario
             flash(translate('Tu perfil no tiene acceso al fichaje.'), 'warning')
-            return redirect(url_for('auth.login'))
+            return redirect(destino_portal_operario(current_user))
 
     # PIN provisional: solo puede cambiar PIN o salir.
     from app.services.pin_auth_service import debe_cambiar_pin
@@ -100,7 +101,7 @@ def _solo_perfiles_con_jornada():
         'operarios.cambiar_pin',
         'operarios.salir',
     ):
-        return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
+        return redirect(url_for('empleado.cambiar_pin', obligatorio=1))
     return None
 
 
@@ -125,130 +126,36 @@ def tour_volver_admin():
             if next_url.startswith('/') and not next_url.startswith('//'):
                 return redirect(next_url)
             return redirect(url_for('admin.obras_detailed', tour='fichaje_done'))
-    return redirect(url_for('operarios.entrar'))
+    return redirect(url_for('auth.login'))
 
 
 @operarios_bp.route('/entrar', methods=['GET', 'POST'])
 @limiter.limit('20 per minute; 100 per hour', methods=['POST'])
 def entrar():
-    """
-    Acceso a la PWA con DNI y PIN.
-
-    Es la puerta pensada para obra. El login de correo y contraseña sigue
-    existiendo para oficina; aquí el teclado es numérico y no hace falta
-    recordar un email.
-    """
-    if not fichaje_operario_activo():
-        if request.args.get('tour'):
-            try:
-                from app.services.fichaje_operario_service import (
-                    activar_fichajes_alta,
-                    tenant_tiene_fichaje_operario_module,
-                )
-                if tenant_tiene_fichaje_operario_module():
-                    activar_fichajes_alta()
-            except Exception:
-                current_app.logger.exception('No se pudo activar fichaje al abrir /mi (tour)')
-        if not fichaje_operario_activo():
-            abort(404)
-
-    # Guía: forzar pantalla de login aunque hubiera sesión residual.
-    if request.args.get('tour') and current_user.is_authenticated:
-        from flask import session as flask_session
-        if current_user.role == ROLE_ADMIN and not flask_session.get('tour_admin_user_id'):
-            flask_session['tour_admin_user_id'] = current_user.id
-        logout_user()
-
-    if current_user.is_authenticated and current_user.role in ROLES_CON_FICHAJE:
-        return redirect(url_for('operarios.inicio'))
-
-    if request.method == 'POST':
+    """Legacy: el acceso unificado está en /auth/login."""
+    if request.args.get('tour') and not fichaje_operario_activo():
         try:
-            user = autenticar_por_pin(
-                request.form.get('dni'),
-                request.form.get('pin'),
+            from app.services.fichaje_operario_service import (
+                activar_fichajes_alta,
+                tenant_tiene_fichaje_operario_module,
             )
-        except PinAuthError as exc:
-            from app.utils import register_log
-            register_log(
-                user_id=None,
-                category='accesos',
-                action='Intento fallido de acceso por PIN',
-                detail=f"IP: {request.remote_addr or 'Desconocida'}",
-            )
-            flash(str(exc), 'danger')
-            return render_template('operario/entrar.html')
-
-        login_user(user, remember=True)
-        if getattr(g, 'current_tenant', None):
-            from flask import session
-            session['tenant_id'] = g.current_tenant.id
-
-        from app.utils import register_log
-        register_log(
-            user_id=user.id,
-            category='accesos',
-            action='Inicio de sesión (PIN)',
-            detail=f"Acceso a fichaje desde IP: {request.remote_addr or 'Desconocida'}",
-        )
-
-        from app.services.pin_auth_service import debe_cambiar_pin
-        if debe_cambiar_pin(user):
-            return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
-
-        destino = request.args.get('next') or url_for('operarios.inicio')
-        if not destino.startswith('/mi'):
-            destino = url_for('operarios.inicio')
-        # Preservar guía en /mi (capítulo + forzar Oficina)
-        tour = (request.args.get('tour') or request.form.get('tour') or '').strip()
-        chapter = (request.args.get('chapter') or request.form.get('chapter') or '').strip()
-        from flask import session as flask_session
-        if flask_session.get('tour_fichar_oficina') and not chapter:
-            chapter = flask_session.get('tour_chapter') or 'fichajes'
-        if tour or chapter or flask_session.get('tour_fichar_oficina'):
-            sep = '&' if '?' in destino else '?'
-            parts = []
-            if tour:
-                parts.append('tour=' + tour)
-            elif flask_session.get('tour_fichar_oficina'):
-                parts.append('tour=mi')
-            if chapter:
-                parts.append('chapter=' + chapter)
-            if parts:
-                destino = destino + sep + '&'.join(parts)
-        return redirect(destino)
-
-    return render_template('operario/entrar.html')
+            if tenant_tiene_fichaje_operario_module():
+                activar_fichajes_alta()
+        except Exception:
+            current_app.logger.exception('No se pudo activar fichaje al abrir login (tour)')
+    return redirect(url_for('auth.login'))
 
 
 @operarios_bp.route('/salir')
 def salir():
     logout_user()
     flash(translate('Sesión cerrada'), 'info')
-    return redirect(url_for('operarios.entrar'))
+    return redirect(url_for('auth.login'))
 
 
 @operarios_bp.route('/')
 def inicio():
-    if not fichaje_operario_activo():
-        abort(404)
-
-    from app.services.pin_auth_service import debe_cambiar_pin
-    if debe_cambiar_pin(current_user):
-        return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
-
-    contexto = estado_para_pantalla(current_user)
-    from flask import session as flask_session
-    force_oficina = bool(flask_session.get('tour_fichar_oficina'))
-    obra_preselect_id = None
-    if force_oficina:
-        from app.services.oficina_obra_service import buscar_obra_oficina
-        of = buscar_obra_oficina()
-        if of:
-            obra_preselect_id = of.id
-    contexto['tour_force_oficina'] = force_oficina
-    contexto['obra_preselect_id'] = obra_preselect_id
-    return render_template('operario/fichar.html', **contexto)
+    return redirect(url_for('empleado.fichar'))
 
 
 @operarios_bp.route('/definir-pin', methods=['GET', 'POST'])
@@ -263,12 +170,12 @@ def definir_pin():
 
     if not getattr(g, 'current_tenant', None):
         flash(translate('Accede desde la URL de tu empresa.'), 'warning')
-        return redirect(url_for('operarios.entrar'))
+        return redirect(url_for('auth.login'))
 
     token = (request.values.get('t') or '').strip()
     if not token:
         flash(translate('El enlace para definir el PIN no es válido.'), 'danger')
-        return redirect(url_for('operarios.entrar'))
+        return redirect(url_for('auth.login'))
 
     # Validación temprana en GET para mostrar error claro si el token caducó.
     if request.method == 'GET':
@@ -276,7 +183,7 @@ def definir_pin():
             leer_token_definir_pin(token, g.current_tenant)
         except PinAuthError as exc:
             flash(str(exc), 'danger')
-            return redirect(url_for('operarios.entrar'))
+            return redirect(url_for('auth.login'))
 
     if request.method == 'POST':
         try:
@@ -291,7 +198,7 @@ def definir_pin():
                 logout_user()
             login_user(user, remember=True)
             flash(translate('PIN guardado. Ya puedes fichar.'), 'success')
-            return redirect(url_for('operarios.inicio'))
+            return redirect(url_for('empleado.fichar'))
         except PinAuthError as exc:
             db.session.rollback()
             flash(str(exc), 'danger')
@@ -306,7 +213,8 @@ def definir_pin():
 @operarios_bp.route('/pin', methods=['GET', 'POST'])
 @limiter.limit('20 per minute; 60 per hour', methods=['POST'])
 def cambiar_pin():
-    """Cambio de PIN (voluntario) o primer cambio obligatorio tras PIN generado."""
+    if request.method == 'GET':
+        return redirect(url_for('empleado.cambiar_pin', obligatorio=request.args.get('obligatorio')))
     from app.services.pin_auth_service import (
         PinAuthError,
         debe_cambiar_pin,
@@ -337,7 +245,7 @@ def cambiar_pin():
                 )
             db.session.commit()
             flash(translate('PIN actualizado.'), 'success')
-            return redirect(url_for('operarios.inicio'))
+            return redirect(url_for('empleado.fichar'))
         except PinAuthError as exc:
             db.session.rollback()
             flash(str(exc), 'danger')
@@ -352,7 +260,8 @@ def cambiar_pin():
 @operarios_bp.route('/ausencias', methods=['GET', 'POST'])
 @limiter.limit('20 per minute; 60 per hour', methods=['POST'])
 def ausencias():
-    """Solicitar vacaciones/permisos y ver el estado (pendiente → aprobación oficina)."""
+    if request.method == 'GET':
+        return redirect(url_for('empleado.ausencias'))
     from app.models import LEAVE_STATUS_PENDIENTE, LEAVE_SOURCE_MANUAL
     from app.services.leave_service import (
         delete_manual_leave,
@@ -366,7 +275,7 @@ def ausencias():
         need = 'w' if request.method == 'POST' else 'r'
         if not user_can(current_user, 'operario_ausencias', need):
             flash(translate('No tienes permiso para gestionar ausencias.'), 'warning')
-            return redirect(url_for('operarios.inicio'))
+            return redirect(url_for('empleado.fichar'))
 
     if request.method == 'POST':
         accion = (request.form.get('accion') or 'solicitar').strip()
@@ -535,17 +444,7 @@ def _rango_solicitado():
 
 @operarios_bp.route('/registros')
 def registros():
-    """
-    El trabajador consultando sus propios fichajes.
-
-    Esto no depende de que la empresa active nada: el derecho a consultar el
-    registro propio es del trabajador, no una función que se contrate.
-    """
-    desde, hasta = _rango_solicitado()
-    return render_template(
-        'operario/registros.html',
-        **historial(current_user.id, desde, hasta),
-    )
+    return redirect(url_for('empleado.fichajes'))
 
 
 @operarios_bp.route('/registros.csv')
@@ -602,8 +501,8 @@ def manifest():
         'name': f'Fichaje · {nombre}',
         'short_name': 'Fichaje',
         'description': f'Registro de jornada de {nombre}',
-        'start_url': url_for('operarios.inicio'),
-        'scope': url_for('operarios.inicio'),
+        'start_url': url_for('empleado.fichar'),
+        'scope': '/',
         'display': 'standalone',
         'orientation': 'portrait',
         'background_color': '#0f172a',

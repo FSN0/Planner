@@ -455,7 +455,7 @@
         );
       } catch (e) { /* ignore */ }
       if (fromMi) {
-        window.location.href = '/mi/tour-volver-admin?next=' + encodeURIComponent(dest);
+        window.location.href = '/auth/tour-volver-admin?next=' + encodeURIComponent(dest);
         return;
       }
       window.location.href = dest;
@@ -2953,7 +2953,7 @@
   function prefillLoginField(kind) {
     var st = loadState() || {};
     if (kind === 'dni') {
-      var dniEl = qs('[data-tour="fichar-dni"]') || qs('#dni');
+      var dniEl = qs('[data-tour="fichar-dni"]') || qs('#dni') || qs('#login');
       if (dniEl && st.createdDni) {
         dniEl.value = st.createdDni;
         try { dniEl.focus(); dniEl.select(); } catch (e) {}
@@ -2961,7 +2961,7 @@
       return dniEl;
     }
     if (kind === 'pin') {
-      var pinEl = qs('[data-tour="fichar-pin"]') || qs('#pin');
+      var pinEl = qs('[data-tour="fichar-pin"]') || qs('#pin') || qs('#secret');
       if (pinEl && st.createdPin) {
         pinEl.value = st.createdPin;
         try { pinEl.type = 'text'; } catch (e2) {}
@@ -2974,13 +2974,18 @@
     return null;
   }
 
+  function isAuthLoginTour() {
+    var q = window.location.search || '';
+    return pathIs(/\/auth\/login/) && (/[?&]tour=mi(?:&|$)/.test(q) || /[?&]chapter=/.test(q));
+  }
+
   function isMiEntrar() {
-    return pathIs(/\/mi\/entrar/);
+    return pathIs(/\/mi\/entrar/) || isAuthLoginTour();
   }
 
   function isMiFichar() {
     var p = (window.location.pathname || '').replace(/\/$/, '') || '';
-    return p === '/mi' || /\/mi$/.test(p);
+    return p === '/mi' || /\/mi$/.test(p) || pathIs(/\/fichaje\/fichar/);
   }
 
   function fichajeEstado() {
@@ -3100,7 +3105,7 @@
         when: function () { return pathIs(/\/admin\/create_user/); },
         selector: 'input[name="dni"]',
         title: 'DNI / NIE',
-        body: 'Con el DNI y el PIN entrará a fichar en el móvil (/mi).',
+        body: 'Con el DNI y el PIN entrará en la aplicación y podrá fichar.',
         progress: 'Alta · DNI',
         onShow: function (el) { if (el) el.focus(); },
       },
@@ -3167,7 +3172,7 @@
             return 'Ya está en plantilla. Te devolvemos a Primeros pasos para que sigas con el material o elijas el siguiente tutorial.';
           }
           if (isInicioTrack(st)) {
-            return 'Has completado tu primera persona. Ahora vamos a fichar con él: entrarás en /mi con su DNI y PIN, ficharás en tu obra y verás el resultado en el tablero.';
+            return 'Has completado tu primera persona. Ahora vamos a fichar con él: entrarás en la aplicación con su DNI y PIN, ficharás en tu obra y verás el resultado en el tablero.';
           }
           return 'Ya está en plantilla. Siguiente: una obra.';
         },
@@ -3582,9 +3587,9 @@
         title: 'Ahora vamos a fichar',
         body: function () {
           if (usesOwnObraFichaje()) {
-            return 'Has completado tu primera persona. Ahora vamos a fichar con él: entrarás en /mi con su DNI y PIN, ficharás en tu obra y verás el resultado en el tablero.';
+            return 'Has completado tu primera persona. Ahora vamos a fichar con él: entrarás en la aplicación con su DNI y PIN, ficharás en tu obra y verás el resultado en el tablero.';
           }
-          return 'Vas a entrar en /mi con el DNI y el PIN. Ficharás en <strong>Oficina</strong> y luego veremos auditoría.';
+          return 'Vas a entrar en la aplicación con el DNI y el PIN. Ficharás en <strong>Oficina</strong> y luego veremos auditoría.';
         },
         progress: 'Fichaje · empezar',
         primaryHref: '/admin/tour/fichaje-probar?chapter=fichaje&oficina=0',
@@ -3735,7 +3740,7 @@
           return 'Volvemos al tablero para ver el resultado del fichaje.';
         },
         progress: 'Fichaje · listo',
-        primaryHref: '/mi/tour-volver-admin',
+        primaryHref: '/auth/tour-volver-admin',
         primaryLabel: 'Ver en el tablero',
         onBeforeGo: function () {
           var st = loadState() || {};
@@ -6425,7 +6430,7 @@
         },
         manualTarget: true,
         title: 'Rol del sistema',
-        body: 'El <strong>rol</strong> define cómo entra cada persona. Un <strong>operario</strong> ficha con DNI + PIN. El resto de roles entran al panel con nombre (email) y contraseña.',
+        body: 'El <strong>rol</strong> define cómo entra cada persona. Un <strong>operario</strong> entra con DNI + PIN (mismo login que el resto) y ficha desde el menú Fichaje. Los demás roles usan correo y contraseña.',
         progress: 'Fichajes · rol',
         nextLabel: 'Siguiente: PIN →',
         onShow: function () {
@@ -6552,7 +6557,7 @@
         },
         modal: true,
         title: 'Prueba a fichar',
-        body: 'Vas a entrar en /mi con el DNI y el PIN. Ficharás en <strong>Oficina</strong> (la activamos para el tutorial): así el fichaje no está planificado y luego lo revisas en auditoría.',
+        body: 'Vas a entrar en la aplicación con el DNI y el PIN. Ficharás en <strong>Oficina</strong> (la activamos para el tutorial): así el fichaje no está planificado y luego lo revisas en auditoría.',
         progress: 'Fichajes · probar',
         primaryHref: '/admin/tour/fichaje-probar?chapter=fichajes',
         primaryLabel: 'Ir a fichar como operario',
@@ -6686,7 +6691,7 @@
         title: 'Fichaje hecho',
         body: 'Has fichado en <strong>Oficina</strong>. Primero lo miramos en el <strong>tablero</strong> y después en auditoría.',
         progress: 'Fichajes · puente',
-        primaryHref: '/mi/tour-volver-admin?next=' +
+        primaryHref: '/auth/tour-volver-admin?next=' +
           encodeURIComponent('/admin/obras_detailed?tour=fichajes&mode=solo'),
         primaryLabel: 'Ver en el tablero →',
         onBeforeGo: function () {

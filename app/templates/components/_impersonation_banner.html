@@ -1,0 +1,16 @@
+{% if impersonacion_activa %}
+<div class="alert alert-warning border-0 rounded-0 mb-0 text-center" data-impersonation-banner="1" style="background:#fde68a;color:#78350f;">
+  <strong>{{ _('Viendo como otro usuario:') }}</strong>
+  {{ _('estás en la sesión de') }}
+  <strong>{{ current_user.name }} {{ current_user.lastname }}</strong>.
+  {% if impersonador_label %}
+  <span class="d-none d-md-inline">({{ _('tu cuenta:') }} {{ impersonador_label }})</span>
+  {% endif %}
+  <form method="POST" action="{{ url_for('auth.stop_impersonate') }}" class="d-inline" style="margin-left:.5rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-sm btn-outline-dark">
+      {{ _('Volver a mi cuenta') }}
+    </button>
+  </form>
+</div>
+{% endif %}

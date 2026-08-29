@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/empleado_portal.css') }}?v=20260829a">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/universal_calendar.css') }}">
+{% block empleado_extra_css %}{% endblock %}
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact">
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <h1 class="page-toolbar-title">{% block empleado_title %}{{ _('Fichaje') }}{% endblock %}</h1>
+      </div>
+    </div>
+    {% block empleado_content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% block empleado_extra_js %}{% endblock %}
+{% endblock %}

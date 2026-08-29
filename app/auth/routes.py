@@ -25,8 +25,6 @@ from app.services.i18n_service import translate
 
 auth_bp = Blueprint('auth', __name__)
 
-LOGIN_BLOCKED_ROLES = (ROLE_OPERARIO,)
-
 
 @auth_bp.before_request
 def _enforce_auth_module_permissions():
@@ -35,21 +33,27 @@ def _enforce_auth_module_permissions():
 
 
 def _puede_login_web(user):
-    """
-    El operario solo entra al portal web si:
-    - el rol tiene permiso operario_web, y
-    - administración le activó web_access en su ficha.
-    El módulo de fichaje (/mi con DNI+PIN) NO desbloquea el login de oficina.
-    """
-    if user.role == ROLE_OPERARIO:
-        if not getattr(user, 'web_access', False):
-            return False
-        try:
-            from app.services.permission_service import user_can
-            return user_can(user, 'operario_web', 'r')
-        except Exception:
-            return False
-    return user.role not in LOGIN_BLOCKED_ROLES
+    """Cualquier perfil activo puede autenticarse; los permisos limitan qué ve."""
+    return bool(user and not getattr(user, 'is_deleted', False))
+
+
+def destino_portal_operario(user):
+    """Primera pantalla del operario: fichaje primero."""
+    from app.services.permission_service import user_can
+    from app.services.fichaje_operario_service import tenant_tiene_fichaje_operario_module
+    try:
+        if (
+            tenant_tiene_fichaje_operario_module()
+            and user_can(user, 'operario_fichaje', 'r')
+        ):
+            return url_for('empleado.fichar')
+        if user_can(user, 'operario_calendario', 'r'):
+            return url_for('empleado.calendario')
+        if user_can(user, 'operario_ausencias', 'r'):
+            return url_for('empleado.ausencias')
+    except Exception:
+        pass
+    return url_for('empleado.fichar')
 
 
 def _complete_login(user, remember, *, source, success_message=None):
@@ -88,11 +92,12 @@ def _login_page_context():
         fichaje_activo = fichaje_operario_activo()
     except Exception:
         pass
-    prefill = (request.args.get('email') or request.form.get('email') or '').strip()
+    prefill = (request.args.get('email') or request.form.get('login') or request.form.get('email') or '').strip()
     return {
         'tenant_name': g.current_tenant.nombre,
         'fichaje_activo': fichaje_activo,
         'prefill_email': prefill,
+        'prefill_login': prefill,
     }
 
 
@@ -116,14 +121,7 @@ def _destino_por_rol(user):
     if user.role in (ROLE_LABORAL, ROLE_RRHH):
         return url_for('admin.panel_laboral')
     if user.role == ROLE_OPERARIO:
-        if getattr(user, 'web_access', False):
-            try:
-                from app.services.permission_service import user_can
-                if user_can(user, 'operario_web', 'r'):
-                    return url_for('empleado.calendario')
-            except Exception:
-                pass
-        return None
+        return destino_portal_operario(user)
     return None
 
 
@@ -277,13 +275,31 @@ def login():
         return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
-        email = (request.form.get('email') or '').strip()
-        password = request.form.get('password') or ''
+        identifier = (request.form.get('login') or request.form.get('email') or '').strip()
+        secret = request.form.get('secret') or request.form.get('password') or ''
         remember = True if request.form.get('remember') == 'on' else False
 
-        user = User.query.filter_by(email=email).first()
+        from app.services.auth_login_service import (
+            identifier_looks_like_email,
+            login_with_dni_pin,
+            login_with_email_password,
+        )
+        from app.services.pin_auth_service import PinAuthError
 
-        if user and check_password_hash(user.password_hash, password):
+        user = None
+        login_error = None
+
+        try:
+            if identifier_looks_like_email(identifier):
+                user = login_with_email_password(identifier, secret)
+            else:
+                user = login_with_dni_pin(identifier, secret)
+        except PinAuthError as exc:
+            login_error = str(exc)
+        except ValueError as exc:
+            login_error = str(exc)
+
+        if user and not login_error:
             if not _puede_login_web(user):
                 from app.utils import register_log
                 register_log(
@@ -312,26 +328,38 @@ def login():
                 )
                 return render_template('login.html', **_login_page_context())
 
-            return _complete_login(user, remember, source='local')
+            from app.services.pin_auth_service import debe_cambiar_pin
+            source = 'pin' if not identifier_looks_like_email(identifier) else 'local'
+            if source == 'pin' and debe_cambiar_pin(user):
+                login_user(user, remember=remember)
+                session['tenant_id'] = g.current_tenant.id
+                flash(translate('Debes cambiar el PIN antes de continuar.'), 'warning')
+                return redirect(url_for('empleado.cambiar_pin', obligatorio=1))
 
+            return _complete_login(user, remember, source=source)
+
+        # Email no encontrado localmente → fallback Odoo (Soltec / tenants con auth externo)
+        email = identifier.lower() if identifier_looks_like_email(identifier) else ''
+        user = User.query.filter_by(email=email).first() if email else None
         external_result = None
         if (
             user
-            and password
+            and secret
+            and identifier_looks_like_email(identifier)
             and external_auth_enabled_for_tenant()
             and external_auth_allowed_for_user(user)
             and can_attempt_external_auth(email, request.remote_addr, g.current_tenant.id)
         ):
             external_result = verify_external_password(
                 email,
-                password,
+                secret,
                 tenant_id=g.current_tenant.id,
             )
             if external_result.decision != 'skipped':
                 log_external_auth_result(user, external_result, request.remote_addr)
 
             if external_result.is_valid:
-                user.password_hash = generate_password_hash(password)
+                user.password_hash = generate_password_hash(secret)
                 user.auth_source_last = 'odoo'
                 user.odoo_verified_at = _utc_now()
                 db.session.add(user)
@@ -385,14 +413,14 @@ def login():
                     f"IP: {request.remote_addr or 'Desconocida'}"
                 )
             else:
-                detail = f"Contraseña incorrecta. IP: {request.remote_addr or 'Desconocida'}"
+                detail = f"Credenciales incorrectas. IP: {request.remote_addr or 'Desconocida'}"
             register_log(
                 user_id=user.id,
                 category='accesos',
                 action='Intento fallido de login',
                 detail=detail,
             )
-        flash(translate('Credenciales inválidas'), 'danger')
+        flash(login_error or translate('Credenciales inválidas'), 'danger')
 
     return render_template('login.html', **_login_page_context())
 
@@ -552,11 +580,52 @@ def sso_portal():
     return redirect(destino)
 
 
+@auth_bp.route('/tour-volver-admin')
+def tour_volver_admin():
+    """Tras probar el fichaje en la guía: vuelve al admin (alias sin /mi)."""
+    return redirect(url_for('operarios.tour_volver_admin', **request.args))
+
+
+@auth_bp.route('/stop-impersonate', methods=['POST'])
+@login_required
+def stop_impersonate():
+    """Volver a la cuenta del administrador tras impersonar."""
+    from app.services.impersonation_service import detener_impersonacion, impersonacion_activa
+    from app.utils import register_log
+
+    if not impersonacion_activa():
+        flash(translate('No hay una sesión suplantada activa.'), 'info')
+        return redirect(url_for('admin.panel'))
+
+    suplantado = current_user
+    admin = detener_impersonacion()
+    if not admin:
+        flash(translate('No se pudo restaurar la sesión del administrador.'), 'danger')
+        return redirect(url_for('auth.login'))
+
+    register_log(
+        user_id=admin.id,
+        category='accesos',
+        action='Impersonación fin',
+        detail=f"Volvió desde {suplantado.name} {suplantado.lastname} ({suplantado.email}).",
+        target_user_id=suplantado.id,
+    )
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    flash(translate('Has vuelto a tu cuenta de administrador.'), 'success')
+    return redirect(url_for('admin.personal'))
+
+
 @auth_bp.route('/logout')
 @login_required
 def logout():
     logout_user()
     session.pop('superadmin_impersonation', None)
+    session.pop('impersonator_user_id', None)
+    session.pop('impersonated_user_id', None)
     flash(translate('Sesión cerrada'), 'info')
     return redirect(url_for('auth.login'))
 

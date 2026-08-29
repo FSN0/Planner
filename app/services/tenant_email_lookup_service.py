@@ -1,13 +1,12 @@
 # app/services/tenant_email_lookup_service.py
 #
 # Resuelve «este correo → ¿en qué empresas puede entrar?».
-# Solo cuenta usuarios con acceso web (no operarios solo-PIN).
 
 from sqlalchemy import create_engine, text
 
 from flask import current_app
 
-from app.models import ROLE_OPERARIO, Tenant
+from app.models import Tenant
 
 
 def _engine():
@@ -16,8 +15,7 @@ def _engine():
 
 
 def _puede_login_web_row(role, web_access):
-    if role == ROLE_OPERARIO:
-        return bool(web_access)
+    del role, web_access
     return True
 
 

@@ -62,11 +62,21 @@ _JEFE_RULES = (
 )
 
 _EMPLEADO_RULES = (
+    ('/fichaje/ausencias', 'operario_ausencias', 'r', {'POST': 'w'}),
+    ('/fichaje/calendario', 'operario_calendario', 'r', {}),
+    ('/fichaje/fichar', 'operario_fichaje', 'r', {}),
+    ('/fichaje/fichajes', 'operario_fichaje', 'r', {}),
+    ('/fichaje/pin', 'operario_fichaje', 'r', {'POST': 'w'}),
     ('/empleado/ausencias', 'operario_ausencias', 'r', {'POST': 'w'}),
     ('/empleado/calendario', 'operario_calendario', 'r', {}),
     ('/empleado/fichar', 'operario_fichaje', 'r', {}),
     ('/empleado/fichajes', 'operario_fichaje', 'r', {}),
-    ('/empleado', 'operario_web', 'r', {}),
+)
+
+_PORTAL_JORNADA_MODULES = (
+    ('operario_fichaje', 'r'),
+    ('operario_calendario', 'r'),
+    ('operario_ausencias', 'r'),
 )
 
 # Auth: atajos SSO salientes (defensa en profundidad; la ruta también chequea user_can)
@@ -179,6 +189,13 @@ def _deny(redirect_to='main.dashboard', action=None):
             'permission_denied': True,
         }), 403
     flash(msg, 'danger')
+    try:
+        from app.services.impersonation_service import impersonacion_activa
+        if impersonacion_activa():
+            from app.auth.routes import destino_portal_operario
+            return redirect(destino_portal_operario(current_user))
+    except Exception:
+        pass
     back = _safe_referrer_redirect()
     if back:
         return redirect(back)
@@ -221,6 +238,11 @@ def enforce_jefe_permissions():
 
 
 def enforce_empleado_permissions():
+    path = (request.path or '').rstrip('/') or '/'
+    if path in ('/fichaje', '/empleado'):
+        if any(user_can(current_user, mod, act) for mod, act in _PORTAL_JORNADA_MODULES):
+            return None
+        return _deny('auth.login', action='r')
     return enforce_rules(_EMPLEADO_RULES, redirect_to='auth.login')
 
 

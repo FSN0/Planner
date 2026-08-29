@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
         id: workerId,
         mode: 'obras',
         entityName: {{ (worker.name ~ ' ' ~ worker.lastname)|tojson }},
-        showFichajes: true,
+        showFichajes: {{ puede_ver_estado_fichaje|tojson }},
         hideTitle: true,
         readonly: {{ (not can_edit_calendar)|tojson }}
     });

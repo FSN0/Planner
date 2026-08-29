@@ -156,10 +156,9 @@ IMPORT_WIZARD_CONFIG = {
 def _bloquear_operario_en_admin():
     """El operario no entra al panel de oficina (ni por PIN ni por portal web)."""
     if current_user.is_authenticated and current_user.role == ROLE_OPERARIO:
+        from app.auth.routes import destino_portal_operario
         flash(translate('Tu perfil no tiene acceso al panel de administración.'), 'warning')
-        if getattr(current_user, 'web_access', False):
-            return redirect(url_for('empleado.inicio'))
-        return redirect(url_for('operarios.inicio'))
+        return redirect(destino_portal_operario(current_user))
 
 
 _RETURN_TO_ENDPOINTS = {
@@ -829,6 +828,48 @@ def resolver_solicitud_vehiculo(solicitud_id):
     return redirect(url_for('admin.solicitudes_list', seccion='vehiculos', estado=request.args.get('estado', 'todas')))
 
     
+@admin_bp.route('/impersonate/<int:user_id>', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def impersonate_user(user_id):
+    """Entrar en la app como otro usuario (solo administrador)."""
+    from app.auth.routes import _destino_por_rol
+    from app.services.impersonation_service import iniciar_impersonacion
+    from app.utils import register_log
+
+    target = User.query.filter_by(id=user_id, is_deleted=False).first_or_404()
+    actor_id = current_user.id
+    ok, err = iniciar_impersonacion(current_user, target)
+    if not ok:
+        flash(translate(err or 'No se pudo entrar como ese usuario.'), 'danger')
+        return redirect(url_for('admin.personal'))
+
+    register_log(
+        user_id=actor_id,
+        category='accesos',
+        action='Impersonación inicio',
+        detail=f"Entró como {target.name} {target.lastname} ({target.email}).",
+        target_user_id=target.id,
+    )
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    flash(
+        translate(
+            'Estás viendo la aplicación como {name}.',
+            name=f'{target.name} {target.lastname}',
+        ),
+        'warning',
+    )
+    destino = _destino_por_rol(target)
+    from flask import make_response
+    from app.services.impersonation_service import clear_remember_cookie
+    resp = make_response(redirect(destino or url_for('empleado.inicio')))
+    return clear_remember_cookie(resp)
+
+
 @admin_bp.route("/worker_panel/<int:user_id>", methods=["GET"])
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
@@ -1971,11 +2012,13 @@ def edit_operario(user_id):
                 request.form.get("especialidad") or ""
             ).strip() or None
 
-            # Operario: acceso = DNI + PIN (sin login web). Oficina: siempre web.
-            if nuevo_rol == ROLE_OPERARIO:
-                user.web_access = False
-            else:
-                user.web_access = True
+            # Acceso web gobernado por auth_mode + permisos.
+            from app.services.auth_login_service import normalize_auth_mode
+            user.auth_mode = normalize_auth_mode(
+                request.form.get('auth_mode'),
+                role=nuevo_rol,
+            )
+            user.web_access = True
 
             if was_active and not nuevo_active:
                 dar_de_baja(user, actor_id=current_user.id, motivo='manual', commit=False)
@@ -2260,10 +2303,10 @@ def api_tour_fichaje_demo():
 @roles_required(ROLE_ADMIN)
 def tour_fichaje_probar():
     """
-    Cierra la sesión de oficina y abre /mi/entrar para que el admin
+    Cierra la sesión de oficina y abre el login para que el admin
     pruebe el fichaje como el operario creado en la guía.
     Guarda el id del admin para poder volver al tablero después.
-    Activa la obra «Oficina» y la deja preseleccionada en /mi (tutorial).
+    Activa la obra «Oficina» y la deja preseleccionada en Fichaje (tutorial).
     """
     from flask import session
     from flask_login import logout_user
@@ -2280,7 +2323,7 @@ def tour_fichaje_probar():
 
     if not tenant_tiene_fichaje_operario_module():
         flash(
-            translate('Este espacio no tiene fichaje de operarios. No se puede abrir /mi.'),
+            translate('Este espacio no tiene fichaje de operarios. No se puede probar el fichaje.'),
             'warning',
         )
         return redirect(url_for('admin.obras_detailed'))
@@ -2317,7 +2360,7 @@ def tour_fichaje_probar():
     session['tour_chapter'] = chapter
     logout_user()
     # tour=mi + chapter: no reinicia la guía ni cae al tutorial seed viejo.
-    return redirect(url_for('operarios.entrar', tour='mi', chapter=chapter))
+    return redirect(url_for('auth.login', tour='mi', chapter=chapter))
 
 
 @admin_bp.route("/create_obra", methods=["GET", "POST"])
@@ -2772,7 +2815,7 @@ def reset_pin(user_id):
             flash(
                 translate(
                     'PIN provisional para {name}: {pin}. '
-                    'Debe cambiarlo en el primer acceso a /mi (o con el enlace del correo).'
+                    'Debe cambiarlo en el primer acceso (o con el enlace del correo).'
                     '{mail}',
                     name=f'{user.name} {user.lastname}',
                     pin=pin_plano,
@@ -2913,7 +2956,7 @@ def create_user():
                 ).strip().lower()
                 email = email_opt if _email_parece_real_form(email_opt) else _email_placeholder_desde_dni(dni)
             password_hash = generate_password_hash(secrets.token_urlsafe(32))
-            web_access = False
+            web_access = True
         else:
             email = (
                 request.form.get("email_office")
@@ -2930,6 +2973,12 @@ def create_user():
             password_hash = generate_password_hash(password)
             web_access = True
             pin_mode = "none"
+
+        from app.services.auth_login_service import default_auth_mode_for_role, normalize_auth_mode
+        auth_mode = normalize_auth_mode(
+            request.form.get('auth_mode'),
+            role=role,
+        ) if request.form.get('auth_mode') else default_auth_mode_for_role(role)
 
         if User.query.filter_by(email=email).first():
             flash(translate("Error: El email {email} ya está registrado.", email=email), "danger")
@@ -2956,6 +3005,7 @@ def create_user():
             active=active,
             email_verified=True,
             web_access=web_access,
+            auth_mode=auth_mode,
             receive_emails=receive_emails,
             categoria_profesional=categoria,
             especialidad=especialidad,
@@ -2986,7 +3036,7 @@ def create_user():
                 asignar_pin_explicito(
                     new_user, pin_form, notify=False, actor=current_user
                 )
-                pin_msg = translate(" PIN asignado (DNI + PIN en /mi).")
+                pin_msg = translate(" PIN asignado (DNI + PIN en la aplicación).")
         except PinAuthError as exc:
             db.session.rollback()
             flash(translate(str(exc)), "danger")
@@ -3657,7 +3707,7 @@ def permisos_roles(role=None):
         MODULE_WRITE_HINTS,
         PERMISSION_ROLES,
         SSO_READ_ONLY_MODULES,
-        visible_permission_modules,
+        modules_for_role,
     )
     from app.services.permission_service import (
         ensure_role_permissions,
@@ -3670,7 +3720,7 @@ def permisos_roles(role=None):
     ensure_role_permissions()
     valid = {r for r, _ in PERMISSION_ROLES}
     active = role if role in valid else 'admin'
-    modules = visible_permission_modules()
+    modules = modules_for_role(active)
     visible_keys = {m for m, _, _ in modules}
     return render_template(
         'admin_permisos.html',
@@ -3691,7 +3741,7 @@ def permisos_roles(role=None):
 @admin_bp.route('/permisos/guardar', methods=['POST'])
 @login_required
 def permisos_roles_save():
-    from app.services.permission_catalog import PERMISSION_ROLES
+    from app.services.permission_catalog import PERMISSION_ROLES, modules_for_role
     from app.services.permission_service import (
         ensure_role_permissions,
         save_role_matrix,
@@ -3710,7 +3760,8 @@ def permisos_roles_save():
         flash(translate('Rol no válido.'), 'danger')
         return redirect(url_for('admin.permisos_roles'))
     try:
-        save_role_matrix(role, request.form)
+        role_modules = [m for m, _, _ in modules_for_role(role)]
+        save_role_matrix(role, request.form, modules=role_modules)
     except Exception as exc:
         db.session.rollback()
         flash(translate('No se pudieron guardar los permisos: {error}', error=exc), 'danger')
@@ -4615,7 +4666,7 @@ def registro_jornada():
     try:
         from app.services.signup_service import url_acceso_tenant
         if getattr(g, 'current_tenant', None):
-            url_fichaje_mi = url_acceso_tenant(g.current_tenant, path='/mi')
+            url_fichaje_mi = url_acceso_tenant(g.current_tenant, path='/auth/login')
     except Exception:
         url_fichaje_mi = None
 

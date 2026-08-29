@@ -112,10 +112,6 @@ document.addEventListener('DOMContentLoaded', function() {
         var dayEnd = day.clone().add(1, 'day');
         var events = window.allEventsMaster || [];
         var groups = window.allGroupsMaster || [];
-        var groupTitle = {};
-        groups.forEach(function (g) {
-            groupTitle[String(g.id)] = g.title || g.codigo || ('#' + g.id);
-        });
 
         var byGroup = {};
         events.forEach(function (ev) {
@@ -130,16 +126,26 @@ document.addEventListener('DOMContentLoaded', function() {
             byGroup[gid].push(ev);
         });
 
-        var ids = Object.keys(byGroup);
-        if (!ids.length) {
+        if (!groups.length) {
             list.innerHTML = '<p class="pmd-empty">' + t('Nadie asignado este día con los filtros actuales.') + '</p>';
             return;
         }
-        ids.sort(function (a, b) {
-            return (groupTitle[a] || a).localeCompare(groupTitle[b] || b);
+
+        var sortedGroups = groups.slice().sort(function (a, b) {
+            var aCount = (byGroup[String(a.id)] || []).length;
+            var bCount = (byGroup[String(b.id)] || []).length;
+            if (aCount > 0 && bCount === 0) return -1;
+            if (aCount === 0 && bCount > 0) return 1;
+            if (aCount !== bCount) return bCount - aCount;
+            var ta = a.title || a.codigo || String(a.id);
+            var tb = b.title || b.codigo || String(b.id);
+            return ta.localeCompare(tb);
         });
-        list.innerHTML = ids.map(function (gid) {
-            var people = byGroup[gid].map(function (ev) {
+
+        list.innerHTML = sortedGroups.map(function (g) {
+            var gid = String(g.id);
+            var evs = byGroup[gid] || [];
+            var people = evs.map(function (ev) {
                 var name = ev.title || ('#' + (ev.worker_id || ''));
                 var ds = moment(ev.start).format('DD/MM');
                 var de = moment(ev.end).subtract(1, 'day');
@@ -152,9 +158,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     '</span><span class="pmd-person-dates">' + pmdEsc(dates) + '</span></div>';
             }).join('');
             var obraHref = '/admin/obra_panel/' + encodeURIComponent(gid);
-            return '<article class="pmd-obra"><div class="pmd-obra-title"><a href="' + obraHref + '">' +
-                pmdEsc(groupTitle[gid] || gid) + '</a><span class="pmd-obra-count">' +
-                byGroup[gid].length + '</span></div>' + people + '</article>';
+            var obraTitle = pmdEsc(g.title || g.codigo || gid);
+            var assignBtn = '';
+            if (window.PLANIFICADOR_CAN_EDIT) {
+                assignBtn = '<button type="button" class="pmd-btn-assign" data-obra-id="' + pmdEsc(gid) +
+                    '" data-obra-name="' + obraTitle + '" title="' + pmdEsc(t('Asignar operario')) +
+                    '" aria-label="' + pmdEsc(t('Asignar operario')) + '"><i class="fas fa-plus"></i></button>';
+            }
+            var emptyNote = evs.length ? '' : '<p class="pmd-empty-inline">' + t('Nadie asignado este día.') + '</p>';
+            return '<article class="pmd-obra' + (evs.length ? '' : ' pmd-obra--empty') + '"><div class="pmd-obra-title"><a href="' +
+                obraHref + '">' + obraTitle + '</a><span class="pmd-obra-title-actions">' + assignBtn +
+                '<span class="pmd-obra-count">' + evs.length + '</span></span></div>' +
+                (people || emptyNote) + '</article>';
         }).join('');
     };
 

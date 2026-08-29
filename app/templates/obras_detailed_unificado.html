@@ -7,7 +7,8 @@
   {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260828d">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260829b">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260829a">
 {% endblock %}
 
 {% block wrapper %}
@@ -92,6 +93,9 @@
 {# --- MODALES --- #}
 {% include "components/_modal_assignment.html" %}
 {% include "components/_modal_request_generic.html" %}
+{% if view_mode|default('') != 'readonly' %}
+{% include "components/_mobile_assign_sheet.html" %}
+{% endif %}
 
 <div class="modal fade" id="modalEditStaff" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
@@ -247,6 +251,9 @@
         window.KANBAN_READONLY = {{ 'true' if view_mode == 'readonly' else 'false' }};
     </script>
   <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260819b"></script>
+  {% if view_mode|default('') != 'readonly' %}
+  <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260829a"></script>
+  {% endif %}
   
   {% if tenant_has_valoraciones %}
   <script>

@@ -889,4 +889,13 @@ body.layout-admin #quickCalendarModal .modal-header .close { color: #fff; opacit
         font-size: 0.85rem;
         padding: 1.5rem 0.5rem;
     }
+    .pmd-empty-inline {
+        margin: 0.35rem 0 0;
+        font-size: 0.78rem;
+        color: #94a3b8;
+        font-style: italic;
+    }
+    .pmd-obra--empty {
+        opacity: 0.92;
+    }
 }

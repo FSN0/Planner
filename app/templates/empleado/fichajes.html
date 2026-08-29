@@ -1,8 +1,8 @@
-{% extends "empleado/base.html" %}
-{% block title %}{{ _('Mis fichajes') }}{% endblock %}
+{% extends "empleado/_shell.html" %}
+{% block empleado_title %}{{ _('Mis horas') }}{% endblock %}
 
-{% block content %}
-<section class="empleado-card">
+{% block empleado_content %}
+<section class="admin-panel">
   <h2>{{ _('Mis fichajes') }}</h2>
   <p class="empleado-muted mb-3">
     {{ _('Del') }} {{ desde.strftime('%d/%m/%Y') }} {{ _('al') }} {{ hasta.strftime('%d/%m/%Y') }}

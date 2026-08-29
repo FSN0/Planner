@@ -1,9 +1,91 @@
-{% extends 'empleado/base.html' %}
-{% block title %}{{ _('Fichar') }}{% endblock %}
+{% extends 'empleado/_shell.html' %}
+{% block empleado_title %}{{ _('Fichaje') }}{% endblock %}
 
-{% block extra_css %}
+{% block empleado_extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/operario.css') }}">
 <style>
+  /* Portal escritorio: tema claro legible (operario.css es oscuro para móvil/PWA) */
+  .empleado-fichar-wrap .fichaje {
+    --fondo: #f8fafc;
+    --superficie: #ffffff;
+    --superficie-alta: #f1f5f9;
+    --borde: #cbd5e1;
+    --texto: #0f172a;
+    --texto-suave: #475569;
+    color: var(--texto);
+  }
+  .empleado-fichar-wrap .reloj__hora {
+    color: #0f172a;
+    font-weight: 300;
+  }
+  .empleado-fichar-wrap .reloj__fecha {
+    color: #64748b;
+  }
+  .empleado-fichar-wrap .estado {
+    background: #f8fafc;
+    border-width: 2px;
+    border-style: solid;
+    border-color: #cbd5e1;
+  }
+  .empleado-fichar-wrap .estado--dentro {
+    background: #f0fdf4;
+    border-color: #22c55e;
+  }
+  .empleado-fichar-wrap .estado--pausa {
+    background: #fffbeb;
+    border-color: #f59e0b;
+  }
+  .empleado-fichar-wrap .estado__etiqueta {
+    color: #166534;
+    font-weight: 700;
+  }
+  .empleado-fichar-wrap .estado--pausa .estado__etiqueta {
+    color: #b45309;
+  }
+  .empleado-fichar-wrap .estado__obra {
+    color: #0f172a;
+    font-size: 1.15rem;
+  }
+  .empleado-fichar-wrap .estado__acumulado {
+    color: #475569;
+  }
+  .empleado-fichar-wrap .estado__acumulado strong {
+    color: #0f172a;
+  }
+  .empleado-fichar-wrap .jornada__titulo {
+    color: #64748b;
+  }
+  .empleado-fichar-wrap .jornada__item {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left-width: 4px;
+    color: #0f172a;
+  }
+  .empleado-fichar-wrap .jornada__hora {
+    color: #0f172a;
+    font-weight: 700;
+  }
+  .empleado-fichar-wrap .jornada__tipo {
+    color: #334155;
+    font-weight: 500;
+  }
+  .empleado-fichar-wrap .jornada__vacio {
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px dashed #cbd5e1;
+  }
+  .empleado-fichar-wrap .campo__etiqueta,
+  .empleado-fichar-wrap .campo__control {
+    color: #0f172a;
+    background: #fff;
+    border-color: #cbd5e1;
+  }
+  .empleado-fichar-wrap .mensaje {
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
   /* Adaptación escritorio: el panel de fichaje dentro del shell empleado */
   .empleado-fichar-wrap {
     max-width: 420px;
@@ -17,7 +99,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block empleado_content %}
 {% set dias_semana = [_('Lunes'), _('Martes'), _('Miércoles'), _('Jueves'), _('Viernes'), _('Sábado'), _('Domingo')] %}
 {% set meses = [_('enero'), _('febrero'), _('marzo'), _('abril'), _('mayo'), _('junio'), _('julio'),
                 _('agosto'), _('septiembre'), _('octubre'), _('noviembre'), _('diciembre')] %}
@@ -56,8 +138,9 @@
     <div class="mensaje" id="mensaje" role="status" aria-live="polite" hidden></div>
 
     {% if estado == 'fuera' %}
-        <div class="campo">
+        <div class="empleado-obra-picker campo">
             <label class="campo__etiqueta" for="obra">{{ _('¿Dónde vas a trabajar?') }}</label>
+            <p class="campo__ayuda">{{ _('Elige la obra de hoy. Si no aparece la tuya, busca en «Otras obras».') }}</p>
             <select class="campo__control" id="obra" name="obra">
                 {% if not obras_planificadas and not otras_obras %}
                     <option value="">{{ _('No hay obras disponibles') }}</option>
@@ -121,6 +204,6 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block empleado_extra_js %}
 <script src="{{ url_for('static', filename='js/operario-fichaje.js') }}"></script>
 {% endblock %}

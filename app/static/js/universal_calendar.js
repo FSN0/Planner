@@ -14,6 +14,7 @@ class UniversalCalendarManager {
         this.callbacks = config.callbacks || {};
         this.showFichajes = config.showFichajes || false;
         this.readonly = config.readonly || false;
+        this.selfService = config.selfService || false;
         this.partialSelectionMode = config.partialSelectionMode || false;
         this.compact = config.compact || false;
         this.embedded = config.embedded || false;
@@ -29,6 +30,11 @@ class UniversalCalendarManager {
         this.keydownHandler = null; 
         
         this.init();
+    }
+
+    /** En portal /fichaje no saltar a pantallas de administración. */
+    _adminUrl(url) {
+        return (this.selfService || !url) ? null : url;
     }
 
     init() {
@@ -351,12 +357,12 @@ class UniversalCalendarManager {
                     if (info.event.url) { window.open(info.event.url, '_blank'); return; }
 
                     let targetUrl = null;
-                    if (props.worker_id && _this.context !== 'worker') targetUrl = `/admin/worker_panel/${props.worker_id}`;
-                    else if (props.obra_id && _this.context !== 'obra') targetUrl = `/admin/obra_panel/${props.obra_id}`;
-                    else if (props.vehiculo_id && _this.context !== 'vehiculo') targetUrl = `/admin/vehicle_panel/${props.vehiculo_id}`;
+                    if (props.worker_id && _this.context !== 'worker') targetUrl = _this._adminUrl(`/admin/worker_panel/${props.worker_id}`);
+                    else if (props.obra_id && _this.context !== 'obra') targetUrl = _this._adminUrl(`/admin/obra_panel/${props.obra_id}`);
+                    else if (props.vehiculo_id && _this.context !== 'vehiculo') targetUrl = _this._adminUrl(`/admin/vehicle_panel/${props.vehiculo_id}`);
                     else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
-                        let cid = props.empresa_id || props.company_id; targetUrl = `/admin/company_panel/${cid}`;
-                    } else if (props.type === 'empresa_group' && _this.context !== 'empresa') targetUrl = `/admin/companies`; 
+                        let cid = props.empresa_id || props.company_id; targetUrl = _this._adminUrl(`/admin/company_panel/${cid}`);
+                    } else if (props.type === 'empresa_group' && _this.context !== 'empresa') targetUrl = _this._adminUrl('/admin/companies');
                     
                     if (targetUrl) window.open(targetUrl, '_blank');
                 });
@@ -443,24 +449,27 @@ class UniversalCalendarManager {
                 }
 
                 if (info.event.url) {
-                    if (_this.readonly) window.open(info.event.url, '_blank'); 
+                    if (_this.selfService && String(info.event.url).indexOf('/admin/') !== -1) {
+                        return;
+                    }
+                    if (_this.readonly) window.open(info.event.url, '_blank');
                     else window.location.href = info.event.url;
                     return;
                 }
 
                 let targetUrl = null;
-                if (props.worker_id && _this.context !== 'worker') targetUrl = `/admin/worker_panel/${props.worker_id}`;
-                else if (props.obra_id && _this.context !== 'obra') targetUrl = `/admin/obra_panel/${props.obra_id}`;
-                else if (props.vehiculo_id && _this.context !== 'vehiculo') targetUrl = `/admin/vehicle_panel/${props.vehiculo_id}`;
+                if (props.worker_id && _this.context !== 'worker') targetUrl = _this._adminUrl(`/admin/worker_panel/${props.worker_id}`);
+                else if (props.obra_id && _this.context !== 'obra') targetUrl = _this._adminUrl(`/admin/obra_panel/${props.obra_id}`);
+                else if (props.vehiculo_id && _this.context !== 'vehiculo') targetUrl = _this._adminUrl(`/admin/vehicle_panel/${props.vehiculo_id}`);
                 else if ((props.empresa_id || props.company_id) && _this.context !== 'empresa') {
                     let cid = props.empresa_id || props.company_id;
-                    targetUrl = `/admin/company_panel/${cid}`;
-                } 
-                else if (props.type === 'empresa_group' && _this.context !== 'empresa') targetUrl = `/admin/companies`; 
+                    targetUrl = _this._adminUrl(`/admin/company_panel/${cid}`);
+                }
+                else if (props.type === 'empresa_group' && _this.context !== 'empresa') targetUrl = _this._adminUrl('/admin/companies');
 
-                if (_this.readonly) {
-                    if (targetUrl) window.open(targetUrl, '_blank'); 
-                    return; 
+                if (_this.readonly || _this.selfService) {
+                    if (targetUrl && !_this.selfService) window.open(targetUrl, '_blank');
+                    return;
                 }
 
                 if (info.event.id === _this.ghostEventId) {
@@ -688,8 +697,8 @@ class UniversalCalendarManager {
                     btnView.onclick = () => {
                         if(props.obra_url) { window.open(props.obra_url, '_blank'); return;}
                         let targetUrl = null;
-                        if (this.context === 'worker') targetUrl = `/admin/obra_panel/${props.obra_id}`;
-                        else if (this.context === 'obra' || this.context === 'vehiculo') targetUrl = `/admin/worker_panel/${props.worker_id}`;
+                        if (this.context === 'worker') targetUrl = this._adminUrl(`/admin/obra_panel/${props.obra_id}`);
+                        else if (this.context === 'obra' || this.context === 'vehiculo') targetUrl = this._adminUrl(`/admin/worker_panel/${props.worker_id}`);
                         
                         if (targetUrl) window.open(targetUrl, '_blank');
                         else if(typeof Swal !== 'undefined') Swal.fire(t('Información'), t('No hay enlace directo disponible.'), 'info');

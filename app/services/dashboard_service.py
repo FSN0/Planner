@@ -75,10 +75,11 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     obra_ids = [o.id for o in obras]
     mapa_asig = {oid: [] for oid in obra_ids}
 
-    # Precargar fichajes del día para admin / laboral (estado final del día,
-    # misma precedencia que las pelotitas del calendario del trabajador).
+    # Precargar fichajes del día si el usuario puede ver auditoría (pelotitas).
+    from app.services.fichaje_operario_service import usuario_ve_estado_fichaje
+    ve_estado_fichaje = usuario_ve_estado_fichaje(user)
     fichajes_dict = {}
-    if user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
+    if ve_estado_fichaje:
         from collections import defaultdict
         from app.services.fichaje_estado_service import estado_fichaje_agregado
 
@@ -101,10 +102,9 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
             if a.obra_id in mapa_asig:
                 u = User.query.get(a.user_id)
                 if u: 
-                    # Inyectamos estado de fichaje al usuario (admin y laboral)
                     u.temp_estado_fichaje = (
                         fichajes_dict.get(u.id, 'Sin_Registro')
-                        if user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
+                        if ve_estado_fichaje
                         else None
                     )
                     mapa_asig[a.obra_id].append(u)
@@ -225,7 +225,7 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     
     for w in all_operarios:
         # Inyectamos estado de fichaje al usuario libre/ocupado
-        w.temp_estado_fichaje = fichajes_dict.get(w.id, 'Sin_Registro') if user.role == ROLE_ADMIN else None
+        w.temp_estado_fichaje = fichajes_dict.get(w.id, 'Sin_Registro') if ve_estado_fichaje else None
         
         if w.id not in busy_ids:
             free_workers.append(w)

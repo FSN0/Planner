@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, date
 import json
 
 from app import db
-from app.models import User, Obra, Asignacion, Solicitud, Festivo, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL
+from app.models import User, Obra, Asignacion, Solicitud, Festivo, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO
 from app.decorators import roles_required
 
 from app.services.assignment_service import process_assignment_action, process_unassign_action
@@ -246,6 +246,55 @@ def api_assign_worker():
     
     status_code = 200 if result.get('success') or result.get('conflict') else 400
     return jsonify(result), status_code
+
+
+@asignaciones_api.route("/v6/free_workers", methods=["GET"])
+@login_required
+def api_free_workers():
+    """Operarios libres en una fecha (picker móvil tablero/planificador)."""
+    if is_laboral(current_user):
+        return jsonify({"success": False, "message": translate("Modo solo lectura.")}), 403
+    if not can_write_assignments(current_user):
+        return jsonify({
+            "success": False,
+            "message": translate("No tienes permisos para asignar personal."),
+            "permission_denied": True,
+        }), 403
+
+    raw = (request.args.get("date") or "").strip()
+    try:
+        selected = datetime.strptime(raw, "%Y-%m-%d").date() if raw else date.today()
+    except ValueError:
+        return jsonify({"success": False, "message": translate("Fecha inválida.")}), 400
+
+    busy_ids = {
+        row.user_id
+        for row in Asignacion.query.filter_by(fecha=selected).all()
+    }
+    operarios = (
+        User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False)
+        .order_by(User.name, User.lastname)
+        .all()
+    )
+    workers = []
+    for w in operarios:
+        if w.id in busy_ids:
+            continue
+        comp = w.company_rel
+        workers.append({
+            "id": w.id,
+            "name": f"{w.name} {w.lastname}".strip(),
+            "company": (comp.code if comp and comp.code else "") or (
+                comp.nombre if comp else translate("Ext")
+            ),
+        })
+
+    return jsonify({
+        "success": True,
+        "date": selected.isoformat(),
+        "workers": workers,
+    })
+
 
 @asignaciones_api.route("/v6/unassign_worker", methods=["POST"])
 @login_required

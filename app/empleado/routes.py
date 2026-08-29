@@ -1,14 +1,14 @@
 # app/empleado/routes.py
 #
-# Portal web del operario (email/contraseña). Separado de /mi (DNI+PIN fichaje).
-# Sin valoraciones. Solo datos propios. Requiere User.web_access.
+# Portal de jornada del trabajador (/fichaje): fichar, calendario, ausencias.
+# Acceso por permisos operario_*; mismo shell lateral que el resto de la app.
 
 from datetime import timedelta
 
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app.decorators import roles_required
+from app import limiter
 from app.empleado import empleado_bp
 from app.models import (
     ROLE_OPERARIO,
@@ -19,125 +19,77 @@ from app.utils.timezone_utils import today_local
 from app.services.i18n_service import translate
 
 
+def _puede_portal_jornada() -> bool:
+    from app.services.permission_service import user_can
+    return any(
+        user_can(current_user, mod, 'r')
+        for mod in (
+            'operario_fichaje',
+            'operario_calendario',
+            'operario_ausencias',
+        )
+    )
+
+
 @empleado_bp.before_request
-def _solo_operario_con_web():
+def _portal_jornada_guard():
     if not current_user.is_authenticated:
         return None
-    if current_user.role != ROLE_OPERARIO:
-        flash(translate('Acceso no autorizado'), 'danger')
-        return redirect(url_for('auth.login'))
-    from app.services.permission_service import user_can
-    if not user_can(current_user, 'operario_web', 'r'):
-        flash(
-            translate(
-                'Tu perfil no tiene acceso al portal web. '
-                'Pide a administración que active el permiso de operario.'
-            ),
-            'warning',
-        )
-        try:
-            from app.services.fichaje_operario_service import fichaje_operario_activo
-            if fichaje_operario_activo() and user_can(current_user, 'operario_fichaje', 'r'):
-                return redirect(url_for('operarios.inicio'))
-        except Exception:
-            pass
-        return redirect(url_for('auth.login'))
-    if not getattr(current_user, 'web_access', False):
-        flash(
-            translate(
-                'Tu cuenta no tiene acceso a la plataforma web. '
-                'Usa el fichaje con DNI y PIN o pide acceso a administración.'
-            ),
-            'warning',
-        )
-        try:
-            from app.services.fichaje_operario_service import fichaje_operario_activo
-            if fichaje_operario_activo() and user_can(current_user, 'operario_fichaje', 'r'):
-                return redirect(url_for('operarios.inicio'))
-        except Exception:
-            pass
-        return redirect(url_for('auth.login'))
+    if not _puede_portal_jornada():
+        flash(translate('No tienes acceso a esta sección.'), 'warning')
+        return redirect(url_for('main.dashboard'))
     from app.services.permission_guard import enforce_empleado_permissions
     return enforce_empleado_permissions()
 
 
 @empleado_bp.route('/')
 @login_required
-@roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def inicio():
-    # Inicio = calendario si tiene permiso; si no, resumen semanal.
     from app.services.permission_service import user_can
+    from app.services.fichaje_operario_service import tenant_tiene_fichaje_operario_module
+    if (
+        tenant_tiene_fichaje_operario_module()
+        and user_can(current_user, 'operario_fichaje', 'r')
+    ):
+        return redirect(url_for('empleado.fichar'))
     if user_can(current_user, 'operario_calendario', 'r'):
         return redirect(url_for('empleado.calendario'))
-
-    hoy = today_local()
-    fin_semana = hoy + timedelta(days=6)
-
-    asignaciones = (
-        Asignacion.query.filter(
-            Asignacion.user_id == current_user.id,
-            Asignacion.fecha >= hoy,
-            Asignacion.fecha <= fin_semana,
-        )
-        .order_by(Asignacion.fecha)
-        .all()
-    )
-    obra_ids = {a.obra_id for a in asignaciones if a.obra_id}
-    obras = {
-        o.id: o for o in Obra.query.filter(Obra.id.in_(obra_ids)).all()
-    } if obra_ids else {}
-
-    hoy_asigs = [
-        {
-            'obra': obras.get(a.obra_id).nombre if obras.get(a.obra_id) else '—',
-            'codigo': getattr(obras.get(a.obra_id), 'codigo', None),
-        }
-        for a in asignaciones
-        if a.fecha == hoy
-    ]
-    semana = [
-        {
-            'fecha': a.fecha,
-            'obra': obras.get(a.obra_id).nombre if obras.get(a.obra_id) else '—',
-            'codigo': getattr(obras.get(a.obra_id), 'codigo', None),
-        }
-        for a in asignaciones
-    ]
-
-    return render_template(
-        'empleado/inicio.html',
-        hoy=hoy,
-        hoy_asigs=hoy_asigs,
-        semana=semana,
-        fin_semana=fin_semana,
-    )
+    if user_can(current_user, 'operario_ausencias', 'r'):
+        return redirect(url_for('empleado.ausencias'))
+    return redirect(url_for('empleado.fichar'))
 
 
 @empleado_bp.route('/calendario')
 @login_required
-@roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def calendario():
     return render_template('empleado/calendario.html', worker=current_user)
 
 
 @empleado_bp.route('/fichar')
 @login_required
-@roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def fichar():
-    """Panel de fichaje en escritorio (misma lógica que /mi)."""
     from app.services.fichaje_operario_service import (
         estado_para_pantalla,
         fichaje_operario_activo,
+        tenant_tiene_fichaje_operario_module,
     )
     from app.services.permission_service import user_can
     from app.services.pin_auth_service import debe_cambiar_pin
 
-    if not fichaje_operario_activo() or not user_can(current_user, 'operario_fichaje', 'r'):
+    if not tenant_tiene_fichaje_operario_module():
         abort(404)
+    if not user_can(current_user, 'operario_fichaje', 'r'):
+        abort(403)
+
+    if not fichaje_operario_activo():
+        return render_template(
+            'empleado/fichaje_desactivado.html',
+            puede_activar=current_user.role == 'admin',
+        )
 
     if debe_cambiar_pin(current_user):
         flash(translate('Debes cambiar el PIN antes de fichar.'), 'warning')
-        return redirect(url_for('operarios.cambiar_pin', obligatorio=1))
+        return redirect(url_for('empleado.cambiar_pin', obligatorio=1))
 
     contexto = estado_para_pantalla(current_user)
     return render_template('empleado/fichar.html', **contexto)
@@ -145,7 +97,6 @@ def fichar():
 
 @empleado_bp.route('/fichajes')
 @login_required
-@roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def fichajes():
     from app.services.fichaje_operario_service import (
         fichaje_operario_activo,
@@ -161,7 +112,6 @@ def fichajes():
 
 @empleado_bp.route('/ausencias', methods=['GET', 'POST'])
 @login_required
-@roles_required(ROLE_OPERARIO, redirect_to='auth.login')
 def ausencias():
     from app.services.leave_service import (
         delete_manual_leave,
@@ -209,3 +159,50 @@ def ausencias():
 
     items = leaves_del_usuario(current_user.id, limit=100)
     return render_template('empleado/ausencias.html', ausencias=items)
+
+
+@empleado_bp.route('/pin', methods=['GET', 'POST'])
+@login_required
+@limiter.limit('20 per minute; 60 per hour', methods=['POST'])
+def cambiar_pin():
+    from app.services.pin_auth_service import (
+        PinAuthError,
+        debe_cambiar_pin,
+        cambiar_pin_propio,
+        forzar_cambio_pin_primer_acceso,
+    )
+
+    obligatorio = bool(
+        request.args.get('obligatorio')
+        or request.form.get('obligatorio')
+        or debe_cambiar_pin(current_user)
+    )
+
+    if request.method == 'POST':
+        try:
+            if obligatorio and debe_cambiar_pin(current_user):
+                forzar_cambio_pin_primer_acceso(
+                    current_user,
+                    request.form.get('pin_nuevo'),
+                    request.form.get('pin_nuevo2'),
+                )
+            else:
+                cambiar_pin_propio(
+                    current_user,
+                    request.form.get('pin_actual'),
+                    request.form.get('pin_nuevo'),
+                    request.form.get('pin_nuevo2'),
+                )
+            from app import db
+            db.session.commit()
+            flash(translate('PIN actualizado.'), 'success')
+            return redirect(url_for('empleado.fichar'))
+        except PinAuthError as exc:
+            from app import db
+            db.session.rollback()
+            flash(str(exc), 'danger')
+
+    return render_template(
+        'empleado/cambiar_pin.html',
+        obligatorio=obligatorio,
+    )

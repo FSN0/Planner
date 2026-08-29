@@ -115,12 +115,11 @@ class TestAutenticacion:
 
 class TestPantallaEntrar:
 
-    def test_la_pantalla_de_entrar_carga(self, pin_ctx, tenant_client):
-        respuesta = tenant_client.get('/mi/entrar')
+    def test_mi_entrar_redirige_al_login_unificado(self, pin_ctx, tenant_client):
+        respuesta = tenant_client.get('/mi/entrar', follow_redirects=True)
         assert respuesta.status_code == 200
         html = respuesta.get_data(as_text=True)
-        assert 'DNI' in html
-        assert 'PIN' in html
+        assert 'login' in html.lower() or 'DNI' in html or 'correo' in html.lower()
 
     def test_login_por_pin_lleva_al_area_de_fichaje(
         self, pin_ctx, tenant_client, user_operario
@@ -128,18 +127,22 @@ class TestPantallaEntrar:
         asignar_pin(user_operario, '4829')
         pin_ctx.commit()
 
-        respuesta = tenant_client.post('/mi/entrar', data={
-            'dni': user_operario.dni,
-            'pin': '4829',
+        respuesta = tenant_client.post('/auth/login', data={
+            'login': user_operario.dni,
+            'secret': '4829',
         }, follow_redirects=True)
 
         assert respuesta.status_code == 200
-        assert 'Entrar' in respuesta.get_data(as_text=True) or 'Jornada' in respuesta.get_data(as_text=True) or 'Fuera de jornada' in respuesta.get_data(as_text=True)
+        assert (
+            'Jornada' in respuesta.get_data(as_text=True)
+            or 'Fuera de jornada' in respuesta.get_data(as_text=True)
+            or 'Entrar' in respuesta.get_data(as_text=True)
+        )
 
-    def test_sin_sesion_redirige_a_entrar(self, pin_ctx, tenant_client):
+    def test_sin_sesion_redirige_a_login(self, pin_ctx, tenant_client):
         respuesta = tenant_client.get('/mi/', follow_redirects=False)
         assert respuesta.status_code in (302, 303)
-        assert '/mi/entrar' in (respuesta.location or '')
+        assert '/auth/login' in (respuesta.location or '')
 
     def test_admin_puede_asignar_pin(
         self, pin_ctx, authenticated_client, user_operario

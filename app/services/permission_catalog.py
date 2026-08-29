@@ -23,6 +23,10 @@ PERMISSION_MODULES = (
     ('auditoria_vehiculos', 'Auditoría vehículos', 'Vehículos'),
     ('auditoria_fichajes', 'Auditoría fichajes', 'Jornada'),
     ('registro_jornada', 'Registro de jornada', 'Jornada'),
+    # Portal propio /fichaje (autogestión: cualquier rol puede tenerlos)
+    ('operario_fichaje', 'Fichar desde el portal propio', 'Jornada'),
+    ('operario_calendario', 'Mi calendario (portal propio)', 'Jornada'),
+    ('operario_ausencias', 'Mis ausencias (portal propio)', 'Jornada'),
     # Integraciones: hub + cada integración (permisos independientes entre sí)
     ('integraciones', 'Integraciones (hub)', 'Integraciones'),
     ('sync_odoo', 'Sincronización Odoo', 'Integraciones'),
@@ -32,12 +36,14 @@ PERMISSION_MODULES = (
     ('configuracion', 'Configuración', 'Sistema'),
     ('permisos', 'Permisos por rol', 'Sistema'),
     ('logs', 'Logs', 'Sistema'),
-    # Portales operario
-    ('operario_fichaje', 'Fichaje móvil (/mi)', 'Operario'),
-    ('operario_calendario', 'Calendario propio', 'Operario'),
-    ('operario_ausencias', 'Solicitar / ver ausencias', 'Operario'),
-    ('operario_web', 'Portal web empleado', 'Operario'),
 )
+
+# Módulos del portal /fichaje (autogestión). Solo se configuran en el rol Operario.
+PORTAL_JORNADA_MODULES = frozenset({
+    'operario_fichaje',
+    'operario_calendario',
+    'operario_ausencias',
+})
 
 # Compat: paneles detalle usados en código legado
 LEGACY_MODULE_ALIASES = {
@@ -98,7 +104,6 @@ _DEFAULTS = {
         'operario_fichaje': frozenset('rw'),
         'operario_calendario': frozenset('r'),
         'operario_ausencias': frozenset('rw'),
-        'operario_web': frozenset('r'),
     },
 }
 
@@ -150,6 +155,8 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
         return has_onboarding
     if module == 'operario_fichaje':
         return has_fichaje
+    if module in ('operario_calendario', 'operario_ausencias'):
+        return has_fichaje
     if module == 'auditoria_fichajes':
         return has_fichaje or has_odoo
     if module == 'registro_jornada':
@@ -168,6 +175,18 @@ def visible_permission_modules(tenant=None):
         row for row in PERMISSION_MODULES
         if _permission_row_enabled(row[0], tenant)
     )
+
+
+def modules_for_role(role: str, tenant=None):
+    """
+    Filas visibles al editar un rol concreto.
+    El portal /fichaje solo se configura en Operario; el resto de perfiles
+    no ven esos checkboxes (usan los módulos de oficina).
+    """
+    visible = visible_permission_modules(tenant)
+    if role == ROLE_OPERARIO:
+        return tuple(row for row in visible if row[0] in PORTAL_JORNADA_MODULES)
+    return tuple(row for row in visible if row[0] not in PORTAL_JORNADA_MODULES)
 
 
 def visible_permission_keys(tenant=None):
@@ -227,8 +246,9 @@ MODULE_WRITE_HINTS = {
     'logs': 'Marcar / gestionar avisos',
     'configuracion': 'Guardar ajustes del espacio',
     'permisos': 'Cambiar la matriz de permisos',
-    'operario_fichaje': 'Fichar en la PWA',
-    'operario_ausencias': 'Solicitar ausencias',
+    'operario_fichaje': 'Fichar entrada, pausas y salida',
+    'operario_calendario': 'Ver asignaciones propias en /fichaje',
+    'operario_ausencias': 'Solicitar y consultar ausencias propias',
 }
 
 MODULE_READ_HINTS = {

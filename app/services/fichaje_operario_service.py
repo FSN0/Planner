@@ -105,6 +105,16 @@ def tenant_muestra_auditoria_fichajes():
     return False
 
 
+def usuario_ve_estado_fichaje(user) -> bool:
+    """Pelotitas de fichaje en tablero, calendarios, etc."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if not tenant_muestra_auditoria_fichajes():
+        return False
+    from app.services.permission_service import user_can
+    return user_can(user, 'auditoria_fichajes', 'r')
+
+
 def activar_fichajes_alta():
     """Alta pública: Fichajes on, oficina on, ubicación no (default)."""
     from app.services.config_service import set_tenant_config

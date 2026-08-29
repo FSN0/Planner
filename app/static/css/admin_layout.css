@@ -2764,7 +2764,7 @@ html.sidebar-collapsed .admin-main {
 }
 .dashboard-page .dashboard-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
   gap: 0.5rem;
   margin-top: 0.15rem;
 }
@@ -2828,14 +2828,20 @@ html.sidebar-collapsed .admin-main {
 }
 .dashboard-page .dashboard-main-grid {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
   gap: 0.6rem;
 }
 .dashboard-page .dashboard-tables-grid,
 .dashboard-page .dashboard-bottom-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   gap: 0.6rem;
+}
+.dashboard-page .dashboard-bottom-grid:has(> :only-child) {
+  grid-template-columns: 1fr;
+}
+.dashboard-page .dashboard-tables-grid:has(> :only-child) {
+  grid-template-columns: 1fr;
 }
 .dashboard-page .dashboard-panel {
   padding: 0.65rem 0.75rem;

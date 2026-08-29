@@ -22,10 +22,21 @@ def test_admin_has_all_modules_rw():
         assert default_actions(ROLE_ADMIN, module) == frozenset('rw')
 
 
-def test_operario_web_on_by_default_with_web_access_gate():
-    assert 'r' in default_actions(ROLE_OPERARIO, 'operario_web')
+def test_operario_portal_defaults():
     assert 'r' in default_actions(ROLE_OPERARIO, 'operario_calendario')
     assert 'w' in default_actions(ROLE_OPERARIO, 'operario_fichaje')
+    assert not default_actions(ROLE_OPERARIO, 'operario_web')
+
+
+def test_modules_for_role_splits_portal_and_office():
+    from app.services.permission_catalog import modules_for_role
+
+    operario_keys = {m for m, _, _ in modules_for_role(ROLE_OPERARIO)}
+    jefe_keys = {m for m, _, _ in modules_for_role(ROLE_JEFE)}
+    assert operario_keys <= {'operario_fichaje', 'operario_calendario', 'operario_ausencias'}
+    assert not operario_keys & {'tablero', 'trabajadores'}
+    assert 'tablero' in jefe_keys
+    assert not jefe_keys & {'operario_fichaje', 'operario_calendario', 'operario_ausencias'}
 
 
 def test_laboral_and_rrhh_share_core_acl():

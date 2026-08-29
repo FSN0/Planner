@@ -1,0 +1,21 @@
+{# Bottom sheet: asignar operario libre a una obra (móvil). #}
+<div id="sp-mobile-assign-sheet" class="sp-assign-sheet" hidden aria-hidden="true">
+  <div class="sp-assign-sheet-backdrop" data-sp-assign-close></div>
+  <div class="sp-assign-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sp-assign-sheet-title">
+    <div class="sp-assign-sheet-handle" aria-hidden="true"></div>
+    <header class="sp-assign-sheet-head">
+      <h2 id="sp-assign-sheet-title" class="sp-assign-sheet-title">{{ _('Asignar a') }} <span id="sp-assign-obra-name"></span></h2>
+      <p class="sp-assign-sheet-sub" id="sp-assign-date-label"></p>
+      <button type="button" class="sp-assign-sheet-close" data-sp-assign-close aria-label="{{ _('Cerrar') }}">
+        <i class="fas fa-times"></i>
+      </button>
+    </header>
+    <div class="sp-assign-sheet-search-wrap">
+      <i class="fas fa-search"></i>
+      <input type="search" id="sp-assign-search" class="sp-assign-sheet-search"
+             placeholder="{{ _('Buscar operario…') }}" autocomplete="off">
+    </div>
+    <div id="sp-assign-list" class="sp-assign-sheet-list" role="listbox"></div>
+    <p id="sp-assign-empty" class="sp-assign-sheet-empty" hidden>{{ _('No hay operarios libres este día.') }}</p>
+  </div>
+</div>

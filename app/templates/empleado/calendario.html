@@ -1,19 +1,19 @@
-{% extends "empleado/base.html" %}
-{% block title %}{{ _('Mi calendario') }}{% endblock %}
+{% extends 'empleado/_shell.html' %}
+{% block empleado_title %}{{ _('Mi calendario') }}{% endblock %}
 
-{% block content %}
-<section class="empleado-card">
+{% block empleado_content %}
+<section class="admin-panel">
   <h2>{{ _('Mi calendario') }}</h2>
   <p class="empleado-muted">{{ _('Solo lectura: tus asignaciones.') }}</p>
   <div id="empleado-calendar"></div>
 </section>
 {% endblock %}
 
-{% block extra_js %}
+{% block empleado_extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/locales-all.global.min.js"></script>
 <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260817e"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260829b"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   window.empleadoCalendar = new UniversalCalendarManager('empleado-calendar', {
@@ -21,9 +21,10 @@ document.addEventListener('DOMContentLoaded', function () {
     id: {{ worker.id }},
     mode: 'obras',
     entityName: {{ (worker.name ~ ' ' ~ worker.lastname)|tojson }},
-    showFichajes: {{ 'true' if tenant_has_fichaje_operario else 'false' }},
+    showFichajes: {{ puede_ver_estado_fichaje|tojson }},
     hideTitle: true,
-    readonly: true
+    readonly: true,
+    selfService: true
   });
 });
 </script>

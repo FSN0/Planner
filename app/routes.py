@@ -12,6 +12,15 @@ from app.marketing.routes import render_landing
 main_bp = Blueprint('main', __name__)
 
 
+@main_bp.route('/empleado')
+@main_bp.route('/empleado/<path:subpath>')
+def empleado_legacy_redirect(subpath=''):
+    target = '/fichaje/' + subpath if subpath else '/fichaje/'
+    if request.query_string:
+        target += '?' + request.query_string.decode('utf-8')
+    return redirect(target, code=301)
+
+
 @main_bp.route('/')
 def dashboard():
     if is_marketing_host(normalize_host(request.host)):
@@ -30,11 +39,8 @@ def dashboard():
     if current_user.role in (ROLE_LABORAL, ROLE_RRHH):
         return redirect(url_for('admin.panel_laboral'))
     if current_user.role == ROLE_OPERARIO:
-        if getattr(current_user, 'web_access', False):
-            return redirect(url_for('empleado.inicio'))
-        logout_user()
-        flash(translate('Tu perfil no tiene acceso a la aplicación.'), 'warning')
-        return redirect(url_for('auth.login'))
+        from app.auth.routes import destino_portal_operario
+        return redirect(destino_portal_operario(current_user))
     return redirect(url_for('auth.login'))
 
 

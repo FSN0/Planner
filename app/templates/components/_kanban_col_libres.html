@@ -4,8 +4,19 @@
 <div class="kanban-libres-panel col-libres" data-tour="tablero-libres">
 
     <div class="kanban-libres-head">
-        <div class="kanban-libres-title">
-            <i class="fas fa-users"></i> {{ _('Operarios') }}
+        <div class="kanban-libres-head-row">
+            <div class="kanban-libres-title">
+                <i class="fas fa-users"></i> {{ _('Operarios libres') }}
+                <span class="kanban-libres-count-badge">{{ free_workers|length }}</span>
+            </div>
+            <button type="button"
+                    class="kanban-libres-toggle"
+                    aria-expanded="false"
+                    aria-controls="list-libres-body"
+                    title="{{ _('Ver operarios libres') }}">
+                <span class="kanban-libres-toggle-label">{{ _('Ver lista') }}</span>
+                <i class="fas fa-chevron-down kanban-libres-toggle-icon" aria-hidden="true"></i>
+            </button>
         </div>
         <div class="kanban-libres-search-wrap">
             <i class="fas fa-search"></i>
@@ -48,7 +59,7 @@
                     
                     {# MODIFICADO: Inyección de pelotita al lado del nombre #}
                     <div class="text-truncate d-flex align-items-center" style="max-width: 160px;">
-                        {% if current_user.role == 'admin' and worker.temp_estado_fichaje %}
+                        {% if puede_ver_estado_fichaje and worker.temp_estado_fichaje %}
                             {% set st = worker.temp_estado_fichaje %}
                             {% if st == 'Correcto' %}
                                 <span class="status-dot-kanban dot-success" title="{{ _('Correcto') }}"></span>
@@ -171,6 +182,22 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    const panelLibres = document.querySelector('.kanban-libres-panel');
+    const toggleLibres = document.querySelector('.kanban-libres-toggle');
+    if (panelLibres && toggleLibres) {
+        function syncLibresToggle() {
+            const open = panelLibres.classList.contains('is-expanded');
+            toggleLibres.setAttribute('aria-expanded', open ? 'true' : 'false');
+            const label = toggleLibres.querySelector('.kanban-libres-toggle-label');
+            if (label) label.textContent = open ? {{ _('Ocultar')|tojson }} : {{ _('Ver lista')|tojson }};
+        }
+        toggleLibres.addEventListener('click', function () {
+            panelLibres.classList.toggle('is-expanded');
+            syncLibresToggle();
+        });
+        syncLibresToggle();
+    }
+
     const inputLibres = document.getElementById('search-libres-input');
     const containerLibres = document.getElementById('list-libres-body');
     const msgNoMatch = document.getElementById('libres-no-match');

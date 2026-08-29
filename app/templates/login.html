@@ -19,9 +19,9 @@
         <h1 class="auth-title text-center h3 mb-2 font-weight-bold">{{ _('Bienvenido') }}</h1>
         <p class="auth-subtitle text-center text-muted small mb-4">
             {% if g.current_tenant %}
-                {{ _('Panel de Gestión') }} - <strong>{{ g.current_tenant.nombre }}</strong>
+                {{ _('Acceso a') }} <strong>{{ g.current_tenant.nombre }}</strong>
             {% else %}
-                {{ _('Introduce tus credenciales para entrar') }}
+                {{ _('Correo o DNI, y contraseña o PIN') }}
             {% endif %}
         </p>
 
@@ -33,20 +33,23 @@
           {% endif %}
         {% endwith %}
 
-        <form method="POST">
+        <form method="POST" data-tour="fichar-login">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-group mb-3">
-                <label for="email" class="form-label font-weight-bold small text-secondary">{{ _('Correo Electrónico') }}</label>
-                <input type="email" name="email" id="email" class="form-control"
-                       placeholder="nombre@empresa.com" required
-                       value="{{ prefill_email or '' }}"
-                       autocomplete="username" inputmode="email"
+                <label for="login" class="form-label font-weight-bold small text-secondary">{{ _('Correo o DNI') }}</label>
+                <input type="text" name="login" id="login" class="form-control"
+                       data-tour="fichar-dni"
+                       placeholder="{{ _('nombre@empresa.com o 12345678A') }}" required
+                       value="{{ prefill_login or prefill_email or '' }}"
+                       autocomplete="username"
                        autocapitalize="none" autocorrect="off" spellcheck="false">
             </div>
             <div class="form-group mb-4">
-                <label for="password" class="form-label font-weight-bold small text-secondary">{{ _('Contraseña') }}</label>
-                <input type="password" name="password" id="password" class="form-control"
-                       placeholder="••••••••" required autocomplete="current-password">
+                <label for="secret" class="form-label font-weight-bold small text-secondary">{{ _('Contraseña o PIN') }}</label>
+                <input type="password" name="secret" id="secret" class="form-control"
+                       data-tour="fichar-pin"
+                       placeholder="••••••••" required autocomplete="current-password"
+                       inputmode="text">
             </div>
 
             <div class="form-group form-check mb-4 text-left">
@@ -54,19 +57,13 @@
                 <label class="form-check-label small text-muted" for="rememberCheck">{{ _('Recordarme') }}</label>
             </div>
 
-            <button type="submit" class="btn btn-primary w-100 font-weight-bold text-white shadow-sm" style="background-color: #16a34a; border: none; padding: 10px;">{{ _('Iniciar Sesión') }}</button>
+            <button type="submit" class="btn btn-primary w-100 font-weight-bold text-white shadow-sm" data-tour="fichar-submit"
+                    style="background-color: #16a34a; border: none; padding: 10px;">{{ _('Entrar') }}</button>
         </form>
 
         <div class="auth-footer text-center mt-4 small text-muted">
             <a href="{{ url_for('auth.recuperar') }}">{{ _('¿Has olvidado la contraseña?') }}</a>
-            <div class="mt-2">{{ _('¿No tienes cuenta? Las altas de personal las gestiona la administración de tu empresa.') }}</div>
-            {% if fichaje_activo %}
-                <div class="mt-2">
-                    <a href="{{ url_for('operarios.entrar') }}" class="text-primary font-weight-bold">
-                        {{ _('Acceso de fichaje (DNI y PIN)') }}
-                    </a>
-                </div>
-            {% endif %}
+            <div class="mt-2">{{ _('¿No tienes cuenta? Las altas las gestiona administración.') }}</div>
         </div>
     </div>
 </body>

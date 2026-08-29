@@ -25,6 +25,7 @@ from app.models import (
     FichajeEvento,
     Obra,
     RegistroFichaje,
+    User,
 )
 
 
@@ -54,8 +55,12 @@ def _fichar(cliente, tipo, **extra):
     )
 
 
-def _entrar(cliente, email='operario@test.com', password='operario123'):
-    return cliente.post('/auth/login', data={'email': email, 'password': password})
+def _entrar(cliente, login='operario@test.com', secret='operario123'):
+    return cliente.post('/auth/login', data={'login': login, 'secret': secret})
+
+
+def _entrar_pin(cliente, dni='44444444D', pin='4829'):
+    return cliente.post('/auth/login', data={'login': dni, 'secret': pin})
 
 
 @pytest.fixture
@@ -79,6 +84,15 @@ def pwa(session, tenant_soltec, company_internal,
     session.add(tenant_soltec)
     session.commit()
     _configurar(session, fichaje_operario_activo='True')
+    from app.services.pin_auth_service import asignar_pin
+    oper = session.execute(
+        text('SELECT id FROM users WHERE email = :e'),
+        {'e': 'operario@test.com'},
+    ).fetchone()
+    if oper:
+        user = session.get(User, oper[0])
+        asignar_pin(user, '4829')
+        session.commit()
     yield session
 
 
@@ -95,7 +109,7 @@ def operario_conectado(pwa, tenant_client):
 
 class TestAcceso:
 
-    def test_operario_no_entra_si_el_modulo_esta_apagado(
+    def test_operario_entra_aunque_el_modulo_esta_apagado(
         self, session, tenant_soltec, company_internal,
         user_admin, user_jefe, user_operario, obra_activa, tenant_client
     ):
@@ -103,37 +117,42 @@ class TestAcceso:
         _configurar(session, fichaje_operario_activo='False')
 
         respuesta = _entrar(tenant_client)
+        assert respuesta.status_code in (200, 302)
+        assert tenant_client.get('/fichaje/fichar').status_code == 404
 
-        assert respuesta.status_code == 200
-        assert 'no tiene acceso' in respuesta.get_data(as_text=True)
-
-    def test_sin_configuracion_ninguna_el_operario_sigue_bloqueado(
+    def test_sin_configuracion_ninguna_el_operario_puede_entrar(
         self, session, tenant_soltec, company_internal,
         user_admin, user_jefe, user_operario, obra_activa, tenant_client
     ):
-        """El valor por defecto no puede ser 'abierto': se falla hacia cerrado."""
+        """Sin activar el módulo el operario entra, pero fichar no está disponible."""
         respuesta = _entrar(tenant_client)
+        assert respuesta.status_code in (200, 302)
+        assert tenant_client.get('/fichaje/fichar').status_code == 404
 
-        assert 'no tiene acceso' in respuesta.get_data(as_text=True)
-
-    def test_operario_entra_y_aterriza_en_su_area(self, operario_conectado):
-        respuesta = operario_conectado.get('/mi/', follow_redirects=True)
+    def test_operario_entra_y_aterriza_en_fichaje(self, operario_conectado):
+        respuesta = operario_conectado.get('/fichaje/fichar', follow_redirects=True)
 
         assert respuesta.status_code == 200
-        assert 'Entrar' in respuesta.get_data(as_text=True)
+        html = respuesta.get_data(as_text=True)
+        assert 'Jornada' in html or 'Fuera de jornada' in html or 'Entrar' in html
+
+    def test_login_por_dni_y_pin(self, pwa, tenant_client, user_operario):
+        respuesta = _entrar_pin(tenant_client, user_operario.dni, '4829')
+        assert respuesta.status_code in (200, 302)
+        assert tenant_client.get('/fichaje/fichar').status_code == 200
 
     def test_sin_sesion_no_se_ficha(self, pwa, tenant_client):
         respuesta = _fichar(tenant_client, EVENTO_ENTRADA)
 
         assert respuesta.status_code in (302, 401)
         if respuesta.status_code == 302:
-            assert '/mi/entrar' in (respuesta.location or '')
+            assert '/auth/login' in (respuesta.location or '')
 
     def test_el_manifiesto_lleva_el_nombre_de_la_empresa(self, operario_conectado):
         datos = operario_conectado.get('/mi/manifest.webmanifest').get_json()
 
         assert 'SOLTEC' in datos['name']
-        assert datos['start_url'] == '/mi/'
+        assert datos['start_url'] == '/fichaje/fichar'
 
     def test_el_service_worker_declara_su_alcance(self, operario_conectado):
         respuesta = operario_conectado.get('/mi/sw.js')
@@ -396,7 +415,7 @@ class TestMisHoras:
         _fichar(operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id)
         _fichar(operario_conectado, EVENTO_SALIDA)
 
-        html = operario_conectado.get('/mi/registros').get_data(as_text=True)
+        html = operario_conectado.get('/mi/registros', follow_redirects=True).get_data(as_text=True)
 
         assert respuesta_contiene_fecha_de_hoy(html)
         assert obra_activa.nombre in html
@@ -412,7 +431,7 @@ class TestMisHoras:
         )
         pwa.commit()
 
-        html = operario_conectado.get('/mi/registros').get_data(as_text=True)
+        html = operario_conectado.get('/mi/registros', follow_redirects=True).get_data(as_text=True)
 
         assert 'No hay registros en este periodo' in html
 
@@ -428,28 +447,23 @@ class TestMisHoras:
         assert 'Total horas' in texto
         assert '44444444D' in texto
 
-    def test_consultar_las_propias_horas_no_depende_del_modulo(
+    def test_consultar_las_propias_horas_requiere_modulo_activo(
         self, pwa, operario_conectado
     ):
-        """
-        Consultar el registro propio es un derecho del trabajador, no una
-        función que la empresa contrate: no se apaga con el módulo.
-        """
         _configurar(pwa, fichaje_operario_activo='False')
 
-        respuesta = operario_conectado.get('/mi/registros')
+        respuesta = operario_conectado.get('/mi/registros', follow_redirects=False)
 
-        assert respuesta.status_code == 200
-        assert 'Mis horas' in respuesta.get_data(as_text=True)
+        assert respuesta.status_code in (302, 404)
 
     def test_con_el_modulo_apagado_fichar_no_existe(
         self, pwa, operario_conectado
     ):
-        """Config off: /mi no se anuncia (404), sin página de «desactivado»."""
+        """Config off: la pantalla de fichar responde 404."""
         _configurar(pwa, fichaje_operario_activo='False')
 
-        assert operario_conectado.get('/mi/').status_code == 404
-        assert operario_conectado.get('/mi/entrar').status_code == 404
+        assert operario_conectado.get('/fichaje/fichar').status_code == 404
+        assert operario_conectado.get('/mi/entrar').status_code in (302, 303)
 
     def test_un_rango_de_fechas_absurdo_no_rompe_la_pantalla(self, operario_conectado):
         respuesta = operario_conectado.get('/mi/registros?desde=manzana&hasta=1')

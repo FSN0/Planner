@@ -1,0 +1,42 @@
+{% extends 'empleado/_shell.html' %}
+{% block empleado_title %}{{ _('PIN') }}{% endblock %}
+
+{% block empleado_content %}
+<section class="admin-panel" style="max-width: 420px;">
+  <div class="admin-panel-header">
+    <h2 class="admin-panel-title">
+      {% if obligatorio %}{{ _('Elige tu PIN') }}{% else %}{{ _('Cambiar PIN') }}{% endif %}
+    </h2>
+    {% if obligatorio %}
+    <p class="admin-panel-subtitle">{{ _('Elige un PIN de 4–6 dígitos antes de fichar.') }}</p>
+    {% else %}
+    <p class="admin-panel-subtitle">{{ _('Introduce tu PIN actual y el nuevo.') }}</p>
+    {% endif %}
+  </div>
+  <form method="POST" class="admin-panel-body" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if obligatorio %}<input type="hidden" name="obligatorio" value="1">{% endif %}
+
+    {% if not obligatorio %}
+    <div class="form-group">
+      <label for="pin_actual">{{ _('PIN actual') }}</label>
+      <input class="form-control" type="password" id="pin_actual" name="pin_actual"
+             inputmode="numeric" pattern="[0-9]*" maxlength="6" required autocomplete="current-password">
+    </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label for="pin_nuevo">{{ _('PIN nuevo') }}</label>
+      <input class="form-control" type="password" id="pin_nuevo" name="pin_nuevo"
+             inputmode="numeric" pattern="[0-9]*" maxlength="6" required autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label for="pin_nuevo2">{{ _('Repite el PIN nuevo') }}</label>
+      <input class="form-control" type="password" id="pin_nuevo2" name="pin_nuevo2"
+             inputmode="numeric" pattern="[0-9]*" maxlength="6" required autocomplete="new-password">
+    </div>
+
+    <button type="submit" class="btn-admin btn-admin-primary">{{ _('Guardar PIN') }}</button>
+  </form>
+</section>
+{% endblock %}

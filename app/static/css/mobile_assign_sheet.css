@@ -1,0 +1,252 @@
+/* Bottom sheet para asignar operarios en móvil (tablero + planificador). */
+
+.sp-assign-sheet[hidden] { display: none !important; }
+
+.sp-assign-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 10600;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.sp-assign-sheet.is-open {
+  pointer-events: auto;
+}
+
+.sp-assign-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.sp-assign-sheet.is-open .sp-assign-sheet-backdrop {
+  opacity: 1;
+}
+
+.sp-assign-sheet-panel {
+  position: relative;
+  max-height: min(78vh, 560px);
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.sp-assign-sheet.is-open .sp-assign-sheet-panel {
+  transform: translateY(0);
+}
+
+.sp-assign-sheet-handle {
+  width: 2.5rem;
+  height: 0.22rem;
+  border-radius: 999px;
+  background: #cbd5e1;
+  margin: 0.55rem auto 0;
+  flex-shrink: 0;
+}
+
+.sp-assign-sheet-head {
+  padding: 0.65rem 1rem 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sp-assign-sheet-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  padding-right: 2rem;
+  line-height: 1.35;
+}
+
+.sp-assign-sheet-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.sp-assign-sheet-close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.65rem;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-assign-sheet-search-wrap {
+  position: relative;
+  padding: 0.55rem 1rem;
+  flex-shrink: 0;
+}
+
+.sp-assign-sheet-search-wrap > i {
+  position: absolute;
+  left: 1.45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.sp-assign-sheet-search {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem 0.5rem 2rem;
+  font-size: 0.88rem;
+  outline: none;
+}
+
+.sp-assign-sheet-search:focus {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.12);
+}
+
+.sp-assign-sheet-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0.65rem 1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sp-assign-worker {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.4rem;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.sp-assign-worker:hover,
+.sp-assign-worker:focus {
+  border-color: #86efac;
+  background: #f0fdf4;
+  outline: none;
+}
+
+.sp-assign-worker-name {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: #0f172a;
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-assign-worker-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.sp-assign-sheet-empty {
+  padding: 1.25rem 1rem 1.5rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Botón + en cabecera de obra (solo móvil) */
+.btn-obra-assign-mobile {
+  display: none;
+}
+
+.col-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 960px) {
+  .btn-obra-assign-mobile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #16a34a;
+    cursor: pointer;
+    line-height: 1;
+    font-size: 0.85rem;
+  }
+
+  .btn-obra-assign-mobile:hover,
+  .btn-obra-assign-mobile:focus {
+    background: #fff;
+    color: #15803d;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+  }
+
+  .pmd-obra-title-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+  }
+
+  .pmd-btn-assign {
+    width: 1.65rem;
+    height: 1.65rem;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    background: #ecfdf5;
+    color: #15803d;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .pmd-btn-assign:hover,
+  .pmd-btn-assign:focus {
+    background: #dcfce7;
+    outline: none;
+  }
+
+  .pmd-obra-title {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .pmd-obra-title > a {
+    flex: 1;
+    min-width: 0;
+  }
+}

@@ -42,6 +42,11 @@
     <p class="perm-hint">
       {{ _('El jefe de obra sigue limitado a sus obras aunque tenga permiso de módulo.') }}
       {{ _('Administrador no puede quitarse Configuración ni Permisos.') }}
+      {% if active_role == 'operario' %}
+      {{ _('En Operario solo ves el portal /fichaje (fichar, calendario y ausencias propias). El resto de perfiles usa los módulos de oficina.') }}
+      {% else %}
+      {{ _('Los permisos del portal /fichaje se configuran solo en la pestaña Operario.') }}
+      {% endif %}
       {% if show_integration_perm_hint|default(false) %}
       {{ _('Altas Odoo y Portal Soltec no requieren permiso del hub de Integraciones.') }}
       {% endif %}

@@ -205,9 +205,13 @@ class User(UserMixin, db.Model):
     email_verified = db.Column(
         db.Boolean, nullable=False, default=False, server_default='false'
     )
-    # Login web (email/contraseña) para operarios. El PIN de /mi es independiente.
+    # Login web (legacy; acceso gobernado por auth_mode + permisos).
     web_access = db.Column(
         db.Boolean, nullable=False, default=False, server_default='false'
+    )
+    # pin | password | both — operario por defecto pin; oficina password.
+    auth_mode = db.Column(
+        db.String(16), nullable=False, default='password', server_default='password'
     )
     
     # Configuración

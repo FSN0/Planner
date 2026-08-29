@@ -1,0 +1,20 @@
+{% extends 'empleado/_shell.html' %}
+{% block empleado_title %}{{ _('Fichaje') }}{% endblock %}
+
+{% block empleado_content %}
+<section class="admin-panel">
+  <h2><i class="fas fa-fingerprint mr-2 text-muted"></i>{{ _('Fichaje') }}</h2>
+  <p class="empleado-muted mb-3">
+    {{ _('El módulo de fichaje está contratado, pero todavía no está activado en este espacio.') }}
+  </p>
+  {% if puede_activar %}
+  <p class="mb-0">
+    <a href="{{ url_for('admin.configuracion_global') }}#cfg-fichajes" class="btn-admin btn-admin-primary">
+      {{ _('Activar en Configuración → Fichajes') }}
+    </a>
+  </p>
+  {% else %}
+  <p class="empleado-muted mb-0">{{ _('Pide a administración que active los fichajes de operarios.') }}</p>
+  {% endif %}
+</section>
+{% endblock %}

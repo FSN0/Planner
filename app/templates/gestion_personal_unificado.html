@@ -173,6 +173,12 @@
                       {% if user_can(current_user, 'trabajadores', 'w') %}
                       <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
                       {% endif %}
+                      {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
+                      <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn-table-action" title="{{ _('Entrar como') }}"><i class="fas fa-user-secret"></i></button>
+                      </form>
+                      {% endif %}
                       {% if current_user.role == 'admin' %}
                       <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar usuario?')|tojson }});">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -269,6 +275,12 @@
                       {% if user_can(current_user, 'trabajadores', 'w') %}
                       <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
                       {% endif %}
+                      {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
+                      <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn-table-action" title="{{ _('Entrar como') }}"><i class="fas fa-user-secret"></i></button>
+                      </form>
+                      {% endif %}
                       {% if view_mode == 'admin' %}
                       <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
                         <button type="submit" class="btn-table-action btn-table-action--warn" title="{{ _('Desactivar') }}"><i class="fas fa-ban"></i></button>
@@ -333,7 +345,7 @@
         <div class="modal-body">
           <p class="small mb-2">{{ _('Trabajador:') }} <strong id="resetPinUsernameDisplay"></strong></p>
           <p class="small text-muted">
-            {{ _('Con este PIN entrará en /mi usando su DNI.') }}
+            {{ _('Con este PIN y su DNI entrará en la aplicación para fichar.') }}
             {{ _('Entre 4 y 6 dígitos. No uses el mismo dígito repetido.') }}
           </p>
           <label class="admin-form-label">{{ _('Nuevo PIN') }}</label>

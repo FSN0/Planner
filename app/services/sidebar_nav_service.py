@@ -13,7 +13,7 @@ from flask import has_request_context, request, url_for
 from flask_login import current_user
 
 from app import db
-from app.models import ROLE_JEFE
+from app.models import ROLE_JEFE, ROLE_OPERARIO
 from app.services.i18n_service import _
 from app.services.permission_service import is_laboral, user_can
 
@@ -40,6 +40,10 @@ ITEM_PRIMEROS_PASOS = 'primeros_pasos'
 ITEM_CONFIGURACION = 'configuracion'
 ITEM_PERMISOS = 'permisos'
 ITEM_LOGS = 'logs'
+ITEM_MI_FICHAJE = 'mi_fichaje'
+ITEM_MI_CALENDARIO = 'mi_calendario'
+ITEM_MI_HORAS = 'mi_horas'
+ITEM_MI_AUSENCIAS = 'mi_ausencias_portal'
 
 ALL_ITEM_KEYS = (
     ITEM_INICIO,
@@ -63,13 +67,36 @@ ALL_ITEM_KEYS = (
     ITEM_CONFIGURACION,
     ITEM_PERMISOS,
     ITEM_LOGS,
+    ITEM_MI_FICHAJE,
+    ITEM_MI_CALENDARIO,
+    ITEM_MI_HORAS,
+    ITEM_MI_AUSENCIAS,
 )
+
+
+def _operario_sections_blueprint() -> list[dict]:
+    return [
+        {
+            'id': 'sec_jornada',
+            'title': '',
+            'items': [
+                ITEM_MI_FICHAJE,
+                ITEM_MI_CALENDARIO,
+                ITEM_MI_HORAS,
+                ITEM_MI_AUSENCIAS,
+            ],
+        },
+    ]
+
+
+def _is_operario(user) -> bool:
+    return getattr(user, 'role', None) == ROLE_OPERARIO
 
 
 def _default_sections_blueprint() -> list[dict]:
     """Estructura por defecto (títulos traducidos al construir)."""
     return [
-        {'id': 'sec_home', 'title': '', 'items': [ITEM_INICIO]},
+        {'id': 'sec_home', 'title': '', 'items': [ITEM_INICIO, ITEM_MI_FICHAJE]},
         {
             'id': 'sec_plan',
             'title': str(_('Planificación')),
@@ -148,8 +175,8 @@ def _home_href(user) -> str:
         return url_for('admin.panel')
     if is_laboral(user):
         return url_for('admin.panel_laboral')
-    if user_can(user, 'operario_web', 'r'):
-        return url_for('empleado.calendario')
+    if _is_operario(user):
+        return url_for('empleado.fichar')
     return url_for('main.dashboard')
 
 
@@ -363,6 +390,42 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'badge_laboral': int(ctx.get('unread_laboral_count') or 0),
             'show_laboral_badge': bool(ctx.get('tenant_has_avisos_laborales')),
         },
+        ITEM_MI_FICHAJE: {
+            'id': ITEM_MI_FICHAJE,
+            'label': str(_('Fichaje')),
+            'icon': 'fa-fingerprint',
+            'kind': 'link',
+            'href': url_for('empleado.fichar'),
+            'active': _ep() in ('empleado.fichar', 'empleado.inicio'),
+            'data_tour': None,
+        },
+        ITEM_MI_CALENDARIO: {
+            'id': ITEM_MI_CALENDARIO,
+            'label': str(_('Mi calendario')),
+            'icon': 'fa-calendar-alt',
+            'kind': 'link',
+            'href': url_for('empleado.calendario'),
+            'active': _ep() == 'empleado.calendario',
+            'data_tour': None,
+        },
+        ITEM_MI_HORAS: {
+            'id': ITEM_MI_HORAS,
+            'label': str(_('Mis horas')),
+            'icon': 'fa-clock',
+            'kind': 'link',
+            'href': url_for('empleado.fichajes'),
+            'active': _ep() == 'empleado.fichajes',
+            'data_tour': None,
+        },
+        ITEM_MI_AUSENCIAS: {
+            'id': ITEM_MI_AUSENCIAS,
+            'label': str(_('Vacaciones')),
+            'icon': 'fa-umbrella-beach',
+            'kind': 'link',
+            'href': url_for('empleado.ausencias'),
+            'active': _ep() == 'empleado.ausencias',
+            'data_tour': None,
+        },
     }
 
 
@@ -449,9 +512,16 @@ def _integration_children(ctx: dict) -> list[dict]:
     return kids
 
 
+def _portal_jornada_disponible(user, ctx: dict) -> bool:
+    """El hub de jornada (fichaje/calendario/ausencias) requiere módulo activo."""
+    if _is_operario(user):
+        return True
+    return bool(ctx.get('tenant_has_fichaje_operario'))
+
+
 def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_INICIO:
-        return True
+        return not _is_operario(user)
     if item_id == ITEM_TABLERO:
         return user_can(user, 'tablero', 'r')
     if item_id == ITEM_DIRECTORIO:
@@ -518,6 +588,28 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
         return user_can(user, 'permisos', 'r')
     if item_id == ITEM_LOGS:
         return user_can(user, 'logs', 'r')
+    if item_id == ITEM_MI_FICHAJE:
+        if not _portal_jornada_disponible(user, ctx):
+            return False
+        return (
+            bool(ctx.get('tenant_has_fichaje_operario'))
+            and user_can(user, 'operario_fichaje', 'r')
+        )
+    if item_id == ITEM_MI_CALENDARIO:
+        if not _portal_jornada_disponible(user, ctx):
+            return False
+        return user_can(user, 'operario_calendario', 'r')
+    if item_id == ITEM_MI_HORAS:
+        if not _portal_jornada_disponible(user, ctx):
+            return False
+        return (
+            bool(ctx.get('tenant_has_fichaje_operario'))
+            and user_can(user, 'operario_fichaje', 'r')
+        )
+    if item_id == ITEM_MI_AUSENCIAS:
+        if not _portal_jornada_disponible(user, ctx):
+            return False
+        return user_can(user, 'operario_ausencias', 'r')
     return False
 
 
@@ -595,17 +687,30 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
     sections_pref = prefs.get('sections') if isinstance(prefs.get('sections'), list) else None
     hidden_raw = prefs.get('hidden') if isinstance(prefs.get('hidden'), list) else None
 
+    # En suplantación: menú fijo del operario (no prefs de oficina ni personalizadas).
+    if ctx.get('impersonacion_activa') and _is_operario(user):
+        sections_pref = _operario_sections_blueprint()
+        hidden_raw = []
+
     # Migrar el layout stock antiguo (Personal/Vehículos/Jornada) al nuevo por defecto
     if sections_pref is not None and _is_stock_v1_layout(sections_pref):
         sections_pref = None
         hidden_raw = list(_default_hidden())
 
     if sections_pref is None and hidden_raw is None:
-        sections_pref = _default_sections_blueprint()
+        sections_pref = (
+            _operario_sections_blueprint()
+            if _is_operario(user)
+            else _default_sections_blueprint()
+        )
         hidden_pref = set(_default_hidden())
     else:
         if sections_pref is None:
-            sections_pref = _default_sections_blueprint()
+            sections_pref = (
+                _operario_sections_blueprint()
+                if _is_operario(user)
+                else _default_sections_blueprint()
+            )
         hidden_pref = set(hidden_raw or [])
 
     placed: set[str] = set()

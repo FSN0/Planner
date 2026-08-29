@@ -49,16 +49,16 @@ def _jefe_puede_ver_worker(user_id):
 
 def _autorizar_calendario(context, entity_id):
     """
-    Perfiles de oficina + operario con web_access solo sobre sí mismo.
+    Perfiles de oficina + operario solo sobre su propio calendario (permisos).
     El PIN del operario no abre calendarios ajenos (RGPD).
     """
     if current_user.role == ROLE_OPERARIO:
-        if (
-            getattr(current_user, 'web_access', False)
-            and context == 'worker'
-            and entity_id == current_user.id
-        ):
-            return None
+        if context == 'worker' and entity_id == current_user.id:
+            from app.services.permission_service import user_can
+            if user_can(current_user, 'operario_calendario', 'r') or user_can(
+                current_user, 'operario_web', 'r'
+            ):
+                return None
         return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
 
     if current_user.role not in _ROLES_OFICINA:
@@ -247,6 +247,10 @@ def get_universal_calendar_events():
     start_str = request.args.get('start')
     end_str = request.args.get('end')
     show_fichajes = request.args.get('show_fichajes') == '1'
+    if show_fichajes:
+        from app.services.fichaje_operario_service import usuario_ve_estado_fichaje
+        if not usuario_ve_estado_fichaje(current_user):
+            show_fichajes = False
     if not start_str or not end_str: return jsonify([])
 
     denied = _autorizar_calendario(context, entity_id)
