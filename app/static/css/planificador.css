@@ -821,9 +821,9 @@ body.layout-admin #quickCalendarModal .modal-header .close { color: #fff; opacit
     }
     .planificador-mobile-day {
         display: block;
-        flex: 1;
+        flex: none;
         min-height: 0;
-        overflow-y: auto;
+        overflow-y: visible;
         padding: 0 0.15rem 1.25rem;
     }
     .planificador-mobile-day-lead {

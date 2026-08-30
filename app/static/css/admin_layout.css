@@ -3183,6 +3183,24 @@ body.layout-auth .navbar { display: none !important; }
 }
 
 @media (max-width: 960px) {
+  /*
+    Scroll móvil: body/shell no pueden recortar el contenido.
+    El gesto va en .admin-main; tablas sin cajas anidadas.
+    (kanban-page mantiene su propio layout en kanban_board.css)
+  */
+  body.layout-admin:not(.kanban-page) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  body.layout-admin:not(.kanban-page) .admin-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+
   .admin-shell {
     flex-direction: column;
     height: 100vh;
@@ -3194,6 +3212,8 @@ body.layout-auth .navbar { display: none !important; }
     align-items: center;
     gap: 0.65rem;
     flex-shrink: 0;
+    position: sticky;
+    top: 0;
     height: 2.75rem;
     padding: 0 0.7rem;
     background: #020617;
@@ -3322,12 +3342,25 @@ body.layout-auth .navbar { display: none !important; }
     color: #e2e8f0;
   }
 
-  .admin-main,
-  .admin-main--compact {
+  .admin-main:not(.kanban-layout),
+  .admin-main--compact:not(.kanban-layout) {
     width: 100%;
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
+    height: auto !important;
+    max-height: none;
     padding: 0.7rem 0.85rem 5rem;
+    overflow-x: hidden;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  body.layout-admin:not(.kanban-page) .admin-main:not(.kanban-layout) > *,
+  body.layout-admin:not(.kanban-page) .admin-main--compact:not(.kanban-layout) > * {
+    flex-shrink: 0;
+  }
+  body.layout-admin:not(.kanban-page) .admin-panel-flush {
+    overflow: visible !important;
   }
 
   .page-toolbar {
@@ -3370,8 +3403,9 @@ body.layout-auth .navbar { display: none !important; }
   .vl-page .admin-table-scroll,
   .vehiculos-page .admin-table-scroll {
     overflow-x: auto;
+    overflow-y: visible !important;
     -webkit-overflow-scrolling: touch;
-    max-height: none;
+    max-height: none !important;
   }
   .vl-page .admin-table-scroll {
     overflow-x: auto !important;
