@@ -96,12 +96,12 @@ Write-Host ""
 if ($LanIp) {
     Write-Host "En el MOVIL (misma WiFi), abre EXACTAMENTE:" -ForegroundColor Green
     Write-Host "  http://${LanIp}:8080/health"
-    Write-Host "  http://${LanIp}:8080/mi/"
+    Write-Host "  http://${LanIp}:8080/auth/login"
     Write-Host ""
     Write-Host "NO uses 172.x (eso es Hyper-V/WSL, el telefono no llega)."
 } else {
     Write-Host "No he encontrado IP WiFi. En Windows: ipconfig -> IPv4 de Wi-Fi (suele ser 192.168.x.x)."
-    Write-Host "Luego en el movil: http://ESA_IP:8080/mi/"
+    Write-Host "Luego en el movil: http://ESA_IP:8080/auth/login"
 }
 Write-Host ""
 if ($LanIp) {
@@ -111,13 +111,13 @@ if ($LanIp) {
     Write-Host "    http://${LanIp}:8080/health"
     Write-Host "  Tenant Paquito (subdominio sslip.io, mismo comportamiento que produccion):"
     Write-Host "    http://paquito.${LanIp}.sslip.io:8080/"
-    Write-Host "    http://paquito.${LanIp}.sslip.io:8080/mi/"
+    Write-Host "    http://paquito.${LanIp}.sslip.io:8080/fichaje/fichar"
     Write-Host ""
     Write-Host "Si Caddy escucha en el puerto 80, quita :8080 de las URLs."
     Write-Host "NO uses 172.x (eso es Hyper-V/WSL, el telefono no llega)."
 } else {
     Write-Host "No he encontrado IP WiFi. En Windows: ipconfig -> IPv4 de Wi-Fi (suele ser 192.168.x.x)."
-    Write-Host "Landing: http://ESA_IP:8080/  |  Tenant: http://paquito.ESA_IP.sslip.io:8080/mi/"
+    Write-Host "Landing: http://ESA_IP:8080/  |  Tenant: http://paquito.ESA_IP.sslip.io:8080/fichaje/fichar"
 }
 Write-Host ""
 Write-Host "Requisitos app: docker compose up -d"

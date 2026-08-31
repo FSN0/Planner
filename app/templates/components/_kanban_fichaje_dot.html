@@ -1,0 +1,42 @@
+{# Pelotita de estado fichaje en chips del tablero. Requiere: worker, selected_date #}
+{% if puede_ver_estado_fichaje and worker.temp_estado_fichaje %}
+    {% set ns_dot = namespace(style='') %}
+    {% set st = worker.temp_estado_fichaje %}
+    {% if st == 'Correcto' %}
+        {% set dot_class = 'dot-success' %}
+        {% set dot_title = _('Correcto') %}
+    {% elif st == 'Correcto_Automatico' %}
+        {% set dot_class = 'dot-auto' %}
+        {% set dot_title = _('Auto-Asignado') %}
+    {% elif st == 'Exento_Ausencia' %}
+        {% set dot_class = '' %}
+        {% set ns_dot.style = 'background:#7c3aed;' %}
+        {% set dot_title = _('Exento (ausencia planificada)') %}
+    {% elif st == 'Sobreescrito_RRHH' %}
+        {% set dot_class = '' %}
+        {% set ns_dot.style = 'background:#7c3aed;' %}
+        {% set dot_title = _('Corregido por RRHH / ERP') %}
+    {% elif st == 'Ausencia' or st == 'Pendiente' or st == 'Retraso' %}
+        {% set dot_class = 'dot-warning' %}
+        {% set dot_title = _(st) %}
+    {% elif st == 'Conflicto' or st == 'Paracaidista' %}
+        {% set dot_class = 'dot-danger' %}
+        {% set dot_title = _('Conflicto') if st == 'Conflicto' else _('Sin planificar') %}
+    {% elif st.startswith('Resuelto') or st == 'Cerrado_Multiobra' %}
+        {% set dot_class = 'dot-success' %}
+        {% set dot_title = _('Resuelto / correcto') %}
+    {% else %}
+        {% set dot_class = 'dot-secondary' %}
+        {% set dot_title = _('Sin Registro') %}
+    {% endif %}
+    <span class="status-dot-kanban status-dot-kanban--interactive {{ dot_class }}"
+          data-fichaje-dot="1"
+          data-user-id="{{ worker.id }}"
+          data-fecha="{{ selected_date.strftime('%Y-%m-%d') }}"
+          data-estado-fichaje="{{ st }}"
+          {% if ns_dot.style %}style="{{ ns_dot.style }}"{% endif %}
+          title="{{ dot_title }} — {{ _('Clic para ver el historial del día') }}"
+          role="button"
+          tabindex="0"
+          aria-label="{{ dot_title }} — {{ _('Ver historial del día') }}"></span>
+{% endif %}

@@ -65,8 +65,8 @@ def clear_remember_cookie(response):
 def admin_puede_impersonar(actor) -> bool:
     if not is_admin(actor):
         return False
-    if session.get('superadmin_impersonation'):
-        return False
+    # Entrada de soporte desde /superadmin (superadmin_impersonation) sigue siendo
+    # un admin del tenant: debe poder usar «entrar como» como en login normal.
     if impersonacion_activa():
         return False
     return True

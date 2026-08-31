@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260830b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260831b">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260830b">
 <style id="dynamic-sidebar-style"></style>
 {% endblock %}
@@ -71,6 +71,15 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="planificador-filter-divider" aria-hidden="true"></div>
+
+        <div class="planificador-workers-filter planificador-filter-control">
+          <span class="planificador-filter-control-label">{{ _('Operarios') }}</span>
+          <i class="fas fa-users planificador-filter-icon"></i>
+          <select id="workersSelect" class="form-control select2-multiple" multiple="multiple"
+                  aria-label="{{ _('Filtrar por operarios') }}"></select>
         </div>
 
         {% if current_user.role == ROLE_ADMIN %}
@@ -252,7 +261,7 @@
 <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260824a"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260829b"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260831a"></script>
 {% if can_edit_planificador|default(false) %}
 <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260830b"></script>
 {% endif %}

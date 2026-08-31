@@ -18,6 +18,15 @@
   padding-bottom: 0;
 }
 
+.person-day-timeline-item--conflict .person-day-timeline-card {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.person-day-timeline-item--conflict .person-day-timeline-title {
+  color: #b91c1c;
+}
+
 .person-day-timeline-marker {
   position: absolute;
   left: -0.5rem;
@@ -279,6 +288,14 @@
   background: var(--color-surface, #fff);
   border-top: 1px solid var(--color-border-strong, #e2e8f0);
   padding: 0.55rem 1rem;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.person-day-timeline-modal-footer [data-timeline-resolve-audit] {
+  margin-right: auto;
 }
 
 .person-day-timeline-modal .btn-admin {

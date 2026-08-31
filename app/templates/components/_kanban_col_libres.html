@@ -59,24 +59,7 @@
                     
                     {# MODIFICADO: Inyección de pelotita al lado del nombre #}
                     <div class="text-truncate d-flex align-items-center" style="max-width: 160px;">
-                        {% if puede_ver_estado_fichaje and worker.temp_estado_fichaje %}
-                            {% set st = worker.temp_estado_fichaje %}
-                            {% if st == 'Correcto' %}
-                                <span class="status-dot-kanban dot-success" title="{{ _('Correcto') }}"></span>
-                            {% elif st == 'Correcto_Automatico' %}
-                                <span class="status-dot-kanban dot-auto" title="{{ _('Auto-Asignado') }}"></span>
-                            {% elif st == 'Exento_Ausencia' or st == 'Sobreescrito_RRHH' %}
-                                <span class="status-dot-kanban" style="background:#7c3aed;" title="{{ _('Intervención / exento') }}"></span>
-                            {% elif st == 'Ausencia' or st == 'Pendiente' or st == 'Retraso' %}
-                                <span class="status-dot-kanban dot-warning" title="{{ _(st) }}"></span>
-                            {% elif st == 'Conflicto' or st == 'Paracaidista' %}
-                                <span class="status-dot-kanban dot-danger" title="{{ _('Conflicto') }}"></span>
-                            {% elif st.startswith('Resuelto') or st == 'Cerrado_Multiobra' %}
-                                <span class="status-dot-kanban dot-success" title="{{ _('Resuelto / correcto') }}"></span>
-                            {% else %}
-                                <span class="status-dot-kanban dot-secondary" title="{{ _('Sin Registro') }}"></span>
-                            {% endif %}
-                        {% endif %}
+                        {% include "components/_kanban_fichaje_dot.html" %}
                         
                         <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" 
                            class="worker-name text-truncate text-dark font-weight-bold" 

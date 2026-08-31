@@ -1,6 +1,6 @@
 """web_access, email_verified y locale en users + legal_* en tenants
 
-web_access     → login web del operario (independiente del PIN /mi).
+web_access     → login web del operario (independiente del PIN de fichaje).
 email_verified → confirmación de correo en el alta autoservicio.
 locale         → preferencia de idioma (es/en/pt/fr).
 legal_*        → registro de consentimiento RGPD en la tabla pública de tenants.

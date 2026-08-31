@@ -2980,12 +2980,12 @@
   }
 
   function isMiEntrar() {
-    return pathIs(/\/mi\/entrar/) || isAuthLoginTour();
+    return isAuthLoginTour();
   }
 
   function isMiFichar() {
     var p = (window.location.pathname || '').replace(/\/$/, '') || '';
-    return p === '/mi' || /\/mi$/.test(p) || pathIs(/\/fichaje\/fichar/);
+    return pathIs(/\/fichaje\/fichar/);
   }
 
   function fichajeEstado() {
@@ -6950,7 +6950,7 @@
       return;
     }
 
-    // En /mi solo corre fichaje (seed) o fichajes (academia). No pisar academia.
+    // En /fichaje/fichar solo corre fichaje (seed) o fichajes (academia). No pisar academia.
     if ((isMiEntrar() || isMiFichar()) &&
         state.chapter !== 'fichaje' && state.chapter !== 'fichajes') {
       state.chapter = 'fichaje';
@@ -7101,7 +7101,7 @@
       });
       return true;
     }
-    // Continuar capítulo fichaje / fichajes en /mi (no reiniciar la guía)
+    // Continuar capítulo fichaje / fichajes en /fichaje (no reiniciar la guía)
     if (tour === 'mi' || tour === 'continuar') {
       var stMi = loadState() || {};
       var chUrl = (params.get('chapter') || '').trim();
@@ -7206,7 +7206,7 @@
     if (academiaTours.indexOf(tour) >= 0) {
       var ch = (tour === 'auditoria_fichajes' || tour === 'registro_jornada') ? 'fichajes' : tour;
       var existing = loadState();
-      // Continuar capítulo a medias (p. ej. tras volver de /mi al registro)
+      // Continuar capítulo a medias (p. ej. tras volver de fichaje al registro)
       if (existing && existing.active && existing.chapter === ch && (existing.step || 0) > 0) {
         document.body.classList.add('sp-tour-active');
         run();

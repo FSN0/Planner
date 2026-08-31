@@ -56,6 +56,89 @@
         </div>
     </div>
 
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">{{ _('Tenant con contenido (grabación / pruebas)') }}</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                {{ _('Crea un cliente ya lleno: obras, gente, vehículos, asignaciones, fichajes y solicitudes. No se marca como demo: no sale el banner amarillo. Las cantidades de abajo son las mismas que usa el tutorial; cámbialas si quieres.') }}
+                {{ _('Jefes y operarios sembrados usan la contraseña') }}
+                <code>{{ seed_password }}</code>
+                {{ _('y el PIN de operario') }}
+                <code>{{ seed_pin }}</code>.
+            </p>
+            <form action="{{ url_for('superadmin.create_tenant_seeded') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row">
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label">{{ _('Nombre Empresa') }}</label>
+                        <input type="text" name="nombre" class="form-control" placeholder="{{ _('Ej: Construcciones López') }}" required>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label">{{ _('Subdominio') }}</label>
+                        <input type="text" name="subdominio" class="form-control" placeholder="lopez" required>
+                    </div>
+                    <div class="col-md-3 mb-2">
+                        <label class="form-label">{{ _('Email del Admin') }}</label>
+                        <input type="email" name="admin_email" class="form-control" required>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label">{{ _('Contraseña Admin') }}</label>
+                        <input type="password" name="admin_password" class="form-control" required>
+                    </div>
+                    <div class="col-md-2 mb-2">
+                        <label class="form-label">{{ _('Dominio propio') }}</label>
+                        <input type="text" name="custom_domain" class="form-control" placeholder="{{ _('Opcional') }}">
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Obras') }}</label>
+                        <input type="number" min="1" max="80" name="n_obras" class="form-control" value="{{ seed_defaults.obras }}">
+                    </div>
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Plantilla') }}</label>
+                        <input type="number" min="1" max="200" name="n_empleados" class="form-control" value="{{ seed_defaults.empleados }}">
+                    </div>
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Jefes') }}</label>
+                        <input type="number" min="1" max="15" name="n_jefes" class="form-control" value="{{ seed_defaults.jefes }}">
+                    </div>
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Externos') }}</label>
+                        <input type="number" min="0" max="40" name="n_externos" class="form-control" value="{{ seed_defaults.externos }}">
+                    </div>
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Vehículos') }}</label>
+                        <input type="number" min="0" max="40" name="n_vehiculos" class="form-control" value="{{ seed_defaults.vehiculos }}">
+                    </div>
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Solicitudes') }}</label>
+                        <input type="number" min="0" max="20" name="n_solicitudes" class="form-control" value="{{ seed_defaults.solicitudes }}">
+                    </div>
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Días hist.') }}</label>
+                        <input type="number" min="1" max="60" name="n_dias" class="form-control" value="{{ seed_defaults.dias_historial }}">
+                    </div>
+                    <div class="col-md-1 mb-2">
+                        <label class="form-label small">{{ _('Días flota') }}</label>
+                        <input type="number" min="1" max="45" name="n_dias_flota" class="form-control" value="{{ seed_defaults.dias_flota }}">
+                    </div>
+                    <div class="col-md-2 mb-2 d-flex align-items-end">
+                        <div class="custom-control custom-checkbox mb-2">
+                            <input type="checkbox" class="custom-control-input" name="activar_fichaje" value="1" id="seedFichaje" checked>
+                            <label class="custom-control-label" for="seedFichaje">{{ _('Activar fichaje') }}</label>
+                        </div>
+                    </div>
+                    <div class="col-md-2 mb-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-dark w-100">{{ _('Crear con datos') }}</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <h4>{{ _('Clientes') }}</h4>
     <table class="table table-hover bg-white shadow-sm border align-middle table-sm">
         <thead class="table-light">
@@ -129,6 +212,7 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-sm btn-warning mb-1">{{ _('Entrar como admin') }}</button>
                     </form>
+                    <button type="button" class="btn btn-sm btn-outline-dark mb-1" data-toggle="modal" data-target="#modalRellenar_{{ t.id }}">{{ _('Rellenar datos') }}</button>
                     <form action="{{ url_for('superadmin.desactivar_tenant', id_tenant=t.id) }}" method="POST" class="d-inline"
                           onsubmit="return confirm({{ _('¿Desactivar {nombre}? Dejará de ser accesible.', nombre=t.nombre)|tojson }});">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -304,6 +388,69 @@
             <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _('Cerrar') }}</button>
             <button type="submit" class="btn btn-success"><i class="fas fa-save"></i>{{ _('Guardar Configuración') }}</button>
           </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalRellenar_{{ t.id }}" tabindex="-1" role="dialog" aria-labelledby="modalRellenarLabel_{{ t.id }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="modalRellenarLabel_{{ t.id }}">{{ _('Rellenar datos') }} — {{ t.nombre }}</h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <form action="{{ url_for('superadmin.rellenar_tenant', id_tenant=t.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body p-4">
+          <p class="text-muted small">
+            {{ _('Añade obras, gente, flota, fichajes y solicitudes. No activa el banner de demo. Si el tenant ya tiene datos, se suman.') }}
+          </p>
+          <div class="form-row">
+            <div class="form-group col-4">
+              <label>{{ _('Obras') }}</label>
+              <input type="number" min="1" max="80" name="n_obras" class="form-control" value="{{ seed_defaults.obras }}">
+            </div>
+            <div class="form-group col-4">
+              <label>{{ _('Plantilla') }}</label>
+              <input type="number" min="1" max="200" name="n_empleados" class="form-control" value="{{ seed_defaults.empleados }}">
+            </div>
+            <div class="form-group col-4">
+              <label>{{ _('Jefes') }}</label>
+              <input type="number" min="1" max="15" name="n_jefes" class="form-control" value="{{ seed_defaults.jefes }}">
+            </div>
+            <div class="form-group col-4">
+              <label>{{ _('Externos') }}</label>
+              <input type="number" min="0" max="40" name="n_externos" class="form-control" value="{{ seed_defaults.externos }}">
+            </div>
+            <div class="form-group col-4">
+              <label>{{ _('Vehículos') }}</label>
+              <input type="number" min="0" max="40" name="n_vehiculos" class="form-control" value="{{ seed_defaults.vehiculos }}">
+            </div>
+            <div class="form-group col-4">
+              <label>{{ _('Solicitudes') }}</label>
+              <input type="number" min="0" max="20" name="n_solicitudes" class="form-control" value="{{ seed_defaults.solicitudes }}">
+            </div>
+            <div class="form-group col-4">
+              <label>{{ _('Días hist.') }}</label>
+              <input type="number" min="1" max="60" name="n_dias" class="form-control" value="{{ seed_defaults.dias_historial }}">
+            </div>
+            <div class="form-group col-4">
+              <label>{{ _('Días flota') }}</label>
+              <input type="number" min="1" max="45" name="n_dias_flota" class="form-control" value="{{ seed_defaults.dias_flota }}">
+            </div>
+          </div>
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" name="activar_fichaje" value="1" id="rellenarFichaje_{{ t.id }}" checked>
+            <label class="custom-control-label" for="rellenarFichaje_{{ t.id }}">{{ _('Activar fichaje') }}</label>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ _('Cerrar') }}</button>
+          <button type="submit" class="btn btn-dark">{{ _('Rellenar') }}</button>
+        </div>
       </form>
     </div>
   </div>

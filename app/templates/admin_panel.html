@@ -456,6 +456,8 @@ document.addEventListener('DOMContentLoaded', function() {
       modalId: 'modalTimelineFichaje',
       apiBase: '/sync/timeline_dia',
       loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
+      canResolveAudit: {{ (puede_resolver_auditoria|default(false))|tojson }},
+      auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
     });
   }
   document.querySelectorAll('tr.row-clickable[data-href]').forEach(function(row) {

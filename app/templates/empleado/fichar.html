@@ -109,8 +109,8 @@
   <p class="empleado-muted mb-3">{{ _('Registra entrada, pausas y salida desde el ordenador, igual que en el móvil.') }}</p>
 
   <div class="fichaje"
-       data-url-fichar="{{ url_for('operarios.api_fichar') }}"
-       data-url-conformar="{{ url_for('operarios.api_conformar') }}"
+       data-url-fichar="{{ url_for('empleado.api_fichar') }}"
+       data-url-conformar="{{ url_for('empleado.api_conformar') }}"
        data-modo-geo="{{ modo_geo }}"
        data-estado="{{ estado }}">
 
@@ -141,6 +141,9 @@
         <div class="empleado-obra-picker campo">
             <label class="campo__etiqueta" for="obra">{{ _('¿Dónde vas a trabajar?') }}</label>
             <p class="campo__ayuda">{{ _('Elige la obra de hoy. Si no aparece la tuya, busca en «Otras obras».') }}</p>
+            {% if not obras_planificadas %}
+            <p class="campo__ayuda">{{ _('Hoy no tienes obra planificada; puedes fichar eligiendo una obra abajo.') }}</p>
+            {% endif %}
             <select class="campo__control" id="obra" name="obra">
                 {% if not obras_planificadas and not otras_obras %}
                     <option value="">{{ _('No hay obras disponibles') }}</option>

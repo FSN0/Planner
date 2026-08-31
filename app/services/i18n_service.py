@@ -336,6 +336,14 @@ _LOG_CAMBIO_MASIVO = re.compile(r'^Cambio masivo a (.+)$')
 _LOG_FICHO = re.compile(
     r'^El operario fichó en (.+?)\. Entrada: (.+) / Salida: (.+?)(?: Notas: (.+))?$'
 )
+_LOG_FICHO_CONFLICTO = re.compile(
+    r'^El operario fichó en (.+?) \(tenía planificado en (.+?)\)\. '
+    r'Entrada: (.+) / Salida: (.+?)(?: Notas: (.+))?$'
+)
+_LOG_FICHO_PARACAIDISTA = re.compile(
+    r'^El operario fichó en (.+?) sin planificación en esa obra\. '
+    r'Entrada: (.+) / Salida: (.+?)(?: Notas: (.+))?$'
+)
 _LOG_IGNORA_PLAN = re.compile(
     r"^Se ignora el fichaje en '(.+)' \(estaba planificado en '(.+)'\)\.$"
 )
@@ -466,6 +474,37 @@ def translate_log_detail(detail, locale=None):
         return translate(
             'Incluye sobreescritura de {n} día(s).', locale, n=m.group(1)
         )
+
+    m = _LOG_FICHO_CONFLICTO.match(detail)
+    if m:
+        label, plan, entrada, salida, notas = m.groups()
+        text = translate(
+            'El operario fichó en {label} (tenía planificado en {plan}). '
+            'Entrada: {entrada} / Salida: {salida}',
+            locale,
+            label=label,
+            plan=plan,
+            entrada=entrada,
+            salida=salida,
+        )
+        if notas:
+            text = f"{text} {translate('Notas: {note}', locale, note=notas)}"
+        return text
+
+    m = _LOG_FICHO_PARACAIDISTA.match(detail)
+    if m:
+        label, entrada, salida, notas = m.groups()
+        text = translate(
+            'El operario fichó en {label} sin planificación en esa obra. '
+            'Entrada: {entrada} / Salida: {salida}',
+            locale,
+            label=label,
+            entrada=entrada,
+            salida=salida,
+        )
+        if notas:
+            text = f"{text} {translate('Notas: {note}', locale, note=notas)}"
+        return text
 
     m = _LOG_FICHO.match(detail)
     if m:

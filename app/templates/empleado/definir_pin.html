@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="{{ current_locale|default('es') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ _('Definir PIN') }} — SignaPlan</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/brand/favicon-48.png') }}?v=20260807f" type="image/png" sizes="48x48">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+</head>
+<body class="layout-auth d-flex align-items-center justify-content-center" style="min-height: 100vh; background-color: #0f172a;">
+    <div class="auth-card p-4 shadow-sm rounded" style="width: 100%; max-width: 400px; border-top: 4px solid #16a34a; background: #1e293b; color: #f1f5f9;">
+        <div class="text-center mb-3">
+            <img src="{{ url_for('static', filename='img/brand/logo-horizontal.png') }}?v=20260807b"
+                 alt="SignaPlan" width="160" height="42" style="max-width:100%;height:auto;filter:brightness(1.05);">
+        </div>
+        <h1 class="h4 text-center mb-2 font-weight-bold">{{ _('Define tu PIN') }}</h1>
+        <p class="text-center small mb-4" style="color:#94a3b8;">
+            {{ _('Elige un PIN de 4 a 6 dígitos para fichar con tu DNI. No lo compartas.') }}
+        </p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category if category != 'error' else 'danger' }} p-2 small text-center">{{ _(message) }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="t" value="{{ token }}">
+            <div class="form-group">
+                <label for="pin_nuevo" class="small font-weight-bold" style="color:#cbd5e1;">{{ _('PIN nuevo') }}</label>
+                <input class="form-control" type="password" id="pin_nuevo" name="pin_nuevo"
+                       inputmode="numeric" pattern="[0-9]*" maxlength="6" required autocomplete="new-password"
+                       placeholder="••••" style="background:#334155;border-color:#475569;color:#f1f5f9;">
+            </div>
+            <div class="form-group mb-4">
+                <label for="pin_nuevo2" class="small font-weight-bold" style="color:#cbd5e1;">{{ _('Repite el PIN') }}</label>
+                <input class="form-control" type="password" id="pin_nuevo2" name="pin_nuevo2"
+                       inputmode="numeric" pattern="[0-9]*" maxlength="6" required autocomplete="new-password"
+                       placeholder="••••" style="background:#334155;border-color:#475569;color:#f1f5f9;">
+            </div>
+            <button type="submit" class="btn btn-success btn-block font-weight-bold" style="padding: 12px;">
+                {{ _('Guardar PIN') }}
+            </button>
+        </form>
+    </div>
+</body>
+</html>

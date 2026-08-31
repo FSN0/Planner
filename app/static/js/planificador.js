@@ -984,6 +984,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.loadTimelineData = function() {
         let obrasIds = $('#obrasSelect').val() || []; 
         let jefeId = $('#jefeSelect').val() || null;
+        let workerIds = $('#workersSelect').val() || [];
         
         // --- LÓGICA DE CHECKBOXES EN LUGAR DE SELECT2 ---
         let totalEmpresas = $('.chk-empresa-filter').length;
@@ -1002,6 +1003,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (jefeId) params.append('jefe_id', jefeId);
         obrasIds.forEach(id => params.append('obra_ids[]', id));
         companyIds.forEach(id => params.append('company_ids[]', id));
+        workerIds.forEach(id => params.append('worker_ids[]', id));
 
         params.append('start', moment().subtract(6, 'months').toISOString()); 
         params.append('end', moment().add(6, 'months').toISOString());
@@ -1103,6 +1105,36 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+    if ($('#workersSelect').length) {
+        let $workersSelect = $('#workersSelect');
+        $workersSelect.select2({
+            placeholder: t('Buscar operarios…'),
+            allowClear: true,
+            width: '100%',
+            minimumInputLength: 0,
+            dropdownParent: $(document.body),
+            dropdownCssClass: 'planificador-select2-dropdown admin-select2-dropdown planificador-workers-dropdown',
+            ajax: {
+                url: '/admin/api/planificador/search_workers',
+                dataType: 'json',
+                delay: 250,
+                data: function(params) {
+                    return { q: params.term || '', plain: '1' };
+                },
+                processResults: function(data) {
+                    return { results: data.results || [] };
+                },
+            },
+        });
+        setupSelect2ChipRemoveAnimation($workersSelect);
+        if (window.SignaPlanSelect2) {
+            window.SignaPlanSelect2.bindFixedDropdown($workersSelect, [planificadorScrollRoot, document.querySelector('.admin-main')].filter(Boolean));
+        }
+        $workersSelect.on('change', function() {
+            loadTimelineData();
+        });
+    }
+
     if ($('#obrasSelect').length) {
         let $obrasSelect = $('#obrasSelect');
         let $jefeSelect = $('#jefeSelect');
@@ -1153,7 +1185,14 @@ document.addEventListener('DOMContentLoaded', function() {
             isUpdating = false;
         });
 
-        // ==========================================
+        const urlJefeId = new URLSearchParams(window.location.search).get('jefe_id');
+        if (urlJefeId && $jefeSelect.length) {
+            isUpdating = true;
+            $jefeSelect.val(urlJefeId).trigger('change.select2');
+            loadTimelineData();
+            isUpdating = false;
+        }
+
         // ==========================================
         // LÓGICA DEL DROPDOWN (A prueba de fallos sin Popper.js)
         // ==========================================

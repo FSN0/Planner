@@ -880,6 +880,8 @@ def worker_panel(user_id):
     """
     worker = User.query.get_or_404(user_id)
     panel_stats = get_worker_panel_stats(worker)
+    from app.services.permission_service import can_resolve_fichajes
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     return render_template(
         "admin_worker_panel.html",
         worker=worker,
@@ -888,6 +890,9 @@ def worker_panel(user_id):
         chart_14d_max=panel_stats["chart_14d_max"],
         vehicle_rows=get_worker_vehicle_rows(worker),
         can_edit_calendar=user_can(current_user, 'worker_panel', 'w'),
+        puede_resolver_auditoria=(
+            can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
+        ),
     )
 
 
@@ -1836,6 +1841,11 @@ def obras_detailed():
     # 4. Configurar modo vista (para activar botones de edición en el HTML)
     can_write_tablero = user_can(current_user, 'tablero', 'w')
     context['view_mode'] = 'readonly' if (is_laboral(current_user) or not can_write_tablero) else 'admin'
+    from app.services.permission_service import can_resolve_fichajes
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    context['puede_resolver_auditoria'] = (
+        can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
+    )
     
     # 5. Renderizar desempaquetando el contexto (header_days, timeline_data, free_workers, etc.)
     return render_template("obras_detailed_unificado.html", **context)
@@ -2060,6 +2070,11 @@ def panel():
     ctx = get_admin_panel_context()
     ctx['mostrar_onboarding'] = necesita_onboarding()
     ctx['onboarding'] = estado_onboarding() if ctx['mostrar_onboarding'] else None
+    from app.services.permission_service import can_resolve_fichajes
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    ctx['puede_resolver_auditoria'] = (
+        can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
+    )
     return render_template("admin_panel.html", **ctx)
 
 
@@ -2776,6 +2791,47 @@ def enviar_acceso_fichaje(user_id):
     return redirect(url_for('admin.edit_operario', user_id=user.id))
 
 
+@admin_bp.route("/enviar_informacion_acceso/<int:user_id>", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def enviar_informacion_acceso(user_id):
+    """Envía instrucciones de acceso (URL, DNI, enlace PIN). Sin PIN en claro."""
+    from app.services.pin_auth_service import notificar_informacion_acceso
+
+    user = User.query.get_or_404(user_id)
+    if user.role != ROLE_OPERARIO:
+        flash(translate('Solo aplica a operarios (acceso con DNI + PIN).'), 'warning')
+        return redirect(url_for('admin.edit_operario', user_id=user.id))
+
+    email = (request.form.get('email') or '').strip()
+    if email:
+        user.email = email
+    elif not user.email or '@demo.signaplan' in (user.email or '') or '@local.signaplan' in (user.email or ''):
+        flash(translate('Indica un correo real para enviar las instrucciones de acceso.'), 'danger')
+        return redirect(url_for('admin.edit_operario', user_id=user.id))
+
+    try:
+        ok = notificar_informacion_acceso(user, actor=current_user)
+        db.session.commit()
+        if ok:
+            flash(
+                translate('Instrucciones de acceso enviadas a {email}.', email=user.email),
+                'success',
+            )
+        else:
+            flash(
+                translate(
+                    'No se pudo enviar el correo. Revisa SMTP o copia las instrucciones a mano.'
+                ),
+                'warning',
+            )
+    except Exception as exc:
+        db.session.rollback()
+        flash(translate('No se ha podido enviar el acceso: {error}', error=exc), 'danger')
+
+    return redirect(url_for('admin.edit_operario', user_id=user.id))
+
+
 @admin_bp.route("/reset_pin/<int:user_id>", methods=["POST"])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -3254,6 +3310,32 @@ def planificador_jo():
     )
 
 
+def _planificador_worker_ids_from_request():
+    out = []
+    for raw in request.args.getlist('worker_ids[]'):
+        s = str(raw or '').strip()
+        if s.isdigit():
+            out.append(int(s))
+    return out
+
+
+def _planificador_obras_con_operarios(worker_ids, start_date, end_date, obras_ids):
+    if not worker_ids or not obras_ids:
+        return set()
+    rows = (
+        db.session.query(Asignacion.obra_id)
+        .filter(
+            Asignacion.user_id.in_(worker_ids),
+            Asignacion.obra_id.in_(obras_ids),
+            Asignacion.fecha >= start_date,
+            Asignacion.fecha <= end_date,
+        )
+        .distinct()
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
 # 2. FUNCIÓN QUE CARGA LAS FILAS (EJE Y) DEL CALENDARIO
 @admin_bp.route("/api/planificador/resources")
 @login_required
@@ -3301,6 +3383,13 @@ def api_planificador_resources():
                 obras = Obra.query.filter(Obra.id.in_(obras_ids), *base_filters).all()
     else:
         return jsonify([])
+
+    worker_ids = _planificador_worker_ids_from_request()
+    if worker_ids and win_start and win_end:
+        allowed = _planificador_obras_con_operarios(
+            worker_ids, win_start, win_end, {o.id for o in obras}
+        )
+        obras = [o for o in obras if o.id in allowed]
 
     resources = [{
         "id": str(obra.id), 
@@ -3353,9 +3442,19 @@ def api_planificador_events():
     else:
         return jsonify([])
 
+    worker_ids = _planificador_worker_ids_from_request()
+    if worker_ids:
+        allowed = _planificador_obras_con_operarios(
+            worker_ids, start_date, end_date, obras_ids
+        )
+        obras_ids = [oid for oid in obras_ids if oid in allowed]
+
     asignaciones = Asignacion.query.filter(
         Asignacion.obra_id.in_(obras_ids), Asignacion.fecha >= start_date, Asignacion.fecha <= end_date
-    ).all()
+    )
+    if worker_ids:
+        asignaciones = asignaciones.filter(Asignacion.user_id.in_(worker_ids))
+    asignaciones = asignaciones.all()
     
     events_map = {}
     workers_info = {} 
@@ -3496,6 +3595,12 @@ def api_planificador_events():
             Solicitud.fecha_inicio <= end_date,
             Solicitud.fecha_fin >= start_date
         ).all()
+
+        if worker_ids:
+            solicitudes = [
+                s for s in solicitudes
+                if s.tipo == 'CONCRETA' and s.empleado_id in worker_ids
+            ]
 
         for sol in solicitudes:
             accion = getattr(sol, 'accion', 'ASIGNAR')

@@ -5,6 +5,7 @@ from app import db
 from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_OPERARIO
 from app.services.permission_service import is_laboral
 from app.services.i18n_service import translate
+from app.services.solicitud_service import solicitud_calendar_title
 from app.decorators import roles_required_api
 from datetime import datetime, timedelta
 import json
@@ -482,16 +483,18 @@ def get_universal_calendar_events():
                 
                 if not lista_fichajes:
                     color_final = "#94a3b8"  # ⚪ Gris (Sin datos en BD)
+                    estado_agregado = 'Sin_Registro'
                     tooltip_html = f"<div style='text-align:left;'><strong>{fecha.strftime('%d/%m/%Y')}:</strong><br>⚪ Sin Registro (Aún no ha fichado)</div>"
                 else:
                     estados = [f.estado for f in lista_fichajes]
-
                     from app.services.fichaje_estado_service import (
                         FICHAJE_OK,
                         FICHAJE_NARANJA,
                         FICHAJE_ROJO,
                         color_fichaje_agregado,
+                        estado_fichaje_agregado,
                     )
+                    estado_agregado = estado_fichaje_agregado(estados)
 
                     def _label_estado_fichaje(estado):
                         return {
@@ -552,7 +555,10 @@ def get_universal_calendar_events():
                     "extendedProps": {
                         "isFichaje": True,
                         "estado_color": color_final,
-                        "tooltipContent": tooltip_html
+                        "tooltipContent": tooltip_html,
+                        "fecha_iso": fecha.strftime("%Y-%m-%d"),
+                        "worker_id": entity_id,
+                        "estado_fichaje": estado_agregado,
                     }
                 })
 
@@ -566,29 +572,31 @@ def get_universal_calendar_events():
 
         for s in solicitudes:
             accion = getattr(s, 'accion', 'ASIGNAR')
-            url_sol = url_for('admin.solicitud_detail', solicitud_id=s.id)
             nom_obra = _obra_label(s.obra, fallback='?')
+            title = solicitud_calendar_title(s, nom_obra, view='worker')
+            if not title:
+                continue
 
-            if accion == 'DESASIGNAR':
-                title = "LIBRE (Salida)"
-                color = "#dc3545"
-                visual_end = s.fecha_fin
-                if s.comentarios and 'all_obra' in s.comentarios:
-                    visual_end = s.obra.fecha_fin if (s.obra and s.obra.fecha_fin) else s.fecha_inicio + timedelta(days=365)
-            else:
-                title = f"Solicitado: {nom_obra}"
-                color = "#F59E0B"
-                visual_end = s.fecha_fin
+            color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
+            visual_end = s.fecha_fin
+            if accion == 'DESASIGNAR' and s.comentarios and 'all_obra' in s.comentarios:
+                visual_end = s.obra.fecha_fin if (s.obra and s.obra.fecha_fin) else s.fecha_inicio + timedelta(days=365)
 
             end_to_draw = min(visual_end, end_date)
-            events.append({
+            event = {
                 "title": title,
                 "start": s.fecha_inicio.strftime("%Y-%m-%d"),
                 "end": (end_to_draw + timedelta(days=1)).strftime("%Y-%m-%d"),
                 "color": color,
-                "url": url_sol, # URL PARA REDIRIGIR AL CLICAR
-                "extendedProps": {"type": "request"}
-            })
+                "extendedProps": {
+                    "type": "request",
+                    "solicitud_accion": accion,
+                    "solicitud_estado": s.estado,
+                },
+            }
+            if current_user.role != ROLE_OPERARIO:
+                event["url"] = url_for('admin.solicitud_detail', solicitud_id=s.id)
+            events.append(event)
 
     # =====================================================================
     # 2. CONTEXTO: FICHA DE OBRA
@@ -612,6 +620,27 @@ def get_universal_calendar_events():
         )
 
         if mode == 'empleados':
+            from app.models import AsignacionVehiculo, Vehiculo
+
+            worker_ids = {a.user_id for a in asignaciones if a.user_id}
+            veh_by_user_date = {}
+            if worker_ids:
+                veh_rows = AsignacionVehiculo.query.filter(
+                    AsignacionVehiculo.user_id.in_(worker_ids),
+                    AsignacionVehiculo.fecha >= start_date,
+                    AsignacionVehiculo.fecha < end_date,
+                ).all()
+                veh_ids = {r.vehiculo_id for r in veh_rows}
+                vehiculos_map = {
+                    v.id: v for v in Vehiculo.query.filter(Vehiculo.id.in_(veh_ids)).all()
+                } if veh_ids else {}
+                for r in veh_rows:
+                    v = vehiculos_map.get(r.vehiculo_id)
+                    veh_by_user_date[(r.user_id, r.fecha)] = {
+                        'vehiculo_id': r.vehiculo_id,
+                        'vehiculo_label': v.label() if v else None,
+                    }
+
             raw_events = []
             for a in asignaciones:
                 worker = getattr(a, 'user_obj', getattr(a, 'user', None))
@@ -630,6 +659,7 @@ def get_universal_calendar_events():
                 title, overlay_color, is_overlay = apply_leave_overlay_title(
                     base_title, leave, name_first=True
                 )
+                v_info = veh_by_user_date.get((worker.id, a.fecha), {})
                 raw_events.append({
                     'title': title,
                     'start_date': a.fecha,
@@ -638,6 +668,8 @@ def get_universal_calendar_events():
                     'extendedProps': {
                         'type': 'asignacion',
                         'worker_id': worker.id,
+                        'vehiculo_label': v_info.get('vehiculo_label'),
+                        'vehiculo_id': v_info.get('vehiculo_id'),
                         'en_ausencia': is_overlay,
                         'ausencia_tipo': leave.tipo if leave else None,
                     }
@@ -658,14 +690,9 @@ def get_universal_calendar_events():
         for s in solicitudes:
             accion = getattr(s, 'accion', 'ASIGNAR')
             url_sol = url_for('admin.solicitud_detail', solicitud_id=s.id)
-
-            if s.tipo == 'CONCRETA':
-                emp_name = s.empleado.name if s.empleado else '?'
-                title = f"Solicitud de Baja: {emp_name}" if accion == 'DESASIGNAR' else f"FALTA: {emp_name}"
-            else:
-                faltan = s.cantidad_solicitada - s.cantidad_cubierta
-                if faltan <= 0: continue
-                title = f"FALTAN: {faltan} ({s.perfil_categoria or 'Cualquiera'})"
+            title = solicitud_calendar_title(s, _obra_label(s.obra, fallback='?'), view='obra')
+            if not title:
+                continue
 
             color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
             visual_end = s.fecha_fin
@@ -750,14 +777,9 @@ def get_universal_calendar_events():
             accion = getattr(s, 'accion', 'ASIGNAR')
             url_sol = url_for('admin.solicitud_detail', solicitud_id=s.id)
             obra_txt = _obra_label(s.obra, fallback='?')
-
-            if s.tipo == 'CONCRETA':
-                emp_name = s.empleado.name if s.empleado else '?'
-                title = f"Solicitud de Baja: {emp_name} ({obra_txt})" if accion == 'DESASIGNAR' else f"FALTA: {emp_name} ({obra_txt})"
-            else:
-                faltan = s.cantidad_solicitada - s.cantidad_cubierta
-                if faltan <= 0: continue
-                title = f"FALTAN: {faltan} ({obra_txt})"
+            title = solicitud_calendar_title(s, obra_txt, view='empresa')
+            if not title:
+                continue
 
             color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
             visual_end = s.fecha_fin

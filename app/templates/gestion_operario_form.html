@@ -337,6 +337,28 @@
         </div>
       </div>
     </section>
+
+    <section class="admin-panel admin-form-panel mt-3" id="pinAccessInfoSection">
+      <div class="admin-panel-header">
+        <h2 class="admin-panel-title">{{ _('Acceso al fichaje') }}</h2>
+        <span class="admin-panel-subtitle">{{ _('Envía por correo la URL, el DNI y el enlace para definir o cambiar el PIN') }}</span>
+      </div>
+      <div class="p-3">
+        <p class="small text-muted mb-3">
+          {{ _('El PIN nunca viaja en el correo. Si se lo diste a mano, el operario ya puede entrar; el enlace sirve para definirlo o cambiarlo.') }}
+        </p>
+        <form method="POST" action="{{ url_for('admin.enviar_informacion_acceso', user_id=user.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="admin-form-label">{{ _('Email del operario') }}</label>
+          <input type="email" name="email" class="form-control mb-3" style="max-width:360px;"
+                 value="{% if user.email and '@demo.signaplan' not in (user.email or '') and '@local.signaplan' not in (user.email or '') %}{{ user.email }}{% endif %}"
+                 placeholder="{{ _('Obligatorio para enviar') }}" required>
+          <button type="submit" class="btn-admin btn-admin-primary">
+            <i class="fas fa-envelope"></i> {{ _('Enviar información de acceso') }}
+          </button>
+        </form>
+      </div>
+    </section>
     {% endif %}
   </main>
 </div>

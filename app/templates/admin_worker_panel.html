@@ -4,6 +4,9 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+{% if puede_ver_estado_fichaje %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
+{% endif %}
 {% endblock %}
 
 {% block wrapper %}
@@ -115,6 +118,11 @@
           </div>
 
           <div class="entity-hero-actions">
+            {% if worker.role == 'jefe_obra' and current_user.role in ['admin', 'jefe_obra', 'laboral'] %}
+            <a href="{{ url_for('admin.planificador_jo', jefe_id=worker.id) }}" class="btn-admin btn-admin-ghost">
+              <i class="fas fa-calendar-alt"></i> {{ _('Ver planificador') }}
+            </a>
+            {% endif %}
             {% if tenant_has_valoraciones and current_user.role in ['admin', 'jefe_obra'] %}
             <button type="button" class="btn-admin btn-admin-ghost" onclick="openRatingModal()">
               <i class="far fa-star"></i> {{ _('Puntuar') }}
@@ -212,9 +220,19 @@
 </div>
 {% endif %}
 
+{% if puede_ver_estado_fichaje %}
+{% with modal_id='modalTimelineFichaje', modal_title=_('Historial del día') %}
+  {% include 'components/_person_day_timeline_modal.html' %}
+{% endwith %}
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
+{% if puede_ver_estado_fichaje %}
+<script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
+<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260831b"></script>
+{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
@@ -233,6 +251,18 @@ document.addEventListener('DOMContentLoaded', function() {
         hideTitle: true,
         readonly: {{ (not can_edit_calendar)|tojson }}
     });
+
+    {% if puede_ver_estado_fichaje %}
+    if (typeof PersonDayTimeline !== 'undefined') {
+        PersonDayTimeline.bindFichajeDotClick('#worker-calendar', {
+            modalId: 'modalTimelineFichaje',
+            apiBase: '/sync/timeline_dia',
+            loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
+            canResolveAudit: {{ (puede_resolver_auditoria|default(false))|tojson }},
+            auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
+        });
+    }
+    {% endif %}
 
     window.enviarAccionPerfil = function(payload, revertFunc) {
         payload.check_conflicts = true;

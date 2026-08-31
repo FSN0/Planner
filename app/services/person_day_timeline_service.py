@@ -360,6 +360,48 @@ def _link_subject_in_text(html, subject_user):
     return Markup(html_str.replace(escaped_name, link, 1))
 
 
+def _enrich_fichaje_app_from_registro(log, detail):
+    """Añade obra planificada al detalle del fichaje cuando hay desviación."""
+    if log.category != "fichaje_app" or not log.target_user_id or not log.target_date:
+        return detail
+    if not detail or "planificado" in detail.lower():
+        return detail
+
+    reg = RegistroFichaje.query.filter_by(
+        user_id=log.target_user_id,
+        fecha=log.target_date,
+    ).first()
+    if not reg:
+        return detail
+
+    obra_real = (
+        format_obra_label(Obra.query.get(reg.obra_real_id))
+        if reg.obra_real_id
+        else None
+    )
+    obra_plan = (
+        format_obra_label(Obra.query.get(reg.obra_planificada_id))
+        if reg.obra_planificada_id
+        else None
+    )
+
+    if reg.estado == "Conflicto" and obra_real and obra_plan and obra_real != obra_plan:
+        detail = detail.rstrip(".")
+        return f"{detail} (tenía planificado en '{obra_plan}')."
+    if reg.estado == "Paracaidista" and obra_real:
+        detail = detail.rstrip(".")
+        return f"{detail}. Fichó sin planificación previa en esa obra."
+    if (
+        obra_real
+        and obra_plan
+        and obra_real != obra_plan
+        and "planificado" not in detail.lower()
+    ):
+        detail = detail.rstrip(".")
+        return f"{detail} (tenía planificado en '{obra_plan}')."
+    return detail
+
+
 def _append_fichaje_notes_from_registro(log, detail):
     """Añade notas Odoo al detalle del log si el registro local las tiene."""
     if log.category != 'fichaje_app' or not detail or 'Notas:' in detail:
@@ -389,6 +431,7 @@ def _append_fichaje_notes_from_registro(log, detail):
 def _build_detail_html(text, obra_cache, subject_user, target_date=None, log_timestamp=None, log=None):
     plain = strip_coverage(text or "")
     plain = _enrich_legacy_fichaje_detail(log, plain) if log else plain
+    plain = _enrich_fichaje_app_from_registro(log, plain) if log else plain
     plain = _append_fichaje_notes_from_registro(log, plain) if log else plain
     plain = _normalize_detail_obras(plain, obra_cache)
     plain = _normalize_fichaje_times_in_detail(plain, target_date, log_timestamp)
@@ -417,6 +460,13 @@ def _build_hito(log, user, obra_cache):
     autor, actor_user_id = _resolve_actor(log, user)
 
     local_ts = format_datetime(log.timestamp, "%Y-%m-%d %H:%M:%S")
+    conflicto = (
+        log.category == "fichaje_app"
+        and (
+            "planificado" in (detail or "").lower()
+            or "sin planificación" in (detail or "").lower()
+        )
+    )
     return {
         "id": log.id,
         "sort_time": local_ts,
@@ -430,6 +480,7 @@ def _build_hito(log, user, obra_cache):
         "actor_url": _worker_panel_url(actor_user_id),
         "descripcion": detail,
         "descripcion_html": str(detail_html),
+        "conflicto": conflicto,
     }
 
 
@@ -641,6 +692,24 @@ def build_person_day_timeline(user_id, fecha_obj):
 
     hitos = [_localize_hito(h, user, obra_cache) for h in hitos]
 
+    registro_auditoria_id = None
+    _prioridad_auditoria = (
+        "Conflicto",
+        "Paracaidista",
+        "Ausencia",
+        "Pendiente",
+        "Retraso",
+    )
+    if registros:
+        pendientes_audit = [
+            r for r in registros if r.estado in _prioridad_auditoria
+        ]
+        if pendientes_audit:
+            pendientes_audit.sort(
+                key=lambda r: (_prioridad_auditoria.index(r.estado), r.id)
+            )
+            registro_auditoria_id = pendientes_audit[0].id
+
     return {
         "success": True,
         "empleado": f"{user.name} {user.lastname}",
@@ -649,6 +718,7 @@ def build_person_day_timeline(user_id, fecha_obj):
         "fecha": fecha_obj.strftime("%d/%m/%Y"),
         "fecha_iso": fecha_obj.strftime("%Y-%m-%d"),
         "estado_actual": estado_actual,
+        "registro_auditoria_id": registro_auditoria_id,
         "hitos": hitos,
     }
 

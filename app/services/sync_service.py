@@ -36,9 +36,25 @@ def _merge_fichaje_notes(existing, new):
     return ' | '.join(parts)
 
 
-def _format_fichaje_log_detail(obra_label, check_in_dt, check_out_dt, note=None):
+def _format_fichaje_log_detail(
+    obra_label,
+    check_in_dt,
+    check_out_dt,
+    note=None,
+    obra_plan_label=None,
+    estado=None,
+):
+    if estado == 'Conflicto' and obra_plan_label and obra_plan_label != obra_label:
+        intro = (
+            f"El operario fichó en {obra_label} "
+            f"(tenía planificado en {obra_plan_label})."
+        )
+    elif estado == 'Paracaidista':
+        intro = f"El operario fichó en {obra_label} sin planificación en esa obra."
+    else:
+        intro = f"El operario fichó en {obra_label}."
     detail = (
-        f"El operario fichó en {obra_label}. "
+        f"{intro} "
         f"Entrada: {format_time(check_in_dt) if check_in_dt else '-'} / "
         f"Salida: {format_time(check_out_dt) if check_out_dt else '-'}"
     )
@@ -350,12 +366,22 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                 ))
 
                 obra_label = CoreAssignmentService.format_obra_label(local_obra)
+                obra_plan_label = None
+                if nuevo_plan_id and nuevo_plan_id != local_obra.id:
+                    obra_plan = Obra.query.get(nuevo_plan_id)
+                    if obra_plan:
+                        obra_plan_label = CoreAssignmentService.format_obra_label(obra_plan)
                 db.session.add(SystemLog(
                     timestamp=check_in_dt or utc_now(),
                     category='fichaje_app',
                     action=f"Fichaje físico [{nuevo_estado.replace('_', ' ')}]",
                     detail=_format_fichaje_log_detail(
-                        obra_label, check_in_dt, check_out_dt, f.get('note')
+                        obra_label,
+                        check_in_dt,
+                        check_out_dt,
+                        f.get('note'),
+                        obra_plan_label=obra_plan_label,
+                        estado=nuevo_estado,
                     ),
                     target_user_id=local_user.id,
                     target_date=fecha_obj,

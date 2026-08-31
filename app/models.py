@@ -171,7 +171,7 @@ class User(UserMixin, db.Model):
     )
     # PIN numérico para la PWA de fichaje (DNI + PIN). Independiente del login web.
     pin_hash = db.Column(db.String(255), nullable=True)
-    # True si el PIN fue generado y aún no lo ha cambiado el trabajador en /mi.
+    # True si el PIN fue generado y aún no lo ha cambiado el trabajador en la app.
     pin_must_change = db.Column(
         db.Boolean, nullable=False, default=False, server_default='false'
     )

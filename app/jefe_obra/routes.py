@@ -48,7 +48,13 @@ def panel():
         return redirect(url_for('main.dashboard'))
 
     from app.services.panel_service import get_jefe_panel_context
-    return render_template('jefe_panel.html', **get_jefe_panel_context(current_user))
+    from app.services.permission_service import can_resolve_fichajes
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    ctx = get_jefe_panel_context(current_user)
+    ctx['puede_resolver_auditoria'] = (
+        can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
+    )
+    return render_template('jefe_panel.html', **ctx)
 
 
 @jefe_bp.route('/obras_detailed', methods=['GET'], endpoint="obras_detailed")
@@ -68,6 +74,11 @@ def obras_detailed():
     context['prev_month_url'] = url_for('jefe.obras_detailed', selected_date=context['prev_date_str'])
     context['next_month_url'] = url_for('jefe.obras_detailed', selected_date=context['next_date_str'])
     context['view_mode'] = 'jefe' # Para que el HTML oculte botones de Admin
+    from app.services.permission_service import can_resolve_fichajes
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    context['puede_resolver_auditoria'] = (
+        can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
+    )
     
     # 4. Renderizar pasando todo el diccionario del contexto
     return render_template('obras_detailed_unificado.html', **context)

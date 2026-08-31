@@ -334,6 +334,18 @@ body.kanban-page .admin-shell {
 .dot-warning { background-color: #f59e0b; }
 .dot-info { background-color: #3b82f6; }
 .dot-secondary { background-color: #94a3b8; }
+.status-dot-kanban--interactive {
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.status-dot-kanban--interactive:hover,
+.status-dot-kanban--interactive:focus {
+    transform: scale(1.35);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 3px rgba(15, 23, 42, 0.18);
+    outline: none;
+}
 
 
 /* ==========================================================================

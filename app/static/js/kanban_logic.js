@@ -562,6 +562,18 @@ $(document).ready(function() {
         dataList.forEach(item => {
             $select.append(new Option(item.text, item.id, false, String(item.id) === String(currentId)));
         });
+
+        var $panelLink = $('#staffPanelLink');
+        function updateStaffPanelLink() {
+            var uid = $select.val();
+            if (role === 'jefe' && uid) {
+                $panelLink.attr('href', '/admin/worker_panel/' + uid).removeClass('d-none');
+            } else {
+                $panelLink.addClass('d-none');
+            }
+        }
+        updateStaffPanelLink();
+        $select.off('change.staffPanel').on('change.staffPanel', updateStaffPanelLink);
         
         $('#modalEditStaff').data('trigger-element', $span).modal('show');
     });

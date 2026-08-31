@@ -11,6 +11,75 @@ window.PersonDayTimeline = (function () {
         return div.innerHTML;
     }
 
+    const ACTIONABLE_ESTADOS = new Set([
+        'Conflicto', 'Paracaidista', 'Ausencia', 'Pendiente', 'Retraso',
+    ]);
+
+    function auditSectionForEstado(estado) {
+        const canon = canonEstado(estado);
+        if (canon === 'Paracaidista') return '#collapseParacaidistas';
+        if (canon === 'Ausencia') return '#collapseAusencias';
+        return '#collapseConflictos';
+    }
+
+    function buildAuditoriaUrl(userId, fechaStr, estado, auditBase, registroId) {
+        const base = auditBase || '/sync/auditoria';
+        const params = new URLSearchParams();
+        if (userId) params.set('user_id', String(userId));
+        if (fechaStr) params.set('fecha', fechaStr);
+        if (estado) params.set('estado', canonEstado(estado));
+        const section = auditSectionForEstado(estado);
+        if (section) {
+            params.set('seccion', section.replace('#collapse', '').toLowerCase());
+        }
+        if (registroId) params.set('registro_id', String(registroId));
+        return `${base}?${params.toString()}`;
+    }
+
+    function hideResolveButton(modal) {
+        const btn = modal && modal.querySelector('[data-timeline-resolve-audit]');
+        if (!btn) return;
+        btn.classList.add('d-none');
+        btn.hidden = true;
+        btn.removeAttribute('href');
+    }
+
+    function updateResolveButton(modal, data, opts) {
+        const btn = modal && modal.querySelector('[data-timeline-resolve-audit]');
+        if (!btn) return;
+        const options = opts || {};
+        if (!options.canResolveAudit) {
+            hideResolveButton(modal);
+            return;
+        }
+        const estado = canonEstado(
+            (data && data.estado_actual) || options.estadoHint || ''
+        );
+        if (!ACTIONABLE_ESTADOS.has(estado)) {
+            hideResolveButton(modal);
+            return;
+        }
+        const userId = (data && (data.target_user_id || data.user_id)) || options.userId;
+        const fechaStr = (data && data.fecha_iso) || options.fechaStr;
+        btn.href = buildAuditoriaUrl(
+            userId,
+            fechaStr,
+            estado,
+            options.auditUrl,
+            data && data.registro_auditoria_id
+        );
+        btn.classList.remove('d-none');
+        btn.hidden = false;
+    }
+
+    function wrapOnLoaded(opts, modal, openCtx) {
+        const prev = opts && opts.onLoaded;
+        return function (data) {
+            updateResolveButton(modal, data, Object.assign({}, opts, openCtx));
+            if (typeof prev === 'function') prev(data);
+        };
+    }
+
     function renderEmpleadoLink(name, url) {
         if (!name) return '—';
         if (!url) return escapeHtml(name);
@@ -61,7 +130,7 @@ window.PersonDayTimeline = (function () {
         ].join(' ').toLowerCase();
 
         return `
-            <div class="person-day-timeline-item" data-timeline-search="${escapeHtml(searchBlob)}">
+            <div class="person-day-timeline-item${hito.conflicto ? ' person-day-timeline-item--conflict' : ''}" data-timeline-search="${escapeHtml(searchBlob)}">
                 <span class="person-day-timeline-marker" style="background:${iconColor};">
                     <i class="fas ${iconClass}" style="color:#fff;"></i>
                 </span>
@@ -293,6 +362,7 @@ window.PersonDayTimeline = (function () {
         }
 
         const body = modal.querySelector('[data-person-day-timeline-root]');
+        hideResolveButton(modal);
         showLoading(body, opts.loadingMessage);
 
         if (typeof $ !== 'undefined' && $.fn.modal) {
@@ -302,7 +372,58 @@ window.PersonDayTimeline = (function () {
             modal.style.display = 'block';
         }
 
-        return load(body, userId, fechaStr, opts);
+        const openCtx = {
+            userId: userId,
+            fechaStr: fechaStr,
+            estadoHint: opts.estadoHint || '',
+        };
+        return load(body, userId, fechaStr, Object.assign({}, opts, {
+            onLoaded: wrapOnLoaded(opts, modal, openCtx),
+        }));
+    }
+
+    function bindFichajeDotClick(containerSelector, options) {
+        const root = document.querySelector(containerSelector);
+        if (!root) return;
+
+        function openFromDot(dot) {
+            const userId = dot.getAttribute('data-user-id');
+            let fechaStr = dot.getAttribute('data-fecha');
+            if (!fechaStr) {
+                const dateInput = document.getElementById('timeline-selected-date');
+                fechaStr = dateInput ? dateInput.value : '';
+            }
+            if (!userId || !fechaStr) return;
+            openModal(userId, fechaStr, Object.assign({}, options || {}, {
+                estadoHint: dot.getAttribute('data-estado-fichaje') || '',
+            }));
+        }
+
+        root.addEventListener('mousedown', function (e) {
+            const dot = e.target.closest('[data-fichaje-dot]');
+            if (dot) e.stopPropagation();
+        });
+
+        root.addEventListener('click', function (e) {
+            const dot = e.target.closest('[data-fichaje-dot]');
+            if (!dot) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openFromDot(dot);
+        });
+
+        root.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            const dot = e.target.closest('[data-fichaje-dot]');
+            if (!dot) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openFromDot(dot);
+        });
+    }
+
+    function bindKanbanDotClick(containerSelector, options) {
+        bindFichajeDotClick(containerSelector, options);
     }
 
     function bindRowClick(selector, options) {
@@ -330,6 +451,9 @@ window.PersonDayTimeline = (function () {
         loadRange,
         openModal,
         bindRowClick,
+        bindKanbanDotClick,
+        bindFichajeDotClick,
+        buildAuditoriaUrl,
         renderInto,
         renderHitosHTML,
         applyEstadoBadge,

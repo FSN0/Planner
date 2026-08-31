@@ -22,6 +22,14 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
+<style>
+tr.audit-row-highlight > td {
+  background-color: #fef9c3 !important;
+}
+tr.audit-row-highlight {
+  box-shadow: inset 4px 0 0 #f59e0b;
+}
+</style>
 {% endblock %}
 
 {% block wrapper %}
@@ -701,6 +709,41 @@ function openAuditoriaSection(collapseSelector) {
 }
 window.openAuditoriaSection = openAuditoriaSection;
 
+function applyAuditoriaDeepLink() {
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get('user_id');
+    const fecha = params.get('fecha');
+    const registroId = params.get('registro_id');
+    const seccion = (params.get('seccion') || '').toLowerCase();
+    if (!userId && !fecha && !registroId) return;
+
+    const sectionMap = {
+        conflictos: '#collapseConflictos',
+        paracaidistas: '#collapseParacaidistas',
+        ausencias: '#collapseAusencias',
+    };
+    const section = sectionMap[seccion] || '#collapseConflictos';
+    openAuditoriaSection(section);
+
+    setTimeout(function () {
+        let target = null;
+        if (registroId) {
+            target = document.getElementById('row-' + registroId);
+        }
+        if (!target && userId && fecha) {
+            document.querySelectorAll('.fila-fichaje-auditoria').forEach(function (row) {
+                if (String(row.getAttribute('data-user-id')) !== String(userId)) return;
+                if (row.getAttribute('data-fecha') !== fecha) return;
+                if (!target || row.closest('.collapse.show')) target = row;
+            });
+        }
+        if (!target) return;
+        target.classList.add('audit-row-highlight');
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 500);
+}
+window.applyAuditoriaDeepLink = applyAuditoriaDeepLink;
+
 $(document).ready(function() {
     ['auditConflictosTable', 'auditParacaidistasTable', 'auditAusenciasTable'].forEach(function(id) {
         if (document.getElementById(id)) applyDefaultDateSort(id, 0);
@@ -745,6 +788,8 @@ $(document).ready(function() {
             });
         }
     });
+
+    applyAuditoriaDeepLink();
 });
 
 function showToast(message, isSuccess = false) {
@@ -896,6 +941,8 @@ document.addEventListener('DOMContentLoaded', function () {
         modalId: 'modalTimelineFichaje',
         apiBase: '/sync/timeline_dia',
         loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
+        canResolveAudit: {{ can_resolve_fichajes|tojson }},
+        auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
     });
 });
 </script>

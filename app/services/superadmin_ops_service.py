@@ -182,3 +182,44 @@ def leer_token_impersonacion(token, tenant_esperado):
     if (data.get('sub') or '') != tenant_esperado.subdominio:
         raise ValueError('El enlace no corresponde a esta empresa.')
     return int(data['uid'])
+
+
+def seed_tenant_content(tenant, qty=None, activar_fichaje=True):
+    """Rellena el schema del tenant SIN marcar modo demo (sin banner)."""
+    from flask import g
+
+    from app import is_safe_schema_name
+    from app.models import User
+    from app.services.demo_data_service import generar_datos_demo
+
+    schema = tenant.schema_name
+    if not is_safe_schema_name(schema):
+        raise ValueError('Esquema de tenant no válido.')
+
+    prev = getattr(g, 'current_tenant', None)
+    try:
+        db.session.execute(text(f'SET search_path TO {schema}, public'))
+        g.current_tenant = tenant
+        admin = (
+            User.query
+            .filter_by(role=ROLE_ADMIN, is_deleted=False)
+            .order_by(User.id.asc())
+            .first()
+        )
+        qty_out = generar_datos_demo(
+            actor_user=admin,
+            activar_fichaje=activar_fichaje,
+            qty=qty,
+            marcar_demo=False,
+        )
+        db.session.commit()
+        return qty_out
+    except Exception:
+        db.session.rollback()
+        raise
+    finally:
+        try:
+            db.session.execute(text('SET search_path TO public'))
+        except Exception:
+            pass
+        g.current_tenant = prev

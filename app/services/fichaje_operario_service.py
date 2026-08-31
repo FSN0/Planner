@@ -6,7 +6,7 @@
 #
 # Dos capas: el módulo comercial fichaje_operario (superadmin /alta) y el
 # interruptor del cliente fichaje_operario_activo («Fichajes»). Sin módulo
-# no hay /mi. Con módulo apagado, tampoco. El alta pública deja ambos on.
+# no hay portal de fichaje. Con módulo apagado, tampoco. El alta pública deja ambos on.
 
 from datetime import timedelta
 
@@ -66,7 +66,7 @@ _MENSAJE_TRANSICION = {
 def tenant_tiene_fichaje_operario_module():
     """
     El PWA del operario es un módulo comercial/funcional independiente.
-    Si no está activado en el tenant, no enseñamos sus ajustes ni abrimos /mi.
+    Si no está activado en el tenant, no enseñamos sus ajustes ni abrimos el portal de fichaje.
     """
     from flask import g, has_app_context
 
@@ -88,7 +88,7 @@ def tenant_muestra_auditoria_fichajes():
     """
     Auditoría de fichajes en menú, panel y correos.
 
-    - Cliente con Odoo (p. ej. Soltec): sí, aunque no tenga /mi.
+    - Cliente con Odoo (p. ej. Soltec): sí, aunque no tenga portal de fichaje propio.
     - Alta con módulo de fichaje: solo si el interruptor «Fichajes» está on.
     - Superadmin sin Odoo ni módulo: no.
     """

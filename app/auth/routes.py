@@ -582,8 +582,23 @@ def sso_portal():
 
 @auth_bp.route('/tour-volver-admin')
 def tour_volver_admin():
-    """Tras probar el fichaje en la guía: vuelve al admin (alias sin /mi)."""
-    return redirect(url_for('operarios.tour_volver_admin', **request.args))
+    """Tras probar el fichaje en la guía: restaura la sesión del admin."""
+    from flask import session
+    from app.models import User, ROLE_ADMIN
+
+    admin_id = session.pop('tour_admin_user_id', None)
+    next_url = (request.args.get('next') or '').strip()
+    logout_user()
+    if admin_id:
+        admin = User.query.get(admin_id)
+        if admin and admin.role == ROLE_ADMIN and not admin.is_deleted:
+            login_user(admin, remember=True)
+            if getattr(g, 'current_tenant', None):
+                session['tenant_id'] = g.current_tenant.id
+            if next_url.startswith('/') and not next_url.startswith('//'):
+                return redirect(next_url)
+            return redirect(url_for('admin.obras_detailed', tour='fichaje_done'))
+    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/stop-impersonate', methods=['POST'])

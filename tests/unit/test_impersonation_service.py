@@ -16,6 +16,21 @@ def test_admin_puede_impersonar_si_no_hay_sesion_activa(app):
         assert admin_puede_impersonar(admin) is True
 
 
+def test_admin_puede_impersonar_tras_entrada_superadmin(app):
+    admin = SimpleNamespace(is_authenticated=True, role='admin', id=1)
+    with app.test_request_context() as ctx:
+        ctx.session['superadmin_impersonation'] = True
+        assert admin_puede_impersonar(admin) is True
+
+
+def test_no_impersonar_si_ya_hay_suplantacion_activa(app):
+    admin = SimpleNamespace(is_authenticated=True, role='admin', id=1)
+    with app.test_request_context() as ctx:
+        ctx.session[SESSION_IMPERSONATOR_KEY] = admin.id
+        ctx.session['impersonated_user_id'] = 99
+        assert admin_puede_impersonar(admin) is False
+
+
 def test_no_impersonar_admin_ni_a_si_mismo():
     actor = SimpleNamespace(is_authenticated=True, role='admin', id=1)
     otro_admin = SimpleNamespace(is_authenticated=True, role='admin', id=2, is_deleted=False, is_active=True)

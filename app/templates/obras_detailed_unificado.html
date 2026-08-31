@@ -9,6 +9,9 @@
 
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260829b">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260829a">
+  {% if puede_ver_estado_fichaje %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
+  {% endif %}
 {% endblock %}
 
 {% block wrapper %}
@@ -124,6 +127,9 @@
                 <button type="button" class="btn btn-primary btn-sm btn-block" onclick="submitStaffChange()">
                     {{ _('Guardar Cambios') }}
                 </button>
+                <a id="staffPanelLink" href="#" class="btn btn-outline-secondary btn-sm btn-block mt-2 d-none" target="_blank" rel="noopener">
+                    <i class="fas fa-user-tie mr-1"></i> {{ _('Ir al panel del jefe') }}
+                </a>
             </div>
         </div>
     </div>
@@ -203,6 +209,12 @@
 </div>
 
 
+{% if puede_ver_estado_fichaje %}
+{% with modal_id='modalTimelineFichaje', modal_title=_('Historial del día') %}
+  {% include 'components/_person_day_timeline_modal.html' %}
+{% endwith %}
+{% endif %}
+
 <script>
   var LISTA_JEFES = [
       {id: "", text: {{ _('-- Sin Jefe --')|tojson }}},
@@ -281,6 +293,22 @@
   </script>
   {% endif %}
 
+  {% if puede_ver_estado_fichaje %}
+  <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260831a"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (typeof PersonDayTimeline === 'undefined') return;
+    PersonDayTimeline.bindKanbanDotClick('#kanbanContainer', {
+      modalId: 'modalTimelineFichaje',
+      apiBase: '/sync/timeline_dia',
+      loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
+      canResolveAudit: {{ (puede_resolver_auditoria|default(false))|tojson }},
+      auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
+    });
+  });
+  </script>
+  {% endif %}
 
 
 {% endblock %}

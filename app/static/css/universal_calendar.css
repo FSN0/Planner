@@ -417,3 +417,29 @@ body > .select2-container--open {
 .univ-calendar-embedded .modal-body .close.univ-calendar-modal-close:hover {
   opacity: 1;
 }
+
+.univ-event-with-vehicle {
+  min-width: 0;
+}
+.univ-event-vehicle-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.fc-fichaje-dot-float--interactive span {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.fc-fichaje-dot-float--interactive:hover span,
+.fc-fichaje-dot-float--interactive:focus span {
+  transform: scale(1.18);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.fc-fichaje-dot-float--interactive:focus {
+  outline: none;
+}
+.fc-fichaje-dot-float--interactive:focus span {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}

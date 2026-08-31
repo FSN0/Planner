@@ -136,4 +136,4 @@ class TestAdminSolicitudesAuthz:
         if response.status_code == 302:
             loc = response.location or ''
             assert '/admin/solicitudes' not in loc
-            assert '/mi' in loc or '/auth/login' in loc or '/login' in loc
+            assert '/fichaje' in loc or '/auth/login' in loc or '/login' in loc

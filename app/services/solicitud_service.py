@@ -579,3 +579,63 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
         return "Solicitud reabierta."
     else:
         raise ValueError("Acción no reconocida.")
+
+
+def solicitud_calendar_title(solicitud, obra_label='?', *, view='worker'):
+    """
+    Título legible para eventos de solicitud en calendarios.
+
+    view:
+      - worker: calendario del propio operario (incluye obra, sin nombre)
+      - obra: ficha de obra (nombre del operario, sin obra en el título)
+      - empresa: ficha de empresa (nombre + obra)
+    """
+    from app.services.i18n_service import translate
+
+    accion = getattr(solicitud, 'accion', 'ASIGNAR') or 'ASIGNAR'
+    obra = obra_label or '?'
+
+    if getattr(solicitud, 'tipo', None) == 'GENERICA':
+        faltan = solicitud.cantidad_solicitada - solicitud.cantidad_cubierta
+        if faltan <= 0:
+            return None
+        perfil = solicitud.perfil_categoria or translate('Cualquiera')
+        if view == 'empresa':
+            return translate(
+                'Solicitud de personal: faltan {n} ({perfil}) · {obra}',
+                n=faltan,
+                perfil=perfil,
+                obra=obra,
+            )
+        return translate(
+            'Solicitud de personal: faltan {n} ({perfil})',
+            n=faltan,
+            perfil=perfil,
+        )
+
+    emp_name = '?'
+    empleado = getattr(solicitud, 'empleado', None)
+    if empleado:
+        emp_name = empleado.name or '?'
+
+    if view == 'worker':
+        if accion == 'DESASIGNAR':
+            return translate('Solicitud de baja · {obra}', obra=obra)
+        return translate('Solicitud de asignación · {obra}', obra=obra)
+
+    if accion == 'DESASIGNAR':
+        if view == 'empresa':
+            return translate(
+                'Solicitud de baja: {nombre} ({obra})',
+                nombre=emp_name,
+                obra=obra,
+            )
+        return translate('Solicitud de baja: {nombre}', nombre=emp_name)
+
+    if view == 'empresa':
+        return translate(
+            'Solicitud de asignación: {nombre} ({obra})',
+            nombre=emp_name,
+            obra=obra,
+        )
+    return translate('Solicitud de asignación: {nombre}', nombre=emp_name)

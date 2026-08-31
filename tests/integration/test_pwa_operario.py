@@ -49,7 +49,7 @@ def _configurar(session, **claves):
 def _fichar(cliente, tipo, **extra):
     cuerpo = dict(tipo=tipo, **extra)
     return cliente.post(
-        '/mi/fichar',
+        '/fichaje/fichar',
         data=json.dumps(cuerpo),
         content_type='application/json',
     )
@@ -77,7 +77,7 @@ def pwa(session, tenant_soltec, company_internal,
     session.execute(text('ALTER TABLE fichajes_eventos DISABLE TRIGGER USER'))
     session.execute(text('DELETE FROM fichajes_eventos'))
     session.execute(text('ALTER TABLE fichajes_eventos ENABLE TRIGGER USER'))
-    # Módulo comercial + config: ambos hacen falta para abrir /mi.
+    # Módulo comercial + config: ambos hacen falta para abrir el portal de fichaje.
     mods = dict(tenant_soltec.modulos_activos or {})
     mods['fichaje_operario'] = True
     tenant_soltec.modulos_activos = mods
@@ -147,20 +147,6 @@ class TestAcceso:
         assert respuesta.status_code in (302, 401)
         if respuesta.status_code == 302:
             assert '/auth/login' in (respuesta.location or '')
-
-    def test_el_manifiesto_lleva_el_nombre_de_la_empresa(self, operario_conectado):
-        datos = operario_conectado.get('/mi/manifest.webmanifest').get_json()
-
-        assert 'SOLTEC' in datos['name']
-        assert datos['start_url'] == '/fichaje/fichar'
-
-    def test_el_service_worker_declara_su_alcance(self, operario_conectado):
-        respuesta = operario_conectado.get('/mi/sw.js')
-
-        assert respuesta.status_code == 200
-        assert respuesta.headers['Service-Worker-Allowed'] == '/mi/'
-        assert 'no-store' in respuesta.headers['Cache-Control']
-
 
 # ---------------------------------------------------------------------------
 # Fichar
@@ -330,7 +316,7 @@ class TestObras:
         ))
         pwa.commit()
 
-        html = operario_conectado.get('/mi/').get_data(as_text=True)
+        html = operario_conectado.get('/fichaje/fichar').get_data(as_text=True)
 
         assert 'Tu planificación de hoy' in html
         assert obra_activa.nombre in html
@@ -343,7 +329,7 @@ class TestObras:
         provocaría que no fichasen, que es peor. Tras fichar, el tablero lo
         refleja como asignación (planificado = fichado).
         """
-        html = operario_conectado.get('/mi/').get_data(as_text=True)
+        html = operario_conectado.get('/fichaje/fichar').get_data(as_text=True)
         assert 'no tienes obra planificada' in html.lower()
 
         respuesta = _fichar(operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id)
@@ -415,7 +401,7 @@ class TestMisHoras:
         _fichar(operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id)
         _fichar(operario_conectado, EVENTO_SALIDA)
 
-        html = operario_conectado.get('/mi/registros', follow_redirects=True).get_data(as_text=True)
+        html = operario_conectado.get('/fichaje/fichajes', follow_redirects=True).get_data(as_text=True)
 
         assert respuesta_contiene_fecha_de_hoy(html)
         assert obra_activa.nombre in html
@@ -431,7 +417,7 @@ class TestMisHoras:
         )
         pwa.commit()
 
-        html = operario_conectado.get('/mi/registros', follow_redirects=True).get_data(as_text=True)
+        html = operario_conectado.get('/fichaje/fichajes', follow_redirects=True).get_data(as_text=True)
 
         assert 'No hay registros en este periodo' in html
 
@@ -439,7 +425,7 @@ class TestMisHoras:
         _fichar(operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id)
         _fichar(operario_conectado, EVENTO_SALIDA)
 
-        respuesta = operario_conectado.get('/mi/registros.csv')
+        respuesta = operario_conectado.get('/fichaje/fichajes.csv')
         texto = respuesta.get_data(as_text=True)
 
         assert respuesta.status_code == 200
@@ -452,7 +438,7 @@ class TestMisHoras:
     ):
         _configurar(pwa, fichaje_operario_activo='False')
 
-        respuesta = operario_conectado.get('/mi/registros', follow_redirects=False)
+        respuesta = operario_conectado.get('/fichaje/fichajes', follow_redirects=False)
 
         assert respuesta.status_code in (302, 404)
 
@@ -463,10 +449,9 @@ class TestMisHoras:
         _configurar(pwa, fichaje_operario_activo='False')
 
         assert operario_conectado.get('/fichaje/fichar').status_code == 404
-        assert operario_conectado.get('/mi/entrar').status_code in (302, 303)
 
     def test_un_rango_de_fechas_absurdo_no_rompe_la_pantalla(self, operario_conectado):
-        respuesta = operario_conectado.get('/mi/registros?desde=manzana&hasta=1')
+        respuesta = operario_conectado.get('/fichaje/fichajes?desde=manzana&hasta=1')
 
         assert respuesta.status_code == 200
 

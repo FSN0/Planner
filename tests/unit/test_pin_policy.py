@@ -106,7 +106,7 @@ def test_email_definir_pin_no_incluye_pin_en_claro(app):
         with patch('app.services.pin_auth_service._resolver_tenant_para_email', return_value=tenant), \
              patch(
                  'app.services.signup_service.url_acceso_tenant',
-                 return_value='https://acme.signaplan.com/mi/definir-pin?t=TOK',
+                 return_value='https://acme.signaplan.com/fichaje/definir-pin?t=TOK',
              ), \
              patch('app.services.email_service.send_email', side_effect=_fake_send):
             assert notificar_definir_pin_por_email(user) is True

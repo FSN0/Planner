@@ -97,7 +97,25 @@ def dashboard():
         modulos=MODULOS_DISPONIBLES,
         adaptadores_odoo=ADAPTADORES_ODOO,
         dias_purga=DIAS_PURGA_TRAS_DESACTIVAR,
+        seed_defaults=seed_defaults(),
+        seed_password=seed_password(),
+        seed_pin=seed_pin(),
     )
+
+
+def seed_defaults():
+    from app.services.demo_data_service import demo_cantidades
+    return demo_cantidades()
+
+
+def seed_password():
+    from app.services.demo_data_service import SEED_PASSWORD
+    return SEED_PASSWORD
+
+
+def seed_pin():
+    from app.services.demo_data_service import SEED_PIN_OPERARIO
+    return SEED_PIN_OPERARIO
 
 
 @superadmin_bp.route('/tenant/<int:id_tenant>/desactivar', methods=['POST'])
@@ -188,6 +206,99 @@ def create_tenant():
     except Exception as e:
         flash(f"Error al crear inquilino: {str(e)}", "danger")
         
+    return redirect(url_for('superadmin.dashboard'))
+
+
+@superadmin_bp.route('/create_tenant_seeded', methods=['POST'])
+def create_tenant_seeded():
+    from app.services.demo_data_service import (
+        SEED_PASSWORD,
+        SEED_PIN_OPERARIO,
+        cantidades_desde_formulario,
+    )
+    from app.services.superadmin_ops_service import seed_tenant_content
+
+    nombre = request.form.get('nombre')
+    subdominio = request.form.get('subdominio')
+    admin_email = request.form.get('admin_email')
+    admin_password = request.form.get('admin_password')
+    if not all([nombre, subdominio, admin_email, admin_password]):
+        flash('Faltan datos en el formulario.', 'danger')
+        return redirect(url_for('superadmin.dashboard'))
+
+    qty = cantidades_desde_formulario(request.form)
+    activar_fichaje = bool(request.form.get('activar_fichaje'))
+    try:
+        custom_domain = validate_custom_domain(request.form.get('custom_domain'))
+        assert_custom_domain_available(custom_domain)
+        tenant = provision_new_tenant(
+            nombre,
+            subdominio,
+            admin_email,
+            admin_password,
+            custom_domain=custom_domain,
+            modulos_activos={
+                'fichaje_operario': True,
+                'registro_jornada': True,
+                'onboarding': False,
+                'notas': False,
+                'auditoria_vehiculos': False,
+            },
+        )
+        tenant.billing_exempt = True
+        db.session.commit()
+        qty_out = seed_tenant_content(
+            tenant, qty=qty, activar_fichaje=activar_fichaje,
+        )
+        flash(
+            f"Tenant '{nombre}' creado con datos (sin banner de demo). "
+            f"Obras {qty_out.get('obras')}, plantilla {qty_out.get('empleados')}, "
+            f"externos {qty_out.get('externos')}, vehículos {qty_out.get('vehiculos')}, "
+            f"solicitudes {qty_out.get('solicitudes')}. "
+            f"Jefes/operarios de semilla: contraseña {SEED_PASSWORD}, "
+            f"PIN operario {SEED_PIN_OPERARIO}.",
+            'success',
+        )
+    except Exception as e:
+        db.session.rollback()
+        try:
+            db.session.execute(text('SET search_path TO public'))
+        except Exception:
+            pass
+        flash(f'Error al crear tenant con datos: {e}', 'danger')
+    return redirect(url_for('superadmin.dashboard'))
+
+
+@superadmin_bp.route('/tenant/<int:id_tenant>/rellenar', methods=['POST'])
+def rellenar_tenant(id_tenant):
+    from app.services.demo_data_service import (
+        SEED_PASSWORD,
+        SEED_PIN_OPERARIO,
+        cantidades_desde_formulario,
+    )
+    from app.services.superadmin_ops_service import seed_tenant_content
+
+    tenant = Tenant.query.get_or_404(id_tenant)
+    qty = cantidades_desde_formulario(request.form)
+    activar_fichaje = bool(request.form.get('activar_fichaje'))
+    try:
+        qty_out = seed_tenant_content(
+            tenant, qty=qty, activar_fichaje=activar_fichaje,
+        )
+        flash(
+            f"Datos añadidos a {tenant.nombre} (sin banner de demo). "
+            f"Obras {qty_out.get('obras')}, plantilla {qty_out.get('empleados')}, "
+            f"vehículos {qty_out.get('vehiculos')}. "
+            f"Contraseña semilla {SEED_PASSWORD}, PIN {SEED_PIN_OPERARIO}.",
+            'success',
+        )
+    except Exception as e:
+        db.session.rollback()
+        try:
+            db.session.execute(text('SET search_path TO public'))
+        except Exception:
+            pass
+        flash(f'Error al rellenar {tenant.nombre}: {e}', 'danger')
     return redirect(url_for('superadmin.dashboard'))
 
 @superadmin_bp.route('/tenant/<int:id_tenant>/dominio', methods=['POST'])

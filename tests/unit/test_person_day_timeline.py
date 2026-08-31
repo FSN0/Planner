@@ -7,7 +7,10 @@ from app.services.log_coverage import (
     planif_detail_covers_day,
     strip_coverage,
 )
-from app.services.person_day_timeline_service import _synthetic_asignacion_hito
+from app.services.person_day_timeline_service import (
+    _enrich_fichaje_app_from_registro,
+    _synthetic_asignacion_hito,
+)
 
 
 def test_planif_range_log_covers_days_inside():
@@ -78,3 +81,39 @@ def test_contiguous_range_does_not_need_marker():
     )
     assert "[[cov:" not in detail
     assert planif_detail_covers_day(detail, date(2026, 8, 15))
+
+
+def test_enrich_fichaje_app_adds_planned_obra_on_conflict():
+    class _Log:
+        category = 'fichaje_app'
+        target_user_id = 7
+        target_date = date(2026, 8, 10)
+
+    class _Reg:
+        estado = 'Conflicto'
+        obra_real_id = 2
+        obra_planificada_id = 1
+
+    class _Obra:
+        def __init__(self, oid, codigo, nombre):
+            self.id = oid
+            self.codigo = codigo
+            self.nombre = nombre
+
+    obras = {
+        1: _Obra(1, 'SOL-01', 'Viviendas Calle del Sol'),
+        2: _Obra(2, 'OF-02', 'Oficinas Central'),
+    }
+
+    with patch('app.services.person_day_timeline_service.Obra') as ObraMock, patch(
+        'app.services.person_day_timeline_service.RegistroFichaje'
+    ) as RegMock:
+        ObraMock.query.get.side_effect = lambda oid: obras.get(oid)
+        RegMock.query.filter_by.return_value.first.return_value = _Reg()
+        detail = _enrich_fichaje_app_from_registro(
+            _Log(),
+            'El operario fichó en OF-02 — Oficinas Central. Entrada: 07:45 / Salida: 16:10',
+        )
+    assert 'planificado' in detail
+    assert 'Viviendas Calle del Sol' in detail
+

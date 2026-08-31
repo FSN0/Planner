@@ -282,8 +282,24 @@ class UniversalCalendarManager {
                     const evFontVeh = _this.compact ? '0.52rem' : '0.72rem';
                     return { html: `<div class="d-flex align-items-center fc-event-vehiculo-inner" style="font-size:${evFontVeh}; line-height:1.1; overflow:hidden; width:100%; padding:${evPadVeh}; color:${arg.event.textColor || 'inherit'}; opacity:0.92;">${innerHtml}<span class="text-truncate">${arg.event.title}</span></div>` };
                 }
-                // Obras: sin icono de coche aunque lleven vehiculo_label en props
-                innerHtml += `<span class="text-truncate">${arg.event.title}</span>`;
+                const showWorkerVehicle = props.vehiculo_label
+                    && props.type === 'asignacion'
+                    && _this.context === 'obra';
+                const titleHtml = `<span class="text-truncate">${arg.event.title}</span>`;
+                if (showWorkerVehicle) {
+                    const vehTip = `${t('Vehículo')}: ${props.vehiculo_label}`;
+                    const vehFont = _this.compact ? '0.48rem' : '0.62rem';
+                    const vehPad = _this.compact ? '0 2px' : '0 4px';
+                    return {
+                        html: `<div class="univ-event-with-vehicle" style="font-size:${evFont}; line-height:${evLine}; overflow:hidden; width:100%; padding:${evPad}; color:${arg.event.textColor || 'inherit'};">
+                            <div class="d-flex align-items-center" style="min-width:0;">${innerHtml}${titleHtml}</div>
+                            <div class="univ-event-vehicle-line text-truncate" title="${vehTip}" style="font-size:${vehFont}; line-height:1.15; opacity:0.92; padding-left:2px;">
+                                <i class="fas fa-car mr-1" style="font-size:0.9em;"></i>${props.vehiculo_label}
+                            </div>
+                        </div>`
+                    };
+                }
+                innerHtml += titleHtml;
                 return { html: `<div class="d-flex align-items-center" style="font-size:${evFont}; line-height:${evLine}; overflow:hidden; width:100%; padding:${evPad}; color:${arg.event.textColor || 'inherit'};">${innerHtml}</div>` };
             },
 
@@ -292,6 +308,11 @@ class UniversalCalendarManager {
                 if (info.event.extendedProps && info.event.extendedProps.isFichaje) {
                     let dotColor = info.event.extendedProps.estado_color || '#94a3b8';
                     let htmlTooltip = info.event.extendedProps.tooltipContent || '';
+                    const fProps = info.event.extendedProps || {};
+                    const fechaStr = fProps.fecha_iso || (info.event.startStr || '').substring(0, 10);
+                    const userId = fProps.worker_id || (_this.context === 'worker' ? _this.entityId : null);
+                    const estadoFichaje = fProps.estado_fichaje || '';
+                    const dotInteractive = !!(_this.showFichajes && userId && fechaStr);
 
                     // Hacemos el fondo invisible para no ensuciar las barras
                     info.el.style.backgroundColor = 'transparent';
@@ -306,18 +327,28 @@ class UniversalCalendarManager {
 
                         // Creamos la bola flotante arriba a la izquierda
                         let dotEl = document.createElement('div');
-                        dotEl.className = 'fc-fichaje-dot-float';
+                        dotEl.className = 'fc-fichaje-dot-float' + (dotInteractive ? ' fc-fichaje-dot-float--interactive' : '');
                         dotEl.style = 'position: absolute; top: 4px; left: 4px; z-index: 99; pointer-events: auto;';
-                        dotEl.innerHTML = `<span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${dotColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.5); border: 2px solid #fff; cursor: help;"></span>`;
+                        if (dotInteractive) {
+                            dotEl.setAttribute('data-fichaje-dot', '1');
+                            dotEl.setAttribute('data-user-id', String(userId));
+                            dotEl.setAttribute('data-fecha', fechaStr);
+                            if (estadoFichaje) dotEl.setAttribute('data-estado-fichaje', estadoFichaje);
+                            dotEl.setAttribute('role', 'button');
+                            dotEl.setAttribute('tabindex', '0');
+                            dotEl.setAttribute('aria-label', t('Ver historial del fichaje del día'));
+                            dotEl.title = t('Clic para ver el historial del día');
+                        }
+                        dotEl.innerHTML = `<span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${dotColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.5); border: 2px solid #fff; cursor:${dotInteractive ? 'pointer' : 'help'};"></span>`;
                         
                         // La inyectamos de forma segura dentro del cuadro del día
                         let targetFrame = dayCell.querySelector('.fc-daygrid-day-frame');
                         if (targetFrame) targetFrame.appendChild(dotEl);
                         else dayCell.appendChild(dotEl);
 
-                        // Le aplicamos el Tooltip
+                        // Tooltip solo si no es clicable (en clicable abre el modal)
                         let targetSpan = dotEl.querySelector('span');
-                        if (targetSpan && htmlTooltip) {
+                        if (targetSpan && htmlTooltip && !dotInteractive) {
                             if (typeof tippy !== 'undefined') tippy(targetSpan, { content: htmlTooltip, allowHTML: true, placement: 'top', theme: 'light-border' });
                             else if (typeof $ !== 'undefined' && $.fn.tooltip) $(targetSpan).tooltip({ title: htmlTooltip, html: true, sanitize: false, placement: 'top', container: 'body' });
                         }
@@ -643,6 +674,9 @@ class UniversalCalendarManager {
         if (leaveRow) {
             leaveRow.style.display = (this.context === 'worker' && !this.readonly) ? 'block' : 'none';
         }
+        if (!isNew && this.embedded) {
+            this._setEmbeddedModalHint(false);
+        }
 
         if (!isSameEvent) {
             if (isNew) {
@@ -680,7 +714,14 @@ class UniversalCalendarManager {
                     if (this.context === 'worker') {
                         prefill = { obraId: props.obra_id, obraName: event.title };
                     } else if (this.context === 'obra' || this.context === 'vehiculo') {
-                        prefill = { workerId: props.worker_id, workerName: event.title };
+                        prefill = {
+                            workerId: props.worker_id,
+                            workerName: event.title,
+                        };
+                        if (props.vehiculo_id) {
+                            prefill.vehicleId = props.vehiculo_id;
+                            prefill.vehicleLabel = props.vehiculo_label || t('Vehículo');
+                        }
                     }
                     this._renderResourceSelect(container, prefill);
                 } else {
@@ -947,7 +988,32 @@ class UniversalCalendarManager {
                         $w.append(new Option(label, val, true, true));
                     }
                     $w.val(val).trigger('change');
+                    const hidden = document.getElementById(`${this.panelId}-select`);
+                    if (hidden) hidden.value = val;
                     this._pendingPrefill = null;
+
+                    if (opts.prefill && opts.prefill.vehicleId) {
+                        const vid = String(opts.prefill.vehicleId);
+                        const vlabel = opts.prefill.vehicleLabel || t('Vehículo');
+                        const workerIdFn = () => {
+                            const workerSel = row.querySelector('.univ-worker-select');
+                            if (!workerSel) return val;
+                            return (typeof $ !== 'undefined' && $(workerSel).val)
+                                ? $(workerSel).val()
+                                : workerSel.value;
+                        };
+                        if (toggle) {
+                            toggle.checked = true;
+                            if (vehicleWrap) vehicleWrap.style.display = 'block';
+                        }
+                        if (!$v.data('select2')) {
+                            this._initVehicleSelect($v, workerIdFn, t('Selecciona vehículo...'));
+                        }
+                        if (!$v.find(`option[value="${vid}"]`).length) {
+                            $v.append(new Option(vlabel, vid, true, true));
+                        }
+                        $v.val(vid).trigger('change');
+                    }
                 }
 
                 if (toggle) {
@@ -963,7 +1029,10 @@ class UniversalCalendarManager {
                         if (!$v.data('select2')) {
                             const workerId = () => {
                                 const workerSel = row.querySelector('.univ-worker-select');
-                                return workerSel ? workerSel.value : null;
+                                if (!workerSel) return null;
+                                return (typeof $ !== 'undefined' && $(workerSel).val)
+                                    ? $(workerSel).val()
+                                    : workerSel.value;
                             };
                             this._initVehicleSelect($v, workerId, t('Selecciona vehículo...'));
                         }
@@ -998,14 +1067,65 @@ class UniversalCalendarManager {
             const wSel = row.querySelector('.univ-worker-select');
             const vSel = row.querySelector('.univ-vehicle-select');
             const vToggle = row.querySelector('.univ-vehicle-toggle');
-            const wid = wSel ? wSel.value : null;
+            let wid = null;
+            if (wSel) {
+                wid = (typeof $ !== 'undefined' && $(wSel).val) ? $(wSel).val() : wSel.value;
+            }
             if (!wid) return;
             const entry = { worker_id: wid, index };
-            const vid = (vToggle && vToggle.checked && vSel) ? vSel.value : null;
+            let vid = null;
+            if (vToggle && vToggle.checked && vSel) {
+                vid = (typeof $ !== 'undefined' && $(vSel).val) ? $(vSel).val() : vSel.value;
+            }
             if (vid) entry.vehicle_id = vid;
             workers.push(entry);
         });
         return workers;
+    }
+
+    _resolvePanelWorkerId(props) {
+        props = props || {};
+        let val = null;
+        const hidden = document.getElementById(`${this.panelId}-select`);
+        if (hidden && hidden.value) val = hidden.value;
+
+        if (this.context === 'obra') {
+            const multi = this._collectMultiWorkers();
+            if (multi && multi.length === 1 && multi[0].worker_id) {
+                val = String(multi[0].worker_id);
+                if (hidden) hidden.value = val;
+            }
+        }
+
+        if (!val && props.worker_id) val = String(props.worker_id);
+        return val;
+    }
+
+    _resolvePanelVehicleId() {
+        if (this.context === 'obra') {
+            const multi = this._collectMultiWorkers();
+            if (multi && multi.length === 1 && multi[0].vehicle_id) {
+                return multi[0].vehicle_id;
+            }
+            return null;
+        }
+        const vehicleEl = document.getElementById(`${this.panelId}-vehicle-select`);
+        return (this.context === 'worker' && vehicleEl && vehicleEl.value)
+            ? vehicleEl.value
+            : null;
+    }
+
+    _assignmentDatesChanged(props, startVal, endVal) {
+        if (!this.activeEvent) return true;
+        props = props || this.activeEvent.extendedProps || {};
+        const origStart = moment(props.real_original_start || this.activeEvent.start).format('YYYY-MM-DD');
+        let origEnd = startVal;
+        if (props.real_original_end) {
+            origEnd = moment(props.real_original_end).subtract(1, 'days').format('YYYY-MM-DD');
+        } else if (this.activeEvent.end) {
+            origEnd = moment(this.activeEvent.end).subtract(1, 'days').format('YYYY-MM-DD');
+        }
+        return origStart !== startVal || origEnd !== endVal;
     }
 
     _showBatchAssignResult(res) {
@@ -1298,10 +1418,7 @@ class UniversalCalendarManager {
                 let qtyEl = document.getElementById(`${this.panelId}-quantity`);
                 let qty = qtyEl ? parseInt(qtyEl.value) || 1 : 1;
 
-                const afterSave = () => {
-                    this.calendar.refetchEvents(); this.hidePanel();
-                    if (window.loadTimelineData) window.loadTimelineData();
-                };
+                const afterSave = (opts) => this._finishPanelSave(opts || {});
 
                 const runVehicleSave = (onDone) => {
                     const vWorker = this._pendingObraVehicleWorkerId || (
@@ -1359,10 +1476,7 @@ class UniversalCalendarManager {
                     // Solo vehículo (contexto worker)
                     runVehicleSave((vres) => {
                         if (!vres || !vres.success) return;
-                        if (typeof Swal !== 'undefined') {
-                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Vehículo guardado'), showConfirmButton: false, timer: 1800});
-                        }
-                        afterSave();
+                        afterSave({ message: vres.message || t('Vehículo guardado') });
                     });
                 }
 
@@ -1379,7 +1493,8 @@ class UniversalCalendarManager {
                 }
 
                 let selEl = document.getElementById(`${this.panelId}-select`);
-                let selVal = selEl ? selEl.value : null;
+                const props = this.activeEvent.extendedProps || {};
+                let selVal = this._resolvePanelWorkerId(props);
 
                 let payload = {
                     start_date: startVal,
@@ -1390,11 +1505,7 @@ class UniversalCalendarManager {
                     include_weekends: includeWeekends
                 };
 
-                const props = this.activeEvent.extendedProps || {};
-                const afterSave = () => {
-                    this.calendar.refetchEvents(); this.hidePanel();
-                    if (window.loadTimelineData) window.loadTimelineData();
-                };
+                const afterSave = (opts) => this._finishPanelSave(opts || {});
 
                 if (this.context === 'worker') {
                     if (!selVal) {
@@ -1461,6 +1572,7 @@ class UniversalCalendarManager {
                     }
                     return;
                 } else if (this.context === 'obra') {
+                    const vehicleVal = this._resolvePanelVehicleId();
                     if (!selVal) {
                         if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Debes seleccionar un trabajador.'), 'warning');
                         return;
@@ -1470,16 +1582,67 @@ class UniversalCalendarManager {
                     payload.old_obra_id = this.entityId;
                     payload.worker_id = selVal;
 
-                    // Cambio de persona: primero desasignar la anterior en el rango editado
+                    const finishWithVehicle = (next) => {
+                        if (!vehicleVal) {
+                            if (next) next({ success: true });
+                            return;
+                        }
+                        this.executeVehicleSave({
+                            worker_id: selVal,
+                            vehicle_id: vehicleVal,
+                            start: startVal,
+                            end: endVal,
+                            include_weekends: includeWeekends,
+                            overwrite_mode: 'check',
+                        }, next);
+                    };
+
+                    const saveAssignment = (cb) => {
+                        if (this.callbacks.onEventModified) {
+                            this.callbacks.onEventModified(payload, () => cb({ success: true }));
+                        } else {
+                            this.executeSave(payload, cb, { skipHideOnSuccess: !!vehicleVal });
+                        }
+                    };
+
                     if (oldWorkerId && String(selVal) !== String(oldWorkerId) && String(selVal) !== 'GENERICO') {
                         const dates = this._buildEditableDates(startVal, endVal);
                         if (!dates.length) {
                             if (typeof Swal !== 'undefined') Swal.fire(t('Histórico Protegido'), t('No hay días futuros editables en este bloque.'), 'info');
                             return;
                         }
-                        this._unassignThenSave(oldWorkerId, this.entityId, dates, payload, afterSave);
+                        this._unassignThenSave(oldWorkerId, this.entityId, dates, payload, (res) => {
+                            if (!res || res.success === false) return;
+                            saveAssignment((obraRes) => {
+                                if (!obraRes || !obraRes.success) return;
+                                finishWithVehicle((vres) => {
+                                    if (!vres || !vres.success) return;
+                                    afterSave();
+                                });
+                            });
+                        });
                         return;
                     }
+
+                    const datesChanged = this._assignmentDatesChanged(props, startVal, endVal);
+                    const vehicleOnly = !!(vehicleVal && oldWorkerId && String(selVal) === String(oldWorkerId) && !datesChanged);
+
+                    if (vehicleOnly) {
+                        finishWithVehicle((vres) => {
+                            if (!vres || !vres.success) return;
+                            afterSave({ message: vres.message || t('Vehículo guardado') });
+                        });
+                        return;
+                    }
+
+                    saveAssignment((obraRes) => {
+                        if (!obraRes || !obraRes.success) return;
+                        finishWithVehicle((vres) => {
+                            if (!vres || !vres.success) return;
+                            afterSave();
+                        });
+                    });
+                    return;
                 } else {
                     payload.worker_id = props.worker_id || this.entityId;
                     payload.target_obra_id = this.entityId;
@@ -1608,7 +1771,8 @@ class UniversalCalendarManager {
         }
     }
     
-    hidePanel() { 
+    hidePanel(opts) { 
+        opts = opts || {};
         let p = document.getElementById(this.panelId);
         if(p) p.style.display = 'none'; 
 
@@ -1636,6 +1800,51 @@ class UniversalCalendarManager {
         this._pendingObraVehicleWorkerId = null;
         this.activeEvent = null;
         this._toggleVehicleRow(false);
+        if (this.embedded && !opts.skipScroll) {
+            this._scrollEmbeddedToCalendar();
+        }
+    }
+
+    _setEmbeddedModalHint(showEmpty) {
+        if (!this.embedded) return;
+        const hintEmpty = document.getElementById('modalAssignHintEmpty');
+        const hintPrefill = document.getElementById('modalAssignHintPrefill');
+        if (hintEmpty) hintEmpty.classList.toggle('d-none', !showEmpty);
+        if (hintPrefill && showEmpty) hintPrefill.classList.add('d-none');
+    }
+
+    _scrollEmbeddedToCalendar() {
+        const modalBody = this._embeddedModal && this._embeddedModal.querySelector('.modal-body');
+        if (!modalBody || !this.element) return;
+        setTimeout(() => {
+            const top = Math.max(0, this.element.offsetTop - 16);
+            modalBody.scrollTo({ top, behavior: 'smooth' });
+        }, 80);
+    }
+
+    _finishPanelSave(opts) {
+        opts = opts || {};
+        if (!opts.skipToast && typeof Swal !== 'undefined') {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: opts.message || t('Guardado'),
+                showConfirmButton: false,
+                timer: 1500,
+            });
+        }
+        this.hidePanel({ skipScroll: true });
+        this.calendar.refetchEvents();
+        if (this.embedded) {
+            setTimeout(() => this._scrollEmbeddedToCalendar(), 220);
+        }
+        if (window.loadTimelineData) window.loadTimelineData();
+        try {
+            if (window.jQuery) {
+                window.jQuery(document).trigger('sp-calendar-assigned', [opts.result || {}]);
+            }
+        } catch (eCal) { /* ignore */ }
     }
 
     _buildEditableDates(startVal, endVal) {

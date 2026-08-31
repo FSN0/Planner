@@ -1,16 +1,11 @@
 # app/services/pin_auth_service.py
 #
-# Acceso del trabajador a la PWA con DNI y PIN numérico.
-#
-# En obra el correo y la contraseña fallan: el teclado pone mayúsculas, nadie
-# recuerda un email corporativo y las cuentas importadas del ERP suelen tener
-# una contraseña genérica. Un PIN de cuatro a seis cifras, puesto por
-# administración o definido por el propio trabajador, es lo que realmente se usa.
+# Acceso del trabajador con DNI y PIN numérico.
 #
 # Política de producto:
 # - Si el admin/import pone un PIN explícito → ese es el definitivo (salvo que
 #   el trabajador lo redefina con el enlace).
-# - Si se genera aleatorio → pin_must_change=True hasta el primer cambio en /mi.
+# - Si se genera aleatorio → pin_must_change=True hasta el primer cambio en la app.
 # - Nunca se envía el PIN en claro por correo: se manda un enlace para definirlo.
 
 import re
@@ -112,7 +107,7 @@ def asignar_pin(user, pin, *, must_change=False, notify=False, actor=None):
     """
     Guarda el hash del PIN. No hace commit.
 
-    must_change: obliga a cambiarlo en el primer acceso a /mi.
+    must_change: obliga a cambiarlo en el primer acceso a la app.
     notify: si True y el usuario tiene email real, envía enlace para definir PIN
     (nunca el PIN en claro).
     """
@@ -161,7 +156,7 @@ def debe_cambiar_pin(user):
 
 
 def cambiar_pin_propio(user, pin_actual, pin_nuevo, pin_nuevo2):
-    """El operario cambia su PIN desde /mi. No hace commit."""
+    """El operario cambia su PIN desde Fichaje → PIN. No hace commit."""
     if not user or not user.pin_hash:
         raise PinAuthError(translate('Todavía no tienes PIN. Pídeselo a administración.'))
     pin_actual = (pin_actual or '').strip()
@@ -219,8 +214,13 @@ def leer_token_definir_pin(token, tenant_esperado):
 def _url_definir_pin(tenant, token):
     from app.services.signup_service import url_acceso_tenant
     return url_acceso_tenant(
-        tenant, path=f'/mi/definir-pin?t={quote(token, safe="")}'
+        tenant, path=f'/fichaje/definir-pin?t={quote(token, safe="")}'
     )
+
+
+def _url_login_tenant(tenant):
+    from app.services.signup_service import url_acceso_tenant
+    return url_acceso_tenant(tenant, path='/auth/login')
 
 
 def _resolver_tenant_para_email():
@@ -290,6 +290,98 @@ def notificar_definir_pin_por_email(user, actor=None):
             tenant=html_tenant,
             dni=user.dni,
             url=url,
+        )
+        return bool(send_email(asunto, [user.email], texto, html_body=html))
+    except Exception:
+        return False
+
+
+def notificar_informacion_acceso(user, actor=None):
+    """
+    Instrucciones completas de acceso: URL de login, DNI y enlace para definir/cambiar PIN.
+    Nunca incluye el PIN en claro.
+    """
+    if not _email_parece_real(getattr(user, 'email', None)):
+        return False
+    try:
+        from app.services.email_service import send_email
+
+        tenant = _resolver_tenant_para_email()
+        if tenant is None:
+            return False
+
+        token = generar_token_definir_pin(user, tenant)
+        url_pin = _url_definir_pin(tenant, token)
+        url_login = _url_login_tenant(tenant)
+        tenant_nombre = tenant.nombre or ''
+        quien = ''
+        if actor is not None:
+            quien = f"{getattr(actor, 'name', '')} {getattr(actor, 'lastname', '')}".strip()
+
+        loc = normalize_locale(getattr(user, 'locale', None)) or get_locale() or DEFAULT_LOCALE
+        tenant_bit = f' ({tenant_nombre})' if tenant_nombre else ''
+        quien_txt = (
+            translate(' Te lo ha enviado {quien}.', loc, quien=quien) if quien else ''
+        )
+
+        if user.pin_hash:
+            pin_info = translate(
+                'Ya tienes PIN activo. Si no lo recuerdas, pídeselo a quien te dio de alta. '
+                'Puedes cambiarlo entrando en la app (Fichaje → PIN) o con el enlace de abajo.',
+                loc,
+            )
+        else:
+            pin_info = translate(
+                'Todavía no tienes PIN. Defínelo con el enlace de abajo (caduca en 3 días).',
+                loc,
+            )
+
+        asunto = translate(
+            'Tu acceso a SignaPlan — {tenant}',
+            loc,
+            tenant=tenant_nombre or 'SignaPlan',
+        )
+        texto = translate(
+            'Hola {name},\n\n'
+            'Así entras a SignaPlan{tenant} para fichar:\n\n'
+            '1. Abre: {login_url}\n'
+            '2. Usuario: tu DNI ({dni})\n'
+            '3. Contraseña: tu PIN de 4–6 dígitos\n\n'
+            '{pin_info}\n\n'
+            'Definir o restablecer PIN:\n{pin_url}\n\n'
+            'Guarda el enlace de acceso en el móvil.{quien}\n'
+            'Si no esperabas este correo, ignóralo.\n',
+            loc,
+            name=user.name,
+            tenant=tenant_bit,
+            login_url=url_login,
+            dni=user.dni,
+            pin_info=pin_info,
+            pin_url=url_pin,
+            quien=quien_txt,
+        )
+        html_tenant = (
+            translate(' en <strong>{tenant}</strong>', loc, tenant=tenant_nombre)
+            if tenant_nombre else ''
+        )
+        html = translate(
+            '<p>Hola {name},</p>'
+            '<p>Así entras a SignaPlan{tenant} para fichar:</p>'
+            '<ol>'
+            '<li>Abre <a href="{login_url}">{login_url}</a></li>'
+            '<li><strong>DNI:</strong> {dni}</li>'
+            '<li><strong>PIN:</strong> 4–6 dígitos (no va en este correo por seguridad)</li>'
+            '</ol>'
+            '<p>{pin_info}</p>'
+            '<p><a href="{pin_url}">Definir o restablecer mi PIN</a> (caduca en 3 días)</p>'
+            '<p>Guarda el enlace de acceso en el móvil.</p>',
+            loc,
+            name=user.name,
+            tenant=html_tenant,
+            login_url=url_login,
+            dni=user.dni,
+            pin_info=pin_info,
+            pin_url=url_pin,
         )
         return bool(send_email(asunto, [user.email], texto, html_body=html))
     except Exception:

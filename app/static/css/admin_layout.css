@@ -3182,6 +3182,22 @@ body.layout-auth .navbar { display: none !important; }
   display: none;
 }
 
+/* Buscador global en listas (móvil): sustituye filtros por columna ocultos */
+.sp-mobile-table-search {
+  display: none;
+}
+.sp-mobile-table-search-empty {
+  display: none;
+  margin: 0;
+  padding: 0.85rem 0.5rem 0.25rem;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+.sp-mobile-table-search-empty[hidden] {
+  display: none !important;
+}
+
 @media (max-width: 960px) {
   /*
     Scroll móvil: body/shell no pueden recortar el contenido.
@@ -3391,6 +3407,78 @@ body.layout-auth .navbar { display: none !important; }
   }
 
   .admin-actions-bar { left: 0; padding-left: 1rem; padding-right: 1rem; }
+
+  .sp-mobile-table-search {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    margin: 0 0 0.55rem;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  }
+  .sp-mobile-table-search-field {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+  }
+  .sp-mobile-table-search-icon {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .sp-mobile-table-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    padding: 0.35rem 0;
+    font-size: 0.9rem;
+    font-family: inherit;
+    color: #0f172a;
+    outline: none;
+  }
+  .sp-mobile-table-search-input::placeholder {
+    color: #94a3b8;
+  }
+  .sp-mobile-table-search-input::-webkit-search-cancel-button {
+    display: none;
+  }
+  .sp-mobile-table-search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.85rem;
+    height: 1.85rem;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #64748b;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 0;
+  }
+  .sp-mobile-table-search-clear[hidden] {
+    display: none !important;
+  }
+  .sp-mobile-table-search-clear:hover,
+  .sp-mobile-table-search-clear:focus-visible {
+    background: #e2e8f0;
+    color: #334155;
+    outline: none;
+  }
+  .sp-mobile-table-search-empty:not([hidden]) {
+    display: block;
+  }
 
   /* Tablas: swipe horizontal. No convertir filas en fichas. */
   .admin-table-scroll,

@@ -154,7 +154,7 @@ test-oficina: test-db ## Obra Oficina opcional
 test-onboarding: test-db ## Wizard post-alta y panel hoy en obra
 	$(PYTEST) tests/integration/test_onboarding_hoy.py -v
 
-lan-tunnel: ## Túnel Cloudflare para probar /mi desde el móvil
+lan-tunnel: ## Túnel Cloudflare para probar fichaje desde el móvil
 	bash scripts/lan-tunnel.sh
 
 smoke: ## Smoke tests post-deploy (seguro en prod). Uso: make smoke DOMAIN=signaplan.com

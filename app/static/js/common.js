@@ -149,6 +149,123 @@ function filterTable(tableId, colIndex, value) {
     }
 }
 
+function getAdminTableRowSearchText(row) {
+    if (!row || !row.cells) return "";
+    var parts = [];
+    Array.prototype.forEach.call(row.cells, function (td) {
+        if (td.dataset.sortValue) parts.push(td.dataset.sortValue);
+        var specialNode = td.querySelector(".jefe-trigger, .jefe-display");
+        if (specialNode && !specialNode.classList.contains("d-none")) {
+            parts.push(specialNode.textContent || specialNode.innerText || "");
+        } else {
+            parts.push(td.textContent || td.innerText || "");
+        }
+    });
+    return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+/** Búsqueda global en móvil: texto en cualquier columna (incl. ocultas en móvil). */
+function filterTableAll(tableId, value) {
+    var table = document.getElementById(tableId);
+    if (!table) return;
+    var filter = (value || "").toUpperCase().trim();
+    var tbody = table.tBodies[0];
+    if (!tbody) return;
+
+    var visible = 0;
+    tbody.querySelectorAll("tr").forEach(function (tr) {
+        if (tr.classList.contains("table-empty-state")) return;
+        if (tr.querySelector("th")) {
+            tr.style.display = "none";
+            return;
+        }
+        if (!filter) {
+            tr.style.display = "";
+            visible++;
+            return;
+        }
+        var haystack = getAdminTableRowSearchText(tr).toUpperCase();
+        var match = haystack.indexOf(filter) > -1;
+        tr.style.display = match ? "" : "none";
+        if (match) visible++;
+    });
+
+    var host = table.closest(".admin-table-scroll, .audit-table-wrap, .aus-table-wrap, .admin-panel-flush, .admin-panel");
+    if (!host) return;
+    var emptyEl = host.querySelector(".sp-mobile-table-search-empty[data-table-id='" + tableId + "']");
+    if (!filter) {
+        if (emptyEl) emptyEl.hidden = true;
+        return;
+    }
+    if (!emptyEl) {
+        emptyEl = document.createElement("p");
+        emptyEl.className = "sp-mobile-table-search-empty";
+        emptyEl.dataset.tableId = tableId;
+        emptyEl.setAttribute("role", "status");
+        var searchBar = host.querySelector(".sp-mobile-table-search[data-table-id='" + tableId + "']");
+        if (searchBar && searchBar.nextSibling) {
+            host.insertBefore(emptyEl, searchBar.nextSibling);
+        } else {
+            host.appendChild(emptyEl);
+        }
+    }
+    emptyEl.textContent = visible === 0 ? t("Sin resultados") : "";
+    emptyEl.hidden = visible !== 0;
+}
+
+function initMobileTableSearch() {
+    var tFn = window.SP_T || function (key) { return key; };
+    document.querySelectorAll("table.filterable-table[id], table.audit-sortable-table[id]").forEach(function (table) {
+        var tableId = table.id;
+        if (!tableId || table.dataset.mobileSearchReady === "1") return;
+        if (!table.tBodies.length || !getAdminTableDataRows(table.tBodies[0]).length) return;
+
+        var host = table.closest(".admin-table-scroll, .audit-table-wrap, .aus-table-wrap, .sync-preview-table-wrap, .sync-log-table-wrap, .ratings-table-wrap, .admin-panel-flush, .admin-panel");
+        if (!host || host.querySelector(".sp-mobile-table-search[data-table-id='" + tableId + "']")) return;
+
+        table.dataset.mobileSearchReady = "1";
+
+        var wrap = document.createElement("div");
+        wrap.className = "sp-mobile-table-search";
+        wrap.dataset.tableId = tableId;
+        wrap.innerHTML =
+            '<label class="sp-mobile-table-search-field">' +
+            '<i class="fas fa-search sp-mobile-table-search-icon" aria-hidden="true"></i>' +
+            '<input type="search" class="sp-mobile-table-search-input" ' +
+            'placeholder="' + tFn("Buscar…") + '" autocomplete="off" enterkeyhint="search" ' +
+            'aria-label="' + tFn("Buscar en la lista") + '">' +
+            "</label>" +
+            '<button type="button" class="sp-mobile-table-search-clear" hidden ' +
+            'aria-label="' + tFn("Limpiar búsqueda") + '">' +
+            '<i class="fas fa-times" aria-hidden="true"></i></button>';
+
+        host.insertBefore(wrap, table);
+
+        var input = wrap.querySelector(".sp-mobile-table-search-input");
+        var clearBtn = wrap.querySelector(".sp-mobile-table-search-clear");
+
+        function syncClear() {
+            var hasValue = !!(input.value || "").trim();
+            clearBtn.hidden = !hasValue;
+        }
+
+        input.addEventListener("input", function () {
+            filterTableAll(tableId, input.value);
+            syncClear();
+        });
+        input.addEventListener("search", function () {
+            if (!input.value) filterTableAll(tableId, "");
+            syncClear();
+        });
+        clearBtn.addEventListener("click", function () {
+            input.value = "";
+            filterTableAll(tableId, "");
+            syncClear();
+            input.focus();
+        });
+    });
+}
+
 // =========================================================================
 // ORDENACIÓN DE TABLAS ADMIN (obras, personal, subcontratas…)
 // =========================================================================
@@ -402,7 +519,10 @@ function getCheckedIds(tableId, checkboxClass) {
     });
 }
 
-document.addEventListener('DOMContentLoaded', captureAllAdminTables);
+document.addEventListener('DOMContentLoaded', function () {
+    captureAllAdminTables();
+    initMobileTableSearch();
+});
 
 // =========================================================================
 // SweetAlert2 — estética admin compartida

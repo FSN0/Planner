@@ -115,8 +115,8 @@ class TestAutenticacion:
 
 class TestPantallaEntrar:
 
-    def test_mi_entrar_redirige_al_login_unificado(self, pin_ctx, tenant_client):
-        respuesta = tenant_client.get('/mi/entrar', follow_redirects=True)
+    def test_login_page_accessible(self, pin_ctx, tenant_client):
+        respuesta = tenant_client.get('/auth/login', follow_redirects=True)
         assert respuesta.status_code == 200
         html = respuesta.get_data(as_text=True)
         assert 'login' in html.lower() or 'DNI' in html or 'correo' in html.lower()
@@ -140,9 +140,10 @@ class TestPantallaEntrar:
         )
 
     def test_sin_sesion_redirige_a_login(self, pin_ctx, tenant_client):
-        respuesta = tenant_client.get('/mi/', follow_redirects=False)
+        respuesta = tenant_client.get('/fichaje/fichar', follow_redirects=False)
         assert respuesta.status_code in (302, 303)
-        assert '/auth/login' in (respuesta.location or '')
+        loc = respuesta.location or ''
+        assert '/auth/login' in loc or '/login' in loc
 
     def test_admin_puede_asignar_pin(
         self, pin_ctx, authenticated_client, user_operario
