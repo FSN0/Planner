@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260830a">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260901a">
 {% endblock %}
 
 {% block wrapper %}
@@ -30,8 +30,13 @@
       <div class="page-toolbar-actions" data-tour="personal-actions">
         {% if user_can(current_user, 'trabajadores', 'w') %}
         <a href="{{ url_for('admin.import_users', modo='internos') }}"
+           id="toolbarImportBtn"
            class="btn-admin btn-admin-ghost"
-           data-tour="personal-import">
+           data-tour="personal-import"
+           data-import-internos="{{ url_for('admin.import_users', modo='internos') }}"
+           data-import-externos="{{ url_for('admin.import_users', modo='externos') }}"
+           data-label-internos="{{ _('Importar internos') }}"
+           data-label-externos="{{ _('Importar externos') }}">
           <i class="fas fa-file-import"></i> {{ _('Importar internos') }}
         </a>
         <a href="{{ url_for('admin.create_user', tab='internos') }}"
@@ -82,16 +87,6 @@
             </a>
           </li>
         </ul>
-        {% if user_can(current_user, 'trabajadores', 'w') %}
-        <div class="d-flex align-items-center flex-wrap" style="gap:0.5rem;">
-          <a href="{{ url_for('admin.import_users', modo='internos') }}" class="btn-admin btn-admin-ghost btn-sm tab-import-btn" data-tab="internos">
-            <i class="fas fa-file-import"></i> {{ _('Importar internos') }}
-          </a>
-          <a href="{{ url_for('admin.import_users', modo='externos') }}" class="btn-admin btn-admin-ghost btn-sm tab-import-btn d-none" data-tab="operarios">
-            <i class="fas fa-file-import"></i> {{ _('Importar externos') }}
-          </a>
-        </div>
-        {% endif %}
       </div>
 
       <div class="tab-content">
@@ -168,10 +163,12 @@
                     <div class="table-actions">
                       {% if user_can(current_user, 'trabajadores', 'x') %}
                       <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
+                      {% if tenant_usa_acceso_pin %}
                       <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
                       {% endif %}
+                      {% endif %}
                       {% if user_can(current_user, 'trabajadores', 'w') %}
-                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
+                      <a href="{{ url_with_back('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
                       {% endif %}
                       {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
                       <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
@@ -270,10 +267,12 @@
                     <div class="table-actions">
                       {% if user_can(current_user, 'trabajadores', 'x') %}
                       <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
+                      {% if tenant_usa_acceso_pin %}
                       <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
                       {% endif %}
+                      {% endif %}
                       {% if user_can(current_user, 'trabajadores', 'w') %}
-                      <a href="{{ url_for('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
+                      <a href="{{ url_with_back('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
                       {% endif %}
                       {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
                       <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
@@ -333,6 +332,7 @@
   </div>
 </div>
 
+{% if tenant_usa_acceso_pin %}
 <div class="modal fade" id="resetPinModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <form id="resetPinForm" method="POST" action="">
@@ -376,6 +376,7 @@
     </form>
   </div>
 </div>
+{% endif %}
 
 <div class="modal fade" id="scheduleModal" tabindex="-1" role="dialog" aria-hidden="true">
   <div class="modal-dialog" role="document">
@@ -415,15 +416,28 @@ document.addEventListener("DOMContentLoaded", function() {
     initBulkSelection({ tableId: 'tableExternos', checkboxClass: '.externo-checkbox', selectAllId: 'selectAllExternos', toolbarId: 'bulk-externos', countId: 'count-externos' });
 
     function syncPersonalImportButtons(tabHref) {
-        var target = (tabHref || '#internos').replace('#', '');
-        document.querySelectorAll('.tab-import-btn').forEach(function(btn) {
-            btn.classList.toggle('d-none', btn.getAttribute('data-tab') !== target);
-        });
+        var btn = document.getElementById('toolbarImportBtn');
+        if (!btn) return;
+        var isExternos = (tabHref || '#internos') === '#operarios';
+        btn.href = isExternos ? btn.dataset.importExternos : btn.dataset.importInternos;
+        var label = isExternos ? btn.dataset.labelExternos : btn.dataset.labelInternos;
+        btn.innerHTML = '<i class="fas fa-file-import"></i> ' + label;
     }
     $('#personalTab a[data-toggle="tab"]').on('shown.bs.tab', function(e) {
-        syncPersonalImportButtons(e.target.getAttribute('href'));
+        var hash = e.target.getAttribute('href') || '#internos';
+        syncPersonalImportButtons(hash);
+        if (window.history && window.history.replaceState) {
+            var base = window.location.pathname + window.location.search;
+            window.history.replaceState({ personalTab: hash }, '', base + hash);
+        }
     });
     syncPersonalImportButtons('#internos');
+
+    window.addEventListener('popstate', function () {
+        var tabHash = window.location.hash || '#internos';
+        var targetTab = document.querySelector('.admin-tabs-compact a[href="' + tabHash + '"]');
+        if (targetTab) $(targetTab).tab('show');
+    });
 
     $(document).on('click', '.reset-pwd-btn', function() {
         $('#resetUsernameDisplay').text($(this).data('username'));

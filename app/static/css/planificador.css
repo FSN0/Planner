@@ -913,7 +913,30 @@ body.layout-admin #quickCalendarModal .modal-header .close { color: #fff; opacit
         font-size: 0.82rem;
     }
     .pmd-person-name { color: #1e293b; min-width: 0; }
+    .pmd-person-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-shrink: 0;
+    }
     .pmd-person-dates { color: #64748b; font-size: 0.72rem; white-space: nowrap; }
+    .pmd-fichaje-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 0;
+        flex-shrink: 0;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+        cursor: pointer;
+        position: relative;
+        z-index: 2;
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .pmd-fichaje-dot.status-dot-kanban--interactive:active {
+        transform: scale(1.25);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 3px rgba(15, 23, 42, 0.15);
+    }
     .pmd-empty {
         text-align: center;
         color: #64748b;

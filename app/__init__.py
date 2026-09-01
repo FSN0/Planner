@@ -336,6 +336,11 @@ def create_app():
         marketing_origin=marketing_origin,
         marketing_url=marketing_url,
     )
+    from app.utils.nav_back import resolve_back_url, url_with_back
+    app.jinja_env.globals.update(
+        resolve_back_url=resolve_back_url,
+        url_with_back=url_with_back,
+    )
     from app.services.i18n_service import translate_log_action, translate_log_detail
     app.jinja_env.filters['format_dt'] = format_datetime
     app.jinja_env.filters['format_time'] = format_time
@@ -364,6 +369,7 @@ def create_app():
                 tenant_has_integrations=False,
                 tenant_has_registro_jornada=True,
                 tenant_has_fichaje_operario=False,
+                tenant_usa_acceso_pin=False,
                 muestra_auditoria_fichajes=False,
                 puede_ver_estado_fichaje=False,
                 impersonacion_activa=False,
@@ -478,6 +484,7 @@ def create_app():
         tenant_has_integrations = False
         tenant_has_registro_jornada = True
         tenant_has_fichaje_operario = False
+        tenant_usa_acceso_pin = False
         muestra_auditoria_fichajes = False
         puede_ver_estado_fichaje = False
         impersonacion_activa = False
@@ -505,6 +512,8 @@ def create_app():
                 tenant_has_fichaje_operario = bool(
                     modulos_activos.get('fichaje_operario')
                 )
+                from app.services.tenant_auth_policy import tenant_usa_acceso_pin as _tenant_usa_acceso_pin
+                tenant_usa_acceso_pin = _tenant_usa_acceso_pin(tenant)
                 from app.services.tenant_modules import (
                     has_avisos_laborales,
                     has_auditoria_vehiculos,
@@ -599,6 +608,7 @@ def create_app():
                     'tenant_has_integrations': tenant_has_integrations,
                     'tenant_has_registro_jornada': tenant_has_registro_jornada,
                     'tenant_has_fichaje_operario': tenant_has_fichaje_operario,
+                    'tenant_usa_acceso_pin': tenant_usa_acceso_pin,
                     'tenant_has_avisos_laborales': tenant_has_avisos_laborales,
                     'tenant_has_notas': tenant_has_notas,
                     'tenant_has_valoraciones': tenant_has_valoraciones,
@@ -627,6 +637,7 @@ def create_app():
             tenant_has_integrations=tenant_has_integrations,
             tenant_has_registro_jornada=tenant_has_registro_jornada,
             tenant_has_fichaje_operario=tenant_has_fichaje_operario,
+            tenant_usa_acceso_pin=tenant_usa_acceso_pin,
             muestra_auditoria_fichajes=muestra_auditoria_fichajes,
             puede_ver_estado_fichaje=puede_ver_estado_fichaje,
             impersonacion_activa=impersonacion_activa,

@@ -51,6 +51,23 @@
   transition: border-color var(--duration-fast, 150ms) ease, box-shadow var(--duration-fast, 150ms) ease;
 }
 
+.person-day-timeline-card-icon {
+  display: none;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md, 0.625rem);
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.72rem;
+}
+
+.person-day-timeline-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .person-day-timeline-card:hover {
   border-color: #cbd5e1;
   box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
@@ -359,4 +376,149 @@
 .person-day-timeline-empty--compact {
   padding: 0.85rem 0.75rem;
   font-size: 0.74rem;
+}
+
+/* ── Móvil: bottom sheet + feed de eventos ── */
+@media (max-width: 767.98px) {
+  .person-day-timeline-modal .modal-dialog {
+    margin: 0;
+    max-width: 100%;
+    min-height: calc(100% - 0.5rem);
+    display: flex;
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .person-day-timeline-modal .person-day-timeline-modal-content {
+    border-radius: 1rem 1rem 0 0;
+    max-height: 92vh;
+    width: 100%;
+    border-bottom: none;
+  }
+
+  .person-day-timeline-modal .person-day-timeline-modal-header {
+    padding: 0.85rem 1rem 0.65rem;
+    position: relative;
+  }
+
+  .person-day-timeline-modal .person-day-timeline-modal-header::before {
+    content: '';
+    display: block;
+    width: 2.25rem;
+    height: 0.22rem;
+    border-radius: 999px;
+    background: #cbd5e1;
+    margin: 0 auto 0.65rem;
+  }
+
+  .person-day-timeline-modal .person-day-timeline-modal-kicker {
+    font-size: 0.58rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .person-day-timeline-modal .modal-title {
+    font-size: 1rem;
+    line-height: 1.25;
+  }
+
+  .person-day-timeline-modal .modal-body {
+    padding: 0.65rem 0.85rem 1rem;
+  }
+
+  .person-day-timeline-meta {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .person-day-timeline-meta-item {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .person-day-timeline-container {
+    padding: 0;
+  }
+
+  .person-day-timeline-item {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+    padding-bottom: 0.55rem;
+  }
+
+  .person-day-timeline-marker {
+    display: none;
+  }
+
+  .person-day-timeline-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.72rem 0.75rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .person-day-timeline-card-icon {
+    display: flex;
+  }
+
+  .person-day-timeline-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .person-day-timeline-title {
+    font-size: 0.82rem;
+    line-height: 1.3;
+    width: 100%;
+  }
+
+  .person-day-timeline-time {
+    font-size: 0.68rem;
+    padding: 0.06rem 0.32rem;
+    order: -1;
+  }
+
+  .person-day-timeline-desc {
+    font-size: 0.78rem;
+    margin-bottom: 0.45rem;
+    line-height: 1.4;
+  }
+
+  .person-day-timeline-footer {
+    justify-content: flex-start;
+  }
+
+  .person-day-timeline-actor {
+    font-size: 0.62rem;
+    padding: 0.1rem 0.38rem;
+  }
+
+  .person-day-timeline-modal-footer {
+    padding: 0.65rem 0.85rem calc(0.65rem + env(safe-area-inset-bottom, 0px));
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .person-day-timeline-modal-footer [data-timeline-resolve-audit] {
+    width: 100%;
+    margin-right: 0;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .person-day-timeline-day-header {
+    padding: 0.45rem 0.55rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .person-day-timeline-day-date {
+    font-size: 0.74rem;
+  }
 }

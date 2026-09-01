@@ -102,7 +102,7 @@ class TestGeolocalizacionDePago:
         session.execute(
             text(
                 'INSERT INTO configuracion_global (clave, valor) VALUES '
-                "('fichaje_geolocalizacion', 'opcional') "
+                "('fichaje_geolocalizacion', 'activada') "
                 'ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor'
             )
         )
@@ -110,7 +110,7 @@ class TestGeolocalizacionDePago:
         with app.test_request_context():
             g.current_tenant = tenant
             assert plan_incluye_geolocalizacion()
-            assert modo_geolocalizacion() == 'opcional'
+            assert modo_geolocalizacion() == 'activada'
 
 
 class TestAltaPorFormulario:

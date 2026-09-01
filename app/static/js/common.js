@@ -643,6 +643,51 @@ window.resolverConflictoAsignacion = function(data, payload, onRetryCallback, on
 };
 
 /**
+ * Navegación «atrás» contextual: enlaces a fichas llevan ?back=origen.
+ */
+window.SP_navBack = {
+    current: function () {
+        return window.location.pathname + window.location.search + window.location.hash;
+    },
+    withBack: function (href) {
+        if (!href || href.charAt(0) === '#' || /^javascript:/i.test(href)) return href;
+        try {
+            var u = new URL(href, window.location.origin);
+            if (u.origin !== window.location.origin) return href;
+            if (u.searchParams.has('back')) return href;
+            u.searchParams.set('back', this.current());
+            return u.pathname + u.search + u.hash;
+        } catch (e) {
+            return href;
+        }
+    },
+};
+
+var _SP_DRILL_PATH_RE = /^\/admin\/(worker_panel|edit_operario|obra_panel|company_panel|vehicle_panel|edit_obra|create_user|create_obra|vehiculos\/|worker\/)/;
+
+function initAdminNavBack() {
+    document.addEventListener('click', function (ev) {
+        if (ev.defaultPrevented || ev.button !== 0) return;
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+        var a = ev.target.closest('a[href]');
+        if (!a || (a.target && a.target !== '_self')) return;
+        var href = a.getAttribute('href') || '';
+        if (!href || href.charAt(0) === '#' || /^javascript:/i.test(href)) return;
+        var path;
+        try {
+            path = new URL(href, window.location.origin).pathname;
+        } catch (e) { return; }
+        if (!_SP_DRILL_PATH_RE.test(path)) return;
+        if (href.indexOf('back=') !== -1) return;
+        var next = window.SP_navBack.withBack(href);
+        if (next === href) return;
+        ev.preventDefault();
+        if (window.SP_pageLoading) window.SP_pageLoading.show();
+        window.location.href = next;
+    }, true);
+}
+
+/**
  * Filas de tabla clicables (navegan a data-row-href o data-href en <tr>).
  * Ignora clics en enlaces, botones, inputs y columna de checkbox.
  */
@@ -655,6 +700,7 @@ function initClickableTableRows(tableId) {
         row.setAttribute('role', 'link');
         function go() {
             var href = row.getAttribute('data-row-href') || row.getAttribute('data-href');
+            if (href && window.SP_navBack) href = window.SP_navBack.withBack(href);
             if (href) window.location.href = href;
         }
         row.addEventListener('click', function(e) {
@@ -671,3 +717,7 @@ function initClickableTableRows(tableId) {
         });
     });
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    initAdminNavBack();
+});

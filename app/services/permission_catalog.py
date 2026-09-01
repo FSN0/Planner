@@ -22,6 +22,7 @@ PERMISSION_MODULES = (
     ('vehiculos_libres', 'Coches libres', 'Vehículos'),
     ('auditoria_vehiculos', 'Auditoría vehículos', 'Vehículos'),
     ('auditoria_fichajes', 'Auditoría fichajes', 'Jornada'),
+    ('mapa_fichajes', 'Mapa de fichajes', 'Jornada'),
     ('registro_jornada', 'Registro de jornada', 'Jornada'),
     # Portal propio /fichaje (autogestión: cualquier rol puede tenerlos)
     ('operario_fichaje', 'Fichar desde el portal propio', 'Jornada'),
@@ -159,6 +160,8 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
         return has_fichaje
     if module == 'auditoria_fichajes':
         return has_fichaje or has_odoo
+    if module == 'mapa_fichajes':
+        return has_fichaje
     if module == 'registro_jornada':
         return has_registro
     if module == 'solicitudes':
@@ -238,6 +241,7 @@ MODULE_WRITE_HINTS = {
     'solicitudes': 'Crear y resolver solicitudes',
     'ausencias': 'Crear / aprobar ausencias y conflictos',
     'auditoria_fichajes': 'Resolver incidencias y sincronizar',
+    'mapa_fichajes': 'Solo consulta: no requiere escritura',
     'auditoria_vehiculos': 'Resolver auditoría de flota',
     'integraciones': 'Acciones del hub (si las hay)',
     'sync_odoo': 'Preview, sincronizar, guardar configuración',

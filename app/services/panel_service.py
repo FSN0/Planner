@@ -274,8 +274,12 @@ def get_admin_panel_context():
         .limit(8)
         .all()
     )
-    last_sync = SyncLog.query.order_by(SyncLog.fecha.desc()).first()
-    sync_error_lines = _parse_sync_errores_detail(last_sync)
+    last_sync = (
+        SyncLog.query.filter(db.or_(SyncLog.visto.is_(False), SyncLog.visto.is_(None)))
+        .order_by(SyncLog.fecha.desc())
+        .first()
+    )
+    sync_error_lines = _parse_sync_errores_detail(last_sync) if last_sync else []
     hoy_en_obra = resumen_hoy_plan_vs_ficha(today)
 
     return {

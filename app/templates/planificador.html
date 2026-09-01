@@ -3,10 +3,11 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260901a">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260831b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260901a">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}?v=20260901b">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260830b">
 <style id="dynamic-sidebar-style"></style>
 {% endblock %}
@@ -252,6 +253,11 @@
 {% if can_edit_planificador|default(false) %}
 {% include "components/_mobile_assign_sheet.html" %}
 {% endif %}
+{% if puede_ver_estado_fichaje %}
+{% with modal_id='modalTimelineFichaje', modal_title=_('Historial del día') %}
+  {% include 'components/_person_day_timeline_modal.html' %}
+{% endwith %}
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -260,9 +266,25 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
+<script>window.PLANIFICADOR_SHOW_FICHAJES = {{ puede_ver_estado_fichaje|default(false)|tojson }};</script>
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260824a"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260831a"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260901d"></script>
 {% if can_edit_planificador|default(false) %}
 <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260830b"></script>
+{% endif %}
+{% if puede_ver_estado_fichaje %}
+<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260901b"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof PersonDayTimeline === 'undefined') return;
+  PersonDayTimeline.bindFichajeDotClick('#planificador-mobile-day', {
+    modalId: 'modalTimelineFichaje',
+    apiBase: '/sync/timeline_dia',
+    loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
+    canResolveAudit: {{ (puede_resolver_auditoria|default(false))|tojson }},
+    auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
+  });
+});
+</script>
 {% endif %}
 {% endblock %}

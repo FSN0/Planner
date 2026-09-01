@@ -166,3 +166,18 @@ def tooltip_fichaje_agregado(estados):
     if (estado or '').startswith('Resuelto'):
         return labels.get(estado, 'Resuelto / correcto')
     return labels.get(estado, estado or 'Sin datos')
+
+
+def fichajes_agregados_por_fecha(fecha):
+    """Mapa user_id → estado agregado del día (para planificador móvil, APIs)."""
+    from collections import defaultdict
+
+    from app.models import RegistroFichaje
+
+    por_usuario = defaultdict(list)
+    for f in RegistroFichaje.query.filter_by(fecha=fecha).all():
+        por_usuario[f.user_id].append(f.estado)
+    return {
+        str(uid): estado_fichaje_agregado(estados)
+        for uid, estados in por_usuario.items()
+    }

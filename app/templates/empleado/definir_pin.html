@@ -7,17 +7,63 @@
     <link rel="icon" href="{{ url_for('static', filename='img/brand/favicon-48.png') }}?v=20260807f" type="image/png" sizes="48x48">
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+    <style>
+      .definir-pin-logo-wrap { line-height: 0; }
+      .definir-pin-logo-wrap .sp-logo { width: 220px; max-width: 100%; height: auto; }
+      .definir-pin-datos {
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        font-size: 0.88rem;
+        color: #cbd5e1;
+      }
+      .definir-pin-datos dt {
+        font-weight: 600;
+        color: #94a3b8;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin: 0 0 0.15rem;
+      }
+      .definir-pin-datos dd {
+        margin: 0 0 0.65rem;
+        color: #f1f5f9;
+        word-break: break-word;
+      }
+      .definir-pin-datos dd:last-child { margin-bottom: 0; }
+      .definir-pin-datos a { color: #5eead4; }
+    </style>
 </head>
 <body class="layout-auth d-flex align-items-center justify-content-center" style="min-height: 100vh; background-color: #0f172a;">
-    <div class="auth-card p-4 shadow-sm rounded" style="width: 100%; max-width: 400px; border-top: 4px solid #16a34a; background: #1e293b; color: #f1f5f9;">
-        <div class="text-center mb-3">
-            <img src="{{ url_for('static', filename='img/brand/logo-horizontal.png') }}?v=20260807b"
-                 alt="SignaPlan" width="160" height="42" style="max-width:100%;height:auto;filter:brightness(1.05);">
+    <div class="auth-card p-4 shadow-sm rounded" style="width: 100%; max-width: 420px; border-top: 4px solid #16a34a; background: #1e293b; color: #f1f5f9;">
+        <div class="text-center mb-3 definir-pin-logo-wrap">
+            {% with variant='horizontal_on_dark', logo_class='definir-pin-logo' %}
+            {% include "components/_brand_logo.html" %}
+            {% endwith %}
         </div>
         <h1 class="h4 text-center mb-2 font-weight-bold">{{ _('Define tu PIN') }}</h1>
-        <p class="text-center small mb-4" style="color:#94a3b8;">
+        <p class="text-center small mb-3" style="color:#94a3b8;">
             {{ _('Elige un PIN de 4 a 6 dígitos para fichar con tu DNI. No lo compartas.') }}
         </p>
+
+        {% if pin_user and not pin_error %}
+        <dl class="definir-pin-datos mb-4">
+            <dt>{{ _('Nombre') }}</dt>
+            <dd>{{ pin_user.name }} {{ pin_user.lastname }}</dd>
+            <dt>{{ _('Usuario (DNI)') }}</dt>
+            <dd>{{ pin_user.dni }}</dd>
+            {% set email_val = pin_user.email or '' %}
+            {% if email_val and '@local.signaplan' not in email_val and '@demo.signaplan' not in email_val %}
+            <dt>{{ _('Correo') }}</dt>
+            <dd>{{ email_val }}</dd>
+            {% endif %}
+            {% if login_url %}
+            <dt>{{ _('Acceso') }}</dt>
+            <dd><a href="{{ login_url }}">{{ login_url }}</a></dd>
+            {% endif %}
+        </dl>
+        {% endif %}
 
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
@@ -27,6 +73,10 @@
           {% endif %}
         {% endwith %}
 
+        {% if pin_error %}
+        <div class="alert alert-warning p-3 small text-center mb-4">{{ pin_error }}</div>
+        <a href="{{ url_for('auth.login') }}" class="btn btn-outline-light btn-block">{{ _('Ir al inicio de sesión') }}</a>
+        {% else %}
         <form method="POST" autocomplete="off">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="t" value="{{ token }}">
@@ -46,6 +96,7 @@
                 {{ _('Guardar PIN') }}
             </button>
         </form>
+        {% endif %}
     </div>
 </body>
 </html>

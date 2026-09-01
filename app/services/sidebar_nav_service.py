@@ -32,6 +32,7 @@ ITEM_FLOTA = 'flota'
 ITEM_COCHES_LIBRES = 'coches_libres'
 ITEM_AUDITORIA_VEH = 'auditoria_vehiculos'
 ITEM_AUDITORIA_FICH = 'auditoria_fichajes'
+ITEM_MAPA_FICH = 'mapa_fichajes'
 ITEM_REGISTRO_JORNADA = 'registro_jornada'
 ITEM_INTEGRACIONES = 'integraciones'
 ITEM_SOLTEC_PORTAL = 'soltec_portal'
@@ -59,6 +60,7 @@ ALL_ITEM_KEYS = (
     ITEM_COCHES_LIBRES,
     ITEM_AUDITORIA_VEH,
     ITEM_AUDITORIA_FICH,
+    ITEM_MAPA_FICH,
     ITEM_REGISTRO_JORNADA,
     ITEM_INTEGRACIONES,
     ITEM_ODOO_ALTA,
@@ -116,7 +118,7 @@ def _default_sections_blueprint() -> list[dict]:
         {
             'id': 'sec_audit',
             'title': str(_('Auditorías')),
-            'items': [ITEM_AUDITORIA_FICH, ITEM_REGISTRO_JORNADA, ITEM_AUDITORIA_VEH],
+            'items': [ITEM_AUDITORIA_FICH, ITEM_MAPA_FICH, ITEM_REGISTRO_JORNADA, ITEM_AUDITORIA_VEH],
         },
         {
             'id': 'sec_soltec',
@@ -308,6 +310,15 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'href': url_for('sync.auditoria_fichajes'),
             'active': _ep() == 'sync.auditoria_fichajes',
             'data_tour': 'nav-auditoria-fichajes',
+        },
+        ITEM_MAPA_FICH: {
+            'id': ITEM_MAPA_FICH,
+            'label': str(_('Mapa fichajes')),
+            'icon': 'fa-map-marked-alt',
+            'kind': 'link',
+            'href': url_for('admin.mapa_fichajes'),
+            'active': _ep() == 'admin.mapa_fichajes',
+            'data_tour': None,
         },
         ITEM_REGISTRO_JORNADA: {
             'id': ITEM_REGISTRO_JORNADA,
@@ -556,6 +567,10 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
         if not user_can(user, 'auditoria_fichajes', 'r'):
             return False
         return bool(ctx.get('muestra_auditoria_fichajes'))
+    if item_id == ITEM_MAPA_FICH:
+        if not user_can(user, 'mapa_fichajes', 'r'):
+            return False
+        return bool(ctx.get('tenant_has_fichaje_operario'))
     if item_id == ITEM_REGISTRO_JORNADA:
         return user_can(user, 'registro_jornada', 'r') and bool(ctx.get('tenant_has_registro_jornada'))
     if item_id == ITEM_INTEGRACIONES:

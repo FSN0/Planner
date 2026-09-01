@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Mapa de fichajes') }}{% endblock %}
+{% block body_class %}layout-admin mapa-fichajes-page{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260901a">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mapa_fichajes.css') }}?v=20260901a">
+<style>
+  /* Viewport a pantalla completa dentro del shell admin (sin padding de admin-main) */
+  .mapa-fichajes-page.admin-shell {
+    height: 100vh;
+    overflow: hidden;
+  }
+  .mapa-fichajes-page .mapa-fichajes-viewport {
+    flex: 1;
+    min-width: 0;
+  }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell mapa-fichajes-page">
+  {% include "_admin_sidebar.html" %}
+
+  <div class="mapa-fichajes-viewport">
+    <div id="mapaFichajesMap"></div>
+
+    <div class="mapa-fichajes-legend">
+      <span><i class="mapa-fichajes-dot" style="background:#2563eb;"></i> {{ _('Obra') }}</span>
+      <span><i class="mapa-fichajes-dot" style="background:#16a34a;"></i> {{ _('En radio') }}</span>
+      <span><i class="mapa-fichajes-dot" style="background:#ea580c;"></i> {{ _('Dudosa') }}</span>
+      <span><i class="mapa-fichajes-dot" style="background:#64748b;"></i> {{ _('Otros') }}</span>
+    </div>
+
+    <div class="mapa-fichajes-float mapa-fichajes-float--controls" id="mapaControlsPanel">
+      <div class="mapa-fichajes-float-head" id="mapaControlsHead">
+        <div style="min-width:0;">
+          <a href="{{ back_url }}" class="mapa-fichajes-back" onclick="event.stopPropagation()">
+            <i class="fas fa-arrow-left"></i> {{ _('Volver') }}
+          </a>
+          <h1><i class="fas fa-map-marked-alt"></i> {{ _('Mapa de fichajes') }}</h1>
+        </div>
+        <div class="mapa-fichajes-float-head-actions">
+          <button type="button" id="mapaControlsCollapse" title="{{ _('Minimizar') }}" aria-label="{{ _('Minimizar') }}">
+            <i class="fas fa-minus"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mapa-fichajes-float-body">
+        <div class="mapa-fichajes-filters">
+          <label>{{ _('Periodo') }}</label>
+          <div class="mapa-fichajes-presets" id="mapaPresets">
+            <button type="button" data-preset="today" class="is-active">{{ _('Hoy') }}</button>
+            <button type="button" data-preset="7">{{ _('7 días') }}</button>
+            <button type="button" data-preset="30">{{ _('30 días') }}</button>
+            <button type="button" data-preset="custom">{{ _('Personalizado') }}</button>
+          </div>
+          <div id="mapaCustomRange" style="display:none;">
+            <label for="mapaDesde">{{ _('Desde') }}</label>
+            <input type="date" id="mapaDesde" class="form-control form-control-sm">
+            <label for="mapaHasta">{{ _('Hasta') }}</label>
+            <input type="date" id="mapaHasta" class="form-control form-control-sm">
+          </div>
+          <label class="mapa-fichajes-check">
+            <input type="checkbox" id="mapaSoloDudosos">
+            {{ _('Solo ubicaciones dudosas') }}
+          </label>
+        </div>
+        <div class="mapa-fichajes-list-wrap" id="mapaObrasList">
+          <p class="mapa-fichajes-empty mb-0">{{ _('Cargando obras…') }}</p>
+        </div>
+      </div>
+      <div class="mapa-fichajes-resize-handle" id="mapaControlsResize" title="{{ _('Redimensionar') }}"></div>
+    </div>
+
+    <div class="mapa-fichajes-float mapa-fichajes-float--detail is-hidden" id="mapaDetallePanel">
+      <div class="mapa-fichajes-float-head" id="mapaDetalleHead">
+        <div style="min-width:0;">
+          <h2 id="mapaDetalleTitulo">{{ _('Selecciona una obra') }}</h2>
+          <div class="mapa-fichajes-stats" id="mapaDetalleStats"></div>
+        </div>
+        <div class="mapa-fichajes-float-head-actions">
+          <button type="button" id="mapaDetalleCollapse" title="{{ _('Minimizar') }}" aria-label="{{ _('Minimizar') }}">
+            <i class="fas fa-minus"></i>
+          </button>
+          <button type="button" id="mapaDetalleCerrar" title="{{ _('Cerrar') }}" aria-label="{{ _('Cerrar') }}">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mapa-fichajes-float-body">
+        <div class="mapa-fichajes-table-wrap">
+          <table class="mapa-fichajes-table" id="mapaDetalleTable">
+            <thead>
+              <tr>
+                <th>{{ _('Operario') }}</th>
+                <th>{{ _('Fecha') }}</th>
+                <th>{{ _('Hora') }}</th>
+                <th>{{ _('Estado') }}</th>
+                <th>{{ _('Distancia') }}</th>
+                <th>{{ _('Nota') }}</th>
+              </tr>
+            </thead>
+            <tbody id="mapaDetalleBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="mapa-fichajes-resize-handle" id="mapaDetalleResize" title="{{ _('Redimensionar') }}"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="{{ url_for('static', filename='js/mapa-fichajes.js') }}?v=20260901b"></script>
+<script>
+  MapaFichajes.init({
+    obrasUrl: {{ url_for('admin.api_mapa_fichajes_obras')|tojson }},
+    fichajesUrlBase: {{ url_for('admin.api_mapa_fichajes_obra', obra_id=0)|tojson }}.replace('/0/', '/__ID__/'),
+    editObraUrlBase: {{ url_for('admin.edit_obra', obra_id=0)|tojson }}.replace('/0', '/__ID__'),
+    workerUrlBase: {{ url_for('admin.worker_panel', user_id=0)|tojson }}.replace('/0', '/__ID__'),
+    labels: {
+      sinObras: {{ _('No hay obras con ubicación en mapa.')|tojson }},
+      obrasConPin: {{ _('Obras en mapa')|tojson }},
+      sinUbicacion: {{ _('Sin ubicación en mapa')|tojson }},
+      seleccionaObra: {{ _('Selecciona una obra del listado')|tojson }},
+      cargando: {{ _('Cargando fichajes…')|tojson }},
+      sinFichajes: {{ _('No hay entradas con GPS en este periodo.')|tojson }},
+      enRadio: {{ _('En radio')|tojson }},
+      dudosa: {{ _('Dudosa')|tojson }},
+      otro: {{ _('Otro')|tojson }},
+      entradas: {{ _('entradas')|tojson }},
+      sinGps: {{ _('sin GPS')|tojson }},
+      filtros: {{ _('Filtros y obras')|tojson }},
+      detalle: {{ _('Detalle de fichajes')|tojson }},
+    }
+  });
+</script>
+{% endblock %}

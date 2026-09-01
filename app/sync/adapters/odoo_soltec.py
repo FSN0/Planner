@@ -520,7 +520,18 @@ class Adapter(BaseSyncAdapter):
                 if (local_user.lastname or '') != lastname: data['cambios']['Apellidos'] = f"{local_user.lastname} ➔ {lastname}"
                 if local_user.dni != dni: data['cambios']['DNI'] = f"{local_user.dni} ➔ {dni}"
                 if local_user.email != email: data['cambios']['Email'] = f"{local_user.email} ➔ {email}"
-                if local_user.role != role: data['cambios']['Rol'] = f"{local_user.role} ➔ {role}"
+                from app.services.user_role_sync_service import user_role_sync_locked
+                role_sync_role = role
+                office_roles = {'laboral', 'rrhh', 'admin'}
+                odoo_field_roles = {'operario', 'jefe_obra'}
+                if user_role_sync_locked(local_user):
+                    role_sync_role = local_user.role
+                elif local_user.role in office_roles and role in odoo_field_roles:
+                    # p. ej. Lupe importada como operario pero ya es laboral en SignaPlan
+                    role_sync_role = local_user.role
+                elif local_user.role != role:
+                    data['cambios']['Rol'] = f"{local_user.role} ➔ {role}"
+                data['role'] = role_sync_role
                 if (local_user.categoria_profesional or '') != categoria: 
                     data['cambios']['Categoría'] = f"{local_user.categoria_profesional or 'Ninguna'} ➔ {categoria}"
                 if not local_user.active:

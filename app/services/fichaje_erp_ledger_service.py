@@ -96,12 +96,37 @@ def _estado_deseado(fichajes, fecha_obj):
             EVENTO_SALIDA: _momento(fichaje.get('check_out')),
             'autor': fichaje.get('autor'),
             'nota': fichaje.get('note'),
+            # Reservado para cuando Odoo envíe coordenadas del fichaje.
+            'latitud': fichaje.get('latitud') or fichaje.get('latitude'),
+            'longitud': fichaje.get('longitud') or fichaje.get('longitude'),
+            'precision_metros': fichaje.get('precision_metros') or fichaje.get('gps_accuracy'),
         }
 
     return deseado
 
 
 def _anotar(referencia, datos, tipo, momento):
+    latitud = datos.get('latitud')
+    longitud = datos.get('longitud')
+    try:
+        latitud = float(latitud) if latitud not in (None, '') else None
+        longitud = float(longitud) if longitud not in (None, '') else None
+    except (TypeError, ValueError):
+        latitud = longitud = None
+
+    precision = datos.get('precision_metros')
+    try:
+        precision = float(precision) if precision not in (None, '') else None
+    except (TypeError, ValueError):
+        precision = None
+
+    obra = Obra.query.get(datos['obra_id']) if datos.get('obra_id') else None
+    geo_estado = None
+    distancia_obra = None
+    if latitud is not None and longitud is not None and obra is not None:
+        from app.services.geocerca_service import evaluar_geo_fichaje
+        geo_estado, distancia_obra = evaluar_geo_fichaje(obra, latitud, longitud)
+
     registrar_evento(
         user_id=datos['user_id'],
         tipo=tipo,
@@ -109,6 +134,11 @@ def _anotar(referencia, datos, tipo, momento):
         ocurrido_en=momento,
         fecha_laboral=datos['fecha_laboral'],
         obra_id=datos['obra_id'],
+        latitud=latitud,
+        longitud=longitud,
+        precision_metros=precision,
+        geo_estado=geo_estado,
+        distancia_obra_metros=distancia_obra,
         external_ids={
             CLAVE_REFERENCIA: referencia,
             'erp_autor': datos.get('autor'),

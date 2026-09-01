@@ -81,7 +81,9 @@ document.addEventListener('DOMContentLoaded', function() {
             window.AppItems.add(visible);
         }
         setTimeout(refreshPlanificadorLayout, 50);
-        if (typeof window.renderPlanificadorMobileDay === 'function') {
+        var mobileDay = document.getElementById('planificador-mobile-day');
+        if (mobileDay && mobileDay.offsetParent !== null &&
+            typeof window.renderPlanificadorMobileDay === 'function') {
             window.renderPlanificadorMobileDay();
         }
     };
@@ -103,6 +105,29 @@ document.addEventListener('DOMContentLoaded', function() {
         window.renderPlanificadorMobileDay();
     }
 
+    function pmdFichajeDotHtml(workerId, fechaIso, estado) {
+        if (!window.PLANIFICADOR_SHOW_FICHAJES || !workerId || !fechaIso) return '';
+        var st = estado || 'Sin_Registro';
+        var fe = window.SPFichajeEstado;
+        var color = fe ? fe.colorDeEstado(st) : '#94a3b8';
+        var label = fe ? fe.labelDeEstado(st) : st;
+        var hint = t('Clic para ver el historial del día');
+        return '<span class="pmd-fichaje-dot status-dot-kanban status-dot-kanban--interactive" ' +
+            'data-fichaje-dot="1" data-user-id="' + pmdEsc(String(workerId)) + '" ' +
+            'data-fecha="' + pmdEsc(fechaIso) + '" data-estado-fichaje="' + pmdEsc(st) + '" ' +
+            'style="background:' + color + ';" role="button" tabindex="0" ' +
+            'title="' + pmdEsc(label + ' — ' + hint) + '" ' +
+            'aria-label="' + pmdEsc(label + ' — ' + hint) + '"></span>';
+    }
+
+    function fetchPmdFichajes(fechaIso) {
+        if (!window.PLANIFICADOR_SHOW_FICHAJES) return Promise.resolve({});
+        return fetch('/admin/api/planificador/fichajes-estado?fecha=' + encodeURIComponent(fechaIso))
+            .then(function (r) { return r.json(); })
+            .then(function (data) { return (data && data.estados) || {}; })
+            .catch(function () { return {}; });
+    }
+
     window.renderPlanificadorMobileDay = function() {
         var list = document.getElementById('pmd-list');
         var input = document.getElementById('pmd-date');
@@ -110,6 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (input && !input.value) input.value = moment().format('YYYY-MM-DD');
         var day = moment((input && input.value) || undefined).startOf('day');
         var dayEnd = day.clone().add(1, 'day');
+        var fechaIso = day.format('YYYY-MM-DD');
         var events = window.allEventsMaster || [];
         var groups = window.allGroupsMaster || [];
 
@@ -131,46 +157,54 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        var sortedGroups = groups.slice().sort(function (a, b) {
-            var aCount = (byGroup[String(a.id)] || []).length;
-            var bCount = (byGroup[String(b.id)] || []).length;
-            if (aCount > 0 && bCount === 0) return -1;
-            if (aCount === 0 && bCount > 0) return 1;
-            if (aCount !== bCount) return bCount - aCount;
-            var ta = a.title || a.codigo || String(a.id);
-            var tb = b.title || b.codigo || String(b.id);
-            return ta.localeCompare(tb);
-        });
+        fetchPmdFichajes(fechaIso).then(function (estados) {
+            window.planificadorFichajeEstado = estados;
 
-        list.innerHTML = sortedGroups.map(function (g) {
-            var gid = String(g.id);
-            var evs = byGroup[gid] || [];
-            var people = evs.map(function (ev) {
-                var name = ev.title || ('#' + (ev.worker_id || ''));
-                var ds = moment(ev.start).format('DD/MM');
-                var de = moment(ev.end).subtract(1, 'day');
-                if (!de.isValid() || de.isBefore(moment(ev.start), 'day')) de = moment(ev.start);
-                var dates = ds === de.format('DD/MM') ? ds : (ds + ' – ' + de.format('DD/MM'));
-                var body = ev.worker_id
-                    ? '<a href="/admin/worker_panel/' + encodeURIComponent(ev.worker_id) + '">' + pmdEsc(name) + '</a>'
-                    : pmdEsc(name);
-                return '<div class="pmd-person"><span class="pmd-person-name">' + body +
-                    '</span><span class="pmd-person-dates">' + pmdEsc(dates) + '</span></div>';
+            var sortedGroups = groups.slice().sort(function (a, b) {
+                var aCount = (byGroup[String(a.id)] || []).length;
+                var bCount = (byGroup[String(b.id)] || []).length;
+                if (aCount > 0 && bCount === 0) return -1;
+                if (aCount === 0 && bCount > 0) return 1;
+                if (aCount !== bCount) return bCount - aCount;
+                var ta = a.title || a.codigo || String(a.id);
+                var tb = b.title || b.codigo || String(b.id);
+                return ta.localeCompare(tb);
+            });
+
+            list.innerHTML = sortedGroups.map(function (g) {
+                var gid = String(g.id);
+                var evs = byGroup[gid] || [];
+                var people = evs.map(function (ev) {
+                    var name = ev.title || ('#' + (ev.worker_id || ''));
+                    var ds = moment(ev.start).format('DD/MM');
+                    var de = moment(ev.end).subtract(1, 'day');
+                    if (!de.isValid() || de.isBefore(moment(ev.start), 'day')) de = moment(ev.start);
+                    var dates = ds === de.format('DD/MM') ? ds : (ds + ' – ' + de.format('DD/MM'));
+                    var body = ev.worker_id
+                        ? '<a href="/admin/worker_panel/' + encodeURIComponent(ev.worker_id) + '">' + pmdEsc(name) + '</a>'
+                        : pmdEsc(name);
+                    var wid = ev.worker_id ? String(ev.worker_id) : '';
+                    var estado = wid ? (estados[wid] || 'Sin_Registro') : '';
+                    var dot = pmdFichajeDotHtml(wid, fechaIso, estado);
+                    return '<div class="pmd-person"><span class="pmd-person-name">' + body +
+                        '</span><span class="pmd-person-meta">' + dot +
+                        '<span class="pmd-person-dates">' + pmdEsc(dates) + '</span></span></div>';
+                }).join('');
+                var obraHref = '/admin/obra_panel/' + encodeURIComponent(gid);
+                var obraTitle = pmdEsc(g.title || g.codigo || gid);
+                var assignBtn = '';
+                if (window.PLANIFICADOR_CAN_EDIT) {
+                    assignBtn = '<button type="button" class="pmd-btn-assign" data-obra-id="' + pmdEsc(gid) +
+                        '" data-obra-name="' + obraTitle + '" title="' + pmdEsc(t('Asignar operario')) +
+                        '" aria-label="' + pmdEsc(t('Asignar operario')) + '"><i class="fas fa-plus"></i></button>';
+                }
+                var emptyNote = evs.length ? '' : '<p class="pmd-empty-inline">' + t('Nadie asignado este día.') + '</p>';
+                return '<article class="pmd-obra' + (evs.length ? '' : ' pmd-obra--empty') + '"><div class="pmd-obra-title"><a href="' +
+                    obraHref + '">' + obraTitle + '</a><span class="pmd-obra-title-actions">' + assignBtn +
+                    '<span class="pmd-obra-count">' + evs.length + '</span></span></div>' +
+                    (people || emptyNote) + '</article>';
             }).join('');
-            var obraHref = '/admin/obra_panel/' + encodeURIComponent(gid);
-            var obraTitle = pmdEsc(g.title || g.codigo || gid);
-            var assignBtn = '';
-            if (window.PLANIFICADOR_CAN_EDIT) {
-                assignBtn = '<button type="button" class="pmd-btn-assign" data-obra-id="' + pmdEsc(gid) +
-                    '" data-obra-name="' + obraTitle + '" title="' + pmdEsc(t('Asignar operario')) +
-                    '" aria-label="' + pmdEsc(t('Asignar operario')) + '"><i class="fas fa-plus"></i></button>';
-            }
-            var emptyNote = evs.length ? '' : '<p class="pmd-empty-inline">' + t('Nadie asignado este día.') + '</p>';
-            return '<article class="pmd-obra' + (evs.length ? '' : ' pmd-obra--empty') + '"><div class="pmd-obra-title"><a href="' +
-                obraHref + '">' + obraTitle + '</a><span class="pmd-obra-title-actions">' + assignBtn +
-                '<span class="pmd-obra-count">' + evs.length + '</span></span></div>' +
-                (people || emptyNote) + '</article>';
-        }).join('');
+        });
     };
 
     (function bindPmd() {
@@ -434,7 +468,7 @@ document.addEventListener('DOMContentLoaded', function() {
         groupEditable: true,
         groupOrder: 'orden',
         margin: { item: 2, axis: 5 },
-        throttleRedraw: 15,
+        throttleRedraw: 50,
         showTooltips: false,
         editable: (window.PLANIFICADOR_CAN_EDIT === false)
             ? false
@@ -981,12 +1015,94 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- LÓGICA DE CARGA DE DATOS ---
+    function applyPlanificadorPayload(data, evData) {
+        if (!data.length) {
+            window.allGroupsMaster = [];
+            window.AppGroups.clear();
+            window.allEventsMaster = [];
+            window.renderItems();
+            return;
+        }
+
+        var activeGroupIds = new Set();
+        evData.forEach(function (e) {
+            var groupId = e.resourceId || e.group;
+            if (groupId && e.type !== 'background') {
+                activeGroupIds.add(String(groupId));
+            }
+        });
+
+        data.sort(function (a, b) {
+            var aActive = activeGroupIds.has(String(a.id)) ? 1 : 0;
+            var bActive = activeGroupIds.has(String(b.id)) ? 1 : 0;
+            if (aActive !== bActive) return bActive - aActive;
+            var titleA = a.title || '';
+            var titleB = b.title || '';
+            return titleA.localeCompare(titleB);
+        });
+
+        window.allGroupsMaster = data;
+        window.AppGroups.clear();
+        window.AppGroups.add(data.map(function (g, index) {
+            return {
+                id: g.id,
+                title: g.title,
+                codigo: g.codigo,
+                fecha_fin: g.fecha_fin,
+                fecha_inicio: g.fecha_inicio || '',
+                fecha_fin_iso: g.fecha_fin_iso || '',
+                orden: index,
+            };
+        }));
+
+        window.allEventsMaster = evData.map(function (e) {
+            var base = {
+                id: e.id,
+                start: e.start,
+                end: e.end,
+                worker_id: e.worker_id,
+                solicitud_id: e.solicitud_id,
+            };
+            if (e.resourceId) base.group = e.resourceId;
+            if (e.type === 'background') {
+                base.type = e.type;
+                base.content = e.content;
+                base.className = e.className;
+                base.style = e.color ? 'background-color: ' + e.color + ' !important;' : '';
+            } else {
+                base.title = e.title;
+                base.style = e.style ? e.style : (e.color ? 'background-color: ' + e.color + ';' : '');
+                base.color = e.color;
+                base.empresa_nombre = e.empresa_nombre || 'ZZ_Sin_Empresa';
+                base.empresa_id = e.empresa_id;
+                base.categoria = e.categoria;
+                base.especialidad = e.especialidad;
+                base.nota = e.nota;
+            }
+            return base;
+        });
+
+        window.committedEventState = {};
+        window.allEventsMaster.forEach(function (ev) {
+            if (!ev || ev.type === 'background') return;
+            window.committedEventState[ev.id] = {
+                group: ev.group,
+                start: ev.start,
+                end: ev.end,
+                worker_id: ev.worker_id,
+            };
+        });
+
+        window.renderItems();
+    }
+
     window.loadTimelineData = function() {
-        let obrasIds = $('#obrasSelect').val() || []; 
+        if (window.planificadorLoading) return;
+        window.planificadorLoading = true;
+        let obrasIds = $('#obrasSelect').val() || [];
         let jefeId = $('#jefeSelect').val() || null;
         let workerIds = $('#workersSelect').val() || [];
         
-        // --- LÓGICA DE CHECKBOXES EN LUGAR DE SELECT2 ---
         let totalEmpresas = $('.chk-empresa-filter').length;
         let checkedEmpresas = $('.chk-empresa-filter:checked').length;
         let companyIds = [];
@@ -995,9 +1111,8 @@ document.addEventListener('DOMContentLoaded', function() {
             $('.chk-empresa-filter:checked').each(function() {
                 companyIds.push($(this).val());
             });
-            if (companyIds.length === 0) companyIds = [-1]; // -1 para que el servidor oculte todos
+            if (companyIds.length === 0) companyIds = [-1];
         }
-        // ------------------------------------------------
 
         let params = new URLSearchParams();
         if (jefeId) params.append('jefe_id', jefeId);
@@ -1005,93 +1120,22 @@ document.addEventListener('DOMContentLoaded', function() {
         companyIds.forEach(id => params.append('company_ids[]', id));
         workerIds.forEach(id => params.append('worker_ids[]', id));
 
-        params.append('start', moment().subtract(6, 'months').toISOString()); 
+        params.append('start', moment().subtract(6, 'months').toISOString());
         params.append('end', moment().add(6, 'months').toISOString());
 
-        // 1. Descargamos primero las obras (Eje Y)
-        // 1. Descargamos primero las obras
-        fetch('/admin/api/planificador/resources?' + params.toString()).then(r => r.json()).then(data => {
-            if (data.length > 0) {
-                // 2. Descargamos los eventos (operarios)
-                fetch('/admin/api/planificador/events?' + params.toString()).then(r => r.json()).then(evData => {
-                    
-                    // A) Identificamos qué obras tienen al menos un trabajador o solicitud asignada
-                    let activeGroupIds = new Set();
-                    evData.forEach(e => {
-                        let groupId = e.resourceId || e.group;
-                        // Excluimos eventos de fondo o festivos que no sean operarios reales
-                        if (groupId && e.type !== 'background') {
-                            activeGroupIds.add(String(groupId));
-                        }
-                    });
-
-                    // B) ORDENAMOS LAS OBRAS (NO las ocultamos)
-                    // Las que tienen gente (1) suben arriba. Las que están vacías (0) bajan.
-                    data.sort((a, b) => {
-                        let aActive = activeGroupIds.has(String(a.id)) ? 1 : 0;
-                        let bActive = activeGroupIds.has(String(b.id)) ? 1 : 0;
-
-                        if (aActive !== bActive) {
-                            return bActive - aActive; // Las activas suben
-                        }
-                        // Si empatan (ambas llenas o ambas vacías), ordenamos alfabéticamente
-                        let titleA = a.title || "";
-                        let titleB = b.title || "";
-                        return titleA.localeCompare(titleB);
-                    });
-
-                    // 3. Cargamos los Grupos (Obras) ya ordenados
-                    window.allGroupsMaster = data;
-                    window.AppGroups.clear(); 
-                    window.AppGroups.add(data.map((g, index) => ({ 
-                        id: g.id, 
-                        title: g.title, 
-                        codigo: g.codigo, 
-                        fecha_fin: g.fecha_fin,
-                        fecha_inicio: g.fecha_inicio || '',
-                        fecha_fin_iso: g.fecha_fin_iso || '',
-                        orden: index // El calendario usa este 'orden' para poner las vacías al final
-                    })));
-
-                    // 4. Mapeamos y cargamos los Eventos (Operarios)
-                    window.allEventsMaster = evData.map(e => {
-                        let base = { id: e.id, start: e.start, end: e.end, worker_id: e.worker_id, solicitud_id: e.solicitud_id };
-                        if (e.resourceId) base.group = e.resourceId;
-                        
-                        if (e.type === 'background') {
-                            base.type = e.type; base.content = e.content; base.className = e.className;
-                            base.style = e.color ? `background-color: ${e.color} !important;` : '';
-                        } else {
-                            base.title = e.title;
-                            base.style = e.style ? e.style : (e.color ? `background-color: ${e.color};` : '');
-                            base.color = e.color; base.empresa_nombre = e.empresa_nombre || 'ZZ_Sin_Empresa';
-                            base.empresa_id = e.empresa_id; base.categoria = e.categoria; base.especialidad = e.especialidad; base.nota = e.nota;
-                        }
-                        return base;
-                    });
-
-                    window.committedEventState = {};
-                    window.allEventsMaster.forEach(function(ev) {
-                        if (!ev || ev.type === 'background') return;
-                        window.committedEventState[ev.id] = {
-                            group: ev.group,
-                            start: ev.start,
-                            end: ev.end,
-                            worker_id: ev.worker_id,
-                        };
-                    });
-                    
-                    window.renderItems();
-                    if (typeof window.filtrarObrasPorVentana === 'function') {
-                        window.filtrarObrasPorVentana();
-                    }
-                });
-            } else {
-                window.allGroupsMaster = [];
-                window.AppGroups.clear();
-                window.allEventsMaster = [];
-                window.renderItems();
-            }
+        var qs = params.toString();
+        Promise.all([
+            fetch('/admin/api/planificador/resources?' + qs).then(function (r) { return r.json(); }),
+            fetch('/admin/api/planificador/events?' + qs).then(function (r) { return r.json(); }),
+        ]).then(function (results) {
+            applyPlanificadorPayload(results[0], results[1]);
+        }).catch(function () {
+            window.allGroupsMaster = [];
+            window.AppGroups.clear();
+            window.allEventsMaster = [];
+            window.renderItems();
+        }).finally(function () {
+            window.planificadorLoading = false;
         });
     };
 
@@ -1378,12 +1422,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.AppTimeline.on('rangechanged', function() {
         let popover = document.getElementById('worker-popover');
         if (popover && !popover.classList.contains('d-none')) { popover.classList.add('d-none'); }
-        if (window.__spFilterObrasTimer) clearTimeout(window.__spFilterObrasTimer);
-        window.__spFilterObrasTimer = setTimeout(function () {
-            if (typeof window.filtrarObrasPorVentana === 'function') {
-                window.filtrarObrasPorVentana();
-            }
-        }, 180);
     });
 
     /**

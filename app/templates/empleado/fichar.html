@@ -96,6 +96,24 @@
   .empleado-fichar-wrap .contenido { padding: 0; }
   .empleado-fichar-wrap body,
   .empleado-fichar-wrap { background: transparent; }
+  .empleado-fichar-wrap .obra-option--cerca {
+    font-weight: 700;
+    color: #166534;
+  }
+  .empleado-fichar-wrap .obra-option--lejos {
+    color: #94a3b8;
+  }
+  .geo-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 2000;
+    padding: 1rem;
+  }
+  .geo-modal {
+    background: #fff; border-radius: 12px; padding: 1.25rem; max-width: 420px;
+    width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  }
+  .geo-modal textarea { width: 100%; min-height: 72px; margin-top: 0.5rem; }
+  .geo-modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
 </style>
 {% endblock %}
 
@@ -112,7 +130,12 @@
        data-url-fichar="{{ url_for('empleado.api_fichar') }}"
        data-url-conformar="{{ url_for('empleado.api_conformar') }}"
        data-modo-geo="{{ modo_geo }}"
+       data-geocerca-activa="{{ '1' if geocerca_activa else '0' }}"
+       data-geo-exigir="{{ '1' if geo_exigir else '0' }}"
+       data-obra-preseleccionada="{{ obra_preseleccionada_id or '' }}"
+       data-ultima-obra="{{ ultima_obra_entrada_id or '' }}"
        data-estado="{{ estado }}">
+    <script type="application/json" id="obras-geo-data">{{ obras_geo_json | safe }}</script>
 
     <div class="reloj">
         <div class="reloj__hora" id="reloj-hora">--:--</div>
@@ -149,21 +172,26 @@
                     <option value="">{{ _('No hay obras disponibles') }}</option>
                 {% endif %}
                 {% if obras_planificadas %}
-                    <optgroup label="{{ _('Tu planificación de hoy') }}">
+                    <optgroup label="{{ _('Tu planificación de hoy') }}" data-grupo="planificadas">
                         {% for obra in obras_planificadas %}
-                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            <option value="{{ obra.id }}"
+                                    {% if obra_preseleccionada_id == obra.id %}selected{% endif %}
+                                    data-nombre="{{ obra.nombre }}">{{ obra.nombre }}</option>
                         {% endfor %}
                     </optgroup>
                 {% endif %}
                 {% if otras_obras %}
-                    <optgroup label="{{ _('Otras obras') }}">
+                    <optgroup label="{{ _('Otras obras') }}" data-grupo="otras">
                         {% for obra in otras_obras %}
-                            <option value="{{ obra.id }}">{{ obra.nombre }}</option>
+                            <option value="{{ obra.id }}"
+                                    {% if obra_preseleccionada_id == obra.id and not obras_planificadas %}selected{% endif %}
+                                    data-nombre="{{ obra.nombre }}">{{ obra.nombre }}</option>
                         {% endfor %}
                     </optgroup>
                 {% endif %}
             </select>
         </div>
+        <div id="geo-modal-root" hidden></div>
         <button class="boton boton--entrar" type="button" data-tipo="entrada">{{ _('Entrar') }}</button>
     {% else %}
         <div class="botonera">

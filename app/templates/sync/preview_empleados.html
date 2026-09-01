@@ -16,7 +16,16 @@
       <div>
         <a href="{{ url_for('sync.odoo_panel') }}" class="sync-preview-back"><i class="fas fa-arrow-left"></i> {{ _('Panel Odoo') }}</a>
         <h1 class="sync-preview-title"><i class="fas {{ preview.icon }}"></i> {{ _(preview.modulo_label) }}</h1>
+        {% if from_cache %}
+        <p class="sync-preview-sub sync-preview-sub--cached">
+          <i class="fas fa-history"></i>
+          {{ _('Pendientes guardados') }} · {{ cache_saved_at or '—' }}
+          {% if cache_source == 'auto' %}<span class="sync-preview-cache-tag">{{ _('desde sync automática') }}</span>{% endif %}
+          · <a href="{{ url_for('sync.preview_empleados') }}">{{ _('Actualizar desde Odoo') }}</a>
+        </p>
+        {% else %}
         <p class="sync-preview-sub">{{ _('Empleados internos desde hr.employee · conflictos, omitidos y listos.') }}</p>
+        {% endif %}
       </div>
       <button class="btn-admin btn-admin-primary" onclick="confirmSyncEmpleados()">
         <i class="fas fa-save"></i>{{ _('Guardar válidos') }}</button>

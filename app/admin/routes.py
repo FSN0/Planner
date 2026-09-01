@@ -46,6 +46,7 @@ from app.services.entity_panel_service import (
     get_worker_panel_stats,
     get_company_panel_stats,
     get_worker_vehicle_rows,
+    get_worker_vehicle_today,
     get_obra_vehicle_rows,
     get_vehicle_panel_stats,
     get_vehicle_history_rows,
@@ -208,10 +209,11 @@ def _redirect_after_create(default_endpoint, **url_kwargs):
 
 
 def _cancel_url_after_create(default_endpoint, **url_kwargs):
+    from app.utils.nav_back import resolve_back_url
     key = _return_to_key()
     if key:
-        return url_for(_RETURN_TO_ENDPOINTS[key])
-    return url_for(default_endpoint, **url_kwargs)
+        return url_for(_RETURN_TO_ENDPOINTS[key], **url_kwargs)
+    return resolve_back_url(default_endpoint, **url_kwargs)
 
 
 def allowed_file(filename):
@@ -369,7 +371,8 @@ def _import_options_from_session(entity_type):
     # PIN de fichaje: por defecto sí (correo con enlace para definirlo)
     assign_pin = opts.get('assign_pin')
     if assign_pin is None:
-        assign_pin = True
+        from app.services.tenant_auth_policy import tenant_usa_acceso_pin
+        assign_pin = tenant_usa_acceso_pin()
     notify_pin = opts.get('notify_pin')
     if notify_pin is None:
         notify_pin = True
@@ -880,20 +883,135 @@ def worker_panel(user_id):
     """
     worker = User.query.get_or_404(user_id)
     panel_stats = get_worker_panel_stats(worker)
+    history_days = 90
+    history_open = request.args.get('history_open') == '1'
+    try:
+        history_days = int(request.args.get('history_days') or history_days)
+    except (TypeError, ValueError):
+        pass
+    history_days = max(1, min(730, history_days))
+    history_offset = 0
+    try:
+        history_offset = max(0, int(request.args.get('history_offset') or 0))
+    except (TypeError, ValueError):
+        pass
+    history_page = get_worker_vehicle_rows(
+        worker,
+        days=history_days,
+        offset=history_offset,
+        limit=30,
+    ) if history_open else None
     from app.services.permission_service import can_resolve_fichajes
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    from app.utils.nav_back import resolve_back_url
+    if current_user.role == ROLE_JEFE:
+        back_url = resolve_back_url('admin.obras_detailed')
+    else:
+        back_url = resolve_back_url('admin.personal')
     return render_template(
         "admin_worker_panel.html",
         worker=worker,
+        back_url=back_url,
         stats=panel_stats["stats"],
         chart_14d=panel_stats["chart_14d"],
         chart_14d_max=panel_stats["chart_14d_max"],
-        vehicle_rows=get_worker_vehicle_rows(worker),
+        vehicle_today=get_worker_vehicle_today(worker),
+        history_days=history_days,
+        history_open=history_open,
+        history_page=history_page,
         can_edit_calendar=user_can(current_user, 'worker_panel', 'w'),
         puede_resolver_auditoria=(
             can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
         ),
     )
+
+
+@admin_bp.route("/worker_panel/<int:user_id>/historial", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+def worker_panel_historial(user_id):
+    """Fragmento HTML del historial de vehículos del operario."""
+    worker = User.query.get_or_404(user_id)
+    try:
+        days = int(request.args.get('days') or 90)
+    except (TypeError, ValueError):
+        days = 90
+    days = max(1, min(730, days))
+    try:
+        offset = max(0, int(request.args.get('offset') or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        limit = int(request.args.get('limit') or 30)
+    except (TypeError, ValueError):
+        limit = 30
+    page = get_worker_vehicle_rows(worker, days=days, offset=offset, limit=limit)
+    return render_template(
+        "components/_worker_vehicle_history_table.html",
+        history_page=page,
+    )
+
+
+@admin_bp.route("/mapa-fichajes", methods=["GET"])
+@login_required
+def mapa_fichajes():
+    from app.services.fichaje_operario_service import tenant_tiene_fichaje_operario_module
+    from app.services.permission_service import user_can
+    if not tenant_tiene_fichaje_operario_module():
+        flash(translate("El mapa de fichajes requiere el módulo de fichaje operario activo."), "warning")
+        return redirect(url_for('admin.panel'))
+    if not user_can(current_user, 'mapa_fichajes', 'r'):
+        flash(translate("No tienes permiso para ver el mapa de fichajes."), "danger")
+        return redirect(url_for('admin.panel'))
+    from app.utils.nav_back import resolve_back_url
+    return render_template(
+        "admin_mapa_fichajes.html",
+        back_url=resolve_back_url('admin.panel'),
+    )
+
+
+@admin_bp.route("/api/mapa-fichajes/obras", methods=["GET"])
+@login_required
+def api_mapa_fichajes_obras():
+    from app.services.fichaje_operario_service import tenant_tiene_fichaje_operario_module
+    from app.services.mapa_fichajes_service import listar_obras_mapa
+    from app.services.permission_service import user_can
+    if not tenant_tiene_fichaje_operario_module():
+        return jsonify({'success': False, 'error': translate('Módulo no disponible')}), 403
+    if not user_can(current_user, 'mapa_fichajes', 'r'):
+        return jsonify({'success': False, 'error': translate('Sin permiso')}), 403
+    return jsonify({'success': True, **listar_obras_mapa(current_user)})
+
+
+@admin_bp.route("/api/mapa-fichajes/obra/<int:obra_id>/fichajes", methods=["GET"])
+@login_required
+def api_mapa_fichajes_obra(obra_id):
+    from app.services.fichaje_operario_service import tenant_tiene_fichaje_operario_module
+    from app.services.mapa_fichajes_service import fichajes_mapa_obra
+    from app.services.permission_service import user_can
+    from app.services.dashboard_service import parse_date
+
+    if not tenant_tiene_fichaje_operario_module():
+        return jsonify({'success': False, 'error': translate('Módulo no disponible')}), 403
+    if not user_can(current_user, 'mapa_fichajes', 'r'):
+        return jsonify({'success': False, 'error': translate('Sin permiso')}), 403
+
+    desde_raw = (request.args.get('desde') or '').strip()
+    hasta_raw = (request.args.get('hasta') or '').strip()
+    solo_dudosos = request.args.get('solo_dudosos') in ('1', 'true', 'yes')
+    fecha_desde = parse_date(desde_raw) if desde_raw else None
+    fecha_hasta = parse_date(hasta_raw) if hasta_raw else None
+
+    data = fichajes_mapa_obra(
+        obra_id,
+        current_user,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        solo_dudosos=solo_dudosos,
+    )
+    if data is None:
+        return jsonify({'success': False, 'error': translate('Obra no encontrada')}), 404
+    return jsonify({'success': True, **data})
 
 
 @admin_bp.route("/api/check_obra_status_impact", methods=["POST"])
@@ -939,9 +1057,12 @@ def company_panel(company_id):
     company = Company.query.get_or_404(company_id)
     panel_stats = get_company_panel_stats(company)
 
+    from app.utils.nav_back import resolve_back_url
+    back_url = resolve_back_url('admin.companies')
     return render_template(
         "admin_company_panel.html",
         company=company,
+        back_url=back_url,
         stats=panel_stats["stats"],
         chart_14d=panel_stats["chart_14d"],
         chart_14d_max=panel_stats["chart_14d_max"],
@@ -1066,9 +1187,12 @@ def solicitud_detail(solicitud_id):
     # 3. Cobertura
     cobertura_texto = f"{solicitud.cantidad_cubierta}/{solicitud.cantidad_solicitada}" if solicitud.tipo == 'GENERICA' else ""
 
+    from app.utils.nav_back import resolve_back_url
+    back_url = resolve_back_url('admin.solicitudes_list')
     return render_template(
         'admin_solicitud_detail.html',
         solicitud=solicitud,
+        back_url=back_url,
         solicitud_notas=get_solicitud_notas(solicitud),
         cobertura_texto=cobertura_texto,
         es_admin=es_admin,
@@ -1220,9 +1344,16 @@ def obra_panel(obra_id):
     jefes = User.query.filter(User.role.in_([ROLE_JEFE, ROLE_ADMIN])).all()
     panel_stats = get_obra_panel_stats(obra)
 
+    from app.utils.nav_back import resolve_back_url
+    if current_user.role == ROLE_JEFE:
+        back_url = resolve_back_url('admin.obras_detailed')
+    else:
+        back_url = resolve_back_url('admin.obras_list')
+
     return render_template(
         "admin_obra_panel.html",
         obra=obra,
+        back_url=back_url,
         jefes=jefes,
         today=date.today(),
         stats=panel_stats["stats"],
@@ -1461,9 +1592,13 @@ def vehicle_panel(vehiculo_id):
     history_days = max(1, min(730, history_days))
     history_open = request.args.get('history_open') in ('1', 'true', 'yes')
 
+    from app.utils.nav_back import resolve_back_url
+    back_url = resolve_back_url('admin.vehiculos')
+
     return render_template(
         "admin_vehicle_panel.html",
         vehiculo=vehiculo,
+        back_url=back_url,
         stats=panel_stats["stats"],
         chart_14d=panel_stats["chart_14d"],
         chart_14d_max=panel_stats["chart_14d_max"],
@@ -1754,7 +1889,14 @@ def worker_ratings_history(user_id):
     worker = User.query.get_or_404(user_id)
     # Mostramos TODOS (activos e inactivos) ordenados por fecha
     ratings = Rating.query.filter_by(user_id=worker.id).order_by(Rating.created_at.desc()).all()
-    return render_template("admin_worker_ratings.html", worker=worker, ratings=ratings)
+    from app.utils.nav_back import resolve_back_url
+    back_url = resolve_back_url('admin.worker_panel', user_id=worker.id)
+    return render_template(
+        "admin_worker_ratings.html",
+        worker=worker,
+        ratings=ratings,
+        back_url=back_url,
+    )
 
 @admin_bp.route("/obras", methods=["GET"])
 @login_required
@@ -1805,6 +1947,31 @@ def api_update_obra_jefe():
         nuevo_nombre = f"{obra.jefe_obra.name} {obra.jefe_obra.lastname}" if obra.jefe_obra else translate("Sin asignar")
         return jsonify({"success": True, "new_name": nuevo_nombre})
         
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@admin_bp.route("/api/obra/<int:obra_id>/ubicacion", methods=["POST"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_obra_ubicacion(obra_id):
+    from app.utils.obra_geo import aplicar_obra_geo_json
+
+    obra = Obra.query.get_or_404(obra_id)
+    data = request.get_json(silent=True) or {}
+    try:
+        aplicar_obra_geo_json(obra, data)
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "ubicacion": obra.ubicacion or "",
+            "latitud": obra.latitud,
+            "longitud": obra.longitud,
+        })
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
@@ -2006,7 +2173,11 @@ def edit_operario(user_id):
             user.lastname = (request.form.get("lastname") or "").strip()
             user.dni = new_dni
             user.email = new_email
+            rol_anterior = user.role
             user.role = nuevo_rol
+            if nuevo_rol != rol_anterior:
+                from app.services.user_role_sync_service import lock_user_role_manual
+                lock_user_role_manual(user)
 
             company_id = (request.form.get("company_id") or "").strip()
             if company_id:
@@ -2024,10 +2195,13 @@ def edit_operario(user_id):
 
             # Acceso web gobernado por auth_mode + permisos.
             from app.services.auth_login_service import normalize_auth_mode
+            from app.services.tenant_auth_policy import enforce_password_only_user, tenant_usa_acceso_pin
             user.auth_mode = normalize_auth_mode(
                 request.form.get('auth_mode'),
                 role=nuevo_rol,
             )
+            if not tenant_usa_acceso_pin():
+                enforce_password_only_user(user)
             user.web_access = True
 
             if was_active and not nuevo_active:
@@ -2042,7 +2216,8 @@ def edit_operario(user_id):
 
             db.session.commit()
             flash(translate("Datos actualizados correctamente"), "success")
-            return redirect(url_for("admin.personal"))
+            from app.utils.nav_back import redirect_back_or
+            return redirect_back_or("admin.personal")
 
         except PlanLimitError as e:
             db.session.rollback()
@@ -2051,11 +2226,13 @@ def edit_operario(user_id):
             db.session.rollback()
             flash(translate("Error inesperado al guardar: {error}", error=str(e)), "danger")
 
+    from app.utils.nav_back import resolve_back_url, url_with_back
     return _render_user_form(
         edit_mode=True,
         user=user,
-        action_url=url_for("admin.edit_operario", user_id=user.id),
+        action_url=url_with_back("admin.edit_operario", user_id=user.id),
         companies=companies,
+        cancel_url=resolve_back_url("admin.personal"),
     )
 
 
@@ -2402,19 +2579,15 @@ def create_obra():
         .order_by(User.name)
         .all()
     )
-    inicio = date.today()
-    try:
-        fin = date(inicio.year + 1, inicio.month, inicio.day)
-    except ValueError:
-        fin = date(inicio.year + 1, 2, 28)
     defaults = {
-        'fecha_inicio': inicio.isoformat(),
-        'fecha_fin': fin.isoformat(),
+        'fecha_inicio': '',
+        'fecha_fin': '',
         'estado': 'En Curso',
-        'jefe_obra_id': str(current_user.id),
+        'jefe_obra_id': '',
     }
 
     def _render_create(form_data):
+        from app.services.geocerca_service import radio_default_metros
         return render_template(
             "create_obra.html",
             jefes=jefes,
@@ -2423,6 +2596,7 @@ def create_obra():
             defaults=defaults,
             return_to=_return_to_key(),
             cancel_url=_cancel_url_after_create('admin.obras_list'),
+            radio_default=radio_default_metros(),
         )
 
     if request.method == "POST":
@@ -2436,14 +2610,8 @@ def create_obra():
         if not nombre:
             flash(translate("El nombre de la obra es obligatorio."), "danger")
             return _render_create(request.form)
-        if not fecha_inicio:
-            flash(translate("La fecha de inicio es obligatoria."), "danger")
-            return _render_create(request.form)
-        if not jefe_obra_id:
-            flash(translate("Debes seleccionar un jefe de obra."), "danger")
-            return _render_create(request.form)
 
-        if not fecha_fin:
+        if not fecha_fin and fecha_inicio:
             try:
                 ini = parse_date(fecha_inicio)
                 fecha_fin = date(ini.year + 1, ini.month, ini.day).isoformat()
@@ -2475,13 +2643,15 @@ def create_obra():
                 nombre=nombre,
                 descripcion=(request.form.get("descripcion") or "").strip() or None,
                 ubicacion=(request.form.get("ubicacion") or "").strip() or None,
-                fecha_inicio=parse_date(fecha_inicio),
-                fecha_fin=parse_date(fecha_fin),
+                fecha_inicio=parse_date(fecha_inicio) if fecha_inicio else None,
+                fecha_fin=parse_date(fecha_fin) if fecha_fin else None,
                 estado=estado,
-                jefe_obra_id=int(jefe_obra_id),
+                jefe_obra_id=int(jefe_obra_id) if jefe_obra_id else None,
                 encargado_id=int(encargado_id) if encargado_id else None,
                 color=color,
             )
+            from app.utils.obra_geo import aplicar_obra_geo_form
+            aplicar_obra_geo_form(nueva_obra, request.form)
             db.session.add(nueva_obra)
             db.session.commit()
 
@@ -2495,11 +2665,10 @@ def create_obra():
             )
 
             flash(translate("Obra creada exitosamente"), "success")
-            return _redirect_after_create(
-                "admin.obras_detailed",
-                selected_date=nueva_obra.fecha_inicio.strftime("%Y-%m-%d"),
-                obra=nueva_obra.id,
-            )
+            redirect_kwargs = {"obra": nueva_obra.id}
+            if nueva_obra.fecha_inicio:
+                redirect_kwargs["selected_date"] = nueva_obra.fecha_inicio.strftime("%Y-%m-%d")
+            return _redirect_after_create("admin.obras_detailed", **redirect_kwargs)
         except Exception as e:
             db.session.rollback()
             flash(translate("Error al guardar: {error}", error=str(e)), "danger")
@@ -2512,6 +2681,9 @@ def create_obra():
 @login_required
 @roles_required(ROLE_ADMIN)
 def edit_obra(obra_id):
+    from app.services.geocerca_service import radio_default_metros
+
+    radio_default = radio_default_metros()
     obra = Obra.query.get_or_404(obra_id)
     jefes = (
         User.query.filter(
@@ -2544,35 +2716,29 @@ def edit_obra(obra_id):
             return render_template(
                 "edit_obra.html", obra=obra, jefes=jefes,
                 encargados=encargados, form_data=request.form,
+                radio_default=radio_default,
             )
 
         if new_codigo and new_codigo != obra.codigo:
             existe = Obra.query.filter(Obra.codigo == new_codigo, Obra.id != obra.id).first()
             if existe:
                 flash(translate("Error: El código '{codigo}' ya está en uso en '{obra}'.", codigo=new_codigo, obra=existe.nombre), "danger")
-                return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
-
-        if not new_jefe_id:
-            flash(translate("Error: La obra no puede quedarse sin Jefe de Obra."), "danger")
-            return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
+                return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form, radio_default=radio_default)
 
         obra.codigo = new_codigo
-        obra.jefe_obra_id = int(new_jefe_id)
+        obra.jefe_obra_id = int(new_jefe_id) if new_jefe_id else None
         obra.nombre = nombre
         obra.descripcion = (request.form.get("descripcion") or "").strip() or None
-        obra.ubicacion = (request.form.get("ubicacion") or "").strip() or None
         obra.color = request.form.get("color") or obra.color
 
         old_estado = obra.estado
         new_estado = request.form.get("estado") or obra.estado
         obra.estado = new_estado
 
-        f_inicio = request.form.get("fecha_inicio")
-        f_fin = request.form.get("fecha_fin")
-        if f_inicio:
-            obra.fecha_inicio = parse_date(f_inicio)
-        if f_fin:
-            obra.fecha_fin = parse_date(f_fin)
+        f_inicio = (request.form.get("fecha_inicio") or "").strip()
+        f_fin = (request.form.get("fecha_fin") or "").strip()
+        obra.fecha_inicio = parse_date(f_inicio) if f_inicio else None
+        obra.fecha_fin = parse_date(f_fin) if f_fin else None
 
         enc_id = (request.form.get("encargado_id") or "").strip()
         obra.encargado_id = int(enc_id) if enc_id else None
@@ -2634,13 +2800,14 @@ def edit_obra(obra_id):
                 detail=f"Ha editado la obra '{obra_nombre}'. Estado actual: {obra.estado}"
             )
             flash(translate("Obra actualizada correctamente"), "success")
-            return redirect(url_for("admin.obras_detailed", selected_date=str(date.today())))
+            from app.utils.nav_back import redirect_back_or
+            return redirect_back_or("admin.obra_panel", obra_id=obra.id)
         except Exception as e:
             db.session.rollback()
             flash(translate("Error al actualizar: {error}", error=str(e)), "danger")
-            return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form)
+            return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data=request.form, radio_default=radio_default)
 
-    return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data={})
+    return render_template("edit_obra.html", obra=obra, jefes=jefes, encargados=encargados, form_data={}, radio_default=radio_default)
 
 
 
@@ -2844,8 +3011,13 @@ def reset_pin(user_id):
     en claro: envía un enlace para definirlo.
     """
     from app.services.pin_auth_service import PinAuthError, asignar_pin, quitar_pin
+    from app.services.tenant_auth_policy import tenant_usa_acceso_pin
 
     user = User.query.get_or_404(user_id)
+    if not tenant_usa_acceso_pin():
+        flash(translate('Este cliente no usa PIN de fichaje.'), 'warning')
+        dest = (request.form.get('next') or '').strip() or url_for('admin.edit_operario', user_id=user.id)
+        return redirect(dest)
     if user.role != ROLE_OPERARIO:
         flash(translate('Solo los operarios usan PIN de fichaje.'), 'warning')
         dest = (request.form.get('next') or '').strip() or url_for('admin.edit_operario', user_id=user.id)
@@ -2937,6 +3109,7 @@ def _default_internal_company_id():
 
 
 def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to='', cancel_url=None, default_role=''):
+    from app.utils.nav_back import resolve_back_url
     if companies is None:
         keep_id = getattr(user, 'company_id', None) if user else None
         companies = Company.query.filter(
@@ -2950,7 +3123,7 @@ def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to=
         edit_mode=edit_mode,
         user=user,
         action_url=action_url,
-        cancel_url=cancel_url or url_for("admin.personal"),
+        cancel_url=cancel_url or resolve_back_url("admin.personal"),
         return_to=return_to,
         default_role=default_role,
         companies=companies,
@@ -3031,10 +3204,14 @@ def create_user():
             pin_mode = "none"
 
         from app.services.auth_login_service import default_auth_mode_for_role, normalize_auth_mode
+        from app.services.tenant_auth_policy import enforce_password_only_user, tenant_usa_acceso_pin
         auth_mode = normalize_auth_mode(
             request.form.get('auth_mode'),
             role=role,
         ) if request.form.get('auth_mode') else default_auth_mode_for_role(role)
+        if not tenant_usa_acceso_pin():
+            auth_mode = 'password'
+            pin_mode = 'none'
 
         if User.query.filter_by(email=email).first():
             flash(translate("Error: El email {email} ya está registrado.", email=email), "danger")
@@ -3070,6 +3247,8 @@ def create_user():
         )
         db.session.add(new_user)
         db.session.flush()
+        if not tenant_usa_acceso_pin():
+            enforce_password_only_user(new_user)
 
         pin_msg = ""
         try:
@@ -3260,6 +3439,7 @@ def active_obras():
 from flask import request, jsonify, render_template
 from flask_login import login_required, current_user
 from sqlalchemy import func, or_
+from sqlalchemy.orm import joinedload
 
 from app.models import Obra, User, Asignacion, Company, Solicitud
 from app import db
@@ -3334,6 +3514,22 @@ def _planificador_obras_con_operarios(worker_ids, start_date, end_date, obras_id
         .all()
     )
     return {r[0] for r in rows}
+
+
+def _planificador_avg_ratings(user_ids):
+    """Media de valoraciones activas por user_id (una sola consulta)."""
+    from app.services.tenant_modules import has_valoraciones
+
+    ids = [int(u) for u in (user_ids or []) if u]
+    if not ids or not has_valoraciones():
+        return {}
+    rows = (
+        db.session.query(Rating.user_id, func.avg(Rating.score))
+        .filter(Rating.user_id.in_(ids), Rating.is_active.is_(True))
+        .group_by(Rating.user_id)
+        .all()
+    )
+    return {uid: round(float(avg), 1) for uid, avg in rows}
 
 
 # 2. FUNCIÓN QUE CARGA LAS FILAS (EJE Y) DEL CALENDARIO
@@ -3449,62 +3645,94 @@ def api_planificador_events():
         )
         obras_ids = [oid for oid in obras_ids if oid in allowed]
 
-    asignaciones = Asignacion.query.filter(
-        Asignacion.obra_id.in_(obras_ids), Asignacion.fecha >= start_date, Asignacion.fecha <= end_date
+    asignaciones_rows = (
+        db.session.query(
+            Asignacion.user_id,
+            Asignacion.obra_id,
+            Asignacion.fecha,
+            Asignacion.company_id,
+        )
+        .filter(
+            Asignacion.obra_id.in_(obras_ids),
+            Asignacion.fecha >= start_date,
+            Asignacion.fecha <= end_date,
+        )
     )
     if worker_ids:
-        asignaciones = asignaciones.filter(Asignacion.user_id.in_(worker_ids))
-    asignaciones = asignaciones.all()
+        asignaciones_rows = asignaciones_rows.filter(Asignacion.user_id.in_(worker_ids))
+    asignaciones_rows = asignaciones_rows.all()
+
+    user_ids_needed = {r.user_id for r in asignaciones_rows}
+    company_ids_needed = {r.company_id for r in asignaciones_rows if r.company_id}
+    users_by_id = {}
+    if user_ids_needed:
+        users_by_id = {
+            u.id: u for u in User.query.options(joinedload(User.company_rel))
+            .filter(User.id.in_(user_ids_needed))
+            .all()
+        }
+        for u in users_by_id.values():
+            if u.company_id:
+                company_ids_needed.add(u.company_id)
+    companies_by_id = {}
+    if company_ids_needed:
+        companies_by_id = {
+            c.id: c for c in Company.query.filter(Company.id.in_(company_ids_needed)).all()
+        }
     
     events_map = {}
-    workers_info = {} 
+    workers_info = {}
+    ratings_cache = {}
     
-    for a in asignaciones:
-        # --- AQUÍ ESTÁ EL ARREGLO: Filtro RÁPIDO y seguro de empresa ---
+    for row in asignaciones_rows:
         if company_ids:
-            emp_id_check = a.company_id
+            emp_id_check = row.company_id
             if not emp_id_check:
-                worker_check = a.user_obj if hasattr(a, 'user_obj') else User.query.get(a.user_id)
+                worker_check = users_by_id.get(row.user_id)
                 emp_id_check = worker_check.company_id if worker_check else 0
             
             if emp_id_check not in company_ids:
                 continue
-        # ---------------------------------------------------------------
 
-        key = f"w_{a.user_id}_o_{a.obra_id}"
+        key = f"w_{row.user_id}_o_{row.obra_id}"
         if key not in events_map:
             events_map[key] = []
-            worker = a.user_obj if hasattr(a, 'user_obj') else User.query.get(a.user_id)
-            color = a.company.color if a.company else (worker.company_rel.color if worker and worker.company_rel else "#3b82f6")
+            worker = users_by_id.get(row.user_id)
+            comp = companies_by_id.get(row.company_id) if row.company_id else None
+            color = comp.color if comp else (
+                worker.company_rel.color if worker and worker.company_rel else "#3b82f6"
+            )
             
             emp_nom = "Sin Empresa"
             emp_id = 0
-            if a.company:
-                emp_nom = a.company.nombre
-                emp_id = a.company.id
+            if comp:
+                emp_nom = comp.nombre
+                emp_id = comp.id
             elif worker and worker.company_rel:
                 emp_nom = worker.company_rel.nombre
                 emp_id = worker.company_rel.id
 
+            ratings_cache[row.user_id] = None
             nota_media = 0
-            if worker and hasattr(worker, 'ratings_received'):
-                active_ratings = [r.score for r in worker.ratings_received if r.is_active]
-                if active_ratings:
-                    nota_media = sum(active_ratings) / len(active_ratings)
 
             workers_info[key] = {
-                "name": f"{worker.name} {worker.lastname}" if worker else f"User {a.user_id}",
+                "name": f"{worker.name} {worker.lastname}" if worker else f"User {row.user_id}",
                 "color": color, 
-                "worker_id": a.user_id, 
-                "obra_id": a.obra_id,
+                "worker_id": row.user_id, 
+                "obra_id": row.obra_id,
                 "empresa_nombre": emp_nom,
                 "empresa_id": emp_id,
                 "categoria": worker.categoria_profesional if worker and worker.categoria_profesional else "",
                 "especialidad": worker.especialidad if worker and worker.especialidad else "",
-                "nota": round(nota_media, 1)
+                "nota": nota_media,
             }
             
-        events_map[key].append(a.fecha)
+        events_map[key].append(row.fecha)
+
+    if ratings_cache:
+        avg_ratings = _planificador_avg_ratings(list(ratings_cache.keys()))
+        for info in workers_info.values():
+            info["nota"] = avg_ratings.get(info["worker_id"], 0)
         
     events = []
 
@@ -3589,12 +3817,17 @@ def api_planificador_events():
     # =====================================================================
     from app.services.tenant_modules import jefe_sin_buzon_solicitudes
     if not jefe_sin_buzon_solicitudes(current_user):
-        solicitudes = Solicitud.query.filter(
-            Solicitud.obra_id.in_(obras_ids),
-            Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-            Solicitud.fecha_inicio <= end_date,
-            Solicitud.fecha_fin >= start_date
-        ).all()
+        solicitudes = (
+            Solicitud.query
+            .options(joinedload(Solicitud.empleado))
+            .filter(
+                Solicitud.obra_id.in_(obras_ids),
+                Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                Solicitud.fecha_inicio <= end_date,
+                Solicitud.fecha_fin >= start_date,
+            )
+            .all()
+        )
 
         if worker_ids:
             solicitudes = [
@@ -3666,6 +3899,32 @@ def api_planificador_events():
         })
 
     return jsonify(events)
+
+
+@admin_bp.route("/api/planificador/fichajes-estado")
+@login_required
+def api_planificador_fichajes_estado():
+    """Estados agregados de fichaje por operario para un día (planificador móvil)."""
+    from app.services.fichaje_operario_service import usuario_ve_estado_fichaje
+    from app.services.fichaje_estado_service import fichajes_agregados_por_fecha
+
+    if not usuario_ve_estado_fichaje(current_user):
+        return jsonify({'success': True, 'estados': {}})
+
+    fecha_str = request.args.get('fecha')
+    if not fecha_str:
+        return jsonify({'success': False, 'error': translate('Fecha requerida')}), 400
+    try:
+        fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'error': translate('Fecha inválida')}), 400
+
+    return jsonify({
+        'success': True,
+        'fecha': fecha_str,
+        'estados': fichajes_agregados_por_fecha(fecha),
+    })
+
 
 @admin_bp.route("/api/planificador/search_workers", methods=['GET'])
 @login_required
@@ -3954,10 +4213,15 @@ def update_config():
 
         from app.services.fichaje_operario_service import (
             CONFIG_FICHAJE_GEO,
+            CONFIG_FICHAJE_GEO_EXIGIR,
             CONFIG_FICHAJE_OPERARIO,
+            GEO_ACTIVADA,
             GEO_DESACTIVADA,
-            GEO_OPCIONES,
             tenant_tiene_fichaje_operario_module,
+        )
+        from app.services.geocerca_service import (
+            CONFIG_GEOCERCA_RADIO,
+            normalizar_modo_geo_config,
         )
 
         # Activar esto abre el login a los operarios, que hasta ahora no
@@ -3968,16 +4232,32 @@ def update_config():
             _upsert(CONFIG_FICHAJE_OPERARIO, operario_activo)
 
             if operario_activo == 'True':
-                modo_geo = (request.form.get('fichaje_geolocalizacion') or '').strip()
-                if modo_geo not in GEO_OPCIONES:
-                    modo_geo = GEO_DESACTIVADA
-                if modo_geo != GEO_DESACTIVADA:
+                modo_geo_raw = (request.form.get('fichaje_geolocalizacion') or '').strip()
+                modo_geo = (
+                    GEO_ACTIVADA
+                    if normalizar_modo_geo_config(modo_geo_raw) == GEO_ACTIVADA
+                    else GEO_DESACTIVADA
+                )
+                if modo_geo == GEO_ACTIVADA:
                     try:
                         exigir_geolocalizacion()
                     except PlanLimitError as exc:
                         flash(translate(str(exc)), 'danger')
                         modo_geo = GEO_DESACTIVADA
                 _upsert(CONFIG_FICHAJE_GEO, modo_geo)
+                exigir_geo = (
+                    'True'
+                    if modo_geo == GEO_ACTIVADA and request.form.get('fichaje_geolocalizacion_exigir')
+                    else 'False'
+                )
+                _upsert(CONFIG_FICHAJE_GEO_EXIGIR, exigir_geo)
+
+                radio_raw = (request.form.get('fichaje_geocerca_radio_default') or '').strip()
+                try:
+                    radio = max(25, min(int(radio_raw or 150), 5000))
+                except ValueError:
+                    radio = 150
+                _upsert(CONFIG_GEOCERCA_RADIO, str(radio))
 
                 from app.services.oficina_obra_service import (
                     CONFIG_OBRA_OFICINA,

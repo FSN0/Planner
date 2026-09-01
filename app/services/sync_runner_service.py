@@ -83,6 +83,11 @@ def run_auto_sync_obras():
             duracion_ms=int((time.time() - t0) * 1000),
         ))
         db.session.commit()
+        try:
+            from app.services.sync_preview_cache_service import cache_from_diff
+            cache_from_diff('obras', diff, source='auto')
+        except Exception:
+            pass
         return {'nuevos': len(nuevas_limpias), 'actualizados': len(act_limpias), 'omitidos': errores}
     except Exception as e:
         db.session.rollback()
@@ -112,6 +117,7 @@ def run_auto_sync_empleados():
     from app.services.employee_baja_service import aplicar_baja_por_odoo, reactivar
 
     for obj in emp_nuevos:
+        from app.services.auth_login_service import default_auth_mode_for_role
         db.session.add(User(
             external_ids={'odoo': str(obj['odoo_id'])},
             name=obj['name'], lastname=obj['lastname'],
@@ -119,6 +125,7 @@ def run_auto_sync_empleados():
             categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
             company_id=default_company_id, active=True, email_verified=True,
             password_hash=generate_password_hash(secrets.token_urlsafe(24)),
+            auth_mode=default_auth_mode_for_role(obj['role']),
         ))
 
     for obj in emp_act:
@@ -127,7 +134,8 @@ def run_auto_sync_empleados():
             _set_odoo_external_id(user, obj['odoo_id'])
             user.name = obj['name']
             user.lastname = obj['lastname']
-            user.role = obj['role']
+            from app.services.user_role_sync_service import apply_odoo_role_if_allowed
+            apply_odoo_role_if_allowed(user, obj['role'])
             user.categoria_profesional = obj.get('categoria_profesional', user.categoria_profesional)
             if not user.active:
                 reactivar(user, commit=False)
@@ -150,6 +158,11 @@ def run_auto_sync_empleados():
         duracion_ms=int((time.time() - t0) * 1000),
     ))
     db.session.commit()
+    try:
+        from app.services.sync_preview_cache_service import cache_from_diff
+        cache_from_diff('empleados', diff, source='auto')
+    except Exception:
+        pass
     return {
         'nuevos': len(emp_nuevos),
         'actualizados': len(emp_act),

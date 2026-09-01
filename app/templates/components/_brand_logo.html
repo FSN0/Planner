@@ -1,6 +1,6 @@
 {# Logo SignaPlan (PNG de marca).
    variant: mark | horizontal | horizontal_on_dark | wordmark
-   horizontal_on_dark = con fondo blanco (hero sobre wallpaper).
+   horizontal_on_dark = texto claro para fondos oscuros (p. ej. definir PIN).
 #}
 {% set _variant = variant|default('horizontal') %}
 {% set _brand_v = '20260807e' %}
@@ -27,5 +27,6 @@
   alt="SignaPlan"
   width="{{ _w }}"
   height="{{ _h }}"
+  style="max-width: 100%; height: auto;"
   decoding="async"
 />

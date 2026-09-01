@@ -1,0 +1,55 @@
+{% set rows = history_page.rows if history_page else [] %}
+{% if rows %}
+<div class="admin-table-scroll vehicle-history-scroll">
+  <table class="filterable-table admin-data-table mb-0">
+    <thead>
+      <tr class="header-row">
+        <th>{{ _('Fecha') }}</th>
+        <th>{{ _('Vehículo') }}</th>
+        <th>{{ _('Km Odoo') }}</th>
+        <th>{{ _('Conductor Odoo') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="data-row">
+        <td>{{ row.fecha.strftime('%d/%m/%Y') }}</td>
+        <td>
+          {% if row.vehiculo_id %}
+          <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=row.vehiculo_id) }}" class="table-link-primary">{{ row.vehiculo_label }}</a>
+          {% else %}
+            {{ row.vehiculo_label }}
+          {% endif %}
+        </td>
+        <td>{% if row.km is not none %}{{ '%.0f'|format(row.km) }}{% else %}—{% endif %}</td>
+        <td>{{ row.conductor or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="vehicle-history-meta text-muted mb-0">
+  {{ rows|length }} {{ _('de') }} {{ history_page.total }}
+  · {{ _('últimos') }} {{ history_page.days }} {{ _('días') }}
+</p>
+{% if history_page.has_prev or history_page.has_next %}
+<div class="vehicle-history-pagination">
+  {% if history_page.has_prev %}
+  <button type="button" class="btn-admin btn-admin-ghost btn-admin-sm worker-history-page"
+          data-offset="{{ history_page.offset - history_page.limit }}">
+    <i class="fas fa-chevron-left"></i> {{ _('Anterior') }}
+  </button>
+  {% endif %}
+  {% if history_page.has_next %}
+  <button type="button" class="btn-admin btn-admin-ghost btn-admin-sm worker-history-page"
+          data-offset="{{ history_page.offset + history_page.limit }}">
+    {{ _('Siguiente') }} <i class="fas fa-chevron-right"></i>
+  </button>
+  {% endif %}
+</div>
+{% endif %}
+{% else %}
+<p class="text-muted mb-0" style="padding:0.75rem 0;">
+  {{ _('Sin vehículos planificados ni uso Odoo en los últimos') }} {{ history_page.days if history_page else 90 }} {{ _('días') }}.
+</p>
+{% endif %}

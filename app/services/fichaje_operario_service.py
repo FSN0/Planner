@@ -37,15 +37,15 @@ from app.utils.timezone_utils import today_local, utc_now
 
 CONFIG_FICHAJE_OPERARIO = 'fichaje_operario_activo'
 CONFIG_FICHAJE_GEO = 'fichaje_geolocalizacion'
+CONFIG_FICHAJE_GEO_EXIGIR = 'fichaje_geolocalizacion_exigir'
 CONFIG_FICHAJE_ASKED = 'onboarding_fichaje_asked'
 
 # Misma etiqueta que el sync de Odoo: el cuadrante refleja el fichaje físico.
 CONTEXTO_FICHAJE_PWA = 'Auto-asignación por Fichaje Físico'
 
 GEO_DESACTIVADA = 'desactivada'
-GEO_OPCIONAL = 'opcional'
-GEO_OBLIGATORIA = 'obligatoria'
-GEO_OPCIONES = (GEO_DESACTIVADA, GEO_OPCIONAL, GEO_OBLIGATORIA)
+GEO_ACTIVADA = 'activada'
+GEO_OPCIONES = (GEO_DESACTIVADA, GEO_ACTIVADA)
 
 # Transiciones válidas: de qué estado se puede pasar a qué acción.
 _TRANSICIONES = {
@@ -147,12 +147,36 @@ def modo_geolocalizacion():
     La geolocalización es valor de plan de pago. En free siempre queda
     desactivada, aunque en configuración figure otra cosa.
     """
+    from app.services.geocerca_service import normalizar_modo_geo_config
     from app.services.plan_service import plan_incluye_geolocalizacion
 
     if not plan_incluye_geolocalizacion():
         return GEO_DESACTIVADA
-    valor = str(get_tenant_config(CONFIG_FICHAJE_GEO, default=GEO_DESACTIVADA))
-    return valor if valor in GEO_OPCIONES else GEO_DESACTIVADA
+    valor = get_tenant_config(CONFIG_FICHAJE_GEO, default=GEO_DESACTIVADA)
+    return (
+        GEO_ACTIVADA
+        if normalizar_modo_geo_config(valor) == GEO_ACTIVADA
+        else GEO_DESACTIVADA
+    )
+
+
+def geolocalizacion_activa():
+    return modo_geolocalizacion() == GEO_ACTIVADA
+
+
+def geolocalizacion_exigir():
+    """Si la geo está activada, ¿es obligatorio tener GPS para fichar?"""
+    from app.services.geocerca_service import (
+        modo_geo_exigir_desde_config,
+        normalizar_modo_geo_config,
+    )
+
+    if not geolocalizacion_activa():
+        return False
+    if str(get_tenant_config(CONFIG_FICHAJE_GEO_EXIGIR, default='False')) == 'True':
+        return True
+    valor = get_tenant_config(CONFIG_FICHAJE_GEO, default=GEO_DESACTIVADA)
+    return modo_geo_exigir_desde_config(valor)
 
 
 def obras_del_dia(user_id, fecha=None):
@@ -206,6 +230,15 @@ def obras_seleccionables(user_id, fecha=None):
 
 def estado_para_pantalla(user, fecha=None):
     """Todo lo que necesita la pantalla de fichaje en una sola llamada."""
+    import json
+
+    from app.services.geocerca_service import (
+        geocerca_activa,
+        preseleccion_obra_id,
+        serializar_obras_geo,
+        ultima_obra_entrada_id,
+    )
+
     fecha = fecha or today_local()
     estado = jornada_abierta(user.id, fecha)
     planificadas, otras = obras_seleccionables(user.id, fecha)
@@ -213,6 +246,12 @@ def estado_para_pantalla(user, fecha=None):
     obra_actual = None
     if estado['obra_id']:
         obra_actual = Obra.query.filter_by(id=estado['obra_id']).first()
+
+    todas = planificadas + otras
+    obra_preseleccionada_id = preseleccion_obra_id(
+        user.id, fecha, planificadas, otras,
+    )
+    ultima_obra_id = ultima_obra_entrada_id(user.id, fecha)
 
     return {
         'estado': estado['estado'],
@@ -223,6 +262,11 @@ def estado_para_pantalla(user, fecha=None):
         'obras_planificadas': planificadas,
         'otras_obras': otras,
         'modo_geo': modo_geolocalizacion(),
+        'geo_exigir': geolocalizacion_exigir(),
+        'geocerca_activa': geocerca_activa(),
+        'obras_geo_json': json.dumps(serializar_obras_geo(todas)),
+        'obra_preseleccionada_id': obra_preseleccionada_id,
+        'ultima_obra_entrada_id': ultima_obra_id,
         'eventos': eventos_del_dia(user.id, fecha),
         'conforme': dia_tiene_conforme(user.id, fecha),
         'puede_conformar': puede_conformar_jornada(user.id, fecha),
@@ -236,10 +280,9 @@ def _validar_transicion(user_id, tipo, fecha):
 
 
 def _validar_geo(latitud, longitud):
-    modo = modo_geolocalizacion()
-    if modo == GEO_DESACTIVADA:
-        return None, None, None
-    if modo == GEO_OBLIGATORIA and (latitud is None or longitud is None):
+    if not geolocalizacion_activa():
+        return None, None, False
+    if geolocalizacion_exigir() and (latitud is None or longitud is None):
         raise FichajeLedgerError(
             'Esta empresa exige registrar la ubicación al fichar. '
             'Activa la localización en tu móvil y vuelve a intentarlo.'
@@ -288,7 +331,8 @@ def asegurar_asignacion_por_fichaje(user, obra_id, fecha):
 
 
 def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
-           precision_metros=None, ip=None, dispositivo=None):
+           precision_metros=None, ip=None, dispositivo=None,
+           nota_ubicacion=None):
     """
     Registra un fichaje del trabajador y actualiza la proyección del día.
 
@@ -317,6 +361,13 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
     else:
         # Las salidas y pausas heredan la obra de la entrada en curso.
         obra_id = jornada_abierta(user.id, fecha)['obra_id']
+        if obra_id:
+            obra = Obra.query.filter_by(id=obra_id).first()
+
+    from app.services.geocerca_service import evaluar_geo_fichaje
+
+    geo_estado, distancia_obra = evaluar_geo_fichaje(obra, latitud, longitud)
+    nota_ubicacion = (nota_ubicacion or '').strip() or None
 
     registrar_evento(
         user_id=user.id,
@@ -327,6 +378,9 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
         latitud=latitud,
         longitud=longitud,
         precision_metros=precision_metros,
+        geo_estado=geo_estado,
+        distancia_obra_metros=distancia_obra,
+        nota_ubicacion=nota_ubicacion,
         ip=ip,
         dispositivo=dispositivo,
     )

@@ -172,6 +172,7 @@ def api_fichar():
             latitud=_numero(datos.get('latitud')),
             longitud=_numero(datos.get('longitud')),
             precision_metros=_numero(datos.get('precision_metros')),
+            nota_ubicacion=(datos.get('nota_ubicacion') or '').strip() or None,
             ip=_ip(),
             dispositivo=_dispositivo(),
         )
@@ -395,7 +396,8 @@ def definir_pin():
     from app.services.pin_auth_service import (
         PinAuthError,
         definir_pin_desde_token,
-        leer_token_definir_pin,
+        usuario_desde_token_definir_pin,
+        _url_login_tenant,
     )
 
     if not getattr(g, 'current_tenant', None):
@@ -407,14 +409,10 @@ def definir_pin():
         flash(translate('El enlace para definir el PIN no es válido.'), 'danger')
         return redirect(url_for('auth.login'))
 
-    if request.method == 'GET':
-        try:
-            leer_token_definir_pin(token, g.current_tenant)
-        except PinAuthError as exc:
-            flash(str(exc), 'danger')
-            return redirect(url_for('auth.login'))
+    pin_user, pin_error = usuario_desde_token_definir_pin(token, g.current_tenant)
+    login_url = _url_login_tenant(g.current_tenant)
 
-    if request.method == 'POST':
+    if request.method == 'POST' and not pin_error:
         try:
             user = definir_pin_desde_token(
                 token,
@@ -430,6 +428,12 @@ def definir_pin():
             return redirect(url_for('empleado.fichar'))
         except PinAuthError as exc:
             db.session.rollback()
-            flash(str(exc), 'danger')
+            pin_error = str(exc)
 
-    return render_template('empleado/definir_pin.html', token=token)
+    return render_template(
+        'empleado/definir_pin.html',
+        token=token,
+        pin_error=pin_error,
+        pin_user=pin_user,
+        login_url=login_url,
+    )

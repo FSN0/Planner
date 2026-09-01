@@ -50,6 +50,49 @@ def _require_odoo_module():
     return True
 
 
+def _render_preview(modulo, template, diff, preview, *, extra=None):
+    """Renderiza preview y persiste pendientes si los hay."""
+    extra = extra or {}
+    try:
+        from app.services.sync_preview_cache_service import save_cache
+        save_cache(modulo, preview, diff, source=extra.get('cache_source', 'manual'))
+    except Exception:
+        pass
+    return render_template(
+        template,
+        diff=diff,
+        preview=preview,
+        from_cache=False,
+        **extra,
+    )
+
+
+def _render_cached_preview(modulo, template, *, extra=None):
+    from app.services.sync_preview_cache_service import load_cache, format_saved_at
+    cached = load_cache(modulo)
+    if not cached:
+        flash(translate('No hay pendientes guardados para este módulo. Ejecuta un preview manual.'), 'warning')
+        return redirect(url_for('sync.odoo_panel'))
+    extra = extra or {}
+    return render_template(
+        template,
+        diff=cached.get('diff') or {},
+        preview=cached.get('preview') or {},
+        from_cache=True,
+        cache_saved_at=format_saved_at(cached.get('saved_at')),
+        cache_source=cached.get('source') or 'manual',
+        **extra,
+    )
+
+
+def _clear_preview_cache(modulo):
+    try:
+        from app.services.sync_preview_cache_service import clear_cache
+        clear_cache(modulo)
+    except Exception:
+        pass
+
+
 def _require_auditoria_vehiculos():
     from app.services.tenant_modules import has_auditoria_vehiculos
     return bool(_tenant_modulos().get('odoo') and has_auditoria_vehiculos())
@@ -236,13 +279,51 @@ def api_run_sync(task_name):
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+
+@sync_bp.route('/api/sync-log/<int:log_id>/visto', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
+def api_sync_log_visto(log_id):
+    from app.services.permission_service import user_can
+    from app.services.sync_dashboard_service import marcar_sync_log_visto
+    if not user_can(current_user, 'sync_odoo', 'r'):
+        return jsonify({'success': False, 'error': translate('Sin permiso')}), 403
+    log = marcar_sync_log_visto(log_id)
+    if not log:
+        return jsonify({'success': False, 'error': translate('Registro no encontrado')}), 404
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'id': log.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/api/sync-log/visto-todos', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
+def api_sync_log_visto_todos():
+    from app.services.permission_service import user_can
+    from app.services.sync_dashboard_service import marcar_alertas_sync_vistas
+    if not user_can(current_user, 'sync_odoo', 'r'):
+        return jsonify({'success': False, 'error': translate('Sin permiso')}), 403
+    try:
+        marcar_alertas_sync_vistas()
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @sync_bp.route('/resolve_conflict_empleado', methods=['POST'])
 @login_required
 @roles_required(ROLE_ADMIN)
 def resolve_conflict_empleado():
     data = request.json
     emp_data = data['emp']
-    action = data['action'] 
+    action = data['action']
+    from app.services.user_role_sync_service import apply_odoo_role_if_allowed
     
     try:
         actual_user = User.query.get(emp_data['conflicto']['actual']['id'])
@@ -272,7 +353,7 @@ def resolve_conflict_empleado():
             actual_user.lastname = emp_data['lastname']
             actual_user.dni = emp_data['dni']
             actual_user.email = emp_data['email']
-            actual_user.role = emp_data['role']
+            apply_odoo_role_if_allowed(actual_user, emp_data['role'])
             db.session.add(actual_user)
 
         elif action == 'keep_blocker':
@@ -285,7 +366,7 @@ def resolve_conflict_empleado():
             blocker_user.lastname = emp_data['lastname']
             blocker_user.dni = emp_data['dni']
             blocker_user.email = emp_data['email']
-            blocker_user.role = emp_data['role']
+            apply_odoo_role_if_allowed(blocker_user, emp_data['role'])
             db.session.add(blocker_user)
             
         db.session.commit()
@@ -302,16 +383,15 @@ def preview_obras():
         return redirect(url_for('admin.panel'))
     try:
         from app.services.sync_preview_service import analyze_obras_preview
+        jefes_locales = User.query.filter(User.role.in_(['jefe_obra', 'admin'])).all()
+        encargados_locales = User.query.filter_by(active=True).all()
+        extra = {'jefes': jefes_locales, 'encargados': encargados_locales}
+        if request.args.get('cached') == '1':
+            return _render_cached_preview('obras', 'sync/preview_obras.html', extra=extra)
         service = get_sync_adapter()
         diff = service.get_diff_obras()
         preview = analyze_obras_preview(diff)
-        jefes_locales = User.query.filter(User.role.in_(['jefe_obra', 'admin'])).all()
-        encargados_locales = User.query.filter_by(active=True).all()
-        return render_template(
-            'sync/preview_obras.html',
-            diff=diff, preview=preview,
-            jefes=jefes_locales, encargados=encargados_locales,
-        )
+        return _render_preview('obras', 'sync/preview_obras.html', diff, preview, extra=extra)
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception('Fallo al previsualizar obras Odoo')
@@ -398,6 +478,7 @@ def commit_obras():
         ))
                 
         db.session.commit()
+        _clear_preview_cache('obras')
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -411,10 +492,12 @@ def preview_empleados():
         return redirect(url_for('admin.panel'))
     try:
         from app.services.sync_preview_service import analyze_empleados_preview
+        if request.args.get('cached') == '1':
+            return _render_cached_preview('empleados', 'sync/preview_empleados.html')
         service = get_sync_adapter()
         diff = service.get_diff_empleados()
         preview = analyze_empleados_preview(diff)
-        return render_template('sync/preview_empleados.html', diff=diff, preview=preview)
+        return _render_preview('empleados', 'sync/preview_empleados.html', diff, preview)
     except Exception as e:
         flash(f"Error Odoo: {str(e)}", "danger")
         return redirect(url_for('sync.odoo_panel'))
@@ -427,10 +510,12 @@ def preview_subcontratas():
         return redirect(url_for('admin.panel'))
     try:
         from app.services.sync_preview_service import analyze_subcontratas_preview
+        if request.args.get('cached') == '1':
+            return _render_cached_preview('subcontratas', 'sync/preview_subcontratas.html')
         service = get_sync_adapter()
         diff = service.get_diff_subcontratas()
         preview = analyze_subcontratas_preview(diff)
-        return render_template('sync/preview_subcontratas.html', diff=diff, preview=preview)
+        return _render_preview('subcontratas', 'sync/preview_subcontratas.html', diff, preview)
     except Exception as e:
         flash(f"Error Odoo: {str(e)}", "danger")
         return redirect(url_for('sync.odoo_panel'))
@@ -573,6 +658,7 @@ def commit_subcontratas():
         ))
 
         db.session.commit()
+        _clear_preview_cache('subcontratas')
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -633,7 +719,8 @@ def commit_empleados():
                 user.external_ids['odoo'] = str(obj['odoo_id'])
                 user.name = obj['name']
                 user.lastname = obj['lastname']
-                user.role = obj['role']
+                from app.services.user_role_sync_service import apply_odoo_role_if_allowed
+                apply_odoo_role_if_allowed(user, obj['role'])
                 user.categoria_profesional = obj.get('categoria_profesional', user.categoria_profesional)
 
                 if not choque_dni:
@@ -707,6 +794,7 @@ def commit_empleados():
         ))
 
         db.session.commit()
+        _clear_preview_cache('empleados')
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -716,7 +804,10 @@ def commit_empleados():
 @login_required
 def auditoria_fichajes():
     from app.services.permission_service import user_can
-    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    from app.services.fichaje_operario_service import (
+        tenant_muestra_auditoria_fichajes,
+        tenant_tiene_fichaje_operario_module,
+    )
     if not user_can(current_user, 'auditoria_fichajes', 'r') or not tenant_muestra_auditoria_fichajes():
         flash("Acceso denegado.", "danger")
         return redirect(url_for('main.index'))
@@ -744,6 +835,17 @@ def auditoria_fichajes():
     historial = RegistroFichaje.query.filter(*filtros_historial).order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc()).limit(1500).all()
     correcciones = RegistroFichaje.query.filter(*filtros_correcciones).order_by(RegistroFichaje.fecha.desc()).limit(500).all()
     visible_sections = laboral_auditoria_sections(current_user)
+
+    from app.services.fichaje_geo_audit_service import (
+        contar_geo_dudosa,
+        entrada_geo_por_registros,
+    )
+    from app.services.geocerca_service import geocerca_activa
+
+    todos_registros = list(pendientes) + list(historial) + list(correcciones)
+    geo_por_registro = entrada_geo_por_registros(todos_registros)
+    geo_dudosa_count = contar_geo_dudosa(geo_por_registro)
+    muestra_geo_audit = geocerca_activa()
 
     trabajadores_marca = []
     obras_marca = []
@@ -776,7 +878,14 @@ def auditoria_fichajes():
                            can_resolve=can_resolve_fichajes(current_user),
                            can_resolve_fichajes=can_resolve_fichajes(current_user),
                            trabajadores_marca=trabajadores_marca,
-                           obras_marca=obras_marca)
+                           obras_marca=obras_marca,
+                           geo_por_registro=geo_por_registro,
+                           geo_dudosa_count=geo_dudosa_count,
+                           muestra_geo_audit=muestra_geo_audit,
+                           puede_ver_mapa_fichajes=(
+                               user_can(current_user, 'mapa_fichajes', 'r')
+                               and tenant_tiene_fichaje_operario_module()
+                           ))
 
 ACCION_RESOLUCION_TITULOS = {
     'ignorar': 'Ignorar',

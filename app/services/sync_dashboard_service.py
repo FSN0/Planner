@@ -63,8 +63,9 @@ def test_odoo_connection():
 
 def get_recent_sync_alerts():
     """Errores críticos + un único resumen por módulo (sin repetir cada ejecución)."""
+    no_visto = db.or_(SyncLog.visto.is_(False), SyncLog.visto.is_(None))
     critical = (
-        SyncLog.query.filter(SyncLog.estado == 'error')
+        SyncLog.query.filter(SyncLog.estado == 'error', no_visto)
         .order_by(SyncLog.fecha.desc())
         .limit(5)
         .all()
@@ -74,7 +75,8 @@ def get_recent_sync_alerts():
     partial_summaries = []
     for log in (
         SyncLog.query.filter(
-            db.or_(SyncLog.estado == 'parcial', SyncLog.errores > 0)
+            no_visto,
+            db.or_(SyncLog.estado == 'parcial', SyncLog.errores > 0),
         )
         .order_by(SyncLog.fecha.desc())
         .limit(80)
@@ -89,6 +91,31 @@ def get_recent_sync_alerts():
             break
 
     return critical, partial_summaries
+
+
+def marcar_sync_log_visto(log_id):
+    log = SyncLog.query.get(log_id)
+    if not log:
+        return None
+    log.visto = True
+    log.visto_en = utc_now()
+    return log
+
+
+def marcar_alertas_sync_vistas():
+    """Oculta errores/parciales pendientes del panel (no borra el historial en BD)."""
+    no_visto = db.or_(SyncLog.visto.is_(False), SyncLog.visto.is_(None))
+    pendientes = db.or_(
+        SyncLog.estado == 'error',
+        SyncLog.estado == 'parcial',
+        SyncLog.errores > 0,
+    )
+    ahora = utc_now()
+    (
+        SyncLog.query.filter(no_visto, pendientes)
+        .update({'visto': True, 'visto_en': ahora}, synchronize_session=False)
+    )
+    return ahora
 
 
 def get_sync_panel_context():
@@ -135,7 +162,29 @@ def get_sync_panel_context():
 
     critical_errors, partial_summaries = get_recent_sync_alerts()
 
-    logs = SyncLog.query.order_by(SyncLog.fecha.desc()).limit(50).all()
+    logs = (
+        SyncLog.query.filter(db.or_(SyncLog.visto.is_(False), SyncLog.visto.is_(None)))
+        .order_by(SyncLog.fecha.desc())
+        .limit(50)
+        .all()
+    )
+
+    preview_pending = {}
+    preview_cache_meta = {}
+    try:
+        from app.services.sync_preview_cache_service import pending_counts_all, load_cache, format_saved_at
+        preview_pending = pending_counts_all()
+        for mod_key, count in preview_pending.items():
+            if count > 0:
+                cached = load_cache(mod_key) or {}
+                preview_cache_meta[mod_key] = {
+                    'count': count,
+                    'saved_at': format_saved_at(cached.get('saved_at')),
+                    'source': cached.get('source') or 'manual',
+                }
+    except Exception:
+        preview_pending = {}
+        preview_cache_meta = {}
 
     return {
         'config': cfg,
@@ -157,4 +206,6 @@ def get_sync_panel_context():
         'critical_errors': critical_errors,
         'partial_summaries': partial_summaries,
         'logs': logs,
+        'preview_pending': preview_pending,
+        'preview_cache_meta': preview_cache_meta,
     }

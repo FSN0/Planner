@@ -285,15 +285,47 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
     return day_map
 
 
-def get_worker_vehicle_rows(worker, days=30):
-    """Últimos N días: AsignacionVehiculo ∪ uso Odoo (misma lógica que el calendario del vehículo)."""
+def get_worker_vehicle_today(worker):
+    """Vehículo del operario en el día actual (plan o Odoo)."""
+    today = today_local()
+    day_map = get_worker_vehicle_day_map(worker, today, today, end_exclusive=False)
+    info = day_map.get(today)
+    if not info:
+        return None
+    return {
+        'fecha': today,
+        'vehiculo_id': info['vehiculo_id'],
+        'vehiculo_label': info['label'],
+        'km': info.get('km'),
+        'conductor': info.get('conductor'),
+        'source': info.get('source'),
+    }
+
+
+def get_worker_vehicle_rows(worker, days=90, offset=0, limit=30):
+    """Días con vehículo en un rango; paginable para historial en ficha."""
+    try:
+        days = int(days or 90)
+    except (TypeError, ValueError):
+        days = 90
+    days = max(1, min(730, days))
+    try:
+        offset = max(0, int(offset or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        limit = int(limit or 30)
+    except (TypeError, ValueError):
+        limit = 30
+    limit = max(1, min(50, limit))
+
     today = today_local()
     start = today - timedelta(days=days - 1)
     day_map = get_worker_vehicle_day_map(worker, start, today, end_exclusive=False)
-    rows = []
+    all_rows = []
     for fecha in sorted(day_map.keys(), reverse=True):
         info = day_map[fecha]
-        rows.append({
+        all_rows.append({
             'fecha': fecha,
             'vehiculo_id': info['vehiculo_id'],
             'vehiculo_label': info['label'],
@@ -301,7 +333,17 @@ def get_worker_vehicle_rows(worker, days=30):
             'conductor': info.get('conductor'),
             'source': info.get('source'),
         })
-    return rows
+    total = len(all_rows)
+    rows = all_rows[offset:offset + limit]
+    return {
+        'rows': rows,
+        'total': total,
+        'offset': offset,
+        'limit': limit,
+        'days': days,
+        'has_prev': offset > 0,
+        'has_next': offset + limit < total,
+    }
 
 
 def get_obra_vehicle_rows(obra, days=30):

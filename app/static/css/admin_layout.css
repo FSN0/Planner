@@ -192,7 +192,7 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
 /* --- Panel sin padding (tablas) --- */
 .admin-panel-flush {
   padding: 0 !important;
-  overflow: hidden;
+  overflow: visible;
 }
 .admin-panel-flush .admin-panel-header {
   padding: 1rem 1.25rem 0.75rem;
@@ -203,9 +203,9 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
   margin-bottom: 0;
 }
 .admin-table-scroll {
-  max-height: calc(100vh - 220px);
-  overflow-x: hidden;
-  overflow-y: auto;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 transparent;
 }
@@ -352,7 +352,7 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
 .admin-main--compact .admin-panel-flush {
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 .admin-main--compact.solicitud-detail-page .admin-panel-flush {
   overflow: visible !important;
@@ -368,11 +368,11 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
   padding-bottom: 5rem !important;
 }
 .admin-main--compact .admin-table-scroll {
-  max-height: calc(100vh - 108px);
+  max-height: none;
   width: 100%;
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 /* Tablas de datos densas (obras, personal, subcontratas…) */
@@ -2587,7 +2587,8 @@ html.sidebar-collapsed .admin-main {
   cursor: pointer;
 }
 .logs-page .admin-table-scroll {
-  max-height: calc(100vh - 200px);
+  max-height: none;
+  overflow-y: visible;
 }
 .logs-page .log-author-inline {
   display: inline-flex;

@@ -211,6 +211,21 @@ def leer_token_definir_pin(token, tenant_esperado):
     return data
 
 
+def usuario_desde_token_definir_pin(token, tenant):
+    """Devuelve (user, error). user es None si el token no es usable."""
+    try:
+        data = leer_token_definir_pin(token, tenant)
+    except PinAuthError as exc:
+        return None, str(exc)
+    user = User.query.filter_by(id=data.get('uid'), is_deleted=False).first()
+    if not user:
+        return None, translate('El enlace para definir el PIN no es válido.')
+    token_email = (data.get('email') or '').strip().lower()
+    if token_email and (user.email or '').strip().lower() != token_email:
+        return None, translate('El enlace para definir el PIN no es válido.')
+    return user, None
+
+
 def _url_definir_pin(tenant, token):
     from app.services.signup_service import url_acceso_tenant
     return url_acceso_tenant(

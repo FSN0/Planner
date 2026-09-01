@@ -11,7 +11,7 @@
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact ratings-history-page">
 
-    <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" class="ratings-history-back">
+    <a href="{{ back_url }}" class="ratings-history-back">
       <i class="fas fa-arrow-left"></i> {{ _('Volver a la ficha') }}
     </a>
 

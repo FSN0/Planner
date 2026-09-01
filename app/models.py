@@ -466,6 +466,9 @@ class Obra(db.Model):
     descripcion = db.Column(db.Text)
     cliente = db.Column(db.String(100))
     ubicacion = db.Column(db.String(100))
+    latitud = db.Column(db.Float, nullable=True)
+    longitud = db.Column(db.Float, nullable=True)
+    radio_metros = db.Column(db.Integer, nullable=True)
     fecha_sincronizacion = db.Column(db.DateTime, nullable=True)
 
     external_ids = db.Column(JSONB, server_default='{}', nullable=False)
@@ -549,6 +552,8 @@ class SyncLog(db.Model):
     estado = db.Column(db.String(20), default='ok')  # ok | parcial | error
     duracion_ms = db.Column(db.Integer, nullable=True)
     mensaje_error = db.Column(db.Text, nullable=True)
+    visto = db.Column(db.Boolean, default=False, nullable=False)
+    visto_en = db.Column(db.DateTime, nullable=True)
     
     
 class RegistroFichaje(db.Model):
@@ -695,6 +700,11 @@ class FichajeEvento(db.Model):
     longitud = db.Column(db.Float, nullable=True)
     precision_metros = db.Column(db.Float, nullable=True)
 
+    # Validación contra geocerca de la obra (solo PWA; ERP puede rellenarlo más adelante).
+    geo_estado = db.Column(db.String(20), nullable=True)
+    distancia_obra_metros = db.Column(db.Float, nullable=True)
+    nota_ubicacion = db.Column(db.Text, nullable=True)
+
     dispositivo = db.Column(db.String(255), nullable=True)
     ip = db.Column(db.String(45), nullable=True)
 
@@ -735,6 +745,7 @@ class FichajeEvento(db.Model):
             self.fecha_laboral, self.ocurrido_en, self.registrado_en,
             self.zona_horaria, self.autor_id, self.obra_id,
             self.latitud, self.longitud, self.precision_metros,
+            self.geo_estado, self.distancia_obra_metros, self.nota_ubicacion,
             self.dispositivo, self.ip, self.motivo, self.evento_anulado_id,
             self.hash_previo,
         )

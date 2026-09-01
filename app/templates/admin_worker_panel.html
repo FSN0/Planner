@@ -7,6 +7,124 @@
 {% if puede_ver_estado_fichaje %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 {% endif %}
+<style>
+  .vehicle-today-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.65rem;
+  }
+  .vehicle-today-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.35rem;
+  }
+  .vehicle-today-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .vehicle-today-meta {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+  }
+  .vehicle-history-acc {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .vehicle-history-acc.is-open {
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.35);
+  }
+  .vehicle-history-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    min-height: 3.25rem;
+    background: #fff;
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+  }
+  .vehicle-history-toggle:hover { background: #f8fafc; }
+  .vehicle-history-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 0.85rem;
+  }
+  .vehicle-history-text { flex: 1; min-width: 0; }
+  .vehicle-history-title {
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .vehicle-history-sub {
+    display: block;
+    font-size: 0.72rem;
+    color: #64748b;
+    margin-top: 0.15rem;
+  }
+  .vehicle-history-chevron {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    transition: transform 0.2s ease;
+  }
+  .vehicle-history-acc.is-open .vehicle-history-chevron { transform: rotate(180deg); }
+  .vehicle-history-body {
+    display: none;
+    padding: 0.85rem 1rem 1rem;
+    background: #fcfcfd;
+    border-top: 1px solid #e2e8f0;
+  }
+  .vehicle-history-acc.is-open > .vehicle-history-body { display: block; }
+  .vehicle-history-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.55rem 0.75rem;
+    margin-bottom: 0.85rem;
+  }
+  .vehicle-history-controls .config-field label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+  }
+  .vehicle-history-scroll {
+    max-height: min(420px, 55vh);
+    overflow: auto;
+  }
+  .vehicle-history-meta { font-size: 0.72rem; margin-top: 0.55rem; }
+  .vehicle-history-pagination {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    justify-content: flex-end;
+  }
+  .vehicle-history-loading {
+    padding: 1.25rem 0.25rem;
+    font-size: 0.82rem;
+    color: #64748b;
+  }
+</style>
 {% endblock %}
 
 {% block wrapper %}
@@ -19,14 +137,14 @@
     <article class="entity-panel-card">
       <header class="entity-panel-card-top">
         <div class="entity-panel-toolbar-start">
-          <a href="{{ url_for('admin.personal') if current_user.role == 'admin' else url_for('admin.obras_detailed') }}" class="entity-panel-back">
-            <i class="fas fa-arrow-left"></i> {{ _('Personal') if current_user.role == 'admin' else _('Tablero') }}
+          <a href="{{ back_url }}" class="entity-panel-back">
+            <i class="fas fa-arrow-left"></i> {{ _('Volver') }}
           </a>
           <span class="entity-type-marker"><i class="fas fa-hard-hat"></i> {{ _('Empleado') }}</span>
         </div>
         <div class="entity-panel-actions">
           {% if current_user.role == 'admin' %}
-          <a href="{{ url_for('admin.edit_operario', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
+          <a href="{{ url_with_back('admin.edit_operario', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
           </a>
           {% endif %}
@@ -146,35 +264,64 @@
       {% include "components/_entity_stats.html" %}
     </article>
 
-    <section class="entity-calendar-zone entity-vehicles-zone">
+    <section class="entity-calendar-zone entity-vehicles-zone" style="padding:0; background:transparent; border:0; box-shadow:none;">
       <h2 class="entity-calendar-zone-heading"><i class="fas fa-car"></i> {{ _('Vehículos') }}</h2>
-      {% if vehicle_rows %}
-      <div class="admin-table-scroll">
-        <table class="filterable-table admin-data-table mb-0">
-          <thead><tr class="header-row">
-            <th>{{ _('Fecha') }}</th><th>{{ _('Vehículo') }}</th><th>{{ _('Km Odoo') }}</th><th>{{ _('Conductor Odoo') }}</th>
-          </tr></thead>
-          <tbody>
-          {% for row in vehicle_rows %}
-            <tr>
-              <td>{{ row.fecha.strftime('%d/%m/%Y') }}</td>
-              <td>
-                {% if row.vehiculo_id %}
-                <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=row.vehiculo_id) }}" class="table-link-primary">{{ row.vehiculo_label }}</a>
-                {% else %}
-                {{ row.vehiculo_label }}
-                {% endif %}
-              </td>
-              <td>{% if row.km is not none %}{{ '%.0f'|format(row.km) }}{% else %}—{% endif %}</td>
-              <td>{{ row.conductor or '—' }}</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
+
+      <div class="vehicle-today-card">
+        <div class="vehicle-today-label">{{ _('Hoy') }}</div>
+        {% if vehicle_today %}
+          <div class="vehicle-today-value">
+            {% if vehicle_today.vehiculo_id %}
+            <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=vehicle_today.vehiculo_id) }}" class="table-link-primary">{{ vehicle_today.vehiculo_label }}</a>
+            {% else %}
+              {{ vehicle_today.vehiculo_label }}
+            {% endif %}
+          </div>
+          <div class="vehicle-today-meta">
+            {% if vehicle_today.km is not none %}{{ _('Km Odoo') }}: {{ '%.0f'|format(vehicle_today.km) }}{% endif %}
+            {% if vehicle_today.conductor %} · {{ _('Conductor') }}: {{ vehicle_today.conductor }}{% endif %}
+          </div>
+        {% else %}
+          <div class="vehicle-today-value text-muted" style="font-weight:500;">{{ _('Sin vehículo asignado hoy') }}</div>
+        {% endif %}
       </div>
-      {% else %}
-      <p class="text-muted mb-0" style="padding:0.75rem 0;">{{ _('Sin vehículos planificados ni uso Odoo en los últimos 30 días.') }}</p>
-      {% endif %}
+
+      <div class="vehicle-history-acc{% if history_open %} is-open{% endif %}" id="workerVehicleHistoryAcc">
+        <button type="button" class="vehicle-history-toggle" id="workerVehicleHistoryToggle" aria-expanded="{{ 'true' if history_open else 'false' }}">
+          <span class="vehicle-history-icon"><i class="fas fa-history"></i></span>
+          <span class="vehicle-history-text">
+            <span class="vehicle-history-title">{{ _('Historial de vehículos') }}</span>
+            <span class="vehicle-history-sub">{% if tenant_has_odoo %}{{ _('Planificado + odómetros Odoo') }}{% else %}{{ _('Asignaciones planificadas') }}{% endif %} · {{ _('despliega para consultar') }}</span>
+          </span>
+          <i class="fas fa-chevron-down vehicle-history-chevron"></i>
+        </button>
+        <div class="vehicle-history-body" id="workerVehicleHistoryBody">
+          <div class="vehicle-history-controls">
+            <div class="config-field">
+              <label for="workerHistoryDaysPreset">{{ _('Periodo') }}</label>
+              <select id="workerHistoryDaysPreset" class="form-control form-control-sm">
+                <option value="30" {% if history_days == 30 %}selected{% endif %}>30 {{ _('días') }}</option>
+                <option value="90" {% if history_days == 90 %}selected{% endif %}>90 {{ _('días') }}</option>
+                <option value="180" {% if history_days == 180 %}selected{% endif %}>180 {{ _('días') }}</option>
+                <option value="365" {% if history_days == 365 %}selected{% endif %}>365 {{ _('días') }}</option>
+              </select>
+            </div>
+            <div class="config-field">
+              <label>&nbsp;</label>
+              <button type="button" class="btn-admin btn-admin-primary btn-admin-sm" id="workerHistoryDaysApply">
+                <i class="fas fa-search"></i> {{ _('Consultar') }}
+              </button>
+            </div>
+          </div>
+          <div id="workerVehicleHistoryContent">
+            {% if history_open and history_page %}
+              {% include "components/_worker_vehicle_history_table.html" %}
+            {% else %}
+              <p class="vehicle-history-loading mb-0">{{ _('Abre el historial o pulsa Consultar para cargar datos.') }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="entity-calendar-zone">
@@ -263,6 +410,83 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     {% endif %}
+
+    (function initWorkerVehicleHistory() {
+        var acc = document.getElementById('workerVehicleHistoryAcc');
+        var toggle = document.getElementById('workerVehicleHistoryToggle');
+        var content = document.getElementById('workerVehicleHistoryContent');
+        var preset = document.getElementById('workerHistoryDaysPreset');
+        var applyBtn = document.getElementById('workerHistoryDaysApply');
+        if (!acc || !toggle || !content) return;
+
+        var historialUrl = {{ url_for('admin.worker_panel_historial', user_id=worker.id)|tojson }};
+        var loadedDays = {{ history_days|tojson }};
+        var loadedOffset = {{ (history_page.offset if history_page else 0)|tojson }};
+        var hasLoaded = {{ history_open|tojson }};
+
+        function setOpen(open) {
+            acc.classList.toggle('is-open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function selectedDays() {
+            return parseInt(preset.value, 10) || 90;
+        }
+
+        function loadHistory(days, offset, force) {
+            if (!force && hasLoaded && days === loadedDays && offset === loadedOffset) {
+                return Promise.resolve();
+            }
+            content.innerHTML = '<p class="vehicle-history-loading mb-0"><i class="fas fa-spinner fa-spin"></i> ' + {{ _('Cargando historial…')|tojson }} + '</p>';
+            var url = historialUrl + '?days=' + encodeURIComponent(days)
+                + '&offset=' + encodeURIComponent(offset || 0)
+                + '&limit=30';
+            return fetch(url, {
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            }).then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+            }).then(function(html) {
+                content.innerHTML = html;
+                loadedDays = days;
+                loadedOffset = offset || 0;
+                hasLoaded = true;
+                bindPagination();
+                try {
+                    var u = new URL(window.location.href);
+                    u.searchParams.set('history_days', String(days));
+                    u.searchParams.set('history_offset', String(loadedOffset));
+                    u.searchParams.set('history_open', '1');
+                    window.history.replaceState({}, '', u.toString());
+                } catch (e) {}
+            }).catch(function() {
+                content.innerHTML = '<p class="text-danger mb-0" style="padding:0.75rem 0;">' + {{ _('No se pudo cargar el historial.')|tojson }} + '</p>';
+            });
+        }
+
+        function bindPagination() {
+            content.querySelectorAll('.worker-history-page').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var off = parseInt(btn.getAttribute('data-offset'), 10) || 0;
+                    loadHistory(selectedDays(), off, true);
+                });
+            });
+        }
+
+        toggle.addEventListener('click', function() {
+            var willOpen = !acc.classList.contains('is-open');
+            setOpen(willOpen);
+            if (willOpen) loadHistory(selectedDays(), loadedOffset, false);
+        });
+
+        applyBtn.addEventListener('click', function() {
+            setOpen(true);
+            loadHistory(selectedDays(), 0, true);
+        });
+
+        bindPagination();
+    })();
 
     window.enviarAccionPerfil = function(payload, revertFunc) {
         payload.check_conflicts = true;

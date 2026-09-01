@@ -5,6 +5,8 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
   .obra-form-advanced {
     margin-top: 1rem;
@@ -42,7 +44,7 @@
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
-        <a href="{{ url_for('admin.obras_list') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
+        <a href="{{ resolve_back_url('admin.obras_list') }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
           <i class="fas fa-arrow-left"></i>
         </a>
         <h1 class="page-toolbar-title">{{ _('Editar obra') }}</h1>
@@ -57,6 +59,7 @@
 
       <form method="POST" id="editObraForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="back" value="{{ request.args.get('back', '') }}">
 
         <div class="form-group">
           <label class="admin-form-label">{{ _('Nombre') }}</label>
@@ -68,18 +71,18 @@
           <div class="form-group col-md-6">
             <label class="admin-form-label">{{ _('Fecha inicio') }}</label>
             <input type="date" name="fecha_inicio" class="form-control"
-                   value="{{ form_data.get('fecha_inicio', obra.fecha_inicio) }}" required>
+                   value="{{ form_data.get('fecha_inicio', obra.fecha_inicio.strftime('%Y-%m-%d') if obra.fecha_inicio else '') }}">
           </div>
           <div class="form-group col-md-6">
             <label class="admin-form-label">{{ _('Fecha fin') }}</label>
             <input type="date" name="fecha_fin" class="form-control"
-                   value="{{ form_data.get('fecha_fin', obra.fecha_fin) }}">
+                   value="{{ form_data.get('fecha_fin', obra.fecha_fin.strftime('%Y-%m-%d') if obra.fecha_fin else '') }}">
           </div>
         </div>
 
         <div class="form-group">
           <label class="admin-form-label">{{ _('Jefe de obra') }}</label>
-          <select name="jefe_obra_id" id="jefe_select" class="form-control" required>
+          <select name="jefe_obra_id" id="jefe_select" class="form-control">
             <option value="">{{ _('— Seleccione un jefe —') }}</option>
             {% for jefe in jefes %}
               <option value="{{ jefe.id }}" {% if jefe_sel == jefe.id|string %}selected{% endif %}>
@@ -92,7 +95,7 @@
           </small>
         </div>
 
-        <details class="obra-form-advanced" open>
+        <details class="obra-form-advanced">
           <summary>{{ _('Opciones avanzadas') }}</summary>
           <div class="advanced-body">
             <div class="form-row">
@@ -117,14 +120,9 @@
               </div>
             </div>
             <div class="form-row">
-              <div class="form-group col-md-6">
+              <div class="form-group col-md-12">
                 <label class="admin-form-label">{{ _('Descripción') }}</label>
                 <textarea name="descripcion" class="form-control" rows="2">{{ form_data.get('descripcion', obra.descripcion or '') }}</textarea>
-              </div>
-              <div class="form-group col-md-6">
-                <label class="admin-form-label">{{ _('Ubicación') }}</label>
-                <input type="text" name="ubicacion" class="form-control"
-                       value="{{ form_data.get('ubicacion', obra.ubicacion or '') }}">
               </div>
             </div>
             <div class="form-group">
@@ -139,6 +137,9 @@
                 {% endfor %}
               </select>
             </div>
+            {% with form_data=form_data, obra=obra, radio_default=radio_default %}
+            {% include 'components/_obra_ubicacion_map.html' %}
+            {% endwith %}
           </div>
         </details>
 
@@ -168,9 +169,12 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="{{ url_for('static', filename='js/obra-ubicacion-map.js') }}"></script>
 <script>
   $(document).ready(function() {
-      $('#jefe_select').select2({ width: '100%', placeholder: {{ _('Seleccione un jefe')|tojson }}, allowClear: false });
+      $('#jefe_select').select2({ width: '100%', placeholder: {{ _('Seleccione un jefe')|tojson }}, allowClear: true });
       $('#encargado_select').select2({ width: '100%', placeholder: {{ _('Seleccione un encargado')|tojson }}, allowClear: true });
   });
 </script>

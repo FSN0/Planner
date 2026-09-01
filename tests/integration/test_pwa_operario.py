@@ -258,10 +258,10 @@ class TestUbicacion:
         assert evento.latitud is None
         assert evento.longitud is None
 
-    def test_opcional_guarda_lo_que_llegue_y_deja_fichar_sin_ello(
+    def test_activada_guarda_lo_que_llegue_y_deja_fichar_sin_ello(
         self, pwa, operario_conectado, obra_activa
     ):
-        _configurar(pwa, fichaje_geolocalizacion='opcional')
+        _configurar(pwa, fichaje_geolocalizacion='activada')
 
         _fichar(
             operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id,
@@ -276,10 +276,11 @@ class TestUbicacion:
         salida = FichajeEvento.query.filter_by(tipo=EVENTO_SALIDA).one()
         assert salida.latitud is None
 
-    def test_obligatoria_rechaza_el_fichaje_sin_coordenadas(
+    def test_exigir_rechaza_el_fichaje_sin_coordenadas(
         self, pwa, operario_conectado, obra_activa
     ):
-        _configurar(pwa, fichaje_geolocalizacion='obligatoria')
+        _configurar(pwa, fichaje_geolocalizacion='activada')
+        _configurar(pwa, fichaje_geolocalizacion_exigir='True')
 
         respuesta = _fichar(operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id)
 
@@ -300,6 +301,55 @@ class TestUbicacion:
 
         assert respuesta.status_code == 200
         assert FichajeEvento.query.one().latitud is None
+
+    def test_fuera_de_geocerca_marca_dudosa(
+        self, pwa, operario_conectado, obra_activa
+    ):
+        _configurar(pwa, fichaje_geolocalizacion='activada')
+        obra_activa.latitud = 41.65
+        obra_activa.longitud = -4.72
+        obra_activa.radio_metros = 100
+        pwa.commit()
+
+        respuesta = _fichar(
+            operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id,
+            latitud=42.0, longitud=-4.72,
+            nota_ubicacion='Visita en cliente',
+        )
+
+        assert respuesta.status_code == 200
+        entrada = FichajeEvento.query.filter_by(tipo=EVENTO_ENTRADA).one()
+        assert entrada.geo_estado == 'dudosa'
+        assert entrada.nota_ubicacion == 'Visita en cliente'
+        assert entrada.distancia_obra_metros is not None
+        assert entrada.distancia_obra_metros > 100
+
+    def test_obra_sin_pin_no_es_dudosa(
+        self, pwa, operario_conectado, obra_activa, user_jefe
+    ):
+        _configurar(pwa, fichaje_geolocalizacion='activada')
+        obra_activa.latitud = None
+        obra_activa.longitud = None
+        # Otra obra geolocalizada activa la geocerca del tenant.
+        pwa.add(Obra(
+            nombre='Obra con mapa',
+            codigo='GEO-TEST',
+            estado='En Curso',
+            jefe_obra_id=user_jefe.id,
+            latitud=41.0,
+            longitud=-3.0,
+            radio_metros=200,
+        ))
+        pwa.commit()
+
+        respuesta = _fichar(
+            operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id,
+            latitud=41.65, longitud=-4.72,
+        )
+
+        assert respuesta.status_code == 200
+        entrada = FichajeEvento.query.filter_by(tipo=EVENTO_ENTRADA).one()
+        assert entrada.geo_estado == 'obra_sin_geo'
 
 
 # ---------------------------------------------------------------------------

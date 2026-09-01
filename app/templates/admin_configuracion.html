@@ -257,26 +257,49 @@
 
             <div id="cfg-fichajes-extras" class="{% if configs.get('fichaje_operario_activo', 'False') != 'True' %}d-none{% endif %}">
             <div class="config-field mt-3">
-              <label for="fichaje_geolocalizacion">{{ _('Ubicación al fichar') }}</label>
+              <label for="fichaje_geolocalizacion">{{ _('Geolocalización al fichar') }}</label>
               <select id="fichaje_geolocalizacion" name="fichaje_geolocalizacion"
                       class="form-control form-control-sm custom-select">
-                {% set geo_actual = configs.get('fichaje_geolocalizacion', 'desactivada') %}
-                <option value="desactivada" {% if geo_actual == 'desactivada' %}selected{% endif %}>
-                  {{ _('No registrar la ubicación') }}
+                {% set geo_raw = configs.get('fichaje_geolocalizacion', 'desactivada') %}
+                {% set geo_activa = geo_raw in ['activada', 'opcional', 'obligatoria'] %}
+                <option value="desactivada" {% if not geo_activa %}selected{% endif %}>
+                  {{ _('Desactivada') }}
                 </option>
-                <option value="opcional" {% if geo_actual == 'opcional' %}selected{% endif %}>
-                  {{ _('Registrarla si el trabajador la autoriza') }}{% if monetizacion_activa %} {{ _('(plan de pago)') }}{% endif %}
-                </option>
-                <option value="obligatoria" {% if geo_actual == 'obligatoria' %}selected{% endif %}>
-                  {{ _('Exigirla para poder fichar') }}{% if monetizacion_activa %} {{ _('(plan de pago)') }}{% endif %}
+                <option value="activada" {% if geo_activa %}selected{% endif %}>
+                  {{ _('Activada') }}{% if monetizacion_activa %} {{ _('(plan de pago)') }}{% endif %}
                 </option>
               </select>
               <p class="config-field-hint">
-                {{ _('Por defecto no se registra. Solo se guarda la coordenada del instante del fichaje, nunca un seguimiento continuo.') }}
-                {% if monetizacion_activa %}
-                {{ _('Con el cobro activo, opcional/obligatoria pueden depender del plan.') }}
-                {% endif %}
+                {{ _('Solo se guarda la coordenada del instante del fichaje, nunca un seguimiento continuo.') }}
               </p>
+            </div>
+
+            <div id="cfg-geo-extras" class="{% if not geo_activa %}d-none{% endif %}">
+              <div class="config-switch-box mt-3">
+                <label class="admin-form-switch">
+                  <input type="checkbox" id="fichaje_geolocalizacion_exigir"
+                         name="fichaje_geolocalizacion_exigir"
+                         {% if configs.get('fichaje_geolocalizacion_exigir', 'False') == 'True'
+                            or geo_raw == 'obligatoria' %}checked{% endif %}>
+                  <span class="slider"></span>
+                </label>
+                <div>
+                  <p class="admin-form-switch-label mb-0">{{ _('Exigir ubicación para fichar') }}</p>
+                  <p class="admin-form-switch-hint mb-0">
+                    {{ _('Si no hay GPS, el trabajador no podrá registrar el fichaje.') }}
+                  </p>
+                </div>
+              </div>
+              <div class="config-field mt-3">
+                <label for="fichaje_geocerca_radio_default">{{ _('Radio por defecto (metros)') }}</label>
+                <input type="number" id="fichaje_geocerca_radio_default"
+                       name="fichaje_geocerca_radio_default" min="25" max="5000" step="5"
+                       class="form-control form-control-sm"
+                       value="{{ configs.get('fichaje_geocerca_radio_default', '150') }}">
+                <p class="config-field-hint">
+                  {{ _('Distancia alrededor del pin de cada obra. Mismo radio para todas las obras del tenant.') }}
+                </p>
+              </div>
             </div>
 
             <div class="config-switch-box mt-4">
@@ -310,11 +333,19 @@
             (function () {
               var master = document.getElementById('fichaje_operario_activo');
               var extras = document.getElementById('cfg-fichajes-extras');
+              var geoSelect = document.getElementById('fichaje_geolocalizacion');
+              var geoExtras = document.getElementById('cfg-geo-extras');
               if (!master || !extras) return;
               function sync() {
                 extras.classList.toggle('d-none', !master.checked);
               }
+              function syncGeo() {
+                if (!geoSelect || !geoExtras) return;
+                geoExtras.classList.toggle('d-none', geoSelect.value !== 'activada');
+              }
               master.addEventListener('change', sync);
+              if (geoSelect) geoSelect.addEventListener('change', syncGeo);
+              syncGeo();
             })();
             </script>
             {% endif %}

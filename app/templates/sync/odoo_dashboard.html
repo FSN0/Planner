@@ -286,6 +286,12 @@
           {% if not can_write_sync %}
           <span class="text-muted small">{{ _('Solo lectura') }}</span>
           {% elif mod.key == 'obras' %}
+          {% set pend = preview_pending.get('obras', 0) %}
+          {% if pend %}
+          <a href="{{ url_for('sync.preview_obras', cached=1) }}" class="btn-admin btn-admin-ghost btn-sm sync-pending-btn" title="{{ _('Guardado') }} {{ preview_cache_meta.get('obras', {}).get('saved_at', '') }}">
+            <i class="fas fa-exclamation-circle"></i> {{ _('Ver pendientes') }} ({{ pend }})
+          </a>
+          {% endif %}
           <a href="{{ url_for('sync.preview_obras') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader({{ _('Obras')|tojson }})">
             <i class="fas fa-search"></i> {{ _('Preview manual') }}
           </a>
@@ -293,6 +299,12 @@
             <i class="fas fa-robot"></i> {{ _('Auto ahora') }}
           </button>
           {% elif mod.key == 'empleados' %}
+          {% set pend = preview_pending.get('empleados', 0) %}
+          {% if pend %}
+          <a href="{{ url_for('sync.preview_empleados', cached=1) }}" class="btn-admin btn-admin-ghost btn-sm sync-pending-btn" title="{{ _('Guardado') }} {{ preview_cache_meta.get('empleados', {}).get('saved_at', '') }}">
+            <i class="fas fa-exclamation-circle"></i> {{ _('Ver pendientes') }} ({{ pend }})
+          </a>
+          {% endif %}
           <a href="{{ url_for('sync.preview_empleados') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader({{ _('Empleados')|tojson }})">
             <i class="fas fa-search"></i> {{ _('Preview manual') }}
           </a>
@@ -300,6 +312,12 @@
             <i class="fas fa-robot"></i> {{ _('Auto ahora') }}
           </button>
           {% elif mod.key == 'subcontratas' %}
+          {% set pend = preview_pending.get('subcontratas', 0) %}
+          {% if pend %}
+          <a href="{{ url_for('sync.preview_subcontratas', cached=1) }}" class="btn-admin btn-admin-ghost btn-sm sync-pending-btn" title="{{ _('Guardado') }} {{ preview_cache_meta.get('subcontratas', {}).get('saved_at', '') }}">
+            <i class="fas fa-exclamation-circle"></i> {{ _('Ver pendientes') }} ({{ pend }})
+          </a>
+          {% endif %}
           <a href="{{ url_for('sync.preview_subcontratas') }}" class="btn-admin btn-admin-ghost btn-sm" onclick="showSyncLoader({{ _('Subcontratas')|tojson }})">
             <i class="fas fa-search"></i> {{ _('Preview manual') }}
           </a>
@@ -344,23 +362,38 @@
 
     <div class="sync-bottom-grid">
       <section class="sync-card">
-        <h2 class="sync-section-title mb-3"><i class="fas fa-exclamation-circle text-danger"></i> {{ _('Alertas') }}</h2>
+        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+          <h2 class="sync-section-title mb-0"><i class="fas fa-exclamation-circle text-danger"></i> {{ _('Alertas') }}</h2>
+          {% if critical_errors or partial_summaries %}
+          <button type="button" class="btn-admin btn-admin-ghost btn-admin-sm" id="syncMarcarTodosVistos">
+            <i class="fas fa-check-double"></i> {{ _('Marcar todas como vistas') }}
+          </button>
+          {% endif %}
+        </div>
         {% if critical_errors or partial_summaries %}
         <ul class="sync-error-list">
           {% for err in critical_errors %}
-          <li class="sync-error-item sync-error-item--critical">
+          <li class="sync-error-item sync-error-item--critical" data-sync-log-id="{{ err.id }}">
             <div class="sync-error-item-head">
               <span class="sync-error-tipo"><i class="fas fa-times-circle mr-1"></i>{{ _(err.tipo) }}</span>
               <span class="sync-error-fecha">{{ err.fecha|format_dt }}</span>
+              <button type="button" class="btn-admin btn-admin-ghost btn-admin-sm sync-log-visto-btn"
+                      data-log-id="{{ err.id }}" title="{{ _('Marcar como visto') }}">
+                <i class="fas fa-check"></i>
+              </button>
             </div>
             <p class="sync-error-detail mb-0">{{ err.mensaje_error or err.detalles }}</p>
           </li>
           {% endfor %}
           {% for log in partial_summaries %}
-          <li class="sync-error-item sync-error-item--partial">
+          <li class="sync-error-item sync-error-item--partial" data-sync-log-id="{{ log.id }}">
             <div class="sync-error-item-head">
               <span class="sync-error-tipo"><i class="fas fa-exclamation-triangle mr-1"></i>{{ _(log.tipo) }}</span>
               <span class="sync-error-fecha">{{ _('Último:') }} {{ log.fecha|format_dt }}</span>
+              <button type="button" class="btn-admin btn-admin-ghost btn-admin-sm sync-log-visto-btn"
+                      data-log-id="{{ log.id }}" title="{{ _('Marcar como visto') }}">
+                <i class="fas fa-check"></i>
+              </button>
             </div>
             <p class="sync-error-detail mb-0">
               {{ _('{n} registro(s) omitidos en la última sync.', n=log.errores) }}
@@ -394,11 +427,12 @@
                 <th class="text-center">{{ _('Omit.') }}</th>
                 <th>{{ _('Duración') }}</th>
                 <th>{{ _('Detalle') }}</th>
+                <th class="text-center" style="width:3rem;"></th>
               </tr>
             </thead>
             <tbody>
               {% for log in logs %}
-              <tr>
+              <tr data-sync-log-id="{{ log.id }}" class="{% if log.estado == 'error' or (log.errores or 0) > 0 %}sync-log-row--alert{% endif %}">
                 <td class="text-nowrap small">{{ log.fecha|format_dt }}</td>
                 <td><span class="badge-soft">{{ _(log.tipo) }}</span></td>
                 <td class="small">{{ _(log.modo) }}</td>
@@ -411,9 +445,19 @@
                 <td class="sync-log-detail small" title="{{ log.mensaje_error or log.detalles or '' }}">
                   {{ log.mensaje_error or log.detalles or '—' }}
                 </td>
+                <td class="text-center">
+                  {% if log.estado == 'error' or (log.errores or 0) > 0 %}
+                  <button type="button" class="btn-admin btn-admin-ghost btn-admin-sm sync-log-visto-btn"
+                          data-log-id="{{ log.id }}" title="{{ _('Marcar como visto') }}">
+                    <i class="fas fa-check"></i>
+                  </button>
+                  {% else %}
+                  —
+                  {% endif %}
+                </td>
               </tr>
               {% else %}
-              <tr><td colspan="10" class="text-center text-muted py-4">{{ _('No hay registros.') }}</td></tr>
+              <tr><td colspan="11" class="text-center text-muted py-4">{{ _('No hay registros.') }}</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -786,6 +830,90 @@ function runSyncNow(moduleKey) {
         .then(r => r.json())
         .then(res => Swal.fire(res.success ? {{ _('Lanzado')|tojson }} : {{ _('Error')|tojson }}, res.message, res.success ? 'success' : 'error'));
     }
+  });
+}
+
+function getSyncCsrfToken() {
+  if (typeof getCsrfToken === 'function') return getCsrfToken();
+  var meta = document.querySelector('meta[name=csrf-token]');
+  if (meta) return meta.getAttribute('content') || '';
+  var input = document.querySelector('input[name="csrf_token"]');
+  return input ? input.value : '';
+}
+
+function dismissSyncLogRow(el) {
+  if (!el) return;
+  el.style.transition = 'opacity 0.25s';
+  el.style.opacity = '0.35';
+  setTimeout(function() { el.remove(); }, 280);
+}
+
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.sync-log-visto-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var logId = btn.getAttribute('data-log-id');
+  if (!logId) return;
+  btn.disabled = true;
+  fetch('/sync/api/sync-log/' + logId + '/visto', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getSyncCsrfToken()
+    }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res.success) {
+      dismissSyncLogRow(btn.closest('[data-sync-log-id]'));
+    } else {
+      btn.disabled = false;
+      Swal.fire({{ _('Error')|tojson }}, res.error || {{ _('No se pudo marcar como visto')|tojson }}, 'error');
+    }
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    Swal.fire({{ _('Error')|tojson }}, String(err), 'error');
+  });
+});
+
+var syncMarcarTodosBtn = document.getElementById('syncMarcarTodosVistos');
+if (syncMarcarTodosBtn) {
+  syncMarcarTodosBtn.addEventListener('click', function() {
+    Swal.fire({
+      title: {{ _('¿Marcar todas las alertas como vistas?')|tojson }},
+      text: {{ _('Desaparecerán del panel pero seguirán en la base de datos.')|tojson }},
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: {{ _('Sí, marcar')|tojson }},
+      cancelButtonText: {{ _('Cancelar')|tojson }}
+    }).then(function(result) {
+      if (!result.isConfirmed) return;
+      syncMarcarTodosBtn.disabled = true;
+      fetch('/sync/api/sync-log/visto-todos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getSyncCsrfToken()
+        }
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.success) {
+          document.querySelectorAll('.sync-error-item[data-sync-log-id]').forEach(dismissSyncLogRow);
+          document.querySelectorAll('tr.sync-log-row--alert[data-sync-log-id]').forEach(dismissSyncLogRow);
+          syncMarcarTodosBtn.remove();
+        } else {
+          syncMarcarTodosBtn.disabled = false;
+          Swal.fire({{ _('Error')|tojson }}, res.error || {{ _('No se pudo marcar como visto')|tojson }}, 'error');
+        }
+      })
+      .catch(function(err) {
+        syncMarcarTodosBtn.disabled = false;
+        Swal.fire({{ _('Error')|tojson }}, String(err), 'error');
+      });
+    });
   });
 }
 </script>

@@ -1,4 +1,5 @@
 """Tests unitarios de agregación de estado de fichaje (pelotitas)."""
+import pytest
 from app.services.fichaje_estado_service import (
     COLOR_GRIS,
     COLOR_NARANJA,
@@ -66,3 +67,22 @@ def test_sobreescrito_mas_sin_registro_es_violeta():
     assert color_fichaje_agregado(
         ['Sobreescrito_RRHH', 'Sin_Registro']
     ) == COLOR_VIOLETA
+
+
+def test_fichajes_agregados_por_fecha(session, tenant_soltec, app):
+    from datetime import date
+    from sqlalchemy import text
+    from app.models import RegistroFichaje, User
+    from app.services.fichaje_estado_service import fichajes_agregados_por_fecha
+
+    session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+    user = User.query.filter_by(role='operario', active=True).first()
+    if not user:
+        pytest.skip('sin operario en fixture')
+    dia = date(2026, 9, 1)
+    session.add(RegistroFichaje(user_id=user.id, fecha=dia, estado='Correcto'))
+    session.add(RegistroFichaje(user_id=user.id, fecha=dia, estado='Paracaidista'))
+    session.commit()
+
+    estados = fichajes_agregados_por_fecha(dia)
+    assert estados[str(user.id)] == 'Paracaidista'

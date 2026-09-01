@@ -135,13 +135,18 @@ window.PersonDayTimeline = (function () {
                     <i class="fas ${iconClass}" style="color:#fff;"></i>
                 </span>
                 <div class="person-day-timeline-card">
-                    <div class="person-day-timeline-header">
-                        <h6 class="person-day-timeline-title">${escapeHtml(hito.titulo || '')}</h6>
-                        <span class="person-day-timeline-time">${escapeHtml(hito.fecha || '')}</span>
+                    <div class="person-day-timeline-card-icon" style="background:${iconColor};">
+                        <i class="fas ${iconClass}"></i>
                     </div>
-                    <p class="person-day-timeline-desc">${descripcion}</p>
-                    <div class="person-day-timeline-footer">
-                        ${renderActor(hito)}
+                    <div class="person-day-timeline-card-main">
+                        <div class="person-day-timeline-header">
+                            <h6 class="person-day-timeline-title">${escapeHtml(hito.titulo || '')}</h6>
+                            <span class="person-day-timeline-time">${escapeHtml(hito.fecha || '')}</span>
+                        </div>
+                        <p class="person-day-timeline-desc">${descripcion}</p>
+                        <div class="person-day-timeline-footer">
+                            ${renderActor(hito)}
+                        </div>
                     </div>
                 </div>
             </div>

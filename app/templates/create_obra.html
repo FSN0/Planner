@@ -5,6 +5,8 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
   .obra-form-advanced {
     margin-top: 1rem;
@@ -74,11 +76,11 @@
         <div class="form-row">
           <div class="form-group col-md-6" data-tour="obra-inicio">
             <label class="admin-form-label">{{ _('Fecha inicio') }}</label>
-            <input type="date" name="fecha_inicio" class="form-control" value="{{ fi }}" required data-tour-field="obra-inicio">
+            <input type="date" name="fecha_inicio" class="form-control" value="{{ fi }}" data-tour-field="obra-inicio">
           </div>
           <div class="form-group col-md-6" data-tour="obra-fin">
             <label class="admin-form-label">{{ _('Fecha fin') }}</label>
-            <input type="date" name="fecha_fin" id="fechaFinInput" class="form-control" value="{{ ff }}" required data-tour-field="obra-fin">
+            <input type="date" name="fecha_fin" id="fechaFinInput" class="form-control" value="{{ ff }}" data-tour-field="obra-fin">
             <small class="form-text text-muted" style="font-size: 0.72rem;">
               {{ _('Por defecto, un año después del inicio (puedes cambiarla).') }}
             </small>
@@ -87,7 +89,7 @@
 
         <div class="form-group" data-tour="obra-jefe">
           <label class="admin-form-label">{{ _('Jefe de obra') }}</label>
-          <select name="jefe_obra_id" id="jefe_select" class="form-control" required data-tour-field="obra-jefe">
+          <select name="jefe_obra_id" id="jefe_select" class="form-control" data-tour-field="obra-jefe">
             <option value="">{{ _('— Seleccione un jefe —') }}</option>
             {% for jefe in jefes %}
               <option value="{{ jefe.id }}" {% if jefe_sel == jefe.id|string %}selected{% endif %}>
@@ -123,13 +125,9 @@
               </div>
             </div>
             <div class="form-row">
-              <div class="form-group col-md-6">
+              <div class="form-group col-md-12">
                 <label class="admin-form-label">{{ _('Cliente / descripción') }}</label>
                 <input type="text" name="descripcion" class="form-control" value="{{ form_data.get('descripcion', '') }}">
-              </div>
-              <div class="form-group col-md-6">
-                <label class="admin-form-label">{{ _('Ubicación') }}</label>
-                <input type="text" name="ubicacion" class="form-control" value="{{ form_data.get('ubicacion', '') }}">
               </div>
             </div>
             <div class="form-group">
@@ -143,6 +141,9 @@
                 {% endfor %}
               </select>
             </div>
+            {% with form_data=form_data, radio_default=radio_default %}
+            {% include 'components/_obra_ubicacion_map.html' %}
+            {% endwith %}
           </div>
         </details>
 
@@ -162,9 +163,12 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="{{ url_for('static', filename='js/obra-ubicacion-map.js') }}"></script>
 <script>
   $(document).ready(function() {
-      $('#jefe_select').select2({ width: '100%', placeholder: {{ _('Seleccione un jefe')|tojson }}, allowClear: false });
+      $('#jefe_select').select2({ width: '100%', placeholder: {{ _('Seleccione un jefe')|tojson }}, allowClear: true });
       $('#encargado_select').select2({ width: '100%', placeholder: {{ _('Seleccione un encargado')|tojson }}, allowClear: true });
 
       var inicio = document.querySelector('input[name="fecha_inicio"]');

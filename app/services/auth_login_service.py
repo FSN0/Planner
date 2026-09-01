@@ -8,6 +8,7 @@ from werkzeug.security import check_password_hash
 from app.models import User
 from app.services.i18n_service import translate
 from app.services.pin_auth_service import PinAuthError, autenticar_por_pin
+from app.services.tenant_auth_policy import tenant_usa_acceso_pin
 
 AUTH_MODE_PIN = 'pin'
 AUTH_MODE_PASSWORD = 'password'
@@ -16,18 +17,22 @@ AUTH_MODE_BOTH = 'both'
 _EMAIL_LIKE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 
-def default_auth_mode_for_role(role: str) -> str:
+def default_auth_mode_for_role(role: str, tenant=None) -> str:
+    if not tenant_usa_acceso_pin(tenant):
+        return AUTH_MODE_PASSWORD
     if role == 'operario':
         return AUTH_MODE_PIN
     return AUTH_MODE_PASSWORD
 
 
-def normalize_auth_mode(value, *, role=None) -> str:
+def normalize_auth_mode(value, *, role=None, tenant=None) -> str:
+    if not tenant_usa_acceso_pin(tenant):
+        return AUTH_MODE_PASSWORD
     val = (value or '').strip().lower()
     if val in (AUTH_MODE_PIN, AUTH_MODE_PASSWORD, AUTH_MODE_BOTH):
         return val
     if role:
-        return default_auth_mode_for_role(role)
+        return default_auth_mode_for_role(role, tenant=tenant)
     return AUTH_MODE_PASSWORD
 
 

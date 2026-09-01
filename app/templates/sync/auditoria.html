@@ -18,6 +18,25 @@
 </td>
 {% endmacro %}
 
+{% macro celda_geo(reg) %}
+{% set g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}
+<td class="align-middle text-center geo-audit-cell" data-sort-value="{{ g.geo_estado if g else '' }}">
+    {% if g and g.geo_estado == 'dudosa' %}
+        <span class="text-warning font-weight-bold" style="font-size:0.72rem;"
+              title="{{ _('Ubicación no coincide con la obra fichada') }}{% if g.distancia_metros %} · {{ g.distancia_metros|int }} m{% endif %}{% if g.nota_ubicacion %} · {{ g.nota_ubicacion }}{% endif %}">
+            <i class="fas fa-exclamation-triangle"></i>
+            {% if g.distancia_metros %}<span class="d-block">{{ g.distancia_metros|int }} m</span>{% endif %}
+        </span>
+    {% elif g and g.geo_estado == 'coincide' %}
+        <span class="text-success" title="{{ _('Ubicación coherente con la obra') }}"><i class="fas fa-map-marker-alt"></i></span>
+    {% elif g and g.geo_estado == 'sin_ubicacion' %}
+        <span class="text-muted" title="{{ _('Sin GPS en la entrada') }}"><i class="fas fa-location-slash"></i></span>
+    {% else %}
+        <span class="text-muted">—</span>
+    {% endif %}
+</td>
+{% endmacro %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
@@ -28,6 +47,10 @@ tr.audit-row-highlight > td {
 }
 tr.audit-row-highlight {
   box-shadow: inset 4px 0 0 #f59e0b;
+}
+.auditoria-stat--active {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
 }
 </style>
 {% endblock %}
@@ -107,6 +130,16 @@ tr.audit-row-highlight {
       </span>
       {% endif %}
       {% endif %}
+      {% if muestra_geo_audit and geo_dudosa_count %}
+      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" id="auditGeoDudosaStat" data-audit-target="#collapseHistorial" title="{{ _('Filtrar ubicación dudosa') }}">
+        <i class="fas fa-map-marker-alt"></i> {{ geo_dudosa_count }} {{ _('ubic. dudosa') }}
+      </span>
+      {% if puede_ver_mapa_fichajes %}
+      <a href="{{ url_for('admin.mapa_fichajes', solo_dudosos=1) }}" class="auditoria-stat auditoria-stat--warning" style="text-decoration:none;" title="{{ _('Ver en mapa') }}">
+        <i class="fas fa-map"></i> {{ _('Mapa') }}
+      </a>
+      {% endif %}
+      {% endif %}
       {% if 'historico_global' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseHistorial" title="{{ _('Ir al histórico') }}">
         <i class="fas fa-archive"></i> {{ historial|length }} {{ _('en histórico') }}
@@ -138,13 +171,14 @@ tr.audit-row-highlight {
                                 {{ audit_sort_th(3, fichaje_col, '18%') }}
                                 {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
                                 {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
-                                {{ audit_sort_th(6, 'Notas', '15%') }}
-                                {{ audit_sort_th(7, 'Resolución', '15%', 'right') }}
+                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '8%', 'center') }}{% endif %}
+                                {{ audit_sort_th(6 if not muestra_geo_audit else 7, 'Notas', '12%' if muestra_geo_audit else '15%') }}
+                                {{ audit_sort_th(7 if not muestra_geo_audit else 8, 'Resolución', '12%' if muestra_geo_audit else '15%', 'right') }}
                             </tr>
                         </thead>
                         <tbody>
                             {% for reg in var_conflictos %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 <td data-sort-value="{{ reg.user.lastname|lower }}">
                                     <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or _('Externo') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
@@ -169,6 +203,7 @@ tr.audit-row-highlight {
                                 <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
                                     {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
+                                {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
@@ -213,8 +248,9 @@ tr.audit-row-highlight {
                                 {{ audit_sort_th(3, fichaje_col, '20%') }}
                                 {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
                                 {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
-                                {{ audit_sort_th(6, 'Notas', '15%') }}
-                                {{ audit_sort_th(7, 'Resolución', '20%', 'right') }}
+                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '8%', 'center') }}{% endif %}
+                                {{ audit_sort_th(6 if not muestra_geo_audit else 7, 'Notas', '12%' if muestra_geo_audit else '15%') }}
+                                {{ audit_sort_th(7 if not muestra_geo_audit else 8, 'Resolución', '12%' if muestra_geo_audit else '20%', 'right') }}
                             </tr>
                         </thead>
                         <tbody>
@@ -223,6 +259,7 @@ tr.audit-row-highlight {
                                 data-user-id="{{ reg.user_id }}"
                                 data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
                                 {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
+                                {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %}
                                 data-tour-audit-row
                                 style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
@@ -243,6 +280,7 @@ tr.audit-row-highlight {
                                 <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
                                     {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
+                                {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
@@ -417,9 +455,10 @@ tr.audit-row-highlight {
                         {{ audit_sort_th(3, 'Trazabilidad', '26%', 'center') }}
                         {{ audit_sort_th(4, 'Entrada', '6%', 'center', 'time') }}
                         {{ audit_sort_th(5, 'Salida', '6%', 'center', 'time') }}
-                        {{ audit_sort_th(6, 'Notas', '14%') }}
-                        {{ audit_sort_th(7, 'Auditado por', '8%') }}
-                        {{ audit_sort_th(8, 'Hora reg.', '7%', '', 'date') }}
+                        {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center') }}{% endif %}
+                        {{ audit_sort_th(6 if not muestra_geo_audit else 7, 'Notas', '10%' if muestra_geo_audit else '14%') }}
+                        {{ audit_sort_th(7 if not muestra_geo_audit else 8, 'Auditado por', '8%') }}
+                        {{ audit_sort_th(8 if not muestra_geo_audit else 9, 'Hora reg.', '7%', '', 'date') }}
                         {% if can_resolve_fichajes %}
                         <th style="width:7%;" class="text-center no-sort">{{ _('Acción') }}</th>
                         {% endif %}
@@ -427,7 +466,7 @@ tr.audit-row-highlight {
                 </thead>
                 <tbody>
                     {% for reg in historial %}
-                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
+                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
                         <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                         <td data-sort-value="{{ reg.user.lastname|lower }}">
                             <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
@@ -491,6 +530,7 @@ tr.audit-row-highlight {
                         <td class="text-center">
                             {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                         </td>
+                        {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
                         {{ celda_notas(reg) }}
                         <td>
                             {% if reg.resuelto_por %}
@@ -677,6 +717,23 @@ tr.audit-row-highlight {
 <script>
 var dtCorrecciones = null;
 var dtHistorial = null;
+var SP_HISTORIAL_DATE_COL = {{ 9 if muestra_geo_audit else 8 }};
+var SP_GEO_FILTER_DUDOSA = false;
+
+function applyGeoDudosaFilter(active) {
+    SP_GEO_FILTER_DUDOSA = !!active;
+    document.querySelectorAll('.fila-fichaje-auditoria').forEach(function (row) {
+        if (!SP_GEO_FILTER_DUDOSA) {
+            row.style.display = '';
+            return;
+        }
+        row.style.display = row.getAttribute('data-geo-estado') === 'dudosa' ? '' : 'none';
+    });
+    var stat = document.getElementById('auditGeoDudosaStat');
+    if (stat) {
+        stat.classList.toggle('auditoria-stat--active', SP_GEO_FILTER_DUDOSA);
+    }
+}
 
 function initAuditDataTable(tableId, options) {
     var $el = $('#' + tableId);
@@ -690,7 +747,7 @@ function initAuditDataTable(tableId, options) {
         language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/' + dtLang + '.json' }
     };
     if (tableId === 'historialTable') {
-        defaults.columnDefs.push({ targets: 8, type: 'num' });
+        defaults.columnDefs.push({ targets: SP_HISTORIAL_DATE_COL, type: 'num' });
     }
     return $el.DataTable($.extend(true, {}, defaults, options || {}));
 }
@@ -756,6 +813,12 @@ $(document).ready(function() {
             e.preventDefault();
             openAuditoriaSection($(this).data('audit-target'));
         }
+    });
+
+    $('#auditGeoDudosaStat').on('click', function (e) {
+        e.stopPropagation();
+        applyGeoDudosaFilter(!SP_GEO_FILTER_DUDOSA);
+        openAuditoriaSection('#collapseHistorial');
     });
 
     // Acordeón: cada sección se abre/cierra de forma independiente

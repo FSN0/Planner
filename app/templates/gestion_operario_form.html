@@ -81,6 +81,7 @@
 
       <form action="{{ action_url }}" method="POST" id="userCreateForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="back" value="{{ request.args.get('back', '') }}">
         {% if return_to %}
         <input type="hidden" name="next" value="{{ return_to }}">
         {% endif %}
@@ -95,8 +96,17 @@
             <option value="admin" {% if role_actual == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
           </select>
           <small class="form-text text-muted" style="font-size: 0.72rem;">
+            {% if tenant_usa_acceso_pin %}
             {{ _('Operario: entra con DNI + PIN. El resto: email y contraseña en el panel de oficina.') }}
+            {% else %}
+            {{ _('Todos entran con correo y contraseña (o SSO/Odoo si está configurado).') }}
+            {% endif %}
           </small>
+          {% if edit_mode and user.external_ids and user.external_ids.get('role_manual') %}
+          <p class="small text-info mb-0 mt-1">
+            <i class="fas fa-lock mr-1"></i>{{ _('Rol protegido: la sincronización Odoo no lo cambiará.') }}
+          </p>
+          {% endif %}
         </div>
 
         <div class="admin-form-section">{{ _('Datos básicos') }}</div>
@@ -117,6 +127,7 @@
         </div>
 
         {# —— Operario: PIN —— #}
+        {% if tenant_usa_acceso_pin %}
         <div id="operarioAccessBlock" data-tour="user-acceso">
           {% if not edit_mode %}
           <div class="admin-form-section">{{ _('Acceso del operario (DNI + PIN)') }}</div>
@@ -150,6 +161,9 @@
             </small>
           </div>
         </div>
+        {% else %}
+        <div id="operarioAccessBlock" style="display:none;" aria-hidden="true"></div>
+        {% endif %}
 
         {# —— Oficina: email + contraseña —— #}
         <div id="officeAccessBlock" style="display: none;" data-tour="user-acceso-office">
@@ -204,6 +218,7 @@
 
             <div class="admin-form-section">{{ _('Acceso') }}</div>
             <div class="form-group">
+              {% if tenant_usa_acceso_pin %}
               <label class="admin-form-label">{{ _('Modo de acceso') }}</label>
               <select name="auth_mode" class="form-control" style="max-width:320px;">
                 {% set modo = user.auth_mode if edit_mode else ('pin' if role_actual == 'operario' else 'password') %}
@@ -212,6 +227,10 @@
                 <option value="both" {% if modo == 'both' %}selected{% endif %}>{{ _('PIN y contraseña') }}</option>
               </select>
               <p class="admin-form-switch-hint mb-0">{{ _('En el login unificado: correo o DNI en el primer campo; contraseña o PIN en el segundo.') }}</p>
+              {% else %}
+              <input type="hidden" name="auth_mode" value="password">
+              <p class="admin-form-switch-hint mb-0">{{ _('Acceso con correo y contraseña.') }}</p>
+              {% endif %}
             </div>
 
             <div class="admin-form-section">{{ _('Perfil profesional') }}</div>
@@ -274,7 +293,7 @@
       </form>
     </section>
 
-    {% if edit_mode and user.role == 'operario' %}
+    {% if edit_mode and user.role == 'operario' and tenant_usa_acceso_pin %}
     <section class="admin-panel admin-form-panel mt-3" id="pinEditSection" data-tour="user-pin-edit">
       <div class="admin-panel-header">
         <h2 class="admin-panel-title">{{ _('PIN de fichaje') }}</h2>
@@ -378,13 +397,14 @@
   var officeEmail = document.getElementById('officeEmail');
   var officePassword = document.getElementById('officePassword');
   var editMode = {{ edit_mode|tojson }};
+  var tenantUsaPin = {{ tenant_usa_acceso_pin|default(false)|tojson }};
 
   function isOperario() {
     return roleSelect && roleSelect.value === 'operario';
   }
 
   function syncPinMode() {
-    if (editMode || !isOperario()) return;
+    if (!tenantUsaPin || editMode || !isOperario()) return;
     var sendLink = pinEmail && pinEmail.checked;
     if (pinManualGroup) pinManualGroup.style.display = sendLink ? 'none' : '';
     if (pinInput) {
@@ -405,6 +425,19 @@
 
   function syncRole() {
     var op = isOperario();
+    if (!tenantUsaPin) {
+      if (operarioBlock) operarioBlock.style.display = 'none';
+      if (officeBlock) officeBlock.style.display = '';
+      if (officeEmail) {
+        officeEmail.required = true;
+        officeEmail.disabled = false;
+      }
+      if (officePassword) {
+        officePassword.required = !editMode;
+        officePassword.disabled = false;
+      }
+      return;
+    }
     if (operarioBlock) operarioBlock.style.display = op ? '' : 'none';
     if (officeBlock) officeBlock.style.display = op ? 'none' : '';
 

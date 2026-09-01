@@ -687,7 +687,8 @@
   padding: 0.6rem 0; border-bottom: 1px solid #f1f5f9;
 }
 .sync-error-item:last-child { border-bottom: none; }
-.sync-error-item-head { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.2rem; }
+.sync-error-item-head { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.2rem; align-items: flex-start; }
+.sync-log-visto-btn { flex-shrink: 0; padding: 0.15rem 0.4rem !important; min-width: 0; }
 .sync-error-tipo { font-size: 0.72rem; font-weight: 700; color: #dc2626; }
 .sync-error-fecha { font-size: 0.65rem; color: #94a3b8; }
 .sync-error-detail { font-size: 0.72rem; color: #64748b; line-height: 1.4; }
@@ -728,6 +729,27 @@
 .sync-preview-title { margin: 0; font-size: 1.15rem; font-weight: 700; color: #1e293b; }
 .sync-preview-title i { color: #22c55e; margin-right: 0.35rem; }
 .sync-preview-sub { margin: 0.2rem 0 0; font-size: 0.78rem; color: #64748b; }
+.sync-preview-sub--cached { color: #92400e; }
+.sync-preview-sub--cached a { color: #2563eb; font-weight: 600; }
+.sync-preview-cache-tag {
+  display: inline-block;
+  margin-left: 0.25rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #fffbeb;
+  color: #b45309;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.sync-pending-btn {
+  color: #b45309 !important;
+  border-color: #fcd34d !important;
+  background: #fffbeb !important;
+}
+.sync-pending-btn:hover {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+}
 .sync-preview-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 .sync-preview-stats {

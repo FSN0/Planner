@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260901a">
 <style>
   .veh-toolbar-filters {
     display: flex;
@@ -23,9 +23,9 @@
     overflow: visible;
   }
   .admin-main--compact.vehiculos-page .admin-table-scroll {
-    max-height: calc(100vh - 220px);
+    max-height: none;
     overflow-x: auto;
-    overflow-y: auto;
+    overflow-y: visible;
     padding-bottom: 0.75rem;
   }
 </style>

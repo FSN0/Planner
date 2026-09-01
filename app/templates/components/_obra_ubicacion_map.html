@@ -1,0 +1,101 @@
+{# Mapa para ubicar la obra. Requiere Leaflet + obra-ubicacion-map.js #}
+<style>
+  .obra-geo-block { margin-top: 0.75rem; }
+  .obra-geo-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .obra-geo-preview {
+    font-size: 0.78rem;
+    color: #64748b;
+    flex: 1 1 200px;
+  }
+  .obra-geo-panel {
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid #e2e8f0;
+  }
+  .obra-geo-panel.d-none { display: none !important; }
+  .obra-geo-map {
+    height: 320px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    margin-top: 0.5rem;
+  }
+  .obra-geo-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: flex-end; }
+  .obra-geo-row .form-group { flex: 1 1 180px; margin-bottom: 0; }
+  .obra-geo-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.35rem; align-items: center; }
+  .obra-geo-status { font-size: 0.72rem; color: #64748b; margin-left: auto; }
+  .obra-geo-status.is-ok { color: #15803d; }
+  .obra-geo-status.is-error { color: #b91c1c; }
+</style>
+
+{% set geo_ubicacion = form_data.get('ubicacion', obra.ubicacion if obra is defined and obra else '') %}
+{% set geo_lat = form_data.get('latitud', obra.latitud if obra is defined and obra else '') %}
+{% set geo_lng = form_data.get('longitud', obra.longitud if obra is defined and obra else '') %}
+{% set geo_obra_id = obra.id if obra is defined and obra else '' %}
+
+<div class="obra-geo-block" id="obraGeoBlock"
+     data-obra-id="{{ geo_obra_id }}"
+     data-save-url="{{ url_for('admin.api_obra_ubicacion', obra_id=geo_obra_id) if geo_obra_id else '' }}"
+     data-csrf="{{ csrf_token() }}"
+     data-lat="{{ geo_lat }}"
+     data-lng="{{ geo_lng }}"
+     data-radio-default="{{ radio_default|default(150) }}"
+     data-label-expand="{{ _('Ampliar mapa') }}"
+     data-label-collapse="{{ _('Ocultar mapa') }}">
+  <label class="admin-form-label">{{ _('Ubicación en mapa') }}</label>
+  <div class="obra-geo-summary">
+    <p class="obra-geo-preview mb-0" id="obraGeoPreview">
+      {% if geo_lat and geo_lng %}
+        {{ geo_ubicacion or _('Pin fijado (sin dirección)') }}
+      {% else %}
+        {{ _('Sin ubicación fijada') }}
+      {% endif %}
+    </p>
+    <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="obraGeoToggle" aria-expanded="false">
+      <i class="fas fa-map-marked-alt"></i> {{ _('Ampliar mapa') }}
+    </button>
+  </div>
+  <p class="form-text text-muted mb-0 mt-1" style="font-size: 0.72rem;">
+    {{ _('El radio de geocerca es global (Configuración → Fichaje). Busca una dirección o haz clic en el mapa.') }}
+  </p>
+
+  <div class="obra-geo-panel d-none" id="obraGeoPanel">
+    <div class="obra-geo-row">
+      <div class="form-group" style="flex: 2 1 260px;">
+        <input type="text" id="obraGeoDireccion" class="form-control"
+               placeholder="{{ _('Dirección o lugar') }}" maxlength="100"
+               value="{{ geo_ubicacion }}">
+      </div>
+    </div>
+    <div class="obra-geo-actions">
+      <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="obraGeoBuscar">
+        <i class="fas fa-search-location"></i> {{ _('Buscar') }}
+      </button>
+      <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="obraGeoLimpiar">
+        <i class="fas fa-eraser"></i> {{ _('Quitar pin') }}
+      </button>
+      {% if geo_obra_id %}
+      <button type="button" class="btn-admin btn-admin-primary btn-sm" id="obraGeoGuardar">
+        <i class="fas fa-save"></i> {{ _('Guardar ubicación') }}
+      </button>
+      {% else %}
+      <span class="form-text text-muted mb-0" style="font-size: 0.72rem;">
+        {{ _('Tras crear la obra podrás guardar la ubicación sin guardar el resto del formulario.') }}
+      </span>
+      {% endif %}
+      <span class="obra-geo-status" id="obraGeoStatus" aria-live="polite"></span>
+    </div>
+    <div id="obraGeoMap" class="obra-geo-map"></div>
+  </div>
+
+  {% if not geo_obra_id %}
+  <input type="hidden" name="ubicacion" id="obraGeoUbicacion" value="{{ geo_ubicacion }}">
+  <input type="hidden" name="latitud" id="obraGeoLat" value="{{ geo_lat }}">
+  <input type="hidden" name="longitud" id="obraGeoLng" value="{{ geo_lng }}">
+  {% endif %}
+</div>
