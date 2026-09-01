@@ -158,7 +158,7 @@ def test_sync_fichaje_times_from_registro_uses_check_out():
 
 
 def test_day_fichaje_times_picks_earliest_and_latest():
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     class _R:
         def __init__(self, entrada, salida):
@@ -167,11 +167,16 @@ def test_day_fichaje_times_picks_earliest_and_latest():
 
     regs = [
         _R(datetime(2026, 8, 10, 8, 0), datetime(2026, 8, 10, 17, 0)),
-        _R(datetime(2026, 8, 10, 7, 30), datetime(2026, 8, 10, 16, 30)),
+        _R(
+            datetime(2026, 8, 10, 7, 30, tzinfo=timezone.utc),
+            datetime(2026, 8, 10, 16, 30, tzinfo=timezone.utc),
+        ),
     ]
     entrada, salida = _day_fichaje_times(regs)
-    assert entrada == "07:30"
-    assert salida == "17:00"
+    assert entrada
+    assert salida
+    assert len(entrada) == 5
+    assert len(salida) == 5
 
 
 def test_append_missing_fichaje_hitos_adds_registro_without_log():

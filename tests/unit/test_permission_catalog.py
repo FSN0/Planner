@@ -59,6 +59,13 @@ def test_jefe_soltec_shortcuts_without_integraciones_hub():
     assert 'r' in default_actions(ROLE_JEFE, 'soltec_portal')
 
 
+def test_timeline_dia_uses_auditoria_not_integraciones():
+    from app.services.permission_guard import _SYNC_RULES, _match_rule
+
+    matched = _match_rule(_SYNC_RULES, '/sync/timeline_dia/12/2026-08-10', 'GET')
+    assert matched == ('auditoria_fichajes', 'r')
+
+
 def test_integration_modules_in_catalog():
     keys = set(module_keys())
     assert 'integraciones' in keys

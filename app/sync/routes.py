@@ -1860,12 +1860,22 @@ def sync_vehiculos_manual():
 @login_required
 def get_timeline_dia(user_id, fecha_str):
     """Compatibilidad con auditoría de fichajes. Delega en el servicio compartido."""
+    from flask import current_app
     from app.services.person_day_timeline_service import build_person_day_timeline
 
     if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
         return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
-    data = build_person_day_timeline(user_id, fecha_str)
+    try:
+        data = build_person_day_timeline(user_id, fecha_str)
+    except Exception:
+        current_app.logger.exception(
+            'timeline_dia falló user_id=%s fecha=%s', user_id, fecha_str
+        )
+        return jsonify({
+            'success': False,
+            'error': translate('No se pudo cargar el historial.'),
+        }), 500
     if not data:
         return jsonify({'success': False, 'error': translate('Operario no encontrado')}), 404
     return jsonify(data)

@@ -1403,12 +1403,22 @@ def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color
 @api_bp.route('/person-day-timeline/<int:user_id>/<string:fecha_str>', methods=['GET'])
 @login_required
 def person_day_timeline(user_id, fecha_str):
+    from flask import current_app
     from app.services.person_day_timeline_service import build_person_day_timeline
 
-    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
+    if current_user.role not in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH):
         return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
-    data = build_person_day_timeline(user_id, fecha_str)
+    try:
+        data = build_person_day_timeline(user_id, fecha_str)
+    except Exception:
+        current_app.logger.exception(
+            'person-day-timeline falló user_id=%s fecha=%s', user_id, fecha_str
+        )
+        return jsonify({
+            'success': False,
+            'error': translate('No se pudo cargar el historial.'),
+        }), 500
     if not data:
         return jsonify({'success': False, 'error': translate('Operario no encontrado')}), 404
     return jsonify(data)
@@ -1420,7 +1430,7 @@ def person_day_timeline_range(user_id):
     """Rango de fechas: ?from=YYYY-MM-DD&to=YYYY-MM-DD (uno solo = un día)."""
     from app.services.person_day_timeline_service import build_person_day_timeline_range
 
-    if current_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
+    if current_user.role not in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH):
         return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
     fecha_from = request.args.get('from') or request.args.get('fecha_inicio')

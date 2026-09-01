@@ -1,6 +1,6 @@
 # app/services/person_day_timeline_service.py
 import re
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 
 from flask import url_for
 from markupsafe import Markup, escape
@@ -434,8 +434,17 @@ def _sync_fichaje_times_from_registro(log, detail):
 
 
 def _day_fichaje_times(registros):
-    entradas = [r.check_in for r in registros if r.check_in]
-    salidas = [r.check_out for r in registros if r.check_out]
+    def _sort_key(dt):
+        if dt is None:
+            return None
+        if getattr(dt, 'tzinfo', None) is not None:
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+
+    entradas = [_sort_key(r.check_in) for r in registros if r.check_in]
+    salidas = [_sort_key(r.check_out) for r in registros if r.check_out]
+    entradas = [d for d in entradas if d is not None]
+    salidas = [d for d in salidas if d is not None]
     entrada = format_time(min(entradas)) if entradas else None
     salida = format_time(max(salidas)) if salidas else None
     return entrada, salida
@@ -866,7 +875,7 @@ def build_person_day_timeline(user_id, fecha_obj):
         hitos, logs_del_dia, user, fecha_obj, obra_cache
     )
     hitos = _append_missing_fichaje_hitos(hitos, user, fecha_obj, obra_cache)
-    hitos.sort(key=lambda x: (x["sort_time"], x["prioridad"]))
+    hitos.sort(key=lambda x: (x.get("sort_time") or "", x.get("prioridad") or 0))
 
     if not hitos:
         hitos = [{

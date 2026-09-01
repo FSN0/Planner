@@ -46,6 +46,9 @@ _ADMIN_RULES = (
 _SYNC_RULES = (
     ('/sync/auditoria-vehiculos', 'auditoria_vehiculos', 'r', {'POST': 'w'}),
     ('/sync/auditoria', 'auditoria_fichajes', 'r', {'POST': 'w'}),
+    # Historial del día (pelotitas): NO es el hub Odoo. Sin esta línea pega
+    # el catch-all /sync → integraciones y el fetch recibe un HTML de redirect.
+    ('/sync/timeline_dia', 'auditoria_fichajes', 'r', {}),
     # Previews y commits = escritura del centro Odoo
     ('/sync/api/sync-log', 'sync_odoo', 'r', {'POST': 'w'}),
     ('/sync/preview', 'sync_odoo', 'w', {'POST': 'w'}),
