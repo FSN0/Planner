@@ -903,6 +903,7 @@ def worker_panel(user_id):
     ) if history_open else None
     from app.services.permission_service import can_resolve_fichajes
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    from app.services.impersonation_service import admin_puede_impersonar, puede_ser_impersonado
     from app.utils.nav_back import resolve_back_url
     if current_user.role == ROLE_JEFE:
         back_url = resolve_back_url('admin.obras_detailed')
@@ -920,6 +921,10 @@ def worker_panel(user_id):
         history_open=history_open,
         history_page=history_page,
         can_edit_calendar=user_can(current_user, 'worker_panel', 'w'),
+        puede_impersonar=(
+            admin_puede_impersonar(current_user)
+            and puede_ser_impersonado(worker, current_user)
+        ),
         puede_resolver_auditoria=(
             can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
         ),

@@ -1,5 +1,28 @@
 var t = window.SP_T || function (key) { return key; };
 
+function calendarSwal(titleOrOpts, text, icon) {
+    if (typeof Swal === 'undefined') return Promise.resolve();
+    var opts;
+    if (titleOrOpts && typeof titleOrOpts === 'object') {
+        opts = titleOrOpts;
+        if (opts.heightAuto === false) {
+            return Swal.fire(opts);
+        }
+    } else {
+        opts = { title: titleOrOpts, text: text, icon: icon || 'info' };
+    }
+    if (typeof window.adminSwal === 'function') return window.adminSwal(opts);
+    if (typeof window.adminSwalDefaults === 'function') return Swal.fire(window.adminSwalDefaults(opts));
+    opts.heightAuto = false;
+    opts.scrollbarPadding = false;
+    return Swal.fire(opts);
+}
+
+function eventFromFichajeDot(jsEvent) {
+    var el = jsEvent && (jsEvent.target || jsEvent.srcElement);
+    return !!(el && el.closest && el.closest('[data-fichaje-dot]'));
+}
+
 class UniversalCalendarManager {
     constructor(elementId, config) {
         this.element = document.getElementById(elementId);
@@ -338,6 +361,11 @@ class UniversalCalendarManager {
                             dotEl.setAttribute('tabindex', '0');
                             dotEl.setAttribute('aria-label', t('Ver historial del fichaje del día'));
                             dotEl.title = t('Clic para ver el historial del día');
+                            ['pointerdown', 'mousedown'].forEach(function (type) {
+                                dotEl.addEventListener(type, function (e) {
+                                    e.stopPropagation();
+                                });
+                            });
                         }
                         dotEl.innerHTML = `<span style="display:inline-block; width:12px; height:12px; border-radius:50%; background-color:${dotColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.5); border: 2px solid #fff; cursor:${dotInteractive ? 'pointer' : 'help'};"></span>`;
                         
@@ -415,6 +443,7 @@ class UniversalCalendarManager {
             },
 
             dateClick: function(info) {
+                if (eventFromFichajeDot(info.jsEvent)) return;
                 if (_this.partialSelectionMode) {
                     if (_this.callbacks.onDateToggle) _this.callbacks.onDateToggle(info.dateStr);
                     return;
@@ -426,13 +455,17 @@ class UniversalCalendarManager {
                 let today = moment().startOf('day');
                 let clickedDate = moment(info.dateStr).startOf('day');
                 if (clickedDate.isBefore(today)) {
-                    if (typeof Swal !== 'undefined') Swal.fire(t('Acción no permitida'), t('No puedes planificar en días pasados.'), 'warning');
+                    calendarSwal(t('Acción no permitida'), t('No puedes planificar en días pasados.'), 'warning');
                     return;
                 }
                 _this.createGhostEvent(info.dateStr); 
             },
 
             select: function(info) {
+                if (eventFromFichajeDot(info.jsEvent)) {
+                    _this.calendar.unselect();
+                    return;
+                }
                 if (_this.partialSelectionMode) {
                     _this.calendar.unselect();
                     return;
@@ -452,7 +485,7 @@ class UniversalCalendarManager {
                 }
                 if (start.isBefore(today)) {
                     _this.calendar.unselect();
-                    if (typeof Swal !== 'undefined') Swal.fire(t('Acción no permitida'), t('No puedes planificar en días pasados.'), 'warning');
+                    calendarSwal(t('Acción no permitida'), t('No puedes planificar en días pasados.'), 'warning');
                     return;
                 }
                 _this.createGhostEventRange(
@@ -538,7 +571,7 @@ class UniversalCalendarManager {
                     if (typeof Swal !== 'undefined') {
                         if (targetUrl) {
                             const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
-                            Swal.fire(swalBase({
+                            calendarSwal(swalBase({
                                 title: isPast ? t('Bloque Histórico') : t('Acción no permitida'),
                                 text: reasonText,
                                 icon: 'info',
@@ -559,7 +592,7 @@ class UniversalCalendarManager {
                             });
                         } else {
                             const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
-                            Swal.fire(swalBase({ title: t('Acción no permitida'), text: reasonText, icon: 'warning', confirmButtonText: t('Entendido') }));
+                            calendarSwal(swalBase({ title: t('Acción no permitida'), text: reasonText, icon: 'warning', confirmButtonText: t('Entendido') }));
                         }
                     } else {
                         alert(reasonText);
@@ -583,7 +616,7 @@ class UniversalCalendarManager {
                 
                 let today = moment().startOf('day');
                 if (moment(info.event.start).startOf('day').isBefore(today)) {
-                    if(typeof Swal !== 'undefined') Swal.fire(t('Acción no permitida'), t('No puedes mover una asignación a una fecha pasada.'), 'warning');
+                    if(typeof Swal !== 'undefined') calendarSwal(t('Acción no permitida'), t('No puedes mover una asignación a una fecha pasada.'), 'warning');
                     info.revert();
                     return;
                 }
@@ -600,7 +633,7 @@ class UniversalCalendarManager {
                 let today = moment().startOf('day');
                 let endReal = info.event.end ? moment(info.event.end).subtract(1, 'days').startOf('day') : moment(info.event.start).startOf('day');
                 if (endReal.isBefore(today)) {
-                    if(typeof Swal !== 'undefined') Swal.fire(t('Acción no permitida'), t('La asignación debe terminar al menos hoy o en una fecha futura.'), 'warning');
+                    if(typeof Swal !== 'undefined') calendarSwal(t('Acción no permitida'), t('La asignación debe terminar al menos hoy o en una fecha futura.'), 'warning');
                     info.revert();
                     return;
                 }
@@ -683,7 +716,7 @@ class UniversalCalendarManager {
                 if (this.context === 'solicitud') {
                     this.hidePanel();
                     if (this.activeEvent && this.activeEvent.id === this.ghostEventId) this.activeEvent.remove();
-                    if (typeof Swal !== 'undefined') Swal.fire(t('Aviso'), t('No puedes crear asignaciones libres directamente desde la vista de solicitudes.'), 'info');
+                    if (typeof Swal !== 'undefined') calendarSwal(t('Aviso'), t('No puedes crear asignaciones libres directamente desde la vista de solicitudes.'), 'info');
                     return;
                 }
 
@@ -742,7 +775,7 @@ class UniversalCalendarManager {
                         else if (this.context === 'obra' || this.context === 'vehiculo') targetUrl = this._adminUrl(`/admin/worker_panel/${props.worker_id}`);
                         
                         if (targetUrl) window.open(targetUrl, '_blank');
-                        else if(typeof Swal !== 'undefined') Swal.fire(t('Información'), t('No hay enlace directo disponible.'), 'info');
+                        else if(typeof Swal !== 'undefined') calendarSwal(t('Información'), t('No hay enlace directo disponible.'), 'info');
                     };
                 }
             }
@@ -1047,7 +1080,7 @@ class UniversalCalendarManager {
                 const rows = listEl.querySelectorAll('.univ-worker-row');
                 if (rows.length <= 1) {
                     if (typeof Swal !== 'undefined') {
-                        Swal.fire(t('Atención'), t('Debe quedar al menos un trabajador.'), 'info');
+                        calendarSwal(t('Atención'), t('Debe quedar al menos un trabajador.'), 'info');
                     }
                     return;
                 }
@@ -1134,7 +1167,7 @@ class UniversalCalendarManager {
         const ok = results.filter((r) => r.success);
         if (!failed.length) {
             if (typeof Swal !== 'undefined') {
-                Swal.fire({
+                calendarSwal({
                     toast: true, position: 'top-end', icon: 'success',
                     title: res.message || t('Guardado'),
                     showConfirmButton: false, timer: 2000,
@@ -1153,7 +1186,7 @@ class UniversalCalendarManager {
         });
         html += '</ul>';
         if (typeof Swal !== 'undefined') {
-            Swal.fire({
+            calendarSwal({
                 title: ok.length ? t('Asignación parcial') : t('No se pudo asignar'),
                 html,
                 icon: ok.length ? 'warning' : 'error',
@@ -1227,7 +1260,7 @@ class UniversalCalendarManager {
             let startVal = startInput ? startInput.value : null;
             let endVal = endInput ? endInput.value : null;
             if (!startVal || !endVal) {
-                if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Indica fecha de inicio y fin.'), 'warning');
+                if (typeof Swal !== 'undefined') calendarSwal(t('Atención'), t('Indica fecha de inicio y fin.'), 'warning');
                 return;
             }
             const TIPO_VACACIONES = 'Vacaciones';
@@ -1249,11 +1282,11 @@ class UniversalCalendarManager {
                 .then(({ ok, res }) => {
                     if (!ok || !res || !res.success) {
                         const msg = (res && (res.error || res.message)) || t('No se pudo guardar');
-                        if (typeof Swal !== 'undefined') Swal.fire(t('Error'), msg, 'error');
+                        if (typeof Swal !== 'undefined') calendarSwal(t('Error'), msg, 'error');
                         return;
                     }
                     if (typeof Swal !== 'undefined') {
-                        Swal.fire({
+                        calendarSwal({
                             toast: true,
                             position: 'top-end',
                             icon: 'success',
@@ -1266,11 +1299,11 @@ class UniversalCalendarManager {
                     this.hidePanel();
                 })
                 .catch(() => {
-                    if (typeof Swal !== 'undefined') Swal.fire(t('Error'), t('Fallo de conexión'), 'error');
+                    if (typeof Swal !== 'undefined') calendarSwal(t('Error'), t('Fallo de conexión'), 'error');
                 });
             };
             if (typeof Swal !== 'undefined') {
-                Swal.fire({
+                calendarSwal({
                     title: t('Marcar ausencia'),
                     input: 'text',
                     inputValue: t(TIPO_VACACIONES),
@@ -1301,7 +1334,7 @@ class UniversalCalendarManager {
 
             if (this.activeEvent.id === this.ghostEventId) {
                 if (moment(startVal).isBefore(today)) {
-                    if(typeof Swal !== 'undefined') Swal.fire(t('Error'), t('No puedes planificar en el pasado.'), 'error');
+                    if(typeof Swal !== 'undefined') calendarSwal(t('Error'), t('No puedes planificar en el pasado.'), 'error');
                     return;
                 }
                 
@@ -1320,7 +1353,7 @@ class UniversalCalendarManager {
 
                 if (this.context === 'vehiculo') {
                     if (!selVal || String(selVal) === 'GENERICO') {
-                        Swal.fire(t('Atención'), t('Selecciona un operario para asignar el vehículo.'), 'warning');
+                        calendarSwal(t('Atención'), t('Selecciona un operario para asignar el vehículo.'), 'warning');
                         return;
                     }
                     const vPayload = {
@@ -1335,7 +1368,7 @@ class UniversalCalendarManager {
                     this.executeVehicleSave(vPayload, (vres) => {
                         if (!vres || !vres.success) return;
                         if (typeof Swal !== 'undefined') {
-                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Vehículo asignado'), showConfirmButton: false, timer: 1800});
+                            calendarSwal({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Vehículo asignado'), showConfirmButton: false, timer: 1800});
                         }
                         this.calendar.refetchEvents(); this.hidePanel();
                         if (window.loadTimelineData) window.loadTimelineData();
@@ -1345,7 +1378,7 @@ class UniversalCalendarManager {
 
                 if (this.context === 'worker') {
                     if (!selVal && !vehicleVal) {
-                        Swal.fire(t('Atención'), t('Selecciona una obra y/o un vehículo, o usa «Marcar vacaciones».'), 'warning');
+                        calendarSwal(t('Atención'), t('Selecciona una obra y/o un vehículo, o usa «Marcar vacaciones».'), 'warning');
                         return;
                     }
                 }
@@ -1354,7 +1387,7 @@ class UniversalCalendarManager {
                 const multiWorkers = (this.context === 'obra') ? this._collectMultiWorkers() : null;
                 if (this.context === 'obra' && multiWorkers !== null) {
                     if (!multiWorkers.length) {
-                        Swal.fire(t('Atención'), t('Debes seleccionar al menos un trabajador.'), 'warning');
+                        calendarSwal(t('Atención'), t('Debes seleccionar al menos un trabajador.'), 'warning');
                         return;
                     }
                     // Un solo GENERICO → flujo legacy de solicitud genérica
@@ -1363,7 +1396,7 @@ class UniversalCalendarManager {
                     } else {
                         const realWorkers = multiWorkers.filter((w) => String(w.worker_id) !== 'GENERICO');
                         if (!realWorkers.length) {
-                            Swal.fire(t('Atención'), t('Debes seleccionar trabajadores concretos.'), 'warning');
+                            calendarSwal(t('Atención'), t('Debes seleccionar trabajadores concretos.'), 'warning');
                             return;
                         }
                         // Un solo trabajador: legacy (conflictos interactivos) + vehículo de la fila
@@ -1411,7 +1444,7 @@ class UniversalCalendarManager {
                 }
 
                 if (this.context !== 'worker' && !selVal) {
-                    Swal.fire(t('Atención'), t('Debes seleccionar un destino/trabajador.'), 'warning');
+                    calendarSwal(t('Atención'), t('Debes seleccionar un destino/trabajador.'), 'warning');
                     return;
                 }
 
@@ -1484,11 +1517,11 @@ class UniversalCalendarManager {
                 let originalStart = moment(this.activeEvent.extendedProps.real_original_start || this.activeEvent.start).startOf('day');
                 
                 if (originalStart.isSameOrAfter(today) && moment(startVal).isBefore(today)) {
-                    if(typeof Swal !== 'undefined') Swal.fire(t('Error'), t('No puedes mover hacia el pasado.'), 'error');
+                    if(typeof Swal !== 'undefined') calendarSwal(t('Error'), t('No puedes mover hacia el pasado.'), 'error');
                     return;
                 }
                 if (moment(endVal).isBefore(today)) {
-                    if(typeof Swal !== 'undefined') Swal.fire(t('Error'), t('La fecha de fin no puede apuntar al pasado.'), 'error');
+                    if(typeof Swal !== 'undefined') calendarSwal(t('Error'), t('La fecha de fin no puede apuntar al pasado.'), 'error');
                     return;
                 }
 
@@ -1509,7 +1542,7 @@ class UniversalCalendarManager {
 
                 if (this.context === 'worker') {
                     if (!selVal) {
-                        if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Debes seleccionar una obra.'), 'warning');
+                        if (typeof Swal !== 'undefined') calendarSwal(t('Atención'), t('Debes seleccionar una obra.'), 'warning');
                         return;
                     }
                     payload.worker_id = this.entityId;
@@ -1517,7 +1550,7 @@ class UniversalCalendarManager {
                     payload.target_obra_id = selVal;
                 } else if (this.context === 'vehiculo') {
                     if (!selVal || String(selVal) === 'GENERICO') {
-                        if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Selecciona un operario.'), 'warning');
+                        if (typeof Swal !== 'undefined') calendarSwal(t('Atención'), t('Selecciona un operario.'), 'warning');
                         return;
                     }
                     const oldWorkerId = props.worker_id;
@@ -1538,7 +1571,7 @@ class UniversalCalendarManager {
                         this.executeVehicleSave(vPayload, (vres) => {
                             if (!vres || !vres.success) return;
                             if (typeof Swal !== 'undefined') {
-                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Guardado'), showConfirmButton: false, timer: 1500});
+                                calendarSwal({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Guardado'), showConfirmButton: false, timer: 1500});
                             }
                             afterVehicleSave();
                         });
@@ -1574,7 +1607,7 @@ class UniversalCalendarManager {
                 } else if (this.context === 'obra') {
                     const vehicleVal = this._resolvePanelVehicleId();
                     if (!selVal) {
-                        if (typeof Swal !== 'undefined') Swal.fire(t('Atención'), t('Debes seleccionar un trabajador.'), 'warning');
+                        if (typeof Swal !== 'undefined') calendarSwal(t('Atención'), t('Debes seleccionar un trabajador.'), 'warning');
                         return;
                     }
                     const oldWorkerId = props.worker_id;
@@ -1608,7 +1641,7 @@ class UniversalCalendarManager {
                     if (oldWorkerId && String(selVal) !== String(oldWorkerId) && String(selVal) !== 'GENERICO') {
                         const dates = this._buildEditableDates(startVal, endVal);
                         if (!dates.length) {
-                            if (typeof Swal !== 'undefined') Swal.fire(t('Histórico Protegido'), t('No hay días futuros editables en este bloque.'), 'info');
+                            if (typeof Swal !== 'undefined') calendarSwal(t('Histórico Protegido'), t('No hay días futuros editables en este bloque.'), 'info');
                             return;
                         }
                         this._unassignThenSave(oldWorkerId, this.entityId, dates, payload, (res) => {
@@ -1669,7 +1702,7 @@ class UniversalCalendarManager {
             let daysCount = Math.max(0, end.diff(start, 'days') + 1);
             
             if (daysCount <= 0) {
-                if (typeof Swal !== 'undefined') Swal.fire(t('Histórico Protegido'), t('Este bloque pertenece íntegramente al pasado y no se puede borrar.'), 'info');
+                if (typeof Swal !== 'undefined') calendarSwal(t('Histórico Protegido'), t('Este bloque pertenece íntegramente al pasado y no se puede borrar.'), 'info');
                 return;
             }
 
@@ -1686,7 +1719,7 @@ class UniversalCalendarManager {
                     : `${t('Se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b>.`;
 
                 const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
-                Swal.fire(swalBase({
+                calendarSwal(swalBase({
                     title: t('¿Desasignar bloque?'),
                     html: msg,
                     icon: 'warning',
@@ -1709,7 +1742,7 @@ class UniversalCalendarManager {
                         } else if (this.context === 'vehiculo') {
                             const wId = this.activeEvent.extendedProps.worker_id;
                             if (!wId) {
-                                Swal.fire(t('Error'), t('No se pudo identificar el operario del bloque.'), 'error');
+                                calendarSwal(t('Error'), t('No se pudo identificar el operario del bloque.'), 'error');
                                 return;
                             }
                             this.executeVehicleSave({
@@ -1722,7 +1755,7 @@ class UniversalCalendarManager {
                                 accion: 'DESASIGNAR',
                             }, (vres) => {
                                 if (!vres || !vres.success) return;
-                                Swal.fire({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Desasignado'), showConfirmButton: false, timer: 1500});
+                                calendarSwal({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Desasignado'), showConfirmButton: false, timer: 1500});
                                 this.calendar.refetchEvents(); this.hidePanel();
                                 if (window.loadTimelineData) window.loadTimelineData();
                             });
@@ -1740,10 +1773,10 @@ class UniversalCalendarManager {
                                 body: JSON.stringify({ worker_id: wId, obra_id: oId, dates: dates, mode: 'selected' })
                             }).then(r=>r.json()).then(data => {
                                 if(data.success) {
-                                    Swal.fire({toast: true, position: 'top-end', icon: 'success', title: t('Borrado'), showConfirmButton: false, timer: 1500});
+                                    calendarSwal({toast: true, position: 'top-end', icon: 'success', title: t('Borrado'), showConfirmButton: false, timer: 1500});
                                     this.calendar.refetchEvents(); this.hidePanel();
                                     if (window.loadTimelineData) window.loadTimelineData();
-                                } else { Swal.fire(t('Error'), data.message, 'error'); }
+                                } else { calendarSwal(t('Error'), data.message, 'error'); }
                             });
                         }
                     }
@@ -1825,7 +1858,7 @@ class UniversalCalendarManager {
     _finishPanelSave(opts) {
         opts = opts || {};
         if (!opts.skipToast && typeof Swal !== 'undefined') {
-            Swal.fire({
+            calendarSwal({
                 toast: true,
                 position: 'top-end',
                 icon: 'success',
@@ -1877,7 +1910,7 @@ class UniversalCalendarManager {
             body: JSON.stringify({ worker_id: workerId, obra_id: obraId, dates: dates, mode: 'selected' })
         }).then(r => r.json()).then(data => {
             if (!data.success) {
-                if (typeof Swal !== 'undefined') Swal.fire(t('Error'), data.message || t('No se pudo desasignar al trabajador anterior.'), 'error');
+                if (typeof Swal !== 'undefined') calendarSwal(t('Error'), data.message || t('No se pudo desasignar al trabajador anterior.'), 'error');
                 return;
             }
             // Tras desasignar, el alta del nuevo es una asignación nueva (sin rango original)
@@ -1888,7 +1921,7 @@ class UniversalCalendarManager {
             });
             this.executeSave(createPayload, afterSave);
         }).catch(() => {
-            if (typeof Swal !== 'undefined') Swal.fire(t('Error'), t('Error de red al cambiar el trabajador.'), 'error');
+            if (typeof Swal !== 'undefined') calendarSwal(t('Error'), t('Error de red al cambiar el trabajador.'), 'error');
         });
     }
 
@@ -2002,7 +2035,7 @@ class UniversalCalendarManager {
                 if (res.success) {
                     if (!options.skipHideOnSuccess) {
                         if (!options.skipSuccessToast && typeof Swal !== 'undefined') {
-                            Swal.fire({toast: true, position: 'top-end', icon: 'success', title: t('Guardado'), showConfirmButton: false, timer: 1500});
+                            calendarSwal({toast: true, position: 'top-end', icon: 'success', title: t('Guardado'), showConfirmButton: false, timer: 1500});
                         }
                         this.calendar.refetchEvents();
                         this.hidePanel();
@@ -2029,12 +2062,12 @@ class UniversalCalendarManager {
                         console.error("CRÍTICO: No se encontró window.resolverConflictoAsignacion.");
                     }
                 } else {
-                    if(typeof Swal !== 'undefined') Swal.fire(t('Error'), res.error || res.message || t('Error desconocido'), 'error');
+                    if(typeof Swal !== 'undefined') calendarSwal(t('Error'), res.error || res.message || t('Error desconocido'), 'error');
                     if (revertFunc) revertFunc();
                 }
             },
             error: () => {
-                if(typeof Swal !== 'undefined') Swal.fire(t('Error'), t('Fallo de red'), 'error');
+                if(typeof Swal !== 'undefined') calendarSwal(t('Error'), t('Fallo de red'), 'error');
                 if (revertFunc) revertFunc();
             }
         });
@@ -2064,7 +2097,7 @@ class UniversalCalendarManager {
                         });
                         detailHtml += '</ul>';
                     }
-                    Swal.fire({
+                    calendarSwal({
                         title: t('Conflicto de vehículo'),
                         html: (res.message || '') + detailHtml,
                         icon: 'warning',
@@ -2081,13 +2114,13 @@ class UniversalCalendarManager {
                     });
                 } else {
                     if (typeof Swal !== 'undefined') {
-                        Swal.fire(t('Error'), res.error || res.message || t('Error de vehículo'), 'error');
+                        calendarSwal(t('Error'), res.error || res.message || t('Error de vehículo'), 'error');
                     }
                     if (onDone) onDone(res);
                 }
             },
             error: () => {
-                if (typeof Swal !== 'undefined') Swal.fire(t('Error'), t('Fallo de red (vehículo)'), 'error');
+                if (typeof Swal !== 'undefined') calendarSwal(t('Error'), t('Fallo de red (vehículo)'), 'error');
                 if (onDone) onDone({ success: false });
             }
         });

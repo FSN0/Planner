@@ -448,9 +448,11 @@ window.PersonDayTimeline = (function () {
             }));
         }
 
-        root.addEventListener('mousedown', function (e) {
-            const dot = e.target.closest('[data-fichaje-dot]');
-            if (dot) e.stopPropagation();
+        ['mousedown', 'pointerdown'].forEach(function (type) {
+            root.addEventListener(type, function (e) {
+                const dot = e.target.closest('[data-fichaje-dot]');
+                if (dot) e.stopPropagation();
+            });
         });
 
         root.addEventListener('click', function (e) {

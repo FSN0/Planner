@@ -428,6 +428,11 @@ body > .select2-container--open {
   max-width: 100%;
 }
 
+.fc-fichaje-dot-float--interactive {
+  padding: 10px;
+  margin: -10px 0 0 -10px;
+  touch-action: manipulation;
+}
 .fc-fichaje-dot-float--interactive span {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }

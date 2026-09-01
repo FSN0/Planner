@@ -528,10 +528,25 @@ document.addEventListener('DOMContentLoaded', function () {
 // SweetAlert2 — estética admin compartida
 // =========================================================================
 window.adminSwalDefaults = function(overrides = {}) {
+    const scrollX = window.scrollX || window.pageXOffset || 0;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const restoreScroll = function () {
+        window.scrollTo(scrollX, scrollY);
+    };
+    const userDidOpen = overrides.didOpen;
+    const userDidClose = overrides.didClose;
+    const userWillClose = overrides.willClose;
+    const rest = Object.assign({}, overrides);
+    delete rest.didOpen;
+    delete rest.didClose;
+    delete rest.willClose;
+
     const base = {
         confirmButtonText: t('Aceptar'),
         cancelButtonText: t('Cancelar'),
         denyButtonText: t('No'),
+        heightAuto: false,
+        scrollbarPadding: false,
         customClass: {
             popup: 'admin-swal-popup',
             title: 'admin-swal-title',
@@ -542,14 +557,30 @@ window.adminSwalDefaults = function(overrides = {}) {
             actions: 'admin-swal-actions',
         },
         buttonsStyling: false,
+        didOpen: function (el) {
+            restoreScroll();
+            if (typeof userDidOpen === 'function') userDidOpen(el);
+        },
+        willClose: function (el) {
+            restoreScroll();
+            if (typeof userWillClose === 'function') userWillClose(el);
+        },
+        didClose: function () {
+            restoreScroll();
+            requestAnimationFrame(restoreScroll);
+            if (typeof userDidClose === 'function') userDidClose();
+        },
     };
-    if (overrides.customClass) {
-        base.customClass = Object.assign({}, base.customClass, overrides.customClass);
-        const rest = Object.assign({}, overrides);
+    if (rest.customClass) {
+        base.customClass = Object.assign({}, base.customClass, rest.customClass);
         delete rest.customClass;
-        return Object.assign(base, rest);
     }
-    return Object.assign(base, overrides);
+    return Object.assign(base, rest);
+};
+
+window.adminSwal = function (options) {
+    if (typeof Swal === 'undefined') return Promise.resolve();
+    return Swal.fire(window.adminSwalDefaults(options || {}));
 };
 
 // =========================================================================
