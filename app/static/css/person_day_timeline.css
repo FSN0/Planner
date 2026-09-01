@@ -365,8 +365,26 @@
 }
 
 .person-day-timeline-day-date i {
-  color: var(--color-text-muted, #64748b);
-  font-size: 0.7rem;
+  opacity: 0.65;
+}
+
+.person-day-timeline-day-times {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #475569);
+}
+
+.person-day-timeline-day-fichaje i {
+  opacity: 0.7;
+  font-size: 0.68rem;
+}
+
+.person-day-timeline-meta-item--fichaje .person-day-timeline-meta-value {
+  font-variant-numeric: tabular-nums;
 }
 
 .person-day-timeline-day-body {

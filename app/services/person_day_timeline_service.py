@@ -360,6 +360,205 @@ def _link_subject_in_text(html, subject_user):
     return Markup(html_str.replace(escaped_name, link, 1))
 
 
+def _pick_registro_for_detail(regs, detail):
+    if not regs:
+        return None
+    if len(regs) == 1:
+        return regs[0]
+
+    detail_lower = (detail or "").lower()
+    for reg in regs:
+        obra_id = reg.obra_real_id or reg.obra_planificada_id
+        if not obra_id:
+            continue
+        obra = Obra.query.get(obra_id)
+        if not obra:
+            continue
+        label = format_obra_label(obra)
+        codigo = (obra.codigo or "").strip()
+        nombre = (obra.nombre or "").strip()
+        if label.lower() in detail_lower:
+            return reg
+        if codigo and codigo.lower() in detail_lower:
+            return reg
+        if nombre and len(nombre) > 2 and nombre.lower() in detail_lower:
+            return reg
+
+    with_times = [r for r in regs if r.check_in or r.check_out]
+    return with_times[0] if with_times else regs[0]
+
+
+def _rebuild_fichaje_times_in_detail(detail, entrada, salida):
+    if not detail:
+        return detail
+
+    note_part = ""
+    if " Notas:" in detail:
+        note_part = " Notas:" + detail.split(" Notas:", 1)[1]
+
+    intro = detail
+    if " Entrada:" in detail:
+        intro = detail.split(" Entrada:")[0].rstrip()
+    elif " Notas:" in detail:
+        intro = detail.split(" Notas:")[0].rstrip()
+    intro = intro.rstrip(".")
+
+    times = f" Entrada: {entrada or '-'} / Salida: {salida or '-'}"
+    return f"{intro}.{times}{note_part}" if intro else f"{times.lstrip()}{note_part}"
+
+
+def _sync_fichaje_times_from_registro(log, detail):
+    """Actualiza Entrada/Salida desde RegistroFichaje (p. ej. salida llegó después del log)."""
+    if log.category != "fichaje_app" or not log.target_user_id or not log.target_date:
+        return detail
+    if not detail or "Entrada:" not in detail:
+        return detail
+
+    regs = RegistroFichaje.query.filter_by(
+        user_id=log.target_user_id,
+        fecha=log.target_date,
+    ).all()
+    if not regs:
+        return detail
+
+    reg = _pick_registro_for_detail(regs, detail)
+    if not reg:
+        return detail
+
+    entrada = format_time(reg.check_in) if reg.check_in else None
+    salida = format_time(reg.check_out) if reg.check_out else None
+    if not entrada and not salida:
+        return detail
+
+    return _rebuild_fichaje_times_in_detail(detail, entrada, salida)
+
+
+def _day_fichaje_times(registros):
+    entradas = [r.check_in for r in registros if r.check_in]
+    salidas = [r.check_out for r in registros if r.check_out]
+    entrada = format_time(min(entradas)) if entradas else None
+    salida = format_time(max(salidas)) if salidas else None
+    return entrada, salida
+
+
+def _hitos_cover_registro_fichaje(hitos, reg, obra):
+    label = format_obra_label(obra)
+    codigo = (obra.codigo or "").strip().lower()
+    fichaje_hitos = []
+    for h in hitos or []:
+        desc = (h.get("descripcion") or "").lower()
+        titulo = (h.get("titulo") or "").lower()
+        if "fichó" not in desc and "fichaje" not in titulo:
+            continue
+        fichaje_hitos.append(h)
+        if label.lower() in desc or (codigo and codigo in desc):
+            return True
+    if len(fichaje_hitos) == 1 and reg.check_in:
+        return True
+    return False
+
+
+def _format_registro_fichaje_detail(reg, obra):
+    obra_label = format_obra_label(obra)
+    obra_plan_label = None
+    if reg.obra_planificada_id and reg.obra_planificada_id != reg.obra_real_id:
+        obra_plan = Obra.query.get(reg.obra_planificada_id)
+        if obra_plan:
+            obra_plan_label = format_obra_label(obra_plan)
+
+    if reg.estado == "Conflicto" and obra_plan_label and obra_plan_label != obra_label:
+        intro = (
+            f"El operario fichó en {obra_label} "
+            f"(tenía planificado en {obra_plan_label})."
+        )
+    elif reg.estado == "Paracaidista":
+        intro = f"El operario fichó en {obra_label} sin planificación en esa obra."
+    else:
+        intro = f"El operario fichó en {obra_label}."
+
+    detail = (
+        f"{intro} "
+        f"Entrada: {format_time(reg.check_in) if reg.check_in else '-'} / "
+        f"Salida: {format_time(reg.check_out) if reg.check_out else '-'}"
+    )
+    note = (reg.nota_odoo or "").strip()
+    if note:
+        detail += f" Notas: {note}"
+    return detail
+
+
+def _fichaje_hito_from_registro(user, reg, obra, fecha_obj):
+    detail = _format_registro_fichaje_detail(reg, obra)
+    style = CATEGORY_STYLES["fichaje_app"]
+    estado_raw = (reg.estado or "Correcto_Automatico").replace("_", " ")
+    if reg.check_in:
+        local_ts = format_datetime(reg.check_in, "%Y-%m-%d %H:%M:%S")
+        fecha_txt = format_datetime(reg.check_in, "%d/%m %H:%M")
+    else:
+        local_ts = fecha_obj.strftime("%Y-%m-%d") + " 12:00:00"
+        fecha_txt = fecha_obj.strftime("%d/%m")
+
+    conflicto = reg.estado in ("Conflicto", "Paracaidista") or (
+        reg.obra_planificada_id
+        and reg.obra_real_id
+        and reg.obra_planificada_id != reg.obra_real_id
+    )
+    user_nombre = f"{user.name} {user.lastname}".strip() if user else "Operario"
+    return {
+        "id": f"rf-{reg.id}",
+        "sort_time": local_ts,
+        "prioridad": 0,
+        "fecha": fecha_txt,
+        "icon_class": style["icon"],
+        "icon_color": style["color"],
+        "titulo": f"Fichaje físico [{estado_raw}]",
+        "autor": f"{user_nombre} (Fichaje en App)",
+        "actor_user_id": user.id if user else None,
+        "actor_url": _worker_panel_url(user.id if user else None),
+        "descripcion": detail,
+        "descripcion_html": detail,
+        "conflicto": conflicto,
+    }
+
+
+def _append_missing_fichaje_hitos(hitos, user, fecha_obj, obra_cache):
+    """Añade hitos de fichaje cuando hay RegistroFichaje pero no log fichaje_app."""
+    regs = RegistroFichaje.query.filter_by(user_id=user.id, fecha=fecha_obj).all()
+    meaningful = [
+        r for r in regs
+        if (r.check_in or r.check_out)
+        and r.estado not in ("Sin_Registro",)
+    ]
+    if not meaningful:
+        return hitos
+
+    out = list(hitos or [])
+    if len(out) == 1 and out[0].get("titulo") == "Sin actividad":
+        out = []
+
+    for reg in meaningful:
+        obra_id = reg.obra_real_id or reg.obra_planificada_id
+        if not obra_id:
+            continue
+        obra = Obra.query.get(obra_id)
+        if not obra:
+            continue
+        obra_cache[(obra.codigo or "").lower()] = obra
+        obra_cache[(obra.nombre or "").lower()] = obra
+        if _hitos_cover_registro_fichaje(out, reg, obra):
+            continue
+        hito = _fichaje_hito_from_registro(user, reg, obra, fecha_obj)
+        obra_cache_key = obra_cache
+        _, detail_html = _build_detail_html(
+            hito["descripcion"], obra_cache_key, user, fecha_obj, None, None
+        )
+        hito["descripcion_html"] = str(detail_html)
+        out.append(hito)
+
+    out.sort(key=lambda x: (x.get("sort_time") or "", x.get("prioridad") or 0))
+    return out
+
+
 def _enrich_fichaje_app_from_registro(log, detail):
     """Añade obra planificada al detalle del fichaje cuando hay desviación."""
     if log.category != "fichaje_app" or not log.target_user_id or not log.target_date:
@@ -432,6 +631,7 @@ def _build_detail_html(text, obra_cache, subject_user, target_date=None, log_tim
     plain = strip_coverage(text or "")
     plain = _enrich_legacy_fichaje_detail(log, plain) if log else plain
     plain = _enrich_fichaje_app_from_registro(log, plain) if log else plain
+    plain = _sync_fichaje_times_from_registro(log, plain) if log else plain
     plain = _append_fichaje_notes_from_registro(log, plain) if log else plain
     plain = _normalize_detail_obras(plain, obra_cache)
     plain = _normalize_fichaje_times_in_detail(plain, target_date, log_timestamp)
@@ -665,6 +865,7 @@ def build_person_day_timeline(user_id, fecha_obj):
     hitos = _append_missing_planificacion_hitos(
         hitos, logs_del_dia, user, fecha_obj, obra_cache
     )
+    hitos = _append_missing_fichaje_hitos(hitos, user, fecha_obj, obra_cache)
     hitos.sort(key=lambda x: (x["sort_time"], x["prioridad"]))
 
     if not hitos:
@@ -682,6 +883,7 @@ def build_person_day_timeline(user_id, fecha_obj):
         }]
 
     registros = RegistroFichaje.query.filter_by(user_id=user_id, fecha=fecha_obj).all()
+    entrada, salida = _day_fichaje_times(registros)
     if registros:
         from app.services.fichaje_estado_service import estado_fichaje_agregado
         estado_actual = estado_fichaje_agregado([r.estado for r in registros])
@@ -718,6 +920,8 @@ def build_person_day_timeline(user_id, fecha_obj):
         "fecha": fecha_obj.strftime("%d/%m/%Y"),
         "fecha_iso": fecha_obj.strftime("%Y-%m-%d"),
         "estado_actual": estado_actual,
+        "entrada": entrada,
+        "salida": salida,
         "registro_auditoria_id": registro_auditoria_id,
         "hitos": hitos,
     }
@@ -760,6 +964,8 @@ def build_person_day_timeline_range(user_id, fecha_inicio, fecha_fin):
             "fecha": day_data["fecha"],
             "fecha_iso": day_data["fecha_iso"],
             "estado_actual": day_data["estado_actual"],
+            "entrada": day_data.get("entrada"),
+            "salida": day_data.get("salida"),
             "hitos": day_data["hitos"],
         })
         current += timedelta(days=1)

@@ -200,8 +200,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 var emptyNote = evs.length ? '' : '<p class="pmd-empty-inline">' + t('Nadie asignado este día.') + '</p>';
                 return '<article class="pmd-obra' + (evs.length ? '' : ' pmd-obra--empty') + '"><div class="pmd-obra-title"><a href="' +
-                    obraHref + '">' + obraTitle + '</a><span class="pmd-obra-title-actions">' + assignBtn +
-                    '<span class="pmd-obra-count">' + evs.length + '</span></span></div>' +
+                    obraHref + '">' + obraTitle + '</a><span class="pmd-obra-title-actions">' +
+                    '<span class="pmd-obra-count">' + evs.length + '</span>' + assignBtn + '</span></div>' +
                     (people || emptyNote) + '</article>';
             }).join('');
         });

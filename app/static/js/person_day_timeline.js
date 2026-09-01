@@ -172,11 +172,53 @@ window.PersonDayTimeline = (function () {
         return hitos.map(renderHitoCard).join('');
     }
 
+    function setFichajeMeta(meta, data) {
+        if (!meta) return;
+        const multiDay = !!(data.days && data.days.length > 1);
+        const entradaWrap = meta.querySelector('[data-timeline-entrada-wrap]');
+        const salidaWrap = meta.querySelector('[data-timeline-salida-wrap]');
+        const entradaEl = meta.querySelector('[data-timeline-entrada]');
+        const salidaEl = meta.querySelector('[data-timeline-salida]');
+
+        if (multiDay) {
+            if (entradaWrap) entradaWrap.hidden = true;
+            if (salidaWrap) salidaWrap.hidden = true;
+            return;
+        }
+
+        if (entradaWrap && entradaEl) {
+            if (data.entrada) {
+                entradaEl.textContent = data.entrada;
+                entradaWrap.hidden = false;
+            } else {
+                entradaWrap.hidden = true;
+            }
+        }
+        if (salidaWrap && salidaEl) {
+            if (data.salida) {
+                salidaEl.textContent = data.salida;
+                salidaWrap.hidden = false;
+            } else {
+                salidaWrap.hidden = true;
+            }
+        }
+    }
+
     function renderDaySection(day) {
         const raw = canonEstado(day.estado_actual || '');
         const FE = window.SPFichajeEstado;
         const badge = FE && FE.badgeClass ? FE.badgeClass(raw) : 'badge-soft-gray';
         const estadoLabel = FE && FE.labelDeEstado ? FE.labelDeEstado(raw) : t(raw.replace(/_/g, ' '));
+        const fichajeMeta = [];
+        if (day.entrada) {
+            fichajeMeta.push(`<span class="person-day-timeline-day-fichaje"><i class="fas fa-sign-in-alt mr-1"></i>${escapeHtml(day.entrada)}</span>`);
+        }
+        if (day.salida) {
+            fichajeMeta.push(`<span class="person-day-timeline-day-fichaje"><i class="fas fa-sign-out-alt mr-1"></i>${escapeHtml(day.salida)}</span>`);
+        }
+        const fichajeMetaHtml = fichajeMeta.length
+            ? `<span class="person-day-timeline-day-times">${fichajeMeta.join('')}</span>`
+            : '';
 
         return `
             <section class="person-day-timeline-day" data-fecha-iso="${escapeHtml(day.fecha_iso || '')}">
@@ -184,6 +226,7 @@ window.PersonDayTimeline = (function () {
                     <span class="person-day-timeline-day-date">
                         <i class="fas fa-calendar-day mr-1"></i>${escapeHtml(day.fecha || '')}
                     </span>
+                    ${fichajeMetaHtml}
                     <span class="badge-soft person-day-timeline-estado ${badge}">${escapeHtml(estadoLabel || '—')}</span>
                 </header>
                 <div class="person-day-timeline-day-body">
@@ -227,6 +270,7 @@ window.PersonDayTimeline = (function () {
                 if (wrap) wrap.hidden = multiDay;
                 if (!multiDay) applyEstadoBadge(estadoEl, data.estado_actual);
             }
+            setFichajeMeta(meta, data);
         }
 
         const content = container.querySelector('[data-timeline-content]') || container;
