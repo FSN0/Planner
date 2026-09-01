@@ -3,7 +3,7 @@
    horizontal_on_dark = texto claro para fondos oscuros (p. ej. definir PIN).
 #}
 {% set _variant = variant|default('horizontal') %}
-{% set _brand_v = '20260807e' %}
+{% set _brand_v = '20260901i' %}
 {% if _variant == 'mark' %}
   {% set _src = 'img/brand/logo-mark.png' %}
   {% set _w = width|default(32) %}
@@ -27,6 +27,6 @@
   alt="SignaPlan"
   width="{{ _w }}"
   height="{{ _h }}"
-  style="max-width: 100%; height: auto;"
+  style="width: {{ _w }}px; max-width: 100%; height: {{ _h }}px; object-fit: contain;"
   decoding="async"
 />

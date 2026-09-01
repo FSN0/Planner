@@ -81,8 +81,13 @@ def utc_to_local(dt, user=None):
     """Convierte datetime naive UTC → naive en zona del usuario."""
     if dt is None:
         return None
+    if not isinstance(dt, datetime):
+        return None
     tz = get_user_timezone(user)
-    aware = dt.replace(tzinfo=timezone.utc)
+    if dt.tzinfo is not None:
+        aware = dt.astimezone(timezone.utc)
+    else:
+        aware = dt.replace(tzinfo=timezone.utc)
     return aware.astimezone(ZoneInfo(tz)).replace(tzinfo=None)
 
 

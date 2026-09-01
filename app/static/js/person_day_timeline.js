@@ -300,28 +300,9 @@ window.PersonDayTimeline = (function () {
         content.innerHTML = `<div class="person-day-timeline-error">${escapeHtml(message || t('No se pudo cargar el historial.'))}</div>`;
     }
 
-    function parseJsonResponse(r) {
-        const ctype = (r.headers.get('content-type') || '').toLowerCase();
-        if (ctype.indexOf('application/json') === -1) {
-            return Promise.reject(new Error('non-json'));
-        }
-        return r.json().then(data => {
-            if (!r.ok && data && !data.error && !data.message) {
-                data.error = t('No se pudo cargar el historial.');
-            }
-            return data;
-        });
-    }
-
     function fetchTimeline(userId, fechaStr, apiBase) {
         const base = apiBase || DEFAULT_API;
-        return fetch(`${base}/${userId}/${fechaStr}`, {
-            credentials: 'same-origin',
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-        }).then(parseJsonResponse);
+        return fetch(`${base}/${userId}/${fechaStr}`).then(r => r.json());
     }
 
     function fetchTimelineRange(userId, fromStr, toStr, apiBase) {
@@ -329,13 +310,7 @@ window.PersonDayTimeline = (function () {
         const params = new URLSearchParams();
         if (fromStr) params.set('from', fromStr);
         if (toStr) params.set('to', toStr);
-        return fetch(`${base}/${userId}?${params.toString()}`, {
-            credentials: 'same-origin',
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-        }).then(parseJsonResponse);
+        return fetch(`${base}/${userId}?${params.toString()}`).then(r => r.json());
     }
 
     function load(container, userId, fechaStr, options) {

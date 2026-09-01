@@ -63,9 +63,19 @@ body.marketing-page {
 }
 
 /* PNG recortado a contenido (márgenes iguales arriba/abajo) */
-.mkt-brand .sp-logo--horizontal {
-  height: 26px;
+.sp-logo--horizontal {
+  max-width: min(220px, 100%);
+  max-height: 56px;
   width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.mkt-brand .sp-logo--horizontal {
+  height: 26px !important;
+  max-height: 26px;
+  width: auto !important;
+  max-width: 180px;
   display: block;
   object-fit: contain;
   /* Ligero ajuste óptico: el check sobresale más arriba que la cola de la g abajo */
