@@ -46,14 +46,17 @@ class Adapter(BaseSyncAdapter):
             
         domain = [('check_in', 'ilike', f'{fecha_str}%')]
         fichajes_estandarizados = []
+        base_fields_int = ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']
+        base_fields_ext = ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']
 
         # --- FICHAJES INTERNOS ---
         try:
+            att_fields, metric_map = self._attendance_read_fields('hr.attendance', base_fields_int)
             att_int = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd, 
                 'hr.attendance', 'search_read', 
                 [domain], 
-                {'fields': ['employee_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']}
+                {'fields': att_fields}
             )
             
             # Seguro contra respuestas malformadas de Odoo (típico de XML-RPC cuando falla)
@@ -63,33 +66,28 @@ class Adapter(BaseSyncAdapter):
 
             for a in att_int:
                 if a.get('employee_id'):
-                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
-                    modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
-                    fichajes_estandarizados.append({
-                        # Identidad estable del apunte en Odoo. El libro de eventos
-                        # la necesita para distinguir un fichaje nuevo de uno que
-                        # ya tenía y que alguien ha modificado allí.
-                        'registro_external_id': str(a['id']),
-                        'origen_modelo': 'hr.attendance',
-                        'empleado_external_id': str(a['employee_id'][0]),
-                        'obra_external_id': str(obra_id) if obra_id else None,
-                        'fecha': fecha_str,
-                        'check_in': a.get('check_in'),
-                        'check_out': a.get('check_out'),
-                        'autor': modificado_por,
-                        'note': a.get('note') if a.get('note') not in (False, None, '') else None,
-                    })
+                    self._append_attendance_fichaje(
+                        fichajes_estandarizados,
+                        a,
+                        actor_field='employee_id',
+                        origen_modelo='hr.attendance',
+                        fecha_str=fecha_str,
+                        metric_map=metric_map,
+                    )
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en hr.attendance. Error: {str(e)}")
             raise e  # <- CRÍTICO: Lanzamos el error hacia arriba para abortar la sincronización de este tenant
 
         # --- FICHAJES SUBCONTRATAS ---
         try:
+            att_fields_ext, metric_map_ext = self._attendance_read_fields(
+                'partner.attendance', base_fields_ext
+            )
             att_ext = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd, 
                 'partner.attendance', 'search_read', 
                 [domain], 
-                {'fields': ['partner_id', 'project_id', 'write_uid', 'check_in', 'check_out', 'note']}
+                {'fields': att_fields_ext}
             )
             
             if not isinstance(att_ext, list):
@@ -98,24 +96,107 @@ class Adapter(BaseSyncAdapter):
 
             for a in att_ext:
                 if a.get('partner_id'):
-                    obra_id = a.get('project_id')[0] if a.get('project_id') else None
-                    modificado_por = a.get('write_uid')[1] if a.get('write_uid') else 'RRHH Odoo'
-                    fichajes_estandarizados.append({
-                        'registro_external_id': str(a['id']),
-                        'origen_modelo': 'partner.attendance',
-                        'empleado_external_id': str(a['partner_id'][0]),
-                        'obra_external_id': str(obra_id) if obra_id else None,
-                        'fecha': fecha_str,
-                        'check_in': a.get('check_in'),
-                        'check_out': a.get('check_out'),
-                        'autor': modificado_por,
-                        'note': a.get('note') if a.get('note') not in (False, None, '') else None,
-                    })
+                    self._append_attendance_fichaje(
+                        fichajes_estandarizados,
+                        a,
+                        actor_field='partner_id',
+                        origen_modelo='partner.attendance',
+                        fecha_str=fecha_str,
+                        metric_map=metric_map_ext,
+                    )
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en partner.attendance. Error: {str(e)}")
             raise e  # <- CRÍTICO: Lanzamos el error hacia arriba
 
         return fichajes_estandarizados
+
+    def _attendance_metric_field_map(self, model_name):
+        """Resuelve nombres técnicos de UD, MOD, Total HH y MOE en Odoo."""
+        cache = getattr(self, '_attendance_metric_cache', None)
+        if cache is None:
+            self._attendance_metric_cache = {}
+            cache = self._attendance_metric_cache
+        if model_name in cache:
+            return cache[model_name]
+
+        available = self._odoo_fields_get(model_name) or {}
+
+        def _pick(*names, labels=()):
+            labels_norm = {str(l).strip().lower() for l in labels}
+            for name in names:
+                if name in available:
+                    return name
+            for fname, meta in available.items():
+                label = (meta.get('string') or '').strip().lower()
+                if label in labels_norm:
+                    return fname
+            return None
+
+        mapping = {
+            'odoo_ud': _pick('ud', 'x_studio_ud', 'x_ud', labels=('ud', 'u d')),
+            'odoo_mod': _pick('mod', 'x_studio_mod', 'x_mod', labels=('mod',)),
+            'odoo_total_hh': _pick(
+                'total_hh', 'total_h_h', 'x_studio_total_hh', 'x_studio_total_h_h',
+                labels=('total hh', 'total h h', 'total_hh', 'total h.h'),
+            ),
+            'odoo_moe': _pick('moe', 'x_studio_moe', 'x_moe', labels=('moe', 'm o e')),
+        }
+        cache[model_name] = mapping
+        return mapping
+
+    def _attendance_read_fields(self, model_name, base_fields):
+        metric_map = self._attendance_metric_field_map(model_name)
+        fields = list(base_fields)
+        for odoo_field in metric_map.values():
+            if odoo_field and odoo_field not in fields:
+                fields.append(odoo_field)
+        return fields, metric_map
+
+    def _odoo_numeric(self, raw):
+        if raw in (None, False, ''):
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    def _extract_attendance_metrics(self, row, metric_map):
+        metrics = {}
+        for target_key, odoo_field in (metric_map or {}).items():
+            if not odoo_field:
+                metrics[target_key] = None
+                continue
+            metrics[target_key] = self._odoo_numeric(row.get(odoo_field))
+        return metrics
+
+    def _append_attendance_fichaje(
+        self,
+        dest,
+        row,
+        *,
+        actor_field,
+        origen_modelo,
+        fecha_str,
+        metric_map,
+    ):
+        actor = row.get(actor_field)
+        if not actor:
+            return
+        obra_id = row.get('project_id')[0] if row.get('project_id') else None
+        modificado_por = row.get('write_uid')[1] if row.get('write_uid') else 'RRHH Odoo'
+        item = {
+            'registro_external_id': str(row['id']),
+            'origen_modelo': origen_modelo,
+            'empleado_external_id': str(actor[0]),
+            'obra_external_id': str(obra_id) if obra_id else None,
+            'fecha': fecha_str,
+            'check_in': row.get('check_in'),
+            'check_out': row.get('check_out'),
+            'autor': modificado_por,
+            'note': row.get('note') if row.get('note') not in (False, None, '') else None,
+        }
+        item.update(self._extract_attendance_metrics(row, metric_map))
+        dest.append(item)
 
     def get_leaves(self, date_from=None, date_to=None) -> list:
         """Sincroniza hr.leave (todos los tipos: vacaciones, bajas, puentes, permisos…)."""

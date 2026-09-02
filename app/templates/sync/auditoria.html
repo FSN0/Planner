@@ -18,6 +18,25 @@
 </td>
 {% endmacro %}
 
+{% macro celda_metricas_odoo(reg) %}
+{% if tenant_has_odoo %}
+<td class="align-middle odoo-metrics-cell text-center" data-sort-value="{{ reg.odoo_total_hh or reg.odoo_ud or '' }}">
+    <div class="odoo-metrics-grid">
+        <span class="odoo-metric" title="{{ _('UD') }}"><abbr>UD</abbr> {% if reg.odoo_ud is not none %}{{ '%.2f'|format(reg.odoo_ud|float) }}{% else %}—{% endif %}</span>
+        <span class="odoo-metric" title="{{ _('MOD') }}"><abbr>MOD</abbr> {% if reg.odoo_mod is not none %}{{ '%.2f'|format(reg.odoo_mod|float) }}{% else %}—{% endif %}</span>
+        <span class="odoo-metric" title="{{ _('Total HH') }}"><abbr>HH</abbr> {% if reg.odoo_total_hh is not none %}{{ '%.2f'|format(reg.odoo_total_hh|float) }}{% else %}—{% endif %}</span>
+        <span class="odoo-metric" title="{{ _('MOE') }}"><abbr>MOE</abbr> {% if reg.odoo_moe is not none %}{{ '%.2f'|format(reg.odoo_moe|float) }}{% else %}—{% endif %}</span>
+    </div>
+</td>
+{% endif %}
+{% endmacro %}
+
+{% macro audit_th_metricas_odoo(col) %}
+{% if tenant_has_odoo %}
+{{ audit_sort_th(col, 'UD · MOD · HH · MOE', '9%', 'center', 'num') }}
+{% endif %}
+{% endmacro %}
+
 {% macro celda_geo(reg) %}
 {% set g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}
 <td class="align-middle text-center geo-audit-cell" data-sort-value="{{ g.geo_estado if g else '' }}">
@@ -51,6 +70,20 @@ tr.audit-row-highlight {
 .auditoria-stat--active {
   outline: 2px solid #f59e0b;
   outline-offset: 2px;
+}
+.odoo-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.15rem 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: #475569;
+}
+.odoo-metric abbr {
+  font-weight: 700;
+  color: #0f172a;
+  text-decoration: none;
+  margin-right: 0.15rem;
 }
 </style>
 {% endblock %}
@@ -172,8 +205,9 @@ tr.audit-row-highlight {
                                 {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
                                 {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
                                 {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '8%', 'center') }}{% endif %}
-                                {{ audit_sort_th(6 if not muestra_geo_audit else 7, 'Notas', '12%' if muestra_geo_audit else '15%') }}
-                                {{ audit_sort_th(7 if not muestra_geo_audit else 8, 'Resolución', '12%' if muestra_geo_audit else '15%', 'right') }}
+                                {{ audit_th_metricas_odoo(6 if not muestra_geo_audit else 7) }}
+                                {{ audit_sort_th((7 if not muestra_geo_audit else 8) + (1 if tenant_has_odoo else 0), 'Notas', '12%' if muestra_geo_audit else '15%') }}
+                                {{ audit_sort_th((8 if not muestra_geo_audit else 9) + (1 if tenant_has_odoo else 0), 'Resolución', '12%' if muestra_geo_audit else '15%', 'right') }}
                             </tr>
                         </thead>
                         <tbody>
@@ -204,6 +238,7 @@ tr.audit-row-highlight {
                                     {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
                                 {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
+                                {{ celda_metricas_odoo(reg) }}
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
@@ -249,8 +284,9 @@ tr.audit-row-highlight {
                                 {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
                                 {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
                                 {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '8%', 'center') }}{% endif %}
-                                {{ audit_sort_th(6 if not muestra_geo_audit else 7, 'Notas', '12%' if muestra_geo_audit else '15%') }}
-                                {{ audit_sort_th(7 if not muestra_geo_audit else 8, 'Resolución', '12%' if muestra_geo_audit else '20%', 'right') }}
+                                {{ audit_th_metricas_odoo(6 if not muestra_geo_audit else 7) }}
+                                {{ audit_sort_th((7 if not muestra_geo_audit else 8) + (1 if tenant_has_odoo else 0), 'Notas', '12%' if muestra_geo_audit else '15%') }}
+                                {{ audit_sort_th((8 if not muestra_geo_audit else 9) + (1 if tenant_has_odoo else 0), 'Resolución', '12%' if muestra_geo_audit else '20%', 'right') }}
                             </tr>
                         </thead>
                         <tbody>
@@ -281,6 +317,7 @@ tr.audit-row-highlight {
                                     {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
                                 {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
+                                {{ celda_metricas_odoo(reg) }}
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
@@ -456,9 +493,10 @@ tr.audit-row-highlight {
                         {{ audit_sort_th(4, 'Entrada', '6%', 'center', 'time') }}
                         {{ audit_sort_th(5, 'Salida', '6%', 'center', 'time') }}
                         {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center') }}{% endif %}
-                        {{ audit_sort_th(6 if not muestra_geo_audit else 7, 'Notas', '10%' if muestra_geo_audit else '14%') }}
-                        {{ audit_sort_th(7 if not muestra_geo_audit else 8, 'Auditado por', '8%') }}
-                        {{ audit_sort_th(8 if not muestra_geo_audit else 9, 'Hora reg.', '7%', '', 'date') }}
+                        {{ audit_th_metricas_odoo(6 if not muestra_geo_audit else 7) }}
+                        {{ audit_sort_th((7 if not muestra_geo_audit else 8) + (1 if tenant_has_odoo else 0), 'Notas', '10%' if muestra_geo_audit else '14%') }}
+                        {{ audit_sort_th((8 if not muestra_geo_audit else 9) + (1 if tenant_has_odoo else 0), 'Auditado por', '8%') }}
+                        {{ audit_sort_th((9 if not muestra_geo_audit else 10) + (1 if tenant_has_odoo else 0), 'Hora reg.', '7%', '', 'date') }}
                         {% if can_resolve_fichajes %}
                         <th style="width:7%;" class="text-center no-sort">{{ _('Acción') }}</th>
                         {% endif %}
@@ -531,6 +569,7 @@ tr.audit-row-highlight {
                             {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                         </td>
                         {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
+                        {{ celda_metricas_odoo(reg) }}
                         {{ celda_notas(reg) }}
                         <td>
                             {% if reg.resuelto_por %}

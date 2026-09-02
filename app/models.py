@@ -566,6 +566,11 @@ class RegistroFichaje(db.Model):
     check_in = db.Column(db.DateTime, nullable=True)
     check_out = db.Column(db.DateTime, nullable=True)
     nota_odoo = db.Column(db.Text, nullable=True)
+    # Métricas de hr.attendance / partner.attendance (Soltec / Odoo)
+    odoo_ud = db.Column(db.Numeric(12, 4), nullable=True)
+    odoo_mod = db.Column(db.Numeric(12, 4), nullable=True)
+    odoo_total_hh = db.Column(db.Numeric(12, 4), nullable=True)
+    odoo_moe = db.Column(db.Numeric(12, 4), nullable=True)
     
     # Lo que decía tu aplicación
     obra_planificada_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)

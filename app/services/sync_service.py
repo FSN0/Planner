@@ -30,10 +30,35 @@ def _merge_fichaje_notes(existing, new):
     existing_clean = _clean_odoo_note(existing)
     if not existing_clean:
         return new_clean
-    parts = [p.strip() for p in existing_clean.split(' | ') if p.strip()]
-    if new_clean not in parts:
-        parts.append(new_clean)
-    return ' | '.join(parts)
+    if new_clean in existing_clean:
+        return existing_clean
+    return f"{existing_clean}\n{new_clean}"
+
+
+def _odoo_metric_value(raw):
+    if raw in (None, False, ''):
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _merge_odoo_metric(existing, new):
+    new_v = _odoo_metric_value(new)
+    if new_v is None:
+        return _odoo_metric_value(existing)
+    existing_v = _odoo_metric_value(existing)
+    if existing_v is None:
+        return new_v
+    return existing_v + new_v
+
+
+def _apply_odoo_metrics(registro, fichaje):
+    for key in ('odoo_ud', 'odoo_mod', 'odoo_total_hh', 'odoo_moe'):
+        value = _odoo_metric_value(fichaje.get(key))
+        if value is not None:
+            setattr(registro, key, value)
 
 
 def _format_fichaje_log_detail(
@@ -128,6 +153,10 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             'check_in': d.get('check_in'),
             'check_out': d.get('check_out'),
             'note': _clean_odoo_note(d.get('note')),
+            'odoo_ud': d.get('odoo_ud'),
+            'odoo_mod': d.get('odoo_mod'),
+            'odoo_total_hh': d.get('odoo_total_hh'),
+            'odoo_moe': d.get('odoo_moe'),
         })
 
     fichajes_unicos = {}
@@ -149,6 +178,10 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             fichajes_unicos[key]['note'] = _merge_fichaje_notes(
                 fichajes_unicos[key].get('note'), f.get('note')
             )
+            for metric_key in ('odoo_ud', 'odoo_mod', 'odoo_total_hh', 'odoo_moe'):
+                fichajes_unicos[key][metric_key] = _merge_odoo_metric(
+                    fichajes_unicos[key].get(metric_key), f.get(metric_key)
+                )
 
     todas_asig = Asignacion.query.filter_by(fecha=fecha_obj).all()
     from app.services.leave_service import user_has_approved_leave
@@ -348,6 +381,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             registro_vacio_exacto.nota_odoo = _merge_fichaje_notes(
                 registro_vacio_exacto.nota_odoo, f.get('note')
             )
+            _apply_odoo_metrics(registro_vacio_exacto, f)
         else:
             registro_existente = RegistroFichaje.query.filter_by(
                 user_id=local_user.id, fecha=fecha_obj, obra_real_id=local_obra.id
@@ -363,6 +397,10 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     check_in=check_in_dt,
                     check_out=check_out_dt,
                     nota_odoo=f.get('note'),
+                    odoo_ud=_odoo_metric_value(f.get('odoo_ud')),
+                    odoo_mod=_odoo_metric_value(f.get('odoo_mod')),
+                    odoo_total_hh=_odoo_metric_value(f.get('odoo_total_hh')),
+                    odoo_moe=_odoo_metric_value(f.get('odoo_moe')),
                 ))
 
                 obra_label = CoreAssignmentService.format_obra_label(local_obra)
@@ -395,6 +433,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                 registro_existente.nota_odoo = _merge_fichaje_notes(
                     registro_existente.nota_odoo, f.get('note')
                 )
+                _apply_odoo_metrics(registro_existente, f)
 
         if crear_asignacion_magica:
             existe_asig = Asignacion.query.filter_by(
