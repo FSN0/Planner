@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}?v=20260901i">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}?v=20260902h">
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
@@ -28,6 +28,7 @@
             <p class="mkt-hero-sub">{{ _('hero.sub') }}</p>
             <div class="mkt-hero-actions">
                 <a class="mkt-btn mkt-btn-primary" href="{{ mkt_url('marketing.alta') }}">{{ _('hero.cta_primary') }}</a>
+                <a class="mkt-btn mkt-btn-ghost-light" href="{{ mkt_url('marketing.demo') }}">{{ _('Ver demo') }}</a>
                 <a class="mkt-btn mkt-btn-ghost-light" href="{{ mkt_url('marketing.soluciones_index') }}">{{ _('landing.see_solutions') }}</a>
             </div>
             <p class="mkt-hero-proof">{{ _('hero.proof') }}</p>
@@ -151,6 +152,8 @@
         <span>© {{ current_year }} SignaPlan</span>
         <span>
             <a href="{{ mkt_url('marketing.entrar') }}">{{ _('footer.login') }}</a> ·
+            <a href="{{ mkt_url('marketing.alta') }}">{{ _('nav.signup') }}</a> ·
+            <a href="{{ mkt_url('marketing.demo') }}">{{ _('Demo') }}</a> ·
             <a href="{{ mkt_url('marketing.contacto') }}">{{ _('footer.contact') }}</a> ·
             <a href="{{ mkt_url('marketing.legal', slug='aviso-legal') }}">{{ _('footer.legal') }}</a> ·
             <a href="{{ mkt_url('marketing.legal', slug='privacidad') }}">{{ _('footer.privacy') }}</a> ·

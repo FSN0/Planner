@@ -319,14 +319,17 @@ def get_universal_calendar_events():
             leave = leave_covering(user_leaves, a.fecha)
             title, overlay_color, is_overlay = apply_leave_overlay_title(obra_name, leave)
             color = overlay_color or obra_color
+            obra_id_val = int(obra.id) if obra else (int(a.obra_id) if a.obra_id else 0)
             raw_events.append({
                 'title': title,
                 'start_date': a.fecha,
                 'end_date': a.fecha,
                 'color': color,
+                'obra_id': obra_id_val,
+                'delete_refs': [{'obra_id': obra_id_val, 'fecha': a.fecha.isoformat()}],
                 'extendedProps': {
                     'type': 'asignacion',
-                    'obra_id': obra.id if obra else 0,
+                    'obra_id': obra_id_val,
                     'vehiculo_label': v_label,
                     'vehiculo_id': v_meta.get('vehiculo_id'),
                     'vehiculo_source': v_meta.get('source'),
@@ -335,7 +338,7 @@ def get_universal_calendar_events():
                     'ausencia_estado': leave.estado if leave else None,
                 }
             })
-        events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
+        events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'obra_id']))
 
         # Vehículo siempre como evento propio (también si hay obra ese día)
         from app.services.vehicle_availability_service import (
@@ -665,6 +668,7 @@ def get_universal_calendar_events():
                     'start_date': a.fecha,
                     'end_date': a.fecha,
                     'color': overlay_color or c_color,
+                    'worker_id': worker.id,
                     'extendedProps': {
                         'type': 'asignacion',
                         'worker_id': worker.id,
@@ -674,7 +678,7 @@ def get_universal_calendar_events():
                         'ausencia_tipo': leave.tipo if leave else None,
                     }
                 })
-            events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
+            events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'worker_id']))
         
         elif mode == 'empresas':
             events.extend(procesar_bloques_empresa(asignaciones, leaves_by_user=leaves_idx))
@@ -1261,24 +1265,34 @@ def merge_events_v2(raw_events, group_by):
         if not ev_list: continue
         
         current = ev_list[0].copy()
+        current_refs = list(current.get('delete_refs') or [])
         for next_ev in ev_list[1:]:
             if (next_ev['start_date'] - current['end_date']).days == 1:
                 current['end_date'] = next_ev['end_date']
+                current_refs.extend(next_ev.get('delete_refs') or [])
             else:
+                if current_refs:
+                    current['delete_refs'] = current_refs
                 merged_events.append(format_event(current))
                 current = next_ev.copy()
+                current_refs = list(current.get('delete_refs') or [])
+        if current_refs:
+            current['delete_refs'] = current_refs
         merged_events.append(format_event(current))
         
     return merged_events
 
 def format_event(ev):
     end_date_exclusive = (ev['end_date'] + timedelta(days=1)).strftime("%Y-%m-%d")
+    extended = dict(ev.get('extendedProps', {}))
+    if ev.get('delete_refs'):
+        extended['delete_refs'] = ev['delete_refs']
     return {
         'title': ev['title'],
         'start': ev['start_date'].strftime("%Y-%m-%d"),
         'end': end_date_exclusive,
         'color': ev['color'],
-        'extendedProps': ev.get('extendedProps', {})
+        'extendedProps': extended,
     }
 
 def procesar_bloques_empresa(asignaciones, leaves_by_user=None):

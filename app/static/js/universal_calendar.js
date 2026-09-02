@@ -739,13 +739,16 @@ class UniversalCalendarManager {
 
                 let notasRow = document.getElementById(`${this.panelId}-notas-row`);
                 if (notasRow) notasRow.style.display = 'none';
-                this._toggleVehicleRow(false);
 
                 const props = event.extendedProps || {};
                 if (this.context === 'worker' || this.context === 'obra' || this.context === 'vehiculo') {
                     let prefill = null;
                     if (this.context === 'worker') {
-                        prefill = { obraId: props.obra_id, obraName: event.title };
+                        if (props.type === 'asignacion' && props.obra_id) {
+                            prefill = { obraId: props.obra_id, obraName: event.title };
+                        } else if (props.type !== 'vehiculo' && props.type !== 'vehiculo_odoo') {
+                            prefill = { obraId: props.obra_id, obraName: event.title };
+                        }
                     } else if (this.context === 'obra' || this.context === 'vehiculo') {
                         prefill = {
                             workerId: props.worker_id,
@@ -757,7 +760,20 @@ class UniversalCalendarManager {
                         }
                     }
                     this._renderResourceSelect(container, prefill);
+                    if (this.context === 'worker') {
+                        const vehiclePrefill = props.vehiculo_id ? {
+                            vehicleId: props.vehiculo_id,
+                            vehicleLabel: props.vehiculo_label || t('Vehículo'),
+                        } : null;
+                        this._toggleVehicleRow(true, {
+                            prefill: vehiclePrefill,
+                            openToggle: props.type === 'vehiculo' || props.type === 'vehiculo_odoo',
+                        });
+                    } else {
+                        this._toggleVehicleRow(false);
+                    }
                 } else {
+                    this._toggleVehicleRow(false);
                     container.innerHTML = `
                         <label class="small font-weight-bold mb-1 text-secondary">${t('Elemento Asignado')}</label>
                         <div class="form-control form-control-sm bg-light text-dark font-weight-bold" style="cursor: not-allowed; border: 1px solid #e2e8f0;">
@@ -771,8 +787,15 @@ class UniversalCalendarManager {
                     btnView.onclick = () => {
                         if(props.obra_url) { window.open(props.obra_url, '_blank'); return;}
                         let targetUrl = null;
-                        if (this.context === 'worker') targetUrl = this._adminUrl(`/admin/obra_panel/${props.obra_id}`);
-                        else if (this.context === 'obra' || this.context === 'vehiculo') targetUrl = this._adminUrl(`/admin/worker_panel/${props.worker_id}`);
+                        if (this.context === 'worker') {
+                            if (props.type === 'vehiculo' || props.type === 'vehiculo_odoo') {
+                                targetUrl = props.vehiculo_id
+                                    ? this._adminUrl(`/admin/vehicle_panel/${props.vehiculo_id}`)
+                                    : null;
+                            } else {
+                                targetUrl = this._adminUrl(`/admin/obra_panel/${props.obra_id}`);
+                            }
+                        } else if (this.context === 'obra' || this.context === 'vehiculo') targetUrl = this._adminUrl(`/admin/worker_panel/${props.worker_id}`);
                         
                         if (targetUrl) window.open(targetUrl, '_blank');
                         else if(typeof Swal !== 'undefined') calendarSwal(t('Información'), t('No hay enlace directo disponible.'), 'info');
@@ -788,6 +811,119 @@ class UniversalCalendarManager {
         const start = startInput ? startInput.value : '';
         const end = endInput ? endInput.value : '';
         return { start, end };
+    }
+
+    _resolveVehicleDeleteIds(props) {
+        const wId = this.context === 'worker'
+            ? parseInt(this.entityId, 10)
+            : parseInt(props.worker_id, 10);
+        const vId = this.context === 'vehiculo'
+            ? parseInt(this.entityId, 10)
+            : parseInt(props.vehiculo_id, 10);
+        if (Number.isNaN(wId) || Number.isNaN(vId)) return null;
+        return { wId, vId };
+    }
+
+    _vehicleUnassignPayload(wId, vId, delCtx, today) {
+        const rangeStart = delCtx.originalStart.isBefore(today)
+            ? today.format('YYYY-MM-DD')
+            : delCtx.originalStart.format('YYYY-MM-DD');
+        return {
+            worker_id: wId,
+            vehicle_id: vId,
+            start: rangeStart,
+            end: delCtx.rangeEnd.format('YYYY-MM-DD'),
+            include_weekends: true,
+            overwrite_mode: 'overwrite',
+            accion: 'DESASIGNAR',
+        };
+    }
+
+    _finishVehicleUnassign(vres) {
+        if (!vres || !vres.success) return;
+        calendarSwal({
+            toast: true, position: 'top-end', icon: 'success',
+            title: vres.message || t('Desasignado'),
+            showConfirmButton: false, timer: 1500,
+        });
+        this.calendar.refetchEvents();
+        this.hidePanel();
+        if (window.loadTimelineData) window.loadTimelineData();
+    }
+
+    /** Rango y refs para desasignar: usa el bloque seleccionado (no fechas obsoletas del panel). */
+    _resolvePanelDeleteContext() {
+        if (!this.activeEvent) return null;
+
+        const props = this.activeEvent.extendedProps || {};
+        let rangeStart = moment(
+            props.real_original_start || this.activeEvent.startStr,
+            'YYYY-MM-DD',
+            true
+        );
+        let rangeEnd = rangeStart.clone();
+
+        if (props.real_original_end) {
+            rangeEnd = moment(props.real_original_end, 'YYYY-MM-DD', true).subtract(1, 'days');
+        } else if (this.activeEvent.endStr) {
+            rangeEnd = moment(this.activeEvent.endStr, 'YYYY-MM-DD', true).subtract(1, 'days');
+        } else if (this.activeEvent.end) {
+            rangeEnd = moment(this.activeEvent.end).subtract(1, 'days');
+        }
+
+        if (!rangeStart.isValid()) return null;
+        if (!rangeEnd.isValid() || rangeEnd.isBefore(rangeStart)) {
+            rangeEnd = rangeStart.clone();
+        }
+
+        const today = moment().startOf('day');
+        const originalStart = rangeStart.clone();
+        const start = rangeStart.isBefore(today) ? today.clone() : rangeStart.clone();
+
+        const dates = [];
+        const curr = start.clone();
+        while (curr.isSameOrBefore(rangeEnd, 'day')) {
+            dates.push(curr.format('YYYY-MM-DD'));
+            curr.add(1, 'days');
+        }
+
+        let filteredRefs = null;
+        if (props.delete_refs && props.delete_refs.length) {
+            filteredRefs = props.delete_refs.filter((r) => {
+                if (!r || !r.fecha) return false;
+                const d = moment(r.fecha, 'YYYY-MM-DD', true);
+                if (!d.isValid() || d.isBefore(today, 'day')) return false;
+                return d.isSameOrAfter(start, 'day') && d.isSameOrBefore(rangeEnd, 'day');
+            });
+        }
+
+        // Mantener el panel alineado con lo que se va a borrar
+        const startInput = document.getElementById(`${this.panelId}-start`);
+        const endInput = document.getElementById(`${this.panelId}-end`);
+        if (startInput) startInput.value = originalStart.format('YYYY-MM-DD');
+        if (endInput) endInput.value = rangeEnd.format('YYYY-MM-DD');
+
+        return {
+            dates,
+            filteredRefs,
+            originalStart,
+            rangeEnd,
+            today,
+            props,
+            daysCount: dates.length,
+        };
+    }
+
+    _postUnassignWorker(payload) {
+        let csrf = '';
+        const parts = ('; ' + document.cookie).split('; csrf_token=');
+        if (parts.length === 2) csrf = parts.pop().split(';').shift();
+
+        return fetch('/api/v6/unassign_worker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+            body: JSON.stringify(payload),
+        }).then((r) => r.json());
     }
 
     _vehicleAjaxData(term, workerId) {
@@ -818,34 +954,74 @@ class UniversalCalendarManager {
         });
     }
 
-    _toggleVehicleRow(showForNew) {
+    _toggleVehicleRow(show, opts) {
+        opts = opts || {};
         const row = document.getElementById(`${this.panelId}-vehicle-row`);
         const container = document.getElementById(`${this.panelId}-vehicle-container`);
         if (!row || !container) return;
 
-        // En obra nueva la flota va por fila multi-trabajador; aquí solo worker context.
-        const show = !!showForNew && this.context === 'worker';
-        row.style.display = show ? 'flex' : 'none';
-        if (!show) {
+        const showRow = !!show && this.context === 'worker';
+        row.style.display = showRow ? 'flex' : 'none';
+        if (!showRow) {
             const existing = $(`#${this.panelId}-vehicle-select`);
             if (existing.length && existing.data('select2')) existing.select2('destroy');
             container.innerHTML = '';
             return;
         }
 
+        const rowId = `${this.panelId}-vehicle`;
         const existingSelect = $(`#${this.panelId}-vehicle-select`);
         if (existingSelect.length && existingSelect.data('select2')) {
             existingSelect.select2('destroy');
         }
+
         container.innerHTML = `
-            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-car mr-1"></i>${t('Vehículo')}</label>
-            <select id="${this.panelId}-vehicle-select" class="form-control form-control-sm" style="width: 100%;">
-                <option></option>
-            </select>
+            <div class="col-12">
+                <div class="custom-control custom-switch mb-1">
+                    <input type="checkbox" class="custom-control-input" id="${rowId}-toggle">
+                    <label class="custom-control-label small text-muted" for="${rowId}-toggle">
+                        <i class="fas fa-car mr-1"></i>${t('Asignar vehículo')}
+                    </label>
+                </div>
+                <div id="${rowId}-wrap" style="display:none;">
+                    <select id="${this.panelId}-vehicle-select" class="form-control form-control-sm" style="width: 100%;">
+                        <option></option>
+                    </select>
+                </div>
+            </div>
         `;
+
+        const toggle = document.getElementById(`${rowId}-toggle`);
+        const wrap = document.getElementById(`${rowId}-wrap`);
+        if (toggle && wrap) {
+            toggle.addEventListener('change', () => {
+                wrap.style.display = toggle.checked ? 'block' : 'none';
+            });
+        }
+
         setTimeout(() => {
             const $select = $(`#${this.panelId}-vehicle-select`);
-            this._initVehicleSelect($select, this.context === 'worker' ? this.entityId : null);
+            if (!$select.length) return;
+            this._initVehicleSelect($select, this.entityId);
+
+            const prefill = opts.prefill || null;
+            if (prefill && prefill.vehicleId) {
+                const vid = String(prefill.vehicleId);
+                const vlabel = prefill.vehicleLabel || t('Vehículo');
+                if (!$select.find(`option[value="${vid}"]`).length) {
+                    $select.append(new Option(vlabel, vid, true, true));
+                }
+                $select.val(vid).trigger('change');
+                if (toggle) {
+                    toggle.checked = true;
+                    wrap.style.display = 'block';
+                }
+            } else if (opts.openToggle) {
+                if (toggle) {
+                    toggle.checked = true;
+                    wrap.style.display = 'block';
+                }
+            }
         }, 150);
     }
 
@@ -1142,10 +1318,14 @@ class UniversalCalendarManager {
             }
             return null;
         }
-        const vehicleEl = document.getElementById(`${this.panelId}-vehicle-select`);
-        return (this.context === 'worker' && vehicleEl && vehicleEl.value)
-            ? vehicleEl.value
-            : null;
+        if (this.context === 'worker') {
+            const toggleEl = document.getElementById(`${this.panelId}-vehicle-toggle`)
+                || document.querySelector(`#${this.panelId}-vehicle-row .custom-control-input`);
+            const vehicleEl = document.getElementById(`${this.panelId}-vehicle-select`);
+            if (toggleEl && !toggleEl.checked) return null;
+            return vehicleEl && vehicleEl.value ? vehicleEl.value : null;
+        }
+        return null;
     }
 
     _assignmentDatesChanged(props, startVal, endVal) {
@@ -1199,9 +1379,17 @@ class UniversalCalendarManager {
         if (!this.activeEvent || this.activeEvent !== event) return;
         let startInput = document.getElementById(`${this.panelId}-start`);
         let endInput = document.getElementById(`${this.panelId}-end`);
-        
-        if (startInput) startInput.value = moment(event.start).format('YYYY-MM-DD');
-        if (endInput) endInput.value = event.end ? moment(event.end).subtract(1, 'days').format('YYYY-MM-DD') : startInput.value;
+
+        const startStr = event.startStr || moment(event.start).format('YYYY-MM-DD');
+        let endInclusive = startStr;
+        if (event.endStr) {
+            endInclusive = moment(event.endStr, 'YYYY-MM-DD', true).subtract(1, 'days').format('YYYY-MM-DD');
+        } else if (event.end) {
+            endInclusive = moment(event.end).subtract(1, 'days').format('YYYY-MM-DD');
+        }
+
+        if (startInput) startInput.value = startStr;
+        if (endInput) endInput.value = endInclusive;
     }
 
     bindPanelIsolation() {
@@ -1346,8 +1534,7 @@ class UniversalCalendarManager {
                     return;
                 }
 
-                let vehicleEl = document.getElementById(`${this.panelId}-vehicle-select`);
-                let vehicleVal = (this.context === 'worker' && vehicleEl) ? vehicleEl.value : null;
+                let vehicleVal = this._resolvePanelVehicleId();
                 let notasEl = document.getElementById(`${this.panelId}-notas`);
                 let notasVal = notasEl ? notasEl.value.trim() : '';
 
@@ -1541,13 +1728,139 @@ class UniversalCalendarManager {
                 const afterSave = (opts) => this._finishPanelSave(opts || {});
 
                 if (this.context === 'worker') {
-                    if (!selVal) {
-                        if (typeof Swal !== 'undefined') calendarSwal(t('Atención'), t('Debes seleccionar una obra.'), 'warning');
+                    const evType = props.type || 'asignacion';
+                    if (evType === 'vehiculo' || evType === 'vehiculo_odoo') {
+                        const vehicleVal = this._resolvePanelVehicleId() || props.vehiculo_id;
+                        if (!vehicleVal) {
+                            const delCtx = {
+                                originalStart: moment(props.real_original_start || this.activeEvent.start).startOf('day'),
+                                rangeEnd: moment(endVal, 'YYYY-MM-DD', true).startOf('day'),
+                            };
+                            const ids = this._resolveVehicleDeleteIds(props);
+                            if (!ids) {
+                                calendarSwal(t('Error'), t('No se pudo identificar el vehículo.'), 'error');
+                                return;
+                            }
+                            this.executeVehicleSave(
+                                this._vehicleUnassignPayload(ids.wId, ids.vId, delCtx, today),
+                                (vres) => {
+                                    if (!vres || !vres.success) return;
+                                    afterSave({ message: vres.message || t('Vehículo desasignado') });
+                                }
+                            );
+                            return;
+                        }
+                        const assignNew = () => {
+                            this.executeVehicleSave({
+                                worker_id: this.entityId,
+                                vehicle_id: vehicleVal,
+                                start: startVal,
+                                end: endVal,
+                                include_weekends: includeWeekends,
+                                overwrite_mode: 'overwrite',
+                                accion: 'ASIGNAR',
+                            }, (vres) => {
+                                if (!vres || !vres.success) return;
+                                afterSave({ message: vres.message || t('Vehículo guardado') });
+                            });
+                        };
+                        const oldVehicleId = props.vehiculo_id;
+                        if (oldVehicleId && String(oldVehicleId) !== String(vehicleVal)) {
+                            const origStart = props.real_original_start
+                                || moment(this.activeEvent.start).format('YYYY-MM-DD');
+                            let origEnd = endVal;
+                            if (props.real_original_end) {
+                                origEnd = moment(props.real_original_end).subtract(1, 'days').format('YYYY-MM-DD');
+                            } else if (this.activeEvent.end) {
+                                origEnd = moment(this.activeEvent.end).subtract(1, 'days').format('YYYY-MM-DD');
+                            }
+                            const clearStart = moment(origStart).isBefore(today)
+                                ? today.format('YYYY-MM-DD')
+                                : origStart;
+                            this.executeVehicleSave({
+                                worker_id: this.entityId,
+                                vehicle_id: oldVehicleId,
+                                start: clearStart,
+                                end: origEnd,
+                                include_weekends: true,
+                                overwrite_mode: 'overwrite',
+                                accion: 'DESASIGNAR',
+                            }, (vres) => {
+                                if (!vres || !vres.success) return;
+                                assignNew();
+                            });
+                        } else {
+                            assignNew();
+                        }
                         return;
                     }
+
+                    const vehicleVal = this._resolvePanelVehicleId();
+
+                    const finishWithVehicle = (next) => {
+                        if (!vehicleVal) {
+                            if (next) next({ success: true });
+                            return;
+                        }
+                        this.executeVehicleSave({
+                            worker_id: this.entityId,
+                            vehicle_id: vehicleVal,
+                            start: startVal,
+                            end: endVal,
+                            include_weekends: includeWeekends,
+                            overwrite_mode: 'check',
+                        }, next);
+                    };
+
+                    if (!selVal && !vehicleVal) {
+                        if (typeof Swal !== 'undefined') {
+                            calendarSwal(
+                                t('Atención'),
+                                t('Selecciona una obra y/o activa «Asignar vehículo».'),
+                                'warning'
+                            );
+                        }
+                        return;
+                    }
+
+                    if (!selVal && vehicleVal) {
+                        finishWithVehicle((vres) => {
+                            if (!vres || !vres.success) return;
+                            afterSave({ message: vres.message || t('Vehículo guardado') });
+                        });
+                        return;
+                    }
+
                     payload.worker_id = this.entityId;
                     payload.old_obra_id = props.obra_id;
                     payload.target_obra_id = selVal;
+
+                    const datesChanged = this._assignmentDatesChanged(props, startVal, endVal);
+                    const obraChanged = props.obra_id && String(selVal) !== String(props.obra_id);
+                    const vehicleOnly = !!(
+                        vehicleVal
+                        && !datesChanged
+                        && !obraChanged
+                        && evType !== 'vehiculo'
+                        && evType !== 'vehiculo_odoo'
+                    );
+
+                    if (vehicleOnly) {
+                        finishWithVehicle((vres) => {
+                            if (!vres || !vres.success) return;
+                            afterSave({ message: vres.message || t('Vehículo guardado') });
+                        });
+                        return;
+                    }
+
+                    this.executeSave(payload, (obraRes) => {
+                        if (!obraRes || !obraRes.success) return;
+                        finishWithVehicle((vres) => {
+                            if (!vres || !vres.success) return;
+                            afterSave();
+                        });
+                    }, { skipHideOnSuccess: !!vehicleVal });
+                    return;
                 } else if (this.context === 'vehiculo') {
                     if (!selVal || String(selVal) === 'GENERICO') {
                         if (typeof Swal !== 'undefined') calendarSwal(t('Atención'), t('Selecciona un operario.'), 'warning');
@@ -1692,36 +2005,52 @@ class UniversalCalendarManager {
 
         if(delBtn) delBtn.addEventListener('click', () => {
             if (!this.activeEvent) return;
+
+            const props = this.activeEvent.extendedProps || {};
+            const evType = props.type || 'asignacion';
+            const isVehicleBlock = evType === 'vehiculo' || evType === 'vehiculo_odoo';
+            if (!isVehicleBlock && evType === 'ausencia') {
+                if (typeof Swal !== 'undefined') {
+                    calendarSwal(
+                        t('No es una asignación de obra'),
+                        t('Este bloque es una ausencia planificada. Gestiónala desde la ficha del trabajador.'),
+                        'info'
+                    );
+                }
+                return;
+            }
+            if (evType === 'request' || evType === 'solicitud_vehiculo') {
+                if (typeof Swal !== 'undefined') {
+                    calendarSwal(
+                        t('No es una asignación de obra'),
+                        t('Este bloque es una solicitud pendiente, no una asignación confirmada.'),
+                        'info'
+                    );
+                }
+                return;
+            }
             
-            let originalStart = moment(this.activeEvent.startStr);
-            let end = this.activeEvent.endStr ? moment(this.activeEvent.endStr).subtract(1, 'days') : originalStart.clone();
-            let today = moment().startOf('day');
-            
-            let start = originalStart.isBefore(today) ? today.clone() : originalStart.clone();
-            
-            let daysCount = Math.max(0, end.diff(start, 'days') + 1);
-            
-            if (daysCount <= 0) {
-                if (typeof Swal !== 'undefined') calendarSwal(t('Histórico Protegido'), t('Este bloque pertenece íntegramente al pasado y no se puede borrar.'), 'info');
+            const delCtx = this._resolvePanelDeleteContext();
+            if (!delCtx || delCtx.daysCount <= 0) {
+                if (typeof Swal !== 'undefined') {
+                    calendarSwal(t('Histórico Protegido'), t('Este bloque pertenece íntegramente al pasado y no se puede borrar.'), 'info');
+                }
                 return;
             }
 
-            let dates = [];
-            let curr = start.clone();
-            while(curr.isSameOrBefore(end)) {
-                dates.push(curr.format('YYYY-MM-DD'));
-                curr.add(1, 'days');
-            }
+            const { dates, filteredRefs, originalStart, today, daysCount } = delCtx;
+            const deleteTitle = isVehicleBlock ? t('¿Desasignar vehículo?') : t('¿Desasignar bloque?');
+            const deleteMsg = isVehicleBlock
+                ? `${t('Se quitará la asignación del vehículo en')} <b class="text-danger">${daysCount} ${t('día(s)')}</b>.`
+                : (originalStart.isBefore(today)
+                    ? `${t('Se conservará el histórico pasado, pero se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('desde hoy en adelante.')}`
+                    : `${t('Se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('del bloque seleccionado.')}`);
 
             if (typeof Swal !== 'undefined') {
-                let msg = originalStart.isBefore(today) 
-                    ? `${t('Se conservará el histórico pasado, pero se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('desde hoy en adelante.')}` 
-                    : `${t('Se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b>.`;
-
                 const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
                 calendarSwal(swalBase({
-                    title: t('¿Desasignar bloque?'),
-                    html: msg,
+                    title: deleteTitle,
+                    html: deleteMsg,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonText: t('Sí, borrar'),
@@ -1735,51 +2064,60 @@ class UniversalCalendarManager {
                         actions: 'admin-swal-actions',
                     },
                 })).then((res) => {
-                    if (res.isConfirmed) {
-                        if (this.callbacks.onDeleteAssignment) {
-                            this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today));
-                            this.hidePanel();
-                        } else if (this.context === 'vehiculo') {
-                            const wId = this.activeEvent.extendedProps.worker_id;
-                            if (!wId) {
-                                calendarSwal(t('Error'), t('No se pudo identificar el operario del bloque.'), 'error');
-                                return;
-                            }
-                            this.executeVehicleSave({
-                                worker_id: wId,
-                                vehicle_id: this.entityId,
-                                start: start.format('YYYY-MM-DD'),
-                                end: end.format('YYYY-MM-DD'),
-                                include_weekends: true,
-                                overwrite_mode: 'overwrite',
-                                accion: 'DESASIGNAR',
-                            }, (vres) => {
-                                if (!vres || !vres.success) return;
-                                calendarSwal({toast: true, position: 'top-end', icon: 'success', title: vres.message || t('Desasignado'), showConfirmButton: false, timer: 1500});
-                                this.calendar.refetchEvents(); this.hidePanel();
-                                if (window.loadTimelineData) window.loadTimelineData();
-                            });
-                        } else {
-                            let wId = this.context === 'worker' ? this.entityId : this.activeEvent.extendedProps.worker_id;
-                            let oId = this.context === 'obra' ? this.entityId : this.activeEvent.extendedProps.obra_id;
-                            if (!oId || oId === '0' || oId === 0) oId = null;
+                    if (!res.isConfirmed) return;
 
-                            let csrf = "";
-                            let parts = ("; " + document.cookie).split("; csrf_token=");
-                            if (parts.length === 2) csrf = parts.pop().split(";").shift();
-
-                            fetch('/api/v6/unassign_worker', {
-                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-                                body: JSON.stringify({ worker_id: wId, obra_id: oId, dates: dates, mode: 'selected' })
-                            }).then(r=>r.json()).then(data => {
-                                if(data.success) {
-                                    calendarSwal({toast: true, position: 'top-end', icon: 'success', title: t('Borrado'), showConfirmButton: false, timer: 1500});
-                                    this.calendar.refetchEvents(); this.hidePanel();
-                                    if (window.loadTimelineData) window.loadTimelineData();
-                                } else { calendarSwal(t('Error'), data.message, 'error'); }
-                            });
-                        }
+                    if (this.callbacks.onDeleteAssignment) {
+                        this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today));
+                        this.hidePanel();
+                        return;
                     }
+
+                    if (isVehicleBlock || this.context === 'vehiculo') {
+                        const ids = this._resolveVehicleDeleteIds(props);
+                        if (!ids) {
+                            calendarSwal(t('Error'), t('No se pudo identificar vehículo u operario.'), 'error');
+                            return;
+                        }
+                        this.executeVehicleSave(
+                            this._vehicleUnassignPayload(ids.wId, ids.vId, delCtx, today),
+                            (vres) => this._finishVehicleUnassign(vres)
+                        );
+                        return;
+                    }
+
+                    let wId = this.context === 'worker' ? this.entityId : this.activeEvent.extendedProps.worker_id;
+                    wId = parseInt(wId, 10);
+                    if (Number.isNaN(wId)) {
+                        calendarSwal(t('Error'), t('No se pudo identificar al operario.'), 'error');
+                        return;
+                    }
+
+                    let oId = this.context === 'obra' ? this.entityId : props.obra_id;
+                    if (oId === 0 || oId === '0' || oId == null) {
+                        oId = null;
+                    } else {
+                        oId = parseInt(oId, 10);
+                        if (Number.isNaN(oId)) oId = null;
+                    }
+
+                    let payload;
+                    if (filteredRefs && filteredRefs.length) {
+                        payload = { worker_id: wId, refs: filteredRefs, mode: 'by_refs' };
+                    } else {
+                        payload = { worker_id: wId, dates: dates, mode: 'selected' };
+                        if (oId != null) payload.obra_id = oId;
+                    }
+
+                    this._postUnassignWorker(payload).then((data) => {
+                        if (data.success) {
+                            calendarSwal({ toast: true, position: 'top-end', icon: 'success', title: data.message || t('Borrado'), showConfirmButton: false, timer: 2000 });
+                            this.calendar.refetchEvents();
+                            this.hidePanel();
+                            if (window.loadTimelineData) window.loadTimelineData();
+                        } else {
+                            calendarSwal(t('Error'), data.message || t('No se pudo desasignar.'), 'error');
+                        }
+                    });
                 });
             }
         });

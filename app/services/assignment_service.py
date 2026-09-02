@@ -422,7 +422,7 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
         'message': f'Asignación realizada ({count} días).',
     }
 
-def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mode='selected'):
+def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mode='selected', assignment_refs=None):
     from app.services.solicitud_service import SolicitudService, update_solicitudes_for_assignment
     from app.services.email_service import notificar_movimiento_admin_a_jo
     
@@ -435,27 +435,65 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
     if not worker_id:
         return {'success': False, 'message': 'Falta ID trabajador'}
 
-    query = Asignacion.query.filter_by(user_id=worker_id)
-    if target_obra_id:
-        query = query.filter_by(obra_id=target_obra_id)
+    hoy = today_local()
 
-    date_objs = []
-    if mode == 'all_obra':
-        asignaciones = query.filter(Asignacion.fecha >= today_local()).all()
-        if not asignaciones:
-            return {'success': False, 'message': 'No hay asignaciones futuras para borrar.'}
-        date_objs = [a.fecha for a in asignaciones]
+    if mode == 'by_refs':
+        rows = []
+        date_objs = []
+        seen = set()
+        for ref in (assignment_refs or []):
+            try:
+                oid = int(ref.get('obra_id'))
+                raw_fecha = ref.get('fecha')
+                if isinstance(raw_fecha, str):
+                    d = datetime.strptime(raw_fecha, '%Y-%m-%d').date()
+                elif isinstance(raw_fecha, date):
+                    d = raw_fecha
+                else:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            if d < hoy:
+                continue
+            key = (worker_id, oid, d)
+            if key in seen:
+                continue
+            if not Asignacion.query.filter_by(user_id=worker_id, obra_id=oid, fecha=d).first():
+                continue
+            seen.add(key)
+            rows.append(key)
+            date_objs.append(d)
+        date_objs = sorted(set(date_objs))
+        asignaciones = []
     else:
-        raw_dates = sorted([datetime.strptime(d, '%Y-%m-%d').date() if isinstance(d, str) else d for d in date_list])
-        date_objs = [d for d in raw_dates if d >= today_local()]
-        asignaciones = query.filter(Asignacion.fecha.in_(date_objs)).all()
+        query = Asignacion.query.filter_by(user_id=worker_id)
+        if target_obra_id:
+            query = query.filter_by(obra_id=target_obra_id)
 
-    if not date_objs:
+        date_objs = []
+        asignaciones = []
+        if mode == 'all_obra':
+            asignaciones = query.filter(Asignacion.fecha >= hoy).all()
+            if not asignaciones:
+                return {'success': False, 'message': 'No hay asignaciones futuras para borrar.'}
+            date_objs = [a.fecha for a in asignaciones]
+        else:
+            raw_dates = sorted([datetime.strptime(d, '%Y-%m-%d').date() if isinstance(d, str) else d for d in date_list])
+            date_objs = [d for d in raw_dates if d >= hoy]
+            asignaciones = query.filter(Asignacion.fecha.in_(date_objs)).all()
+
+        rows = [(int(a.user_id), int(a.obra_id), a.fecha) for a in asignaciones]
+
+    if not date_objs and mode != 'by_refs':
         return {'success': False, 'message': 'No hay fechas válidas.'}
 
-    # Snapshot ANTES de borrar: nunca usar asignaciones[i] tras desasignar.
-    rows = [(int(a.user_id), int(a.obra_id), a.fecha) for a in asignaciones]
     fechas_con_asignacion = [fecha for _, _, fecha in rows]
+
+    if mode in ('selected', 'by_refs') and not rows:
+        return {
+            'success': False,
+            'message': 'No había asignaciones de obra en esos días para eliminar.',
+        }
     
     from app.services.tenant_modules import jefes_asignan_directo as _jefes_directo
 
@@ -498,10 +536,10 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
             fechas=fechas_objs,
         )
     
-    for d_obj in date_objs:
+    for uid, oid, fecha in rows:
         try:
             update_solicitudes_for_assignment(
-                target_obra_id or obra_id_for_log, worker_id, d_obj,
+                oid, worker_id, fecha,
                 resolved_by_id=actor_user.id,
             )
         except Exception:

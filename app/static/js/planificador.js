@@ -948,9 +948,11 @@ document.addEventListener('DOMContentLoaded', function() {
                             
                             window.quickCalendar = new UniversalCalendarManager('modal-calendar-container', {
                                 context: 'worker',
-                                id: window.currentSelectedItem.worker_id,
+                                id: parseInt(window.currentSelectedItem.worker_id, 10),
                                 entityName: window.currentSelectedItem.title,
+                                mode: 'obras',
                                 embedded: true,
+                                showFichajes: !!window.PLANIFICADOR_SHOW_FICHAJES,
                             });
                         }, 200);
                     });
@@ -1485,6 +1487,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
         if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
         if (typeof Swal !== 'undefined' && Swal.isVisible && Swal.isVisible()) return;
+        // Calendario modal abierto: el propio UniversalCalendarManager gestiona Suprimir
+        const calModal = document.getElementById('quickCalendarModal');
+        if (calModal && calModal.classList.contains('show')) return;
+        const calPanel = document.getElementById('modal-calendar-container-bottom-panel');
+        if (calPanel && calPanel.style.display !== 'none') return;
         if (!window.currentSelectedItem) return;
         const wid = window.currentSelectedItem.worker_id;
         if (wid === 'SYSTEM' || wid === 'REQUEST') return;

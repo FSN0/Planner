@@ -607,6 +607,56 @@ body.marketing-page {
 .mkt-related a { color: var(--mkt-primary); font-weight: 600; text-decoration: none; }
 .mkt-related a:hover { text-decoration: underline; }
 
+.mkt-demo {
+  padding: 2.5rem 1.25rem 4rem;
+  background: linear-gradient(180deg, #f8fafc 0%, #fff 40%);
+}
+
+.mkt-demo-inner {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.mkt-demo h1 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  letter-spacing: -0.02em;
+}
+
+.mkt-demo-sub {
+  margin: 0 0 1.75rem;
+  color: var(--mkt-ink-soft);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  max-width: 42rem;
+}
+
+.mkt-video-wrap {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%;
+  height: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #0f172a;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+}
+
+.mkt-video-wrap iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.mkt-demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
 @media (max-width: 860px) {
   .mkt-suite { grid-template-columns: 1fr; }
   .mkt-access { grid-template-columns: 1fr; }

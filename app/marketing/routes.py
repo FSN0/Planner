@@ -337,6 +337,19 @@ def reenviar_verificacion():
     return _pendiente_page(email, subdomain, True, reserva=reserva)
 
 
+DEMO_YOUTUBE_ID = 'HPKfP7fK2IQ'
+
+
+@marketing_bp.route('/demo')
+def demo():
+    _require_marketing()
+    return render_template(
+        'marketing/demo.html',
+        current_year=datetime.utcnow().year,
+        youtube_id=DEMO_YOUTUBE_ID,
+    )
+
+
 @marketing_bp.route('/contacto', methods=['GET', 'POST'])
 @limiter.limit('5 per minute; 20 per hour', methods=['POST'])
 def contacto():
@@ -500,6 +513,7 @@ def sitemap_xml():
         ('/alta', '0.8', 'monthly', None),
         ('/entrar', '0.6', 'monthly', None),
         ('/contacto', '0.7', 'monthly', None),
+        ('/demo', '0.9', 'monthly', None),
         ('/soluciones/', '0.9', 'weekly', None),
         ('/recursos/', '0.7', 'weekly', None),
     ]

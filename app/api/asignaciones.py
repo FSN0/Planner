@@ -37,6 +37,89 @@ def _assignment_mode_from_payload(data, default='check'):
     return mode
 
 
+def _desasignar_obra_origen_traslado(actor, worker_id, old_obra_id, fechas):
+    """
+    Traslado entre obras en planificador: quitar de la obra origen los días
+    que se van a asignar en destino. Sin esto, el check de conflictos trata
+    la propia obra origen como «otra obra» ocupada.
+    """
+    if not fechas or old_obra_id is None:
+        return False, ''
+
+    fechas_en_origen = [
+        f for f in fechas
+        if Asignacion.query.filter_by(user_id=worker_id, fecha=f, obra_id=old_obra_id).first()
+    ]
+    if not fechas_en_origen:
+        return False, ''
+
+    from app.services.tenant_modules import jefes_asignan_directo
+
+    jefe_directo = actor.role == ROLE_JEFE and jefes_asignan_directo()
+
+    if actor.role == ROLE_ADMIN or jefe_directo:
+        for d_orig in fechas_en_origen:
+            CoreAssignmentService.desasignar(
+                worker_id, old_obra_id, d_orig, actor.id,
+                "Planificación Manual", "Traslado a otra obra desde planificador.",
+                registrar_log=False,
+            )
+        CoreAssignmentService.registrar_log_rango(
+            worker_id, old_obra_id,
+            min(fechas_en_origen), max(fechas_en_origen), len(fechas_en_origen),
+            actor.id, "Planificación Manual", False,
+            detalle_extra="Traslado a otra obra desde planificador.",
+            fechas=fechas_en_origen,
+        )
+        db.session.commit()
+        for d_orig in fechas_en_origen:
+            update_solicitudes_for_assignment(
+                old_obra_id, worker_id, d_orig, resolved_by_id=actor.id
+            )
+        worker = User.query.get(worker_id)
+        if worker:
+            worker_name = f"{worker.name} {worker.lastname}"
+            if len(fechas_en_origen) == 1:
+                fechas_str = fechas_en_origen[0].strftime('%d/%m/%Y')
+            else:
+                fechas_str = (
+                    f"{fechas_en_origen[0].strftime('%d/%m/%Y')} - "
+                    f"{fechas_en_origen[-1].strftime('%d/%m/%Y')}"
+                )
+            notificar_movimiento_admin_a_jo(
+                old_obra_id, worker_name, "Desasignar (Traslado)", fechas_str, actor.name
+            )
+        return True, ''
+
+    if actor.role == ROLE_JEFE:
+        dates_str = [d.strftime('%Y-%m-%d') for d in fechas_en_origen]
+        existing_baja = Solicitud.query.filter_by(
+            tipo='CONCRETA', accion='DESASIGNAR', obra_id=old_obra_id, empleado_id=worker_id
+        ).filter(Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])).first()
+
+        if existing_baja:
+            existing_baja.fecha_inicio = min(existing_baja.fecha_inicio, min(fechas_en_origen))
+            existing_baja.fecha_fin = max(existing_baja.fecha_fin, max(fechas_en_origen))
+            existing_baja.comentarios = merge_comentarios_dates(existing_baja.comentarios, dates_str)
+            db.session.commit()
+            return True, translate("La solicitud de baja existente ha sido ampliada.")
+
+        sol_baja = Solicitud(
+            tipo='CONCRETA', accion='DESASIGNAR', obra_id=old_obra_id,
+            requested_by_id=actor.id, empleado_id=worker_id,
+            fecha_inicio=min(fechas_en_origen), fecha_fin=max(fechas_en_origen),
+            cantidad_solicitada=1, estado='PENDIENTE',
+            comentarios=build_comentarios_config(dates_str),
+        )
+        db.session.add(sol_baja)
+        db.session.commit()
+        log_nueva_solicitud(sol_baja)
+        notificar_nueva_solicitud(sol_baja, actor.name)
+        return True, translate("Se generó una solicitud de baja para el traslado.")
+
+    return False, ''
+
+
 def _parse_workers_payload(data):
     """
     Normaliza multi-trabajador desde el planificador.
@@ -311,6 +394,7 @@ def api_unassign_worker():
     worker_id = data.get('worker_id')
     obra_id = data.get('obra_id')
     dates = data.get('dates', [])
+    refs = data.get('refs', [])
     mode = data.get('mode', 'selected')
 
     if not worker_id:
@@ -322,7 +406,8 @@ def api_unassign_worker():
             worker_id=worker_id,
             target_obra_id=obra_id,
             date_list=dates,
-            mode=mode
+            mode=mode,
+            assignment_refs=refs,
         )
         
         status_code = 200 if result.get('success') else 400
@@ -662,6 +747,14 @@ def api_planificador_action():
                 "unchanged": True,
                 "message": translate("No hubo cambios."),
             })
+
+        if old_obra_id != target_obra_id and str(worker_id) != 'GENERICO':
+            traslado_hecho, msg_traslado = _desasignar_obra_origen_traslado(
+                current_user, int(worker_id), old_obra_id, fechas_a_procesar
+            )
+            if traslado_hecho and msg_traslado:
+                sol_baja_creada = True
+                msg_baja = msg_traslado
 
         batch_workers = _parse_workers_payload(data)
         if batch_workers is not None:

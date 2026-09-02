@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="{{ current_locale|default('es') }}">
+<head>
+    {% set page_title = _('Demo SignaPlan — Cuadrante, fichaje y flota') %}
+    {% set meta_description = _('Vídeo demo de SignaPlan: tablero de obras, planificador, fichaje en el móvil y gestión de flota para constructoras PYME.') %}
+    {% set canonical_path = url_for('marketing.demo') %}
+    {% include "components/_marketing_seo_head.html" %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}?v=20260902h">
+</head>
+<body class="marketing-page">
+    <header class="mkt-nav">
+        <a class="mkt-brand" href="{{ mkt_home() }}">
+            {% include "components/_brand_logo.html" %}
+        </a>
+        {% include "components/_marketing_nav.html" %}
+    </header>
+
+    <section class="mkt-demo">
+        <div class="mkt-demo-inner">
+            <h1>{{ _('Así funciona SignaPlan') }}</h1>
+            <p class="mkt-demo-sub">{{ _('Tablero del día, planificador, fichaje en obra y flota en una sola herramienta.') }}</p>
+
+            <div class="mkt-video-wrap">
+                <iframe
+                    src="https://www.youtube-nocookie.com/embed/{{ youtube_id }}?rel=0&modestbranding=1"
+                    title="SignaPlan — demo"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                    loading="lazy"
+                    referrerpolicy="strict-origin-when-cross-origin"
+                ></iframe>
+            </div>
+
+            <div class="mkt-demo-actions">
+                <a class="mkt-btn mkt-btn-primary" href="{{ mkt_url('marketing.alta') }}">{{ _('Crear cuenta gratuita') }}</a>
+                <a class="mkt-btn mkt-btn-ghost" href="{{ mkt_url('marketing.contacto') }}">{{ _('Hablar con nosotros') }}</a>
+                <a class="mkt-btn mkt-btn-ghost" href="https://youtu.be/{{ youtube_id }}" target="_blank" rel="noopener noreferrer">{{ _('Ver en YouTube') }}</a>
+            </div>
+        </div>
+    </section>
+
+    <footer class="mkt-footer">
+        <span>© {{ current_year }} SignaPlan</span>
+        <span>
+            <a href="{{ mkt_home() }}">SignaPlan</a> ·
+            <a href="{{ mkt_url('marketing.alta') }}">{{ _('Crear cuenta gratuita') }}</a>
+        </span>
+    </footer>
+    {% include "components/_cookie_banner.html" %}
+</body>
+</html>
