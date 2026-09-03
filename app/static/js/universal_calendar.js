@@ -74,22 +74,24 @@ class UniversalCalendarManager {
         this.element.classList.add('univ-calendar-root');
         if (this.compact) this.element.classList.add('univ-calendar-compact');
 
-        if (!this.readonly) {
+        // Título + Empresas/Empleados: siempre (quien llega al panel ya tiene permiso).
+        // El panel de edición sigue solo si !readonly.
+        {
             let icon = 'fa-calendar-alt';
             let typeName = t('Elemento');
             let prep = t('de');
             let headerUrl = null;
-            
-            if (this.context === 'obra') { 
-                icon = 'fa-building'; typeName = t('Obra'); prep = t('de la'); 
+
+            if (this.context === 'obra') {
+                icon = 'fa-building'; typeName = t('Obra'); prep = t('de la');
                 headerUrl = `/admin/obra_panel/${this.entityId}`;
             }
-            else if (this.context === 'worker') { 
-                icon = 'fa-hard-hat'; typeName = t('Empleado'); prep = t('del'); 
+            else if (this.context === 'worker') {
+                icon = 'fa-hard-hat'; typeName = t('Empleado'); prep = t('del');
                 headerUrl = `/admin/worker_panel/${this.entityId}`;
             }
-            else if (this.context === 'empresa') { 
-                icon = 'fa-briefcase'; typeName = t('Empresa'); prep = t('de la'); 
+            else if (this.context === 'empresa') {
+                icon = 'fa-briefcase'; typeName = t('Empresa'); prep = t('de la');
                 headerUrl = `/admin/company_panel/${this.entityId}`;
             }
             else if (this.context === 'vehiculo') {
@@ -118,7 +120,6 @@ class UniversalCalendarManager {
                 `;
             }
 
-            let titleHTML = '';
             if (!this.hideTitle || switcherHTML) {
                 let headingBlock = '';
                 if (!this.hideTitle) {
@@ -128,7 +129,7 @@ class UniversalCalendarManager {
                     <span>${titleText}</span>
                 </div>`;
                 }
-                titleHTML = `
+                const titleHTML = `
             <div id="${this.titleId}" class="univ-calendar-title${this.hideTitle ? ' univ-calendar-title--toolbar-only' : ''}">
                 ${headingBlock}
                 ${switcherHTML}
@@ -160,7 +161,9 @@ class UniversalCalendarManager {
                     }
                 }
             }
+        }
 
+        if (!this.readonly) {
             let panelHTML = `
             <div id="${this.panelId}" class="univ-calendar-panel" style="display: none;">
                 <div class="univ-calendar-panel-head">

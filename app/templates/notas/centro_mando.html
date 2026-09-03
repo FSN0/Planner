@@ -22,9 +22,14 @@
         <p class="bitacora-toolbar-sub">{{ _('Registro de reuniones, notas operativas e incidencias.') }}</p>
       </div>
       {% if user_can(current_user, 'reuniones', 'w') %}
-      <button class="btn-admin btn-admin-primary" onclick="$('#modalNuevaNota').modal('show')">
-        <i class="fas fa-plus mr-1"></i> {{ _('Nueva nota / reunión') }}
-      </button>
+      <div class="d-flex flex-wrap gap-2" style="gap: 0.5rem;">
+        <button class="btn-admin btn-admin-primary" onclick="$('#modalNuevaNota').modal('show')">
+          <i class="fas fa-plus mr-1"></i> {{ _('Nueva nota / reunión') }}
+        </button>
+        <button class="btn-admin btn-admin-ghost" onclick="$('#modalNotaAudio').modal('show')">
+          <i class="fas fa-microphone mr-1"></i> {{ _('Nota por voz') }}
+        </button>
+      </div>
       {% endif %}
     </div>
 
@@ -43,13 +48,13 @@
           </thead>
           <tbody>
             {% for nota in notas %}
-            <tr>
+            <tr class="nota-row" data-nota-id="{{ nota.id }}" style="cursor: pointer;">
               <td data-sort="{{ nota.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark">
                 {{ nota.fecha.strftime('%d/%m/%Y') }}
               </td>
               <td>
                 <strong class="text-dark d-block">{{ nota.titulo }}</strong>
-                <div class="nota-preview" title="{{ nota.contenido }}">{{ nota.contenido }}</div>
+                <div class="nota-preview">{{ nota.contenido[:180] }}{% if nota.contenido|length > 180 %}…{% endif %}</div>
               </td>
               <td>
                 {% for o in nota.obras %}
@@ -73,19 +78,19 @@
                 {% endif %}
                 <div class="text-muted" style="font-size: 0.7rem; margin-top: 2px;">{{ nota.autor.name }}</div>
               </td>
-              <td>
+              <td class="no-row-nav" onclick="event.stopPropagation();">
                 <div class="bitacora-actions">
                   {% if user_can(current_user, 'reuniones', 'w') %}
-                  <button class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="{{ _('Ver / editar') }}">
+                  <button type="button" class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="{{ _('Ver / editar') }}">
                     <i class="fas fa-edit text-success"></i>
                   </button>
                   {% else %}
-                  <button class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="{{ _('Ver') }}">
+                  <button type="button" class="btn btn-light border btn-icon" onclick="verNotaModal({{ nota.id }})" title="{{ _('Ver') }}">
                     <i class="fas fa-eye text-secondary"></i>
                   </button>
                   {% endif %}
                   {% if user_can(current_user, 'reuniones', 'x') or (nota.autor_id == current_user.id and user_can(current_user, 'reuniones', 'w')) %}
-                  <button class="btn btn-light border btn-icon" onclick="eliminarNota({{ nota.id }})" title="{{ _('Eliminar') }}">
+                  <button type="button" class="btn btn-light border btn-icon" onclick="eliminarNota({{ nota.id }})" title="{{ _('Eliminar') }}">
                     <i class="fas fa-trash-alt text-danger"></i>
                   </button>
                   {% endif %}
@@ -149,6 +154,8 @@
                 </select>
               </div>
             </div>
+
+            <div id="notaSugerenciasAudio" class="nota-sugerencias-audio d-none" aria-live="polite"></div>
           </div>
 
           <div class="d-flex justify-content-between align-items-center mb-2">
@@ -175,6 +182,90 @@
   </div>
 </div>
 
+<div class="modal fade admin-note-modal" id="modalNotaAudio" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title mb-0"><i class="fas fa-microphone mr-2"></i>{{ _('Nota por voz') }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body nota-audio-body">
+        <p class="nota-audio-lead">
+          {{ _('Sube un audio o grábalo en el PC. Se crea una nota privada en español (máx. 3 h).') }}
+        </p>
+
+        <div id="notaAudioIosHint" class="nota-audio-ios-hint d-none">
+          <i class="fas fa-mobile-alt"></i>
+          <span>{{ _('En iPhone/iPad usa un archivo de audio (Notas de Voz, WhatsApp…). La grabación en navegador no está disponible.') }}</span>
+        </div>
+
+        <div id="notaAudioActions" class="nota-audio-actions">
+          <div class="nota-audio-dropzone" id="notaAudioDropzone" role="button" tabindex="0">
+            <input type="file" id="notaAudioFile" class="d-none" accept="audio/*,video/mp4,.mp3,.m4a,.wav,.ogg,.webm,.flac,.aac,.amr,.3gp,.opus,.wma,.aiff,.caf,.mov,.mkv">
+            <div class="nota-audio-drop-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+            <div class="nota-audio-drop-title">{{ _('Arrastra el audio aquí') }}</div>
+            <div class="nota-audio-drop-sub">{{ _('o haz clic para elegir archivo') }}</div>
+            <div class="nota-audio-drop-formats">MP3 · M4A · WAV · OGG · WEBM · FLAC · AAC</div>
+          </div>
+
+          <div class="nota-audio-rec-card" id="notaAudioRecCard">
+            <div class="nota-audio-rec-copy">
+              <strong>{{ _('Grabar en este PC') }}</strong>
+              <span>{{ _('Ideal para reuniones cortas desde el navegador.') }}</span>
+            </div>
+            <div class="nota-audio-rec-btns">
+              <span id="notaAudioRecTimer" class="nota-audio-rec-timer d-none">0:00</span>
+              <button type="button" class="btn-admin btn-admin-primary btn-sm" id="btnNotaAudioGrabar">
+                <i class="fas fa-circle text-danger mr-1"></i> {{ _('Grabar') }}
+              </button>
+              <button type="button" class="btn-admin btn-admin-danger btn-sm d-none" id="btnNotaAudioParar">
+                <i class="fas fa-stop mr-1"></i> {{ _('Parar') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p id="notaAudioIdleHint" class="nota-audio-idle-hint">
+          {{ _('El progreso aparecerá aquí cuando subas o grabes un audio.') }}
+        </p>
+
+        <div id="notaAudioProgressPanel" class="nota-audio-progress-panel d-none">
+          <div class="nota-audio-progress-head">
+            <div>
+              <div id="notaAudioMsg" class="nota-audio-msg">{{ _('Listo') }}</div>
+              <div id="notaAudioFileMeta" class="nota-audio-file-meta d-none"></div>
+              <div id="notaAudioDetail" class="nota-audio-detail d-none"></div>
+            </div>
+            <div id="notaAudioPct" class="nota-audio-pct">0%</div>
+          </div>
+
+          <div class="nota-audio-bar" aria-hidden="true">
+            <div id="notaAudioBarFill" class="nota-audio-bar-fill" style="width:0%"></div>
+          </div>
+
+          <div class="nota-audio-time-row">
+            <span id="notaAudioElapsed">{{ _('Transcurrido') }}: 0:00</span>
+            <span id="notaAudioEta" class="d-none"></span>
+          </div>
+
+          <ol class="nota-audio-steps" aria-label="{{ _('Fases del proceso') }}">
+            <li id="notaAudioStep_subida"><span>1</span>{{ _('Subida') }}</li>
+            <li id="notaAudioStep_preparando"><span>2</span>{{ _('Preparación') }}</li>
+            <li id="notaAudioStep_transcribiendo"><span>3</span>{{ _('Transcripción') }}</li>
+            <li id="notaAudioStep_resumiendo"><span>4</span>{{ _('Resumen') }}</li>
+            <li id="notaAudioStep_guardando"><span>5</span>{{ _('Guardado') }}</li>
+          </ol>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cerrar') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -182,6 +273,7 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/nota_audio.js') }}?v=20260903b"></script>
 
 <script>
 var t = window.SP_T || function (key) { return key; };
@@ -198,6 +290,17 @@ $(document).ready(function() {
             { "orderable": false, "targets": 5 }
         ]
     });
+
+    // Clic en la fila → abrir nota (salvo botones de acción)
+    $('#notasTable tbody').on('click', 'tr.nota-row', function (e) {
+        if ($(e.target).closest('.no-row-nav, button, a').length) return;
+        var id = $(this).data('nota-id');
+        if (id) verNotaModal(id);
+    });
+
+    if (typeof initNotaAudioUI === 'function') {
+        initNotaAudioUI();
+    }
 
     $('.select2-modal').select2({
         theme: 'bootstrap4',
@@ -240,12 +343,105 @@ function toggleExpandirContenido() {
     }
 }
 
+function _escapeHtml(str) {
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function _addSelect2Value(selectId, id) {
+    const $sel = $(selectId);
+    const val = String(id);
+    let current = $sel.val() || [];
+    if (!Array.isArray(current)) current = [current];
+    if (current.indexOf(val) === -1) {
+        current.push(val);
+        $sel.val(current).trigger('change');
+    }
+}
+
+function renderNotaSugerencias(sugerencias) {
+    const box = document.getElementById('notaSugerenciasAudio');
+    if (!box) return;
+
+    const obras = (sugerencias && sugerencias.obras) || [];
+    const personas = (sugerencias && sugerencias.personas) || [];
+    if (!obras.length && !personas.length) {
+        box.classList.add('d-none');
+        box.innerHTML = '';
+        return;
+    }
+
+    let html = '<div class="nota-sugerencias-head">' +
+        '<i class="fas fa-user-check mr-1"></i> ' +
+        t('Detectado en el audio — valida y pulsa Añadir') +
+        '</div>';
+
+    obras.forEach(function (item) {
+        html += '<div class="nota-sugerencias-row">';
+        html += '<div class="nota-sugerencias-query">' + _escapeHtml(item.query || '') + '</div>';
+        html += '<div class="nota-sugerencias-cands">';
+        (item.candidates || []).forEach(function (c) {
+            const label = c.nombre || c.name || ('#' + c.id);
+            html += '<button type="button" class="btn-admin btn-admin-ghost btn-sm nota-sug-add" ' +
+                'data-kind="obra" data-id="' + _escapeHtml(c.id) + '">' +
+                '<i class="fas fa-plus mr-1"></i>' + _escapeHtml(label) +
+                '</button>';
+        });
+        html += '</div></div>';
+    });
+
+    personas.forEach(function (item) {
+        html += '<div class="nota-sugerencias-row">';
+        html += '<div class="nota-sugerencias-query">' + _escapeHtml(item.query || '') + '</div>';
+        html += '<div class="nota-sugerencias-cands">';
+        (item.candidates || []).forEach(function (c) {
+            const label = c.name || ('#' + c.id);
+            const badge = c.interno ? ' <span class="badge badge-success">interno</span>' : '';
+            html += '<button type="button" class="btn-admin btn-admin-ghost btn-sm nota-sug-add" ' +
+                'data-kind="user" data-id="' + _escapeHtml(c.id) + '">' +
+                '<i class="fas fa-plus mr-1"></i>' + _escapeHtml(label) + badge +
+                '</button>';
+        });
+        html += '</div></div>';
+    });
+
+    box.innerHTML = html;
+    box.classList.remove('d-none');
+
+    box.querySelectorAll('.nota-sug-add').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const id = btn.getAttribute('data-id');
+            const kind = btn.getAttribute('data-kind');
+            if (kind === 'obra') {
+                _addSelect2Value('#verNotaObras', id);
+            } else {
+                _addSelect2Value('#verNotaUsuarios', id);
+            }
+            btn.classList.add('is-added');
+            btn.disabled = true;
+            const icon = btn.querySelector('i');
+            if (icon) {
+                icon.className = 'fas fa-check mr-1';
+            }
+        });
+    });
+}
+
 function verNotaModal(notaId) {
     document.getElementById('notaMetadataSection').style.display = 'block';
     const textarea = document.getElementById('verNotaContenido');
     textarea.classList.remove('is-expanded');
     let btnExp = document.getElementById('btnExpandirContenido');
     btnExp.innerHTML = '<i class="fas fa-expand-arrows-alt mr-1"></i> ' + t('Ampliar contenido');
+
+    const sugBox = document.getElementById('notaSugerenciasAudio');
+    if (sugBox) {
+        sugBox.classList.add('d-none');
+        sugBox.innerHTML = '';
+    }
 
     fetch(`/notas/${notaId}/datos`)
         .then(response => response.json())
@@ -262,6 +458,8 @@ function verNotaModal(notaId) {
 
                 $('#verNotaObras').val(data.obras_ids).trigger('change');
                 $('#verNotaUsuarios').val(data.users_ids).trigger('change');
+
+                renderNotaSugerencias(data.sugerencias);
 
                 document.getElementById('btnVerEliminar').setAttribute('onclick', `eliminarNota(${data.id})`);
 

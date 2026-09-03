@@ -1,11 +1,16 @@
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, g
 from flask_login import login_required, current_user
 from app import db
 from datetime import datetime
+import json
 from sqlalchemy import or_, and_
 from app.models import Nota, Obra, User, nota_obra, nota_user, Asignacion, ROLE_ADMIN, ROLE_JEFE
 
 notas_bp = Blueprint('notas', __name__, url_prefix='/notas')
+
+
+def _can_upload_audio():
+    return current_user.role in (ROLE_ADMIN, ROLE_JEFE)
 
 
 @notas_bp.before_request
@@ -132,6 +137,27 @@ def obtener_nota(nota_id):
     if not tiene_acceso:
         return jsonify({'success': False, 'message': 'Acceso denegado'}), 403
 
+    sugerencias = {'obras': [], 'personas': []}
+    try:
+        from app.models import NotaAudioJob
+        job = (
+            NotaAudioJob.query
+            .filter_by(nota_id=nota.id, estado=NotaAudioJob.ESTADO_COMPLETADO)
+            .order_by(NotaAudioJob.id.desc())
+            .first()
+        )
+        if job and job.meta_json:
+            meta = json.loads(job.meta_json)
+            if isinstance(meta, dict):
+                raw = meta.get('sugerencias') or {}
+                if isinstance(raw, dict):
+                    sugerencias = {
+                        'obras': raw.get('obras') or [],
+                        'personas': raw.get('personas') or [],
+                    }
+    except Exception:
+        pass
+
     return jsonify({
         'success': True,
         'id': nota.id,
@@ -140,7 +166,8 @@ def obtener_nota(nota_id):
         'contenido': nota.contenido,
         'es_privada': nota.es_privada,
         'obras_ids': [o.id for o in nota.obras],
-        'users_ids': [u.id for u in nota.usuarios_implicados]
+        'users_ids': [u.id for u in nota.usuarios_implicados],
+        'sugerencias': sugerencias,
     })
 
 @notas_bp.route('/<int:nota_id>/editar', methods=['POST'])
@@ -199,16 +226,68 @@ def editar_nota(nota_id):
 @notas_bp.route('/<int:nota_id>/eliminar', methods=['POST'])
 @login_required
 def eliminar_nota(nota_id):
+    from app.models import NotaAudioJob
+
     nota = Nota.query.get_or_404(nota_id)
-    
+
     # Seguridad: Solo puede borrar la nota quien la creó (o un admin supremo)
     if nota.autor_id != current_user.id and current_user.role != ROLE_ADMIN:
         return jsonify({'success': False, 'message': 'No autorizado para eliminar esta nota'}), 403
 
     try:
+        # Desvincula jobs de audio (por si la FK aún no tiene ON DELETE SET NULL)
+        NotaAudioJob.query.filter_by(nota_id=nota.id).update(
+            {NotaAudioJob.nota_id: None}, synchronize_session=False,
+        )
         db.session.delete(nota)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Nota eliminada correctamente.'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@notas_bp.route('/audio/subir', methods=['POST'])
+@login_required
+def subir_audio_nota():
+    if not _can_upload_audio():
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+
+    archivo = request.files.get('audio')
+    if not archivo or not archivo.filename:
+        return jsonify({'success': False, 'message': 'No se recibió ningún archivo de audio.'}), 400
+
+    try:
+        from app.services.nota_audio_service import save_audio_upload
+        from app.celery_worker import process_nota_audio_task
+
+        job = save_audio_upload(archivo, current_user.id)
+        tenant = getattr(g, 'current_tenant', None)
+        schema_name = getattr(tenant, 'schema_name', None) or 'public'
+        process_nota_audio_task.delay(schema_name, job.id)
+
+        return jsonify({
+            'success': True,
+            'job_id': job.id,
+            'duracion_segundos': job.duracion_segundos,
+            'archivo_nombre': job.archivo_nombre,
+            'message': 'Audio recibido. Procesando transcripción…',
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@notas_bp.route('/audio/<int:job_id>/estado', methods=['GET'])
+@login_required
+def estado_audio_nota(job_id):
+    from app.models import NotaAudioJob
+    from app.services.nota_audio_service import job_to_status_dict
+
+    job = NotaAudioJob.query.get_or_404(job_id)
+    if job.autor_id != current_user.id and current_user.role != ROLE_ADMIN:
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+
+    return jsonify({'success': True, **job_to_status_dict(job)})

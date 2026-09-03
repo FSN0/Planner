@@ -182,14 +182,10 @@ def visible_permission_modules(tenant=None):
 
 def modules_for_role(role: str, tenant=None):
     """
-    Filas visibles al editar un rol concreto.
-    El portal /fichaje solo se configura en Operario; el resto de perfiles
-    no ven esos checkboxes (usan los módulos de oficina).
+    Misma lista de módulos para todos los roles: el admin decide qué marcar.
+    (Antes Operario solo veía el portal /fichaje; eso limitaba sin sentido.)
     """
-    visible = visible_permission_modules(tenant)
-    if role == ROLE_OPERARIO:
-        return tuple(row for row in visible if row[0] in PORTAL_JORNADA_MODULES)
-    return tuple(row for row in visible if row[0] not in PORTAL_JORNADA_MODULES)
+    return visible_permission_modules(tenant)
 
 
 def visible_permission_keys(tenant=None):
@@ -203,14 +199,22 @@ def normalize_module(module: str) -> str:
 
 def default_actions(role: str, module: str) -> frozenset:
     module = normalize_module(module)
-    role_map = _DEFAULTS.get(role) or {}
+    role_map = _DEFAULTS.get(role)
+    if role_map is None:
+        # Roles custom: plantilla laboral (oficina)
+        role_map = _DEFAULTS.get(ROLE_LABORAL) or {}
     return frozenset(role_map.get(module, frozenset()))
 
 
 def default_matrix_rows():
     """Lista de dicts listos para insertar en RolePermission."""
     rows = []
-    for role, _label in PERMISSION_ROLES:
+    try:
+        from app.services.role_registry_service import list_roles
+        roles = list_roles()
+    except Exception:
+        roles = list(PERMISSION_ROLES)
+    for role, _label in roles:
         for module, _mlabel, _group in PERMISSION_MODULES:
             actions = default_actions(role, module)
             can_w = 'w' in actions

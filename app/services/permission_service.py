@@ -174,7 +174,7 @@ def _ensure_table() -> bool:
         db.session.execute(db.text(f'''
             CREATE TABLE IF NOT EXISTS {schema}.role_permissions (
                 id SERIAL PRIMARY KEY,
-                role VARCHAR(30) NOT NULL,
+                role VARCHAR(40) NOT NULL,
                 module VARCHAR(50) NOT NULL,
                 can_read BOOLEAN NOT NULL DEFAULT FALSE,
                 can_write BOOLEAN NOT NULL DEFAULT FALSE,
@@ -207,6 +207,11 @@ def ensure_role_permissions(force: bool = False) -> int:
     """Siembra defaults si vacío; siempre añade módulos nuevos del catálogo."""
     if not _ensure_table():
         return 0
+    try:
+        from app.services.role_registry_service import ensure_tenant_roles
+        ensure_tenant_roles()
+    except Exception:
+        pass
     existing = RolePermission.query.count()
     created = 0
     if force:
@@ -335,8 +340,13 @@ def roles_with_module(module: str, action: str = 'r') -> tuple:
     module = normalize_module(module)
     action = (action or 'r').lower()[:1]
     found = []
-    from app.services.permission_catalog import PERMISSION_ROLES
-    for role, _ in PERMISSION_ROLES:
+    try:
+        from app.services.role_registry_service import list_roles
+        roles = list_roles()
+    except Exception:
+        from app.services.permission_catalog import PERMISSION_ROLES
+        roles = PERMISSION_ROLES
+    for role, _ in roles:
         if action in _actions_for(role, module):
             if module == 'auditoria_fichajes' and action == 'x' and role in ROLES_LABORAL_LIKE:
                 if not laboral_puede_resolver_fichajes():

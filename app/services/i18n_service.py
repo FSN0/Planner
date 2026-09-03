@@ -211,6 +211,13 @@ def translate(key, locale=None, **kwargs):
 
 
 def role_label(role):
+    try:
+        from app.services.role_registry_service import get_role
+        row = get_role(role)
+        if row and (row.label or '').strip():
+            return row.label.strip()
+    except Exception:
+        pass
     key = f'role.{role}' if role else ''
     labeled = translate(key)
     if labeled != key:

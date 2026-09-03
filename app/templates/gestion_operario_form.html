@@ -89,11 +89,15 @@
         <div class="form-group">
           <label class="admin-form-label">{{ _('Rol de sistema') }}</label>
           <select name="role" id="roleSelect" class="form-control custom-select" required>
+            {% for role_key, role_label_txt in (assignable_roles|default([])) %}
+            <option value="{{ role_key }}" {% if role_actual == role_key %}selected{% endif %}>{{ role_label_txt }}</option>
+            {% else %}
             <option value="operario" {% if role_actual == 'operario' %}selected{% endif %}>{{ _('Operario') }}</option>
             <option value="jefe_obra" {% if role_actual == 'jefe_obra' %}selected{% endif %}>{{ _('Jefe de obra') }}</option>
             <option value="rrhh" {% if role_actual == 'rrhh' %}selected{% endif %}>{{ _('RRHH / Administrativo') }}</option>
             <option value="laboral" {% if role_actual == 'laboral' %}selected{% endif %}>{{ _('Laboral') }}</option>
             <option value="admin" {% if role_actual == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
+            {% endfor %}
           </select>
           <small class="form-text text-muted" style="font-size: 0.72rem;">
             {% if tenant_usa_acceso_pin %}

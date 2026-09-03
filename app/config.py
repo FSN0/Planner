@@ -92,3 +92,8 @@ class Config:
         'pool_recycle': 1800,
         'pool_pre_ping': True  # Verifica que la conexión está viva antes de usarla
     }
+
+    # OpenAI: transcripción Whisper + resumen de notas por voz
+    OPENAI_API_KEY = (os.environ.get('OPENAI_API_KEY') or '').strip() or None
+    NOTA_AUDIO_MAX_BYTES = int(os.environ.get('NOTA_AUDIO_MAX_BYTES', 512 * 1024 * 1024))
+    NOTA_AUDIO_MAX_SECONDS = int(os.environ.get('NOTA_AUDIO_MAX_SECONDS', 3 * 3600))

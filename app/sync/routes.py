@@ -6,7 +6,7 @@ from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 from sqlalchemy import or_
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app import db
 from app.models import Obra, User, Company, SyncLog, Asignacion, RegistroFichaje, RegistroOdometro, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH
@@ -20,6 +20,17 @@ from app.services.permission_service import can_resolve_fichajes, is_laboral, la
 from app.services.i18n_service import translate
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
+
+# Eager-load para auditoría: sin esto, ~2000 filas × 3 relaciones = miles de queries
+# y el worker/Caddy cortan → «Esta página no funciona» a la primera (al recargar ya va).
+_AUDITORIA_EAGER = (
+    selectinload(RegistroFichaje.user),
+    selectinload(RegistroFichaje.obra_planificada),
+    selectinload(RegistroFichaje.obra_real),
+)
+_AUDITORIA_PENDIENTES_LIMIT = 800
+_AUDITORIA_HISTORIAL_LIMIT = 800
+_AUDITORIA_CORRECCIONES_LIMIT = 400
 
 
 @sync_bp.before_request
@@ -803,6 +814,7 @@ def commit_empleados():
 @sync_bp.route('/auditoria')
 @login_required
 def auditoria_fichajes():
+    from flask import current_app
     from app.services.permission_service import user_can
     from app.services.fichaje_operario_service import (
         tenant_muestra_auditoria_fichajes,
@@ -810,82 +822,110 @@ def auditoria_fichajes():
     )
     if not user_can(current_user, 'auditoria_fichajes', 'r') or not tenant_muestra_auditoria_fichajes():
         flash("Acceso denegado.", "danger")
-        return redirect(url_for('main.index'))
-    
-    # 1. FILTROS BASE MÚLTIPLES
-    filtros_pendientes = [RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Ausencia'])]
-    filtros_historial = [~RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Ausencia', 'Sin_Registro', 'Sobreescrito_RRHH'])]
-    filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH'] # NUEVO
+        return redirect(url_for('main.dashboard'))
 
-    # 2. SI ES JEFE DE OBRA, AÑADIMOS RESTRICCIONES
-    if current_user.role == 'jefe_obra':
-        obras_jefe = Obra.query.filter_by(jefe_obra_id=current_user.id).all()
-        obras_jefe_ids = [obra.id for obra in obras_jefe]
-        
-        filtro_jefe = or_(
-            RegistroFichaje.obra_planificada_id.in_(obras_jefe_ids),
-            RegistroFichaje.obra_real_id.in_(obras_jefe_ids)
-        )
-        filtros_pendientes.append(filtro_jefe)
-        filtros_historial.append(filtro_jefe)
-        filtros_correcciones.append(filtro_jefe)
+    try:
+        # 1. FILTROS BASE MÚLTIPLES
+        filtros_pendientes = [RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Ausencia'])]
+        filtros_historial = [~RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Ausencia', 'Sin_Registro', 'Sobreescrito_RRHH'])]
+        filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH']
 
-    # 3. EJECUTAR QUERYS
-    pendientes = RegistroFichaje.query.filter(*filtros_pendientes).order_by(RegistroFichaje.fecha.desc()).all()
-    historial = RegistroFichaje.query.filter(*filtros_historial).order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc()).limit(1500).all()
-    correcciones = RegistroFichaje.query.filter(*filtros_correcciones).order_by(RegistroFichaje.fecha.desc()).limit(500).all()
-    visible_sections = laboral_auditoria_sections(current_user)
+        # 2. SI ES JEFE DE OBRA, AÑADIMOS RESTRICCIONES
+        if current_user.role == 'jefe_obra':
+            obras_jefe = Obra.query.filter_by(jefe_obra_id=current_user.id).all()
+            obras_jefe_ids = [obra.id for obra in obras_jefe]
 
-    from app.services.fichaje_geo_audit_service import (
-        contar_geo_dudosa,
-        entrada_geo_por_registros,
-    )
-    from app.services.geocerca_service import geocerca_activa
-
-    todos_registros = list(pendientes) + list(historial) + list(correcciones)
-    geo_por_registro = entrada_geo_por_registros(todos_registros)
-    geo_dudosa_count = contar_geo_dudosa(geo_por_registro)
-    muestra_geo_audit = geocerca_activa()
-
-    trabajadores_marca = []
-    obras_marca = []
-    if can_resolve_fichajes(current_user) and current_user.role in (
-        'admin', ROLE_LABORAL, ROLE_RRHH,
-    ):
-        trabajadores_marca = (
-            User.query
-            .filter(
-                User.is_deleted.is_(False),
-                User.active.is_(True),
-                User.role.in_(['operario', 'jefe_obra', 'admin', 'laboral']),
+            filtro_jefe = or_(
+                RegistroFichaje.obra_planificada_id.in_(obras_jefe_ids),
+                RegistroFichaje.obra_real_id.in_(obras_jefe_ids)
             )
-            .order_by(User.lastname.asc(), User.name.asc())
-            .all()
-        )
-        obras_marca = (
-            Obra.query
-            .filter(Obra.estado != 'Finalizada')
-            .order_by(Obra.nombre.asc())
-            .all()
-        )
+            filtros_pendientes.append(filtro_jefe)
+            filtros_historial.append(filtro_jefe)
+            filtros_correcciones.append(filtro_jefe)
 
-    return render_template('sync/auditoria.html', 
-                           pendientes=pendientes, 
-                           historial=historial,
-                           correcciones=correcciones,
-                           auditoria_sections=visible_sections,
-                           visible_sections=visible_sections,
-                           can_resolve=can_resolve_fichajes(current_user),
-                           can_resolve_fichajes=can_resolve_fichajes(current_user),
-                           trabajadores_marca=trabajadores_marca,
-                           obras_marca=obras_marca,
-                           geo_por_registro=geo_por_registro,
-                           geo_dudosa_count=geo_dudosa_count,
-                           muestra_geo_audit=muestra_geo_audit,
-                           puede_ver_mapa_fichajes=(
-                               user_can(current_user, 'mapa_fichajes', 'r')
-                               and tenant_tiene_fichaje_operario_module()
-                           ))
+        # 3. EJECUTAR QUERYS (con eager-load: evita N+1 que tumba la página)
+        pendientes = (
+            RegistroFichaje.query
+            .options(*_AUDITORIA_EAGER)
+            .filter(*filtros_pendientes)
+            .order_by(RegistroFichaje.fecha.desc())
+            .limit(_AUDITORIA_PENDIENTES_LIMIT)
+            .all()
+        )
+        historial = (
+            RegistroFichaje.query
+            .options(*_AUDITORIA_EAGER)
+            .filter(*filtros_historial)
+            .order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc())
+            .limit(_AUDITORIA_HISTORIAL_LIMIT)
+            .all()
+        )
+        correcciones = (
+            RegistroFichaje.query
+            .options(*_AUDITORIA_EAGER)
+            .filter(*filtros_correcciones)
+            .order_by(RegistroFichaje.fecha.desc())
+            .limit(_AUDITORIA_CORRECCIONES_LIMIT)
+            .all()
+        )
+        visible_sections = laboral_auditoria_sections(current_user)
+
+        from app.services.fichaje_geo_audit_service import (
+            contar_geo_dudosa,
+            entrada_geo_por_registros,
+        )
+        from app.services.geocerca_service import geocerca_activa
+
+        todos_registros = list(pendientes) + list(historial) + list(correcciones)
+        geo_por_registro = entrada_geo_por_registros(todos_registros)
+        geo_dudosa_count = contar_geo_dudosa(geo_por_registro)
+        muestra_geo_audit = geocerca_activa()
+
+        trabajadores_marca = []
+        obras_marca = []
+        if can_resolve_fichajes(current_user) and current_user.role in (
+            'admin', ROLE_LABORAL, ROLE_RRHH,
+        ):
+            trabajadores_marca = (
+                User.query
+                .filter(
+                    User.is_deleted.is_(False),
+                    User.active.is_(True),
+                    User.role.in_(['operario', 'jefe_obra', 'admin', 'laboral']),
+                )
+                .order_by(User.lastname.asc(), User.name.asc())
+                .all()
+            )
+            obras_marca = (
+                Obra.query
+                .filter(Obra.estado != 'Finalizada')
+                .order_by(Obra.nombre.asc())
+                .all()
+            )
+
+        return render_template(
+            'sync/auditoria.html',
+            pendientes=pendientes,
+            historial=historial,
+            correcciones=correcciones,
+            auditoria_sections=visible_sections,
+            visible_sections=visible_sections,
+            can_resolve=can_resolve_fichajes(current_user),
+            can_resolve_fichajes=can_resolve_fichajes(current_user),
+            trabajadores_marca=trabajadores_marca,
+            obras_marca=obras_marca,
+            geo_por_registro=geo_por_registro,
+            geo_dudosa_count=geo_dudosa_count,
+            muestra_geo_audit=muestra_geo_audit,
+            puede_ver_mapa_fichajes=(
+                user_can(current_user, 'mapa_fichajes', 'r')
+                and tenant_tiene_fichaje_operario_module()
+            ),
+        )
+    except Exception:
+        current_app.logger.exception('Fallo al cargar auditoría de fichajes')
+        flash('No se pudo cargar la auditoría. Inténtalo de nuevo.', 'danger')
+        return redirect(url_for('main.dashboard'))
 
 ACCION_RESOLUCION_TITULOS = {
     'ignorar': 'Ignorar',

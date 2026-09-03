@@ -3,24 +3,160 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260903e">
 <style>
-  .perm-page .perm-role-tabs { display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1rem; }
-  .perm-page .perm-role-tabs a {
-    font-size:0.8rem; font-weight:600; padding:0.4rem 0.85rem; border-radius:999px;
-    border:1px solid #e2e8f0; background:#fff; color:#475569; text-decoration:none;
+  .perm-page .perm-top-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+    gap: 1rem 1.25rem;
+    align-items: start;
+    margin-bottom: 1.1rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: #fff;
   }
-  .perm-page .perm-role-tabs a.is-active { background:#0f172a; color:#fff; border-color:#0f172a; }
-  .perm-page .perm-hint { font-size:0.85rem; color:#64748b; margin-bottom:1rem; max-width:52rem; }
-  .perm-page .perm-table { width:100%; border-collapse:collapse; background:#fff; border-radius:0.75rem; overflow:hidden; border:1px solid #e2e8f0; }
-  .perm-page .perm-table th, .perm-page .perm-table td { padding:0.65rem 0.85rem; border-bottom:1px solid #f1f5f9; font-size:0.875rem; }
-  .perm-page .perm-table th { background:#f8fafc; text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:#64748b; }
-  .perm-page .perm-table th.perm-col, .perm-page .perm-table td.perm-col { text-align:center; width:5.5rem; }
-  .perm-page .perm-group { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#94a3b8; background:#f8fafc; }
-  .perm-page .perm-locked { opacity:0.65; }
-  .perm-page .perm-actions { margin-top:1rem; display:flex; gap:0.75rem; flex-wrap:wrap; }
-  .perm-page input[type=checkbox] { width:1.05rem; height:1.05rem; cursor:pointer; }
-  .perm-page .perm-col-label { display:block; font-size:0.65rem; font-weight:700; color:#64748b; margin-bottom:0.2rem; }
+  .perm-page .perm-top-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 0.35rem;
+  }
+  .perm-page .perm-top-hints {
+    font-size: 0.78rem;
+    color: #64748b;
+    line-height: 1.45;
+    margin: 0 0 0.75rem;
+    max-width: 36rem;
+  }
+  .perm-page .perm-top-hints strong { color: #475569; }
+  .perm-page .perm-role-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .perm-page .perm-role-tabs a {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+    text-decoration: none;
+  }
+  .perm-page .perm-role-tabs a.is-active {
+    background: #0f172a;
+    color: #fff;
+    border-color: #0f172a;
+  }
+  .perm-page .perm-admin-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.55rem;
+    background: #f8fafc;
+    padding: 0.65rem 0.75rem;
+  }
+  .perm-page .perm-admin-panel h2 {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    margin: 0 0 0.5rem;
+  }
+  .perm-page .perm-admin-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: flex-end;
+    margin-bottom: 0.45rem;
+  }
+  .perm-page .perm-admin-row:last-child { margin-bottom: 0; }
+  .perm-page .perm-admin-row .fg { margin: 0; flex: 1 1 6.5rem; min-width: 0; }
+  .perm-page .perm-admin-row label {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.12rem;
+  }
+  .perm-page .perm-admin-row input,
+  .perm-page .perm-admin-row select {
+    width: 100%;
+    font-size: 0.78rem;
+    padding: 0.28rem 0.4rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.35rem;
+    background: #fff;
+  }
+  .perm-page .perm-admin-note {
+    font-size: 0.68rem;
+    color: #94a3b8;
+    margin: 0.2rem 0 0;
+  }
+  .perm-page .perm-admin-danger {
+    margin-top: 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid #fecaca;
+  }
+  .perm-page .perm-admin-danger p {
+    font-size: 0.68rem;
+    color: #9f1239;
+    margin: 0 0 0.35rem;
+  }
+  .perm-page .perm-matrix-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 0.55rem;
+  }
+  .perm-page .perm-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+  }
+  .perm-page .perm-table th,
+  .perm-page .perm-table td {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.84rem;
+  }
+  .perm-page .perm-table th {
+    background: #f8fafc;
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+  }
+  .perm-page .perm-table th.perm-col,
+  .perm-page .perm-table td.perm-col { text-align: center; width: 5.5rem; }
+  .perm-page .perm-group {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    background: #f8fafc;
+  }
+  .perm-page .perm-locked { opacity: 0.65; }
+  .perm-page .perm-actions { margin-top: 0.85rem; display: flex; gap: 0.65rem; flex-wrap: wrap; }
+  .perm-page input[type=checkbox] { width: 1.05rem; height: 1.05rem; cursor: pointer; }
+  .perm-page .perm-empty {
+    padding: 1rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 0.75rem;
+    color: #64748b;
+    background: #f8fafc;
+  }
+  @media (max-width: 960px) {
+    .perm-page .perm-top-card {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -28,45 +164,84 @@
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact perm-page">
-    <div class="page-toolbar">
-      <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title">{{ _('Permisos por rol') }}</h1>
-        <span class="page-toolbar-count">{{ _('Qué puede ver y hacer cada perfil en este espacio') }}</span>
+
+    <section class="perm-top-card">
+      <div class="perm-top-main">
+        <h1 class="perm-top-title">{{ _('Permisos por rol') }}</h1>
+        <p class="perm-top-hints">
+          <strong>{{ _('Lectura') }}</strong> — {{ _('ver menú, listados y paneles.') }}
+          · <strong>{{ _('Escritura') }}</strong> — {{ _('crear, editar, sincronizar…') }}<br>
+          {{ _('Misma lista de módulos para todos los roles. El jefe sigue limitado a sus obras.') }}
+        </p>
+        <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">
+          {% for role_key, role_label_txt in roles %}
+          <a href="{{ url_for('admin.permisos_roles', role=role_key) }}" class="{% if role_key == active_role %}is-active{% endif %}">{{ role_label_txt }}</a>
+          {% endfor %}
+        </nav>
       </div>
-    </div>
 
-    <p class="perm-hint">
-      <strong>{{ _('Lectura') }}</strong> — {{ _('entrar al módulo: ver menú, listados y paneles.') }}<br>
-      <strong>{{ _('Escritura') }}</strong> — {{ _('usar los botones y cambiar datos (crear, editar, sincronizar, aprobar, reset PIN…).') }}
-    </p>
-    <p class="perm-hint">
-      {{ _('El jefe de obra sigue limitado a sus obras aunque tenga permiso de módulo.') }}
-      {{ _('Administrador no puede quitarse Configuración ni Permisos.') }}
-      {% if active_role == 'operario' %}
-      {{ _('En Operario solo ves el portal /fichaje (fichar, calendario y ausencias propias). El resto de perfiles usa los módulos de oficina.') }}
-      {% else %}
-      {{ _('Los permisos del portal /fichaje se configuran solo en la pestaña Operario.') }}
-      {% endif %}
-      {% if show_integration_perm_hint|default(false) %}
-      {{ _('Altas Odoo y Portal Soltec no requieren permiso del hub de Integraciones.') }}
-      {% endif %}
-    </p>
+      {% if can_manage_roles|default(false) %}
+      <aside class="perm-admin-panel" aria-label="{{ _('Administrar roles') }}">
+        <h2>{{ _('Administrar roles') }}</h2>
 
-    <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">
-      {% for role_key, role_label_txt in roles %}
-      <a href="{{ url_for('admin.permisos_roles', role=role_key) }}" class="{% if role_key == active_role %}is-active{% endif %}">{{ _(role_label_txt) }}</a>
-      {% endfor %}
-    </nav>
+        <form method="POST" action="{{ url_for('admin.permisos_rol_crear') }}" class="perm-admin-row">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="fg">
+            <label for="permNewLabel">{{ _('Nuevo') }}</label>
+            <input type="text" id="permNewLabel" name="label" placeholder="{{ _('Ej: Coordinación') }}" maxlength="80" required>
+          </div>
+          <div class="fg">
+            <label for="permCloneFrom">{{ _('Copiar de') }}</label>
+            <select id="permCloneFrom" name="clone_from">
+              {% for role_key, role_label_txt in roles %}
+              <option value="{{ role_key }}" {% if role_key == 'laboral' %}selected{% endif %}>{{ role_label_txt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn-admin btn-admin-primary btn-sm">{{ _('Crear') }}</button>
+        </form>
+
+        {% if not active_role_locked %}
+        <form method="POST" action="{{ url_for('admin.permisos_rol_renombrar') }}" class="perm-admin-row">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="role" value="{{ active_role }}">
+          <div class="fg">
+            <label for="permRenameLabel">{{ _('Renombrar «{role}»', role=active_role_label) }}</label>
+            <input type="text" id="permRenameLabel" name="label" value="{{ active_role_label }}" maxlength="80" required>
+          </div>
+          <button type="submit" class="btn-admin btn-admin-ghost btn-sm">{{ _('Guardar') }}</button>
+        </form>
+        {% else %}
+        <p class="perm-admin-note">{{ _('«{role}» es fijo: no se renombra ni borra.', role=active_role_label) }}</p>
+        {% endif %}
+
+        {% if not active_role_system %}
+        <div class="perm-admin-danger">
+          <p>{{ _('Eliminar «{role}» (sin usuarios asignados).', role=active_role_label) }}</p>
+          <form method="POST" action="{{ url_for('admin.permisos_rol_eliminar') }}"
+                onsubmit="return confirm('{{ _('¿Eliminar el rol') }} «{{ active_role_label }}»?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="role" value="{{ active_role }}">
+            <button type="submit" class="btn-admin btn-admin-danger btn-sm">{{ _('Eliminar') }}</button>
+          </form>
+        </div>
+        {% endif %}
+      </aside>
+      {% endif %}
+    </section>
+
+    <h2 class="perm-matrix-title">{{ _('Permisos de') }} {{ active_role_label }}</h2>
 
     <form method="POST" action="{{ url_for('admin.permisos_roles_save') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="role" value="{{ active_role }}">
+      {% if modules %}
       <table class="perm-table">
         <thead>
           <tr>
             <th>{{ _('Módulo') }}</th>
-            <th class="perm-col" title="{{ _('Ver el módulo') }}">{{ _('Lectura') }}</th>
-            <th class="perm-col" title="{{ _('Usar botones y cambiar datos') }}">{{ _('Escritura') }}</th>
+            <th class="perm-col">{{ _('Lectura') }}</th>
+            <th class="perm-col">{{ _('Escritura') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -93,16 +268,14 @@
                 {% endif %}
               </td>
               <td class="perm-col">
-                <input type="checkbox" name="perm__{{ module }}__r" value="on" {% if flags.r %}checked{% endif %} {% if locked %}disabled{% endif %}
-                       title="{{ _(r_hint) if r_hint else _('Ver el módulo') }}">
+                <input type="checkbox" name="perm__{{ module }}__r" value="on" {% if flags.r %}checked{% endif %} {% if locked %}disabled{% endif %}>
                 {% if locked %}<input type="hidden" name="perm__{{ module }}__r" value="on">{% endif %}
               </td>
               <td class="perm-col">
                 {% if sso_ro %}
-                <input type="checkbox" disabled title="{{ _(w_hint) if w_hint else _('No aplica: con Lectura basta') }}">
+                <input type="checkbox" disabled>
                 {% else %}
-                <input type="checkbox" name="perm__{{ module }}__w" value="on" {% if flags.w %}checked{% endif %} {% if locked %}disabled{% endif %}
-                       title="{{ _(w_hint) if w_hint else _('Usar botones y cambiar datos') }}">
+                <input type="checkbox" name="perm__{{ module }}__w" value="on" {% if flags.w %}checked{% endif %} {% if locked %}disabled{% endif %}>
                 {% if locked %}<input type="hidden" name="perm__{{ module }}__w" value="on">{% endif %}
                 {% endif %}
               </td>
@@ -110,11 +283,14 @@
           {% endfor %}
         </tbody>
       </table>
+      {% else %}
+      <div class="perm-empty">{{ _('No hay módulos configurables en este espacio.') }}</div>
+      {% endif %}
       <div class="perm-actions">
-        <button type="submit" class="btn-admin btn-admin-primary">{{ _('Guardar permisos') }}</button>
+        <button type="submit" class="btn-admin btn-admin-primary" {% if not modules %}disabled{% endif %}>{{ _('Guardar permisos') }}</button>
         <button type="submit" name="reset_defaults" value="1" class="btn-admin btn-admin-ghost"
                 onclick="return confirm('{{ _('¿Restaurar todos los roles a los permisos por defecto de SignaPlan?') }}')">
-          {{ _('Restaurar defaults de todos los roles') }}
+          {{ _('Restaurar defaults') }}
         </button>
       </div>
     </form>

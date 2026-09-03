@@ -519,9 +519,212 @@ function getCheckedIds(tableId, checkboxClass) {
     });
 }
 
+
+/**
+ * Tuerca en cabeceras de listas: mostrar/ocultar columnas (preferencia en localStorage).
+ */
+function _spColPrefsKey(tableId) {
+    return 'sp.table.cols.' + tableId;
+}
+
+function _spColPrefsSlug(label, index) {
+    var s = String(label || '').toLowerCase();
+    try {
+        s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    } catch (e) { /* ignore */ }
+    s = s.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    return s || ('col_' + index);
+}
+
+function _spSetTableColVisible(table, index, visible) {
+    Array.prototype.forEach.call(table.rows, function (tr) {
+        var cell = tr.cells[index];
+        if (!cell) return;
+        cell.classList.toggle('sp-col-hidden', !visible);
+        cell.style.display = visible ? '' : 'none';
+    });
+}
+
+function setupTableColumnPrefs(table) {
+    if (!table || !table.id || table.dataset.colPrefsReady === '1') return;
+    var thead = table.tHead;
+    if (!thead || !thead.rows.length) return;
+    var headerCells = Array.prototype.slice.call(thead.rows[0].cells || []);
+    if (headerCells.length < 2) return;
+
+    var host = table.closest(
+        '.admin-table-scroll, .audit-table-wrap, .aus-table-wrap, ' +
+        '.sync-preview-table-wrap, .sync-log-table-wrap, .ratings-table-wrap, .admin-panel-flush'
+    );
+    if (!host) return;
+
+    var cols = [];
+    headerCells.forEach(function (th, index) {
+        if (th.classList.contains('col-check') || th.classList.contains('no-col-prefs')) return;
+        var labelEl = th.querySelector('.sortable-label');
+        var label = ((labelEl ? labelEl.textContent : th.textContent) || '').replace(/\s+/g, ' ').trim();
+        if (!label) return;
+        var key = th.getAttribute('data-col-key') || _spColPrefsSlug(label, index);
+        var locked = th.classList.contains('no-col-hide') || th.classList.contains('col-identity');
+        cols.push({ index: index, key: key, label: label, locked: locked });
+    });
+    if (cols.length < 2) return;
+
+    table.dataset.colPrefsReady = '1';
+
+    var stored = {};
+    try {
+        stored = JSON.parse(localStorage.getItem(_spColPrefsKey(table.id)) || '{}') || {};
+    } catch (e) {
+        stored = {};
+    }
+
+    var wrap = document.createElement('div');
+    wrap.className = 'sp-col-prefs';
+    wrap.innerHTML =
+        '<button type="button" class="sp-col-prefs-btn" aria-haspopup="true" aria-expanded="false" ' +
+        'title="' + t('Columnas visibles') + '" aria-label="' + t('Columnas visibles') + '">' +
+        '<i class="fas fa-cog" aria-hidden="true"></i></button>';
+
+    var btn = wrap.querySelector('.sp-col-prefs-btn');
+    // Menú en body: evita overflow:hidden de cabeceras / wraps de auditoría
+    var menu = document.createElement('div');
+    menu.className = 'sp-col-prefs-menu';
+    menu.setAttribute('hidden', '');
+    menu.setAttribute('role', 'menu');
+    document.body.appendChild(menu);
+
+    function closeMenu() {
+        menu.setAttribute('hidden', '');
+        btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function positionMenu() {
+        menu.style.position = 'fixed';
+        menu.style.visibility = 'hidden';
+        menu.style.width = 'max-content';
+        menu.style.minWidth = '10.5rem';
+        menu.style.maxWidth = '16rem';
+        menu.style.left = '-9999px';
+        menu.style.top = '0';
+        menu.style.right = 'auto';
+        menu.style.zIndex = '10050';
+
+        var menuW = menu.offsetWidth || 168;
+        var menuH = menu.offsetHeight || 120;
+        var rect = btn.getBoundingClientRect();
+        var left = rect.right - menuW;
+        if (left + menuW > window.innerWidth - 8) {
+            left = window.innerWidth - menuW - 8;
+        }
+        if (left < 8) left = 8;
+        var top = rect.bottom + 4;
+        if (top + menuH > window.innerHeight - 8 && rect.top > menuH + 8) {
+            top = Math.max(8, rect.top - menuH - 4);
+        }
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        menu.style.visibility = 'visible';
+    }
+
+    cols.forEach(function (col) {
+        var visible = stored[col.key] !== false;
+        if (col.locked) visible = true;
+        _spSetTableColVisible(table, col.index, visible);
+
+        var row = document.createElement('label');
+        row.className = 'sp-col-prefs-item' + (col.locked ? ' is-locked' : '');
+        row.setAttribute('role', 'menuitemcheckbox');
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = visible;
+        input.disabled = !!col.locked;
+        input.dataset.colKey = col.key;
+        input.dataset.colIndex = String(col.index);
+        var span = document.createElement('span');
+        span.textContent = col.label;
+        row.appendChild(input);
+        row.appendChild(span);
+        menu.appendChild(row);
+
+        if (!col.locked) {
+            input.addEventListener('change', function () {
+                var on = !!input.checked;
+                var stillOn = Array.prototype.some.call(
+                    menu.querySelectorAll('input[type=checkbox]'),
+                    function (el) { return el.checked; }
+                );
+                if (!stillOn) {
+                    input.checked = true;
+                    return;
+                }
+                _spSetTableColVisible(table, col.index, on);
+                try {
+                    var cur = JSON.parse(localStorage.getItem(_spColPrefsKey(table.id)) || '{}') || {};
+                    cur[col.key] = on;
+                    localStorage.setItem(_spColPrefsKey(table.id), JSON.stringify(cur));
+                } catch (err) { /* ignore */ }
+            });
+        }
+    });
+
+    btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var open = menu.hasAttribute('hidden');
+        document.querySelectorAll('.sp-col-prefs-menu').forEach(function (m) {
+            if (m !== menu) m.setAttribute('hidden', '');
+        });
+        document.querySelectorAll('.sp-col-prefs-btn').forEach(function (b) {
+            if (b !== btn) b.setAttribute('aria-expanded', 'false');
+        });
+        if (open) {
+            menu.removeAttribute('hidden');
+            btn.setAttribute('aria-expanded', 'true');
+            requestAnimationFrame(function () {
+                positionMenu();
+            });
+        } else {
+            closeMenu();
+        }
+    });
+
+    wrap.addEventListener('click', function (ev) { ev.stopPropagation(); });
+    wrap.addEventListener('mousedown', function (ev) { ev.stopPropagation(); });
+    menu.addEventListener('click', function (ev) { ev.stopPropagation(); });
+
+    var lastTh = headerCells[headerCells.length - 1];
+    lastTh.classList.add('sp-col-prefs-host');
+    lastTh.appendChild(wrap);
+
+    // Cerrar al hacer scroll en el wrap (posición fixed se descoloca)
+    host.addEventListener('scroll', closeMenu, { passive: true });
+    window.addEventListener('resize', closeMenu);
+}
+
+function initTableColumnPrefs() {
+    document.querySelectorAll(
+        '.admin-table-scroll > table[id], .audit-table-wrap > table[id], .aus-table-wrap > table[id], ' +
+        '.sync-preview-table-wrap > table[id], .sync-log-table-wrap > table[id], .ratings-table-wrap > table[id]'
+    ).forEach(setupTableColumnPrefs);
+
+    if (document.documentElement.dataset.spColPrefsDocBound === '1') return;
+    document.documentElement.dataset.spColPrefsDocBound = '1';
+    document.addEventListener('click', function (ev) {
+        if (ev.target.closest('.sp-col-prefs, .sp-col-prefs-menu')) return;
+        document.querySelectorAll('.sp-col-prefs-menu').forEach(function (m) {
+            m.setAttribute('hidden', '');
+        });
+        document.querySelectorAll('.sp-col-prefs-btn').forEach(function (b) {
+            b.setAttribute('aria-expanded', 'false');
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     captureAllAdminTables();
     initMobileTableSearch();
+    initTableColumnPrefs();
 });
 
 // =========================================================================

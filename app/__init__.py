@@ -677,6 +677,16 @@ def create_app():
         elif user.role == ROLE_OPERARIO:
             from app.auth.routes import destino_portal_operario
             return redirect(destino_portal_operario(user))
+        # Roles custom: según permisos de la matriz
+        try:
+            from app.services.permission_service import user_can
+            if user_can(user, 'inicio', 'r') or user_can(user, 'tablero', 'r'):
+                return redirect(url_for('admin.panel'))
+            if user_can(user, 'operario_fichaje', 'r'):
+                from app.auth.routes import destino_portal_operario
+                return redirect(destino_portal_operario(user))
+        except Exception:
+            pass
         return redirect(url_for('auth.login'))
 
     @login_manager.unauthorized_handler

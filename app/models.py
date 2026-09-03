@@ -20,6 +20,16 @@ ROLE_ADMIN = 'admin'
 ROLE_LABORAL = 'laboral'
 # RRHH = mismos permisos que laboral (hasta definir un ACL propio).
 ROLES_LABORAL_LIKE = (ROLE_LABORAL, ROLE_RRHH)
+# No se pueden renombrar ni borrar (comportamiento de la app).
+ROLES_SYSTEM_LOCKED = frozenset({ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO})
+# Roles de fábrica (siempre sembrados); laboral/rrhh sí se pueden renombrar.
+ROLES_BUILTIN = (
+    ROLE_ADMIN,
+    ROLE_JEFE,
+    ROLE_LABORAL,
+    ROLE_RRHH,
+    ROLE_OPERARIO,
+)
 from sqlalchemy import event
 
 # Esta función se dispara cada vez que SQLAlchemy hace una consulta
@@ -180,7 +190,7 @@ class User(UserMixin, db.Model):
         db.Integer, nullable=False, default=0, server_default='0'
     )
     pin_locked_until = db.Column(db.DateTime, nullable=True)
-    role = db.Column(db.String(20), nullable=False)  # admin, jefe_obra, rrhh, operario
+    role = db.Column(db.String(40), nullable=False)  # admin, jefe_obra, roles custom…
     
     # Datos Personales
     name = db.Column(db.String(100), nullable=False)
@@ -1132,7 +1142,7 @@ class RolePermission(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    role = db.Column(db.String(30), nullable=False, index=True)
+    role = db.Column(db.String(40), nullable=False, index=True)
     module = db.Column(db.String(50), nullable=False, index=True)
     can_read = db.Column(db.Boolean, nullable=False, default=False)
     can_write = db.Column(db.Boolean, nullable=False, default=False)
@@ -1145,6 +1155,25 @@ class RolePermission(db.Model):
             'x' if self.can_execute else '-',
         ])
         return f'<RolePermission {self.role}/{self.module} {flags}>'
+
+
+class TenantRole(db.Model):
+    """
+    Catálogo de roles del tenant.
+    Clave inmutable (admin, jefe_obra…); etiqueta editable salvo roles bloqueados.
+    """
+    __tablename__ = 'tenant_roles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(40), nullable=False, unique=True, index=True)
+    label = db.Column(db.String(80), nullable=False)
+    is_system = db.Column(db.Boolean, nullable=False, default=False)
+    is_locked = db.Column(db.Boolean, nullable=False, default=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=100)
+    clone_from = db.Column(db.String(40), nullable=True)
+
+    def __repr__(self):
+        return f'<TenantRole {self.key}>'
 
 
 # ==========================================
@@ -1182,3 +1211,32 @@ class Nota(db.Model):
 
     def __repr__(self):
         return f'<Nota {self.titulo} - Autor: {self.autor_id}>'
+
+
+class NotaAudioJob(db.Model):
+    """Procesamiento asíncrono de audio → nota privada (Whisper + resumen)."""
+    __tablename__ = 'nota_audio_jobs'
+
+    ESTADO_PENDIENTE = 'pendiente'
+    ESTADO_PROCESANDO = 'procesando'
+    ESTADO_COMPLETADO = 'completado'
+    ESTADO_ERROR = 'error'
+
+    id = db.Column(db.Integer, primary_key=True)
+    autor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    estado = db.Column(db.String(20), nullable=False, default=ESTADO_PENDIENTE)
+    archivo_path = db.Column(db.String(500), nullable=True)
+    archivo_nombre = db.Column(db.String(255), nullable=True)
+    duracion_segundos = db.Column(db.Float, nullable=True)
+    nota_id = db.Column(db.Integer, db.ForeignKey('notas.id', ondelete='SET NULL'), nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    meta_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+    updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    autor = db.relationship('User', foreign_keys=[autor_id])
+    nota = db.relationship('Nota', foreign_keys=[nota_id])
+
+    def __repr__(self):
+        return f'<NotaAudioJob {self.id} {self.estado}>'

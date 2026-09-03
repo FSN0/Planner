@@ -21,7 +21,7 @@
           <span class="entity-type-marker"><i class="fas fa-building"></i> {{ _('Obra') }}</span>
         </div>
         <div class="entity-panel-actions">
-          {% if current_user.role == 'admin' %}
+          {% if can_edit_obra|default(false) %}
           <a href="{{ url_with_back('admin.edit_obra', obra_id=obra.id) }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
           </a>
@@ -157,7 +157,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260901f"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260903a"></script>
 <script>
 let obraCalendarInstance = null;
 const CURRENT_OBRA_ID = {{ obra.id }};

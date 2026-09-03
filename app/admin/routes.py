@@ -179,8 +179,13 @@ def _return_to_key():
 
 def _create_user_default_role():
     role = (request.values.get('role') or '').strip()
-    if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_RRHH, ROLE_LABORAL, ROLE_ADMIN):
-        return role
+    try:
+        from app.services.role_registry_service import valid_role_keys
+        if role in valid_role_keys():
+            return role
+    except Exception:
+        if role in (ROLE_OPERARIO, ROLE_JEFE, ROLE_RRHH, ROLE_LABORAL, ROLE_ADMIN):
+            return role
     return ''
 
 
@@ -1368,6 +1373,7 @@ def obra_panel(obra_id):
         ocupacion_pct=panel_stats["ocupacion_pct"],
         vehicle_rows=get_obra_vehicle_rows(obra),
         can_edit_calendar=user_can(current_user, 'obra_panel', 'w'),
+        can_edit_obra=user_can(current_user, 'directorio', 'w'),
     )
     
 @admin_bp.route("/companies", methods=["GET"])
@@ -2103,6 +2109,15 @@ def edit_operario(user_id):
     if request.method == "POST":
         new_dni = (request.form.get("dni") or "").strip().upper()
         nuevo_rol = (request.form.get("role") or user.role).strip()
+        from app.services.role_registry_service import valid_role_keys
+        if nuevo_rol not in valid_role_keys():
+            flash(translate("Rol no válido."), "danger")
+            return _render_user_form(
+                edit_mode=True,
+                user=user,
+                action_url=url_for("admin.edit_operario", user_id=user.id),
+                companies=companies,
+            )
 
         if nuevo_rol == ROLE_OPERARIO:
             new_email = (
@@ -3115,6 +3130,7 @@ def _default_internal_company_id():
 
 def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to='', cancel_url=None, default_role=''):
     from app.utils.nav_back import resolve_back_url
+    from app.services.role_registry_service import list_roles
     if companies is None:
         keep_id = getattr(user, 'company_id', None) if user else None
         companies = Company.query.filter(
@@ -3133,6 +3149,7 @@ def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to=
         default_role=default_role,
         companies=companies,
         default_company_id=_default_internal_company_id(),
+        assignable_roles=list_roles(),
     )
 
 
@@ -3151,6 +3168,11 @@ def create_user():
         from app.services.plan_service import PlanLimitError, exigir_alta_empleado
 
         role = (request.form.get("role") or ROLE_OPERARIO).strip()
+        from app.services.role_registry_service import valid_role_keys
+        if role not in valid_role_keys():
+            flash(translate("Rol no válido."), "danger")
+            return redirect(_url_with_return_to("admin.create_user"))
+
         name = (request.form.get("name") or "").strip()
         lastname = (request.form.get("lastname") or "").strip()
         dni = (request.form.get("dni") or "").strip().upper()
@@ -4074,7 +4096,6 @@ def permisos_roles(role=None):
         ADMIN_LOCKED_MODULES,
         MODULE_READ_HINTS,
         MODULE_WRITE_HINTS,
-        PERMISSION_ROLES,
         SSO_READ_ONLY_MODULES,
         modules_for_role,
     )
@@ -4083,19 +4104,31 @@ def permisos_roles(role=None):
         matrix_for_role,
         user_can,
     )
+    from app.services.role_registry_service import (
+        ensure_tenant_roles,
+        get_role,
+        is_role_locked,
+        list_roles,
+    )
     if not user_can(current_user, 'permisos', 'r'):
         flash(translate('Acceso denegado.'), 'danger')
         return redirect(url_for('main.dashboard'))
+    ensure_tenant_roles()
     ensure_role_permissions()
-    valid = {r for r, _ in PERMISSION_ROLES}
+    roles = list_roles()
+    valid = {r for r, _ in roles}
     active = role if role in valid else 'admin'
     modules = modules_for_role(active)
     visible_keys = {m for m, _, _ in modules}
+    active_meta = get_role(active)
     return render_template(
         'admin_permisos.html',
-        roles=PERMISSION_ROLES,
+        roles=roles,
         modules=modules,
         active_role=active,
+        active_role_label=(active_meta.label if active_meta else active),
+        active_role_locked=is_role_locked(active),
+        active_role_system=bool(active_meta and active_meta.is_system),
         matrix=matrix_for_role(active),
         locked_modules=ADMIN_LOCKED_MODULES,
         sso_read_only_modules=SSO_READ_ONLY_MODULES,
@@ -4104,18 +4137,20 @@ def permisos_roles(role=None):
         show_integration_perm_hint=bool(
             visible_keys & {'soltec_alta_odoo', 'soltec_portal', 'sync_odoo', 'integraciones'}
         ),
+        can_manage_roles=user_can(current_user, 'permisos', 'w'),
     )
 
 
 @admin_bp.route('/permisos/guardar', methods=['POST'])
 @login_required
 def permisos_roles_save():
-    from app.services.permission_catalog import PERMISSION_ROLES, modules_for_role
+    from app.services.permission_catalog import modules_for_role
     from app.services.permission_service import (
         ensure_role_permissions,
         save_role_matrix,
         user_can,
     )
+    from app.services.role_registry_service import list_roles, valid_role_keys
     if not user_can(current_user, 'permisos', 'w'):
         flash(translate('Acceso denegado.'), 'danger')
         return redirect(url_for('main.dashboard'))
@@ -4124,8 +4159,7 @@ def permisos_roles_save():
         flash(translate('Permisos restaurados a los valores por defecto.'), 'success')
         return redirect(url_for('admin.permisos_roles'))
     role = (request.form.get('role') or '').strip()
-    valid = {r for r, _ in PERMISSION_ROLES}
-    if role not in valid:
+    if role not in valid_role_keys():
         flash(translate('Rol no válido.'), 'danger')
         return redirect(url_for('admin.permisos_roles'))
     try:
@@ -4137,6 +4171,65 @@ def permisos_roles_save():
         return redirect(url_for('admin.permisos_roles', role=role))
     flash(translate('Permisos guardados.'), 'success')
     return redirect(url_for('admin.permisos_roles', role=role))
+
+
+@admin_bp.route('/permisos/rol/renombrar', methods=['POST'])
+@login_required
+def permisos_rol_renombrar():
+    from app.services.permission_service import user_can
+    from app.services.role_registry_service import rename_role
+    if not user_can(current_user, 'permisos', 'w'):
+        flash(translate('Acceso denegado.'), 'danger')
+        return redirect(url_for('main.dashboard'))
+    key = (request.form.get('role') or '').strip()
+    label = (request.form.get('label') or '').strip()
+    try:
+        rename_role(key, label)
+        flash(translate('Nombre del rol actualizado.'), 'success')
+    except Exception as exc:
+        db.session.rollback()
+        flash(translate('No se pudo renombrar: {error}', error=exc), 'danger')
+    return redirect(url_for('admin.permisos_roles', role=key or 'admin'))
+
+
+@admin_bp.route('/permisos/rol/crear', methods=['POST'])
+@login_required
+def permisos_rol_crear():
+    from app.services.permission_service import user_can
+    from app.services.role_registry_service import create_role
+    if not user_can(current_user, 'permisos', 'w'):
+        flash(translate('Acceso denegado.'), 'danger')
+        return redirect(url_for('main.dashboard'))
+    label = (request.form.get('label') or '').strip()
+    key = (request.form.get('key') or '').strip() or None
+    clone_from = (request.form.get('clone_from') or 'laboral').strip()
+    try:
+        row = create_role(key=key, label=label, clone_from=clone_from)
+        flash(translate('Rol creado. Ajusta sus permisos abajo.'), 'success')
+        return redirect(url_for('admin.permisos_roles', role=row.key))
+    except Exception as exc:
+        db.session.rollback()
+        flash(translate('No se pudo crear el rol: {error}', error=exc), 'danger')
+        return redirect(url_for('admin.permisos_roles'))
+
+
+@admin_bp.route('/permisos/rol/eliminar', methods=['POST'])
+@login_required
+def permisos_rol_eliminar():
+    from app.services.permission_service import user_can
+    from app.services.role_registry_service import delete_role
+    if not user_can(current_user, 'permisos', 'w'):
+        flash(translate('Acceso denegado.'), 'danger')
+        return redirect(url_for('main.dashboard'))
+    key = (request.form.get('role') or '').strip()
+    try:
+        delete_role(key)
+        flash(translate('Rol eliminado.'), 'success')
+        return redirect(url_for('admin.permisos_roles'))
+    except Exception as exc:
+        db.session.rollback()
+        flash(translate('No se pudo eliminar: {error}', error=exc), 'danger')
+        return redirect(url_for('admin.permisos_roles', role=key or 'admin'))
 
 
 @admin_bp.route('/configuracion/update', methods=['POST'])

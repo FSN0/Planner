@@ -459,3 +459,46 @@ def auto_sync_odoo():
             _for_each_tenant(_run_for_tenant)
         finally:
             _cleanup_db_session()
+
+
+@celery.task(bind=True, soft_time_limit=60 * 60, time_limit=65 * 60)
+def process_nota_audio_task(self, schema_name: str, job_id: int):
+    """Transcribe audio subido y crea nota privada en el tenant indicado."""
+    with app.app_context():
+        try:
+            # Tenant está en public; el job/nota viven en schema_name
+            from sqlalchemy import text
+            tenant_row = None
+            with db.engine.connect() as conn:
+                tenant_row = conn.execute(
+                    text(
+                        'SELECT id, schema_name, subdominio, nombre, modulos_activos '
+                        'FROM public.tenants WHERE schema_name = :schema LIMIT 1'
+                    ),
+                    {'schema': schema_name},
+                ).fetchone()
+
+            _set_search_path(schema_name)
+            if tenant_row:
+                _bind_tenant_context({
+                    'id': tenant_row[0],
+                    'schema_name': tenant_row[1],
+                    'subdominio': tenant_row[2],
+                    'nombre': tenant_row[3],
+                    'modulos_activos': tenant_row[4] if isinstance(tenant_row[4], dict) else {},
+                })
+
+            app.logger.info(
+                'process_nota_audio_task start job=%s schema=%s', job_id, schema_name,
+            )
+            from app.services.nota_audio_service import process_nota_audio_job
+            process_nota_audio_job(job_id)
+            app.logger.info(
+                'process_nota_audio_task done job=%s schema=%s', job_id, schema_name,
+            )
+        except Exception as e:
+            app.logger.exception(
+                'Error procesando nota de voz job=%s schema=%s: %s', job_id, schema_name, e,
+            )
+        finally:
+            _cleanup_db_session()

@@ -2,9 +2,13 @@
 {% block title %}{{ _('Auditoría de Fichajes') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
-{% macro audit_sort_th(col, label, width='', align='', sort_type='') %}
-<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
+{% macro audit_sort_th(col, label, width='', align='', sort_type='', col_key='') %}
+<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}"{% if col_key %} data-col-key="{{ col_key }}"{% endif %} data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
 {% endmacro %}
+
+{% macro audit_metric_val(val) -%}
+{%- if val is not none -%}{{ '%.2f'|format(val|float) }}{%- else -%}—{%- endif -%}
+{%- endmacro %}
 
 {% macro celda_notas(reg) %}
 <td class="align-middle" data-sort-value="{{ (reg.nota_odoo or '')|lower }}">
@@ -18,22 +22,45 @@
 </td>
 {% endmacro %}
 
+{% macro celda_obra_link(obra) %}
+<td data-sort-value="{{ (obra.nombre if obra else '')|lower }}">
+    {% if obra %}
+    <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
+        <a href="{{ url_for('admin.obra_panel', obra_id=obra.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=obra.nombre) }}">{{ obra.codigo }}</a>
+        <span class="text-muted flex-shrink-0 mr-1">-</span>
+        <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ obra.nombre }}">{{ obra.nombre }}</span>
+    </div>
+    {% else %}
+    <span class="text-muted">—</span>
+    {% endif %}
+</td>
+{% endmacro %}
+
+{% macro celda_operario(reg) %}
+<td data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
+    {% if reg.user %}
+    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or _('Externo') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
+    {% else %}
+    <span class="text-muted">—</span>
+    {% endif %}
+</td>
+{% endmacro %}
+
 {% macro celda_metricas_odoo(reg) %}
 {% if tenant_has_odoo %}
-<td class="align-middle odoo-metrics-cell text-center" data-sort-value="{{ reg.odoo_total_hh or reg.odoo_ud or '' }}">
-    <div class="odoo-metrics-grid">
-        <span class="odoo-metric" title="{{ _('UD') }}"><abbr>UD</abbr> {% if reg.odoo_ud is not none %}{{ '%.2f'|format(reg.odoo_ud|float) }}{% else %}—{% endif %}</span>
-        <span class="odoo-metric" title="{{ _('MOD') }}"><abbr>MOD</abbr> {% if reg.odoo_mod is not none %}{{ '%.2f'|format(reg.odoo_mod|float) }}{% else %}—{% endif %}</span>
-        <span class="odoo-metric" title="{{ _('Total HH') }}"><abbr>HH</abbr> {% if reg.odoo_total_hh is not none %}{{ '%.2f'|format(reg.odoo_total_hh|float) }}{% else %}—{% endif %}</span>
-        <span class="odoo-metric" title="{{ _('MOE') }}"><abbr>MOE</abbr> {% if reg.odoo_moe is not none %}{{ '%.2f'|format(reg.odoo_moe|float) }}{% else %}—{% endif %}</span>
-    </div>
-</td>
+<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_ud if reg.odoo_ud is not none else '' }}">{{ audit_metric_val(reg.odoo_ud) }}</td>
+<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_total_hh if reg.odoo_total_hh is not none else '' }}">{{ audit_metric_val(reg.odoo_total_hh) }}</td>
+<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_mod if reg.odoo_mod is not none else '' }}">{{ audit_metric_val(reg.odoo_mod) }}</td>
+<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_moe if reg.odoo_moe is not none else '' }}">{{ audit_metric_val(reg.odoo_moe) }}</td>
 {% endif %}
 {% endmacro %}
 
-{% macro audit_th_metricas_odoo(col) %}
+{% macro audit_th_metricas_odoo(col_start) %}
 {% if tenant_has_odoo %}
-{{ audit_sort_th(col, 'UD · MOD · HH · MOE', '9%', 'center', 'num') }}
+{{ audit_sort_th(col_start, 'UD', '4.5%', 'center', 'num', 'odoo_ud') }}
+{{ audit_sort_th(col_start + 1, 'HH', '4.5%', 'center', 'num', 'odoo_hh') }}
+{{ audit_sort_th(col_start + 2, 'MOD', '4.5%', 'center', 'num', 'odoo_mod') }}
+{{ audit_sort_th(col_start + 3, 'MOE', '4.5%', 'center', 'num', 'odoo_moe') }}
 {% endif %}
 {% endmacro %}
 
@@ -57,7 +84,7 @@
 {% endmacro %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260903e">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 <style>
@@ -71,19 +98,11 @@ tr.audit-row-highlight {
   outline: 2px solid #f59e0b;
   outline-offset: 2px;
 }
-.odoo-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.15rem 0.35rem;
-  font-size: 0.68rem;
-  line-height: 1.25;
-  color: #475569;
-}
-.odoo-metric abbr {
-  font-weight: 700;
-  color: #0f172a;
-  text-decoration: none;
-  margin-right: 0.15rem;
+.odoo-metric-col {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+  white-space: nowrap;
 }
 </style>
 {% endblock %}
@@ -95,11 +114,16 @@ tr.audit-row-highlight {
 {% set fichaje_col = _('Fichaje Odoo') %}
 {% set sin_fichaje_lbl = _('Sin registro Odoo') %}
 {% set toolbar_sub = _('Odoo vs planificación') %}
+{% set odoo_extra = 4 %}
 {% else %}
 {% set fichaje_col = _('Fichaje real') %}
 {% set sin_fichaje_lbl = _('Sin fichaje') %}
 {% set toolbar_sub = _('Plan vs fichaje') %}
+{% set odoo_extra = 0 %}
 {% endif %}
+{% set geo_extra = 1 if muestra_geo_audit else 0 %}
+{% set metrics_col = 6 + geo_extra %}
+{% set after_metrics = metrics_col + odoo_extra %}
 <div class="admin-shell auditoria-page">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact">
@@ -198,39 +222,25 @@ tr.audit-row-highlight {
                     <table id="auditConflictosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
                         <thead>
                             <tr>
-                                {{ audit_sort_th(0, 'Día', '7%', '', 'date') }}
-                                {{ audit_sort_th(1, 'Operario', '13%') }}
-                                {{ audit_sort_th(2, 'Asignación original', '18%') }}
-                                {{ audit_sort_th(3, fichaje_col, '18%') }}
-                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
-                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
-                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '8%', 'center') }}{% endif %}
-                                {{ audit_th_metricas_odoo(6 if not muestra_geo_audit else 7) }}
-                                {{ audit_sort_th((7 if not muestra_geo_audit else 8) + (1 if tenant_has_odoo else 0), 'Notas', '12%' if muestra_geo_audit else '15%') }}
-                                {{ audit_sort_th((8 if not muestra_geo_audit else 9) + (1 if tenant_has_odoo else 0), 'Resolución', '12%' if muestra_geo_audit else '15%', 'right') }}
+                                {{ audit_sort_th(0, 'Día', '7%', '', 'date', 'dia') }}
+                                {{ audit_sort_th(1, 'Operario', '13%', '', '', 'operario') }}
+                                {{ audit_sort_th(2, 'Asignación original', '16%', '', '', 'plan') }}
+                                {{ audit_sort_th(3, fichaje_col, '16%', '', '', 'fichaje') }}
+                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time', 'entrada') }}
+                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time', 'salida') }}
+                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center', '', 'ubicacion') }}{% endif %}
+                                {{ audit_th_metricas_odoo(metrics_col) }}
+                                {{ audit_sort_th(after_metrics, 'Notas', '10%' if muestra_geo_audit else '12%', '', '', 'notas') }}
+                                {{ audit_sort_th(after_metrics + 1, 'Resolución', '11%' if muestra_geo_audit else '14%', 'right', '', 'resolucion') }}
                             </tr>
                         </thead>
                         <tbody>
                             {% for reg in var_conflictos %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
+                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                <td data-sort-value="{{ reg.user.lastname|lower }}">
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or _('Externo') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
-                                </td>
-                                <td data-sort-value="{{ reg.obra_planificada.nombre|lower }}">
-                                    <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_planificada.nombre) }}">{{ reg.obra_planificada.codigo }}</a>
-                                        <span class="text-muted flex-shrink-0 mr-1">-</span>
-                                        <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
-                                    </div>
-                                </td>
-                                <td data-sort-value="{{ reg.obra_real.nombre|lower }}">
-                                    <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_real.nombre) }}">{{ reg.obra_real.codigo }}</a>
-                                        <span class="text-muted flex-shrink-0 mr-1">-</span>
-                                        <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
-                                    </div>
-                                </td>
+                                {{ celda_operario(reg) }}
+                                {{ celda_obra_link(reg.obra_planificada) }}
+                                {{ celda_obra_link(reg.obra_real) }}
                                 <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
                                     {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
@@ -277,16 +287,16 @@ tr.audit-row-highlight {
                     <table id="auditParacaidistasTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
                         <thead>
                             <tr>
-                                {{ audit_sort_th(0, 'Día', '7%', '', 'date') }}
-                                {{ audit_sort_th(1, 'Operario', '13%') }}
-                                {{ audit_sort_th(2, 'Estado anterior', '11%') }}
-                                {{ audit_sort_th(3, fichaje_col, '20%') }}
-                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time') }}
-                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time') }}
-                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '8%', 'center') }}{% endif %}
-                                {{ audit_th_metricas_odoo(6 if not muestra_geo_audit else 7) }}
-                                {{ audit_sort_th((7 if not muestra_geo_audit else 8) + (1 if tenant_has_odoo else 0), 'Notas', '12%' if muestra_geo_audit else '15%') }}
-                                {{ audit_sort_th((8 if not muestra_geo_audit else 9) + (1 if tenant_has_odoo else 0), 'Resolución', '12%' if muestra_geo_audit else '20%', 'right') }}
+                                {{ audit_sort_th(0, 'Día', '7%', '', 'date', 'dia') }}
+                                {{ audit_sort_th(1, 'Operario', '13%', '', '', 'operario') }}
+                                {{ audit_sort_th(2, 'Estado anterior', '10%', '', '', 'estado_ant') }}
+                                {{ audit_sort_th(3, fichaje_col, '16%', '', '', 'fichaje') }}
+                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time', 'entrada') }}
+                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time', 'salida') }}
+                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center', '', 'ubicacion') }}{% endif %}
+                                {{ audit_th_metricas_odoo(metrics_col) }}
+                                {{ audit_sort_th(after_metrics, 'Notas', '10%' if muestra_geo_audit else '12%', '', '', 'notas') }}
+                                {{ audit_sort_th(after_metrics + 1, 'Resolución', '11%' if muestra_geo_audit else '16%', 'right', '', 'resolucion') }}
                             </tr>
                         </thead>
                         <tbody>
@@ -294,22 +304,14 @@ tr.audit-row-highlight {
                             <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row"
                                 data-user-id="{{ reg.user_id }}"
                                 data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
-                                {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
+                                {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
                                 {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %}
                                 data-tour-audit-row
                                 style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                <td data-sort-value="{{ reg.user.lastname|lower }}">
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ _('Ir al perfil') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
-                                </td>
+                                {{ celda_operario(reg) }}
                                 <td data-sort-value="libre"><span class="text-muted font-italic" style="font-size: 0.75rem;">{{ _('Libre / Inercia') }}</span></td>
-                                <td data-sort-value="{{ reg.obra_real.nombre|lower }}">
-                                    <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_real.nombre) }}">{{ reg.obra_real.codigo }}</a>
-                                        <span class="text-muted flex-shrink-0 mr-1">-</span>
-                                        <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
-                                    </div>
-                                </td>
+                                {{ celda_obra_link(reg.obra_real) }}
                                 <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
                                     {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
@@ -367,16 +369,8 @@ tr.audit-row-highlight {
                             {% for reg in var_ausencias %}
                             <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                <td data-sort-value="{{ reg.user.lastname|lower }}">
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ _('Ir al perfil') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
-                                </td>
-                                <td data-sort-value="{{ reg.obra_planificada.nombre|lower }}">
-                                    <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=reg.obra_planificada.nombre) }}">{{ reg.obra_planificada.codigo }}</a>
-                                        <span class="text-muted flex-shrink-0 mr-1">-</span>
-                                        <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
-                                    </div>
-                                </td>
+                                {{ celda_operario(reg) }}
+                                {{ celda_obra_link(reg.obra_planificada) }}
                                 <td data-sort-value="ausencia"><span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> {{ sin_fichaje_lbl }}</span></td>
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
@@ -486,30 +480,34 @@ tr.audit-row-highlight {
             <table id="historialTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
                 <thead>
                     <tr>
-                        {{ audit_sort_th(0, 'Fecha', '6%', '', 'date') }}
-                        {{ audit_sort_th(1, 'Operario', '13%') }}
-                        {{ audit_sort_th(2, 'Estado final', '11%') }}
-                        {{ audit_sort_th(3, 'Trazabilidad', '26%', 'center') }}
-                        {{ audit_sort_th(4, 'Entrada', '6%', 'center', 'time') }}
-                        {{ audit_sort_th(5, 'Salida', '6%', 'center', 'time') }}
-                        {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center') }}{% endif %}
-                        {{ audit_th_metricas_odoo(6 if not muestra_geo_audit else 7) }}
-                        {{ audit_sort_th((7 if not muestra_geo_audit else 8) + (1 if tenant_has_odoo else 0), 'Notas', '10%' if muestra_geo_audit else '14%') }}
-                        {{ audit_sort_th((8 if not muestra_geo_audit else 9) + (1 if tenant_has_odoo else 0), 'Auditado por', '8%') }}
-                        {{ audit_sort_th((9 if not muestra_geo_audit else 10) + (1 if tenant_has_odoo else 0), 'Hora reg.', '7%', '', 'date') }}
+                        {{ audit_sort_th(0, 'Fecha', '6%', '', 'date', 'fecha') }}
+                        {{ audit_sort_th(1, 'Operario', '12%', '', '', 'operario') }}
+                        {{ audit_sort_th(2, 'Estado final', '10%', '', '', 'estado') }}
+                        {{ audit_sort_th(3, 'Trazabilidad', '20%', 'center', '', 'trazabilidad') }}
+                        {{ audit_sort_th(4, 'Entrada', '6%', 'center', 'time', 'entrada') }}
+                        {{ audit_sort_th(5, 'Salida', '6%', 'center', 'time', 'salida') }}
+                        {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '6%', 'center', '', 'ubicacion') }}{% endif %}
+                        {{ audit_th_metricas_odoo(metrics_col) }}
+                        {{ audit_sort_th(after_metrics, 'Notas', '8%' if muestra_geo_audit else '10%', '', '', 'notas') }}
+                        {{ audit_sort_th(after_metrics + 1, 'Auditado por', '8%', '', '', 'auditor') }}
+                        {{ audit_sort_th(after_metrics + 2, 'Hora reg.', '7%', '', 'date', 'hora_reg') }}
                         {% if can_resolve_fichajes %}
-                        <th style="width:7%;" class="text-center no-sort">{{ _('Acción') }}</th>
+                        <th style="width:7%;" class="text-center no-sort no-col-hide" data-col-key="accion">{{ _('Acción') }}</th>
                         {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for reg in historial %}
-                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
+                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
                         <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                        <td data-sort-value="{{ reg.user.lastname|lower }}">
+                        <td data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
+                            {% if reg.user %}
                             <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
                                 {{ reg.user.name }} {{ reg.user.lastname }}
                             </a>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
                         </td>
                         <td>
                             {% if reg.estado == 'Correcto' %}

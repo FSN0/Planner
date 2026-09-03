@@ -39,6 +39,9 @@ services:
       - LEGAL_NIF=${LEGAL_NIF:-}
       - LEGAL_DOMICILIO=${LEGAL_DOMICILIO:-}
       - LEGAL_EMAIL=${LEGAL_EMAIL:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NOTA_AUDIO_MAX_BYTES=${NOTA_AUDIO_MAX_BYTES:-536870912}
+      - NOTA_AUDIO_MAX_SECONDS=${NOTA_AUDIO_MAX_SECONDS:-10800}
     depends_on:
       db:
         condition: service_healthy
@@ -110,6 +113,9 @@ services:
       - ODOO_USER=${ODOO_USER}
       - ODOO_PASSWORD=${ODOO_PASSWORD}
       - SSO_SECRET_KEY=${SSO_SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - NOTA_AUDIO_MAX_BYTES=${NOTA_AUDIO_MAX_BYTES:-536870912}
+      - NOTA_AUDIO_MAX_SECONDS=${NOTA_AUDIO_MAX_SECONDS:-10800}
     depends_on:
       db:
         condition: service_healthy
