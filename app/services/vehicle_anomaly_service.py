@@ -432,14 +432,11 @@ def _fecha_iso(val):
 
 def build_anomaly_clave(kind, item):
     """
-    Clave estable para acuse. Preferencia: reg_id del RegistroOdometro.
+    Clave estable para acuse (clave compuesta estable).
     Formato: {kind}:reg:{id} | leave:asig:{id} | leave:{user}:{fecha}:{veh} | …
     """
     kind = (kind or '').strip().lower()
     if isinstance(item, dict):
-        reg_id = item.get('reg_id')
-        if reg_id:
-            return f'{kind}:reg:{reg_id}'
         if kind == 'leave':
             asig = item.get('asignacion_id')
             if asig:
@@ -466,11 +463,25 @@ def build_anomaly_clave(kind, item):
                 f"desvio:{item.get('vehiculo_id')}:{_fecha_iso(item.get('fecha'))}"
                 f":{item.get('viaje_code') or ''}"
             )
-        return f'{kind}:fallback:{item.get("vehiculo_id") or item.get("user_id") or "x"}:{_fecha_iso(item.get("fecha") or item.get("fecha_actual"))}'
+        # Fallback: si no hay un esquema estable específico para el kind,
+        # usamos reg_id (legacy). Esto evita romper casos raros.
+        reg_id = item.get('reg_id')
+        if reg_id:
+            return f'{kind}:reg:{reg_id}'
+        return (
+            f'{kind}:fallback:'
+            f'{item.get("vehiculo_id") or item.get("user_id") or "x"}:'
+            f'{_fecha_iso(item.get("fecha") or item.get("fecha_actual"))}'
+        )
 
     # RegistroOdometro u objeto con .id
     oid = getattr(item, 'id', None)
     if oid is not None:
+        if kind in {'mismatch', 'sin_km', 'sin_plan'}:
+            vehiculo_id = getattr(item, 'vehiculo_id', None)
+            fecha = getattr(item, 'fecha', None)
+            if vehiculo_id is not None and fecha is not None:
+                return f'{kind}:veh:{vehiculo_id}:{_fecha_iso(fecha)}'
         return f'{kind}:reg:{oid}'
     raise ValueError(f'No se puede construir clave para kind={kind!r}')
 
@@ -505,18 +516,142 @@ def get_vistos_claves(kinds=None):
     )
 
 
-def partition_anomalias(kind, items, vistos_set=None):
+def get_vistas_map(kinds=None):
+    """
+    Mapa {(kind, clave)->AnomaliaVehiculoVista} para separar pendientes vs vistos,
+    y para enriquecer el histórico con "quién lo ha visto".
+
+    Compatibilidad legacy:
+    - Si existen claves guardadas tipo `{kind}:reg:{id}`, intentamos reconstruir
+      la clave estable compuesta equivalente en base al estado actual.
+    """
+    from app import db
+    from app.models import AnomaliaVehiculoVista
+
+    q = AnomaliaVehiculoVista.query
+    if kinds:
+        q = q.filter(AnomaliaVehiculoVista.kind.in_(list(kinds)))
+
+    vistos_rows = q.options(db.joinedload(AnomaliaVehiculoVista.visto_por)).all()
+    vistas_map = {(r.kind, r.clave): r for r in vistos_rows}
+    if not vistos_rows:
+        return vistas_map
+
+    need_user_indexes = any(r.kind in {'cross', 'leave'} for r in vistos_rows)
+    users_by_odoo = users_by_name = None
+    if need_user_indexes:
+        users_by_odoo, users_by_name = _build_user_indexes()
+
+    for row in vistos_rows:
+        parts = (row.clave or '').split(':reg:')
+        if len(parts) != 2 or parts[0] != row.kind:
+            continue
+        try:
+            reg_id = int(parts[1])
+        except (TypeError, ValueError):
+            continue
+
+        reg = RegistroOdometro.query.get(reg_id)
+        if not reg:
+            continue
+
+        fecha_iso = _fecha_iso(reg.fecha)
+        stable = None
+
+        if row.kind in {'mismatch', 'sin_km', 'sin_plan'}:
+            if reg.vehiculo_id is not None and fecha_iso:
+                stable = f'{row.kind}:veh:{reg.vehiculo_id}:{fecha_iso}'
+        elif row.kind == 'desvio':
+            if reg.viaje_odoo_id:
+                stable = f'desvio:viaje:{reg.viaje_odoo_id}'
+            elif reg.vehiculo_id is not None and fecha_iso:
+                stable = (
+                    f'desvio:{reg.vehiculo_id}:{fecha_iso}:{reg.viaje_code or ""}'
+                )
+        elif row.kind == 'salto':
+            if reg.vehiculo_id is not None and reg.fecha:
+                prev = RegistroOdometro.query.filter(
+                    RegistroOdometro.vehiculo_id == reg.vehiculo_id,
+                    RegistroOdometro.fecha < reg.fecha,
+                    RegistroOdometro.valor.isnot(None),
+                    RegistroOdometro.viaje_odoo_id.isnot(None),
+                ).order_by(RegistroOdometro.fecha.desc(), RegistroOdometro.id.desc()).first()
+                if prev and prev.fecha:
+                    stable = (
+                        f'salto:{reg.vehiculo_id}:{_fecha_iso(prev.fecha)}:{_fecha_iso(reg.fecha)}'
+                    )
+        elif row.kind == 'cross':
+            matched = _match_driver_user(
+                reg.odoo_driver_partner_id,
+                reg.odoo_driver_name,
+                users_by_odoo,
+                users_by_name,
+            )
+            if matched:
+                planned = AsignacionVehiculo.query.filter_by(
+                    user_id=matched.id,
+                    fecha=reg.fecha,
+                ).first()
+                if planned and planned.vehiculo_id is not None and reg.vehiculo_id is not None:
+                    stable = (
+                        f'cross:{matched.id}:{fecha_iso}:{planned.vehiculo_id}:{reg.vehiculo_id}'
+                    )
+        elif row.kind == 'leave':
+            matched = _match_driver_user(
+                reg.odoo_driver_partner_id,
+                reg.odoo_driver_name,
+                users_by_odoo,
+                users_by_name,
+            )
+            if matched:
+                asig = AsignacionVehiculo.query.filter_by(
+                    user_id=matched.id,
+                    fecha=reg.fecha,
+                    vehiculo_id=reg.vehiculo_id,
+                ).first()
+                if asig:
+                    stable = f'leave:asig:{asig.id}'
+                elif reg.vehiculo_id is not None and fecha_iso:
+                    stable = f'leave:{matched.id}:{fecha_iso}:{reg.vehiculo_id}'
+
+        if stable:
+            vistas_map[(row.kind, stable)] = row
+
+    return vistas_map
+
+
+def partition_anomalias(kind, items, vistas_map=None):
     """
     Anota claves y parte en (pendientes, vistos).
-    vistos_set: set[(kind, clave)] precargado opcional.
+    vistas_map: dict[(kind, clave)] -> AnomaliaVehiculoVista precargado opcional.
     """
-    if vistos_set is None:
-        vistos_set = get_vistos_claves([kind])
+    if vistas_map is None:
+        vistas_map = get_vistas_map(kinds=[kind])
+
     pendientes, vistos = [], []
     for raw in items:
         item = annotate_anomaly_clave(kind, raw)
         clave = item['anomalia_clave'] if isinstance(item, dict) else item.anomalia_clave
-        if (kind, clave) in vistos_set:
+
+        vista_row = vistas_map.get((kind, clave))
+        if vista_row:
+            viewer = None
+            try:
+                if vista_row.visto_por:
+                    viewer = f"{vista_row.visto_por.name} {vista_row.visto_por.lastname}".strip()
+            except Exception:
+                viewer = None
+
+            if isinstance(item, dict):
+                item['visto_por_name'] = viewer
+                item['visto_en'] = vista_row.visto_en
+            else:
+                try:
+                    item.visto_por_name = viewer
+                    item.visto_en = vista_row.visto_en
+                except Exception:
+                    pass
+
             vistos.append(item)
         else:
             pendientes.append(item)

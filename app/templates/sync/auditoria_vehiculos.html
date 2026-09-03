@@ -6,9 +6,12 @@
 <th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}" data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
 {% endmacro %}
 
-{% macro btn_visto(kind, clave, es_visto=false) %}
+{% macro btn_visto(kind, clave, es_visto=false, visto_por_name='', visto_en=None) %}
 {% if es_visto %}
-  <span class="text-muted small"><i class="fas fa-eye"></i>{{ _('Visto') }}</span>
+  <span class="text-muted small"
+        title="{% if visto_en %}{{ visto_en|format_dt }} · {% endif %}{% if visto_por_name %}{{ visto_por_name }}{% else %}{{ _('Nadie') }}{% endif %}">
+    <i class="fas fa-eye"></i>{{ _('Visto') }}{% if visto_por_name %} · {{ visto_por_name }}{% endif %}
+  </span>
 {% else %}
   <button type="button" class="btn-admin btn-admin-ghost btn-sm btn-anomalia-visto"
           data-kind="{{ kind }}" data-clave="{{ clave }}" title="{{ _('Marcar como visto') }}">
@@ -79,7 +82,13 @@
     {% endif %}
   </td>
   <td class="text-center">
-    {{ btn_visto(reg.anomalia_kind, reg.anomalia_clave, es_visto) }}
+    {{ btn_visto(
+        reg.anomalia_kind,
+        reg.anomalia_clave,
+        es_visto,
+        reg.visto_por_name|default(''),
+        reg.visto_en|default(None)
+    ) }}
   </td>
 </tr>
 {% endmacro %}
@@ -346,7 +355,10 @@
                     <td>{% if j.vehiculo %}{{ j.vehiculo.matricula or j.vehiculo.nombre }}{% else %}—{% endif %}</td>
                     <td>{% if j.delta_km >= 0 %}+{% endif %}{{ '%.0f'|format(j.delta_km) }} ({{ '%.0f'|format(j.km_dia) }}/d)</td>
                     <td>{{ j.motivos|join(', ') }}</td>
-                    <td class="text-center">{{ btn_visto(j.anomalia_kind, j.anomalia_clave, true) }}</td>
+                     <td class="text-center">{{ btn_visto(
+                        j.anomalia_kind, j.anomalia_clave, true,
+                        j.visto_por_name|default(''), j.visto_en|default(None)
+                     ) }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -449,7 +461,10 @@
                     <td>{% if a.vehiculo %}{{ a.vehiculo.matricula or a.vehiculo.nombre }}{% else %}—{% endif %}</td>
                     <td>{{ a.viaje_code or '—' }}</td>
                     <td>{% if a.desvio >= 0 %}+{% endif %}{{ '%.1f'|format(a.desvio) }}%</td>
-                    <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave, true) }}</td>
+                     <td class="text-center">{{ btn_visto(
+                        a.anomalia_kind, a.anomalia_clave, true,
+                        a.visto_por_name|default(''), a.visto_en|default(None)
+                     ) }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -549,7 +564,10 @@
                     <td>{{ a.user.name }} {{ a.user.lastname }}</td>
                     <td>{% if a.vehiculo %}{{ a.vehiculo.label() }}{% else %}—{% endif %}</td>
                     <td>{{ a.ausencia_tipo }}</td>
-                    <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave, true) }}</td>
+                     <td class="text-center">{{ btn_visto(
+                        a.anomalia_kind, a.anomalia_clave, true,
+                        a.visto_por_name|default(''), a.visto_en|default(None)
+                     ) }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>
@@ -640,7 +658,10 @@
                     <td>{{ a.user.name }} {{ a.user.lastname }}</td>
                     <td>{% if a.vehiculo_planificado %}{{ a.vehiculo_planificado.label() }}{% else %}—{% endif %}</td>
                     <td>{% if a.vehiculo_reportado %}{{ a.vehiculo_reportado.label() }}{% else %}—{% endif %}</td>
-                    <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave, true) }}</td>
+                     <td class="text-center">{{ btn_visto(
+                        a.anomalia_kind, a.anomalia_clave, true,
+                        a.visto_por_name|default(''), a.visto_en|default(None)
+                     ) }}</td>
                   </tr>
                   {% endfor %}
                 </tbody>

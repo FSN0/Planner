@@ -1669,7 +1669,7 @@ def auditoria_vehiculos():
         detect_viaje_desvios,
         get_desvio_thresholds,
         get_odometer_jump_thresholds,
-        get_vistos_claves,
+        get_vistas_map,
         partition_anomalias,
     )
 
@@ -1752,20 +1752,20 @@ def auditoria_vehiculos():
         saltos, vehiculo_distinto, vehiculo_en_ausencia, desvios = [], [], [], []
 
     # Partición informativa pendientes vs visto (no altera detección)
-    vistos_set = get_vistos_claves([
+    vistas_map = get_vistas_map([
         'salto', 'cross', 'leave', 'desvio', 'mismatch', 'sin_km', 'sin_plan',
     ])
-    saltos, saltos_visto = partition_anomalias('salto', saltos, vistos_set)
-    desvios, desvios_visto = partition_anomalias('desvio', desvios, vistos_set)
+    saltos, saltos_visto = partition_anomalias('salto', saltos, vistas_map)
+    desvios, desvios_visto = partition_anomalias('desvio', desvios, vistas_map)
     vehiculo_en_ausencia, vehiculo_en_ausencia_visto = partition_anomalias(
-        'leave', vehiculo_en_ausencia, vistos_set
+        'leave', vehiculo_en_ausencia, vistas_map
     )
     vehiculo_distinto, vehiculo_distinto_visto = partition_anomalias(
-        'cross', vehiculo_distinto, vistos_set
+        'cross', vehiculo_distinto, vistas_map
     )
-    mismatch, mismatch_visto = partition_anomalias('mismatch', mismatch, vistos_set)
-    sin_km, sin_km_visto = partition_anomalias('sin_km', sin_km, vistos_set)
-    sin_plan, sin_plan_visto = partition_anomalias('sin_plan', sin_plan, vistos_set)
+    mismatch, mismatch_visto = partition_anomalias('mismatch', mismatch, vistas_map)
+    sin_km, sin_km_visto = partition_anomalias('sin_km', sin_km, vistas_map)
+    sin_plan, sin_plan_visto = partition_anomalias('sin_plan', sin_plan, vistas_map)
 
     return render_template(
         'sync/auditoria_vehiculos.html',
