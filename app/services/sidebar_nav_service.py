@@ -171,14 +171,10 @@ def _is_adm(user) -> bool:
 
 
 def _home_href(user) -> str:
-    if _is_jefe(user):
-        return url_for('jefe.panel')
-    if _is_adm(user):
-        return url_for('admin.panel')
-    if is_laboral(user):
-        return url_for('admin.panel_laboral')
-    if _is_operario(user):
-        return url_for('empleado.fichar')
+    from app.services.user_home_service import home_url_for_user
+    dest = home_url_for_user(user)
+    if dest:
+        return dest
     return url_for('main.dashboard')
 
 
@@ -186,6 +182,8 @@ def _home_active() -> bool:
     return _ep() in (
         'main.dashboard', 'admin.panel', 'admin.panel_laboral',
         'jefe.panel', 'empleado.calendario',
+        'admin.vehiculos', 'admin.vehicle_panel', 'admin.vehiculos_libres',
+        'sync.auditoria_vehiculos',
     )
 
 

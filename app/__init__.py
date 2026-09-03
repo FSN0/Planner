@@ -668,25 +668,10 @@ def create_app():
     # ---------------------------------------------------------
     def redirect_by_role(user):
         """Redirige al usuario a su panel correspondiente según su rol."""
-        if user.role == ROLE_ADMIN:
-            return redirect(url_for('admin.panel'))
-        elif user.role == ROLE_JEFE:
-            return redirect(url_for('jefe.panel'))
-        elif user.role in (ROLE_LABORAL, ROLE_RRHH):
-            return redirect(url_for('admin.panel_laboral'))
-        elif user.role == ROLE_OPERARIO:
-            from app.auth.routes import destino_portal_operario
-            return redirect(destino_portal_operario(user))
-        # Roles custom: según permisos de la matriz
-        try:
-            from app.services.permission_service import user_can
-            if user_can(user, 'inicio', 'r') or user_can(user, 'tablero', 'r'):
-                return redirect(url_for('admin.panel'))
-            if user_can(user, 'operario_fichaje', 'r'):
-                from app.auth.routes import destino_portal_operario
-                return redirect(destino_portal_operario(user))
-        except Exception:
-            pass
+        from app.services.user_home_service import home_url_for_user
+        dest = home_url_for_user(user)
+        if dest:
+            return redirect(dest)
         return redirect(url_for('auth.login'))
 
     @login_manager.unauthorized_handler

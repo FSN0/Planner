@@ -1581,7 +1581,9 @@ def commit_vehiculos():
 def auditoria_vehiculos():
     """Auditoría informativa plan vs odómetro Odoo (sin acciones de resolución)."""
     if not _require_auditoria_vehiculos():
-        return redirect(url_for('admin.panel'))
+        from app.services.user_home_service import home_url_for_user
+        dest = home_url_for_user(current_user) or url_for('auth.login')
+        return redirect(dest)
 
     from app.utils.timezone_utils import today_local
 

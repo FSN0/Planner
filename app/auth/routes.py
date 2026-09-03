@@ -1,13 +1,11 @@
 # app/auth/routes.py
 
-from datetime import date
-
 from flask import Blueprint, render_template, request, redirect, url_for, flash, g, session, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import limiter, db
-from app.models import User, ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL, _utc_now
+from app.models import User, _utc_now
 from app.services.external_auth_service import (
     can_attempt_external_auth,
     external_auth_allowed_for_user,
@@ -38,22 +36,9 @@ def _puede_login_web(user):
 
 
 def destino_portal_operario(user):
-    """Primera pantalla del operario: fichaje primero."""
-    from app.services.permission_service import user_can
-    from app.services.fichaje_operario_service import tenant_tiene_fichaje_operario_module
-    try:
-        if (
-            tenant_tiene_fichaje_operario_module()
-            and user_can(user, 'operario_fichaje', 'r')
-        ):
-            return url_for('empleado.fichar')
-        if user_can(user, 'operario_calendario', 'r'):
-            return url_for('empleado.calendario')
-        if user_can(user, 'operario_ausencias', 'r'):
-            return url_for('empleado.ausencias')
-    except Exception:
-        pass
-    return url_for('empleado.fichar')
+    """Reexport: ver user_home_service.destino_portal_operario."""
+    from app.services.user_home_service import destino_portal_operario as _destino
+    return _destino(user)
 
 
 def _complete_login(user, remember, *, source, success_message=None):
@@ -103,26 +88,8 @@ def _login_page_context():
 
 def _destino_por_rol(user):
     """A dónde va cada perfil nada más entrar. None si no tiene sitio."""
-    if user.role == 'admin':
-        try:
-            from app.services.onboarding_service import (
-                debe_redirigir_a_wizard,
-                tour_ya_autostart,
-            )
-            if debe_redirigir_a_wizard():
-                if not tour_ya_autostart():
-                    return url_for('admin.obras_detailed', tour='inicio')
-                return url_for('admin.obras_detailed')
-        except Exception:
-            pass
-        return url_for('admin.panel')
-    if user.role == 'jefe_obra':
-        return url_for('jefe.obras_detailed', selected_date=date.today())
-    if user.role in (ROLE_LABORAL, ROLE_RRHH):
-        return url_for('admin.panel_laboral')
-    if user.role == ROLE_OPERARIO:
-        return destino_portal_operario(user)
-    return None
+    from app.services.user_home_service import home_url_for_user
+    return home_url_for_user(user)
 
 
 def _redirect_authenticated_user():
@@ -275,6 +242,13 @@ def login():
         return redirect(url_for('main.dashboard'))
 
     if request.method == 'POST':
+        if current_user.is_authenticated:
+            logout_user()
+            session.pop('superadmin_impersonation', None)
+            session.pop('impersonator_user_id', None)
+            session.pop('impersonated_user_id', None)
+            session.pop('_remember', None)
+
         identifier = (request.form.get('login') or request.form.get('email') or '').strip()
         secret = request.form.get('secret') or request.form.get('password') or ''
         remember = True if request.form.get('remember') == 'on' else False
@@ -641,8 +615,12 @@ def logout():
     session.pop('superadmin_impersonation', None)
     session.pop('impersonator_user_id', None)
     session.pop('impersonated_user_id', None)
+    session.pop('_remember', None)
     flash(translate('Sesión cerrada'), 'info')
-    return redirect(url_for('auth.login'))
+    from flask import make_response
+    from app.services.impersonation_service import clear_remember_cookie
+    resp = make_response(redirect(url_for('auth.login')))
+    return clear_remember_cookie(resp)
 
 
 @auth_bp.route('/recuperar', methods=['GET', 'POST'])

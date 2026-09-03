@@ -841,7 +841,6 @@ def resolver_solicitud_vehiculo(solicitud_id):
 @roles_required(ROLE_ADMIN)
 def impersonate_user(user_id):
     """Entrar en la app como otro usuario (solo administrador)."""
-    from app.auth.routes import _destino_por_rol
     from app.services.impersonation_service import iniciar_impersonacion
     from app.utils import register_log
 
@@ -871,10 +870,11 @@ def impersonate_user(user_id):
         ),
         'warning',
     )
-    destino = _destino_por_rol(target)
+    from app.services.user_home_service import home_url_for_user
+    destino = home_url_for_user(target)
     from flask import make_response
     from app.services.impersonation_service import clear_remember_cookie
-    resp = make_response(redirect(destino or url_for('empleado.inicio')))
+    resp = make_response(redirect(destino or url_for('auth.login')))
     return clear_remember_cookie(resp)
 
 

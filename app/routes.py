@@ -39,8 +39,12 @@ def dashboard():
     if current_user.role in (ROLE_LABORAL, ROLE_RRHH):
         return redirect(url_for('admin.panel_laboral'))
     if current_user.role == ROLE_OPERARIO:
-        from app.auth.routes import destino_portal_operario
+        from app.services.user_home_service import destino_portal_operario
         return redirect(destino_portal_operario(current_user))
+    from app.services.user_home_service import home_url_for_user
+    dest = home_url_for_user(current_user)
+    if dest:
+        return redirect(dest)
     return redirect(url_for('auth.login'))
 
 
