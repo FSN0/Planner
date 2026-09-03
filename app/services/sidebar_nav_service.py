@@ -544,9 +544,9 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_SUBCONTRATAS:
         return user_can(user, 'subcontratas', 'r')
     if item_id == ITEM_SOLICITUDES:
-        # Buzón de oficina: si el jefe mueve gente en el cuadrante, no hay
-        # peticiones que gestionar. Vale para todos los roles, no solo el jefe.
-        if ctx.get('jefes_asignan_directo'):
+        # Si el jefe asigna gente concreta en el cuadrante, no necesita el buzón
+        # (sigue pudiendo pedir CUALQUIERA desde el calendario). Oficina sí.
+        if ctx.get('jefes_asignan_directo') and _is_jefe(user):
             return False
         return user_can(user, 'solicitudes', 'r')
     if item_id == ITEM_AUSENCIAS:

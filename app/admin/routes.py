@@ -3842,69 +3842,67 @@ def api_planificador_events():
     # =====================================================================
     # --- INYECTAR SOLICITUDES TRASLÚCIDAS EN EL PLANIFICADOR ---
     # =====================================================================
-    from app.services.tenant_modules import jefe_sin_buzon_solicitudes
-    if not jefe_sin_buzon_solicitudes(current_user):
-        solicitudes = (
-            Solicitud.query
-            .options(joinedload(Solicitud.empleado))
-            .filter(
-                Solicitud.obra_id.in_(obras_ids),
-                Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                Solicitud.fecha_inicio <= end_date,
-                Solicitud.fecha_fin >= start_date,
-            )
-            .all()
+    solicitudes = (
+        Solicitud.query
+        .options(joinedload(Solicitud.empleado))
+        .filter(
+            Solicitud.obra_id.in_(obras_ids),
+            Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+            Solicitud.fecha_inicio <= end_date,
+            Solicitud.fecha_fin >= start_date,
         )
+        .all()
+    )
 
-        if worker_ids:
-            solicitudes = [
-                s for s in solicitudes
-                if s.tipo == 'CONCRETA' and s.empleado_id in worker_ids
-            ]
+    if worker_ids:
+        solicitudes = [
+            s for s in solicitudes
+            if s.tipo == 'CONCRETA' and s.empleado_id in worker_ids
+        ]
 
-        for sol in solicitudes:
-            accion = getattr(sol, 'accion', 'ASIGNAR')
-            is_baja = (accion == 'DESASIGNAR')
-            if company_ids:
-                if sol.tipo == 'CONCRETA' and sol.empleado:
-                    sol_comp_id = sol.empleado.company_id or 0
-                    if sol_comp_id not in company_ids: continue
-                elif sol.tipo == 'GENERICA':
-                    sol_comp_id = sol.perfil_empresa_id or 0
-                    if sol_comp_id not in company_ids: continue
+    for sol in solicitudes:
+        accion = getattr(sol, 'accion', 'ASIGNAR')
+        is_baja = (accion == 'DESASIGNAR')
+        if company_ids:
+            if sol.tipo == 'CONCRETA' and sol.empleado:
+                sol_comp_id = sol.empleado.company_id or 0
+                if sol_comp_id not in company_ids: continue
+            elif sol.tipo == 'GENERICA':
+                sol_comp_id = sol.perfil_empresa_id or 0
+                if sol_comp_id not in company_ids: continue
 
-            # 1. Definir Colores (Sólido para el borde y texto, Traslúcido para el fondo)
-            if is_baja:
-                color_fuerte = "#ef4444" # Rojo
-                color_suave = "rgba(239, 68, 68, 0.10)"
-            else:
-                color_fuerte = "#f59e0b" # Naranja
-                color_suave = "rgba(245, 158, 11, 0.10)"
+        # 1. Definir Colores (Sólido para el borde y texto, Traslúcido para el fondo)
+        if is_baja:
+            color_fuerte = "#ef4444" # Rojo
+            color_suave = "rgba(239, 68, 68, 0.10)"
+        else:
+            color_fuerte = "#f59e0b" # Naranja
+            color_suave = "rgba(245, 158, 11, 0.10)"
 
-            # 2. Definir Título
-            if sol.tipo == 'CONCRETA':
-                emp_name = sol.empleado.name if sol.empleado else '?'
-                title = f"{'Solicitud de Baja' if is_baja else 'FALTA'}: {emp_name}"
-            else:
-                faltan = sol.cantidad_solicitada - sol.cantidad_cubierta
-                if faltan <= 0: continue
-                title = f"FALTAN: {faltan} ({sol.perfil_categoria or 'Cualquiera'})"
+        # 2. Definir Título
+        if sol.tipo == 'CONCRETA':
+            emp_name = sol.empleado.name if sol.empleado else '?'
+            title = f"{'Solicitud de Baja' if is_baja else 'FALTA'}: {emp_name}"
+        else:
+            faltan = sol.cantidad_solicitada - sol.cantidad_cubierta
+            if faltan <= 0: continue
+            title = f"FALTAN: {faltan} ({sol.perfil_categoria or 'Cualquiera'})"
 
-            # 3. Crear el estilo CSS directo para vis.js
-            estilo_solicitud = f"background-color: {color_suave} !important; border: 2px dashed {color_fuerte} !important; color: {color_fuerte} !important;"
+        # 3. Crear el estilo CSS directo para vis.js
+        estilo_solicitud = f"background-color: {color_suave} !important; border: 2px dashed {color_fuerte} !important; color: {color_fuerte} !important;"
 
-            events.append({
-                "id": f"solicitud_{sol.id}",
-                "resourceId": str(sol.obra_id),
-                "title": title,
-                "start": sol.fecha_inicio.strftime("%Y-%m-%d"),
-                "end": (sol.fecha_fin + timedelta(days=1)).strftime("%Y-%m-%d"),
-                "style": estilo_solicitud,
-                "worker_id": "REQUEST",
-                "editable": False,
-                "solicitud_id": sol.id
-            })
-        
+        events.append({
+            "id": f"solicitud_{sol.id}",
+            "resourceId": str(sol.obra_id),
+            "title": title,
+            "start": sol.fecha_inicio.strftime("%Y-%m-%d"),
+            "end": (sol.fecha_fin + timedelta(days=1)).strftime("%Y-%m-%d"),
+            "style": estilo_solicitud,
+            "worker_id": "REQUEST",
+            "editable": False,
+            "solicitud_id": sol.id
+        })
+
     # =====================================================================
     # --- INYECTAR FESTIVOS COMO FONDO GLOBAL ---
     # =====================================================================
@@ -3960,12 +3958,11 @@ def search_workers():
     q = request.args.get('q', '').lower()
     plain = request.args.get('plain') in ('1', 'true', 'yes')
 
-    # 1. Opción Genérica (solo solicitudes; no en alta de ausencias ni si el jefe asigna directo)
+    # 1. Opción Genérica (petición de personal): quien puede planificar periodos
+    # la necesita. No aplica en altas de ausencias (plain=1).
     results = []
     if not plain:
-        from app.services.tenant_modules import jefe_sin_buzon_solicitudes
-        if not jefe_sin_buzon_solicitudes(current_user):
-            results.append({"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"})
+        results.append({"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"})
 
     # 2. Buscar en BD
     query = User.query.filter(User.active == True, User.is_deleted == False)

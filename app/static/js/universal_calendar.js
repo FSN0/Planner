@@ -1096,7 +1096,9 @@ class UniversalCalendarManager {
     }
 
     _allowGenericoRequest() {
-        return !(window.JEFES_ASIGNAN_DIRECTO && window.SP_USER_ROLE === 'jefe_obra');
+        // Quien puede crear un periodo puede pedir personal genérico (CUALQUIERA).
+        // Asignar directo a personas concretas no quita esta vía de solicitud.
+        return true;
     }
 
     _renderMultiWorkerSelect(container, prefill) {

@@ -130,7 +130,6 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
         has_auditoria_vehiculos,
         has_notas,
         is_soltec_tenant,
-        jefes_asignan_directo,
     )
 
     mods = _tenant_modulos(tenant)
@@ -164,11 +163,6 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
         return has_fichaje
     if module == 'registro_jornada':
         return has_registro
-    if module == 'solicitudes':
-        try:
-            return not jefes_asignan_directo()
-        except Exception:
-            return is_soltec_tenant(tenant)
     return True
 
 

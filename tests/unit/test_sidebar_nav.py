@@ -10,12 +10,13 @@ from app.services.sidebar_nav_service import (
 
 
 @patch('app.services.sidebar_nav_service.user_can', return_value=True)
-def test_solicitudes_hidden_for_everyone_when_jefes_assign_direct(_can):
+def test_solicitudes_hidden_only_for_jefe_when_asignan_direct(_can):
     admin = SimpleNamespace(role=ROLE_ADMIN)
     jefe = SimpleNamespace(role=ROLE_JEFE)
     on = {'jefes_asignan_directo': True}
     off = {'jefes_asignan_directo': False}
-    assert item_is_available(ITEM_SOLICITUDES, admin, on) is False
+    # Oficina sigue viendo el buzón (peticiones genéricas CUALQUIERA).
+    assert item_is_available(ITEM_SOLICITUDES, admin, on) is True
     assert item_is_available(ITEM_SOLICITUDES, jefe, on) is False
     assert item_is_available(ITEM_SOLICITUDES, admin, off) is True
     assert item_is_available(ITEM_SOLICITUDES, jefe, off) is True
