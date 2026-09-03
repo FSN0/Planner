@@ -24,10 +24,10 @@ PERMISSION_MODULES = (
     ('auditoria_fichajes', 'Auditoría fichajes', 'Jornada'),
     ('mapa_fichajes', 'Mapa de fichajes', 'Jornada'),
     ('registro_jornada', 'Registro de jornada', 'Jornada'),
-    # Portal propio /fichaje (autogestión: cualquier rol puede tenerlos)
-    ('operario_fichaje', 'Fichar desde el portal propio', 'Jornada'),
-    ('operario_calendario', 'Mi calendario (portal propio)', 'Jornada'),
-    ('operario_ausencias', 'Mis ausencias (portal propio)', 'Jornada'),
+    # Portal propio (/fichaje): cualquier rol puede tenerlos (p. ej. jefe con su calendario)
+    ('operario_fichaje', 'Fichar (portal propio)', 'Portal propio'),
+    ('operario_calendario', 'Mi calendario (portal propio)', 'Portal propio'),
+    ('operario_ausencias', 'Mis ausencias (portal propio)', 'Portal propio'),
     # Integraciones: hub + cada integración (permisos independientes entre sí)
     ('integraciones', 'Integraciones (hub)', 'Integraciones'),
     ('sync_odoo', 'Sincronización Odoo', 'Integraciones'),
@@ -154,9 +154,11 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
     if module == 'primeros_pasos':
         return has_onboarding
     if module == 'operario_fichaje':
+        # Reloj de fichaje: solo si el espacio tiene el módulo.
         return has_fichaje
     if module in ('operario_calendario', 'operario_ausencias'):
-        return has_fichaje
+        # Calendario y ausencias propias: siempre configurables (no dependen del reloj).
+        return True
     if module == 'auditoria_fichajes':
         return has_fichaje or has_odoo
     if module == 'mapa_fichajes':
@@ -177,7 +179,8 @@ def visible_permission_modules(tenant=None):
 def modules_for_role(role: str, tenant=None):
     """
     Misma lista de módulos para todos los roles: el admin decide qué marcar.
-    (Antes Operario solo veía el portal /fichaje; eso limitaba sin sentido.)
+    Incluye el portal propio (calendario / ausencias / fichar) para poder
+    dárselo también a un jefe u otro perfil de oficina.
     """
     return visible_permission_modules(tenant)
 
@@ -258,6 +261,9 @@ MODULE_READ_HINTS = {
     'sync_odoo': 'Entrar al centro de sincronización Odoo',
     'soltec_alta_odoo': 'Abrir el panel de altas Odoo',
     'soltec_portal': 'Abrir el portal Soltec',
+    'operario_fichaje': 'Acceso a /fichaje para fichar (requiere módulo de fichaje)',
+    'operario_calendario': 'Ver el calendario propio (asignaciones) en /fichaje',
+    'operario_ausencias': 'Ver y pedir ausencias propias en /fichaje',
 }
 
 

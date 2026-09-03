@@ -34,3 +34,16 @@ def test_integraciones_top_level_if_no_config_permission(can):
     can.side_effect = lambda user, module, action='r': module == 'integraciones'
     jefe = SimpleNamespace(role=ROLE_JEFE)
     assert item_is_available(ITEM_INTEGRACIONES, jefe, {}) is True
+
+
+@patch('app.services.sidebar_nav_service.user_can')
+def test_jefe_can_see_own_calendar_with_portal_permission(can):
+    from app.services.sidebar_nav_service import ITEM_MI_CALENDARIO, ITEM_MI_FICHAJE
+
+    can.side_effect = lambda user, module, action='r': module == 'operario_calendario'
+    jefe = SimpleNamespace(role=ROLE_JEFE)
+    assert item_is_available(ITEM_MI_CALENDARIO, jefe, {}) is True
+    # Sin módulo de fichaje / permiso, no ve el reloj
+    assert item_is_available(
+        ITEM_MI_FICHAJE, jefe, {'tenant_has_fichaje_operario': True},
+    ) is False

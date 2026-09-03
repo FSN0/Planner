@@ -197,8 +197,12 @@ class UniversalCalendarManager {
                     </div>
                     <div class="row mt-2" id="${this.panelId}-generic-options" style="display: none;">
                         <div class="col-md-3">
-                            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-users mr-1"></i> ${t('Cantidad de operarios')}</label>
+                            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-users mr-1"></i> ${t('Nº de personas')}</label>
                             <input type="number" id="${this.panelId}-quantity" class="form-control form-control-sm font-weight-bold text-center" value="1" min="1" max="50">
+                        </div>
+                        <div class="col-md-9">
+                            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-hard-hat mr-1"></i> ${t('Oficio / perfil')} <span class="text-muted font-weight-normal">(${t('opcional')})</span></label>
+                            <input type="text" id="${this.panelId}-perfil" class="form-control form-control-sm" maxlength="120" placeholder="${t('Ej: Oficial 1ª, peón, electricista...')}">
                         </div>
                     </div>
 
@@ -1101,6 +1105,46 @@ class UniversalCalendarManager {
         return true;
     }
 
+    _syncGenericoOptionsVisibility() {
+        const gRow = document.getElementById(`${this.panelId}-generic-options`);
+        if (!gRow) return;
+        const list = document.getElementById(`${this.panelId}-workers-list`);
+        const rows = list ? list.querySelectorAll('.univ-worker-row') : [];
+        let show = false;
+        if (rows.length === 1) {
+            const wSel = rows[0].querySelector('.univ-worker-select');
+            let val = '';
+            if (wSel) {
+                val = (typeof $ !== 'undefined' && $(wSel).val)
+                    ? ($(wSel).val() || '')
+                    : (wSel.value || '');
+            }
+            show = String(val) === 'GENERICO';
+            const hidden = document.getElementById(`${this.panelId}-select`);
+            if (hidden) hidden.value = val || '';
+            // En petición genérica no tiene sentido asignar vehículo a "cualquiera"
+            const vehicleBlock = rows[0].querySelector('.univ-worker-row-vehicle');
+            if (vehicleBlock) vehicleBlock.style.display = show ? 'none' : '';
+            if (show) {
+                const toggle = rows[0].querySelector('.univ-vehicle-toggle');
+                const vehicleWrap = rows[0].querySelector('.univ-vehicle-wrap');
+                const vSel = rows[0].querySelector('.univ-vehicle-select');
+                if (toggle) toggle.checked = false;
+                if (vehicleWrap) vehicleWrap.style.display = 'none';
+                if (vSel && typeof $ !== 'undefined' && $(vSel).data('select2')) {
+                    $(vSel).val(null).trigger('change');
+                }
+            }
+        }
+        if (show) {
+            $(gRow).stop(true, true).slideDown(150);
+            const qty = document.getElementById(`${this.panelId}-quantity`);
+            if (qty && (!qty.value || parseInt(qty.value, 10) < 1)) qty.value = 1;
+        } else {
+            $(gRow).stop(true, true).slideUp(150);
+        }
+    }
+
     _renderMultiWorkerSelect(container, prefill) {
         this._destroySelect2In(container);
         container.innerHTML = `
@@ -1119,6 +1163,7 @@ class UniversalCalendarManager {
         if (addBtn) {
             addBtn.addEventListener('click', () => {
                 this._addWorkerRow(list, { allowGenerico: false });
+                this._syncGenericoOptionsVisibility();
             });
         }
     }
@@ -1182,16 +1227,8 @@ class UniversalCalendarManager {
                                 : (d.results || []).filter((r) => String(r.id) !== 'GENERICO'),
                         }),
                     },
-                }).on('change', (e) => {
-                    const gRow = document.getElementById(`${this.panelId}-generic-options`);
-                    const rows = listEl.querySelectorAll('.univ-worker-row');
-                    const onlyOne = rows.length === 1;
-                    if (gRow && onlyOne) {
-                        e.target.value === 'GENERICO' ? $(gRow).slideDown(150) : $(gRow).slideUp(150);
-                    }
-                    // Sync hidden #select for single/GENERICO legacy path
-                    const hidden = document.getElementById(`${this.panelId}-select`);
-                    if (hidden && onlyOne) hidden.value = e.target.value || '';
+                }).on('change', () => {
+                    this._syncGenericoOptionsVisibility();
                 });
 
                 // Prefill kanban / drag: operario ya elegido, se puede cambiar
@@ -1267,8 +1304,7 @@ class UniversalCalendarManager {
                 }
                 this._destroySelect2In(row);
                 row.remove();
-                const gRow = document.getElementById(`${this.panelId}-generic-options`);
-                if (gRow) $(gRow).slideUp(150);
+                this._syncGenericoOptionsVisibility();
             });
         }
     }
@@ -1641,7 +1677,11 @@ class UniversalCalendarManager {
                 }
 
                 let qtyEl = document.getElementById(`${this.panelId}-quantity`);
-                let qty = qtyEl ? parseInt(qtyEl.value) || 1 : 1;
+                let qty = qtyEl ? parseInt(qtyEl.value, 10) || 1 : 1;
+                if (qty < 1) qty = 1;
+                if (qty > 50) qty = 50;
+                const perfilEl = document.getElementById(`${this.panelId}-perfil`);
+                const perfilVal = perfilEl ? (perfilEl.value || '').trim() : '';
 
                 const afterSave = (opts) => this._finishPanelSave(opts || {});
 
@@ -1672,6 +1712,9 @@ class UniversalCalendarManager {
                         overwrite_mode: 'check', include_weekends: includeWeekends, cantidad: selVal === 'GENERICO' ? qty : 1
                     };
                     if (notasVal) payload.notas = notasVal;
+                    if (String(selVal) === 'GENERICO') {
+                        payload.detalles = perfilVal || t('Personal Genérico');
+                    }
 
                     if (this.context === 'obra') {
                         payload.worker_id = selVal;
@@ -2156,6 +2199,8 @@ class UniversalCalendarManager {
         if (genericRow) genericRow.style.display = 'none';
         let qtyInput = document.getElementById(`${this.panelId}-quantity`);
         if (qtyInput) qtyInput.value = 1;
+        let perfilInput = document.getElementById(`${this.panelId}-perfil`);
+        if (perfilInput) perfilInput.value = '';
         let notasRow = document.getElementById(`${this.panelId}-notas-row`);
         if (notasRow) notasRow.style.display = 'none';
         let notasInput = document.getElementById(`${this.panelId}-notas`);

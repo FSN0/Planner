@@ -772,7 +772,11 @@ def api_planificador_action():
 
         if str(worker_id) == 'GENERICO':
             detalles = data.get('detalles', 'Personal Genérico')
-            cantidad_pedida = int(data.get('cantidad', 1))
+            try:
+                cantidad_pedida = int(data.get('cantidad', 1) or 1)
+            except (TypeError, ValueError):
+                cantidad_pedida = 1
+            cantidad_pedida = max(1, min(50, cantidad_pedida))
             
             SolicitudService.create_solicitud_generica(
                 solicitante_id=current_user.id, obra_id=target_obra_id,

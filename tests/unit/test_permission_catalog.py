@@ -28,15 +28,18 @@ def test_operario_portal_defaults():
     assert not default_actions(ROLE_OPERARIO, 'operario_web')
 
 
-def test_modules_for_role_splits_portal_and_office():
+def test_modules_for_role_same_list_includes_portal():
     from app.services.permission_catalog import modules_for_role
 
     operario_keys = {m for m, _, _ in modules_for_role(ROLE_OPERARIO)}
     jefe_keys = {m for m, _, _ in modules_for_role(ROLE_JEFE)}
-    assert operario_keys <= {'operario_fichaje', 'operario_calendario', 'operario_ausencias'}
-    assert not operario_keys & {'tablero', 'trabajadores'}
+    # Misma base: oficina + portal propio (calendario/ausencias siempre; fichar si módulo)
+    assert 'tablero' in operario_keys
+    assert 'operario_calendario' in operario_keys
+    assert 'operario_ausencias' in operario_keys
     assert 'tablero' in jefe_keys
-    assert not jefe_keys & {'operario_fichaje', 'operario_calendario', 'operario_ausencias'}
+    assert 'operario_calendario' in jefe_keys
+    assert 'operario_ausencias' in jefe_keys
 
 
 def test_laboral_and_rrhh_share_core_acl():
@@ -93,6 +96,23 @@ def _keys_for(monkeypatch, sub, mods, jefes_directo):
     return set(visible_permission_keys(tenant))
 
 
+def test_portal_calendar_visible_without_fichaje_module(monkeypatch):
+    keys = _keys_for(
+        monkeypatch, 'lopez',
+        {
+            'fichaje_operario': False,
+            'registro_jornada': True,
+            'onboarding': False,
+            'notas': False,
+            'auditoria_vehiculos': False,
+        },
+        jefes_directo=True,
+    )
+    assert 'operario_calendario' in keys
+    assert 'operario_ausencias' in keys
+    assert 'operario_fichaje' not in keys
+
+
 def test_generic_selfserve_hides_soltec_and_odoo_rows(monkeypatch):
     keys = _keys_for(
         monkeypatch, 'lopez',
@@ -107,13 +127,16 @@ def test_generic_selfserve_hides_soltec_and_odoo_rows(monkeypatch):
     )
     assert 'tablero' in keys
     assert 'trabajadores' in keys
+    assert 'operario_calendario' in keys
+    assert 'operario_ausencias' in keys
     assert 'operario_fichaje' in keys
     assert 'auditoria_fichajes' in keys
     assert 'registro_jornada' in keys
     assert 'primeros_pasos' in keys
+    assert 'solicitudes' in keys
     for extra in (
         'soltec_portal', 'soltec_alta_odoo', 'sync_odoo', 'integraciones',
-        'reuniones', 'auditoria_vehiculos', 'solicitudes',
+        'reuniones', 'auditoria_vehiculos',
     ):
         assert extra not in keys
 

@@ -98,7 +98,13 @@ def _is_operario(user) -> bool:
 def _default_sections_blueprint() -> list[dict]:
     """Estructura por defecto (títulos traducidos al construir)."""
     return [
-        {'id': 'sec_home', 'title': '', 'items': [ITEM_INICIO, ITEM_MI_FICHAJE]},
+        {'id': 'sec_home', 'title': '', 'items': [
+            ITEM_INICIO,
+            ITEM_MI_FICHAJE,
+            ITEM_MI_CALENDARIO,
+            ITEM_MI_HORAS,
+            ITEM_MI_AUSENCIAS,
+        ]},
         {
             'id': 'sec_plan',
             'title': str(_('Planificación')),
@@ -521,13 +527,6 @@ def _integration_children(ctx: dict) -> list[dict]:
     return kids
 
 
-def _portal_jornada_disponible(user, ctx: dict) -> bool:
-    """El hub de jornada (fichaje/calendario/ausencias) requiere módulo activo."""
-    if _is_operario(user):
-        return True
-    return bool(ctx.get('tenant_has_fichaje_operario'))
-
-
 def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_INICIO:
         return not _is_operario(user)
@@ -602,26 +601,18 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_LOGS:
         return user_can(user, 'logs', 'r')
     if item_id == ITEM_MI_FICHAJE:
-        if not _portal_jornada_disponible(user, ctx):
-            return False
         return (
             bool(ctx.get('tenant_has_fichaje_operario'))
             and user_can(user, 'operario_fichaje', 'r')
         )
     if item_id == ITEM_MI_CALENDARIO:
-        if not _portal_jornada_disponible(user, ctx):
-            return False
         return user_can(user, 'operario_calendario', 'r')
     if item_id == ITEM_MI_HORAS:
-        if not _portal_jornada_disponible(user, ctx):
-            return False
         return (
             bool(ctx.get('tenant_has_fichaje_operario'))
             and user_can(user, 'operario_fichaje', 'r')
         )
     if item_id == ITEM_MI_AUSENCIAS:
-        if not _portal_jornada_disponible(user, ctx):
-            return False
         return user_can(user, 'operario_ausencias', 'r')
     return False
 

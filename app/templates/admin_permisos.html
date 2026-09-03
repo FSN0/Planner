@@ -171,7 +171,9 @@
         <p class="perm-top-hints">
           <strong>{{ _('Lectura') }}</strong> — {{ _('ver menú, listados y paneles.') }}
           · <strong>{{ _('Escritura') }}</strong> — {{ _('crear, editar, sincronizar…') }}<br>
-          {{ _('Misma lista de módulos para todos los roles. El jefe sigue limitado a sus obras.') }}
+          {{ _('Misma lista de módulos para todos los roles (incluido el portal propio: calendario, ausencias y fichar).') }}
+          {{ _('Así puedes dar a un jefe su propio calendario sin tocar el resto.') }}
+          {{ _('El jefe de obra sigue limitado a sus obras en planificación.') }}
         </p>
         <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">
           {% for role_key, role_label_txt in roles %}
