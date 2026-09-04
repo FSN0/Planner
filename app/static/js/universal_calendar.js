@@ -303,6 +303,9 @@ class UniversalCalendarManager {
 
                     innerHtml += `<span title="${titleMsg}" style="display:inline-block; width:${dotSize}px; height:${dotSize}px; border-radius:50%; background-color:${dotClass}; margin-right:3px; flex-shrink:0;"></span>`;
                 }
+                if (props.type === 'jefe_obra_dia') {
+                    innerHtml += `<i class="fas fa-hard-hat" title="${t('Obra que dirige')}" style="margin-right:3px; flex-shrink:0;"></i>`;
+                }
                 if (props.type === 'vehiculo' || props.type === 'vehiculo_odoo') {
                     const tip = props.vehiculo_label
                         ? `${t('Vehículo')}: ${props.vehiculo_label}${props.km != null ? ' · ' + Math.round(props.km) + ' km' : ''}`
@@ -565,6 +568,9 @@ class UniversalCalendarManager {
                 } else if (props.type === 'solicitud_vehiculo' || props.type === 'request') {
                     isEditable = false;
                     reasonText = t('Las solicitudes se gestionan desde el centro de solicitudes.');
+                } else if (props.type === 'jefe_obra_dia') {
+                    isEditable = false;
+                    reasonText = t('Esto es la plantilla de las obras que dirige. Entra en la ficha de la obra para planificar.');
                 }
 
                 let targetName = null;

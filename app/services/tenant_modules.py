@@ -79,6 +79,20 @@ def has_auditoria_vehiculos(tenant=None):
     return _soltec_fallback('auditoria_vehiculos', tenant)
 
 
+def has_portal_ausencias(tenant=None):
+    """
+    El trabajador pide y consulta ausencias en /fichaje.
+
+    Producto genérico: encendido si la clave no está.
+    Soltec (vacaciones en Odoo): apagado si la clave no está.
+    La oficina sigue viendo /admin/ausencias y el sync de hr.leave.
+    """
+    mods = get_modulos_activos(tenant)
+    if 'portal_ausencias' in mods:
+        return bool(mods.get('portal_ausencias'))
+    return not is_soltec_tenant(tenant)
+
+
 # --- Ajustes de tenant (ConfiguracionGlobal), no módulos superadmin ---
 
 CONFIG_JEFES_ASIGNAN_DIRECTO = 'jefes_asignan_directo'

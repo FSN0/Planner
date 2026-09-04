@@ -34,6 +34,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function isPlanificadorGhost(item) {
+        if (!item) return false;
+        if (item.isGhost) return true;
+        return String(item.id || '').indexOf('ghost_') === 0;
+    }
+
+    function isCopyablePlanifItem(item) {
+        if (!item || item.type === 'background') return false;
+        if (isPlanificadorGhost(item)) return false;
+        var w = String(item.worker_id == null ? '' : item.worker_id);
+        if (!w || w === 'SYSTEM' || w === 'REQUEST' || w === 'NEW' || w === 'GENERICO') return false;
+        return true;
+    }
+
+    function collectPlanifGhosts() {
+        if (!window.AppItems) return [];
+        return window.AppItems.get({
+            filter: function (i) { return isPlanificadorGhost(i); },
+        }) || [];
+    }
+
     function fitPlanificadorTimelineToGroups() {
         var last = document.querySelector('#planificador-calendar .vis-labelset .vis-label:last-child');
         var timeline = document.querySelector('#planificador-calendar .vis-timeline');
@@ -77,8 +98,25 @@ document.addEventListener('DOMContentLoaded', function() {
     window.renderItems = function() {
         let visible = window.allEventsMaster.filter(ev => !window.hiddenGroups.has(String(ev.group)));
         if (window.AppItems) {
+            var extras = window.AppItems.get({
+                filter: function (i) {
+                    return i && (isPlanificadorGhost(i) || i.worker_id === 'NEW');
+                },
+            }) || [];
+            var selectedIds = [];
+            try {
+                if (window.AppTimeline && typeof window.AppTimeline.getSelection === 'function') {
+                    selectedIds = window.AppTimeline.getSelection() || [];
+                }
+            } catch (errSel) { selectedIds = []; }
             window.AppItems.clear();
             window.AppItems.add(visible);
+            if (extras.length) window.AppItems.add(extras);
+            if (selectedIds.length && window.AppTimeline && typeof window.AppTimeline.setSelection === 'function') {
+                setTimeout(function () {
+                    try { window.AppTimeline.setSelection(selectedIds); } catch (errRest) { /* ignore */ }
+                }, 0);
+            }
         }
         setTimeout(refreshPlanificadorLayout, 50);
         var mobileDay = document.getElementById('planificador-mobile-day');
@@ -339,9 +377,393 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function scrollPlanificadorPage(deltaY) {
-        if (!planificadorScrollRoot || !deltaY) return;
-        planificadorScrollRoot.scrollTop += deltaY;
+        if (!deltaY) return;
+        var roots = [];
+        if (planificadorScrollRoot) roots.push(planificadorScrollRoot);
+        var mainEl = document.querySelector('.admin-main');
+        if (mainEl && roots.indexOf(mainEl) === -1) roots.push(mainEl);
+        var scrolled = false;
+        for (var i = 0; i < roots.length; i++) {
+            var el = roots[i];
+            if (!el) continue;
+            var max = el.scrollHeight - el.clientHeight;
+            if (max <= 1) continue;
+            var before = el.scrollTop;
+            el.scrollTop = Math.max(0, Math.min(max, before + deltaY));
+            if (el.scrollTop !== before) {
+                scrolled = true;
+                break;
+            }
+        }
+        if (!scrolled && planificadorScrollRoot) {
+            planificadorScrollRoot.scrollTop += deltaY;
+        }
         updateStickyHeader();
+    }
+
+    var planifPointer = {
+        mode: null,
+        lastY: 0,
+        startX: 0,
+        startY: 0,
+        moved: false,
+        lastEvent: null,
+        confirming: false,
+        clipboard: null,
+    };
+
+    function planifOrderedGroupIds() {
+        if (!window.AppGroups) return [];
+        var groups = window.AppGroups.get({
+            order: function (a, b) { return (a.orden || 0) - (b.orden || 0); },
+        }) || [];
+        return groups.map(function (g) { return g.id; });
+    }
+
+    function planifGroupIndex(groupId) {
+        var ids = planifOrderedGroupIds();
+        var want = String(groupId);
+        for (var i = 0; i < ids.length; i++) {
+            if (String(ids[i]) === want) return i;
+        }
+        return 0;
+    }
+
+    function planifIsTypingTarget(el) {
+        if (!el) return false;
+        var tag = (el.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+        if (el.isContentEditable) return true;
+        return !!el.closest('.select2-container, .select2-dropdown, .swal2-container, .modal');
+    }
+
+    function planifEnsureMarquee() {
+        var el = document.getElementById('planificador-marquee');
+        if (el) return el;
+        el = document.createElement('div');
+        el.id = 'planificador-marquee';
+        el.className = 'planificador-marquee d-none';
+        document.body.appendChild(el);
+        return el;
+    }
+
+    function planifSetMarqueeBox(x1, y1, x2, y2) {
+        var el = planifEnsureMarquee();
+        var left = Math.min(x1, x2);
+        var top = Math.min(y1, y2);
+        var w = Math.abs(x2 - x1);
+        var h = Math.abs(y2 - y1);
+        el.style.left = left + 'px';
+        el.style.top = top + 'px';
+        el.style.width = w + 'px';
+        el.style.height = h + 'px';
+        el.classList.toggle('d-none', w < 2 && h < 2);
+    }
+
+    function planifHideMarquee() {
+        var el = document.getElementById('planificador-marquee');
+        if (el) el.classList.add('d-none');
+    }
+
+    function planifItemDomList() {
+        var out = [];
+        var itemSet = window.AppTimeline && window.AppTimeline.itemSet;
+        var items = itemSet && itemSet.items;
+        if (items) {
+            Object.keys(items).forEach(function (key) {
+                var visItem = items[key];
+                if (!visItem || visItem.data && visItem.data.type === 'background') return;
+                var el = visItem.dom && (visItem.dom.box || visItem.dom.point);
+                if (!el) return;
+                out.push({ id: visItem.id, el: el });
+            });
+        }
+        return out;
+    }
+
+    function planifSelectIds(ids) {
+        if (!window.AppTimeline || typeof window.AppTimeline.setSelection !== 'function') return;
+        try { window.AppTimeline.setSelection(ids || []); } catch (errSel) { /* ignore */ }
+    }
+
+    function planifGetSelectedCopyables() {
+        var ids = [];
+        try {
+            ids = (window.AppTimeline && window.AppTimeline.getSelection()) || [];
+        } catch (errSel) { ids = []; }
+        var items = [];
+        ids.forEach(function (id) {
+            var item = window.AppItems && window.AppItems.get(id);
+            if (isCopyablePlanifItem(item)) items.push(item);
+        });
+        if (!items.length && window.currentSelectedItem && isCopyablePlanifItem(window.currentSelectedItem)) {
+            items.push(window.currentSelectedItem);
+        }
+        return items;
+    }
+
+    function planifRectsOverlap(a, b) {
+        return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    }
+
+    function planifFinishMarquee(x1, y1, x2, y2) {
+        planifHideMarquee();
+        var w = Math.abs(x2 - x1);
+        var h = Math.abs(y2 - y1);
+        var box = {
+            left: Math.min(x1, x2),
+            top: Math.min(y1, y2),
+            right: Math.max(x1, x2),
+            bottom: Math.max(y1, y2),
+        };
+        if (w < 4 && h < 4) {
+            var props = window.AppTimeline && planifPointer.lastEvent
+                ? window.AppTimeline.getEventProperties(planifPointer.lastEvent)
+                : null;
+            if (props && props.item) {
+                var cur = [];
+                try { cur = window.AppTimeline.getSelection() || []; } catch (errCur) { cur = []; }
+                var sid = props.item;
+                var next = cur.filter(function (id) { return String(id) !== String(sid); });
+                if (next.length === cur.length) next.push(sid);
+                planifSelectIds(next);
+            }
+            return;
+        }
+        var hit = [];
+        planifItemDomList().forEach(function (entry) {
+            var item = window.AppItems && window.AppItems.get(entry.id);
+            if (!isCopyablePlanifItem(item) && !isPlanificadorGhost(item)) return;
+            var r = entry.el.getBoundingClientRect();
+            if (planifRectsOverlap(box, r)) hit.push(entry.id);
+        });
+        planifSelectIds(hit);
+    }
+
+    function planifEnsureGhostBar() {
+        var bar = document.getElementById('planificador-ghost-bar');
+        if (bar) return bar;
+        bar = document.createElement('div');
+        bar.id = 'planificador-ghost-bar';
+        bar.className = 'planificador-ghost-bar d-none';
+        bar.innerHTML =
+            '<i class="fas fa-clone"></i>' +
+            '<span id="planificador-ghost-bar-text"></span>' +
+            '<div class="planificador-ghost-bar-actions">' +
+                '<button type="button" class="btn-admin btn-admin-primary" id="planificador-ghost-confirm">' + t('Confirmar') + '</button>' +
+                '<button type="button" class="btn-admin btn-admin-ghost" id="planificador-ghost-cancel">' + t('Cancelar') + '</button>' +
+            '</div>';
+        document.body.appendChild(bar);
+        bar.querySelector('#planificador-ghost-confirm').addEventListener('click', function (e) {
+            e.preventDefault();
+            planifConfirmGhosts();
+        });
+        bar.querySelector('#planificador-ghost-cancel').addEventListener('click', function (e) {
+            e.preventDefault();
+            planifClearGhosts();
+        });
+        return bar;
+    }
+
+    function planifUpdateGhostBar() {
+        var ghosts = collectPlanifGhosts();
+        var bar = planifEnsureGhostBar();
+        var text = document.getElementById('planificador-ghost-bar-text');
+        if (!ghosts.length) {
+            bar.classList.add('d-none');
+            return;
+        }
+        bar.classList.remove('d-none');
+        if (text) {
+            text.textContent = planifPointer.confirming
+                ? t('Guardando asignaciones…')
+                : (t('Borrador') + ' · ' + ghosts.length + ' ' + t('asignaciones') + ' · ' + t('Enter confirma · Esc cancela'));
+        }
+        var confirmBtn = document.getElementById('planificador-ghost-confirm');
+        var cancelBtn = document.getElementById('planificador-ghost-cancel');
+        if (confirmBtn) confirmBtn.disabled = !!planifPointer.confirming;
+        if (cancelBtn) cancelBtn.disabled = !!planifPointer.confirming;
+    }
+
+    function planifClearGhosts() {
+        var ghosts = collectPlanifGhosts();
+        if (ghosts.length && window.AppItems) {
+            window.AppItems.remove(ghosts.map(function (g) { return g.id; }));
+        }
+        planifPointer.confirming = false;
+        planifUpdateGhostBar();
+    }
+
+    function planifCopySelection() {
+        var items = planifGetSelectedCopyables();
+        if (!items.length) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true, position: 'top-end', icon: 'info',
+                    title: t('No hay asignaciones seleccionadas'),
+                    showConfirmButton: false, timer: 1800,
+                });
+            }
+            return;
+        }
+        items.sort(function (a, b) {
+            var gi = planifGroupIndex(a.group) - planifGroupIndex(b.group);
+            if (gi) return gi;
+            return moment(a.start).valueOf() - moment(b.start).valueOf();
+        });
+        var originStart = moment(items[0].start).startOf('day');
+        var originGroup = planifGroupIndex(items[0].group);
+        planifPointer.clipboard = items.map(function (item) {
+            var start = moment(item.start).startOf('day');
+            var end = moment(item.end);
+            return {
+                worker_id: item.worker_id,
+                title: item.title,
+                color: item.color,
+                style: item.style,
+                empresa_nombre: item.empresa_nombre,
+                empresa_id: item.empresa_id,
+                categoria: item.categoria,
+                especialidad: item.especialidad,
+                nota: item.nota,
+                relStartDays: start.diff(originStart, 'days'),
+                durationDays: Math.max(1, end.diff(start, 'days')),
+                relGroupOffset: planifGroupIndex(item.group) - originGroup,
+            };
+        });
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                toast: true, position: 'top-end', icon: 'success',
+                title: planifPointer.clipboard.length + ' ' + t('asignaciones copiadas'),
+                showConfirmButton: false, timer: 1600,
+            });
+        }
+    }
+
+    function planifPasteClipboard() {
+        if (window.PLANIFICADOR_CAN_EDIT === false) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire(t('Sin permiso'), t('No tienes permisos de escritura en el planificador.'), 'warning');
+            }
+            return;
+        }
+        var clip = planifPointer.clipboard;
+        if (!clip || !clip.length) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true, position: 'top-end', icon: 'info',
+                    title: t('No hay nada copiado'),
+                    showConfirmButton: false, timer: 1800,
+                });
+            }
+            return;
+        }
+        if (!window.AppTimeline || !window.AppItems) return;
+
+        planifClearGhosts();
+
+        var props = null;
+        try {
+            if (planifPointer.lastEvent) props = window.AppTimeline.getEventProperties(planifPointer.lastEvent);
+        } catch (errProps) { props = null; }
+
+        var groupIds = planifOrderedGroupIds();
+        if (!groupIds.length) return;
+        var anchorGroup = (props && props.group != null) ? props.group : groupIds[0];
+        var anchorStart = moment((props && props.time) || window.AppTimeline.getWindow().start).startOf('day');
+        var hoy = moment().startOf('day');
+        if (anchorStart.isBefore(hoy)) anchorStart = hoy.clone();
+        var anchorIdx = planifGroupIndex(anchorGroup);
+
+        var ghostIds = [];
+        var stamp = Date.now();
+        clip.forEach(function (piece, i) {
+            var gIdx = anchorIdx + piece.relGroupOffset;
+            if (gIdx < 0) gIdx = 0;
+            if (gIdx >= groupIds.length) gIdx = groupIds.length - 1;
+            var start = anchorStart.clone().add(piece.relStartDays, 'days');
+            if (start.isBefore(hoy)) start = hoy.clone();
+            var end = start.clone().add(piece.durationDays, 'days');
+            var gid = 'ghost_' + stamp + '_' + i;
+            window.AppItems.add({
+                id: gid,
+                isGhost: true,
+                group: groupIds[gIdx],
+                start: start.toDate(),
+                end: end.toDate(),
+                worker_id: piece.worker_id,
+                title: piece.title,
+                color: piece.color,
+                style: piece.style,
+                empresa_nombre: piece.empresa_nombre,
+                empresa_id: piece.empresa_id,
+                categoria: piece.categoria,
+                especialidad: piece.especialidad,
+                nota: piece.nota,
+                className: 'planificador-ghost',
+                editable: { updateTime: true, updateGroup: true, remove: false },
+            });
+            ghostIds.push(gid);
+        });
+        planifSelectIds(ghostIds);
+        planifUpdateGhostBar();
+    }
+
+    function planifConfirmGhosts() {
+        if (planifPointer.confirming) return;
+        if (window.PLANIFICADOR_CAN_EDIT === false) return;
+        var ghosts = collectPlanifGhosts();
+        if (!ghosts.length) return;
+
+        var queue = ghosts.map(function (g) {
+            return {
+                worker_id: g.worker_id,
+                target_obra_id: g.group,
+                start_date: moment(g.start).format('YYYY-MM-DD'),
+                end_date: moment(g.end).subtract(1, 'days').format('YYYY-MM-DD'),
+                overwrite_mode: 'check',
+                continue_on_noop: true,
+                _ghostId: g.id,
+            };
+        });
+
+        planifPointer.confirming = true;
+        planifUpdateGhostBar();
+
+        function finishOk() {
+            planifPointer.confirming = false;
+            planifClearGhosts();
+            if (typeof window.loadTimelineData === 'function') window.loadTimelineData();
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    toast: true, position: 'top-end', icon: 'success',
+                    title: t('Asignaciones confirmadas'),
+                    showConfirmButton: false, timer: 1800,
+                });
+            }
+        }
+
+        function finishStop() {
+            planifPointer.confirming = false;
+            planifUpdateGhostBar();
+        }
+
+        function next() {
+            if (!queue.length) {
+                finishOk();
+                return;
+            }
+            var job = queue.shift();
+            pendingAction = job;
+            pendingRevert = finishStop;
+            ejecutarAccionAPI(pendingRevert, function () {
+                if (job._ghostId && window.AppItems) {
+                    try { window.AppItems.remove(job._ghostId); } catch (errRm) { /* ignore */ }
+                }
+                next();
+            });
+        }
+        next();
     }
 
     function setupPlanificadorWheelScroll() {
@@ -365,8 +787,142 @@ document.addEventListener('DOMContentLoaded', function() {
         }, { passive: false, capture: true });
     }
 
+    function setupPlanificadorDragPan() {
+        const calendarRoot = document.getElementById('planificador-calendar');
+        if (!calendarRoot) return;
+
+        function isOnItem(el) {
+            return !!(el && el.closest && el.closest('.vis-item, .vis-drag-center, .vis-item-overflow, .vis-drag-left, .vis-drag-right'));
+        }
+
+        function isOnUiChrome(el) {
+            return !!(el && el.closest && el.closest('#col-resizer, .btn-ojo-magico, button, a, input, select, textarea, .planificador-ghost-bar'));
+        }
+
+        function isOnTimeline(el) {
+            return !!(el && el.closest && el.closest('#planificador-calendar'));
+        }
+
+        calendarRoot.addEventListener('pointerdown', function (e) {
+            if (e.button !== 0) return;
+            if (isOnUiChrome(e.target)) return;
+            planifPointer.lastEvent = e;
+
+            if (e.shiftKey) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                planifPointer.mode = 'marquee';
+                planifPointer.startX = e.clientX;
+                planifPointer.startY = e.clientY;
+                planifPointer.moved = false;
+                planifSetMarqueeBox(e.clientX, e.clientY, e.clientX, e.clientY);
+                calendarRoot.classList.add('is-planif-pointer', 'is-planif-selecting');
+                try { calendarRoot.setPointerCapture(e.pointerId); } catch (errCap) { /* ignore */ }
+                hidePlanificadorOverlays();
+                return;
+            }
+
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (isOnItem(e.target)) return;
+            if (!isOnTimeline(e.target)) return;
+
+            planifPointer.mode = 'pan';
+            planifPointer.lastY = e.clientY;
+            planifPointer.moved = false;
+            calendarRoot.classList.add('is-planif-pointer');
+        }, true);
+
+        window.addEventListener('pointermove', function (e) {
+            if (e.target && calendarRoot.contains(e.target)) planifPointer.lastEvent = e;
+            if (planifPointer.mode === 'pan') {
+                var dy = e.clientY - planifPointer.lastY;
+                planifPointer.lastY = e.clientY;
+                if (!dy) return;
+                planifPointer.moved = true;
+                scrollPlanificadorPage(-dy);
+            } else if (planifPointer.mode === 'marquee') {
+                planifPointer.lastEvent = e;
+                if (Math.abs(e.clientX - planifPointer.startX) > 2 || Math.abs(e.clientY - planifPointer.startY) > 2) {
+                    planifPointer.moved = true;
+                }
+                planifSetMarqueeBox(planifPointer.startX, planifPointer.startY, e.clientX, e.clientY);
+            }
+        }, true);
+
+        function endPointer(e) {
+            var mode = planifPointer.mode;
+            if (!mode) return;
+            if (e) planifPointer.lastEvent = e;
+            calendarRoot.classList.remove('is-planif-pointer', 'is-planif-selecting');
+            if (mode === 'marquee') {
+                planifFinishMarquee(
+                    planifPointer.startX,
+                    planifPointer.startY,
+                    e ? e.clientX : planifPointer.startX,
+                    e ? e.clientY : planifPointer.startY
+                );
+                window.__planificadorDidDrag = true;
+            } else if (mode === 'pan' && planifPointer.moved) {
+                window.__planificadorDidDrag = true;
+            }
+            planifPointer.mode = null;
+            planifPointer.moved = false;
+        }
+
+        window.addEventListener('pointerup', endPointer, true);
+        window.addEventListener('pointercancel', endPointer, true);
+    }
+
+    function bindVisPanFallback() {
+        if (!window.AppTimeline || window.AppTimeline.__planifPanBound) return;
+        window.AppTimeline.__planifPanBound = true;
+        window.AppTimeline.on('mouseDown', function (props) {
+            if (planifPointer.mode) return;
+            var ev = props && props.event;
+            if (!ev || (ev.button != null && ev.button !== 0)) return;
+            if (ev.shiftKey || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+            if (props.what === 'item') return;
+            planifPointer.mode = 'pan';
+            planifPointer.lastY = ev.clientY != null ? ev.clientY : props.pageY;
+            planifPointer.moved = false;
+            var calendarRoot = document.getElementById('planificador-calendar');
+            if (calendarRoot) calendarRoot.classList.add('is-planif-pointer');
+        });
+        window.AppTimeline.on('mouseMove', function (props) {
+            if (props && props.event) planifPointer.lastEvent = props.event;
+        });
+        var lastHammerY = null;
+        function onVisPanMove(ev) {
+            if (planifPointer.mode === 'pan' || planifPointer.mode === 'marquee') {
+                lastHammerY = ev && ev.center ? ev.center.y : lastHammerY;
+                return;
+            }
+            var itemSet = window.AppTimeline.itemSet;
+            if (itemSet && itemSet.touchParams && itemSet.touchParams.itemIsDragging) {
+                lastHammerY = ev && ev.center ? ev.center.y : lastHammerY;
+                return;
+            }
+            var y = ev && ev.center ? ev.center.y : null;
+            if (y == null && ev && ev.srcEvent) y = ev.srcEvent.clientY;
+            if (y == null) return;
+            if (lastHammerY != null && y !== lastHammerY) {
+                scrollPlanificadorPage(-(y - lastHammerY));
+                window.__planificadorDidDrag = true;
+            }
+            lastHammerY = y;
+        }
+        try {
+            window.AppTimeline.on('panstart', function (ev) {
+                lastHammerY = ev && ev.center ? ev.center.y : null;
+            });
+            window.AppTimeline.on('panmove', onVisPanMove);
+            window.AppTimeline.on('panend', function () { lastHammerY = null; });
+        } catch (errPan) { /* ignore */ }
+    }
+
     bindStickyHeaderScroll();
     setupPlanificadorWheelScroll();
+    setupPlanificadorDragPan();
     setTimeout(updateStickyHeader, 300);
     window.addEventListener('resize', function () {
         refreshPlanificadorLayout();
@@ -465,6 +1021,8 @@ document.addEventListener('DOMContentLoaded', function() {
         groupHeightMode: 'auto',
         verticalScroll: false,
         stack: true,
+        multiselect: true,
+        selectable: true,
         groupEditable: true,
         groupOrder: 'orden',
         margin: { item: 2, axis: 5 },
@@ -606,6 +1164,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return `<div class="operario-micro" data-empresa="${emp.replace(/"/g, '&quot;')}"><i class="fas fa-user"></i>${item.title}</div>`;
         },
         onUpdate: function (item, callback) {
+            if (isPlanificadorGhost(item)) {
+                callback(item);
+                return;
+            }
             if (item.worker_id === 'NEW') {
                 let startStr = moment(item.start).format('YYYY-MM-DD');
                 let endStr = moment(item.end).format('YYYY-MM-DD');
@@ -651,8 +1213,8 @@ document.addEventListener('DOMContentLoaded', function() {
             window.__planificadorDidDrag = true;
             hidePlanificadorOverlays();
             let hoy = moment().startOf('day').toDate();
-            
-            if (item.worker_id === 'NEW') {
+
+            if (isPlanificadorGhost(item) || item.worker_id === 'NEW') {
                 if (item.start < hoy) item.start = hoy;
                 callback(item);
                 return;
@@ -675,7 +1237,7 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         onMove: function (item, callback) {
-            if (item.worker_id === 'NEW') {
+            if (isPlanificadorGhost(item) || item.worker_id === 'NEW') {
                 callback(item);
                 return;
             }
@@ -763,6 +1325,7 @@ document.addEventListener('DOMContentLoaded', function() {
         function showTooltip(item, clientX, clientY) {
             if (!item || !item.title) return;
             if (['NEW', 'SYSTEM', 'REQUEST'].includes(String(item.worker_id))) return;
+            if (isPlanificadorGhost(item)) return;
             const emp = formatEmpresaLabel(item.empresa_nombre);
             tooltipEl.innerHTML =
                 '<strong>' + item.title + '</strong>' +
@@ -806,6 +1369,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     window.AppTimeline.setWindow(moment().subtract(1, 'weeks').toDate(), moment().add(3, 'months').toDate());
     setupPlanificadorItemTooltip();
+    bindVisPanFallback();
 
     calendarDiv.addEventListener('mousedown', function (e) {
         if (e.target && e.target.closest && e.target.closest('.vis-item')) {
@@ -820,11 +1384,19 @@ document.addEventListener('DOMContentLoaded', function() {
             if (popover) popover.classList.add('d-none');
             return;
         }
+        if (props.event && (props.event.shiftKey || props.event.ctrlKey || props.event.metaKey)) {
+            if (popover) popover.classList.add('d-none');
+            return;
+        }
         
         if (props.item && props.item !== 'phantom_new') {
             let item = window.AppItems.get(props.item);
             
-            if (!item || item.worker_id === 'SYSTEM') return; 
+            if (!item || item.worker_id === 'SYSTEM') return;
+            if (isPlanificadorGhost(item)) {
+                if (popover) popover.classList.add('d-none');
+                return;
+            } 
             
             window.currentSelectedItem = item; // <-- GUARDAMOS EL ITEM
 
@@ -977,9 +1549,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     window.AppTimeline.on('doubleClick', function(props) {
-        // Doble clic en el bloque nuevo → mismo flujo que al soltar el arrastre
         if (props.item && window.AppItems) {
             var clicked = window.AppItems.get(props.item);
+            if (clicked && isPlanificadorGhost(clicked)) return;
             if (clicked && clicked.worker_id === 'NEW' && typeof options.onUpdate === 'function') {
                 options.onUpdate(clicked, function () {});
                 return;
@@ -1370,9 +1942,14 @@ document.addEventListener('DOMContentLoaded', function() {
                             showConfirmButton: false,
                             timer: 2000,
                         });
+                        var continueOnNoop = !!(pendingAction && pendingAction.continue_on_noop);
                         pendingAction = null;
                         pendingRevert = null;
-                        if (revertFunc) revertFunc();
+                        if (continueOnNoop) {
+                            if (successCallback) successCallback();
+                        } else if (revertFunc) {
+                            revertFunc();
+                        }
                         return;
                     }
                     Swal.fire({toast: true, position: 'top-end', icon: 'success', title: data.message || t('Guardado'), showConfirmButton: false, timer: 1500});
@@ -1480,18 +2057,65 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 
-    // Suprimir / Delete con bloque seleccionado = "Solo este bloque"
+    // Copiar / pegar, Esc, Enter, y Suprimir sobre el bloque seleccionado
     document.addEventListener('keydown', function (e) {
-        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-        if (window.PLANIFICADOR_CAN_EDIT === false) return;
-        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-        if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
+        if (planifIsTypingTarget(e.target)) return;
         if (typeof Swal !== 'undefined' && Swal.isVisible && Swal.isVisible()) return;
-        // Calendario modal abierto: el propio UniversalCalendarManager gestiona Suprimir
         const calModal = document.getElementById('quickCalendarModal');
         if (calModal && calModal.classList.contains('show')) return;
         const calPanel = document.getElementById('modal-calendar-container-bottom-panel');
         if (calPanel && calPanel.style.display !== 'none') return;
+
+        var isMod = e.ctrlKey || e.metaKey;
+        if (isMod && (e.key === 'c' || e.key === 'C')) {
+            var selectedText = window.getSelection ? String(window.getSelection()) : '';
+            if (selectedText) return;
+            e.preventDefault();
+            planifCopySelection();
+            return;
+        }
+        if (isMod && (e.key === 'v' || e.key === 'V')) {
+            e.preventDefault();
+            planifPasteClipboard();
+            return;
+        }
+        if (e.key === 'Escape') {
+            if (collectPlanifGhosts().length) {
+                e.preventDefault();
+                planifClearGhosts();
+                return;
+            }
+            planifSelectIds([]);
+            hidePlanificadorOverlays();
+            return;
+        }
+        if (e.key === 'Enter' && collectPlanifGhosts().length) {
+            e.preventDefault();
+            planifConfirmGhosts();
+            return;
+        }
+
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        if (window.PLANIFICADOR_CAN_EDIT === false) return;
+
+        var selectedGhosts = [];
+        try {
+            var sel = (window.AppTimeline && window.AppTimeline.getSelection()) || [];
+            sel.forEach(function (id) {
+                var it = window.AppItems && window.AppItems.get(id);
+                if (isPlanificadorGhost(it)) selectedGhosts.push(it.id);
+            });
+        } catch (errDel) { selectedGhosts = []; }
+        if (!selectedGhosts.length && window.currentSelectedItem && isPlanificadorGhost(window.currentSelectedItem)) {
+            selectedGhosts.push(window.currentSelectedItem.id);
+        }
+        if (selectedGhosts.length) {
+            e.preventDefault();
+            if (window.AppItems) window.AppItems.remove(selectedGhosts);
+            planifUpdateGhostBar();
+            return;
+        }
+
         if (!window.currentSelectedItem) return;
         const wid = window.currentSelectedItem.worker_id;
         if (wid === 'SYSTEM' || wid === 'REQUEST') return;

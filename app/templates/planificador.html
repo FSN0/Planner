@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260901a">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260901a">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260903c">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}?v=20260901e">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260830b">
 <style id="dynamic-sidebar-style"></style>
@@ -21,10 +21,14 @@
     <div class="page-toolbar planificador-toolbar">
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title"><i class="fas fa-stream text-primary mr-1"></i> {{ _('Planificador') }}</h1>
-        <span class="planificador-hint">
+        <span class="planificador-hint" title="{{ _('Rueda = zoom. Arrastre en el fondo = mover. Shift + arrastre = seleccionar. Ctrl+C / Ctrl+V = copiar y pegar en borrador.') }}">
           <i class="fas fa-search-plus"></i> {{ _('Rueda = zoom') }}
           <span class="planificador-hint-sep">·</span>
-          <i class="fas fa-arrows-alt-v"></i> {{ _('Ctrl + rueda o columna obras = desplazar') }}
+          {{ _('Arrastre = mover') }}
+          <span class="planificador-hint-sep">·</span>
+          {{ _('Shift+arrastre = seleccionar') }}
+          <span class="planificador-hint-sep">·</span>
+          {{ _('Ctrl+C / Ctrl+V') }}
         </span>
       </div>
 
@@ -268,7 +272,7 @@
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
 <script>window.PLANIFICADOR_SHOW_FICHAJES = {{ puede_ver_estado_fichaje|default(false)|tojson }};</script>
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260902f"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260902f"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260903q"></script>
 {% if can_edit_planificador|default(false) %}
 <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260830b"></script>
 {% endif %}

@@ -740,6 +740,9 @@ def solicitar_ausencia_propia(
     """
     if not actor_puede_crear_ausencia(actor_user):
         raise ValueError('Tu perfil no puede solicitar ausencias.')
+    from app.services.tenant_modules import has_portal_ausencias
+    if not has_portal_ausencias():
+        raise ValueError('En este espacio las ausencias se gestionan fuera de SignaPlan.')
 
     return create_manual_leave(
         user_id=actor_user.id,

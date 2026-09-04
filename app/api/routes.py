@@ -239,6 +239,85 @@ def sidebar_prefs_api():
 # ==============================================================================
 # NUEVO: ENDPOINT PARA EL CALENDARIO UNIVERSAL (DRAG & DROP, AGRUPADO)
 # ==============================================================================
+def _jefe_managed_obra_events(jefe_id, start_date, end_date):
+    """Días con plantilla en las obras que dirige este jefe (no su propia asignación)."""
+    from markupsafe import escape
+
+    obras = (
+        Obra.query.filter(Obra.jefe_obra_id == jefe_id, Obra.is_deleted.is_(False))
+        .all()
+    )
+    if not obras:
+        return []
+    obra_by_id = {o.id: o for o in obras}
+    rows = (
+        db.session.query(Asignacion, User)
+        .join(User, User.id == Asignacion.user_id)
+        .filter(
+            Asignacion.obra_id.in_(list(obra_by_id)),
+            Asignacion.fecha >= start_date,
+            Asignacion.fecha < end_date,
+            User.is_deleted.is_(False),
+        )
+        .order_by(Asignacion.fecha, User.lastname, User.name)
+        .all()
+    )
+    by_key = defaultdict(list)
+    for asig, user in rows:
+        by_key[(asig.obra_id, asig.fecha)].append(user)
+
+    raw = []
+    max_names = 40
+    for (obra_id, fecha), users in by_key.items():
+        obra = obra_by_id.get(obra_id)
+        if not obra:
+            continue
+        seen = set()
+        names = []
+        for u in users:
+            label = f"{(u.name or '').strip()} {(u.lastname or '').strip()}".strip() or f"#{u.id}"
+            if label in seen:
+                continue
+            seen.add(label)
+            names.append(label)
+        n = len(names)
+        if n == 0:
+            continue
+        obra_label = _obra_label(obra)
+        shown = names[:max_names]
+        extra = n - len(shown)
+        lis = ''.join(f"<div>· {escape(nm)}</div>" for nm in shown)
+        if extra > 0:
+            lis += f"<div>· +{extra}</div>"
+        tip = (
+            f"<div style='text-align:left;max-width:18rem;'>"
+            f"<strong>{escape(obra_label)}</strong><br>"
+            f"{n} {translate('persona(s)')}<br>{lis}</div>"
+        )
+        raw.append({
+            'title': f"{obra_label} · {n}",
+            'start_date': fecha,
+            'end_date': fecha,
+            'color': obra.color or '#3b82f6',
+            'obra_id': obra_id,
+            'workers_key': tuple(sorted(names)),
+            'extendedProps': {
+                'type': 'jefe_obra_dia',
+                'obra_id': obra_id,
+                'editable': False,
+                'tooltipContent': tip,
+                'tooltipText': f"{obra_label}: {', '.join(shown)}" + (f' +{extra}' if extra else ''),
+            },
+        })
+    if not raw:
+        return []
+    merged = merge_events_v2(raw, group_by=['title', 'color', 'obra_id', 'workers_key'])
+    for ev in merged:
+        ev['editable'] = False
+        ev['classNames'] = ['fc-event-jefe-obra']
+    return merged
+
+
 @api_bp.route('/universal-calendar', methods=['GET'])
 @login_required
 def get_universal_calendar_events():
@@ -280,6 +359,8 @@ def get_universal_calendar_events():
         )
         from app.models import AusenciaPlanificada
 
+        worker = User.query.get(entity_id)
+
         asignaciones = Asignacion.query.filter(
             Asignacion.user_id == entity_id,
             Asignacion.fecha >= start_date,
@@ -297,7 +378,6 @@ def get_universal_calendar_events():
         vehicle_meta_by_date = {}
         try:
             from app.services.entity_panel_service import get_worker_vehicle_day_map
-            worker = User.query.get(entity_id)
             if worker:
                 vehicle_meta_by_date = get_worker_vehicle_day_map(
                     worker, start_date, end_date, end_exclusive=True
@@ -339,6 +419,9 @@ def get_universal_calendar_events():
                 }
             })
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'obra_id']))
+
+        if worker and worker.role == ROLE_JEFE:
+            events.extend(_jefe_managed_obra_events(worker.id, start_date, end_date))
 
         # Vehículo siempre como evento propio (también si hay obra ese día)
         from app.services.vehicle_availability_service import (

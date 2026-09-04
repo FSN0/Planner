@@ -322,6 +322,11 @@ def user_can(user, module: str, action: str) -> bool:
     if module == 'auditoria_fichajes' and action == 'w' and role in ROLES_LABORAL_LIKE:
         return laboral_puede_resolver_fichajes()
 
+    if module == 'operario_ausencias':
+        from app.services.tenant_modules import has_portal_ausencias
+        if not has_portal_ausencias():
+            return False
+
     return True
 
 

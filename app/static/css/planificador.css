@@ -36,7 +36,9 @@
     border: 1px solid var(--color-border-strong, #e2e8f0);
     border-radius: 999px;
     padding: 0.18rem 0.55rem;
-    white-space: nowrap;
+    white-space: normal;
+    line-height: 1.35;
+    max-width: 42rem;
 }
 .planificador-hint-sep { opacity: 0.45; }
 .planificador-filters {
@@ -658,6 +660,88 @@
     0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
     70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
     100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+#planificador-calendar.is-planif-pointer {
+    cursor: grabbing !important;
+    user-select: none !important;
+}
+#planificador-calendar.is-planif-pointer .vis-item {
+    cursor: grabbing !important;
+}
+#planificador-calendar.is-planif-selecting,
+#planificador-calendar.is-planif-selecting .vis-item {
+    cursor: crosshair !important;
+}
+
+.planificador-marquee {
+    position: fixed;
+    z-index: 10040;
+    pointer-events: none;
+    border: 1px solid rgba(37, 99, 235, 0.95);
+    background: rgba(37, 99, 235, 0.12);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+}
+
+.vis-timeline .vis-item.planificador-ghost {
+    outline: 2px dashed #d97706 !important;
+    outline-offset: -1px;
+    opacity: 0.82;
+    z-index: 12 !important;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 5px,
+        rgba(255, 255, 255, 0.22) 5px,
+        rgba(255, 255, 255, 0.22) 10px
+    ) !important;
+}
+.vis-timeline .vis-item.planificador-ghost.vis-selected {
+    outline: 2px solid #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25) !important;
+}
+
+.planificador-ghost-bar {
+    position: fixed;
+    bottom: 1.35rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1040;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.5rem 0.7rem 0.5rem 0.95rem;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #f8fafc;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.35);
+    font-size: 0.82rem;
+    font-weight: 600;
+    max-width: calc(100vw - 2rem);
+}
+.planificador-ghost-bar.d-none { display: none !important; }
+.planificador-ghost-bar > .fas { color: #fbbf24; }
+.planificador-ghost-bar-actions {
+    display: flex;
+    gap: 0.35rem;
+}
+.planificador-ghost-bar .btn-admin {
+    padding: 0.28rem 0.7rem;
+    font-size: 0.75rem;
+    border-radius: 999px;
+}
+.planificador-ghost-bar .btn-admin-ghost {
+    background: transparent;
+    color: #e2e8f0;
+    border: 1px solid rgba(226, 232, 240, 0.3);
+}
+.planificador-ghost-bar .btn-admin-ghost:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+.planificador-ghost-bar .btn-admin:disabled {
+    opacity: 0.55;
+    cursor: wait;
 }
 
 .vis-item.vis-background.obra-deadline-line {

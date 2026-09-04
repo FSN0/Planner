@@ -17,6 +17,7 @@ from app.services.tenant_modules import (
     has_auditoria_vehiculos,
     has_notas,
     has_valoraciones,
+    has_portal_ausencias,
     hora_corte_activa,
     hora_corte_destinatario_ids,
     jefes_asignan_directo,
@@ -69,6 +70,18 @@ def test_valoraciones_always_on(app):
         assert has_valoraciones() is True
         g.current_tenant = _tenant('soltec', {})
         assert has_valoraciones() is True
+
+
+def test_portal_ausencias_off_for_soltec_by_default(app):
+    with app.app_context():
+        g.current_tenant = _tenant('soltec', {})
+        assert has_portal_ausencias() is False
+        g.current_tenant = _tenant('acme', {})
+        assert has_portal_ausencias() is True
+        g.current_tenant = _tenant('soltec', {'portal_ausencias': True})
+        assert has_portal_ausencias() is True
+        g.current_tenant = _tenant('acme', {'portal_ausencias': False})
+        assert has_portal_ausencias() is False
 
 
 def test_jefes_asignan_directo_defaults(app, monkeypatch):

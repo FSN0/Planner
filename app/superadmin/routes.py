@@ -21,6 +21,7 @@ MODULOS_DISPONIBLES = {
     'avisos_laborales': 'Avisos laborales en Logs (click acusar Planificación/Solicitud)',
     'notas': 'Notas / reuniones (centro de mando)',
     'auditoria_vehiculos': 'Auditoría de km / anomalías de flota',
+    'portal_ausencias': 'Portal: pedir vacaciones / ausencias propias',
 }
 
 # Solo adaptadores realmente implementados en app/sync/adapters/.

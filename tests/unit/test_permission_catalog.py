@@ -31,9 +31,9 @@ def test_operario_portal_defaults():
 def test_modules_for_role_same_list_includes_portal():
     from app.services.permission_catalog import modules_for_role
 
-    operario_keys = {m for m, _, _ in modules_for_role(ROLE_OPERARIO)}
-    jefe_keys = {m for m, _, _ in modules_for_role(ROLE_JEFE)}
-    # Misma base: oficina + portal propio (calendario/ausencias siempre; fichar si módulo)
+    tenant = SimpleNamespace(subdominio='acme', modulos_activos={'fichaje_operario': True})
+    operario_keys = {m for m, _, _ in modules_for_role(ROLE_OPERARIO, tenant)}
+    jefe_keys = {m for m, _, _ in modules_for_role(ROLE_JEFE, tenant)}
     assert 'tablero' in operario_keys
     assert 'operario_calendario' in operario_keys
     assert 'operario_ausencias' in operario_keys
@@ -162,6 +162,7 @@ def test_soltec_with_odoo_shows_custom_rows(monkeypatch):
     assert 'auditoria_vehiculos' in keys
     assert 'solicitudes' in keys
     assert 'primeros_pasos' not in keys
+    assert 'operario_ausencias' not in keys
 
 
 def test_odoo_client_that_is_not_soltec_does_not_see_portal(monkeypatch):

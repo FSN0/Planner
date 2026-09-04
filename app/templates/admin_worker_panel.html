@@ -166,8 +166,10 @@
             <div class="entity-hero-icon-wrap">
               <div class="entity-hero-icon entity-hero-icon--avatar">
                 <i class="fas fa-user"></i>
+                {% if tenant_has_valoraciones and worker.role != 'jefe_obra' %}
                 <div class="entity-rep-badge {{ 'entity-rep-badge--pos' if score > 0 else 'entity-rep-badge--neg' if score < 0 else 'entity-rep-badge--neu' }}"
                      title="{{ _('Reputación actual') }}">{{ score }}</div>
+                {% endif %}
               </div>
             </div>
             <div class="entity-hero-title-text">
@@ -235,7 +237,7 @@
                 {% else %}{{ worker.role or '—' }}{% endif %}
               </span>
             </div>
-            {% if tenant_has_valoraciones %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' %}
             <div class="entity-meta-item">
               <span class="entity-meta-item-label">{{ _('Reputación') }}</span>
               <span class="entity-meta-item-value">{% if score > 0 %}+{% endif %}{{ score }}</span>
@@ -249,7 +251,7 @@
               <i class="fas fa-calendar-alt"></i> {{ _('Ver planificador') }}
             </a>
             {% endif %}
-            {% if tenant_has_valoraciones and current_user.role in ['admin', 'jefe_obra'] %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and current_user.role in ['admin', 'jefe_obra'] %}
             <button type="button" class="btn-admin btn-admin-ghost" onclick="openRatingModal()">
               <i class="far fa-star"></i> {{ _('Puntuar') }}
             </button>
@@ -257,7 +259,7 @@
               <i class="fas fa-history"></i> {{ _('Historial') }}
             </a>
             {% endif %}
-            {% if tenant_has_valoraciones and current_user.role == 'admin' and score != 0 %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and current_user.role == 'admin' and score != 0 %}
             <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline"
                   onsubmit="return confirm({{ _('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.')|tojson }});">
               <button type="submit" class="btn-admin btn-admin-ghost" title="{{ _('Resetear contador') }}">
@@ -334,6 +336,9 @@
 
     <section class="entity-calendar-zone">
       <h2 class="entity-calendar-zone-heading"><i class="fas fa-calendar-alt"></i> {{ _('Planificación') }}</h2>
+      {% if worker.role == 'jefe_obra' %}
+      <p class="text-muted" style="font-size:0.82rem;margin:-0.25rem 0 0.75rem;">{{ _('Las barras son las obras que dirige, los días que tienen gente. Pasa el cursor para ver quién está asignado.') }}</p>
+      {% endif %}
       <div id="worker-calendar" class="univ-calendar-root" style="min-height: 500px;"></div>
     </section>
 
@@ -392,7 +397,7 @@
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260902f"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260903j"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var workerId = {{ worker.id }};

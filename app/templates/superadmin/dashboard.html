@@ -342,6 +342,9 @@
                 {% if key == 'registro_jornada' and (not t.modulos_activos or t.modulos_activos.get(key) is none) %}
                     {% set activo = True %}
                 {% endif %}
+                {% if key == 'portal_ausencias' and (not t.modulos_activos or t.modulos_activos.get(key) is none) %}
+                    {% set activo = (t.subdominio or '')|lower != 'soltec' %}
+                {% endif %}
                 {% if key == 'avisos_laborales' and (not t.modulos_activos or t.modulos_activos.get(key) is none) and (t.subdominio or '')|lower == 'soltec' %}
                     {% set activo = True %}
                 {% endif %}
@@ -367,6 +370,8 @@
                     <small class="text-muted d-block ml-4 mb-3">{{ _('Centro de notas. Apagado en altas self-serve; actívalo si el cliente lo pide.') }}</small>
                 {% elif key == 'auditoria_vehiculos' %}
                     <small class="text-muted d-block ml-4 mb-3">{{ _('Alertas de km, odómetro y TMS. El cuadrante de flota sigue disponible sin este módulo.') }}</small>
+                {% elif key == 'portal_ausencias' %}
+                    <small class="text-muted d-block ml-4 mb-3">{{ _('El trabajador pide vacaciones desde /fichaje. Apágalo si las aprueba el ERP (p. ej. Odoo). Oficina sigue viendo ausencias y el calendario las pinta.') }}</small>
                 {% endif %}
                 
                 {% if key == 'odoo' %}

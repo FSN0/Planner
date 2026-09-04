@@ -921,6 +921,7 @@ def worker_panel(user_id):
         stats=panel_stats["stats"],
         chart_14d=panel_stats["chart_14d"],
         chart_14d_max=panel_stats["chart_14d_max"],
+        chart_caption=panel_stats.get("chart_caption"),
         vehicle_today=get_worker_vehicle_today(worker),
         history_days=history_days,
         history_open=history_open,

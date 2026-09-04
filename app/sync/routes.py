@@ -1620,6 +1620,9 @@ def auditoria_vehiculos():
         .all()
     )
 
+    # Antes de filtrar por pestaña: un mismatch explica el “sin km” del planificado.
+    mismatch_en_rango = [r for r in registros if r.estado == 'mismatch_driver']
+
     if estado in {'mismatch_driver', 'sin_km', 'sin_planificar', 'ok'}:
         registros = [r for r in registros if r.estado == estado]
 
@@ -1659,21 +1662,29 @@ def auditoria_vehiculos():
     reverse = orden in {'fecha_desc', 'vehiculo_desc', 'km_desc', 'estado_desc'}
     registros = sorted(registros, key=sorters.get(orden, sorters['fecha_desc']), reverse=reverse)
 
-    mismatch = [r for r in registros if r.estado == 'mismatch_driver']
-    sin_km = [r for r in registros if r.estado == 'sin_km']
-    sin_plan = [r for r in registros if r.estado == 'sin_planificar']
-    ok_hist = [r for r in registros if r.estado == 'ok']
-
     from app.services.vehicle_anomaly_service import (
         detect_cross_vehicle_reports,
         detect_odometer_jumps,
         detect_vehicle_on_leave,
         detect_viaje_desvios,
+        filter_sin_km_explicados_por_mismatch,
+        filter_sin_km_solo_pasados,
         get_desvio_thresholds,
         get_odometer_jump_thresholds,
         get_vistas_map,
         partition_anomalias,
     )
+
+    mismatch = [r for r in registros if r.estado == 'mismatch_driver']
+    sin_km = filter_sin_km_solo_pasados(
+        filter_sin_km_explicados_por_mismatch(
+            [r for r in registros if r.estado == 'sin_km'],
+            mismatch_en_rango,
+        ),
+        hoy,
+    )
+    sin_plan = [r for r in registros if r.estado == 'sin_planificar']
+    ok_hist = [r for r in registros if r.estado == 'ok']
 
     thresholds = get_odometer_jump_thresholds()
     umbrales_desvio = get_desvio_thresholds()

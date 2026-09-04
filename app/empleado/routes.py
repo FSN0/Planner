@@ -301,7 +301,11 @@ def ausencias():
         leaves_del_usuario,
         solicitar_ausencia_propia,
     )
+    from app.services.tenant_modules import has_portal_ausencias
     from app.utils import register_log
+
+    if not has_portal_ausencias():
+        abort(404)
 
     if request.method == 'POST':
         accion = (request.form.get('accion') or 'solicitar').strip()

@@ -413,6 +413,79 @@ def detect_viaje_desvios(fecha_desde, fecha_hasta, thresholds=None):
     return alerts
 
 
+def filter_sin_km_explicados_por_mismatch(sin_km_rows, mismatch_rows):
+    """
+    Si Juan tenía el coche y al final lo ha cogido Sergio (conductor distinto),
+    no alertar también de que Juan no metió kilómetros: es lo esperable.
+    Cubre el mismo día y el resto de días de esa asignación (mismo vehículo).
+    """
+    if not sin_km_rows:
+        return []
+    if not mismatch_rows:
+        return list(sin_km_rows)
+
+    person_vehicle = set()
+    person_date = set()
+    for row in mismatch_rows:
+        uid = getattr(row, 'planned_user_id', None)
+        vid = getattr(row, 'vehiculo_id', None)
+        fecha = getattr(row, 'fecha', None)
+        if uid is None:
+            continue
+        try:
+            uid = int(uid)
+        except (TypeError, ValueError):
+            continue
+        if vid is not None:
+            try:
+                person_vehicle.add((uid, int(vid)))
+            except (TypeError, ValueError):
+                pass
+        if fecha is not None:
+            person_date.add((uid, fecha))
+
+    if not person_vehicle and not person_date:
+        return list(sin_km_rows)
+
+    kept = []
+    for row in sin_km_rows:
+        uid = getattr(row, 'planned_user_id', None)
+        if uid is None:
+            kept.append(row)
+            continue
+        try:
+            uid = int(uid)
+        except (TypeError, ValueError):
+            kept.append(row)
+            continue
+        vid = getattr(row, 'vehiculo_id', None)
+        fecha = getattr(row, 'fecha', None)
+        if vid is not None:
+            try:
+                if (uid, int(vid)) in person_vehicle:
+                    continue
+            except (TypeError, ValueError):
+                pass
+        if fecha is not None and (uid, fecha) in person_date:
+            continue
+        kept.append(row)
+    return kept
+
+
+def filter_sin_km_solo_pasados(sin_km_rows, hoy):
+    """El día en curso aún puede imputar km; solo alertar días ya cerrados."""
+    if not sin_km_rows:
+        return []
+    if hoy is None:
+        return list(sin_km_rows)
+    kept = []
+    for row in sin_km_rows:
+        fecha = getattr(row, 'fecha', None)
+        if fecha is None or fecha < hoy:
+            kept.append(row)
+    return kept
+
+
 # ---------------------------------------------------------------------------
 # Acuses informativos ("Visto") — no alteran la detección
 # ---------------------------------------------------------------------------

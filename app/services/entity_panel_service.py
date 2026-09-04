@@ -8,8 +8,8 @@ from sqlalchemy import func, distinct, or_
 
 from app import db
 from app.models import (
-    User, Asignacion, Solicitud, RegistroFichaje, Rating,
-    ROLE_OPERARIO,
+    User, Asignacion, Solicitud, RegistroFichaje, Rating, Obra,
+    ROLE_OPERARIO, ROLE_JEFE,
 )
 from app.services.i18n_service import translate as _
 from app.utils.timezone_utils import today_local
@@ -850,7 +850,137 @@ def get_obra_panel_stats(obra):
     }
 
 
+def _obra_activa_para_jefe(obra, today):
+    estado = (obra.estado or '').strip().lower()
+    if estado in ('finalizada', 'cerrada', 'cancelada'):
+        return False
+    if obra.fecha_fin and obra.fecha_fin < today:
+        return False
+    return True
+
+
+def get_jefe_panel_stats(worker):
+    """Indicadores de un jefe de obra: carga de sus obras, no su ficha de operario."""
+    today = today_local()
+    chart_start = today - timedelta(days=13)
+    range_30 = today - timedelta(days=29)
+
+    obras = Obra.query.filter(
+        Obra.jefe_obra_id == worker.id,
+        Obra.is_deleted.is_(False),
+    ).all()
+    obra_ids = [o.id for o in obras]
+    activas = [o for o in obras if _obra_activa_para_jefe(o, today)]
+    activas_ids = [o.id for o in activas]
+
+    personas_hoy = 0
+    obras_con_gente_hoy = 0
+    equipo_30 = 0
+    solicitudes_abiertas = 0
+    chart_14d = [0] * 14
+
+    if obra_ids:
+        q = Asignacion.query.filter(Asignacion.obra_id.in_(obra_ids))
+        personas_hoy = (
+            q.filter(Asignacion.fecha == today)
+            .with_entities(func.count(distinct(Asignacion.user_id)))
+            .scalar() or 0
+        )
+        if activas_ids:
+            obras_con_gente_hoy = (
+                Asignacion.query.filter(
+                    Asignacion.obra_id.in_(activas_ids),
+                    Asignacion.fecha == today,
+                )
+                .with_entities(func.count(distinct(Asignacion.obra_id)))
+                .scalar() or 0
+            )
+        equipo_30 = (
+            q.filter(Asignacion.fecha >= range_30, Asignacion.fecha <= today)
+            .with_entities(func.count(distinct(Asignacion.user_id)))
+            .scalar() or 0
+        )
+        chart_rows = (
+            db.session.query(Asignacion.fecha, func.count(distinct(Asignacion.user_id)))
+            .filter(
+                Asignacion.obra_id.in_(obra_ids),
+                Asignacion.fecha >= chart_start,
+                Asignacion.fecha <= today,
+            )
+            .group_by(Asignacion.fecha)
+            .all()
+        )
+        chart_map = {f: c for f, c in chart_rows}
+        chart_14d = [chart_map.get(chart_start + timedelta(days=i), 0) for i in range(14)]
+        solicitudes_abiertas = Solicitud.query.filter(
+            Solicitud.obra_id.in_(obra_ids),
+            Solicitud.estado.in_(OPEN_SOLICITUD),
+        ).count()
+
+    huecos_hoy = max(0, len(activas_ids) - obras_con_gente_hoy)
+    pico = max(chart_14d) if chart_14d else 0
+    media = round(sum(chart_14d) / 14, 1) if any(chart_14d) else 0
+    planificador_url = None
+    try:
+        planificador_url = url_for('admin.planificador_jo', jefe_id=worker.id)
+    except Exception:
+        planificador_url = None
+
+    stats = [
+        {
+            'key': 'obras_cargo',
+            'label': 'Obras a cargo',
+            'value': len(activas),
+            'sub': _tf('{n} en total', n=len(obras)) if len(obras) != len(activas) else 'Activas ahora',
+            'icon': 'fa-hard-hat',
+            'tone': 'blue' if activas else 'slate',
+            'href': planificador_url,
+        },
+        {
+            'key': 'obras_hoy',
+            'label': 'Obras en marcha hoy',
+            'value': f'{obras_con_gente_hoy}/{len(activas) or 0}',
+            'sub': _tf('{n} sin personal hoy', n=huecos_hoy) if huecos_hoy else 'Todas con gente',
+            'icon': 'fa-layer-group',
+            'tone': 'amber' if huecos_hoy else ('green' if obras_con_gente_hoy else 'slate'),
+        },
+        {
+            'key': 'personas_hoy',
+            'label': 'Personas hoy',
+            'value': personas_hoy,
+            'sub': _tf('Media 14 días: {n}', n=media) if media else 'Nadie en campo',
+            'icon': 'fa-users',
+            'tone': 'green' if personas_hoy else 'slate',
+        },
+        {
+            'key': 'equipo_30',
+            'label': 'Equipo (30 días)',
+            'value': equipo_30,
+            'sub': _tf('Pico: {n} personas/día', n=pico) if pico else 'Sin movimiento reciente',
+            'icon': 'fa-user-friends',
+            'tone': 'blue' if equipo_30 else 'slate',
+        },
+        {
+            'key': 'solicitudes',
+            'label': 'Solicitudes',
+            'value': solicitudes_abiertas,
+            'sub': 'Pendientes en sus obras',
+            'icon': 'fa-clipboard-list',
+            'tone': 'amber' if solicitudes_abiertas else 'slate',
+        },
+    ]
+
+    return {
+        'stats': _stats_sin_buzon(stats),
+        'chart_14d': chart_14d,
+        'chart_14d_max': max(chart_14d) if chart_14d else 1,
+        'chart_caption': 'Personas en sus obras (14 días)',
+    }
+
+
 def get_worker_panel_stats(worker):
+    if getattr(worker, 'role', None) == ROLE_JEFE:
+        return get_jefe_panel_stats(worker)
     today = today_local()
     month_start, month_end = _month_bounds(today)
     range_30 = today - timedelta(days=29)

@@ -8,7 +8,7 @@
       <i class="fas fa-chart-bar"></i> {{ _('Indicadores') }}
     </h2>
     {% if chart_14d %}
-    <div class="entity-mini-chart" title="{{ _('Actividad últimos 14 días') }}">
+    <div class="entity-mini-chart" title="{{ _(chart_caption) if chart_caption else _('Actividad últimos 14 días') }}">
       {% set mx = chart_14d_max or 1 %}
       {% for v in chart_14d %}
       <span class="entity-mini-chart-bar" style="height: {{ ((v / mx) * 100)|int }}%;" title="{{ v }}"></span>

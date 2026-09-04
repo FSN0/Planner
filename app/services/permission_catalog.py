@@ -156,9 +156,11 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
     if module == 'operario_fichaje':
         # Reloj de fichaje: solo si el espacio tiene el módulo.
         return has_fichaje
-    if module in ('operario_calendario', 'operario_ausencias'):
-        # Calendario y ausencias propias: siempre configurables (no dependen del reloj).
+    if module == 'operario_calendario':
         return True
+    if module == 'operario_ausencias':
+        from app.services.tenant_modules import has_portal_ausencias
+        return has_portal_ausencias(tenant)
     if module == 'auditoria_fichajes':
         return has_fichaje or has_odoo
     if module == 'mapa_fichajes':
@@ -263,7 +265,7 @@ MODULE_READ_HINTS = {
     'soltec_portal': 'Abrir el portal Soltec',
     'operario_fichaje': 'Acceso a /fichaje para fichar (requiere módulo de fichaje)',
     'operario_calendario': 'Ver el calendario propio (asignaciones) en /fichaje',
-    'operario_ausencias': 'Ver y pedir ausencias propias en /fichaje',
+    'operario_ausencias': 'Ver y pedir ausencias propias en /fichaje (si el espacio no las gestiona en el ERP)',
 }
 
 
