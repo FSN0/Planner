@@ -210,6 +210,15 @@ class User(UserMixin, db.Model):
     # Motivo de inactividad: pending | manual | odoo | deleted
     deactivation_reason = db.Column(db.String(40), nullable=True)
     deactivated_at = db.Column(db.DateTime, nullable=True)
+    deactivated_by_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True
+    )
+    deactivated_by = db.relationship(
+        'User',
+        foreign_keys=[deactivated_by_id],
+        remote_side=[id],
+        post_update=True,
+    )
     # En el alta nueva el admin nace ya verificado. En cuentas antiguas
     # puede quedar False; no bloquea el login.
     email_verified = db.Column(
@@ -339,6 +348,7 @@ class User(UserMixin, db.Model):
         self.active = False
         self.deactivation_reason = 'deleted'
         self.deactivated_at = utc_now()
+        self.deactivated_by_id = int(actor_id) if actor_id else None
         self.scheduled_activation_date = None
         self.scheduled_deactivation_date = None
 

@@ -1675,5 +1675,12 @@
   "Esta es tu obra": "C’est votre chantier",
   "Error al resolver (HTTP {code})": "Échec de résolution (HTTP {code})",
   "Error de red al resolver": "Erreur réseau lors de la résolution",
-  "Respuesta inválida": "Réponse invalide"
+  "Respuesta inválida": "Réponse invalide",
+  "Eliminados": "Supprimés",
+  "elim.": "suppr.",
+  "Fecha baja": "Date de sortie",
+  "No hay personal eliminado.": "Aucun personnel supprimé.",
+  "Filtrar fecha": "Filtrer la date",
+  "Baja por": "Retiré par",
+  "Filtrar autor": "Filtrer l’auteur"
 }

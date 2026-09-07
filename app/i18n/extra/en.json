@@ -1680,5 +1680,12 @@
   "Esta es tu obra": "This is your site",
   "Error al resolver (HTTP {code})": "Could not resolve (HTTP {code})",
   "Error de red al resolver": "Network error while resolving",
-  "Respuesta inválida": "Invalid response"
+  "Respuesta inválida": "Invalid response",
+  "Eliminados": "Deleted",
+  "elim.": "del.",
+  "Fecha baja": "Leave date",
+  "No hay personal eliminado.": "No deleted staff.",
+  "Filtrar fecha": "Filter date",
+  "Baja por": "Removed by",
+  "Filtrar autor": "Filter author"
 }

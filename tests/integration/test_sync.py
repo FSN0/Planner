@@ -530,6 +530,7 @@ class TestEmployeeBajaService:
             assert user_operario.is_deleted is False
             assert user_operario.deactivation_reason == 'manual'
             assert user_operario.deactivated_at is not None
+            assert user_operario.deactivated_by_id == user_admin.id
             assert 'Baja manual' in user_operario.inactive_reason_label
             assert Asignacion.query.filter_by(
                 user_id=user_operario.id, fecha=fut

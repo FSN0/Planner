@@ -364,6 +364,7 @@ def resolve_conflict_empleado():
             u.deactivation_reason = 'deleted'
             from app.utils.timezone_utils import utc_now
             u.deactivated_at = utc_now()
+            u.deactivated_by_id = current_user.id if current_user.is_authenticated else None
             u.dni = f"DEL-{u.id}"
             if u.email:
                 u.email = f"del-{u.id}@borrado.local"

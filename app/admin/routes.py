@@ -2057,6 +2057,16 @@ def personal():
     operarios_activos = base_operarios.filter(User.active == True).order_by(User.name).all()
     operarios_pendientes = base_operarios.filter(User.active == False).order_by(User.name).all()
 
+    # 3. Archivados (soft-delete): consulta, no gestionables desde las otras pestañas
+    from sqlalchemy.orm import joinedload
+    eliminados = (
+        User.query
+        .options(joinedload(User.deactivated_by), joinedload(User.company_rel))
+        .filter(User.is_deleted.is_(True))
+        .order_by(User.deactivated_at.desc().nullslast(), User.name)
+        .all()
+    )
+
     # Para el dropdown de filtros en la vista
     companies = Company.query.filter_by(is_internal=False, active=True).all()
 
@@ -2069,6 +2079,7 @@ def personal():
         internos=internos,
         operarios_activos=operarios_activos,
         operarios_pendientes=operarios_pendientes,
+        eliminados=eliminados,
         active_count=len(operarios_activos),
         pending_count=len(operarios_pendientes),
         companies=companies, # Pasamos objetos, no strings

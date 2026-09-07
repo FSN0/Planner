@@ -1675,5 +1675,12 @@
   "Esta es tu obra": "Esta é a tua obra",
   "Error al resolver (HTTP {code})": "Erro ao resolver (HTTP {code})",
   "Error de red al resolver": "Erro de rede ao resolver",
-  "Respuesta inválida": "Resposta inválida"
+  "Respuesta inválida": "Resposta inválida",
+  "Eliminados": "Eliminados",
+  "elim.": "elim.",
+  "Fecha baja": "Data de baixa",
+  "No hay personal eliminado.": "Não há pessoal eliminado.",
+  "Filtrar fecha": "Filtrar data",
+  "Baja por": "Baixa por",
+  "Filtrar autor": "Filtrar autor"
 }

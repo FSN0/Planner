@@ -177,6 +177,8 @@ def dar_de_baja(user, *, actor_id=None, motivo=MOTIVO_MANUAL, notas=None, commit
             user.deactivation_reason = motivo_norm
             if not user.deactivated_at:
                 user.deactivated_at = utc_now()
+            if not user.deactivated_by_id:
+                user.deactivated_by_id = actor
             liberadas = _liberar_asignaciones_futuras(user, actor, nota)
             company_inactivada = False
             if user.company_id:
@@ -194,6 +196,7 @@ def dar_de_baja(user, *, actor_id=None, motivo=MOTIVO_MANUAL, notas=None, commit
     user.active = False
     user.deactivation_reason = motivo_norm
     user.deactivated_at = utc_now()
+    user.deactivated_by_id = actor
     user.scheduled_activation_date = None
     user.scheduled_deactivation_date = None
 
@@ -233,6 +236,7 @@ def reactivar(user, *, actor_id=None, commit=True):
     user.active = True
     user.deactivation_reason = None
     user.deactivated_at = None
+    user.deactivated_by_id = None
     user.scheduled_deactivation_date = None
 
     company_reactivada = False
