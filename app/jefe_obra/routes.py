@@ -57,6 +57,29 @@ def panel():
     return render_template('jefe_panel.html', **ctx)
 
 
+@jefe_bp.route('/api/panel/kpi_detail', methods=['GET'])
+@login_required
+def api_panel_kpi_detail():
+    if current_user.role not in [ROLE_JEFE, ROLE_ADMIN]:
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    from app.services.panel_service import get_panel_kpi_detail, _obra_ids_del_jefe
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+
+    kind = (request.args.get('kind') or '').strip().lower()
+    fecha = (request.args.get('fecha') or '').strip() or None
+    if kind in ('fichajes', 'auditoria') and not tenant_muestra_auditoria_fichajes():
+        return jsonify({'success': False, 'message': 'No disponible'}), 403
+    try:
+        data = get_panel_kpi_detail(
+            kind,
+            fecha,
+            obra_ids=_obra_ids_del_jefe(current_user.id),
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    return jsonify({'success': True, **data})
+
+
 @jefe_bp.route('/obras_detailed', methods=['GET'], endpoint="obras_detailed")
 @login_required
 def obras_detailed():

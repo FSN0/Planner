@@ -1687,5 +1687,20 @@
   "No hay personal eliminado.": "No deleted staff.",
   "Filtrar fecha": "Filter date",
   "Baja por": "Removed by",
-  "Filtrar autor": "Filter author"
+  "Filtrar autor": "Filter author",
+  "Ver detalle": "View detail",
+  "Día anterior": "Previous day",
+  "Día siguiente": "Next day",
+  "Sin registros para esta consulta.": "No records for this query.",
+  "No se pudo cargar el detalle.": "Could not load the detail.",
+  "Todas las pendientes": "All pending",
+  "Mostrando las primeras filas": "Showing the first rows",
+  "Obra plan.": "Planned site",
+  "Obra real": "Actual site",
+  "registros": "records",
+  "Cargando…": "Loading…",
+  "con entrada": "with clock-in",
+  "Buscar en todos los campos…": "Search all fields…",
+  "Ningún resultado para esa búsqueda.": "No results for that search.",
+  "Solo entradas físicas": "Physical clock-ins only"
 }

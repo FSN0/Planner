@@ -2287,6 +2287,25 @@ def panel():
     return render_template("admin_panel.html", **ctx)
 
 
+@admin_bp.route("/api/panel/kpi_detail", methods=["GET"])
+@login_required
+@roles_required(ROLE_ADMIN)
+def api_panel_kpi_detail():
+    """Detalle tabular de un KPI del panel (fichajes / asignaciones / auditoría)."""
+    from app.services.panel_service import get_panel_kpi_detail
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+
+    kind = (request.args.get('kind') or '').strip().lower()
+    fecha = (request.args.get('fecha') or '').strip() or None
+    if kind in ('fichajes', 'auditoria') and not tenant_muestra_auditoria_fichajes():
+        return jsonify({'success': False, 'message': translate('No disponible')}), 403
+    try:
+        data = get_panel_kpi_detail(kind, fecha)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    return jsonify({'success': True, **data})
+
+
 @admin_bp.route("/panel-laboral", methods=["GET"])
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_LABORAL)

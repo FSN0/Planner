@@ -146,6 +146,11 @@ def color_fichaje_agregado(estados):
 def tooltip_fichaje_agregado(estados):
     """Texto corto para title/tooltip de la pelotita."""
     estado = estado_fichaje_agregado(estados)
+    return label_estado_fichaje(estado)
+
+
+def label_estado_fichaje(estado):
+    """Etiqueta legible de un estado de RegistroFichaje."""
     labels = {
         'Correcto': 'Correcto',
         'Correcto_Automatico': 'Correcto (auto)',

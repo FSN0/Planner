@@ -1682,5 +1682,20 @@
   "No hay personal eliminado.": "Aucun personnel supprimé.",
   "Filtrar fecha": "Filtrer la date",
   "Baja por": "Retiré par",
-  "Filtrar autor": "Filtrer l’auteur"
+  "Filtrar autor": "Filtrer l’auteur",
+  "Ver detalle": "Voir le détail",
+  "Día anterior": "Jour précédent",
+  "Día siguiente": "Jour suivant",
+  "Sin registros para esta consulta.": "Aucun enregistrement pour cette requête.",
+  "No se pudo cargar el detalle.": "Impossible de charger le détail.",
+  "Todas las pendientes": "Toutes les en attente",
+  "Mostrando las primeras filas": "Affichage des premières lignes",
+  "Obra plan.": "Chantier prévu",
+  "Obra real": "Chantier réel",
+  "registros": "enregistrements",
+  "Cargando…": "Chargement…",
+  "con entrada": "avec entrée",
+  "Buscar en todos los campos…": "Rechercher dans tous les champs…",
+  "Ningún resultado para esa búsqueda.": "Aucun résultat pour cette recherche.",
+  "Solo entradas físicas": "Uniquement les pointages physiques"
 }

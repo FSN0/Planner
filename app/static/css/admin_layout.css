@@ -2910,6 +2910,81 @@ html.sidebar-collapsed .admin-main {
   margin-top: 0.15rem;
   line-height: 1.3;
 }
+.dashboard-page .dashboard-kpi--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.dashboard-page .dashboard-kpi--clickable:hover,
+.dashboard-page .dashboard-kpi--clickable:focus {
+  border-color: rgba(34, 197, 94, 0.45);
+  box-shadow: var(--shadow-md, 0 4px 14px rgba(15, 23, 42, 0.08));
+  outline: none;
+}
+.dashboard-page .dashboard-kpi--clickable:focus-visible {
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+}
+.dashboard-kpi-detail-modal .modal-body {
+  padding-top: 0.75rem;
+}
+.dashboard-kpi-detail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+.dashboard-kpi-detail-date-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.dashboard-kpi-detail-date-controls .form-control {
+  width: auto;
+  min-width: 9.5rem;
+}
+.dashboard-kpi-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.dashboard-kpi-detail-search {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: 18rem;
+}
+.dashboard-kpi-detail-search .form-control {
+  width: 100%;
+}
+.dashboard-kpi-detail-scroll .sortable-col {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.dashboard-kpi-detail-scroll .sortable-col .sort-icon {
+  margin-left: 0.3rem;
+  opacity: 0.45;
+  font-size: 0.7rem;
+}
+.dashboard-kpi-detail-scroll .sortable-col.is-sorted .sort-icon,
+.dashboard-kpi-detail-scroll .sortable-col:hover .sort-icon {
+  opacity: 0.9;
+}
+.dashboard-kpi-detail-scroll {
+  max-height: min(60vh, 28rem);
+  overflow: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+.dashboard-kpi-detail-scroll .admin-data-table {
+  font-size: 0.82rem;
+}
+.dashboard-kpi-detail-scroll .admin-data-table th,
+.dashboard-kpi-detail-scroll .admin-data-table td {
+  white-space: nowrap;
+  padding: 0.4rem 0.55rem;
+}
 .dashboard-page .dashboard-main-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));

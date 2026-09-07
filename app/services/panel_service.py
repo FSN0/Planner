@@ -14,7 +14,11 @@ from app.models import (
     CONFLICT_PENDING, LEAVE_STATUS_PENDIENTE, LEAVE_STATUS_APROBADA,
     ROLE_OPERARIO, ROLE_JEFE, ROLE_RRHH, ROLE_ADMIN,
 )
-from app.services.fichaje_estado_service import FICHAJE_INTERVENCION, FICHAJE_OK
+from app.services.fichaje_estado_service import (
+    FICHAJE_INTERVENCION,
+    FICHAJE_OK,
+    label_estado_fichaje,
+)
 from app.utils.timezone_utils import today_local
 
 # Un día se considera "cerrado" cuando el estado es OK (incluye resoluciones de
@@ -22,6 +26,201 @@ from app.utils.timezone_utils import today_local
 # humana (Sobreescrito_RRHH). Sin esta unión, un `Resuelto_Movido` desaparece
 # del KPI de OK y el admin siente que no avanza tras resolver.
 _FICHAJE_ESTADOS_CERRADOS = FICHAJE_OK | FICHAJE_INTERVENCION
+
+
+def _fichajes_fisicos_q(fecha, obra_ids=None):
+    """
+    Entradas reales del día: tienen check_in.
+
+    Excluye ausencias sintéticas (Exento_Ausencia, Ausencia sin entrada),
+    semillas Sin_Registro y cierres multiobra sin fichaje físico.
+    """
+    q = RegistroFichaje.query.filter(
+        RegistroFichaje.fecha == fecha,
+        RegistroFichaje.check_in.isnot(None),
+    )
+    if obra_ids is not None:
+        if not obra_ids:
+            return q.filter(RegistroFichaje.id < 0)
+        q = q.filter(_filtro_auditoria_obras(obra_ids))
+    return q
+
+
+def _parse_kpi_fecha(fecha):
+    if fecha is None or fecha == '':
+        return None
+    if hasattr(fecha, 'year'):
+        return fecha
+    from datetime import date as date_cls
+    if isinstance(fecha, str):
+        return date_cls.fromisoformat(fecha[:10])
+    raise ValueError('fecha inválida')
+
+
+def _fmt_hora(dt):
+    if not dt:
+        return None
+    from app.utils.timezone_utils import format_time
+    return format_time(dt)
+
+
+def _nombre_user(user):
+    if not user:
+        return '—'
+    return f'{(user.name or "").strip()} {(user.lastname or "").strip()}'.strip() or '—'
+
+
+def _obra_nombre(obra):
+    return (obra.nombre if obra else None) or '—'
+
+
+def get_panel_kpi_detail(kind, fecha=None, *, obra_ids=None, limit=500):
+    """
+    Filas que componen un KPI del panel (fichajes / asignaciones / auditoría).
+
+    obra_ids=None → admin (sin filtro de obra).
+    obra_ids=[] → jefe sin obras (vacío).
+    obra_ids=[...] → restringe a esas obras.
+    """
+    today = today_local()
+    kind = (kind or '').strip().lower()
+    if kind not in ('fichajes', 'asignaciones', 'auditoria'):
+        raise ValueError('kind inválido')
+
+    fecha_obj = _parse_kpi_fecha(fecha)
+    if kind in ('fichajes', 'asignaciones') and fecha_obj is None:
+        fecha_obj = today
+
+    scoped = obra_ids is not None
+    if scoped and not obra_ids:
+        return {
+            'kind': kind,
+            'fecha': fecha_obj.isoformat() if fecha_obj else None,
+            'today': today.isoformat(),
+            'total': 0,
+            'truncated': False,
+            'columns': [],
+            'rows': [],
+        }
+
+    if kind == 'fichajes':
+        # Solo fichajes físicos (hay entrada). El KPI del panel usa el mismo criterio.
+        q = (
+            _fichajes_fisicos_q(fecha_obj, obra_ids if scoped else None)
+            .options(
+                joinedload(RegistroFichaje.user),
+                joinedload(RegistroFichaje.obra_planificada),
+                joinedload(RegistroFichaje.obra_real),
+            )
+        )
+        regs = q.order_by(RegistroFichaje.check_in.asc().nullslast(), RegistroFichaje.id).limit(limit + 1).all()
+        truncated = len(regs) > limit
+        regs = regs[:limit]
+        rows = []
+        for r in regs:
+            rows.append({
+                'id': r.id,
+                'user_id': r.user_id,
+                'fecha': r.fecha.isoformat() if r.fecha else None,
+                'nombre': _nombre_user(r.user),
+                'dni': (r.user.dni if r.user else None) or '—',
+                'obra_plan': _obra_nombre(r.obra_planificada),
+                'obra_real': _obra_nombre(r.obra_real),
+                'entrada': _fmt_hora(r.check_in),
+                'salida': _fmt_hora(r.check_out),
+                'estado': label_estado_fichaje(r.estado),
+                'estado_raw': r.estado or '',
+            })
+        return {
+            'kind': kind,
+            'fecha': fecha_obj.isoformat(),
+            'today': today.isoformat(),
+            'total': len(rows),
+            'truncated': truncated,
+            'columns': ['fecha', 'nombre', 'obra_plan', 'obra_real', 'entrada', 'salida', 'estado'],
+            'rows': rows,
+        }
+
+    if kind == 'asignaciones':
+        q = (
+            Asignacion.query.options(
+                joinedload(Asignacion.user).joinedload(User.company_rel),
+                joinedload(Asignacion.obra),
+            )
+            .filter(Asignacion.fecha == fecha_obj)
+        )
+        if scoped:
+            q = q.filter(Asignacion.obra_id.in_(obra_ids))
+        asigs = q.order_by(Asignacion.obra_id, Asignacion.user_id).limit(limit + 1).all()
+        truncated = len(asigs) > limit
+        asigs = asigs[:limit]
+        rows = []
+        for a in asigs:
+            u = a.user
+            if u and u.is_deleted:
+                continue
+            empresa = '—'
+            if u and u.company_rel:
+                empresa = u.company_rel.nombre or '—'
+            rows.append({
+                'id': a.id,
+                'user_id': a.user_id,
+                'fecha': a.fecha.isoformat() if a.fecha else None,
+                'nombre': _nombre_user(u),
+                'dni': (u.dni if u else None) or '—',
+                'obra': _obra_nombre(a.obra),
+                'empresa': empresa,
+            })
+        return {
+            'kind': kind,
+            'fecha': fecha_obj.isoformat(),
+            'today': today.isoformat(),
+            'total': len(rows),
+            'truncated': truncated,
+            'columns': ['nombre', 'dni', 'obra', 'empresa'],
+            'rows': rows,
+        }
+
+    # auditoría pendiente (conflictos abiertos)
+    q = (
+        RegistroFichaje.query.options(
+            joinedload(RegistroFichaje.user),
+            joinedload(RegistroFichaje.obra_planificada),
+            joinedload(RegistroFichaje.obra_real),
+        )
+        .filter(RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Ausencia']))
+    )
+    if fecha_obj is not None:
+        q = q.filter(RegistroFichaje.fecha == fecha_obj)
+    if scoped:
+        q = q.filter(_filtro_auditoria_obras(obra_ids))
+    regs = q.order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.id.desc()).limit(limit + 1).all()
+    truncated = len(regs) > limit
+    regs = regs[:limit]
+    rows = []
+    for r in regs:
+        rows.append({
+            'id': r.id,
+            'user_id': r.user_id,
+            'fecha': r.fecha.isoformat() if r.fecha else None,
+            'nombre': _nombre_user(r.user),
+            'dni': (r.user.dni if r.user else None) or '—',
+            'obra_plan': _obra_nombre(r.obra_planificada),
+            'obra_real': _obra_nombre(r.obra_real),
+            'entrada': _fmt_hora(r.check_in),
+            'salida': _fmt_hora(r.check_out),
+            'estado': label_estado_fichaje(r.estado),
+            'estado_raw': r.estado or '',
+        })
+    return {
+        'kind': kind,
+        'fecha': fecha_obj.isoformat() if fecha_obj else None,
+        'today': today.isoformat(),
+        'total': len(rows),
+        'truncated': truncated,
+        'columns': ['fecha', 'nombre', 'obra_plan', 'obra_real', 'entrada', 'salida', 'estado'],
+        'rows': rows,
+    }
 
 
 def resumen_hoy_plan_vs_ficha(fecha=None, limite=40):
@@ -221,13 +420,13 @@ def get_admin_panel_context():
         .all()
     )
 
-    fichajes_hoy = RegistroFichaje.query.filter_by(fecha=today).all()
+    fichajes_hoy = _fichajes_fisicos_q(today).all()
     fichajes_ok_hoy = sum(
         1 for f in fichajes_hoy if f.estado in _FICHAJE_ESTADOS_CERRADOS
     )
     fichajes_incidente_hoy = sum(
         1 for f in fichajes_hoy
-        if f.estado in ('Conflicto', 'Paracaidista', 'Ausencia')
+        if f.estado in ('Conflicto', 'Paracaidista', 'Ausencia', 'Disputa', 'Retraso')
     )
 
     # —— Gráfico planificación 14 días ——
@@ -244,6 +443,10 @@ def get_admin_panel_context():
         d = chart_start + timedelta(days=i)
         chart_plan_labels.append(d.strftime('%d/%m'))
         chart_plan_values.append(asig_map.get(d, 0))
+
+    chart_plan_dates = [
+        (chart_start + timedelta(days=i)).isoformat() for i in range(14)
+    ]
 
     # —— Obras con más personal hoy ——
     obras_hoy_rows = (
@@ -310,6 +513,7 @@ def get_admin_panel_context():
         'fichajes_total_hoy': len(fichajes_hoy),
         'chart_plan_labels': chart_plan_labels,
         'chart_plan_values': chart_plan_values,
+        'chart_plan_dates': chart_plan_dates,
         'obras_hoy_rows': obras_hoy_rows,
         'recent_obras': recent_obras,
         'recent_logs': recent_logs,
@@ -432,10 +636,7 @@ def get_jefe_panel_context(user):
             .limit(8)
             .all()
         )
-        fichajes_hoy = RegistroFichaje.query.filter(
-            RegistroFichaje.fecha == today,
-            _filtro_auditoria_obras(obra_ids),
-        ).all()
+        fichajes_hoy = _fichajes_fisicos_q(today, obra_ids).all()
         solicitudes_q = Solicitud.query.filter(Solicitud.obra_id.in_(obra_ids))
     else:
         asignaciones_hoy = planificados_hoy = 0
@@ -454,7 +655,7 @@ def get_jefe_panel_context(user):
     )
     fichajes_incidente_hoy = sum(
         1 for f in fichajes_hoy
-        if f.estado in ('Conflicto', 'Paracaidista', 'Ausencia')
+        if f.estado in ('Conflicto', 'Paracaidista', 'Ausencia', 'Disputa', 'Retraso')
     )
 
     solicitudes_por_estado = dict(
@@ -494,6 +695,10 @@ def get_jefe_panel_context(user):
         chart_plan_labels.append(d.strftime('%d/%m'))
         chart_plan_values.append(asig_map.get(d, 0))
 
+    chart_plan_dates = [
+        (chart_start + timedelta(days=i)).isoformat() for i in range(14)
+    ]
+
     recent_obras = [o for o in mis_obras if o.estado == 'En Curso'][:5]
 
     recent_logs = (
@@ -532,6 +737,7 @@ def get_jefe_panel_context(user):
         'fichajes_total_hoy': len(fichajes_hoy),
         'chart_plan_labels': chart_plan_labels,
         'chart_plan_values': chart_plan_values,
+        'chart_plan_dates': chart_plan_dates,
         'obras_hoy_rows': obras_hoy_rows,
         'recent_obras': recent_obras,
         'recent_logs': recent_logs,

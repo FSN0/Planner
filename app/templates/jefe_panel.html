@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260907m">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 {% endblock %}
 
@@ -46,7 +46,10 @@
           <span class="dashboard-kpi-meta">{{ total_obras }} {{ _('asignadas en total') }}</span>
         </div>
       </article>
-      <article class="dashboard-kpi">
+      <article class="dashboard-kpi dashboard-kpi--clickable"
+               role="button" tabindex="0"
+               data-kpi-detail="asignaciones" data-kpi-fecha="{{ today.strftime('%Y-%m-%d') }}"
+               title="{{ _('Ver detalle') }}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--blue"><i class="fas fa-users"></i></div>
         <div>
           <span class="dashboard-kpi-label">{{ _('Personal hoy') }}</span>
@@ -65,7 +68,10 @@
       </article>
       {% endif %}
       {% if muestra_auditoria_fichajes %}
-      <article class="dashboard-kpi {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}">
+      <article class="dashboard-kpi dashboard-kpi--clickable {% if audit_pendientes_total %}dashboard-kpi--alert{% endif %}"
+               role="button" tabindex="0"
+               data-kpi-detail="auditoria" data-kpi-fecha=""
+               title="{{ _('Ver detalle') }}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--red"><i class="fas fa-exclamation-triangle"></i></div>
         <div>
           <span class="dashboard-kpi-label">{{ _('Auditoría pendiente') }}</span>
@@ -73,12 +79,15 @@
           <span class="dashboard-kpi-meta">{{ audit_conflictos }} {{ _('desv.') }} · {{ audit_paracaidistas }} {{ _('sin plan.') }} · {{ audit_ausencias }} {{ _('aus.') }}</span>
         </div>
       </article>
-      <article class="dashboard-kpi">
+      <article class="dashboard-kpi dashboard-kpi--clickable"
+               role="button" tabindex="0"
+               data-kpi-detail="fichajes" data-kpi-fecha="{{ today.strftime('%Y-%m-%d') }}"
+               title="{{ _('Ver detalle') }}">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--green"><i class="fas fa-fingerprint"></i></div>
         <div>
           <span class="dashboard-kpi-label">{{ _('Fichajes hoy') }}</span>
           <span class="dashboard-kpi-value">{{ fichajes_total_hoy }}</span>
-          <span class="dashboard-kpi-meta">{{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} {{ _('incidencias') }}</span>{% endif %}</span>
+          <span class="dashboard-kpi-meta">{{ _('con entrada') }} · {{ fichajes_ok_hoy }} OK{% if fichajes_incidente_hoy %} · <span class="text-danger">{{ fichajes_incidente_hoy }} {{ _('incidencias') }}</span>{% endif %}</span>
         </div>
       </article>
       {% endif %}
@@ -269,10 +278,12 @@
 {% with modal_id='modalTimelineFichaje', modal_title=_('Historial del Fichaje') %}
   {% include 'components/_person_day_timeline_modal.html' %}
 {% endwith %}
+{% include 'components/_panel_kpi_detail_modal.html' %}
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/person_day_timeline.js') }}"></script>
+<script src="{{ url_for('static', filename='js/panel_kpi_detail.js') }}?v=20260907m"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 function dashboardResolverFichaje(id, accion) {
@@ -321,6 +332,37 @@ document.addEventListener('DOMContentLoaded', function() {
       auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
     });
   }
+  if (typeof PanelKpiDetail !== 'undefined') {
+    PanelKpiDetail.init({
+      apiUrl: {{ url_for('jefe.api_panel_kpi_detail')|tojson }},
+      today: {{ today.strftime('%Y-%m-%d')|tojson }},
+      auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
+      canResolveAudit: {{ (puede_resolver_auditoria|default(false))|tojson }},
+      labels: {
+        kind_fichajes: {{ _('Fichajes')|tojson }},
+        kind_asignaciones: {{ _('Hoy en obra')|tojson }},
+        kind_auditoria: {{ _('Auditoría pendiente')|tojson }},
+        loading: {{ _('Cargando…')|tojson }},
+        empty: {{ _('Sin registros para esta consulta.')|tojson }},
+        no_match: {{ _('Ningún resultado para esa búsqueda.')|tojson }},
+        error: {{ _('No se pudo cargar el detalle.')|tojson }},
+        records: {{ _('registros')|tojson }},
+        all_pending: {{ _('Todas las pendientes')|tojson }},
+        truncated: {{ _('Mostrando las primeras filas')|tojson }},
+        physical_only: {{ _('Solo entradas físicas')|tojson }},
+        col_fecha: {{ _('Fecha')|tojson }},
+        col_nombre: {{ _('Nombre')|tojson }},
+        col_dni: {{ _('DNI')|tojson }},
+        col_obra: {{ _('Obra')|tojson }},
+        col_empresa: {{ _('Empresa')|tojson }},
+        col_obra_plan: {{ _('Obra plan.')|tojson }},
+        col_obra_real: {{ _('Obra real')|tojson }},
+        col_entrada: {{ _('Entrada')|tojson }},
+        col_salida: {{ _('Salida')|tojson }},
+        col_estado: {{ _('Estado')|tojson }},
+      },
+    });
+  }
 
   document.querySelectorAll('tr.row-clickable[data-href]').forEach(function(row) {
     row.addEventListener('click', function(e) {
@@ -331,6 +373,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const planLabels = {{ chart_plan_labels|tojson }};
   const planValues = {{ chart_plan_values|tojson }};
+  const planDates = {{ chart_plan_dates|default([])|tojson }};
   const solLabels = {{ chart_solicitud_labels|tojson }};
   const solValues = {{ chart_solicitud_values|tojson }};
 
@@ -367,6 +410,16 @@ document.addEventListener('DOMContentLoaded', function() {
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 10 } } },
           y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } } }
+        },
+        onClick: function(evt, elements) {
+          if (!elements.length || typeof PanelKpiDetail === 'undefined') return;
+          var idx = elements[0].index;
+          var fecha = planDates[idx];
+          if (fecha) PanelKpiDetail.open('asignaciones', fecha);
+        },
+        onHover: function(evt, elements) {
+          var target = evt && evt.native && evt.native.target;
+          if (target) target.style.cursor = elements.length ? 'pointer' : 'default';
         }
       }
     });

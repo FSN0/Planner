@@ -1682,5 +1682,20 @@
   "No hay personal eliminado.": "Não há pessoal eliminado.",
   "Filtrar fecha": "Filtrar data",
   "Baja por": "Baixa por",
-  "Filtrar autor": "Filtrar autor"
+  "Filtrar autor": "Filtrar autor",
+  "Ver detalle": "Ver detalhe",
+  "Día anterior": "Dia anterior",
+  "Día siguiente": "Dia seguinte",
+  "Sin registros para esta consulta.": "Sem registos para esta consulta.",
+  "No se pudo cargar el detalle.": "Não foi possível carregar o detalhe.",
+  "Todas las pendientes": "Todas as pendentes",
+  "Mostrando las primeras filas": "A mostrar as primeiras linhas",
+  "Obra plan.": "Obra plan.",
+  "Obra real": "Obra real",
+  "registros": "registos",
+  "Cargando…": "A carregar…",
+  "con entrada": "com entrada",
+  "Buscar en todos los campos…": "Pesquisar em todos os campos…",
+  "Ningún resultado para esa búsqueda.": "Nenhum resultado para essa pesquisa.",
+  "Solo entradas físicas": "Só entradas físicas"
 }
