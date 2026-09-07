@@ -50,7 +50,7 @@ def _complete_login(user, remember, *, source, success_message=None):
 
     login_user(user, remember=remember)
     session['tenant_id'] = g.current_tenant.id
-    db.session.commit()
+    # register_log no hace commit: hay que persistirlo con el resto del login.
     register_log(
         user_id=user.id,
         category='accesos',
@@ -59,6 +59,7 @@ def _complete_login(user, remember, *, source, success_message=None):
             f"Login exitoso vía {source} desde IP: {request.remote_addr or 'Desconocida'}"
         ),
     )
+    db.session.commit()
     flash(success_message or translate('Inicio de sesión exitoso'), 'success')
 
     destino = _destino_por_rol(user)
@@ -68,6 +69,14 @@ def _complete_login(user, remember, *, source, success_message=None):
     logout_user()
     flash(translate('Tu perfil no tiene acceso a la aplicación.'), 'warning')
     return render_template('login.html', **_login_page_context())
+
+
+def _commit_access_log():
+    """Persiste logs de accesos pendientes (register_log no hace commit)."""
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def _login_page_context():
@@ -284,6 +293,7 @@ def login():
                         f"IP: {request.remote_addr or 'Desconocida'}"
                     ),
                 )
+                _commit_access_log()
                 flash(
                     translate(
                         'Tu perfil no tiene acceso a la aplicación. Contacta con administración.'
@@ -304,8 +314,21 @@ def login():
             from app.services.pin_auth_service import debe_cambiar_pin
             source = 'pin' if not identifier_looks_like_email(identifier) else 'local'
             if source == 'pin' and debe_cambiar_pin(user):
+                from app.utils import register_log
+                user.auth_source_last = source
+                db.session.add(user)
                 login_user(user, remember=remember)
                 session['tenant_id'] = g.current_tenant.id
+                register_log(
+                    user_id=user.id,
+                    category='accesos',
+                    action='Inicio de Sesión',
+                    detail=(
+                        f"Login exitoso vía {source} (cambio de PIN obligatorio) "
+                        f"desde IP: {request.remote_addr or 'Desconocida'}"
+                    ),
+                )
+                db.session.commit()
                 flash(translate('Debes cambiar el PIN antes de continuar.'), 'warning')
                 return redirect(url_for('empleado.cambiar_pin', obligatorio=1))
 
@@ -349,6 +372,7 @@ def login():
                             f"IP: {request.remote_addr or 'Desconocida'}"
                         ),
                     )
+                    _commit_access_log()
                     flash(
                         translate(
                             'Tu perfil no tiene acceso a la aplicación. Contacta con administración.'
@@ -393,6 +417,7 @@ def login():
                 action='Intento fallido de login',
                 detail=detail,
             )
+            _commit_access_log()
         flash(login_error or translate('Credenciales inválidas'), 'danger')
 
     return render_template('login.html', **_login_page_context())

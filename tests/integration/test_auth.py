@@ -40,6 +40,16 @@ class TestLogin:
         
         assert response.status_code == 302
         assert '/admin' in response.location
+
+        from app.models import SystemLog
+        log = (
+            SystemLog.query
+            .filter_by(category='accesos', action='Inicio de Sesión', user_id=user_admin.id)
+            .order_by(SystemLog.id.desc())
+            .first()
+        )
+        assert log is not None
+        assert 'local' in (log.detail or '')
     
     
     def test_login_wrong_password(self, tenant_client, user_admin, tenant_soltec, session):

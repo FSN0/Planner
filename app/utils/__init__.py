@@ -9,7 +9,10 @@ from .timezone_utils import (
 from app.models import db, SystemLog
 
 def register_log(user_id, category, action, detail="", target_user_id=None, target_date=None):
-    """Guarda un registro de auditoría sin invalidar la sesión principal."""
+    """
+    Añade un SystemLog en la sesión actual (savepoint).
+    No hace commit: el caller debe persistir (db.session.commit()).
+    """
     try:
         with db.session.begin_nested():
             db.session.add(SystemLog(
