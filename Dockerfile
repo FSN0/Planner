@@ -1,12 +1,40 @@
-FROM python:3.9-slim-bullseye
+FROM python:3.9-slim-bookworm
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wkhtmltopdf \
-    xfonts-75dpi \
-    xfonts-base \
-    curl \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Debian 11 LTS ended 2026-08-31. The bullseye-security CDN started 404'ing
+# packages that wkhtmltopdf/ffmpeg pull in (qt, mesa, libaom, libswscale),
+# so the image build died on apt-get install. Bookworm still ships curl and
+# ffmpeg; Debian 12 dropped wkhtmltopdf, so we pin the last official .deb.
+ARG TARGETARCH
+ARG WKHTMLTOX_VERSION=0.12.6.1-3
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        ffmpeg \
+        fontconfig \
+        fonts-dejavu-core \
+        libjpeg62-turbo \
+        libx11-6 \
+        libxcb1 \
+        libxext6 \
+        libxrender1 \
+        xfonts-75dpi \
+        xfonts-base \
+    ; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) wkarch=amd64 ;; \
+      arm64) wkarch=arm64 ;; \
+      *) echo "arquitectura no soportada para wkhtmltopdf: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-delay 2 -o /tmp/wkhtmltox.deb \
+      "https://github.com/wkhtmltopdf/packaging/releases/download/${WKHTMLTOX_VERSION}/wkhtmltox_${WKHTMLTOX_VERSION}.bookworm_${wkarch}.deb"; \
+    apt-get install -y --no-install-recommends /tmp/wkhtmltox.deb; \
+    rm -f /tmp/wkhtmltox.deb; \
+    rm -rf /var/lib/apt/lists/*; \
+    wkhtmltopdf --version; \
+    command -v ffmpeg
 
 RUN useradd -m -r appuser
 
