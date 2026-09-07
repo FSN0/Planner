@@ -323,10 +323,13 @@ def _jefe_managed_obra_events(jefe_id, start_date, end_date):
 def get_universal_calendar_events():
     context = request.args.get('context')
     entity_id = request.args.get('id', type=int)
-    mode = request.args.get('mode', 'empleados') # 'empleados' o 'empresas'
+    mode = request.args.get('mode', 'empleados')  # empleados | empresas | obras
     start_str = request.args.get('start')
     end_str = request.args.get('end')
     show_fichajes = request.args.get('show_fichajes') == '1'
+    include_inercia = request.args.get('inercia', '0').strip().lower() in (
+        '1', 'true', 'yes', 'on',
+    )
     if show_fichajes:
         from app.services.fichaje_operario_service import usuario_ve_estado_fichaje
         if not usuario_ve_estado_fichaje(current_user):
@@ -406,6 +409,7 @@ def get_universal_calendar_events():
                 'end_date': a.fecha,
                 'color': color,
                 'obra_id': obra_id_val,
+                'inercia': False,
                 'delete_refs': [{'obra_id': obra_id_val, 'fecha': a.fecha.isoformat()}],
                 'extendedProps': {
                     'type': 'asignacion',
@@ -418,7 +422,32 @@ def get_universal_calendar_events():
                     'ausencia_estado': leave.estado if leave else None,
                 }
             })
-        events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'obra_id']))
+
+        if include_inercia:
+            from app.services.inercia_service import bloques_inercia_rango
+            for bloque in bloques_inercia_rango(
+                [entity_id], start_date, range_end_inclusive,
+            ):
+                oid = bloque['obra_id']
+                obra_in = Obra.query.get(oid)
+                if not obra_in:
+                    continue
+                obra_name = _obra_label(obra_in)
+                obra_color = obra_in.color or "#3b82f6"
+                raw_events.append({
+                    'title': obra_name,
+                    'start_date': bloque['fecha_inicio'],
+                    'end_date': bloque['fecha_fin'],
+                    'color': obra_color,
+                    'obra_id': int(oid),
+                    'inercia': True,
+                    'extendedProps': {
+                        'type': 'asignacion',
+                        'obra_id': int(oid),
+                        'inercia': True,
+                    }
+                })
+        events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'obra_id', 'inercia']))
 
         if worker and worker.role == ROLE_JEFE:
             events.extend(_jefe_managed_obra_events(worker.id, start_date, end_date))
@@ -586,6 +615,7 @@ def get_universal_calendar_events():
                         return {
                             'Correcto': 'Correcto',
                             'Correcto_Automatico': 'Correcto (automático)',
+                            'Cambio_Tajo': 'Cambio de tajo',
                             'Resuelto_Asignado': 'Correcto (asignado por admin)',
                             'Resuelto_Movido': 'Correcto (movido por admin)',
                             'Resuelto_Dividido': 'Correcto (dividido por admin)',
@@ -752,6 +782,7 @@ def get_universal_calendar_events():
                     'end_date': a.fecha,
                     'color': overlay_color or c_color,
                     'worker_id': worker.id,
+                    'inercia': False,
                     'extendedProps': {
                         'type': 'asignacion',
                         'worker_id': worker.id,
@@ -761,7 +792,40 @@ def get_universal_calendar_events():
                         'ausencia_tipo': leave.tipo if leave else None,
                     }
                 })
-            events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'worker_id']))
+
+            if include_inercia:
+                from app.services.inercia_service import bloques_inercia_rango
+                bloques_in = bloques_inercia_rango(
+                    None, start_date, range_end_inclusive, obra_ids=[entity_id],
+                )
+                extra_uids = {b['user_id'] for b in bloques_in}
+                extra_users = {
+                    u.id: u for u in User.query.filter(User.id.in_(extra_uids)).all()
+                } if extra_uids else {}
+                for bloque in bloques_in:
+                    worker = extra_users.get(bloque['user_id'])
+                    if not worker:
+                        continue
+                    if worker.company_rel:
+                        c_name, c_color = worker.company_rel.nombre, worker.company_rel.color
+                    else:
+                        c_name, c_color = "Sin Empresa", "#10b981"
+                    base_title = f"{worker.name} {worker.lastname} ({c_name})"
+                    raw_events.append({
+                        'title': base_title,
+                        'start_date': bloque['fecha_inicio'],
+                        'end_date': bloque['fecha_fin'],
+                        'color': c_color,
+                        'worker_id': worker.id,
+                        'inercia': True,
+                        'extendedProps': {
+                            'type': 'asignacion',
+                            'worker_id': worker.id,
+                            'inercia': True,
+                        }
+                    })
+
+            events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'worker_id', 'inercia']))
         
         elif mode == 'empresas':
             events.extend(procesar_bloques_empresa(asignaciones, leaves_by_user=leaves_idx))
@@ -817,37 +881,42 @@ def get_universal_calendar_events():
             {a.user_id for a in asignaciones}, start_date, range_end_inclusive
         )
 
-        raw_events = []
-        for a in asignaciones:
-            worker = getattr(a, 'user_obj', getattr(a, 'user', None))
-            if not worker and a.user_id: worker = User.query.get(a.user_id)
-            if not worker: continue
+        if mode == 'empleados':
+            raw_events = []
+            for a in asignaciones:
+                worker = getattr(a, 'user_obj', getattr(a, 'user', None))
+                if not worker and a.user_id: worker = User.query.get(a.user_id)
+                if not worker: continue
 
-            obra = a.obra
-            if not obra and a.obra_id: obra = Obra.query.get(a.obra_id)
-            
-            obra_name = _obra_label(obra, fallback='Sin Obra')
-            obra_color = obra.color if obra else "#3b82f6"
-            base_title = f"{worker.name} {worker.lastname} ({obra_name})"
-            leave = leave_covering(leaves_idx.get(worker.id, []), a.fecha)
-            title, overlay_color, is_overlay = apply_leave_overlay_title(
-                base_title, leave, name_first=True
-            )
+                obra = a.obra
+                if not obra and a.obra_id: obra = Obra.query.get(a.obra_id)
 
-            raw_events.append({
-                'title': title,
-                'start_date': a.fecha,
-                'end_date': a.fecha,
-                'color': overlay_color or obra_color,
-                'extendedProps': {
-                    'type': 'asignacion',
+                obra_name = _obra_label(obra, fallback='Sin Obra')
+                obra_color = obra.color if obra else "#3b82f6"
+                base_title = f"{worker.name} {worker.lastname} ({obra_name})"
+                leave = leave_covering(leaves_idx.get(worker.id, []), a.fecha)
+                title, overlay_color, is_overlay = apply_leave_overlay_title(
+                    base_title, leave, name_first=True
+                )
+
+                raw_events.append({
+                    'title': title,
+                    'start_date': a.fecha,
+                    'end_date': a.fecha,
+                    'color': overlay_color or obra_color,
                     'worker_id': worker.id,
                     'obra_id': obra.id if obra else 0,
-                    'en_ausencia': is_overlay,
-                }
-            })
-        
-        events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))
+                    'extendedProps': {
+                        'type': 'asignacion',
+                        'worker_id': worker.id,
+                        'obra_id': obra.id if obra else 0,
+                        'en_ausencia': is_overlay,
+                    }
+                })
+
+            events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'worker_id', 'obra_id']))
+        else:
+            events.extend(procesar_bloques_obra(asignaciones, leaves_by_user=leaves_idx))
 
         # --- AÑADIR SOLICITUDES ---
         solicitudes = Solicitud.query.filter(
@@ -1455,47 +1524,163 @@ def procesar_bloques_empresa(asignaciones, leaves_by_user=None):
         
     return final_events
 
-def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color, workers_list, en_ausencia=False):
+def _group_event_order(group_id):
+    """Misma obra/empresa → mismo order, para que FullCalendar las alinee en la misma fila."""
+    try:
+        return int(group_id)
+    except (TypeError, ValueError):
+        return 0
+
+
+def crear_evento_grupo(
+    name, group_id, start_date, end_date, count, color, workers_list,
+    *, event_type, id_key, extra_props=None, en_ausencia=False, people_label='operarios',
+):
     from app.services.leave_service import LEAVE_COLOR_APROBADA
 
     end_date_exclusive = (end_date + timedelta(days=1)).strftime("%Y-%m-%d")
-    
+
     if en_ausencia:
         color = LEAVE_COLOR_APROBADA
     elif not color or color.strip() == "":
         color = "#f3f4f6"
-        
+
     text_color = "#ffffff"
     try:
         hex_c = color.lstrip('#')
         if len(hex_c) == 6:
             r, g, b = int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
             if ((r * 299) + (g * 587) + (b * 114)) / 1000 >= 128:
-                text_color = "#111827" 
+                text_color = "#111827"
     except Exception:
-        pass 
-        
+        pass
+
     html_list = "".join([f"<li>{w}</li>" for w in workers_list])
-    tooltip_html = f"<div style='text-align:left;'><strong style='border-bottom: 1px solid #ccc; padding-bottom: 3px; display: block; margin-bottom: 5px;'>{empresa} ({count} operarios)</strong><ul style='padding-left:15px; margin-bottom:0; font-size: 0.85em;'>{html_list}</ul></div>"
-    
-    title = f"({count}) {empresa}"
+    tooltip_html = (
+        f"<div style='text-align:left;'>"
+        f"<strong style='border-bottom: 1px solid #ccc; padding-bottom: 3px; display: block; margin-bottom: 5px;'>"
+        f"{name} ({count} {people_label})</strong>"
+        f"<ul style='padding-left:15px; margin-bottom:0; font-size: 0.85em;'>{html_list}</ul></div>"
+    )
+
+    title = f"({count}) {name}"
     if en_ausencia:
         title = f"Ausencia · {title}"
+
+    extended = {
+        'type': event_type,
+        id_key: group_id,
+        'tooltipContent': tooltip_html,
+        'en_ausencia': en_ausencia,
+        'lane': _group_event_order(group_id),
+    }
+    if extra_props:
+        extended.update(extra_props)
 
     return {
         'title': title,
         'start': start_date.strftime("%Y-%m-%d"),
         'end': end_date_exclusive,
-        'backgroundColor': color,       
-        'textColor': text_color,        
-        'extendedProps': {
-            'type': 'empresa_group',
-            'empresa': empresa,
-            'empresa_id': empresa_id,
-            'tooltipContent': tooltip_html,
-            'en_ausencia': en_ausencia,
-        }
+        'backgroundColor': color,
+        'textColor': text_color,
+        'order': _group_event_order(group_id),
+        'extendedProps': extended,
     }
+
+
+def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color, workers_list, en_ausencia=False):
+    return crear_evento_grupo(
+        empresa, empresa_id, start_date, end_date, count, color, workers_list,
+        event_type='empresa_group',
+        id_key='empresa_id',
+        extra_props={'empresa': empresa},
+        en_ausencia=en_ausencia,
+    )
+
+
+def procesar_bloques_obra(asignaciones, leaves_by_user=None):
+    """Agrupa las asignaciones de una empresa por obra; el tooltip lista el personal."""
+    from app.services.leave_service import leave_covering, leave_overlay_meta
+
+    leaves_by_user = leaves_by_user or {}
+    day_counts = defaultdict(lambda: defaultdict(int))
+    day_workers = defaultdict(lambda: defaultdict(list))
+    day_leave_flags = defaultdict(lambda: defaultdict(bool))
+    names = {}
+    colors = {}
+
+    for a in asignaciones:
+        worker = getattr(a, 'user_obj', getattr(a, 'user', None))
+        if not worker and a.user_id:
+            worker = User.query.get(a.user_id)
+        if not worker:
+            continue
+
+        obra = getattr(a, 'obra', None)
+        if not obra and a.obra_id:
+            obra = Obra.query.get(a.obra_id)
+        obra_id = obra.id if obra else (a.obra_id or 0)
+        obra_name = _obra_label(obra, fallback='Sin Obra')
+        obra_color = obra.color if obra else "#3b82f6"
+
+        leave = leave_covering(leaves_by_user.get(worker.id, []), a.fecha)
+        meta = leave_overlay_meta(leave)
+        label = f"{worker.name} {worker.lastname}".strip()
+        if meta:
+            label = f"{label} · {meta['label_prefix']}"
+            day_leave_flags[obra_id][a.fecha] = True
+
+        day_counts[obra_id][a.fecha] += 1
+        if label not in day_workers[obra_id][a.fecha]:
+            day_workers[obra_id][a.fecha].append(label)
+        names[obra_id] = obra_name
+        colors[obra_id] = obra_color
+
+    final_events = []
+    for obra_id, days in day_counts.items():
+        sorted_dates = sorted(days.keys())
+        if not sorted_dates:
+            continue
+
+        current_start = sorted_dates[0]
+        current_count = days[current_start]
+        current_workers = sorted(day_workers[obra_id][current_start])
+        current_has_leave = day_leave_flags[obra_id].get(current_start, False)
+        last_date = current_start
+
+        for date_obj in sorted_dates[1:]:
+            workers_today = sorted(day_workers[obra_id][date_obj])
+            has_leave_today = day_leave_flags[obra_id].get(date_obj, False)
+
+            if (
+                (date_obj - last_date).days > 1
+                or days[date_obj] != current_count
+                or workers_today != current_workers
+                or has_leave_today != current_has_leave
+            ):
+                final_events.append(crear_evento_grupo(
+                    names[obra_id], obra_id, current_start, last_date, current_count,
+                    colors[obra_id], current_workers,
+                    event_type='obra_group', id_key='obra_id',
+                    en_ausencia=current_has_leave,
+                    people_label='empleados',
+                ))
+                current_start = date_obj
+                current_count = days[date_obj]
+                current_workers = workers_today
+                current_has_leave = has_leave_today
+
+            last_date = date_obj
+
+        final_events.append(crear_evento_grupo(
+            names[obra_id], obra_id, current_start, last_date, current_count,
+            colors[obra_id], current_workers,
+            event_type='obra_group', id_key='obra_id',
+            en_ausencia=current_has_leave,
+            people_label='empleados',
+        ))
+
+    return final_events
 
 @api_bp.route('/person-day-timeline/<int:user_id>/<string:fecha_str>', methods=['GET'])
 @login_required

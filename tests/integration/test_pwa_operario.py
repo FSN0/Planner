@@ -10,7 +10,7 @@
 #   3. El trabajador ve sus horas y solo las suyas.
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -369,6 +369,21 @@ class TestObras:
         html = operario_conectado.get('/fichaje/fichar').get_data(as_text=True)
 
         assert 'Tu planificación de hoy' in html
+        assert 'Hoy estás planificado en' in html
+        assert obra_activa.nombre in html
+
+    def test_la_casa_de_ayer_aparece_como_planificada(
+        self, pwa, operario_conectado, obra_activa, user_operario
+    ):
+        pwa.add(Asignacion(
+            obra_id=obra_activa.id,
+            user_id=user_operario.id,
+            fecha=date.today() - timedelta(days=1),
+        ))
+        pwa.commit()
+
+        html = operario_conectado.get('/fichaje/fichar').get_data(as_text=True)
+        assert 'Hoy estás planificado en' in html
         assert obra_activa.nombre in html
 
     def test_sin_planificacion_se_avisa_pero_se_deja_fichar(
@@ -392,8 +407,53 @@ class TestObras:
         registro = RegistroFichaje.query.filter_by(
             user_id=user_operario.id, fecha=date.today()
         ).one()
-        assert registro.estado == 'Paracaidista'
+        assert registro.estado == 'Correcto_Automatico'
         assert registro.obra_real_id == obra_activa.id
+
+    def test_fichar_en_casa_de_ayer_es_inercia(
+        self, pwa, operario_conectado, obra_activa, user_operario
+    ):
+        pwa.add(Asignacion(
+            obra_id=obra_activa.id,
+            user_id=user_operario.id,
+            fecha=date.today() - timedelta(days=1),
+        ))
+        pwa.commit()
+
+        assert _fichar(
+            operario_conectado, EVENTO_ENTRADA, obra_id=obra_activa.id
+        ).status_code == 200
+        registro = RegistroFichaje.query.filter_by(
+            user_id=user_operario.id, fecha=date.today()
+        ).one()
+        assert registro.estado == 'Correcto_Automatico'
+        assert registro.obra_real_id == obra_activa.id
+
+    def test_fichar_fuera_de_casa_es_cambio_de_tajo(
+        self, pwa, operario_conectado, obra_activa, user_operario
+    ):
+        otra = Obra(
+            nombre='Tajo nuevo',
+            estado='En Curso',
+            codigo='TAJO-NUEVO',
+        )
+        pwa.add(otra)
+        pwa.add(Asignacion(
+            obra_id=obra_activa.id,
+            user_id=user_operario.id,
+            fecha=date.today() - timedelta(days=1),
+        ))
+        pwa.commit()
+
+        assert _fichar(
+            operario_conectado, EVENTO_ENTRADA, obra_id=otra.id
+        ).status_code == 200
+        registro = RegistroFichaje.query.filter_by(
+            user_id=user_operario.id, fecha=date.today()
+        ).one()
+        assert registro.estado == 'Cambio_Tajo'
+        assert registro.obra_planificada_id == obra_activa.id
+        assert registro.obra_real_id == otra.id
 
     def test_fichar_mueve_si_ya_estaba_en_otra_obra(
         self, pwa, operario_conectado, obra_activa, user_operario

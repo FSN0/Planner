@@ -76,6 +76,11 @@ def _format_fichaje_log_detail(
         )
     elif estado == 'Paracaidista':
         intro = f"El operario fichó en {obra_label} sin planificación en esa obra."
+    elif estado == 'Cambio_Tajo' and obra_plan_label and obra_plan_label != obra_label:
+        intro = (
+            f"El operario cambió de tajo: fichó en {obra_label} "
+            f"(casa anterior: {obra_plan_label})."
+        )
     else:
         intro = f"El operario fichó en {obra_label}."
     detail = (
@@ -220,6 +225,41 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             ))
             db.session.flush()
 
+    from app.services.inercia_service import usuarios_esperados_sin_hecho
+    for uid, oid in usuarios_esperados_sin_hecho(fecha_obj).items():
+        registro = RegistroFichaje.query.filter_by(
+            user_id=uid,
+            fecha=fecha_obj,
+            obra_planificada_id=oid,
+        ).first()
+        if registro:
+            continue
+        ya_en_obra = RegistroFichaje.query.filter(
+            RegistroFichaje.user_id == uid,
+            RegistroFichaje.fecha == fecha_obj,
+            RegistroFichaje.obra_real_id == oid,
+        ).first()
+        if ya_en_obra:
+            if not ya_en_obra.obra_planificada_id:
+                ya_en_obra.obra_planificada_id = oid
+            continue
+        estado_ini = (
+            'Exento_Ausencia'
+            if user_has_approved_leave(uid, fecha_obj)
+            else 'Sin_Registro'
+        )
+        db.session.add(RegistroFichaje(
+            user_id=uid,
+            fecha=fecha_obj,
+            obra_planificada_id=oid,
+            estado=estado_ini,
+            notas_resolucion=(
+                'Exento: ausencia planificada aprobada (Odoo/manual).'
+                if estado_ini == 'Exento_Ausencia' else None
+            ),
+        ))
+        db.session.flush()
+
     obras_por_usuario_odoo = {}
     for f in fichajes_unicos.values():
         if f['odoo_user'] not in obras_por_usuario_odoo:
@@ -284,9 +324,6 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
 
     db.session.flush()
 
-    conf_primer_fichaje = ConfiguracionGlobal.query.filter_by(clave='aceptar_primer_fichaje').first()
-    aceptar_primer_fichaje = conf_primer_fichaje.valor == 'True' if conf_primer_fichaje else True
-
     for f in fichajes_unicos.values():
         if not f['odoo_obra']:
             continue
@@ -316,47 +353,29 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             nuevo_estado = 'Correcto'
             nuevo_plan_id = local_obra.id
         else:
-            # ¿Tenía plan en otra obra hoy? → desviación (Conflicto).
-            # Sin plan en todo el día → Paracaidista (o inercia Correcto_Automatico).
-            plan_otro_hoy = Asignacion.query.filter(
+            from app.services.inercia_service import (
+                aceptar_primer_fichaje as _aceptar_primer,
+                casa_en_fecha,
+                clasificar_entrada_fichaje,
+            )
+            otras_hoy = Asignacion.query.filter(
                 Asignacion.user_id == local_user.id,
                 Asignacion.fecha == fecha_obj,
                 Asignacion.obra_id != local_obra.id,
-            ).first()
-
-            ultimo_reg = RegistroFichaje.query.filter(
-                RegistroFichaje.user_id == local_user.id,
-                RegistroFichaje.fecha < fecha_obj,
-                RegistroFichaje.estado.in_([
-                    'Correcto', 'Correcto_Automatico',
-                    'Resuelto_Movido', 'Resuelto_Asignado', 'Resuelto_Dividido',
-                ]),
-            ).order_by(RegistroFichaje.fecha.desc()).first()
-
-            ultima_obra_id = ultimo_reg.obra_real_id if ultimo_reg else None
-
-            if plan_otro_hoy:
-                # Había cuadrante en otra obra: es desviación, no "sin planificar".
-                nuevo_estado = 'Conflicto'
-                nuevo_plan_id = plan_otro_hoy.obra_id
-                crear_asignacion_magica = False
-            elif ultima_obra_id == local_obra.id:
-                nuevo_estado = 'Correcto_Automatico'
-                nuevo_plan_id = local_obra.id
-                crear_asignacion_magica = True
-            elif ultima_obra_id is None:
-                if aceptar_primer_fichaje:
-                    nuevo_estado = 'Correcto_Automatico'
-                    nuevo_plan_id = local_obra.id
-                    crear_asignacion_magica = True
-                else:
-                    nuevo_estado = 'Paracaidista'
-                    nuevo_plan_id = None
-                    crear_asignacion_magica = False
-            else:
-                nuevo_estado = 'Paracaidista'
-                nuevo_plan_id = None
-                crear_asignacion_magica = False
+            ).all()
+            casa_id = None
+            if not otras_hoy:
+                casa_id = casa_en_fecha(local_user.id, fecha_obj)
+            clasif = clasificar_entrada_fichaje(
+                obra_fichada_id=local_obra.id,
+                planificado_en_obra_fichada=False,
+                otras_obras_planificadas_ids=[a.obra_id for a in otras_hoy],
+                casa_obra_id=casa_id,
+                aceptar_primer_fichaje=_aceptar_primer(),
+            )
+            nuevo_estado = clasif.estado
+            nuevo_plan_id = clasif.obra_planificada_id
+            crear_asignacion_magica = clasif.materializar
 
         registro_vacio_exacto = RegistroFichaje.query.filter(
             RegistroFichaje.user_id == local_user.id,

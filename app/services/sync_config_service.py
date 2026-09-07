@@ -1,9 +1,167 @@
 """Configuración y planificación de sincronización Odoo."""
+import json
 from datetime import datetime, timedelta
 
 from app import db
 from app.models import ConfiguracionGlobal
 from app.utils.timezone_utils import now_local, today_local
+
+# Lista de fábrica (Soltec). El tenant puede ampliarla o cambiar el rol en Configurar.
+DEFAULT_EMPLEADOS_DEPARTAMENTOS = [
+    'Administración G', 'Administración S', 'Compras', 'Dirección',
+    'Encargados/Of.1ª', 'Estudios clima', 'Estudios electricidad',
+    'JO clima', 'JO electricidad', 'Oficiales 2ª/3ª', 'Producción clima',
+    'Producción electricidad',
+]
+WILDCARD_TODOS_DEPARTAMENTOS = '*'
+EMPLEADOS_IMPORT_ROLES = ('operario', 'jefe_obra', 'laboral', 'admin')
+
+
+def infer_odoo_department_role(label):
+    """Rol de fábrica a partir del nombre (solo para migrar listas antiguas)."""
+    d = (label or '').lower()
+    if 'jo ' in d or d.startswith('jo ') or 'jefe de obra' in d:
+        return 'jefe_obra'
+    return 'operario'
+
+
+def default_empleados_departamento_map():
+    return [
+        {'department': name, 'role': infer_odoo_department_role(name)}
+        for name in DEFAULT_EMPLEADOS_DEPARTAMENTOS
+    ]
+
+
+def _normalize_import_role(role):
+    r = (role or '').strip().lower().replace(' ', '_')
+    aliases = {
+        'jefe': 'jefe_obra',
+        'jefedeobra': 'jefe_obra',
+        'oficina': 'laboral',
+        'rrhh': 'laboral',
+        'administrador': 'admin',
+        'administracion': 'admin',
+        'administración': 'admin',
+    }
+    r = aliases.get(r, r)
+    if r in EMPLEADOS_IMPORT_ROLES:
+        return r
+    return 'operario'
+
+
+def _row_from_unknown(item):
+    if isinstance(item, dict):
+        dept = str(
+            item.get('department')
+            or item.get('departamento')
+            or item.get('name')
+            or ''
+        ).strip()
+        if not dept:
+            return None
+        role = item.get('role') or item.get('rol') or infer_odoo_department_role(dept)
+        return {'department': dept, 'role': _normalize_import_role(role)}
+    dept = str(item).strip()
+    if not dept:
+        return None
+    if '=' in dept:
+        left, right = dept.split('=', 1)
+        left, right = left.strip(), right.strip()
+        if left:
+            return {'department': left, 'role': _normalize_import_role(right)}
+    return {'department': dept, 'role': infer_odoo_department_role(dept)}
+
+
+def parse_empleados_departamento_map(raw, *, use_defaults_if_empty=True):
+    items = []
+    if isinstance(raw, list):
+        items = raw
+    else:
+        text = str(raw or '').replace('\r\n', '\n').strip()
+        if text:
+            if text.startswith('['):
+                try:
+                    data = json.loads(text)
+                    if isinstance(data, list):
+                        items = data
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    items = []
+            if not items:
+                if '\n' in text:
+                    items = text.split('\n')
+                elif ';' in text:
+                    items = text.split(';')
+                else:
+                    items = [text]
+    rows = []
+    for item in items:
+        row = _row_from_unknown(item)
+        if row:
+            rows.append(row)
+    if rows:
+        return rows
+    if use_defaults_if_empty:
+        return default_empleados_departamento_map()
+    return []
+
+
+def serialize_empleados_departamento_map(rows):
+    clean = []
+    for row in rows or []:
+        dept = str((row or {}).get('department') or '').strip()
+        if not dept:
+            continue
+        clean.append({
+            'department': dept,
+            'role': _normalize_import_role((row or {}).get('role')),
+        })
+    return json.dumps(clean, ensure_ascii=False)
+
+
+def parse_empleados_departamentos(raw, *, use_defaults_if_empty=True):
+    return [
+        row['department']
+        for row in parse_empleados_departamento_map(
+            raw, use_defaults_if_empty=use_defaults_if_empty
+        )
+    ]
+
+
+def resolve_departamento_role(department, mapping):
+    """Rol configurado para ese departamento Odoo, o None si no entra."""
+    mapping = mapping or []
+    dept = (department or '').lower()
+    wildcard_role = None
+    best_role = None
+    best_len = -1
+    for row in mapping:
+        if isinstance(row, str):
+            label, role = row, infer_odoo_department_role(row)
+        else:
+            label = str((row or {}).get('department') or '').strip()
+            role = _normalize_import_role((row or {}).get('role'))
+        if not label:
+            continue
+        if label == WILDCARD_TODOS_DEPARTAMENTOS:
+            wildcard_role = role
+            continue
+        if label.lower() in dept and len(label) > best_len:
+            best_role = role
+            best_len = len(label)
+    if best_role:
+        return best_role
+    return wildcard_role
+
+
+def department_is_allowed(department, allowed):
+    return resolve_departamento_role(department, allowed) is not None
+
+
+def empleados_departamentos_as_text(lines=None):
+    if lines and isinstance(lines[0], dict):
+        lines = [r['department'] for r in lines]
+    return '\n'.join(lines if lines is not None else DEFAULT_EMPLEADOS_DEPARTAMENTOS)
+
 
 DEFAULTS = {
     'sync_obras_enabled': 'true',
@@ -33,6 +191,9 @@ DEFAULTS = {
     'sync_last_fichajes_retro_date': '',
     'sync_last_vehiculos_at': '',
     'sync_last_vehiculos_retro_date': '',
+    'sync_empleados_departamentos': serialize_empleados_departamento_map(
+        default_empleados_departamento_map()
+    ),
 }
 
 SYNC_MODULES = [
@@ -146,6 +307,15 @@ class SyncConfigService:
             cfg['obras_enabled'] or cfg['empleados_enabled']
             or cfg['subcontratas_enabled'] or cfg['ausencias_enabled']
         )
+        cfg['empleados_departamento_map'] = parse_empleados_departamento_map(
+            cfg.get('sync_empleados_departamentos')
+        )
+        cfg['empleados_departamentos'] = [
+            row['department'] for row in cfg['empleados_departamento_map']
+        ]
+        cfg['empleados_departamentos_text'] = empleados_departamentos_as_text(
+            cfg['empleados_departamentos']
+        )
         return cfg
 
     @classmethod
@@ -185,7 +355,28 @@ class SyncConfigService:
                 val = max(lo, min(hi, int(data[field])))
                 cls._set_raw(key, val)
 
+        if 'sync_empleados_departamentos' in data:
+            raw = data.get('sync_empleados_departamentos')
+            rows = parse_empleados_departamento_map(raw, use_defaults_if_empty=False)
+            cls._set_raw(
+                'sync_empleados_departamentos',
+                serialize_empleados_departamento_map(rows),
+            )
+
         db.session.commit()
+
+    @classmethod
+    def get_empleados_departamentos(cls):
+        return [
+            row['department']
+            for row in cls.get_empleados_departamento_map()
+        ]
+
+    @classmethod
+    def get_empleados_departamento_map(cls):
+        return parse_empleados_departamento_map(
+            cls._get_raw('sync_empleados_departamentos')
+        )
 
     @classmethod
     def mark_master_sync_done(cls):

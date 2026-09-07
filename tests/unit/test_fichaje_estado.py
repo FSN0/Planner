@@ -69,6 +69,11 @@ def test_sobreescrito_mas_sin_registro_es_violeta():
     ) == COLOR_VIOLETA
 
 
+def test_cambio_tajo_es_verde():
+    assert estado_fichaje_agregado(['Cambio_Tajo']) == 'Cambio_Tajo'
+    assert color_fichaje_agregado(['Cambio_Tajo']) == COLOR_VERDE
+
+
 def test_fichajes_agregados_por_fecha(session, tenant_soltec, app):
     from datetime import date
     from sqlalchemy import text

@@ -151,11 +151,8 @@ def get_admin_panel_context():
         .count()
     )
 
-    planificados_hoy = (
-        db.session.query(func.count(distinct(Asignacion.user_id)))
-        .filter(Asignacion.fecha == today)
-        .scalar() or 0
-    )
+    from app.services.inercia_service import ids_ocupados_en_fecha
+    planificados_hoy = len(ids_ocupados_en_fecha(today))
     asignaciones_hoy = Asignacion.query.filter_by(fecha=today).count()
     libres_hoy = max(0, operarios_activos - planificados_hoy)
     ocupacion_pct = round((planificados_hoy / operarios_activos * 100), 1) if operarios_activos else 0
@@ -391,15 +388,13 @@ def get_jefe_panel_context(user):
     total_obras = len(mis_obras)
 
     if obra_ids:
-        asignaciones_hoy = Asignacion.query.filter(
-            Asignacion.fecha == today,
-            Asignacion.obra_id.in_(obra_ids),
-        ).count()
-        planificados_hoy = (
-            db.session.query(func.count(distinct(Asignacion.user_id)))
-            .filter(Asignacion.fecha == today, Asignacion.obra_id.in_(obra_ids))
-            .scalar() or 0
-        )
+        from app.services.inercia_service import presencias_en_fecha
+        presencias = [
+            p for p in presencias_en_fecha(today)
+            if p['obra_id'] in set(obra_ids)
+        ]
+        asignaciones_hoy = len(presencias)
+        planificados_hoy = len({p['user_id'] for p in presencias})
         obras_hoy_rows = (
             db.session.query(Obra, func.count(Asignacion.id))
             .join(Asignacion, Asignacion.obra_id == Obra.id)

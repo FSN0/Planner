@@ -1581,5 +1581,16 @@
   "Continuar": "Continuar",
   "Menú": "Menu",
   "Abrir menú": "Abrir menu",
-  "Cerrar menú": "Fechar menu"
+  "Cerrar menú": "Fechar menu",
+  "Cambio de tajo": "Mudança de tajo",
+  "Sigue": "Continua",
+  "Mostrar inercia": "Mostrar inércia",
+  "Ocultar inercia": "Ocultar inércia",
+  "Quien sigue en el tajo sin asignación de hoy": "Quem continua no tajo sem atribuição de hoje",
+  "Sigue en esta obra (inercia)": "Continua nesta obra (inércia)",
+  "Sigue en esta obra hasta que lo muevan": "Continua nesta obra até o moverem",
+  "Asignar de verdad": "Tornar atribuição real",
+  "Enter la convierte en asignación": "Enter transforma-a em atribuição",
+  "Inercia convertida en asignación": "Inércia convertida em atribuição",
+  "El trabajador queda libre a partir de ese día.": "O trabalhador fica livre a partir desse dia."
 }

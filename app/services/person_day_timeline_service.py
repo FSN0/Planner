@@ -480,6 +480,11 @@ def _format_registro_fichaje_detail(reg, obra):
             f"El operario fichó en {obra_label} "
             f"(tenía planificado en {obra_plan_label})."
         )
+    elif reg.estado == "Cambio_Tajo" and obra_plan_label and obra_plan_label != obra_label:
+        intro = (
+            f"El operario cambió de tajo: fichó en {obra_label} "
+            f"(casa anterior: {obra_plan_label})."
+        )
     elif reg.estado == "Paracaidista":
         intro = f"El operario fichó en {obra_label} sin planificación en esa obra."
     else:

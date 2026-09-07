@@ -3,6 +3,27 @@
 $(document).ready(function() {
     const t = window.SP_T || function (key) { return key; };
 
+    function applyKanbanInerciaPref() {
+        var show = window.SPInerciaPref ? window.SPInerciaPref.get('tablero', true) : true;
+        var root = document.getElementById('kanbanContainer');
+        if (root) root.classList.toggle('kanban-hide-inercia', !show);
+        var btn = document.getElementById('btnToggleInerciaKanban');
+        if (!btn) return;
+        btn.classList.toggle('is-on', show);
+        btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+        btn.setAttribute('title', show ? t('Ocultar inercia') : t('Mostrar inercia'));
+    }
+    applyKanbanInerciaPref();
+    var btnKanbanInercia = document.getElementById('btnToggleInerciaKanban');
+    if (btnKanbanInercia) {
+        btnKanbanInercia.addEventListener('click', function () {
+            var show = window.SPInerciaPref ? window.SPInerciaPref.get('tablero', true) : true;
+            show = !show;
+            if (window.SPInerciaPref) window.SPInerciaPref.set('tablero', show);
+            applyKanbanInerciaPref();
+        });
+    }
+
     // =========================================================================
     // 0. CONFIGURACIÓN CENTRALIZADA Y VARIABLES GLOBALES
     // =========================================================================
@@ -192,12 +213,42 @@ $(document).ready(function() {
         });
     }
 
+    function refreshLibresCount() {
+        const $body = $('#list-libres-body');
+        if (!$body.length) return;
+        const n = $body.children('.worker-chip').filter(function () {
+            return !$(this).find('.fa-briefcase').length;
+        }).length;
+        $('.kanban-libres-count-badge').text(n);
+        $('.kanban-libres-stat--free strong').text(n);
+    }
+
+    function expandLibresPanel() {
+        const $panel = $('.kanban-libres-panel');
+        if (!$panel.length) return;
+        $panel.addClass('is-expanded');
+        const $toggle = $('.kanban-libres-toggle');
+        $toggle.attr('aria-expanded', 'true');
+        $toggle.find('.kanban-libres-toggle-label').text(t('Ocultar'));
+    }
+
     function moveChipToObra($chip, $targetCol) {
         if (!$chip || !$chip.length || !$targetCol || !$targetCol.length) return;
-        $chip.detach().appendTo($targetCol);
+        $chip.detach();
+        if (String($targetCol.data('obra-id')) === '0') {
+            $chip.prependTo($targetCol);
+            expandLibresPanel();
+        } else {
+            $chip.appendTo($targetCol);
+        }
         $chip.css({'transition': 'background-color 0.5s', 'background-color': '#d4edda'});
+        if (String($targetCol.data('obra-id')) !== '0') {
+            $chip.removeClass('worker-chip--inercia').removeAttr('data-inercia');
+            $chip.find('.worker-chip-inercia-badge').remove();
+        }
         setTimeout(function () { $chip.css('background-color', ''); }, 1000);
         refreshObraWorkerCounts();
+        refreshLibresCount();
     }
 
     const kanbanReadonly = window.KANBAN_READONLY === true
@@ -231,7 +282,7 @@ $(document).ready(function() {
             if ($chip.data('kanban-assigning')) return;
 
             if (targetObraId == 0) {
-                openUnassignModalWithCalendar(workerId, workerName, sourceObraId, $source.data('obra-name'));
+                unassignKanbanDay($chip, workerId, sourceObraId, $targetCol);
             } else {
                 assignKanbanDay($chip, workerId, targetObraId, sourceObraId, $targetCol);
             }
@@ -250,6 +301,16 @@ $(document).ready(function() {
             overwrite_mode: fromObra ? 'overwrite' : 'check',
         };
         enviarAsignacionDiaKanban(payload, $chip, $targetCol);
+    }
+
+    function unassignKanbanDay($chip, workerId, sourceObraId, $targetCol) {
+        const payload = {
+            worker_id: workerId,
+            obra_id: sourceObraId,
+            dates: [getKanbanSelectedDate()],
+            mode: 'selected',
+        };
+        enviarDesasignacionDiaKanban(payload, $chip, $targetCol);
     }
 
     function enviarAsignacionDiaKanban(payload, $chip, $targetCol) {
@@ -295,6 +356,51 @@ $(document).ready(function() {
                         },
                         function () {}
                     );
+                } else {
+                    Swal.fire(t('Error'), data.error || data.message || t('Error desconocido'), 'error');
+                }
+            },
+            error: function(xhr) {
+                if ($chip && $chip.length) $chip.data('kanban-assigning', false);
+                let msg = t('Fallo de conexión');
+                try {
+                    const body = xhr.responseJSON;
+                    if (body) msg = body.error || body.message || msg;
+                } catch (e) { /* ignore */ }
+                Swal.fire(t('Error'), msg, 'error');
+            }
+        });
+    }
+
+    function enviarDesasignacionDiaKanban(payload, $chip, $targetCol) {
+        if ($chip && $chip.length) $chip.data('kanban-assigning', true);
+
+        $.ajax({
+            url: "/api/v6/unassign_worker",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify(payload),
+            success: function(data) {
+                if ($chip && $chip.length) $chip.data('kanban-assigning', false);
+                if (data.success) {
+                    const action = data.action || 'unassigned';
+                    if (action === 'requested') {
+                        Swal.fire({
+                            toast: true, position: 'top-end', icon: 'info',
+                            title: data.message || t('Solicitud enviada'),
+                            showConfirmButton: false, timer: 2200
+                        });
+                        return;
+                    }
+                    Swal.fire({
+                        toast: true, position: 'top-end', icon: 'success',
+                        title: t('Libre'), showConfirmButton: false, timer: 1200
+                    });
+                    if ($chip && $chip.length && $targetCol && $targetCol.length) {
+                        moveChipToObra($chip, $targetCol);
+                    } else {
+                        setTimeout(function () { location.reload(); }, 600);
+                    }
                 } else {
                     Swal.fire(t('Error'), data.error || data.message || t('Error desconocido'), 'error');
                 }

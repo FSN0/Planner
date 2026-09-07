@@ -514,6 +514,8 @@ tr.audit-row-highlight {
                                 <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('Validado directamente del calendario') }}"><span class="status-dot dot-success"></span>{{ _('Correcto') }}</span>
                             {% elif reg.estado == 'Correcto_Automatico' %}
                                 <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('El sistema lo asignó por inercia del día anterior') }}"><span class="status-dot dot-auto"></span>{{ _('Inercia (Auto)') }}</span>
+                            {% elif reg.estado == 'Cambio_Tajo' %}
+                                <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('Fichó en otra obra; el cuadrante sigue el reloj') }}"><span class="status-dot dot-auto"></span>{{ _('Cambio de tajo') }}</span>
                             {% elif reg.estado == 'Resuelto_Movido' %}
                                 <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Reasignación manual') }}"><span class="status-dot dot-success"></span>{{ _('Reasignado') }}</span>
                             {% elif reg.estado == 'Resuelto_Asignado' %}

@@ -350,10 +350,8 @@ def api_free_workers():
     except ValueError:
         return jsonify({"success": False, "message": translate("Fecha inválida.")}), 400
 
-    busy_ids = {
-        row.user_id
-        for row in Asignacion.query.filter_by(fecha=selected).all()
-    }
+    from app.services.inercia_service import ids_ocupados_en_fecha
+    busy_ids = ids_ocupados_en_fecha(selected)
     operarios = (
         User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False)
         .order_by(User.name, User.lastname)

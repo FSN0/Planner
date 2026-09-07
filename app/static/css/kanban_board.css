@@ -674,6 +674,39 @@ body.kanban-page .admin-shell {
     color: #7c3aed;
     background: rgba(167, 139, 250, 0.18);
 }
+.worker-chip.worker-chip--inercia {
+    background: repeating-linear-gradient(
+        -45deg,
+        #e2e8f0,
+        #e2e8f0 6px,
+        #cbd5e1 6px,
+        #cbd5e1 12px
+    );
+    border-style: dashed;
+    border-color: #64748b;
+    opacity: 0.95;
+}
+.worker-chip-inercia-badge {
+    display: inline-block;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #0f172a;
+    background: rgba(15, 23, 42, 0.16);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+}
+.kanban-hide-inercia .worker-chip--inercia {
+    display: none !important;
+}
+.kanban-inercia-toggle.is-on {
+    background: #e2e8f0 !important;
+    border-color: #64748b !important;
+    color: #0f172a !important;
+}
 .worker-name {
     font-weight: 600;
     font-size: 0.74rem;

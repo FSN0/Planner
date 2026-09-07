@@ -78,11 +78,12 @@
     <div class="worker-list-body" data-obra-id="{{ item.obra.id }}" data-obra-name="{{ item.obra.nombre }}">
         {% for worker in item.workers %}
         {% set en_leave = worker.temp_en_ausencia %}
-        <div class="worker-chip{% if en_leave %} worker-chip--leave{% if not worker.temp_ausencia_aprobada %} worker-chip--leave-pending{% endif %}{% endif %}"
+        <div class="worker-chip{% if en_leave %} worker-chip--leave{% if not worker.temp_ausencia_aprobada %} worker-chip--leave-pending{% endif %}{% endif %}{% if worker.temp_es_inercia %} worker-chip--inercia{% endif %}"
              data-worker-id="{{ worker.id }}"
              data-worker-name="{{ worker.name }} {{ worker.lastname }}"
              {% if worker.dni %}data-dni="{{ worker.dni }}"{% endif %}
-             {% if en_leave %}data-en-ausencia="1" title="{{ worker.temp_ausencia_tipo }} — {{ _('sigue asignado') }}"{% endif %}
+             {% if worker.temp_es_inercia %}data-inercia="1"{% endif %}
+             {% if en_leave %}data-en-ausencia="1" title="{{ worker.temp_ausencia_tipo }} — {{ _('sigue asignado') }}"{% elif worker.temp_es_inercia %}title="{{ _('Sigue en esta obra (inercia)') }}"{% endif %}
              style="border-left-color: {{ '#7c3aed' if en_leave and worker.temp_ausencia_aprobada else ('#a78bfa' if en_leave else (worker.company_rel.color if worker.company_rel else '#ccc')) }}">
 
             <div class="d-flex justify-content-between align-items-center">
@@ -96,6 +97,8 @@
                     </a>
                     {% if en_leave and worker.temp_ausencia_tipo %}
                     <span class="worker-chip-leave-badge" title="{{ worker.temp_ausencia_tipo }}">{{ worker.temp_ausencia_tipo }}</span>
+                    {% elif worker.temp_es_inercia %}
+                    <span class="worker-chip-inercia-badge" title="{{ _('Sigue en esta obra hasta que lo muevan') }}">{{ _('Sigue') }}</span>
                     {% endif %}
                 </div>
 

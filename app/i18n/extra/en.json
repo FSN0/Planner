@@ -1587,5 +1587,16 @@
   "Continuar": "Continue",
   "Menú": "Menu",
   "Abrir menú": "Open menu",
-  "Cerrar menú": "Close menu"
+  "Cerrar menú": "Close menu",
+  "Cambio de tajo": "Site change",
+  "Sigue": "Stays",
+  "Mostrar inercia": "Show inertia",
+  "Ocultar inercia": "Hide inertia",
+  "Quien sigue en el tajo sin asignación de hoy": "People still on yesterday’s site with no assignment today",
+  "Sigue en esta obra (inercia)": "Still on this site (inertia)",
+  "Sigue en esta obra hasta que lo muevan": "Stays on this site until you move them",
+  "Asignar de verdad": "Make it a real assignment",
+  "Enter la convierte en asignación": "Enter turns it into an assignment",
+  "Inercia convertida en asignación": "Inertia converted into an assignment",
+  "El trabajador queda libre a partir de ese día.": "The worker is free from that day on."
 }

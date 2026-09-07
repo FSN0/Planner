@@ -259,3 +259,40 @@ def aplicar_baja_por_odoo(local_id, *, actor_id=None, commit=False):
         motivo=MOTIVO_ODOO,
         commit=commit,
     )
+
+
+def local_ids_activos_en_diff(diff):
+    """Ids locales emparejados como activos en el mismo diff (no deben bajarse)."""
+    ids = set()
+    if not isinstance(diff, dict):
+        return ids
+    nested = diff.get('empleados')
+    fuentes = nested if isinstance(nested, dict) else diff
+    for key in ('nuevos', 'actualizados', 'sin_cambios'):
+        for item in fuentes.get(key) or []:
+            lid = item.get('local_id')
+            if lid is None:
+                continue
+            try:
+                ids.add(int(lid))
+            except (TypeError, ValueError):
+                continue
+    return ids
+
+
+def desactivados_aplicables(diff, desactivados=None):
+    """Quita del listado de baja a quien el mismo pull acaba de tratar como activo."""
+    protegidos = local_ids_activos_en_diff(diff)
+    items = desactivados if desactivados is not None else (diff.get('desactivados') or [])
+    aplicables = []
+    for obj in items:
+        lid = obj.get('local_id')
+        if lid is None:
+            continue
+        try:
+            if int(lid) in protegidos:
+                continue
+        except (TypeError, ValueError):
+            continue
+        aplicables.append(obj)
+    return aplicables

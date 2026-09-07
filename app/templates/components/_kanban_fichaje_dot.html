@@ -8,6 +8,9 @@
     {% elif st == 'Correcto_Automatico' %}
         {% set dot_class = 'dot-auto' %}
         {% set dot_title = _('Auto-Asignado') %}
+    {% elif st == 'Cambio_Tajo' %}
+        {% set dot_class = 'dot-auto' %}
+        {% set dot_title = _('Cambio de tajo') %}
     {% elif st == 'Exento_Ausencia' %}
         {% set dot_class = '' %}
         {% set ns_dot.style = 'background:#7c3aed;' %}

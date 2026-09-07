@@ -108,19 +108,13 @@ class UniversalCalendarManager {
                 }
             }
 
-            let switcherHTML = '';
-            if (this.context === 'obra') {
-                let actEmp = this.mode === 'empresas' ? 'active' : '';
-                let actOpe = this.mode === 'empleados' ? 'active' : '';
-                switcherHTML = `
-                    <div class="btn-group btn-group-sm ml-auto" role="group">
-                        <button type="button" class="btn btn-outline-primary ${actEmp}" onclick="document.getElementById('${this.element.id}')._calendarInstance.changeMode('empresas')"><i class="fas fa-briefcase mr-1"></i> ${t('Empresas')}</button>
-                        <button type="button" class="btn btn-outline-primary ${actOpe}" onclick="document.getElementById('${this.element.id}')._calendarInstance.changeMode('empleados')"><i class="fas fa-users mr-1"></i> ${t('Empleados')}</button>
-                    </div>
-                `;
-            }
+            let switcherHTML = this._modeSwitcherHtml();
+            let inerciaHTML = this._inerciaToggleHtml();
+            let toolsHTML = (switcherHTML || inerciaHTML)
+                ? `<div class="univ-calendar-title-tools">${inerciaHTML}${switcherHTML}</div>`
+                : '';
 
-            if (!this.hideTitle || switcherHTML) {
+            if (!this.hideTitle || toolsHTML) {
                 let headingBlock = '';
                 if (!this.hideTitle) {
                     headingBlock = `
@@ -132,7 +126,7 @@ class UniversalCalendarManager {
                 const titleHTML = `
             <div id="${this.titleId}" class="univ-calendar-title${this.hideTitle ? ' univ-calendar-title--toolbar-only' : ''}">
                 ${headingBlock}
-                ${switcherHTML}
+                ${toolsHTML}
             </div>`;
                 this.element.insertAdjacentHTML('beforebegin', titleHTML);
             }
@@ -247,9 +241,10 @@ class UniversalCalendarManager {
             editable: !this.readonly, 
             selectable: !this.readonly, 
             height: 'auto',
-            dayMaxEventRows: _this.compact ? 2 : true,
-            eventOrder: '-isGhost,start,title',
-            events: `/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}` + (this.showFichajes ? '&show_fichajes=1' : ''),
+            dayMaxEventRows: _this.compact ? 2 : (_this._isGroupedMode() ? false : true),
+            eventOrder: '-isGhost,order,start,title',
+            eventOrderStrict: this._isGroupedMode(),
+            events: this._eventsSourceUrl(),
             
             
             eventDataTransform: function(eventData) {
@@ -258,11 +253,31 @@ class UniversalCalendarManager {
                 if (!eventData.classNames.includes('font-weight-bold')) eventData.classNames.push('font-weight-bold');
                 if (!eventData.classNames.includes('rounded')) eventData.classNames.push('rounded');
                 const evType = (eventData.extendedProps && eventData.extendedProps.type) || '';
+                if (evType === 'empresa_group' || evType === 'obra_group') {
+                    eventData.editable = false;
+                    eventData.startEditable = false;
+                    eventData.durationEditable = false;
+                    const p = eventData.extendedProps || {};
+                    const lane = eventData.order != null
+                        ? eventData.order
+                        : (p.lane != null ? p.lane : (p.obra_id != null ? p.obra_id : p.empresa_id));
+                    if (lane != null) {
+                        eventData.order = lane;
+                        p.lane = lane;
+                        eventData.extendedProps = p;
+                    }
+                }
                 if ((evType === 'vehiculo' || evType === 'vehiculo_odoo') && !eventData.classNames.includes('fc-event-vehiculo')) {
                     eventData.classNames.push('fc-event-vehiculo');
                 }
-                if ((evType === 'asignacion' || evType === 'obra') && !eventData.classNames.includes('fc-event-obra')) {
+                if ((evType === 'asignacion' || evType === 'obra' || evType === 'obra_group') && !eventData.classNames.includes('fc-event-obra')) {
                     eventData.classNames.push('fc-event-obra');
+                }
+                if (eventData.extendedProps && eventData.extendedProps.inercia) {
+                    if (!_this.selfService) eventData.classNames.push('fc-event-inercia');
+                    eventData.editable = false;
+                    eventData.startEditable = false;
+                    eventData.durationEditable = false;
                 }
                 eventData.borderColor = bgColor;
 
@@ -396,6 +411,13 @@ class UniversalCalendarManager {
 
                 // 2. LOGICA NORMAL DE OBRAS (Tooltips y Doble Clic)
                 const evTypeMount = (info.event.extendedProps && info.event.extendedProps.type) || '';
+                if (evTypeMount === 'obra_group' || evTypeMount === 'empresa_group') {
+                    const laneKey = (info.event.extendedProps.obra_id != null)
+                        ? String(info.event.extendedProps.obra_id)
+                        : String(info.event.extendedProps.empresa_id != null ? info.event.extendedProps.empresa_id : '');
+                    if (laneKey) info.el.setAttribute('data-group-lane', laneKey);
+                    _this._scheduleAlignGroupedLanes();
+                }
                 if (evTypeMount === 'vehiculo' || evTypeMount === 'vehiculo_odoo') {
                     // Más compacto y con borde discontinuo para no confundir con obras
                     info.el.style.fontSize = '0.72rem';
@@ -562,7 +584,7 @@ class UniversalCalendarManager {
                     isEditable = false;
                     isPast = true;
                     reasonText = t('No puedes modificar bloques que ya pertenecen al pasado.');
-                } else if (_this.mode === 'empresas' || props.type === 'empresa_group') {
+                } else if (_this._isGroupedMode() || props.type === 'empresa_group' || props.type === 'obra_group') {
                     isEditable = false;
                     reasonText = t("Estás en vista agrupada. Cambia a 'Por Trabajadores' para editar bloques individuales.");
                 } else if (props.type === 'solicitud_vehiculo' || props.type === 'request') {
@@ -571,6 +593,9 @@ class UniversalCalendarManager {
                 } else if (props.type === 'jefe_obra_dia') {
                     isEditable = false;
                     reasonText = t('Esto es la plantilla de las obras que dirige. Entra en la ficha de la obra para planificar.');
+                } else if (props.inercia) {
+                    isEditable = false;
+                    reasonText = t('Sigue en esta obra hasta que lo muevan');
                 }
 
                 let targetName = null;
@@ -660,9 +685,12 @@ class UniversalCalendarManager {
             eventAllow: function(dropInfo, draggedEvent) {
                 if (_this.readonly) return false;
                 if (draggedEvent.id === _this.ghostEventId) return true;
-                if (_this.context === 'obra' && _this.mode === 'empresas') return false; 
+                if (_this._isGroupedMode()) return false;
                 return true;
-            }
+            },
+            datesSet: function () { _this._scheduleAlignGroupedLanes(); },
+            eventsSet: function () { _this._scheduleAlignGroupedLanes(); },
+            windowResize: function () { _this._scheduleAlignGroupedLanes(); },
         };
 
         try {
@@ -2379,16 +2407,157 @@ class UniversalCalendarManager {
         this.showBottomPanel(ghost, true);
     }
 
+    _isGroupedMode() {
+        return this.mode === 'empresas' || (this.context === 'empresa' && this.mode === 'obras');
+    }
+
+    _scheduleAlignGroupedLanes() {
+        if (!this._isGroupedMode()) return;
+        if (this._alignLanesRaf) cancelAnimationFrame(this._alignLanesRaf);
+        this._alignLanesRaf = requestAnimationFrame(() => {
+            this._alignLanesRaf = requestAnimationFrame(() => this._alignGroupedLanes());
+        });
+    }
+
+    _alignGroupedLanes() {
+        if (!this._isGroupedMode() || !this.element) return;
+        this.element.classList.add('is-grouped-lanes');
+        let rows = this.element.querySelectorAll('.fc-daygrid-body > table > tbody > tr');
+        if (!rows.length) {
+            rows = this.element.querySelectorAll('.fc-daygrid-body tr');
+        }
+        rows.forEach((row) => this._alignLanesInWeekRow(row));
+    }
+
+    _alignLanesInWeekRow(row) {
+        const els = Array.prototype.slice.call(row.querySelectorAll('.fc-event[data-group-lane]'));
+        if (!els.length) return;
+        const keys = [];
+        const seen = {};
+        els.forEach((el) => {
+            const k = el.getAttribute('data-group-lane');
+            if (k && !seen[k]) {
+                seen[k] = true;
+                keys.push(k);
+            }
+        });
+        keys.sort((a, b) => {
+            const na = Number(a);
+            const nb = Number(b);
+            if (!isNaN(na) && !isNaN(nb)) return na - nb;
+            return String(a).localeCompare(String(b), undefined, { numeric: true });
+        });
+        const lane = {};
+        keys.forEach((k, i) => { lane[k] = i; });
+        let rowH = 0;
+        els.forEach((el) => {
+            const harness = el.closest('.fc-daygrid-event-harness');
+            const h = (harness || el).getBoundingClientRect().height;
+            if (h > rowH) rowH = h;
+        });
+        if (rowH < 8) rowH = 22;
+        const step = rowH + 2;
+        els.forEach((el) => {
+            const harness = el.closest('.fc-daygrid-event-harness');
+            if (!harness) return;
+            const idx = lane[el.getAttribute('data-group-lane')] || 0;
+            harness.style.top = (idx * step) + 'px';
+            harness.style.marginTop = '0px';
+            harness.classList.add('fc-daygrid-event-harness-abs');
+        });
+        const minH = keys.length * step;
+        row.querySelectorAll('.fc-daygrid-day-events').forEach((box) => {
+            box.style.minHeight = minH + 'px';
+            box.style.paddingTop = '0px';
+        });
+    }
+
+    _eventsSourceUrl() {
+        let url = `/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}`;
+        if (this.showFichajes) url += '&show_fichajes=1';
+        if (!this.selfService && this._inerciaOn()) url += '&inercia=1';
+        return url;
+    }
+
+    _inerciaOn() {
+        return window.SPInerciaPref ? window.SPInerciaPref.get('calendario', false) : false;
+    }
+
+    _inerciaToggleHtml() {
+        if (this.selfService) return '';
+        const on = this._inerciaOn();
+        const label = on ? t('Ocultar inercia') : t('Mostrar inercia');
+        const pressed = on ? 'true' : 'false';
+        const cls = on ? ' is-on' : '';
+        return (
+            `<button type="button" class="btn btn-sm btn-outline-secondary univ-calendar-inercia-toggle${cls}" ` +
+            `data-inercia-toggle="1" aria-pressed="${pressed}" ` +
+            `title="${t('Quien sigue en el tajo sin asignación de hoy')}" ` +
+            `onclick="document.getElementById('${this.element.id}')._calendarInstance.toggleInercia()">` +
+            `<i class="fas fa-ghost mr-1"></i> ${label}</button>`
+        );
+    }
+
+    toggleInercia() {
+        const next = !this._inerciaOn();
+        if (window.SPInerciaPref) window.SPInerciaPref.set('calendario', next);
+        const btn = document.querySelector(`#${this.titleId} [data-inercia-toggle]`);
+        if (btn) {
+            btn.classList.toggle('is-on', next);
+            btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+            btn.innerHTML = `<i class="fas fa-ghost mr-1"></i> ${next ? t('Ocultar inercia') : t('Mostrar inercia')}`;
+        }
+        if (!this.calendar) return;
+        this.calendar.removeAllEventSources();
+        this.calendar.addEventSource(this._eventsSourceUrl());
+    }
+
+    _modeSwitcherHtml() {
+        let buttons = [];
+        if (this.context === 'obra') {
+            buttons = [
+                { mode: 'empresas', icon: 'fa-briefcase', label: t('Empresas') },
+                { mode: 'empleados', icon: 'fa-users', label: t('Empleados') },
+            ];
+        } else if (this.context === 'empresa') {
+            buttons = [
+                { mode: 'obras', icon: 'fa-building', label: t('Obras') },
+                { mode: 'empleados', icon: 'fa-users', label: t('Empleados') },
+            ];
+        }
+        if (!buttons.length) return '';
+        const btns = buttons.map((b) => {
+            const act = this.mode === b.mode ? 'active' : '';
+            return (
+                `<button type="button" class="btn btn-outline-primary ${act}" data-mode="${b.mode}" ` +
+                `onclick="document.getElementById('${this.element.id}')._calendarInstance.changeMode('${b.mode}')">` +
+                `<i class="fas ${b.icon} mr-1"></i> ${b.label}</button>`
+            );
+        }).join('');
+        return `<div class="btn-group btn-group-sm ml-auto" role="group">${btns}</div>`;
+    }
+
     changeMode(newMode) {
         this.mode = newMode;
         this.calendar.removeAllEventSources();
-        this.calendar.addEventSource(`/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}` + (this.showFichajes ? '&show_fichajes=1' : ''));
-        
+        this.calendar.addEventSource(this._eventsSourceUrl());
+        this.calendar.setOption('eventOrderStrict', this._isGroupedMode());
+        this.calendar.setOption('dayMaxEventRows', this.compact ? 2 : (this._isGroupedMode() ? false : true));
+        if (this.element && !this._isGroupedMode()) {
+            this.element.classList.remove('is-grouped-lanes');
+        }
+
+        const modeBtns = document.querySelectorAll(`#${this.titleId} [data-mode]`);
+        if (modeBtns.length) {
+            modeBtns.forEach((btn) => {
+                btn.classList.toggle('active', btn.getAttribute('data-mode') === newMode);
+            });
+            return;
+        }
         let btnEmpresas = document.querySelector(`#${this.titleId} .btn-outline-primary:nth-child(1)`);
         let btnEmpleados = document.querySelector(`#${this.titleId} .btn-outline-primary:nth-child(2)`);
-        
         if (btnEmpresas && btnEmpleados) {
-            if (newMode === 'empresas') {
+            if (newMode === 'empresas' || newMode === 'obras') {
                 btnEmpresas.classList.add('active'); btnEmpleados.classList.remove('active');
             } else {
                 btnEmpleados.classList.add('active'); btnEmpresas.classList.remove('active');

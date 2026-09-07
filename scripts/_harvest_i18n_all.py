@@ -189,7 +189,7 @@ def harvest_all():
     all_keys |= set(role_keys)
 
     fichaje_labels = [
-        'Correcto', 'Correcto (auto)', 'Conflicto', 'Paracaidista',
+        'Correcto', 'Correcto (auto)', 'Cambio de tajo', 'Conflicto', 'Paracaidista',
         'Ausencia', 'Pendiente', 'Retraso', 'Sin fichaje',
         'Corregido por RRHH / ERP', 'Exento (ausencia)',
         'Multi-obra cerrado', 'Resuelto (movido)', 'Resuelto (asignado)',

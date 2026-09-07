@@ -536,6 +536,29 @@ class Asignacion(db.Model):
     def __repr__(self):
         return f'<Asignacion Obra:{self.obra_id} User:{self.user_id} Fecha:{self.fecha}>'
 
+
+class InerciaCorte(db.Model):
+    """
+    Corta la casa de un trabajador a partir de una fecha.
+
+    El cuadrante no guarda filas fantasma: la inercia se calcula. Soltar a
+    Libres tiene que persistir el corte; si no, al día siguiente el fantasma
+    devolvería a la persona al tajo.
+    """
+    __tablename__ = 'inercia_cortes'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    fecha = db.Column(db.Date, nullable=False)
+    autor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'fecha', name='uq_inercia_corte_user_fecha'),
+    )
+
+    def __repr__(self):
+        return f'<InerciaCorte User:{self.user_id} Fecha:{self.fecha}>'
+
+
 class HistorialAsignacion(db.Model):
     """Auditoría de cambios en asignaciones."""
     __tablename__ = 'historial_asignaciones'

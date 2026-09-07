@@ -98,16 +98,37 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
             Asignacion.fecha == selected_date
         ).all()
         
+        users_by_id = {}
         for a in asig_hoy:
             if a.obra_id in mapa_asig:
-                u = User.query.get(a.user_id)
-                if u: 
+                u = users_by_id.get(a.user_id) or User.query.get(a.user_id)
+                if u:
+                    users_by_id[u.id] = u
+                    u.temp_es_inercia = False
                     u.temp_estado_fichaje = (
                         fichajes_dict.get(u.id, 'Sin_Registro')
                         if ve_estado_fichaje
                         else None
                     )
                     mapa_asig[a.obra_id].append(u)
+
+        from app.services.inercia_service import celdas_inercia
+        hechos_ids = set(users_by_id.keys())
+        for (uid, _dia), oid in celdas_inercia(None, selected_date, selected_date).items():
+            if oid not in mapa_asig or uid in hechos_ids:
+                continue
+            u = users_by_id.get(uid) or User.query.get(uid)
+            if not u or not u.active or u.is_deleted:
+                continue
+            users_by_id[uid] = u
+            u.temp_es_inercia = True
+            u.temp_estado_fichaje = (
+                fichajes_dict.get(u.id, 'Sin_Registro')
+                if ve_estado_fichaje
+                else None
+            )
+            mapa_asig[oid].append(u)
+            hechos_ids.add(uid)
 
     # Overlay vacaciones/ausencias del día seleccionado (tarjeta distinta en tablero)
     from app.services.leave_service import (
@@ -157,12 +178,9 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     
     month_start = date(year, month, 1)
     month_end = date(year, month, num_days)
-    
-    asignaciones_mes = db.session.query(Asignacion.fecha, func.count(Asignacion.user_id))\
-        .filter(Asignacion.fecha >= month_start, Asignacion.fecha <= month_end)\
-        .group_by(Asignacion.fecha).all()
-    
-    ocupados_por_dia = {fecha: count for fecha, count in asignaciones_mes}
+
+    from app.services.inercia_service import ocupados_por_dia as ocupados_presencia
+    ocupados_por_dia = ocupados_presencia(month_start, month_end)
 
     for day in range(1, num_days + 1):
         current = date(year, month, day)
@@ -216,9 +234,9 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
 
     # 7. Listas Auxiliares
     all_operarios = User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).order_by(User.name).all()
-    
-    asig_global_hoy = Asignacion.query.filter_by(fecha=selected_date).all()
-    busy_ids = {a.user_id for a in asig_global_hoy}
+
+    from app.services.inercia_service import ids_ocupados_en_fecha
+    busy_ids = ids_ocupados_en_fecha(selected_date)
     
     free_workers = []
     busy_workers = []

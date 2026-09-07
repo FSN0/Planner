@@ -114,7 +114,11 @@ def run_auto_sync_empleados():
     default_company = Company.query.filter_by(is_internal=True).first() or Company.query.first()
     default_company_id = default_company.id if default_company else None
 
-    from app.services.employee_baja_service import aplicar_baja_por_odoo, reactivar
+    from app.services.employee_baja_service import (
+        aplicar_baja_por_odoo,
+        desactivados_aplicables,
+        reactivar,
+    )
 
     for obj in emp_nuevos:
         from app.services.auth_login_service import default_auth_mode_for_role
@@ -142,18 +146,19 @@ def run_auto_sync_empleados():
             else:
                 user.active = True
 
-    for obj in emp_baja:
+    emp_baja_aplicables = desactivados_aplicables(diff, emp_baja)
+    for obj in emp_baja_aplicables:
         local_id = obj.get('local_id')
         if local_id:
             aplicar_baja_por_odoo(local_id, commit=False)
 
     detalle = f"Sync automática empleados. {errores} omitido(s) por conflictos DNI/email." if errores else "Sync automática empleados completada."
-    if emp_baja:
-        detalle = f"{detalle} {len(emp_baja)} baja(s)."
+    if emp_baja_aplicables:
+        detalle = f"{detalle} {len(emp_baja_aplicables)} baja(s)."
     db.session.add(SyncLog(
         fecha=ahora, tipo='Empleados', modo='Automático',
         nuevos=len(emp_nuevos), actualizados=len(emp_act),
-        finalizados=len(emp_baja), errores=errores,
+        finalizados=len(emp_baja_aplicables), errores=errores,
         detalles=detalle, estado=_log_estado(errores),
         duracion_ms=int((time.time() - t0) * 1000),
     ))
@@ -166,7 +171,7 @@ def run_auto_sync_empleados():
     return {
         'nuevos': len(emp_nuevos),
         'actualizados': len(emp_act),
-        'desactivados': len(emp_baja),
+        'desactivados': len(emp_baja_aplicables),
         'omitidos': errores,
     }
 
@@ -179,7 +184,11 @@ def run_auto_sync_subcontratas():
     mapa_empresas = {}
     emp_baja = (diff.get('empleados') or {}).get('desactivados') or []
 
-    from app.services.employee_baja_service import aplicar_baja_por_odoo, reactivar
+    from app.services.employee_baja_service import (
+        aplicar_baja_por_odoo,
+        desactivados_aplicables,
+        reactivar,
+    )
 
     for obj in diff['empresas']['actualizadas']:
         comp = Company.query.get(obj['local_id'])
@@ -244,7 +253,8 @@ def run_auto_sync_subcontratas():
             password_hash=generate_password_hash(secrets.token_urlsafe(24)),
         ))
 
-    for obj in emp_baja:
+    emp_baja_aplicables = desactivados_aplicables(diff, emp_baja)
+    for obj in emp_baja_aplicables:
         local_id = obj.get('local_id')
         if local_id:
             aplicar_baja_por_odoo(local_id, commit=False)
@@ -252,11 +262,11 @@ def run_auto_sync_subcontratas():
     tot_n = len(diff['empresas']['nuevas']) + len(diff['empleados']['nuevos'])
     tot_a = len(diff['empresas']['actualizadas']) + len(diff['empleados']['actualizados'])
     detalle = "Sync automática subcontratas completada."
-    if emp_baja:
-        detalle = f"{detalle} {len(emp_baja)} baja(s)."
+    if emp_baja_aplicables:
+        detalle = f"{detalle} {len(emp_baja_aplicables)} baja(s)."
     db.session.add(SyncLog(
         fecha=ahora, tipo='Subcontratas', modo='Automático',
-        nuevos=tot_n, actualizados=tot_a, finalizados=len(emp_baja), errores=0,
+        nuevos=tot_n, actualizados=tot_a, finalizados=len(emp_baja_aplicables), errores=0,
         detalles=detalle,
         estado='ok', duracion_ms=int((time.time() - t0) * 1000),
     ))
@@ -264,7 +274,7 @@ def run_auto_sync_subcontratas():
     return {
         'nuevos': tot_n,
         'actualizados': tot_a,
-        'desactivados': len(emp_baja),
+        'desactivados': len(emp_baja_aplicables),
         'omitidos': 0,
     }
 

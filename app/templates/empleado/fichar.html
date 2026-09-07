@@ -103,6 +103,14 @@
   .empleado-fichar-wrap .obra-option--lejos {
     color: #94a3b8;
   }
+  .empleado-fichar-wrap .plan-hoy {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    color: #0c4a6e;
+  }
+  .empleado-fichar-wrap .plan-hoy strong {
+    color: #0f172a;
+  }
   .geo-modal-backdrop {
     position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
     display: flex; align-items: center; justify-content: center; z-index: 2000;
@@ -143,6 +151,17 @@
             {{ dias_semana[fecha.weekday()] }}, {{ fecha.day }} {{ _('de') }} {{ meses[fecha.month - 1] }}
         </div>
     </div>
+
+    {% if obras_planificadas %}
+    {% set plan_nombres = obras_planificadas | map(attribute='nombre') | list %}
+    <p class="plan-hoy" id="plan-hoy">
+      {% if plan_nombres|length == 1 %}
+        {{ _('Hoy estás planificado en') }} <strong>{{ plan_nombres[0] }}</strong>.
+      {% else %}
+        {{ _('Hoy estás planificado en') }} <strong>{{ plan_nombres|join(', ') }}</strong>.
+      {% endif %}
+    </p>
+    {% endif %}
 
     <div class="estado estado--{{ estado }}" id="tarjeta-estado">
         <div class="estado__etiqueta" id="estado-etiqueta">

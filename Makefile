@@ -11,7 +11,8 @@
 .PHONY: help sync-brand dev dev-build dev-down dev-restart prod-deploy prod-down prod-logs \
         migrate migrate-new backup restore test test-db test-unit test-integration \
         test-ledger test-pwa test-erp test-informe test-pin test-plan test-comercial \
-        test-oficina test-onboarding lan-tunnel logs shell db-shell clean init-saas
+        test-oficina test-onboarding lan-tunnel logs shell db-shell clean init-saas \
+        odoo-creds odoo-creds-prod
 
 # Detectar compose file según entorno
 DEV_COMPOSE  = docker-compose.yml
@@ -174,6 +175,12 @@ logs: ## Ver logs del entorno de desarrollo
 
 logs-web: ## Logs solo del servicio web
 	docker compose -f $(DEV_COMPOSE) logs -f web
+
+odoo-creds: ## Credenciales Odoo de un tenant (dev). Uso: make odoo-creds TENANT=soltec
+	@docker compose -f $(DEV_COMPOSE) exec -T -w /app -e PYTHONPATH=/app web python scripts/show_odoo_creds.py "$(TENANT)"
+
+odoo-creds-prod: ## Credenciales Odoo de un tenant (producción). Uso: make odoo-creds-prod TENANT=soltec
+	@docker compose -f $(PROD_COMPOSE) exec -T -w /app -e PYTHONPATH=/app web python scripts/show_odoo_creds.py "$(TENANT)"
 
 shell: ## Abrir shell en el contenedor web (dev)
 	docker compose -f $(DEV_COMPOSE) exec web bash

@@ -484,15 +484,19 @@ class Adapter(BaseSyncAdapter):
                 result.append(u)
         return result
 
-    def _append_desactivados_empleados(self, diff, seen_odoo_ids):
+    def _append_desactivados_empleados(self, diff, seen_odoo_ids, seen_local_ids=None):
         """
-        Baja solo con vínculo Odoo + lectura puntual (active=False o borrado).
-        No usa «ausente del pull por departamento» para evitar falsos positivos.
+        Baja solo si el vínculo Odoo apunta a un hr.employee archivado.
+        No usa «ausente del pull» (departamento, DNI vacío, id antiguo) ni
+        «no encontrado» — eso daba falsos positivos (p.ej. ficha duplicada).
         """
+        seen_local_ids = seen_local_ids or set()
         desactivados = []
         candidatos = [
             u for u in self._users_with_odoo_link(externos=False)
-            if u.active and str(u.external_ids.get('odoo')) not in seen_odoo_ids
+            if u.active
+            and u.id not in seen_local_ids
+            and str(u.external_ids.get('odoo')) not in seen_odoo_ids
         ]
         odoo_ids = []
         for u in candidatos:
@@ -507,7 +511,14 @@ class Adapter(BaseSyncAdapter):
             except (TypeError, ValueError):
                 continue
             info = active_map.get(oid)
-            if info is not None and info.get('active'):
+            if info is None:
+                logger.warning(
+                    "[Odoo Adapter - Tenant %s] Empleado local %s (odoo_id=%s) "
+                    "no aparece en hr.employee; no se da de baja.",
+                    self.tenant_id, u.id, oid,
+                )
+                continue
+            if info.get('active'):
                 # Activo en Odoo pero fuera del filtro de departamentos → no baja.
                 continue
             desactivados.append({
@@ -518,7 +529,7 @@ class Adapter(BaseSyncAdapter):
                 'dni': u.dni,
                 'email': u.email,
                 'role': u.role,
-                'motivo': 'inactivo_odoo' if info is not None else 'eliminado_odoo',
+                'motivo': 'inactivo_odoo',
                 'cambios': {
                     'Estado': 'Activo ➔ Baja (Odoo)',
                 },
@@ -530,33 +541,49 @@ class Adapter(BaseSyncAdapter):
         fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id']
         odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
         
-        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'desactivados': []}
+        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'desactivados': [], 'omitidos': []}
         seen_odoo_ids = set()
-        
-        departamentos_permitidos = [
-            'Administración G', 'Administración S', 'Compras', 'Dirección',
-            'Encargados/Of.1ª', 'Estudios clima', 'Estudios electricidad',
-            'JO clima', 'JO electricidad', 'Oficiales 2ª/3ª', 'Producción clima',
-            'Producción electricidad'
-        ]
-        
+        seen_local_ids = set()
+
+        from app.services.sync_config_service import (
+            SyncConfigService,
+            default_empleados_departamento_map,
+            resolve_departamento_role,
+        )
+        try:
+            departamentos_map = SyncConfigService.get_empleados_departamento_map()
+        except Exception:
+            departamentos_map = default_empleados_departamento_map()
+
         for emp in odoo_emps:
-            dni = emp.get('identification_id')
-            if not dni: continue
+            dni = emp.get('identification_id') or ''
 
             dep_raw = emp.get('department_id')
-            department = dep_raw[1] if dep_raw else ''
-            
-            if not any(d in department for d in departamentos_permitidos):
+            department = dep_raw[1] if isinstance(dep_raw, (list, tuple)) and len(dep_raw) > 1 else ''
+
+            if not dni:
+                diff['omitidos'].append({
+                    'odoo_id': emp['id'],
+                    'nombre': emp.get('name') or '',
+                    'departamento': department,
+                    'motivo': 'Sin DNI en Odoo',
+                })
+                continue
+
+            role = resolve_departamento_role(department, departamentos_map)
+            if not role:
+                diff['omitidos'].append({
+                    'odoo_id': emp['id'],
+                    'nombre': emp.get('name') or '',
+                    'departamento': department or 'sin departamento',
+                    'motivo': (
+                        f'Departamento no autorizado: «{department or "sin departamento"}»'
+                    ),
+                })
                 continue
 
             job_raw = emp.get('job_id')
             categoria = emp.get('job_title') or (job_raw[1] if job_raw else 'Sin definir')
-            
-            if 'JO ' in department or 'Jefe de obra' in department or 'jefe' in categoria.lower():
-                role = 'jefe_obra'
-            else:
-                role = 'operario'
 
             email = emp.get('work_email') or f"sin_email_{emp['id']}@local.tuappsaas.com"
             
@@ -585,6 +612,12 @@ class Adapter(BaseSyncAdapter):
             
             if local_user:
                 data['local_id'] = local_user.id
+                seen_local_ids.add(local_user.id)
+                stored_oid = str((local_user.external_ids or {}).get('odoo') or '')
+                if stored_oid:
+                    seen_odoo_ids.add(stored_oid)
+                if stored_oid and stored_oid != str(emp['id']):
+                    data['cambios']['Id Odoo'] = f"{stored_oid} ➔ {emp['id']}"
                 
                 choque = User.query.filter(((User.dni == dni) | (User.email == email)), User.id != local_user.id).first()
                 if choque:
@@ -610,6 +643,10 @@ class Adapter(BaseSyncAdapter):
                 elif local_user.role in office_roles and role in odoo_field_roles:
                     # p. ej. Lupe importada como operario pero ya es laboral en SignaPlan
                     role_sync_role = local_user.role
+                elif local_user.role == 'jefe_obra' and role != 'admin':
+                    # Un cambio de departamento en Odoo no le quita el rol de jefe aquí.
+                    # Sí puede subir a admin si el departamento está mapeado así.
+                    role_sync_role = local_user.role
                 elif local_user.role != role:
                     data['cambios']['Rol'] = f"{local_user.role} ➔ {role}"
                 data['role'] = role_sync_role
@@ -626,7 +663,7 @@ class Adapter(BaseSyncAdapter):
             else:
                 diff['nuevos'].append(data)
 
-        self._append_desactivados_empleados(diff, seen_odoo_ids)
+        self._append_desactivados_empleados(diff, seen_odoo_ids, seen_local_ids)
         return diff
 
     def _resolve_employee(self, odoo_field, as_partner=True):
@@ -708,11 +745,14 @@ class Adapter(BaseSyncAdapter):
 
         return None, True
     
-    def _append_desactivados_subcontratas(self, diff, seen_odoo_ids):
+    def _append_desactivados_subcontratas(self, diff, seen_odoo_ids, seen_local_ids=None):
+        seen_local_ids = seen_local_ids or set()
         desactivados = []
         candidatos = [
             u for u in self._users_with_odoo_link(externos=True)
-            if u.active and str(u.external_ids.get('odoo')) not in seen_odoo_ids
+            if u.active
+            and u.id not in seen_local_ids
+            and str(u.external_ids.get('odoo')) not in seen_odoo_ids
         ]
         odoo_ids = []
         for u in candidatos:
@@ -727,7 +767,14 @@ class Adapter(BaseSyncAdapter):
             except (TypeError, ValueError):
                 continue
             info = active_map.get(oid)
-            if info is not None and info.get('active'):
+            if info is None:
+                logger.warning(
+                    "[Odoo Adapter - Tenant %s] Externo local %s (odoo_id=%s) "
+                    "no aparece en res.partner; no se da de baja.",
+                    self.tenant_id, u.id, oid,
+                )
+                continue
+            if info.get('active'):
                 continue
             desactivados.append({
                 'odoo_id': oid,
@@ -737,7 +784,7 @@ class Adapter(BaseSyncAdapter):
                 'dni': u.dni,
                 'email': u.email,
                 'role': u.role,
-                'motivo': 'inactivo_odoo' if info is not None else 'eliminado_odoo',
+                'motivo': 'inactivo_odoo',
                 'cambios': {
                     'Estado': 'Activo ➔ Baja (Odoo)',
                 },
@@ -771,6 +818,7 @@ class Adapter(BaseSyncAdapter):
         odoo_contactos = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'res.partner', 'search_read', [domain_contactos], {'fields': ['id', 'name', 'email', 'vat', 'function', 'parent_id']})
 
         seen_odoo_ids = set()
+        seen_local_ids = set()
 
         for o_emp in odoo_empresas:
             local_comp = Company.query.filter(Company.external_ids['odoo'].astext == str(o_emp['id'])).first()
@@ -828,6 +876,12 @@ class Adapter(BaseSyncAdapter):
             
             if local_user:
                 data_cont['local_id'] = local_user.id
+                seen_local_ids.add(local_user.id)
+                stored_oid = str((local_user.external_ids or {}).get('odoo') or '')
+                if stored_oid:
+                    seen_odoo_ids.add(stored_oid)
+                if stored_oid and stored_oid != str(o_cont['id']):
+                    data_cont['cambios']['Id Odoo'] = f"{stored_oid} ➔ {o_cont['id']}"
                 if local_user.name != name:
                     data_cont['cambios']['Nombre'] = f"{local_user.name} -> {name}"
                 
@@ -851,7 +905,7 @@ class Adapter(BaseSyncAdapter):
             else:
                 diff['empleados']['nuevos'].append(data_cont)
 
-        self._append_desactivados_subcontratas(diff, seen_odoo_ids)
+        self._append_desactivados_subcontratas(diff, seen_odoo_ids, seen_local_ids)
         return diff
 
     # ------------------------------------------------------------------

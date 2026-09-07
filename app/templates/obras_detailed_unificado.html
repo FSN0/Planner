@@ -7,7 +7,7 @@
   {# 1. IMPORTANTE: Cargar primero los estilos base de la administración #}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260829b">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban_board.css') }}?v=20260904s">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260829a">
   {% if puede_ver_estado_fichaje %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
@@ -31,6 +31,10 @@
         <i class="fas fa-search kanban-filter-search-icon"></i>
         <input type="text" id="kanbanFilterInput" placeholder="{{ _('Obra, código o operario — Enter para añadir') }}">
       </div>
+      <button type="button" class="btn-admin btn-admin-ghost kanban-inercia-toggle" id="btnToggleInerciaKanban"
+              title="{{ _('Quien sigue en el tajo sin asignación de hoy') }}">
+        <i class="fas fa-ghost"></i> {{ _('Sigue') }}
+      </button>
       <button type="button" class="btn-admin btn-admin-ghost kanban-filter-clear" onclick="clearKanbanFilters()" id="btnClearFilters" style="display:none;">
         {{ _('Limpiar') }}
       </button>
@@ -253,7 +257,7 @@
     </script>
   
   <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260901f"></script>
+  <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
   
   
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -262,7 +266,7 @@
         window.CURRENT_USER_ROLE = "{{ current_user.role }}";
         window.KANBAN_READONLY = {{ 'true' if view_mode == 'readonly' else 'false' }};
     </script>
-  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260819b"></script>
+  <script src="{{ url_for('static', filename='js/kanban_logic.js') }}?v=20260904s"></script>
   {% if view_mode|default('') != 'readonly' %}
   <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260829a"></script>
   {% endif %}

@@ -880,21 +880,18 @@ def get_jefe_panel_stats(worker):
     chart_14d = [0] * 14
 
     if obra_ids:
-        q = Asignacion.query.filter(Asignacion.obra_id.in_(obra_ids))
-        personas_hoy = (
-            q.filter(Asignacion.fecha == today)
-            .with_entities(func.count(distinct(Asignacion.user_id)))
-            .scalar() or 0
-        )
+        from app.services.inercia_service import presencias_en_fecha
+        presencias = [
+            p for p in presencias_en_fecha(today)
+            if p['obra_id'] in set(obra_ids)
+        ]
+        personas_hoy = len({p['user_id'] for p in presencias})
         if activas_ids:
-            obras_con_gente_hoy = (
-                Asignacion.query.filter(
-                    Asignacion.obra_id.in_(activas_ids),
-                    Asignacion.fecha == today,
-                )
-                .with_entities(func.count(distinct(Asignacion.obra_id)))
-                .scalar() or 0
-            )
+            activas_set = set(activas_ids)
+            obras_con_gente_hoy = len({
+                p['obra_id'] for p in presencias if p['obra_id'] in activas_set
+            })
+        q = Asignacion.query.filter(Asignacion.obra_id.in_(obra_ids))
         equipo_30 = (
             q.filter(Asignacion.fecha >= range_30, Asignacion.fecha <= today)
             .with_entities(func.count(distinct(Asignacion.user_id)))

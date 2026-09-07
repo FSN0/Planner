@@ -11,6 +11,38 @@ document.addEventListener('DOMContentLoaded', function() {
     window.AppGroups = new vis.DataSet();
     window.AppItems = new vis.DataSet();
     window.currentSelectedItem = null; // <-- NUEVO: Para guardar qué trabajador hemos pinchado
+    window.planificadorHideInercia = !(window.SPInerciaPref
+        ? window.SPInerciaPref.get('planificador', true)
+        : true);
+
+    function syncPlanificadorInerciaBtn() {
+        var btn = document.getElementById('btnToggleInerciaPlanif');
+        if (!btn) return;
+        var showing = !window.planificadorHideInercia;
+        btn.classList.toggle('is-on', showing);
+        btn.setAttribute('aria-pressed', showing ? 'true' : 'false');
+        var label = showing ? t('Ocultar inercia') : t('Mostrar inercia');
+        btn.setAttribute('title', label);
+    }
+    var btnInerciaPlanif = document.getElementById('btnToggleInerciaPlanif');
+    if (btnInerciaPlanif) {
+        btnInerciaPlanif.addEventListener('click', function () {
+            window.planificadorHideInercia = !window.planificadorHideInercia;
+            if (window.SPInerciaPref) {
+                window.SPInerciaPref.set('planificador', !window.planificadorHideInercia);
+            }
+            syncPlanificadorInerciaBtn();
+            var loaded = window._planifLoaded;
+            if (window.planificadorHideInercia) {
+                if (typeof window.renderItems === 'function') window.renderItems();
+            } else if (loaded && !loaded.inercia && typeof window.loadTimelineData === 'function') {
+                window.loadTimelineData();
+            } else if (typeof window.renderItems === 'function') {
+                window.renderItems();
+            }
+        });
+        syncPlanificadorInerciaBtn();
+    }
 
     window.toggleEye = function(groupId) {
         let idStr = String(groupId);
@@ -38,6 +70,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!item) return false;
         if (item.isGhost) return true;
         return String(item.id || '').indexOf('ghost_') === 0;
+    }
+
+    function isPlanificadorInercia(item) {
+        if (!item) return false;
+        if (item.inercia) return true;
+        return String(item.className || '').indexOf('inercia-item') !== -1;
     }
 
     function isCopyablePlanifItem(item) {
@@ -95,8 +133,159 @@ document.addEventListener('DOMContentLoaded', function() {
         updateResizerPosition();
     }
 
+    var planifLaneTimer = null;
+
+    function planifIsPackableWorker(wid) {
+        var w = String(wid == null ? '' : wid);
+        return !!(w && w !== 'SYSTEM' && w !== 'REQUEST' && w !== 'NEW' && w !== 'GENERICO');
+    }
+
+    function planifMs(v) {
+        var t = new Date(v).getTime();
+        return isFinite(t) ? t : 0;
+    }
+
+    function planifRangesOverlap(a0, a1, b0, b1) {
+        return a0 < b1 && b0 < a1;
+    }
+
+    function planifMergeIntervals(intervals) {
+        if (!intervals.length) return [];
+        intervals.sort(function (a, b) { return a.start - b.start; });
+        var out = [{ start: intervals[0].start, end: intervals[0].end }];
+        for (var i = 1; i < intervals.length; i++) {
+            var last = out[out.length - 1];
+            if (intervals[i].start <= last.end) {
+                if (intervals[i].end > last.end) last.end = intervals[i].end;
+            } else {
+                out.push({ start: intervals[i].start, end: intervals[i].end });
+            }
+        }
+        return out;
+    }
+
+    function planifWorkerHitsLane(worker, laneWorkers) {
+        for (var i = 0; i < laneWorkers.length; i++) {
+            var iv = laneWorkers[i].intervals;
+            for (var x = 0; x < worker.intervals.length; x++) {
+                for (var y = 0; y < iv.length; y++) {
+                    if (planifRangesOverlap(worker.intervals[x].start, worker.intervals[x].end, iv[y].start, iv[y].end)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function planifAssignLanes(workers) {
+        workers.sort(function (a, b) {
+            var as = a.intervals.length ? a.intervals[0].start : 0;
+            var bs = b.intervals.length ? b.intervals[0].start : 0;
+            if (as !== bs) return as - bs;
+            return a.order.localeCompare(b.order);
+        });
+        var lanes = [];
+        workers.forEach(function (w) {
+            var lane = -1;
+            for (var i = 0; i < lanes.length; i++) {
+                if (!planifWorkerHitsLane(w, lanes[i])) {
+                    lane = i;
+                    break;
+                }
+            }
+            if (lane < 0) {
+                lane = lanes.length;
+                lanes.push([]);
+            }
+            lanes[lane].push(w);
+            w.lane = lane;
+        });
+    }
+
+    function planifVisibleRangeMs() {
+        if (!window.AppTimeline || typeof window.AppTimeline.getWindow !== 'function') return null;
+        try {
+            var w = window.AppTimeline.getWindow();
+            return { start: +new Date(w.start), end: +new Date(w.end) };
+        } catch (errW) {
+            return null;
+        }
+    }
+
+    function planifRelayoutLanes() {
+        if (!window.AppItems) return;
+        var items = window.AppItems.get() || [];
+        var range = planifVisibleRangeMs();
+        var byGroup = {};
+        items.forEach(function (it) {
+            if (!it || it.type === 'background') return;
+            if (!planifIsPackableWorker(it.worker_id) || it.group == null) return;
+            var start = planifMs(it.start);
+            var end = planifMs(it.end);
+            if (range && !planifRangesOverlap(start, end, range.start, range.end)) return;
+            var gid = String(it.group);
+            var key = String(it.worker_id);
+            if (!byGroup[gid]) byGroup[gid] = {};
+            if (!byGroup[gid][key]) {
+                byGroup[gid][key] = {
+                    key: key,
+                    order: (it.empresa_nombre || 'ZZ_Sin_Empresa') + '\t' + (it.title || ''),
+                    intervals: [],
+                };
+            }
+            byGroup[gid][key].intervals.push({ start: start, end: end });
+        });
+
+        var laneByGroupWorker = {};
+        Object.keys(byGroup).forEach(function (gid) {
+            var list = [];
+            Object.keys(byGroup[gid]).forEach(function (k) {
+                var rec = byGroup[gid][k];
+                rec.intervals = planifMergeIntervals(rec.intervals);
+                list.push(rec);
+            });
+            planifAssignLanes(list);
+            var map = {};
+            list.forEach(function (w) { map[w.key] = w.lane; });
+            laneByGroupWorker[gid] = map;
+        });
+
+        var updates = [];
+        items.forEach(function (it) {
+            if (!it || it.type === 'background' || it.id == null) return;
+            if (!planifIsPackableWorker(it.worker_id)) {
+                if (it.subgroup != null) {
+                    updates.push({ id: it.id, subgroup: null, subgroupOrder: 0 });
+                }
+                return;
+            }
+            var map = laneByGroupWorker[String(it.group)] || {};
+            var lane = map[String(it.worker_id)];
+            if (lane == null) lane = 0;
+            var sg = 'L' + lane;
+            if (it.subgroup !== sg || it.subgroupOrder !== lane) {
+                updates.push({ id: it.id, subgroup: sg, subgroupOrder: lane });
+            }
+        });
+        if (updates.length) window.AppItems.update(updates);
+    }
+
+    function planifScheduleLaneLayout() {
+        if (planifLaneTimer) clearTimeout(planifLaneTimer);
+        planifLaneTimer = setTimeout(function () {
+            planifRelayoutLanes();
+            fitPlanificadorTimelineToGroups();
+            if (planifViewPin) planifRestoreViewPin();
+        }, 200);
+    }
+
     window.renderItems = function() {
-        let visible = window.allEventsMaster.filter(ev => !window.hiddenGroups.has(String(ev.group)));
+        let visible = window.allEventsMaster.filter(function (ev) {
+            if (window.hiddenGroups.has(String(ev.group))) return false;
+            if (ev.inercia && window.planificadorHideInercia) return false;
+            return true;
+        });
         if (window.AppItems) {
             var extras = window.AppItems.get({
                 filter: function (i) {
@@ -112,6 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
             window.AppItems.clear();
             window.AppItems.add(visible);
             if (extras.length) window.AppItems.add(extras);
+            planifRelayoutLanes();
             if (selectedIds.length && window.AppTimeline && typeof window.AppTimeline.setSelection === 'function') {
                 setTimeout(function () {
                     try { window.AppTimeline.setSelection(selectedIds); } catch (errRest) { /* ignore */ }
@@ -502,6 +692,230 @@ document.addEventListener('DOMContentLoaded', function() {
         return items;
     }
 
+    function planifGetSelectedInercia() {
+        var ids = [];
+        try {
+            ids = (window.AppTimeline && window.AppTimeline.getSelection()) || [];
+        } catch (errSel) { ids = []; }
+        var items = [];
+        var seen = {};
+        function push(item) {
+            if (!item || isPlanificadorGhost(item) || !isPlanificadorInercia(item)) return;
+            var id = String(item.id);
+            if (seen[id]) return;
+            seen[id] = true;
+            items.push(item);
+        }
+        ids.forEach(function (id) {
+            push(window.AppItems && window.AppItems.get(id));
+        });
+        if (!items.length) push(window.currentSelectedItem);
+        return items;
+    }
+
+    function planifObraTitle(groupId) {
+        if (window.AppGroups) {
+            var g = window.AppGroups.get(groupId);
+            if (g && g.title) return g.title;
+        }
+        var list = window.allGroupsMaster || [];
+        for (var i = 0; i < list.length; i++) {
+            if (String(list[i].id) === String(groupId)) return list[i].title || ('#' + groupId);
+        }
+        return String(groupId);
+    }
+
+    function planifUnassignSelection(items) {
+        if (window.PLANIFICADOR_CAN_EDIT === false) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire(t('Sin permiso'), t('No tienes permisos de escritura en el planificador.'), 'warning');
+            }
+            return;
+        }
+        items = (items || []).filter(isCopyablePlanifItem);
+        if (!items.length) return;
+
+        var hoy = moment().startOf('day');
+        var actionable = [];
+        var skippedPast = 0;
+        var anyClipped = false;
+
+        items.forEach(function (item) {
+            var startDate = moment(item.start);
+            var endDate = moment(item.end).subtract(1, 'days');
+            if (!endDate.isValid()) endDate = startDate.clone();
+            if (endDate.isBefore(hoy)) {
+                skippedPast += 1;
+                return;
+            }
+            var startToErase = startDate.isBefore(hoy) ? hoy.clone() : startDate.clone();
+            var dates = [];
+            var current = startToErase.clone();
+            while (current.isSameOrBefore(endDate)) {
+                dates.push(current.format('YYYY-MM-DD'));
+                current.add(1, 'days');
+            }
+            if (!dates.length) return;
+            var clipped = startDate.isBefore(hoy);
+            if (clipped) anyClipped = true;
+            actionable.push({
+                workerId: item.worker_id,
+                obraId: item.group,
+                title: item.title || '',
+                obraTitle: planifObraTitle(item.group),
+                dates: dates,
+                startLabel: startToErase.format('DD/MM'),
+                endLabel: endDate.format('DD/MM'),
+                clipped: clipped,
+            });
+        });
+
+        if (!actionable.length) {
+            Swal.fire(
+                t('Histórico Protegido'),
+                skippedPast
+                    ? t('Los bloques seleccionados pertenecen íntegramente al pasado y no se pueden borrar.')
+                    : t('No hay asignaciones que desasignar.'),
+                'info'
+            );
+            return;
+        }
+
+        var totalDays = 0;
+        actionable.forEach(function (row) {
+            totalDays += row.dates.length;
+        });
+
+        var maxLines = 20;
+        var lines = actionable.slice(0, maxLines).map(function (row) {
+            return '<li><strong>' + pmdEsc(row.title) + '</strong> · '
+                + pmdEsc(row.obraTitle) + ' · '
+                + row.startLabel + ' – ' + row.endLabel
+                + ' <span class="text-muted">(' + row.dates.length + ' '
+                + t('días') + ')</span></li>';
+        });
+        if (actionable.length > maxLines) {
+            lines.push('<li class="text-muted">+' + (actionable.length - maxLines) + ' ' + t('más') + '…</li>');
+        }
+
+        var html = '<p class="mb-2">'
+            + t('Se van a desasignar') + ' <strong>' + actionable.length + '</strong> '
+            + t('bloques') + ' (' + totalDays + ' ' + t('días') + ').'
+            + '</p>'
+            + '<ul class="text-left mb-2 pl-3" style="max-height:14rem;overflow:auto;font-size:0.85rem;">'
+            + lines.join('')
+            + '</ul>'
+            + '<p class="text-muted small mb-0">' + t('Esta acción es inmediata.') + '</p>';
+        if (anyClipped) {
+            html += '<p class="text-info small mb-0 mt-2"><i class="fas fa-info-circle"></i> '
+                + t('Se conservará el histórico anterior a hoy.') + '</p>';
+        }
+        if (skippedPast) {
+            html += '<p class="text-muted small mb-0 mt-1">'
+                + skippedPast + ' ' + t('bloque(s) del pasado se omiten.') + '</p>';
+        }
+
+        hidePlanificadorOverlays();
+
+        var swalOpts = {
+            title: t('¿Confirmar desasignación?'),
+            html: html,
+            icon: 'warning',
+            showCancelButton: true,
+            focusConfirm: true,
+            allowEnterKey: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: t('Sí, desasignar'),
+            cancelButtonText: t('Cancelar'),
+            customClass: {
+                confirmButton: 'admin-swal-btn admin-swal-btn-danger',
+                cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+            },
+            didOpen: function () {
+                var btn = typeof Swal.getConfirmButton === 'function' ? Swal.getConfirmButton() : null;
+                if (btn) btn.focus();
+            },
+        };
+        var fire = (typeof window.adminSwal === 'function')
+            ? window.adminSwal(swalOpts)
+            : Swal.fire(swalOpts);
+
+        fire.then(function (result) {
+            if (!result || !result.isConfirmed) return;
+
+            var buckets = {};
+            actionable.forEach(function (row) {
+                var key = String(row.workerId) + '|' + String(row.obraId);
+                if (!buckets[key]) {
+                    buckets[key] = { workerId: row.workerId, obraId: row.obraId, dates: [] };
+                }
+                row.dates.forEach(function (d) {
+                    if (buckets[key].dates.indexOf(d) === -1) buckets[key].dates.push(d);
+                });
+            });
+            var queue = Object.keys(buckets).map(function (k) { return buckets[k]; });
+            var okCount = 0;
+            var failMsg = '';
+
+            Swal.fire({
+                title: t('Desasignando…'),
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: function () { Swal.showLoading(); },
+            });
+
+            function finish() {
+                if (typeof window.loadTimelineData === 'function') window.loadTimelineData();
+                if (okCount && !failMsg) {
+                    Swal.fire({
+                        toast: true, position: 'top-end', icon: 'success',
+                        title: t('Desasignado'),
+                        showConfirmButton: false, timer: 1800,
+                    });
+                } else if (okCount && failMsg) {
+                    Swal.fire(t('Parcial'), failMsg, 'warning');
+                } else {
+                    Swal.fire(t('Error'), failMsg || t('Ocurrió un error'), 'error');
+                }
+            }
+
+            function next() {
+                if (!queue.length) {
+                    finish();
+                    return;
+                }
+                var job = queue.shift();
+                fetch('/api/v6/unassign_worker', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrf_token') },
+                    body: JSON.stringify({
+                        worker_id: job.workerId,
+                        obra_id: job.obraId,
+                        dates: job.dates,
+                        mode: 'selected',
+                    }),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data && data.success) {
+                            okCount += 1;
+                            next();
+                        } else {
+                            failMsg = (data && (data.message || data.error)) || t('Ocurrió un error');
+                            next();
+                        }
+                    })
+                    .catch(function () {
+                        failMsg = t('Fallo de conexión.');
+                        next();
+                    });
+            }
+            next();
+        });
+    }
+
     function planifRectsOverlap(a, b) {
         return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     }
@@ -707,37 +1121,55 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         planifSelectIds(ghostIds);
         planifUpdateGhostBar();
+        planifRelayoutLanes();
     }
 
-    function planifConfirmGhosts() {
+    function planifCommitAssignmentItems(items, opts) {
+        opts = opts || {};
         if (planifPointer.confirming) return;
-        if (window.PLANIFICADOR_CAN_EDIT === false) return;
-        var ghosts = collectPlanifGhosts();
-        if (!ghosts.length) return;
-
-        var queue = ghosts.map(function (g) {
-            return {
+        if (window.PLANIFICADOR_CAN_EDIT === false) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire(t('Sin permiso'), t('No tienes permisos de escritura en el planificador.'), 'warning');
+            }
+            return;
+        }
+        var hoy = moment().startOf('day');
+        var queue = [];
+        (items || []).forEach(function (g) {
+            if (!g || g.group == null) return;
+            var w = String(g.worker_id == null ? '' : g.worker_id);
+            if (!w || w === 'SYSTEM' || w === 'REQUEST' || w === 'NEW' || w === 'GENERICO') return;
+            var start = moment(g.start).startOf('day');
+            var end = moment(g.end).subtract(1, 'days').startOf('day');
+            if (!start.isValid() || !end.isValid()) return;
+            if (start.isBefore(hoy)) start = hoy.clone();
+            if (end.isBefore(start)) return;
+            queue.push({
                 worker_id: g.worker_id,
                 target_obra_id: g.group,
-                start_date: moment(g.start).format('YYYY-MM-DD'),
-                end_date: moment(g.end).subtract(1, 'days').format('YYYY-MM-DD'),
+                start_date: start.format('YYYY-MM-DD'),
+                end_date: end.format('YYYY-MM-DD'),
+                include_weekends: false,
                 overwrite_mode: 'check',
                 continue_on_noop: true,
-                _ghostId: g.id,
-            };
+                _removeId: opts.removeOnSuccess ? g.id : null,
+            });
         });
+        if (!queue.length) return;
 
         planifPointer.confirming = true;
         planifUpdateGhostBar();
+        hidePlanificadorOverlays();
 
         function finishOk() {
             planifPointer.confirming = false;
-            planifClearGhosts();
+            if (opts.clearGhosts) planifClearGhosts();
+            else planifUpdateGhostBar();
             if (typeof window.loadTimelineData === 'function') window.loadTimelineData();
             if (typeof Swal !== 'undefined') {
                 Swal.fire({
                     toast: true, position: 'top-end', icon: 'success',
-                    title: t('Asignaciones confirmadas'),
+                    title: opts.successTitle || t('Asignaciones confirmadas'),
                     showConfirmButton: false, timer: 1800,
                 });
             }
@@ -757,8 +1189,8 @@ document.addEventListener('DOMContentLoaded', function() {
             pendingAction = job;
             pendingRevert = finishStop;
             ejecutarAccionAPI(pendingRevert, function () {
-                if (job._ghostId && window.AppItems) {
-                    try { window.AppItems.remove(job._ghostId); } catch (errRm) { /* ignore */ }
+                if (job._removeId && window.AppItems) {
+                    try { window.AppItems.remove(job._removeId); } catch (errRm) { /* ignore */ }
                 }
                 next();
             });
@@ -766,24 +1198,216 @@ document.addEventListener('DOMContentLoaded', function() {
         next();
     }
 
+    function planifConfirmGhosts() {
+        planifCommitAssignmentItems(collectPlanifGhosts(), {
+            removeOnSuccess: true,
+            clearGhosts: true,
+            successTitle: t('Asignaciones confirmadas'),
+        });
+    }
+
+    function planifConfirmInercia(items) {
+        planifCommitAssignmentItems(items || planifGetSelectedInercia(), {
+            successTitle: t('Inercia convertida en asignación'),
+        });
+    }
+
+    window.confirmarInerciaDesdePop = function () {
+        if (window.currentSelectedItem && isPlanificadorInercia(window.currentSelectedItem)) {
+            planifConfirmInercia([window.currentSelectedItem]);
+        } else {
+            planifConfirmInercia();
+        }
+    };
+
+    var PLANIF_MS_DAY = 1000 * 60 * 60 * 24;
+    var PLANIF_ZOOM_MIN = PLANIF_MS_DAY * 7;
+    var PLANIF_ZOOM_MAX = PLANIF_MS_DAY * 365 * 20;
+    var planifViewPin = null;
+    var planifPinTimer = null;
+    var planifPinRestoring = false;
+
+    function planifScrollRootEl() {
+        return planificadorScrollRoot || document.querySelector('.admin-main');
+    }
+
+    function planifAttrEscape(val) {
+        var s = String(val);
+        if (window.CSS && typeof CSS.escape === 'function') return CSS.escape(s);
+        return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    function planifRowAnchor(groupId) {
+        if (groupId == null || groupId === '') return null;
+        var btn = document.querySelector(
+            '#planificador-calendar .btn-ojo-magico[data-group-id="' + planifAttrEscape(groupId) + '"]'
+        );
+        return btn ? (btn.closest('.vis-label') || btn) : null;
+    }
+
+    function planifLabelAtY(clientY) {
+        var labels = document.querySelectorAll('#planificador-calendar .vis-labelset .vis-label');
+        var last = null;
+        for (var i = 0; i < labels.length; i++) {
+            var r = labels[i].getBoundingClientRect();
+            if (r.height < 2) continue;
+            var btn = labels[i].querySelector('.btn-ojo-magico');
+            var info = {
+                el: labels[i],
+                groupId: btn ? btn.getAttribute('data-group-id') : null,
+                top: r.top,
+            };
+            if (clientY >= r.top && clientY <= r.bottom) return info;
+            if (r.top <= clientY) last = info;
+        }
+        return last;
+    }
+
+    function planifAbandonViewPin() {
+        planifViewPin = null;
+        if (planifPinTimer) {
+            clearTimeout(planifPinTimer);
+            planifPinTimer = null;
+        }
+    }
+
+    function planifClearViewPin() {
+        planifAbandonViewPin();
+        fitPlanificadorTimelineToGroups();
+    }
+
+    function planifCaptureViewPin(event, props) {
+        var hit = planifLabelAtY(event.clientY);
+        if (!hit || !hit.groupId) {
+            var center = document.querySelector('#planificador-calendar .vis-panel.vis-center');
+            if (center) {
+                var cr = center.getBoundingClientRect();
+                var y = event.clientY;
+                if (y < cr.top || y > cr.bottom) y = cr.top + Math.min(cr.height * 0.35, 120);
+                hit = planifLabelAtY(y);
+            }
+        }
+        var groupId = (hit && hit.groupId) || (props && props.group);
+        if (groupId == null || groupId === '') {
+            var labels = document.querySelectorAll('#planificador-calendar .vis-labelset .vis-label');
+            var cal = document.querySelector('#planificador-calendar .vis-panel.vis-center')
+                || document.getElementById('planificador-calendar');
+            var vr = cal ? cal.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+            for (var i = 0; i < labels.length; i++) {
+                var lr = labels[i].getBoundingClientRect();
+                if (lr.bottom <= vr.top || lr.top >= vr.bottom) continue;
+                var btn = labels[i].querySelector('.btn-ojo-magico');
+                if (!btn) continue;
+                hit = { el: labels[i], groupId: btn.getAttribute('data-group-id'), top: lr.top };
+                groupId = hit.groupId;
+                break;
+            }
+        }
+        var rowEl = planifRowAnchor(groupId) || (hit && hit.el);
+        var top = rowEl ? rowEl.getBoundingClientRect().top : event.clientY;
+        planifViewPin = {
+            groupId: groupId,
+            offsetInGroup: event.clientY - top,
+            clientY: event.clientY,
+        };
+    }
+
+    function planifRestoreViewPin() {
+        var pin = planifViewPin;
+        if (!pin || pin.groupId == null || planifPinRestoring) return;
+        planifPinRestoring = true;
+        try {
+            var el = planifRowAnchor(pin.groupId);
+            var root = planifScrollRootEl();
+            if (!el || !root) return;
+            var rootRect = root.getBoundingClientRect();
+            var elRect = el.getBoundingClientRect();
+            var off = pin.offsetInGroup;
+            if (elRect.height > 1) off = Math.max(0, Math.min(off, elRect.height - 1));
+            var groupContentY = elRect.top - rootRect.top + root.scrollTop;
+            var pointContentY = groupContentY + off;
+            var target = pointContentY - (pin.clientY - rootRect.top);
+            var max = Math.max(0, root.scrollHeight - root.clientHeight);
+            target = Math.max(0, Math.min(max, Math.round(target)));
+            if (Math.abs(root.scrollTop - target) >= 1) {
+                root.scrollTop = target;
+            }
+            updateStickyHeader();
+        } finally {
+            planifPinRestoring = false;
+        }
+    }
+
+    function planifKeepViewPin(ms) {
+        planifRestoreViewPin();
+        if (planifPinTimer) clearTimeout(planifPinTimer);
+        var until = Date.now() + (ms || 450);
+        function tick() {
+            if (!planifViewPin) return;
+            planifRestoreViewPin();
+            if (Date.now() < until) planifPinTimer = setTimeout(tick, 50);
+            else planifClearViewPin();
+        }
+        planifPinTimer = setTimeout(tick, 50);
+    }
+
+    function planifZoomAroundPointer(event) {
+        var tl = window.AppTimeline;
+        if (!tl || typeof tl.getWindow !== 'function') return;
+        var win = tl.getWindow();
+        var tStart = new Date(win.start).getTime();
+        var tEnd = new Date(win.end).getTime();
+        var interval = tEnd - tStart;
+        if (!interval || !isFinite(interval)) return;
+
+        var props = null;
+        try { props = tl.getEventProperties(event); } catch (errProps) { props = null; }
+        var pivot = (props && props.time) ? new Date(props.time).getTime() : NaN;
+        if (!isFinite(pivot)) {
+            var center = document.querySelector('#planificador-calendar .vis-panel.vis-center');
+            var rect = (center || document.getElementById('planificador-calendar')).getBoundingClientRect();
+            var fracX = rect.width ? (event.clientX - rect.left) / rect.width : 0.5;
+            fracX = Math.max(0, Math.min(1, fracX));
+            pivot = tStart + interval * fracX;
+        }
+
+        var steps = event.deltaY;
+        if (event.deltaMode === 1) steps = event.deltaY;
+        else if (event.deltaMode === 2) steps = event.deltaY * 4;
+        else steps = event.deltaY / 100;
+        var factor = Math.pow(1.12, steps);
+        var newInterval = Math.min(PLANIF_ZOOM_MAX, Math.max(PLANIF_ZOOM_MIN, interval * factor));
+        if (Math.abs(newInterval - interval) < 1) return;
+
+        var frac = (pivot - tStart) / interval;
+        if (!isFinite(frac)) frac = 0.5;
+        frac = Math.max(0, Math.min(1, frac));
+        var newStart = pivot - newInterval * frac;
+        var newEnd = newStart + newInterval;
+
+        planifCaptureViewPin(event, props);
+        tl.setWindow(new Date(newStart), new Date(newEnd), { animation: false });
+        planifRestoreViewPin();
+        planifKeepViewPin(500);
+    }
+
     function setupPlanificadorWheelScroll() {
         const calendarRoot = document.getElementById('planificador-calendar');
         if (!calendarRoot) return;
 
-        // Dentro del Gantt (personas): rueda = zoom de vis.
-        // Columna de obras o Ctrl/Cmd + rueda: scroll de página.
-        // Fuera del calendario: scroll nativo de la página.
         calendarRoot.addEventListener('wheel', function(event) {
-            const onLeftColumn = !!event.target.closest('.vis-panel.vis-left, .vis-labelset, .vis-label');
-            const wantsPageScroll = onLeftColumn || event.ctrlKey || event.metaKey;
-
-            if (!wantsPageScroll) return;
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
 
-            scrollPlanificadorPage(event.deltaY);
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
+
+            if (event.ctrlKey || event.metaKey) {
+                planifAbandonViewPin();
+                scrollPlanificadorPage(event.deltaY);
+                return;
+            }
+            planifZoomAroundPointer(event);
         }, { passive: false, capture: true });
     }
 
@@ -839,6 +1463,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 planifPointer.lastY = e.clientY;
                 if (!dy) return;
                 planifPointer.moved = true;
+                planifAbandonViewPin();
                 scrollPlanificadorPage(-dy);
             } else if (planifPointer.mode === 'marquee') {
                 planifPointer.lastEvent = e;
@@ -906,6 +1531,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (y == null && ev && ev.srcEvent) y = ev.srcEvent.clientY;
             if (y == null) return;
             if (lastHammerY != null && y !== lastHammerY) {
+                planifAbandonViewPin();
                 scrollPlanificadorPage(-(y - lastHammerY));
                 window.__planificadorDidDrag = true;
             }
@@ -1021,18 +1647,22 @@ document.addEventListener('DOMContentLoaded', function() {
         groupHeightMode: 'auto',
         verticalScroll: false,
         stack: true,
+        stackSubgroups: true,
+        subgroupOrder: 'subgroupOrder',
         multiselect: true,
         selectable: true,
         groupEditable: true,
         groupOrder: 'orden',
         margin: { item: 2, axis: 5 },
-        throttleRedraw: 50,
+        throttleRedraw: 120,
+        preferZoom: true,
+        zoomable: false,
         showTooltips: false,
         editable: (window.PLANIFICADOR_CAN_EDIT === false)
             ? false
             : { add: false, updateTime: true, updateGroup: true, remove: false },
-        zoomMin: 1000 * 60 * 60 * 24 * 7,
-        zoomMax: 1000 * 60 * 60 * 24 * 365,
+        zoomMin: PLANIF_ZOOM_MIN,
+        zoomMax: PLANIF_ZOOM_MAX,
         locale: planifLang(),
         locales: {
             es: { current: 'hoy', time: 'hora' },
@@ -1161,7 +1791,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Estilo para Operarios normales (tooltip vía itemover)
             const emp = formatEmpresaLabel(item.empresa_nombre);
-            return `<div class="operario-micro" data-empresa="${emp.replace(/"/g, '&quot;')}"><i class="fas fa-user"></i>${item.title}</div>`;
+            const icon = item.inercia ? 'fa-ghost' : 'fa-user';
+            return `<div class="operario-micro" data-empresa="${emp.replace(/"/g, '&quot;')}"><i class="fas ${icon}"></i>${item.title}</div>`;
         },
         onUpdate: function (item, callback) {
             if (isPlanificadorGhost(item)) {
@@ -1370,6 +2001,12 @@ document.addEventListener('DOMContentLoaded', function() {
     window.AppTimeline.setWindow(moment().subtract(1, 'weeks').toDate(), moment().add(3, 'months').toDate());
     setupPlanificadorItemTooltip();
     bindVisPanFallback();
+    window.AppTimeline.on('changed', function () {
+        if (planifViewPin) planifRestoreViewPin();
+    });
+    window.AppTimeline.on('rangechange', function () {
+        if (planifViewPin) planifRestoreViewPin();
+    });
 
     calendarDiv.addEventListener('mousedown', function (e) {
         if (e.target && e.target.closest && e.target.closest('.vis-item')) {
@@ -1440,6 +2077,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Ocultamos el botón del calendario universal si existe
                 let btnVerCal = document.getElementById('btn-ver-calendario');
                 if (btnVerCal) btnVerCal.style.display = 'none';
+                var btnInercia = document.getElementById('btn-confirmar-inercia');
+                if (btnInercia) btnInercia.classList.add('d-none');
 
             } else {
             // ==========================================================
@@ -1468,6 +2107,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 let roleText = item.categoria || t('Sin categoría especificada');
                 if (item.especialidad) roleText += ` (${item.especialidad})`;
+                if (item.inercia) {
+                    roleText = t('Sigue en esta obra (inercia)')
+                        + ' · ' + t('Enter la convierte en asignación');
+                }
                 document.getElementById('wp-role').textContent = roleText;
                 
                let ratingEl = document.getElementById('wp-rating');
@@ -1529,7 +2172,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         }, 200);
                     });
                 }
-                btnVerCal.style.display = 'block'; 
+                btnVerCal.style.display = 'block';
+                var btnInerciaOk = document.getElementById('btn-confirmar-inercia');
+                if (btnInerciaOk) {
+                    var canConfirm = window.PLANIFICADOR_CAN_EDIT !== false && !!item.inercia;
+                    btnInerciaOk.classList.toggle('d-none', !canConfirm);
+                }
             }
 
             // --- CÁLCULO DE POSICIÓN Y MOSTRAR POPOVER ---
@@ -1589,6 +2237,48 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- LÓGICA DE CARGA DE DATOS ---
+    function mapPlanifEvent(e) {
+        var base = {
+            id: e.id,
+            start: e.start,
+            end: e.end,
+            worker_id: e.worker_id,
+            solicitud_id: e.solicitud_id,
+        };
+        if (e.resourceId) base.group = e.resourceId;
+        if (e.type === 'background') {
+            base.type = e.type;
+            base.content = e.content;
+            base.className = e.className;
+            base.style = e.color ? 'background-color: ' + e.color + ' !important;' : '';
+        } else {
+            base.title = e.title;
+            base.style = e.style ? e.style : (e.color ? 'background-color: ' + e.color + ';' : '');
+            base.color = e.color;
+            base.empresa_nombre = e.empresa_nombre || 'ZZ_Sin_Empresa';
+            base.empresa_id = e.empresa_id;
+            base.categoria = e.categoria;
+            base.especialidad = e.especialidad;
+            base.nota = e.nota;
+            if (e.inercia) {
+                base.inercia = true;
+                base.editable = false;
+                base.className = (e.className ? e.className + ' ' : '') + 'inercia-item';
+            }
+        }
+        return base;
+    }
+
+    function rememberCommitted(ev) {
+        if (!ev || ev.type === 'background') return;
+        window.committedEventState[ev.id] = {
+            group: ev.group,
+            start: ev.start,
+            end: ev.end,
+            worker_id: ev.worker_id,
+        };
+    }
+
     function applyPlanificadorPayload(data, evData) {
         if (!data.length) {
             window.allGroupsMaster = [];
@@ -1626,82 +2316,181 @@ document.addEventListener('DOMContentLoaded', function() {
                 fecha_inicio: g.fecha_inicio || '',
                 fecha_fin_iso: g.fecha_fin_iso || '',
                 orden: index,
+                subgroupStack: true,
+                subgroupOrder: 'subgroupOrder',
             };
         }));
 
-        window.allEventsMaster = evData.map(function (e) {
-            var base = {
-                id: e.id,
-                start: e.start,
-                end: e.end,
-                worker_id: e.worker_id,
-                solicitud_id: e.solicitud_id,
-            };
-            if (e.resourceId) base.group = e.resourceId;
-            if (e.type === 'background') {
-                base.type = e.type;
-                base.content = e.content;
-                base.className = e.className;
-                base.style = e.color ? 'background-color: ' + e.color + ' !important;' : '';
-            } else {
-                base.title = e.title;
-                base.style = e.style ? e.style : (e.color ? 'background-color: ' + e.color + ';' : '');
-                base.color = e.color;
-                base.empresa_nombre = e.empresa_nombre || 'ZZ_Sin_Empresa';
-                base.empresa_id = e.empresa_id;
-                base.categoria = e.categoria;
-                base.especialidad = e.especialidad;
-                base.nota = e.nota;
-            }
-            return base;
-        });
-
+        window.allEventsMaster = (evData || []).map(mapPlanifEvent);
         window.committedEventState = {};
-        window.allEventsMaster.forEach(function (ev) {
-            if (!ev || ev.type === 'background') return;
-            window.committedEventState[ev.id] = {
-                group: ev.group,
-                start: ev.start,
-                end: ev.end,
-                worker_id: ev.worker_id,
-            };
-        });
-
+        window.allEventsMaster.forEach(rememberCommitted);
         window.renderItems();
     }
 
-    window.loadTimelineData = function() {
-        if (window.planificadorLoading) return;
-        window.planificadorLoading = true;
-        let obrasIds = $('#obrasSelect').val() || [];
-        let jefeId = $('#jefeSelect').val() || null;
-        let workerIds = $('#workersSelect').val() || [];
-        
-        let totalEmpresas = $('.chk-empresa-filter').length;
-        let checkedEmpresas = $('.chk-empresa-filter:checked').length;
-        let companyIds = [];
-        
+    function planifFilterParams() {
+        var params = new URLSearchParams();
+        var obrasIds = $('#obrasSelect').val() || [];
+        var jefeId = $('#jefeSelect').val() || null;
+        var workerIds = $('#workersSelect').val() || [];
+        var totalEmpresas = $('.chk-empresa-filter').length;
+        var checkedEmpresas = $('.chk-empresa-filter:checked').length;
+        var companyIds = [];
         if (checkedEmpresas < totalEmpresas) {
             $('.chk-empresa-filter:checked').each(function() {
                 companyIds.push($(this).val());
             });
             if (companyIds.length === 0) companyIds = [-1];
         }
-
-        let params = new URLSearchParams();
         if (jefeId) params.append('jefe_id', jefeId);
-        obrasIds.forEach(id => params.append('obra_ids[]', id));
-        companyIds.forEach(id => params.append('company_ids[]', id));
-        workerIds.forEach(id => params.append('worker_ids[]', id));
+        obrasIds.forEach(function (id) { params.append('obra_ids[]', id); });
+        companyIds.forEach(function (id) { params.append('company_ids[]', id); });
+        workerIds.forEach(function (id) { params.append('worker_ids[]', id); });
+        return params;
+    }
 
-        params.append('start', moment().subtract(6, 'months').toISOString());
-        params.append('end', moment().add(6, 'months').toISOString());
+    function mergePlanificadorResources(data) {
+        if (!data || !data.length) return false;
+        var have = {};
+        (window.allGroupsMaster || []).forEach(function (g) {
+            have[String(g.id)] = true;
+        });
+        var added = [];
+        data.forEach(function (g) {
+            if (!have[String(g.id)]) added.push(g);
+        });
+        if (!added.length) return false;
+        var orden0 = window.allGroupsMaster.length;
+        added.forEach(function (g, index) {
+            window.allGroupsMaster.push(g);
+            window.AppGroups.add({
+                id: g.id,
+                title: g.title,
+                codigo: g.codigo,
+                fecha_fin: g.fecha_fin,
+                fecha_inicio: g.fecha_inicio || '',
+                fecha_fin_iso: g.fecha_fin_iso || '',
+                orden: orden0 + index,
+                subgroupStack: true,
+                subgroupOrder: 'subgroupOrder',
+            });
+        });
+        return true;
+    }
 
+    function mergePlanificadorEvents(evData) {
+        var mapped = (evData || []).map(mapPlanifEvent);
+        var have = {};
+        window.allEventsMaster.forEach(function (e) {
+            have[String(e.id)] = true;
+        });
+        var fresh = mapped.filter(function (e) { return !have[String(e.id)]; });
+        if (!fresh.length) return false;
+        window.allEventsMaster = window.allEventsMaster.concat(fresh);
+        fresh.forEach(rememberCommitted);
+        var toShow = fresh.filter(function (ev) {
+            if (window.hiddenGroups.has(String(ev.group))) return false;
+            if (ev.inercia && window.planificadorHideInercia) return false;
+            return true;
+        });
+        if (toShow.length && window.AppItems) window.AppItems.add(toShow);
+        planifScheduleLaneLayout();
+        return true;
+    }
+
+    window._planifLoaded = null;
+    window._planifReloadQueued = false;
+    window._planifExtending = false;
+
+    function planifInitialRange() {
+        return {
+            start: moment().subtract(12, 'months').startOf('day'),
+            end: moment().add(6, 'months').endOf('day'),
+        };
+    }
+
+    function planifFetchSlice(start, end, withInercia) {
+        var params = planifFilterParams();
+        params.append('start', start.toISOString());
+        params.append('end', end.toISOString());
+        params.append('inercia', withInercia ? '1' : '0');
+        params.append('compact', '0');
         var qs = params.toString();
-        Promise.all([
+        return Promise.all([
             fetch('/admin/api/planificador/resources?' + qs).then(function (r) { return r.json(); }),
             fetch('/admin/api/planificador/events?' + qs).then(function (r) { return r.json(); }),
-        ]).then(function (results) {
+        ]);
+    }
+
+    function planifExtendIfNeeded() {
+        if (window.planificadorLoading || window._planifExtending) return;
+        var loaded = window._planifLoaded;
+        if (!loaded || !window.AppTimeline) return;
+        var w;
+        try { w = window.AppTimeline.getWindow(); } catch (errW) { return; }
+        var visStart = moment(w.start).subtract(1, 'month').startOf('day');
+        var visEnd = moment(w.end).add(1, 'month').endOf('day');
+        var needPast = visStart.isBefore(loaded.start);
+        var needFuture = visEnd.isAfter(loaded.end);
+        if (!needPast && !needFuture) return;
+
+        var start;
+        var end;
+        var goingPast = needPast;
+        if (goingPast) {
+            end = loaded.start.clone().subtract(1, 'days').endOf('day');
+            start = visStart.clone();
+            if (start.isBefore(loaded.start.clone().subtract(5, 'years'))) {
+                start = loaded.start.clone().subtract(5, 'years').startOf('day');
+            }
+        } else {
+            start = loaded.end.clone().add(1, 'days').startOf('day');
+            end = visEnd.clone();
+            if (end.isAfter(loaded.end.clone().add(5, 'years'))) {
+                end = loaded.end.clone().add(5, 'years').endOf('day');
+            }
+        }
+        if (!start.isBefore(end)) return;
+
+        window._planifExtending = true;
+        planifFetchSlice(start, end, false).then(function (results) {
+            var addedGroups = mergePlanificadorResources(results[0] || []);
+            mergePlanificadorEvents(results[1] || []);
+            if (goingPast) loaded.start = start.clone();
+            else loaded.end = end.clone();
+            if (addedGroups) {
+                setTimeout(function () {
+                    planifRelayoutLanes();
+                    fitPlanificadorTimelineToGroups();
+                    if (planifViewPin) planifRestoreViewPin();
+                }, 40);
+            } else {
+                planifScheduleLaneLayout();
+            }
+            if (planifViewPin) planifKeepViewPin(700);
+        }).catch(function () {
+            if (goingPast) loaded.start = start.clone();
+            else loaded.end = end.clone();
+        }).finally(function () {
+            window._planifExtending = false;
+            planifExtendIfNeeded();
+        });
+    }
+
+    window.loadTimelineData = function() {
+        if (window.planificadorLoading) {
+            window._planifReloadQueued = true;
+            return;
+        }
+        window.planificadorLoading = true;
+        var range = planifInitialRange();
+        var wantInercia = !window.planificadorHideInercia;
+        planifFetchSlice(range.start, range.end, wantInercia).then(function (results) {
+            window._planifLoaded = {
+                start: range.start.clone(),
+                end: range.end.clone(),
+                compact: false,
+                inercia: wantInercia,
+            };
             applyPlanificadorPayload(results[0], results[1]);
         }).catch(function () {
             window.allGroupsMaster = [];
@@ -1710,6 +2499,10 @@ document.addEventListener('DOMContentLoaded', function() {
             window.renderItems();
         }).finally(function () {
             window.planificadorLoading = false;
+            if (window._planifReloadQueued) {
+                window._planifReloadQueued = false;
+                window.loadTimelineData();
+            }
         });
     };
 
@@ -1998,9 +2791,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (popover && !popover.classList.contains('d-none')) { popover.classList.add('d-none'); }
     }, { capture: true, passive: true });
 
+    var planifExtendTimer = null;
     window.AppTimeline.on('rangechanged', function() {
         let popover = document.getElementById('worker-popover');
         if (popover && !popover.classList.contains('d-none')) { popover.classList.add('d-none'); }
+        if (planifExtendTimer) clearTimeout(planifExtendTimer);
+        planifExtendTimer = setTimeout(function () {
+            planifRelayoutLanes();
+            fitPlanificadorTimelineToGroups();
+            if (planifViewPin) planifRestoreViewPin();
+            planifExtendIfNeeded();
+        }, 220);
     });
 
     /**
@@ -2089,10 +2890,18 @@ document.addEventListener('DOMContentLoaded', function() {
             hidePlanificadorOverlays();
             return;
         }
-        if (e.key === 'Enter' && collectPlanifGhosts().length) {
-            e.preventDefault();
-            planifConfirmGhosts();
-            return;
+        if (e.key === 'Enter') {
+            if (collectPlanifGhosts().length) {
+                e.preventDefault();
+                planifConfirmGhosts();
+                return;
+            }
+            var inercias = planifGetSelectedInercia();
+            if (inercias.length) {
+                e.preventDefault();
+                planifConfirmInercia(inercias);
+                return;
+            }
         }
 
         if (e.key !== 'Delete' && e.key !== 'Backspace') return;
@@ -2116,13 +2925,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        if (!window.currentSelectedItem) return;
-        const wid = window.currentSelectedItem.worker_id;
-        if (wid === 'SYSTEM' || wid === 'REQUEST') return;
+        var toUnassign = planifGetSelectedCopyables();
+        if (!toUnassign.length) return;
         e.preventDefault();
-        if (typeof window.desasignarDesdePop === 'function') {
-            window.desasignarDesdePop('periodo');
-        }
+        planifUnassignSelection(toUnassign);
     });
 
     // --- NUEVO: FUNCIÓN PARA DESASIGNAR DIRECTAMENTE DESDE EL POPOVER ---

@@ -533,142 +533,135 @@
 
 {% if can_write_sync %}
 <div class="modal fade admin-note-modal" id="syncConfigModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-xl">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title mb-0"><i class="fas fa-cog mr-2"></i>{{ _('Configuración de sincronización') }}</h5>
+        <h5 class="modal-title mb-0"><i class="fas fa-cog mr-2"></i>{{ _('Qué sincroniza Odoo') }}</h5>
         <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small">{{ _('Los cambios se aplican de inmediato. El scheduler revisa cada 5 minutos qué tareas ejecutar.') }}</p>
         <form id="syncConfigForm">
-          <h6 class="sync-config-group-title">{{ _('Master data (obras, empleados, subcontratas)') }}</h6>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <label class="form-label-sm">{{ _('Hora diaria') }}</label>
-              <input type="number" class="form-control" name="sync_master_hour" min="0" max="23" value="{{ config.master_hour }}">
+          <section class="sync-cfg-block">
+            <h3 class="sync-cfg-title">{{ _('Por la noche') }}</h3>
+            <p class="sync-cfg-help">{{ _('Una vez al día Odoo actualiza lo que marques. Elige la hora y qué bloques quieres.') }}</p>
+            <div class="sync-cfg-night-time">
+              <label class="form-label-sm mb-0" for="syncNightTime">{{ _('A las') }}</label>
+              <input type="time" class="form-control" id="syncNightTime"
+                     value="{{ '%02d:%02d'|format(config.master_hour, config.master_minute) }}">
             </div>
-            <div class="col-md-4">
-              <label class="form-label-sm">{{ _('Minuto') }}</label>
-              <input type="number" class="form-control" name="sync_master_minute" min="0" max="59" value="{{ config.master_minute }}">
+            <div class="sync-cfg-checks">
+              <label class="sync-cfg-check">
+                <input type="checkbox" name="sync_obras_enabled" {% if config.obras_enabled %}checked{% endif %}>
+                <span><strong>{{ _('Obras') }}</strong> — {{ _('proyectos abiertos') }}</span>
+              </label>
+              <label class="sync-cfg-check">
+                <input type="checkbox" name="sync_empleados_enabled" {% if config.empleados_enabled %}checked{% endif %}>
+                <span><strong>{{ _('Personal interno') }}</strong> — {{ _('empleados de los departamentos de abajo') }}</span>
+              </label>
+              <label class="sync-cfg-check">
+                <input type="checkbox" name="sync_subcontratas_enabled" {% if config.subcontratas_enabled %}checked{% endif %}>
+                <span><strong>{{ _('Subcontratas') }}</strong> — {{ _('empresas externas y sus contactos') }}</span>
+              </label>
+              <label class="sync-cfg-check">
+                <input type="checkbox" name="sync_ausencias_enabled" {% if config.ausencias_enabled %}checked{% endif %}>
+                <span><strong>{{ _('Ausencias') }}</strong> — {{ _('vacaciones, bajas y permisos') }}</span>
+              </label>
             </div>
-          </div>
-          <div class="row mb-3">
-            <div class="col-md-3">
-              <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="cfgObras" name="sync_obras_enabled" {% if config.obras_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgObras">{{ _('Obras') }}</label>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="cfgEmp" name="sync_empleados_enabled" {% if config.empleados_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgEmp">{{ _('Empleados') }}</label>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="cfgSub" name="sync_subcontratas_enabled" {% if config.subcontratas_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgSub">{{ _('Subcontratas') }}</label>
-              </div>
-            </div>
-            <div class="col-md-3">
-              <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="cfgAus" name="sync_ausencias_enabled" {% if config.ausencias_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgAus">{{ _('Ausencias') }}</label>
-              </div>
-            </div>
-          </div>
+          </section>
 
-          <h6 class="sync-config-group-title">{{ _('Fichajes en vivo') }}</h6>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <div class="custom-control custom-switch mb-2">
-                <input type="checkbox" class="custom-control-input" id="cfgFich" name="sync_fichajes_enabled" {% if config.fichajes_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgFich">{{ _('Fichajes activos') }}</label>
-              </div>
+          <section class="sync-cfg-block">
+            <h3 class="sync-cfg-title">{{ _('Personal interno: departamento → rol') }}</h3>
+            <p class="sync-cfg-help">{{ _('Solo entra quien esté en un departamento de esta tabla. El rol es el que elijas aquí. Si alguien no aparece, añade su departamento de Odoo.') }}</p>
+            <input type="hidden" name="sync_empleados_departamentos" id="syncEmpleadosDepartamentosJson" value="">
+            <div class="sync-cfg-table-wrap">
+              <table class="sync-cfg-table">
+                <thead>
+                  <tr>
+                    <th>{{ _('Departamento en Odoo') }}</th>
+                    <th>{{ _('En SignaPlan entra como') }}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="syncDeptMapBody">
+                  {% for row in config.empleados_departamento_map %}
+                  <tr>
+                    <td>
+                      <input type="text" class="form-control form-control-sm sync-dept-name" value="{{ row.department }}" placeholder="{{ _('Ej. JO clima') }}">
+                    </td>
+                    <td>
+                      <select class="form-control form-control-sm sync-dept-role">
+                        <option value="operario" {% if row.role == 'operario' %}selected{% endif %}>{{ _('Operario') }}</option>
+                        <option value="jefe_obra" {% if row.role == 'jefe_obra' %}selected{% endif %}>{{ _('Jefe de obra') }}</option>
+                        <option value="laboral" {% if row.role == 'laboral' %}selected{% endif %}>{{ _('Oficina / laboral') }}</option>
+                        <option value="admin" {% if row.role == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
+                      </select>
+                    </td>
+                    <td class="sync-cfg-row-actions">
+                      <button type="button" class="btn-admin btn-admin-ghost btn-sm sync-dept-remove" title="{{ _('Quitar') }}"><i class="fas fa-times"></i></button>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
             </div>
-            <div class="col-md-4">
-              <label class="form-label-sm">{{ _('Intervalo (min)') }}</label>
-              <input type="number" class="form-control" name="sync_fichajes_interval" min="5" max="120" value="{{ config.fichajes_interval }}">
-            </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Desde h') }}</label>
-              <input type="number" class="form-control" name="sync_fichajes_hour_start" min="0" max="23" value="{{ config.fichajes_hour_start }}">
-            </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Hasta h') }}</label>
-              <input type="number" class="form-control" name="sync_fichajes_hour_end" min="0" max="23" value="{{ config.fichajes_hour_end }}">
-            </div>
-          </div>
+            <button type="button" class="btn-admin btn-admin-ghost btn-sm mt-2" id="syncDeptAdd">
+              <i class="fas fa-plus"></i> {{ _('Añadir departamento') }}
+            </button>
+          </section>
 
-          <h6 class="sync-config-group-title">{{ _('Fichajes retrospectivos') }}</h6>
-          <p class="text-muted small mb-2">{{ _('Revisa días anteriores por si RRHH modifica fichajes antiguos en Odoo.') }}</p>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <div class="custom-control custom-switch mb-2">
-                <input type="checkbox" class="custom-control-input" id="cfgFichRetro" name="sync_fichajes_retro_enabled" {% if config.fichajes_retro_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgFichRetro">{{ _('Revisión retrospectiva activa') }}</label>
-              </div>
+          <section class="sync-cfg-block">
+            <h3 class="sync-cfg-title">{{ _('Fichajes') }}</h3>
+            <p class="sync-cfg-help">{{ _('Cruza el reloj de Odoo con lo planificado. Durante el día se actualiza; de madrugada se revisan días viejos por si RRHH ha corregido algo.') }}</p>
+            <label class="sync-cfg-check">
+              <input type="checkbox" name="sync_fichajes_enabled" {% if config.fichajes_enabled %}checked{% endif %}>
+              <span>{{ _('Actualizar durante el día') }}</span>
+            </label>
+            <div class="sync-cfg-subopts">
+              {{ _('Cada') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_fichajes_interval" min="5" max="120" value="{{ config.fichajes_interval }}">
+              {{ _('min, de') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_fichajes_hour_start" min="0" max="23" value="{{ config.fichajes_hour_start }}">
+              {{ _('h a') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_fichajes_hour_end" min="0" max="23" value="{{ config.fichajes_hour_end }}">
+              {{ _('h') }}
             </div>
-            <div class="col-md-4">
-              <label class="form-label-sm">{{ _('Días hacia atrás') }}</label>
-              <input type="number" class="form-control" name="sync_fichajes_retro_days" min="1" max="365" value="{{ config.fichajes_retro_days }}">
+            <label class="sync-cfg-check">
+              <input type="checkbox" name="sync_fichajes_retro_enabled" {% if config.fichajes_retro_enabled %}checked{% endif %}>
+              <span>{{ _('De madrugada, revisar días anteriores por si RRHH corrige') }}</span>
+            </label>
+            <div class="sync-cfg-subopts">
+              {{ _('Últimos') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_fichajes_retro_days" min="1" max="365" value="{{ config.fichajes_retro_days }}">
+              {{ _('días') }}
             </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Hora') }}</label>
-              <input type="number" class="form-control" name="sync_fichajes_retro_hour" min="0" max="23" value="{{ config.fichajes_retro_hour }}">
-            </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Minuto') }}</label>
-              <input type="number" class="form-control" name="sync_fichajes_retro_minute" min="0" max="59" value="{{ config.fichajes_retro_minute }}">
-            </div>
-          </div>
+          </section>
 
-          <h6 class="sync-config-group-title">{{ _('Vehículos / flota en vivo') }}</h6>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <div class="custom-control custom-switch mb-2">
-                <input type="checkbox" class="custom-control-input" id="cfgVeh" name="sync_vehiculos_enabled" {% if config.vehiculos_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgVeh">{{ _('Vehículos activos') }}</label>
-              </div>
+          <section class="sync-cfg-block">
+            <h3 class="sync-cfg-title">{{ _('Vehículos') }}</h3>
+            <p class="sync-cfg-help">{{ _('Flota y kilómetros. Igual: refresco durante el día y revisión de madrugada para la auditoría.') }}</p>
+            <label class="sync-cfg-check">
+              <input type="checkbox" name="sync_vehiculos_enabled" {% if config.vehiculos_enabled %}checked{% endif %}>
+              <span>{{ _('Actualizar durante el día') }}</span>
+            </label>
+            <div class="sync-cfg-subopts">
+              {{ _('Cada') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_vehiculos_interval" min="5" max="180" value="{{ config.vehiculos_interval }}">
+              {{ _('min, de') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_vehiculos_hour_start" min="0" max="23" value="{{ config.vehiculos_hour_start }}">
+              {{ _('h a') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_vehiculos_hour_end" min="0" max="23" value="{{ config.vehiculos_hour_end }}">
+              {{ _('h') }}
             </div>
-            <div class="col-md-4">
-              <label class="form-label-sm">{{ _('Intervalo (min)') }}</label>
-              <input type="number" class="form-control" name="sync_vehiculos_interval" min="5" max="180" value="{{ config.vehiculos_interval }}">
+            <label class="sync-cfg-check">
+              <input type="checkbox" name="sync_vehiculos_retro_enabled" {% if config.vehiculos_retro_enabled %}checked{% endif %}>
+              <span>{{ _('De madrugada, revisar odómetros de días anteriores') }}</span>
+            </label>
+            <div class="sync-cfg-subopts">
+              {{ _('Últimos') }}
+              <input type="number" class="form-control form-control-sm sync-cfg-inline-num" name="sync_vehiculos_retro_days" min="1" max="365" value="{{ config.vehiculos_retro_days }}">
+              {{ _('días') }}
             </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Desde h') }}</label>
-              <input type="number" class="form-control" name="sync_vehiculos_hour_start" min="0" max="23" value="{{ config.vehiculos_hour_start }}">
-            </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Hasta h') }}</label>
-              <input type="number" class="form-control" name="sync_vehiculos_hour_end" min="0" max="23" value="{{ config.vehiculos_hour_end }}">
-            </div>
-          </div>
-
-          <h6 class="sync-config-group-title">{{ _('Vehículos retrospectivos') }}</h6>
-          <p class="text-muted small mb-2">{{ _('Reimporta odómetros de días anteriores para la auditoría informativa.') }}</p>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <div class="custom-control custom-switch mb-2">
-                <input type="checkbox" class="custom-control-input" id="cfgVehRetro" name="sync_vehiculos_retro_enabled" {% if config.vehiculos_retro_enabled %}checked{% endif %}>
-                <label class="custom-control-label" for="cfgVehRetro">{{ _('Revisión retrospectiva activa') }}</label>
-              </div>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label-sm">{{ _('Días hacia atrás') }}</label>
-              <input type="number" class="form-control" name="sync_vehiculos_retro_days" min="1" max="365" value="{{ config.vehiculos_retro_days }}">
-            </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Hora') }}</label>
-              <input type="number" class="form-control" name="sync_vehiculos_retro_hour" min="0" max="23" value="{{ config.vehiculos_retro_hour }}">
-            </div>
-            <div class="col-md-2">
-              <label class="form-label-sm">{{ _('Minuto') }}</label>
-              <input type="number" class="form-control" name="sync_vehiculos_retro_minute" min="0" max="59" value="{{ config.vehiculos_retro_minute }}">
-            </div>
-          </div>
+          </section>
         </form>
       </div>
       <div class="modal-footer">
@@ -782,13 +775,60 @@ function testOdooConnection() {
     });
 }
 
+function collectDeptMap() {
+  const rows = [];
+  document.querySelectorAll('#syncDeptMapBody tr').forEach(function (tr) {
+    const name = (tr.querySelector('.sync-dept-name') || {}).value || '';
+    const role = (tr.querySelector('.sync-dept-role') || {}).value || 'operario';
+    const dept = name.trim();
+    if (dept) rows.push({ department: dept, role: role });
+  });
+  return JSON.stringify(rows);
+}
+
+function syncDeptRowHtml() {
+  return '<tr>' +
+    '<td><input type="text" class="form-control form-control-sm sync-dept-name" placeholder="' + {{ _('Ej. JO clima')|tojson }} + '"></td>' +
+    '<td><select class="form-control form-control-sm sync-dept-role">' +
+      '<option value="operario">' + {{ _('Operario')|tojson }} + '</option>' +
+      '<option value="jefe_obra">' + {{ _('Jefe de obra')|tojson }} + '</option>' +
+      '<option value="laboral">' + {{ _('Oficina / laboral')|tojson }} + '</option>' +
+      '<option value="admin">' + {{ _('Administrador')|tojson }} + '</option>' +
+    '</select></td>' +
+    '<td class="sync-cfg-row-actions"><button type="button" class="btn-admin btn-admin-ghost btn-sm sync-dept-remove" title="' + {{ _('Quitar')|tojson }} + '"><i class="fas fa-times"></i></button></td>' +
+    '</tr>';
+}
+
+document.addEventListener('click', function (ev) {
+  if (ev.target.closest && ev.target.closest('#syncDeptAdd')) {
+    ev.preventDefault();
+    var body = document.getElementById('syncDeptMapBody');
+    if (!body) return;
+    body.insertAdjacentHTML('beforeend', syncDeptRowHtml());
+    var input = body.querySelector('tr:last-child .sync-dept-name');
+    if (input) input.focus();
+  }
+  var removeBtn = ev.target.closest && ev.target.closest('.sync-dept-remove');
+  if (removeBtn) {
+    ev.preventDefault();
+    var tr = removeBtn.closest('tr');
+    if (tr) tr.remove();
+  }
+});
+
 function saveSyncConfig() {
   const form = document.getElementById('syncConfigForm');
   const data = {};
-  form.querySelectorAll('input[name]').forEach(inp => {
+  form.querySelectorAll('input[name], textarea[name], select[name]').forEach(inp => {
+    if (inp.id === 'syncEmpleadosDepartamentosJson') return;
     if (inp.type === 'checkbox') data[inp.name] = inp.checked;
     else data[inp.name] = inp.value;
   });
+  const night = (document.getElementById('syncNightTime') || {}).value || '03:00';
+  const parts = night.split(':');
+  data.sync_master_hour = parseInt(parts[0], 10);
+  data.sync_master_minute = parseInt(parts[1] || '0', 10);
+  data.sync_empleados_departamentos = collectDeptMap();
   fetch('{{ url_for("sync.api_save_config") }}', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

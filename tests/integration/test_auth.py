@@ -11,6 +11,7 @@ Estos tests verifican:
 import pytest
 from flask import session
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
 from app.models import User
 
 
@@ -108,6 +109,55 @@ class TestLogin:
         
         assert response.status_code == 302
         assert '/auth/login' in response.location
+
+    def test_logout_con_remember_no_revive_la_sesion(
+        self, tenant_client, tenant_soltec, company_internal, session,
+    ):
+        """Cerrar sesión debe caducar remember_token.
+
+        Si no, el login reautentica y el perfil laboral vuelve a su inicio
+        con el flash «Sesión cerrada» todavía visible.
+        """
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        laboral = User(
+            email='laboral@test.com',
+            password_hash=generate_password_hash('laboral123'),
+            role='laboral',
+            name='Laura',
+            lastname='Laboral',
+            dni='88888888L',
+            company_id=company_internal.id,
+            active=True,
+            email_verified=True,
+        )
+        session.add(laboral)
+        session.commit()
+
+        login = tenant_client.post('/auth/login', data={
+            'email': 'laboral@test.com',
+            'password': 'laboral123',
+            'remember': 'on',
+        }, follow_redirects=False)
+        assert login.status_code == 302
+        assert 'panel-laboral' in (login.location or '')
+        assert any(
+            c.name == 'remember_token' and c.value
+            for c in tenant_client._client.cookie_jar
+        )
+
+        logout = tenant_client.get('/auth/logout', follow_redirects=False)
+        assert logout.status_code == 302
+        assert '/auth/login' in logout.location
+        set_cookie = ' '.join(logout.headers.getlist('Set-Cookie'))
+        assert 'remember_token=' in set_cookie
+
+        pantallalogin = tenant_client.get('/auth/login', follow_redirects=False)
+        assert pantallalogin.status_code == 200
+
+        panel = tenant_client.get('/admin/panel-laboral', follow_redirects=False)
+        assert panel.status_code in (302, 401)
+        if panel.status_code == 302:
+            assert '/auth/login' in (panel.location or '')
 
 
 class TestRegistro:

@@ -448,3 +448,41 @@ body > .select2-container--open {
   outline: 2px solid #3b82f6;
   outline-offset: 2px;
 }
+.univ-calendar-root .fc-event.fc-event-inercia,
+.layout-admin .fc-event.fc-event-inercia {
+  opacity: 0.32;
+  border-style: dashed !important;
+  box-shadow: none !important;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.5) 0,
+    rgba(255, 255, 255, 0.5) 5px,
+    rgba(255, 255, 255, 0) 5px,
+    rgba(255, 255, 255, 0) 10px
+  );
+}
+.univ-calendar-inercia-toggle {
+  flex-shrink: 0;
+}
+.univ-calendar-inercia-toggle.is-on {
+  background: #e2e8f0 !important;
+  border-color: #64748b !important;
+  color: #0f172a !important;
+}
+.univ-calendar-title-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* Vista agrupada (empresa→obras / obra→empresas): misma entidad en la misma fila de la semana */
+.univ-calendar-root.is-grouped-lanes .fc-daygrid-day-events {
+  position: relative;
+}
+.univ-calendar-root.is-grouped-lanes .fc-daygrid-event-harness-abs {
+  position: absolute;
+  left: 0;
+  right: 0;
+}

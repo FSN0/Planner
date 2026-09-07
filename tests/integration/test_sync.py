@@ -688,3 +688,325 @@ class TestOdooEmpleadosDesactivados:
             assert result['desactivados'] == 1
             assert user_operario.active is False
 
+    def test_no_baja_si_emparejado_por_dni_con_id_odoo_antiguo(
+        self, session, tenant_soltec, company_internal, user_operario, app
+    ):
+        """Ficha activa en Odoo (otro id) + id local apuntando a archivo → no baja y reenlaza."""
+        from flask import g
+        from app.sync.adapters.odoo_soltec import Adapter
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            user_operario.external_ids = {'odoo': '100'}
+            session.add(user_operario)
+            session.commit()
+
+            adapter = Adapter.__new__(Adapter)
+            adapter.tenant_id = tenant_soltec.id
+            adapter.db_name = 'db'
+            adapter.uid = 2
+            adapter.pwd = 'x'
+            adapter.models = Mock()
+
+            def execute_kw(*args, **kwargs):
+                model = args[3]
+                method = args[4]
+                if model == 'hr.employee' and method == 'search_read':
+                    domain = args[5][0] if len(args) > 5 else []
+                    if domain and domain[0] == ['active', '=', True]:
+                        return [{
+                            'id': 200,
+                            'name': 'Juan Operario',
+                            'identification_id': user_operario.dni,
+                            'work_email': user_operario.email,
+                            'job_title': user_operario.categoria_profesional,
+                            'department_id': [1, 'Producción clima'],
+                            'job_id': [1, user_operario.categoria_profesional],
+                        }]
+                    return [{'id': 100, 'active': False, 'name': 'Juan Operario (archivo)'}]
+                return []
+
+            adapter.models.execute_kw.side_effect = execute_kw
+            diff = adapter.get_diff_empleados()
+
+            assert diff['desactivados'] == []
+            assert len(diff['actualizados']) == 1
+            assert diff['actualizados'][0]['local_id'] == user_operario.id
+            assert diff['actualizados'][0]['odoo_id'] == 200
+            assert 'Id Odoo' in diff['actualizados'][0]['cambios']
+
+    def test_no_baja_si_odoo_no_encuentra_el_registro(
+        self, session, tenant_soltec, company_internal, user_operario, app
+    ):
+        """Id local que no existe en hr.employee → no se interpreta como baja."""
+        from flask import g
+        from app.sync.adapters.odoo_soltec import Adapter
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            user_operario.external_ids = {'odoo': '9009'}
+            session.add(user_operario)
+            session.commit()
+
+            adapter = Adapter.__new__(Adapter)
+            adapter.tenant_id = tenant_soltec.id
+            adapter.db_name = 'db'
+            adapter.uid = 2
+            adapter.pwd = 'x'
+            adapter.models = Mock()
+
+            def execute_kw(*args, **kwargs):
+                model = args[3]
+                method = args[4]
+                if model == 'hr.employee' and method == 'search_read':
+                    return []
+                return []
+
+            adapter.models.execute_kw.side_effect = execute_kw
+            diff = adapter.get_diff_empleados()
+            assert diff['desactivados'] == []
+
+    def test_run_auto_sync_no_baja_si_tambien_actualizado(
+        self, session, tenant_soltec, company_internal, user_operario, app, mocker
+    ):
+        from flask import g
+        from app.services.sync_runner_service import run_auto_sync_empleados
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+            user_operario.external_ids = {'odoo': '100'}
+            session.add(user_operario)
+            session.commit()
+
+            mock_adapter = Mock()
+            mock_adapter.get_diff_empleados.return_value = {
+                'nuevos': [],
+                'actualizados': [{
+                    'odoo_id': 200,
+                    'local_id': user_operario.id,
+                    'name': user_operario.name,
+                    'lastname': user_operario.lastname,
+                    'role': 'operario',
+                    'categoria_profesional': user_operario.categoria_profesional,
+                }],
+                'sin_cambios': [],
+                'desactivados': [{
+                    'odoo_id': 100,
+                    'local_id': user_operario.id,
+                    'name': user_operario.name,
+                    'lastname': user_operario.lastname,
+                }],
+            }
+            mocker.patch(
+                'app.services.sync_runner_service.get_sync_adapter',
+                return_value=mock_adapter,
+            )
+
+            result = run_auto_sync_empleados()
+            session.refresh(user_operario)
+            assert result['desactivados'] == 0
+            assert user_operario.active is True
+            assert str(user_operario.external_ids.get('odoo')) == '200'
+
+
+class TestOdooEmpleadosDepartamentos:
+    def _adapter(self, tenant, execute_kw):
+        from app.sync.adapters.odoo_soltec import Adapter
+        adapter = Adapter.__new__(Adapter)
+        adapter.tenant_id = tenant.id
+        adapter.db_name = 'db'
+        adapter.uid = 2
+        adapter.pwd = 'x'
+        adapter.models = Mock()
+        adapter.models.execute_kw.side_effect = execute_kw
+        return adapter
+
+    def _odoo_emp(self, **overrides):
+        emp = {
+            'id': 355,
+            'name': 'Raquel Prats',
+            'identification_id': '44444444D',
+            'work_email': 'operario@test.com',
+            'job_title': 'Oficial 1ª',
+            'department_id': [9, 'Recursos Humanos'],
+            'job_id': [1, 'Oficial 1ª'],
+        }
+        emp.update(overrides)
+        return emp
+
+    def _execute_active(self, employees):
+        def execute_kw(*args, **kwargs):
+            model = args[3]
+            method = args[4]
+            if model == 'hr.employee' and method == 'search_read':
+                domain = args[5][0] if len(args) > 5 else []
+                if domain and domain[0] == ['active', '=', True]:
+                    return employees
+                return []
+            return []
+        return execute_kw
+
+    def test_omite_departamento_no_autorizado(
+        self, session, tenant_soltec, company_internal, app
+    ):
+        from flask import g
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp()]),
+            )
+            diff = adapter.get_diff_empleados()
+            assert diff['nuevos'] == []
+            assert len(diff['omitidos']) == 1
+            assert 'Recursos Humanos' in diff['omitidos'][0]['motivo']
+
+    def test_incluye_si_se_anade_departamento(
+        self, session, tenant_soltec, company_internal, app
+    ):
+        from flask import g
+        from app.services.sync_config_service import SyncConfigService
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            SyncConfigService.save_config({
+                'sync_empleados_departamentos': 'Recursos Humanos',
+            })
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp()]),
+            )
+            diff = adapter.get_diff_empleados()
+            assert diff['omitidos'] == []
+            assert len(diff['nuevos']) == 1
+            assert diff['nuevos'][0]['odoo_id'] == 355
+
+    def test_departamento_jo_entra_como_jefe(
+        self, session, tenant_soltec, company_internal, app
+    ):
+        from flask import g
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp(
+                    department_id=[2, 'JO clima'],
+                    job_title='Jefe',
+                )]),
+            )
+            diff = adapter.get_diff_empleados()
+            assert diff['omitidos'] == []
+            assert diff['nuevos'][0]['role'] == 'jefe_obra'
+
+    def test_rol_configurable_por_departamento(
+        self, session, tenant_soltec, company_internal, app
+    ):
+        from flask import g
+        from app.services.sync_config_service import SyncConfigService
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            SyncConfigService.save_config({
+                'sync_empleados_departamentos': [
+                    {'department': 'Recursos Humanos', 'role': 'laboral'},
+                ],
+            })
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp()]),
+            )
+            diff = adapter.get_diff_empleados()
+            assert diff['nuevos'][0]['role'] == 'laboral'
+
+    def test_departamento_puede_entrar_como_admin(
+        self, session, tenant_soltec, company_internal, app
+    ):
+        from flask import g
+        from app.services.sync_config_service import SyncConfigService
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            SyncConfigService.save_config({
+                'sync_empleados_departamentos': [
+                    {'department': 'Dirección', 'role': 'admin'},
+                ],
+            })
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp(department_id=[3, 'Dirección'])]),
+            )
+            diff = adapter.get_diff_empleados()
+            assert diff['nuevos'][0]['role'] == 'admin'
+
+    def test_jefe_obra_puede_subir_a_admin_si_departamento_lo_mapea(
+        self, session, tenant_soltec, company_internal, user_operario, app
+    ):
+        from flask import g
+        from app.services.sync_config_service import SyncConfigService
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            user_operario.role = 'jefe_obra'
+            user_operario.external_ids = {'odoo': '355'}
+            session.add(user_operario)
+            session.commit()
+            SyncConfigService.save_config({
+                'sync_empleados_departamentos': [
+                    {'department': 'Dirección', 'role': 'admin'},
+                ],
+            })
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp(
+                    identification_id=user_operario.dni,
+                    work_email=user_operario.email,
+                    department_id=[3, 'Dirección'],
+                    name='Raquel Prats',
+                )]),
+            )
+            diff = adapter.get_diff_empleados()
+            row = (diff['actualizados'] or diff['sin_cambios'])[0]
+            assert row['role'] == 'admin'
+            assert row['cambios']['Rol'] == 'jefe_obra ➔ admin'
+
+    def test_no_degrada_jefe_obra_si_cambia_departamento(
+        self, session, tenant_soltec, company_internal, user_operario, app
+    ):
+        from flask import g
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            user_operario.role = 'jefe_obra'
+            user_operario.external_ids = {'odoo': '355'}
+            session.add(user_operario)
+            session.commit()
+
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp(
+                    identification_id=user_operario.dni,
+                    work_email=user_operario.email,
+                    department_id=[1, 'Producción clima'],
+                    name='Raquel Prats',
+                )]),
+            )
+            diff = adapter.get_diff_empleados()
+            row = (diff['actualizados'] or diff['sin_cambios'])[0]
+            assert row['role'] == 'jefe_obra'
+            assert 'Rol' not in (row.get('cambios') or {})
+

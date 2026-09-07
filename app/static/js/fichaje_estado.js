@@ -5,7 +5,7 @@
 window.SPFichajeEstado = (function () {
     var t = window.SP_T || function (key) { return key; };
     var OK = {
-        Correcto: 1, Correcto_Automatico: 1,
+        Correcto: 1, Correcto_Automatico: 1, Cambio_Tajo: 1,
         Resuelto_Movido: 1, Resuelto_Asignado: 1, Resuelto_Dividido: 1,
         Resuelto_Ignorado: 1, Resuelto_Falta: 1, Resuelto_Ausencia: 1,
         Exento_Ausencia: 1, Cerrado_Multiobra: 1,
@@ -38,6 +38,7 @@ window.SPFichajeEstado = (function () {
         var labels = {
             Correcto: t('Correcto'),
             Correcto_Automatico: t('Correcto (auto)'),
+            Cambio_Tajo: t('Cambio de tajo'),
             Conflicto: t('Conflicto'),
             Paracaidista: t('Paracaidista'),
             Ausencia: t('Ausencia'),

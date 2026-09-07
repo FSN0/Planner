@@ -176,12 +176,22 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
         dias_solicitud = []
         dias_conflicto = []
         conflict_details = {} 
-        obras_origen_traslado = set() 
-        
+        obras_origen_traslado = set()
+        from app.services.inercia_service import casa_en_fecha
+
         for d in valid_dates:
             asigs_dia = Asignacion.query.filter_by(user_id=worker.id, fecha=d).all()
             
             if not asigs_dia:
+                casa_id = casa_en_fecha(worker.id, d)
+                if casa_id == target_obra.id:
+                    dias_auto.append(d)
+                    continue
+                if casa_id:
+                    obra_casa = Obra.query.get(casa_id)
+                    if obra_casa and obra_casa.jefe_obra_id == actor_user.id:
+                        dias_auto.append(d)
+                        continue
                 if tiene_custodia:
                     dias_auto.append(d)
                 else:
@@ -474,35 +484,55 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
         asignaciones = []
         if mode == 'all_obra':
             asignaciones = query.filter(Asignacion.fecha >= hoy).all()
-            if not asignaciones:
-                return {'success': False, 'message': 'No hay asignaciones futuras para borrar.'}
             date_objs = [a.fecha for a in asignaciones]
         else:
             raw_dates = sorted([datetime.strptime(d, '%Y-%m-%d').date() if isinstance(d, str) else d for d in date_list])
             date_objs = [d for d in raw_dates if d >= hoy]
-            asignaciones = query.filter(Asignacion.fecha.in_(date_objs)).all()
+            asignaciones = query.filter(Asignacion.fecha.in_(date_objs)).all() if date_objs else []
 
         rows = [(int(a.user_id), int(a.obra_id), a.fecha) for a in asignaciones]
+
+    from app.services.inercia_service import (
+        casa_en_fecha,
+        cortar_casa_fechas,
+        log_corte_inercia,
+    )
+
+    if not date_objs and mode == 'all_obra':
+        date_objs = [hoy]
 
     if not date_objs and mode != 'by_refs':
         return {'success': False, 'message': 'No hay fechas válidas.'}
 
     fechas_con_asignacion = [fecha for _, _, fecha in rows]
+    fechas_inercia = []
+    if not rows:
+        for d in date_objs:
+            casa = casa_en_fecha(worker_id, d)
+            if casa is None:
+                continue
+            if target_obra_id and casa != target_obra_id:
+                continue
+            fechas_inercia.append(d)
+        if not fechas_inercia:
+            return {
+                'success': False,
+                'message': (
+                    'No hay asignaciones futuras para borrar.'
+                    if mode == 'all_obra'
+                    else 'No había asignaciones de obra en esos días para eliminar.'
+                ),
+            }
 
-    if mode in ('selected', 'by_refs') and not rows:
-        return {
-            'success': False,
-            'message': 'No había asignaciones de obra en esos días para eliminar.',
-        }
-    
     from app.services.tenant_modules import jefes_asignan_directo as _jefes_directo
 
     if actor_user.role == ROLE_JEFE and not _jefes_directo():
-        if not fechas_con_asignacion:
+        fechas_sol = fechas_con_asignacion or fechas_inercia
+        if not fechas_sol:
             return {'success': False, 'message': 'El trabajador no tiene asignaciones en este periodo.'}
-            
+
         sol, status = SolicitudService.create_or_merge_solicitud_baja(
-            actor_user.id, target_obra_id, worker_id, fechas_con_asignacion
+            actor_user.id, target_obra_id, worker_id, fechas_sol
         )
         if not sol or status == 'none':
             return {
@@ -535,7 +565,7 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
             actor_user.id, 'Planificación Manual', False,
             fechas=fechas_objs,
         )
-    
+
     for uid, oid, fecha in rows:
         try:
             update_solicitudes_for_assignment(
@@ -544,6 +574,16 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
             )
         except Exception:
             pass
+
+    fechas_a_cortar = sorted(set(fechas_objs + fechas_inercia))
+    if not fechas_a_cortar and date_objs:
+        fechas_a_cortar = list(date_objs)
+    if fechas_a_cortar:
+        cortar_casa_fechas(worker_id, fechas_a_cortar, actor_user.id)
+        if fechas_inercia and not rows:
+            log_corte_inercia(
+                worker_id, fechas_inercia, actor_user.id, target_obra_id,
+            )
 
     db.session.commit()
     
@@ -564,4 +604,8 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
         except Exception:
             pass
 
-    return {'success': True, 'action': 'unassigned', 'message': f'Se han eliminado {count} asignaciones.'}
+    return {'success': True, 'action': 'unassigned', 'message': (
+        f'Se han eliminado {count} asignaciones.'
+        if count
+        else 'El trabajador queda libre a partir de ese día.'
+    )}

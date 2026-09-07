@@ -247,7 +247,6 @@ def login():
             session.pop('superadmin_impersonation', None)
             session.pop('impersonator_user_id', None)
             session.pop('impersonated_user_id', None)
-            session.pop('_remember', None)
 
         identifier = (request.form.get('login') or request.form.get('email') or '').strip()
         secret = request.form.get('secret') or request.form.get('password') or ''
@@ -615,11 +614,14 @@ def logout():
     session.pop('superadmin_impersonation', None)
     session.pop('impersonator_user_id', None)
     session.pop('impersonated_user_id', None)
-    session.pop('_remember', None)
+    # logout_user() deja session['_remember'] = 'clear' para que Flask-Login
+    # borre remember_token en after_request. No hay que hacer pop de esa clave.
     flash(translate('Sesión cerrada'), 'info')
     from flask import make_response
     from app.services.impersonation_service import clear_remember_cookie
     resp = make_response(redirect(url_for('auth.login')))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
     return clear_remember_cookie(resp)
 
 

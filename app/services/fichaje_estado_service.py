@@ -17,6 +17,7 @@ Ejes de color (relleno de la pelotita):
 FICHAJE_OK = {
     'Correcto',
     'Correcto_Automatico',
+    'Cambio_Tajo',
     'Resuelto_Movido',
     'Resuelto_Asignado',
     'Resuelto_Dividido',
@@ -101,6 +102,7 @@ def estado_fichaje_agregado(estados):
         for preferido in (
             'Correcto',
             'Correcto_Automatico',
+            'Cambio_Tajo',
             'Resuelto_Asignado',
             'Resuelto_Movido',
             'Resuelto_Dividido',
@@ -147,6 +149,7 @@ def tooltip_fichaje_agregado(estados):
     labels = {
         'Correcto': 'Correcto',
         'Correcto_Automatico': 'Correcto (auto)',
+        'Cambio_Tajo': 'Cambio de tajo',
         'Conflicto': 'Conflicto',
         'Paracaidista': 'Paracaidista',
         'Ausencia': 'Ausencia',

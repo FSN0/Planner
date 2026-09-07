@@ -116,6 +116,52 @@ class TestAPIObras:
         assert data == []
 
 
+    def test_company_calendar_obras_groups_people(
+        self, authenticated_client, tenant_soltec, company_internal,
+        obra_activa, user_operario, user_jefe, session
+    ):
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+        today = date.today()
+        session.add(Asignacion(
+            user_id=user_operario.id,
+            obra_id=obra_activa.id,
+            fecha=today,
+            company_id=company_internal.id,
+        ))
+        session.add(Asignacion(
+            user_id=user_jefe.id,
+            obra_id=obra_activa.id,
+            fecha=today,
+            company_id=company_internal.id,
+        ))
+        session.commit()
+
+        start = today.strftime('%Y-%m-%d')
+        end = (today + timedelta(days=1)).strftime('%Y-%m-%d')
+        base = (
+            f'/api/v6/universal-calendar?context=empresa&id={company_internal.id}'
+            f'&start={start}&end={end}'
+        )
+
+        grouped = json.loads(authenticated_client.get(base + '&mode=obras').data)
+        obra_events = [
+            ev for ev in grouped
+            if (ev.get('extendedProps') or {}).get('type') == 'obra_group'
+        ]
+        assert len(obra_events) == 1
+        tip = obra_events[0]['extendedProps']['tooltipContent']
+        assert 'Juan Operario' in tip
+        assert 'Carlos Jefe' in tip
+        assert obra_events[0]['extendedProps']['obra_id'] == obra_activa.id
+
+        people = json.loads(authenticated_client.get(base + '&mode=empleados').data)
+        person_events = [
+            ev for ev in people
+            if (ev.get('extendedProps') or {}).get('type') == 'asignacion'
+        ]
+        assert len(person_events) == 2
+
+
 class TestAPIAsignaciones:
     """Tests de endpoints de asignaciones"""
     

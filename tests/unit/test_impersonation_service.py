@@ -38,6 +38,19 @@ def test_no_impersonar_admin_ni_a_si_mismo():
     assert puede_ser_impersonado(actor, actor) is False
 
 
+def test_clear_remember_cookie_caduca_remember_token(app):
+    from flask import make_response
+
+    from app.services.impersonation_service import clear_remember_cookie
+
+    with app.test_request_context('/'):
+        resp = make_response('ok')
+        clear_remember_cookie(resp)
+        header = ' '.join(resp.headers.getlist('Set-Cookie'))
+        assert 'remember_token=' in header
+        assert 'Max-Age=0' in header or 'Expires=' in header
+
+
 def test_jefe_puede_ser_impersonado():
     actor = SimpleNamespace(is_authenticated=True, role='admin', id=1)
     jefe = SimpleNamespace(is_authenticated=True, role='jefe_obra', id=3, is_deleted=False, is_active=True)

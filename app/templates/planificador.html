@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260901a">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260903c">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260905a">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}?v=20260901e">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260830b">
 <style id="dynamic-sidebar-style"></style>
@@ -36,6 +36,12 @@
         {% with tour_id='planificador_multi', tour_label=_('Tutorial'), tour_href=url_for('admin.planificador_jo', tour='planificador_multi', mode='solo') %}
           {% include "components/_tour_cta.html" %}
         {% endwith %}
+        <button type="button"
+                class="btn-admin btn-admin-ghost planificador-filter-btn planificador-inercia-toggle"
+                id="btnToggleInerciaPlanif"
+                title="{{ _('Quien sigue en el tajo sin asignación de hoy') }}">
+          <i class="fas fa-ghost"></i> {{ _('Sigue') }}
+        </button>
         <button type="button"
                 class="btn-admin btn-admin-ghost planificador-filter-btn"
                 onclick="window.reordenarPorVentanaVisible()"
@@ -182,6 +188,10 @@
 
             {% if current_user.role in ['admin', 'jefe_obra'] %}
             <div class="planificador-popover-actions">
+                <button type="button" id="btn-confirmar-inercia" class="btn btn-success btn-block mb-2 text-left d-none" onclick="window.confirmarInerciaDesdePop(); return false;">
+                    <i class="fas fa-user-check mr-2"></i> {{ _('Asignar de verdad') }}
+                    <span class="small font-weight-normal ml-1">(Enter)</span>
+                </button>
                 <p class="planificador-popover-actions-title"><i class="fas fa-user-minus"></i>{{ _('Desasignar') }}</p>
                 <button type="button" class="btn btn-outline-danger btn-block mb-2 text-left" onclick="window.desasignarDesdePop('periodo'); return false;">
                     <i class="fas fa-calendar-times mr-2"></i> {{ _('Solo este bloque') }}
@@ -271,8 +281,8 @@
 <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
 <script>window.PLANIFICADOR_SHOW_FICHAJES = {{ puede_ver_estado_fichaje|default(false)|tojson }};</script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260902f"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260903q"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260905k"></script>
 {% if can_edit_planificador|default(false) %}
 <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260830b"></script>
 {% endif %}

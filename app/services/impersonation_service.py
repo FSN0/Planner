@@ -46,18 +46,29 @@ def _limpiar_claves_remember():
 
 
 def clear_remember_cookie(response):
-    """Quita la cookie remember del admin para que no pise la suplantación."""
-    try:
-        from app import login_manager
-    except Exception:
-        return response
-    name = getattr(login_manager, 'remember_cookie_name', None)
-    if not name:
-        return response
-    response.delete_cookie(
+    """Caduca la cookie remember_token (logout y suplantación).
+
+    Flask-Login 0.5.0 lee el nombre de app.config, no de LoginManager.
+    Si el atributo no existe, un getattr() deja la cookie viva y el
+    siguiente request vuelve a autenticar al usuario.
+    """
+    from flask import current_app
+
+    config = current_app.config
+    name = config.get('REMEMBER_COOKIE_NAME') or 'remember_token'
+    domain = config.get('REMEMBER_COOKIE_DOMAIN')
+    path = config.get('REMEMBER_COOKIE_PATH') or '/'
+    # Mismos flags con los que se emitió la cookie: si no coinciden,
+    # Chrome/Safari en HTTPS no la sustituyen y la sesión «revive».
+    response.set_cookie(
         name,
-        domain=getattr(login_manager, 'remember_cookie_domain', None),
-        path=getattr(login_manager, 'remember_cookie_path', None) or '/',
+        value='',
+        expires=0,
+        max_age=0,
+        domain=domain,
+        path=path,
+        secure=bool(config.get('REMEMBER_COOKIE_SECURE')),
+        httponly=bool(config.get('REMEMBER_COOKIE_HTTPONLY', True)),
     )
     return response
 

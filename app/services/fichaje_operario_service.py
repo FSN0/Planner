@@ -180,15 +180,25 @@ def geolocalizacion_exigir():
 
 
 def obras_del_dia(user_id, fecha=None):
-    """Obras en las que el trabajador está planificado hoy."""
+    """Obras en las que el trabajador está planificado hoy (hecho o inercia)."""
     fecha = fecha or today_local()
-    return (
+    planificadas = (
         Obra.query
         .join(Asignacion, Asignacion.obra_id == Obra.id)
         .filter(Asignacion.user_id == user_id, Asignacion.fecha == fecha)
         .order_by(Obra.nombre.asc())
         .all()
     )
+    if planificadas:
+        return planificadas
+    from app.services.inercia_service import casa_en_fecha, es_dia_laborable
+    if not es_dia_laborable(fecha):
+        return []
+    casa_id = casa_en_fecha(user_id, fecha)
+    if not casa_id:
+        return []
+    casa = Obra.query.filter_by(id=casa_id).first()
+    return [casa] if casa and not getattr(casa, 'is_deleted', False) else []
 
 
 def obras_seleccionables(user_id, fecha=None):
@@ -386,36 +396,38 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
     )
 
     if tipo == EVENTO_ENTRADA and obra is not None:
-        # ¿Ya estaba en el cuadrante de esa obra? Si no:
-        # - plan en otra obra hoy → Conflicto (desviación)
-        # - sin plan en todo el día → Paracaidista (sin planificar)
+        from app.services.inercia_service import (
+            aceptar_primer_fichaje,
+            casa_en_fecha,
+            clasificar_entrada_fichaje,
+        )
         ya_planificado = Asignacion.query.filter_by(
             user_id=user.id, obra_id=obra.id, fecha=fecha,
         ).first() is not None
-        plan_otro = Asignacion.query.filter(
+        otras_hoy = Asignacion.query.filter(
             Asignacion.user_id == user.id,
             Asignacion.fecha == fecha,
             Asignacion.obra_id != obra.id,
-        ).first()
+        ).all()
+        casa_id = None
+        if not ya_planificado and not otras_hoy:
+            casa_id = casa_en_fecha(user.id, fecha)
+        clasif = clasificar_entrada_fichaje(
+            obra_fichada_id=obra.id,
+            planificado_en_obra_fichada=ya_planificado,
+            otras_obras_planificadas_ids=[a.obra_id for a in otras_hoy],
+            casa_obra_id=casa_id,
+            aceptar_primer_fichaje=aceptar_primer_fichaje(),
+        )
         asegurar_asignacion_por_fichaje(user, obra.id, fecha)
         proyectar_dia(user.id, fecha)
         registro = RegistroFichaje.query.filter_by(
             user_id=user.id, fecha=fecha,
         ).first()
         if registro is not None:
-            if ya_planificado:
-                registro.estado = 'Correcto'
-                registro.obra_planificada_id = obra.id
-            elif plan_otro:
-                registro.estado = 'Conflicto'
-                registro.obra_planificada_id = plan_otro.obra_id
-                registro.obra_real_id = obra.id
-            else:
-                registro.estado = 'Paracaidista'
-                # El cuadrante ya tiene la asignación; en auditoría sigue
-                # como «sin planificar» hasta que alguien lo acepte.
-                registro.obra_planificada_id = None
-                registro.obra_real_id = obra.id
+            registro.estado = clasif.estado
+            registro.obra_planificada_id = clasif.obra_planificada_id
+            registro.obra_real_id = obra.id
         db.session.commit()
         return estado_para_pantalla(user, fecha)
 

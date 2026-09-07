@@ -1581,5 +1581,16 @@
   "Continuar": "Continuer",
   "Menú": "Menu",
   "Abrir menú": "Ouvrir le menu",
-  "Cerrar menú": "Fermer le menu"
+  "Cerrar menú": "Fermer le menu",
+  "Cambio de tajo": "Changement de chantier",
+  "Sigue": "Reste",
+  "Mostrar inercia": "Afficher l’inertie",
+  "Ocultar inercia": "Masquer l’inertie",
+  "Quien sigue en el tajo sin asignación de hoy": "Ceux qui restent sur le chantier sans affectation aujourd’hui",
+  "Sigue en esta obra (inercia)": "Reste sur ce chantier (inertie)",
+  "Sigue en esta obra hasta que lo muevan": "Reste sur ce chantier jusqu’à ce que vous le déplaciez",
+  "Asignar de verdad": "En faire une affectation réelle",
+  "Enter la convierte en asignación": "Entrée la convertit en affectation",
+  "Inercia convertida en asignación": "Inertie convertie en affectation",
+  "El trabajador queda libre a partir de ese día.": "Le travailleur est libre à partir de ce jour."
 }

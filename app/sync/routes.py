@@ -564,7 +564,11 @@ def commit_subcontratas():
             mapa_empresas[obj['odoo_id']] = nueva_comp.id
 
         # 2. ACTUALIZAR EMPLEADOS (Seguro Anti-Colisiones DNI)
-        from app.services.employee_baja_service import aplicar_baja_por_odoo, reactivar
+        from app.services.employee_baja_service import (
+            aplicar_baja_por_odoo,
+            desactivados_aplicables,
+            reactivar,
+        )
         for obj in data.get('empleados', {}).get('actualizados', []):
             user = User.query.get(obj['local_id'])
             if user:
@@ -650,7 +654,7 @@ def commit_subcontratas():
             )
             db.session.add(nuevo_user)
 
-        emp_baja = data.get('empleados', {}).get('desactivados') or []
+        emp_baja = desactivados_aplicables(data, data.get('empleados', {}).get('desactivados') or [])
         for obj in emp_baja:
             local_id = obj.get('local_id')
             if local_id:
@@ -783,8 +787,8 @@ def commit_empleados():
                 password_hash=generate_password_hash(dni_limpio),
             ))
 
-        from app.services.employee_baja_service import aplicar_baja_por_odoo
-        emp_baja = data.get('desactivados') or []
+        from app.services.employee_baja_service import aplicar_baja_por_odoo, desactivados_aplicables
+        emp_baja = desactivados_aplicables(data, data.get('desactivados') or [])
         for obj in emp_baja:
             local_id = obj.get('local_id')
             if local_id:

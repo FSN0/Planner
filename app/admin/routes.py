@@ -2788,6 +2788,8 @@ def edit_obra(obra_id):
                     detail=f"Obra '{obra_nombre}' pausada: {len(futuras)} asignaciones futuras eliminadas.",
                 )
                 flash(translate("Obra pausada. {count} asignaciones eliminadas.", count=len(futuras)), "warning")
+            from app.services.inercia_service import cortar_casa_de_obra
+            cortar_casa_de_obra(obra.id, today, actor_id)
         elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
             obra.fecha_fin = today
             futuras = (
@@ -2810,6 +2812,8 @@ def edit_obra(obra_id):
                     detail=f"Obra '{obra_nombre}' finalizada: {len(futuras)} asignaciones futuras eliminadas.",
                 )
             flash(translate("Obra finalizada. {count} asignaciones eliminadas.", count=len(futuras)), "success")
+            from app.services.inercia_service import cortar_casa_de_obra
+            cortar_casa_de_obra(obra.id, today, actor_id)
 
         try:
             db.session.commit()
@@ -3530,6 +3534,7 @@ def _planificador_worker_ids_from_request():
 def _planificador_obras_con_operarios(worker_ids, start_date, end_date, obras_ids):
     if not worker_ids or not obras_ids:
         return set()
+    from app.services.inercia_service import bloques_inercia_rango
     rows = (
         db.session.query(Asignacion.obra_id)
         .filter(
@@ -3541,7 +3546,12 @@ def _planificador_obras_con_operarios(worker_ids, start_date, end_date, obras_id
         .distinct()
         .all()
     )
-    return {r[0] for r in rows}
+    return {r[0] for r in rows} | {
+        b['obra_id']
+        for b in bloques_inercia_rango(
+            worker_ids, start_date, end_date, obra_ids=obras_ids,
+        )
+    }
 
 
 def _planificador_avg_ratings(user_ids):
@@ -3757,6 +3767,70 @@ def api_planificador_events():
             
         events_map[key].append(row.fecha)
 
+    from app.services.inercia_service import (
+        bloques_inercia_rango,
+        festivos_en,
+        _hueco_solo_no_laborable,
+    )
+    include_inercia = request.args.get('inercia', '1').strip().lower() not in (
+        '0', 'false', 'no', 'off',
+    )
+    compact = request.args.get('compact', '0').strip().lower() in (
+        '1', 'true', 'yes', 'on',
+    )
+    bloques_in = []
+    if include_inercia:
+        bloques_in = bloques_inercia_rango(
+            worker_ids or None, start_date, end_date, obra_ids=obras_ids,
+        )
+    extra_inercia_uids = {
+        b['user_id'] for b in bloques_in if b['user_id'] not in users_by_id
+    }
+    if extra_inercia_uids:
+        for u in User.query.options(joinedload(User.company_rel)).filter(
+            User.id.in_(extra_inercia_uids)
+        ).all():
+            users_by_id[u.id] = u
+            if u.company_id:
+                company_ids_needed.add(u.company_id)
+        if company_ids_needed:
+            for c in Company.query.filter(
+                Company.id.in_(company_ids_needed - set(companies_by_id))
+            ).all():
+                companies_by_id[c.id] = c
+
+    def _info_inercia(uid, oid):
+        key = f"w_{uid}_o_{oid}"
+        if key in workers_info:
+            return key, workers_info[key]
+        worker = users_by_id.get(uid)
+        comp = worker.company_rel if worker else None
+        color = comp.color if comp else "#3b82f6"
+        workers_info[key] = {
+            "name": f"{worker.name} {worker.lastname}" if worker else f"User {uid}",
+            "color": color,
+            "worker_id": uid,
+            "obra_id": oid,
+            "empresa_nombre": comp.nombre if comp else "Sin Empresa",
+            "empresa_id": comp.id if comp else 0,
+            "categoria": worker.categoria_profesional if worker and worker.categoria_profesional else "",
+            "especialidad": worker.especialidad if worker and worker.especialidad else "",
+            "nota": 0,
+        }
+        ratings_cache[uid] = None
+        return key, workers_info[key]
+
+    inercia_emits = []
+    for bloque in bloques_in:
+        uid, oid = bloque['user_id'], bloque['obra_id']
+        if company_ids:
+            worker_check = users_by_id.get(uid)
+            emp_id_check = worker_check.company_id if worker_check else 0
+            if emp_id_check not in company_ids:
+                continue
+        key, info = _info_inercia(uid, oid)
+        inercia_emits.append((bloque, key, info))
+
     if ratings_cache:
         avg_ratings = _planificador_avg_ratings(list(ratings_cache.keys()))
         for info in workers_info.values():
@@ -3775,18 +3849,22 @@ def api_planificador_events():
         end_date,
     )
     
-    def crear_bloque(start_d, end_d, curr_key, curr_info, leave=None):
+    def crear_bloque(start_d, end_d, curr_key, curr_info, leave=None, inercia=False):
         base_title = curr_info["name"]
         title, overlay_color, is_overlay = apply_leave_overlay_title(
             base_title, leave, name_first=True
         )
         events.append({
-            "id": f"{curr_key}_{start_d}", "resourceId": str(curr_info["obra_id"]),
+            "id": f"{curr_key}_{start_d}{'_i' if inercia else ''}",
+            "resourceId": str(curr_info["obra_id"]),
             "title": title,
             "start": start_d.strftime("%Y-%m-%d"),
             "end": (end_d + timedelta(days=1)).strftime("%Y-%m-%d"),
             "color": overlay_color or curr_info["color"],
-            "worker_id": curr_info["worker_id"], "editable": True,
+            "worker_id": curr_info["worker_id"],
+            "editable": not inercia,
+            "inercia": inercia,
+            "className": "inercia-item" if inercia else None,
             "empresa_nombre": curr_info["empresa_nombre"],
             "empresa_id": curr_info["empresa_id"],
             "categoria": curr_info["categoria"],
@@ -3797,12 +3875,12 @@ def api_planificador_events():
         })
 
     for key, fechas in events_map.items():
-        fechas.sort()
+        fechas = sorted(set(fechas))
         if not fechas: continue
         info = workers_info[key]
         user_leaves = leaves_idx.get(info["worker_id"], [])
+        festivos_win = festivos_en(fechas[0], fechas[-1]) if compact else set()
 
-        # Partir bloques si cambia continuidad O estado de ausencia
         bloque_start = fechas[0]
         bloque_end = fechas[0]
         bloque_leave = leave_covering(user_leaves, fechas[0])
@@ -3812,18 +3890,29 @@ def api_planificador_events():
             d = fechas[i]
             leave_d = leave_covering(user_leaves, d)
             leave_id = leave_d.id if leave_d else None
-            contiguous = (d - bloque_end).days == 1
+            contiguous = (d - bloque_end).days == 1 or (
+                compact and _hueco_solo_no_laborable(bloque_end, d, festivos_win)
+            )
             same_leave = leave_id == bloque_leave_id
             if contiguous and same_leave:
                 bloque_end = d
             else:
-                crear_bloque(bloque_start, bloque_end, key, info, bloque_leave)
+                crear_bloque(
+                    bloque_start, bloque_end, key, info, bloque_leave, False,
+                )
                 bloque_start = d
                 bloque_end = d
                 bloque_leave = leave_d
                 bloque_leave_id = leave_id
-                
-        crear_bloque(bloque_start, bloque_end, key, info, bloque_leave)
+
+        crear_bloque(
+            bloque_start, bloque_end, key, info, bloque_leave, False,
+        )
+
+    for bloque, key, info in inercia_emits:
+        crear_bloque(
+            bloque['fecha_inicio'], bloque['fecha_fin'], key, info, None, True,
+        )
 
     # MARCADOR FIN DE OBRA
     obras_objs = Obra.query.filter(Obra.id.in_(obras_ids)).all()
@@ -4543,6 +4632,8 @@ def batch_update_obras_status():
                         registrar_log=False,
                     )
                 total_deleted += len(futuras)
+                from app.services.inercia_service import cortar_casa_de_obra
+                cortar_casa_de_obra(obra.id, today, actor_id)
             elif new_estado == 'Finalizada' and old_estado != 'Finalizada':
                 obra.fecha_fin = today
                 futuras = (
@@ -4557,6 +4648,8 @@ def batch_update_obras_status():
                         registrar_log=False,
                     )
                 total_deleted += len(futuras)
+                from app.services.inercia_service import cortar_casa_de_obra
+                cortar_casa_de_obra(obra.id, today, actor_id)
 
         if total_deleted > 0:
             from app.utils import register_log

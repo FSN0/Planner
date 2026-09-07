@@ -952,6 +952,22 @@ function initClickableTableRows(tableId) {
     });
 }
 
+window.SPInerciaPref = {
+    get: function (key, defaultOn) {
+        try {
+            var v = localStorage.getItem('sp.inercia.' + key);
+            if (v === null || v === undefined) return !!defaultOn;
+            return v === '1';
+        } catch (e) {
+            return !!defaultOn;
+        }
+    },
+    set: function (key, on) {
+        try { localStorage.setItem('sp.inercia.' + key, on ? '1' : '0'); } catch (e) { /* ignore */ }
+        return !!on;
+    },
+};
+
 document.addEventListener('DOMContentLoaded', function () {
     initAdminNavBack();
 });
