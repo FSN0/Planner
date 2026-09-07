@@ -371,3 +371,35 @@ def test_inercia_no_pinta_mas_alla_de_un_mes(
     assert (user_operario.id, lejano) not in celdas
     assert all((fecha - hoy).days <= 31 for (_uid, fecha) in celdas)
 
+
+def test_inercia_no_pinta_dias_de_vacaciones(
+    session, tenant_soltec, user_operario, obra_activa,
+):
+    """Vacaciones aprobadas: no fantasma (no se sabe a qué obra vuelve)."""
+    from app.models import AusenciaPlanificada, LEAVE_STATUS_APROBADA, LEAVE_SOURCE_MANUAL
+
+    _path(session, tenant_soltec)
+    hoy = today_local()
+    ancla = _laborable(hoy, -1)
+    dia = _laborable(hoy, 0)
+    manana = _laborable(dia, 1)
+    session.add(Asignacion(
+        user_id=user_operario.id, obra_id=obra_activa.id, fecha=ancla,
+        company_id=user_operario.company_id,
+    ))
+    session.add(AusenciaPlanificada(
+        user_id=user_operario.id,
+        fecha_inicio=dia,
+        fecha_fin=manana,
+        dias=2,
+        tipo='Vacaciones',
+        estado=LEAVE_STATUS_APROBADA,
+        origen=LEAVE_SOURCE_MANUAL,
+    ))
+    session.commit()
+
+    celdas = celdas_inercia([user_operario.id], dia, manana)
+    assert (user_operario.id, dia) not in celdas
+    assert (user_operario.id, manana) not in celdas
+    assert user_operario.id not in ids_ocupados_en_fecha(dia, [user_operario.id])
+

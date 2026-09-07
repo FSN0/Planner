@@ -328,26 +328,24 @@ def release_assignments_blocked_by_leave(
         for a in q.all()
         if user_has_approved_leave(a.user_id, a.fecha)
     ]
-    if not pendientes:
-        return 0
 
     liberados = 0
-    for uid, obra_id, fecha in pendientes:
-        if CoreAssignmentService.desasignar(
-            uid,
-            obra_id,
-            fecha,
-            autor_id,
-            'Desasignado por ausencia planificada',
-            detalle_extra=(
-                'El trabajador tiene ausencia aprobada; '
-                'queda libre en el cuadrante (como los vehículos).'
-            ),
-            registrar_log=False,
-        ):
-            liberados += 1
+    if pendientes:
+        for uid, obra_id, fecha in pendientes:
+            if CoreAssignmentService.desasignar(
+                uid,
+                obra_id,
+                fecha,
+                autor_id,
+                'Desasignado por ausencia planificada',
+                detalle_extra=(
+                    'El trabajador tiene ausencia aprobada; '
+                    'queda libre en el cuadrante (como los vehículos).'
+                ),
+                registrar_log=False,
+            ):
+                liberados += 1
 
-    if liberados:
         por_persona = {}
         for uid, obra_id, fecha in pendientes:
             por_persona.setdefault(uid, []).append((obra_id, fecha))
@@ -369,7 +367,45 @@ def release_assignments_blocked_by_leave(
                 fechas=fechas,
             )
 
+    # De vacaciones no se hereda la obra anterior (fantasma / inercia),
+    # aunque ya no hubiera asignación que liberar.
+    _cortar_inercia_por_ausencias(
+        date_from=date_from,
+        date_to=date_to,
+        user_id=user_id,
+        autor_id=autor_id,
+    )
+
     return liberados
+
+
+def _cortar_inercia_por_ausencias(*, date_from, date_to, user_id=None, autor_id=None):
+    """
+    Corta la casa al inicio de cada ausencia aprobada en el rango.
+
+    Así, al terminar vacaciones no reaparece el fantasma en el tajo anterior
+    (no se sabe a qué obra vuelve).
+    """
+    from app.services.inercia_service import cortar_casa
+
+    q = AusenciaPlanificada.query.filter(
+        AusenciaPlanificada.estado == LEAVE_STATUS_APROBADA,
+        AusenciaPlanificada.fecha_inicio <= date_to,
+        AusenciaPlanificada.fecha_fin >= date_from,
+    )
+    if user_id is not None:
+        q = q.filter(AusenciaPlanificada.user_id == int(user_id))
+
+    cortes = 0
+    vistos = set()
+    for leave in q.all():
+        key = (leave.user_id, leave.fecha_inicio)
+        if key in vistos:
+            continue
+        vistos.add(key)
+        cortar_casa(leave.user_id, leave.fecha_inicio, autor_id)
+        cortes += 1
+    return cortes
 
 
 def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO, modo='Manual'):

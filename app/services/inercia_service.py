@@ -272,6 +272,25 @@ def _casa_desde_contexto(user_id, fecha, anclas_desc, cortes_por_user, obras, fe
     return ancla_obra
 
 
+def _ausencias_aprobadas_por_user(user_ids, fecha_inicio, fecha_fin):
+    """Índice user_id → ausencias aprobadas que solapan el rango."""
+    from app.services.leave_service import build_leaves_by_user
+    return build_leaves_by_user(user_ids, fecha_inicio, fecha_fin, include_pending=False)
+
+
+def _cubre_ausencia_aprobada(leaves_by_user, user_id, day):
+    leaves = (leaves_by_user or {}).get(user_id) or []
+    for leave in leaves:
+        if leave.covers(day):
+            return True
+    return False
+
+
+def user_has_approved_leave_day(user_id, day):
+    from app.services.leave_service import user_has_approved_leave
+    return user_has_approved_leave(user_id, day)
+
+
 def casa_en_fecha(user_id, fecha):
     """Obra-casa vigente ese día, o None. No mira si hay hecho hoy."""
     asigs_por_dia, anclas_desc, cortes_por_user, obras, festivos = _cargar_contexto(
@@ -341,6 +360,8 @@ def celdas_inercia(user_ids, fecha_inicio, fecha_fin):
     """
     {(user_id, fecha): obra_id} para días laborables sin hecho.
     Nunca incluye fechas anteriores a hoy.
+    Tampoco pinta fantasma en días con ausencia/vacaciones aprobadas:
+    al volver no se sabe a qué obra regresa.
     """
     fecha_inicio, fecha_fin = rango_pintura_inercia(fecha_inicio, fecha_fin)
     ids = _operario_ids(user_ids)
@@ -349,6 +370,7 @@ def celdas_inercia(user_ids, fecha_inicio, fecha_fin):
     asigs_por_dia, anclas_desc, cortes_por_user, obras, festivos = _cargar_contexto(
         ids, fecha_inicio, fecha_fin,
     )
+    leaves_by_user = _ausencias_aprobadas_por_user(ids, fecha_inicio, fecha_fin)
     ids_con_casa = [uid for uid in ids if anclas_desc.get(uid)]
     if not ids_con_casa:
         return {}
@@ -366,6 +388,8 @@ def celdas_inercia(user_ids, fecha_inicio, fecha_fin):
         if es_dia_laborable(day, festivos):
             for uid in ids_con_casa:
                 if (uid, day) in asigs_por_dia:
+                    continue
+                if _cubre_ausencia_aprobada(leaves_by_user, uid, day):
                     continue
                 casa = _casa_desde_contexto(
                     uid, day, anclas_desc, cortes_por_user, obras, festivos,
@@ -393,8 +417,11 @@ def presencias_en_fecha(fecha, user_ids=None):
         and fecha <= horizonte_inercia()
         and es_dia_laborable(fecha)
     ):
+        leaves_by_user = _ausencias_aprobadas_por_user(ids, fecha, fecha)
         for uid, casa in casas_en_fecha(ids, fecha).items():
             if uid in vistos:
+                continue
+            if _cubre_ausencia_aprobada(leaves_by_user, uid, fecha):
                 continue
             out.append({'user_id': uid, 'obra_id': casa, 'origen': 'inercia'})
     return out
@@ -412,6 +439,8 @@ def inercia_en_obra(user_id, obra_id, fecha):
         return False
     if not es_dia_laborable(fecha):
         return False
+    if user_has_approved_leave_day(user_id, fecha):
+        return False
     return casa_en_fecha(user_id, fecha) == obra_id
 
 
@@ -423,6 +452,7 @@ def ocupados_por_dia(fecha_inicio, fecha_fin, user_ids=None):
     asigs_por_dia, anclas_desc, cortes_por_user, obras, festivos = _cargar_contexto(
         ids, fecha_inicio, fecha_fin,
     )
+    leaves_by_user = _ausencias_aprobadas_por_user(ids, fecha_inicio, fecha_fin)
     hoy = today_local()
     limite = horizonte_inercia()
     ids_con_casa = [uid for uid in ids if anclas_desc.get(uid)]
@@ -436,6 +466,8 @@ def ocupados_por_dia(fecha_inicio, fecha_fin, user_ids=None):
         if day >= hoy and day <= limite and es_dia_laborable(day, festivos):
             for uid in ids_con_casa:
                 if uid in ocupados:
+                    continue
+                if _cubre_ausencia_aprobada(leaves_by_user, uid, day):
                     continue
                 casa = _casa_desde_contexto(
                     uid, day, anclas_desc, cortes_por_user, obras, festivos,
@@ -526,10 +558,11 @@ def usuarios_esperados_sin_hecho(fecha):
         return {}
     ids = _operario_ids()
     hechos = set(hechos_en_fecha(ids, fecha).keys())
+    leaves_by_user = _ausencias_aprobadas_por_user(ids, fecha, fecha)
     return {
         uid: casa
         for uid, casa in casas_en_fecha(ids, fecha).items()
-        if uid not in hechos
+        if uid not in hechos and not _cubre_ausencia_aprobada(leaves_by_user, uid, fecha)
     }
 
 
