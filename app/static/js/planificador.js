@@ -140,6 +140,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return !!(w && w !== 'SYSTEM' && w !== 'REQUEST' && w !== 'NEW' && w !== 'GENERICO');
     }
 
+    function planifIsRequestItem(it) {
+        if (!it) return false;
+        if (it.solicitud_id) return true;
+        return String(it.worker_id) === 'REQUEST';
+    }
+
     function planifMs(v) {
         var t = new Date(v).getTime();
         return isFinite(t) ? t : 0;
@@ -238,6 +244,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         var laneByGroupWorker = {};
+        var requestLaneByGroup = {};
         Object.keys(byGroup).forEach(function (gid) {
             var list = [];
             Object.keys(byGroup[gid]).forEach(function (k) {
@@ -247,13 +254,29 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             planifAssignLanes(list);
             var map = {};
-            list.forEach(function (w) { map[w.key] = w.lane; });
+            var n = 0;
+            list.forEach(function (w) {
+                map[w.key] = w.lane;
+                if (w.lane + 1 > n) n = w.lane + 1;
+            });
             laneByGroupWorker[gid] = map;
+            requestLaneByGroup[gid] = n;
         });
 
         var updates = [];
         items.forEach(function (it) {
             if (!it || it.type === 'background' || it.id == null) return;
+            // Las solicitudes no entran en el empaquetado de operarios: si
+            // quedan sin subgroup, vis las pinta encima/entre las barras.
+            // Van en un carril propio debajo de la obra.
+            if (planifIsRequestItem(it)) {
+                var reqLane = requestLaneByGroup[String(it.group)];
+                if (reqLane == null) reqLane = 0;
+                if (it.subgroup !== 'R' || it.subgroupOrder !== reqLane) {
+                    updates.push({ id: it.id, subgroup: 'R', subgroupOrder: reqLane });
+                }
+                return;
+            }
             if (!planifIsPackableWorker(it.worker_id)) {
                 if (it.subgroup != null) {
                     updates.push({ id: it.id, subgroup: null, subgroupOrder: 0 });
@@ -2264,6 +2287,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 base.inercia = true;
                 base.editable = false;
                 base.className = (e.className ? e.className + ' ' : '') + 'inercia-item';
+            }
+            if (e.solicitud_id || e.worker_id === 'REQUEST') {
+                base.className = (base.className ? base.className + ' ' : '') + 'solicitud-item';
             }
         }
         return base;
