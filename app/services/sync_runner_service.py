@@ -32,7 +32,7 @@ def _set_odoo_external_id(entity, odoo_id):
     db.session.add(entity)
 
 
-def run_auto_sync_obras():
+def run_auto_sync_obras(modo='Automático'):
     t0 = time.time()
     ahora = utc_now()
     try:
@@ -76,7 +76,7 @@ def run_auto_sync_obras():
 
         detalle = f"Sync automática obras. {errores} omitida(s) por responsables sin resolver." if errores else "Sync automática obras completada."
         db.session.add(SyncLog(
-            fecha=ahora, tipo='Obras', modo='Automático',
+            fecha=ahora, tipo='Obras', modo=modo,
             nuevos=len(nuevas_limpias), actualizados=len(act_limpias),
             finalizados=len(diff['finalizadas']), errores=errores,
             detalles=detalle, estado=_log_estado(errores),
@@ -92,7 +92,7 @@ def run_auto_sync_obras():
     except Exception as e:
         db.session.rollback()
         db.session.add(SyncLog(
-            fecha=utc_now(), tipo='Obras', modo='Automático',
+            fecha=utc_now(), tipo='Obras', modo=modo,
             nuevos=0, actualizados=0, finalizados=0, errores=1,
             detalles='Fallo en sincronización automática de obras.',
             estado='error', mensaje_error=str(e),
@@ -102,7 +102,7 @@ def run_auto_sync_obras():
         raise
 
 
-def run_auto_sync_empleados():
+def run_auto_sync_empleados(modo='Automático'):
     t0 = time.time()
     ahora = utc_now()
     service = get_sync_adapter()
@@ -156,7 +156,7 @@ def run_auto_sync_empleados():
     if emp_baja_aplicables:
         detalle = f"{detalle} {len(emp_baja_aplicables)} baja(s)."
     db.session.add(SyncLog(
-        fecha=ahora, tipo='Empleados', modo='Automático',
+        fecha=ahora, tipo='Empleados', modo=modo,
         nuevos=len(emp_nuevos), actualizados=len(emp_act),
         finalizados=len(emp_baja_aplicables), errores=errores,
         detalles=detalle, estado=_log_estado(errores),
@@ -176,7 +176,7 @@ def run_auto_sync_empleados():
     }
 
 
-def run_auto_sync_subcontratas():
+def run_auto_sync_subcontratas(modo='Automático'):
     t0 = time.time()
     ahora = utc_now()
     service = get_sync_adapter()
@@ -265,7 +265,7 @@ def run_auto_sync_subcontratas():
     if emp_baja_aplicables:
         detalle = f"{detalle} {len(emp_baja_aplicables)} baja(s)."
     db.session.add(SyncLog(
-        fecha=ahora, tipo='Subcontratas', modo='Automático',
+        fecha=ahora, tipo='Subcontratas', modo=modo,
         nuevos=tot_n, actualizados=tot_a, finalizados=len(emp_baja_aplicables), errores=0,
         detalles=detalle,
         estado='ok', duracion_ms=int((time.time() - t0) * 1000),
@@ -321,11 +321,11 @@ def run_fichajes_retro_sync(days=None, modo='Automático'):
     db.session.commit()
     return {'dias': dias, 'ok': not had_error, 'error': err_msg}
 
-def run_auto_sync_ausencias():
+def run_auto_sync_ausencias(modo='Automático'):
     from app.services.leave_service import sync_leaves_from_erp
-    return sync_leaves_from_erp()
+    return sync_leaves_from_erp(modo=modo)
 
 
-def run_auto_sync_vehiculos():
+def run_auto_sync_vehiculos(modo='Automático'):
     from app.services.vehicle_sync_service import run_vehiculos_en_vivo
-    return run_vehiculos_en_vivo(modo='Automático')
+    return run_vehiculos_en_vivo(modo=modo)

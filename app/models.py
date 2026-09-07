@@ -620,11 +620,19 @@ class RegistroFichaje(db.Model):
     # Trazabilidad: Quién resolvió el conflicto
     resuelto_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
+    # Desvío X→Y: firmas independientes de plan y de obra fichada
+    desvio_ack_plan_at = db.Column(db.DateTime, nullable=True)
+    desvio_ack_plan_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    desvio_ack_real_at = db.Column(db.DateTime, nullable=True)
+    desvio_ack_real_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
     # Relaciones para navegar fácilmente desde Jinja
     user = db.relationship('User', backref='fichajes_diarios', foreign_keys=[user_id])
     obra_planificada = db.relationship('Obra', foreign_keys=[obra_planificada_id])
     obra_real = db.relationship('Obra', foreign_keys=[obra_real_id])
     resuelto_por = db.relationship('User', foreign_keys=[resuelto_por_id])
+    desvio_ack_plan_by = db.relationship('User', foreign_keys=[desvio_ack_plan_by_id])
+    desvio_ack_real_by = db.relationship('User', foreign_keys=[desvio_ack_real_by_id])
 
 
 # --- TIPOS DE EVENTO DE FICHAJE ---

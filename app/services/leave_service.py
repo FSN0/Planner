@@ -372,7 +372,7 @@ def release_assignments_blocked_by_leave(
     return liberados
 
 
-def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO):
+def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO, modo='Manual'):
     """
     Importa ausencias del adaptador ERP activo del tenant.
     Crea/actualiza por (origen, external_id). No borra altas manuales.
@@ -473,7 +473,7 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO)
         detect_and_upsert_conflicts(date_from=range_from, date_to=range_to)
         db.session.add(SyncLog(
             tipo='Ausencias',
-            modo='Manual',
+            modo=modo,
             nuevos=stats['nuevos'],
             actualizados=stats['actualizados'],
             finalizados=0,

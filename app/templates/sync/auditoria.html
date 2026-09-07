@@ -252,9 +252,33 @@ tr.audit-row-highlight {
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')" title="{{ _('Cambia la planificación a la obra donde fichó') }}">{{ _('Mover') }}</button>
-                                    <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">{{ _('+ Añadir') }}</button>
-                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">{{ _('Ignorar') }}</button>
+                                      {% set desvio = reg.desvio_ui if reg.desvio_ui is defined else none %}
+                                      {% if desvio and desvio.botones %}
+                                        <div class="audit-desvio-acks small text-muted mb-1">
+                                          {% if desvio.ack_plan %}
+                                            <span class="badge-soft badge-soft-green mr-1">{{ _('Plan OK') }}</span>
+                                          {% else %}
+                                            <span class="badge-soft badge-soft-amber mr-1">{{ _('Plan pendiente') }}</span>
+                                          {% endif %}
+                                          {% if desvio.ack_real %}
+                                            <span class="badge-soft badge-soft-green">{{ _('Fichaje OK') }}</span>
+                                          {% else %}
+                                            <span class="badge-soft badge-soft-amber">{{ _('Fichaje pendiente') }}</span>
+                                          {% endif %}
+                                        </div>
+                                        {% for btn in desvio.botones %}
+                                          <button class="btn btn-outline-{{ 'danger' if btn.style == 'danger' else 'primary' }} btn-audit mr-1"
+                                                  onclick="event.stopPropagation(); resolver({{ reg.id }}, {{ btn.accion|tojson }})"
+                                                  title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
+                                        {% endfor %}
+                                        {% if current_user.role in ['admin', 'laboral', 'rrhh'] %}
+                                          <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">{{ _('Ignorar') }}</button>
+                                        {% endif %}
+                                      {% else %}
+                                        <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')" title="{{ _('Cambia la planificación a la obra donde fichó') }}">{{ _('Mover') }}</button>
+                                        <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">{{ _('+ Añadir') }}</button>
+                                        <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">{{ _('Ignorar') }}</button>
+                                      {% endif %}
                                     {% else %}
                                     <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
@@ -926,8 +950,9 @@ function resolver(id, accion) {
     .then(res => res.json())
     .then(data => {
         if(data.success) {
+            const dismiss = (data.dismiss_row !== false);
             setTimeout(() => {
-                if(row) {
+                if(row && dismiss) {
                     // --- MAGIA PARA BAJAR EL CONTADOR ---
                     let card = row.closest('.card-modern');
                     if(card) {
@@ -941,6 +966,10 @@ function resolver(id, accion) {
                     }
                     // ------------------------------------
                     row.remove(); // Borramos la fila
+                } else if (row && !dismiss) {
+                    // Firma parcial: recargar para ver badges / botones actualizados
+                    window.location.reload();
+                    return;
                 }
                 
                 // Si ya no quedan filas de ningún tipo, recargamos para limpiar

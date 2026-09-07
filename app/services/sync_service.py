@@ -324,6 +324,8 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
 
     db.session.flush()
 
+    desvios_a_notificar = []
+
     for f in fichajes_unicos.values():
         if not f['odoo_obra']:
             continue
@@ -392,7 +394,10 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     f"Hora detectada: {format_time(check_in_dt) if check_in_dt else 'N/A'}"
                 )
             else:
+                prev = registro_vacio_exacto.estado
                 registro_vacio_exacto.estado = nuevo_estado
+                if nuevo_estado == 'Conflicto' and prev != 'Conflicto':
+                    desvios_a_notificar.append(registro_vacio_exacto)
 
             registro_vacio_exacto.obra_real_id = local_obra.id
             registro_vacio_exacto.check_in = check_in_dt
@@ -407,7 +412,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             ).first()
 
             if not registro_existente:
-                db.session.add(RegistroFichaje(
+                nuevo_reg = RegistroFichaje(
                     user_id=local_user.id,
                     fecha=fecha_obj,
                     obra_planificada_id=nuevo_plan_id,
@@ -420,7 +425,10 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     odoo_mod=_odoo_metric_value(f.get('odoo_mod')),
                     odoo_total_hh=_odoo_metric_value(f.get('odoo_total_hh')),
                     odoo_moe=_odoo_metric_value(f.get('odoo_moe')),
-                ))
+                )
+                db.session.add(nuevo_reg)
+                if nuevo_estado == 'Conflicto':
+                    desvios_a_notificar.append(nuevo_reg)
 
                 obra_label = CoreAssignmentService.format_obra_label(local_obra)
                 obra_plan_label = None
@@ -444,9 +452,16 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     target_date=fecha_obj,
                 ))
             else:
+                prev_estado = registro_existente.estado
                 if not registro_existente.estado.startswith('Resuelto'):
                     registro_existente.estado = nuevo_estado
                     registro_existente.obra_planificada_id = nuevo_plan_id
+                    if nuevo_estado == 'Conflicto' and prev_estado != 'Conflicto':
+                        registro_existente.desvio_ack_plan_at = None
+                        registro_existente.desvio_ack_plan_by_id = None
+                        registro_existente.desvio_ack_real_at = None
+                        registro_existente.desvio_ack_real_by_id = None
+                        desvios_a_notificar.append(registro_existente)
                 registro_existente.check_in = check_in_dt
                 registro_existente.check_out = check_out_dt
                 registro_existente.nota_odoo = _merge_fichaje_notes(
@@ -557,3 +572,14 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                             'Cerrado automáticamente: el trabajador fichó u '
                             'obtuvo resolución en otra obra el mismo día.'
                         )
+
+    if desvios_a_notificar:
+        db.session.flush()
+        from app.services.desvio_fichaje_service import notificar_desvio_inmediato
+        vistos = set()
+        for reg in desvios_a_notificar:
+            key = (reg.user_id, reg.fecha, reg.obra_planificada_id, reg.obra_real_id)
+            if key in vistos:
+                continue
+            vistos.add(key)
+            notificar_desvio_inmediato(reg)

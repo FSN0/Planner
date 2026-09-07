@@ -316,7 +316,7 @@
               <td>{{ f.obra_planificada.nombre if f.obra_planificada else '—' }}</td>
               <td>{{ f.obra_real.nombre if f.obra_real else '—' }}</td>
               <td>
-                {% if f.check_in %}{{ f.check_in.strftime('%H:%M') }}{% else %}—{% endif %}
+                {% if f.check_in %}{{ f.check_in|format_time }}{% else %}—{% endif %}
               </td>
               <td>
                 {% if f.estado == 'ok' %}

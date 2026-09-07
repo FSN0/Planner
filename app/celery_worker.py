@@ -461,6 +461,52 @@ def auto_sync_odoo():
             _cleanup_db_session()
 
 
+@celery.task(bind=True, max_retries=3, default_retry_delay=60)
+def process_odoo_hook_task(self, schema_name, resource, meta=None):
+    """Un aviso de Odoo: sync del módulo en el tenant que llamó, no en todos."""
+    with app.app_context():
+        from sqlalchemy import text
+        from app.services.odoo_hook_service import run_hook_resource
+
+        try:
+            tenant_row = None
+            with db.engine.connect() as conn:
+                tenant_row = conn.execute(
+                    text(
+                        'SELECT id, schema_name, subdominio, nombre, modulos_activos '
+                        'FROM public.tenants WHERE schema_name = :schema AND is_active = true '
+                        'LIMIT 1'
+                    ),
+                    {'schema': schema_name},
+                ).fetchone()
+            if not tenant_row:
+                app.logger.warning('Hook Odoo: schema %s no encontrado', schema_name)
+                return
+            tenant_data = {
+                'id': tenant_row[0],
+                'schema_name': tenant_row[1],
+                'subdominio': tenant_row[2],
+                'nombre': tenant_row[3],
+                'modulos_activos': tenant_row[4] if isinstance(tenant_row[4], dict) else {},
+            }
+            if not _tenant_has_odoo_module(tenant_data):
+                app.logger.warning(
+                    'Hook Odoo: tenant %s sin módulo Odoo, se omite', schema_name,
+                )
+                return
+            _set_search_path(schema_name)
+            _bind_tenant_context(tenant_data)
+            run_hook_resource(resource, meta=meta or {})
+        except ValueError as e:
+            # Credenciales / URL Odoo: no reintentar en bucle.
+            app.logger.error('Hook Odoo %s en %s: %s', resource, schema_name, e)
+        except Exception as e:
+            app.logger.exception('Hook Odoo %s en %s falló: %s', resource, schema_name, e)
+            raise self.retry(exc=e)
+        finally:
+            _cleanup_db_session()
+
+
 @celery.task(bind=True, soft_time_limit=60 * 60, time_limit=65 * 60)
 def process_nota_audio_task(self, schema_name: str, job_id: int):
     """Transcribe audio subido y crea nota privada en el tenant indicado."""

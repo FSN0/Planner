@@ -469,6 +469,108 @@ def notificar_movimiento_admin_a_jo(obra_id, worker_name, accion, fecha_str, adm
     _send_localized(destinatarios, subject, text)
 
 
+def notificar_desvio_fichaje(registro):
+    """
+    Aviso inmediato a los jefes de la obra planificada y de la obra fichada.
+    Si es el mismo jefe, un solo correo con ambos lados.
+    """
+    from app.services.i18n_service import translate
+    from app.services.desvio_fichaje_service import es_desvio_plan_vs_real
+    from app.utils.timezone_utils import format_time
+
+    if not es_desvio_plan_vs_real(registro):
+        return
+    user = registro.user
+    if not user:
+        return
+    obra_plan = registro.obra_planificada
+    obra_real = registro.obra_real
+    if not obra_plan or not obra_real:
+        return
+
+    worker_name = f'{user.name or ""} {user.lastname or ""}'.strip() or user.email
+    fecha_txt = registro.fecha.strftime('%d/%m/%Y') if registro.fecha else '—'
+    hora_txt = format_time(registro.check_in) if registro.check_in else '—'
+
+    def _mail_jefe(jefe, *, rol_lado):
+        if not jefe or not jefe.email or getattr(jefe, 'is_deleted', False):
+            return
+        if not getattr(jefe, 'active', True):
+            return
+        loc = _user_locale(jefe, bulk=True)
+        if rol_lado == 'ambos':
+            asunto = translate(
+                'Desvío de fichaje: {worker} ({date})',
+                loc,
+                worker=worker_name,
+                date=fecha_txt,
+            )
+            cuerpo = translate(
+                'Hola {jefe},\n\n'
+                '{worker} estaba planificado en «{plan}» y ha fichado a las {hora} '
+                'en «{real}» ({date}).\n\n'
+                'Como gestionas ambas obras, confirma el desvío en Auditoría de fichajes: '
+                'libera la plaza del plan y acepta la entrada.\n',
+                loc,
+                jefe=jefe.name or '',
+                worker=worker_name,
+                plan=obra_plan.nombre,
+                real=obra_real.nombre,
+                hora=hora_txt,
+                date=fecha_txt,
+            )
+        elif rol_lado == 'plan':
+            asunto = translate(
+                'No ha venido a tu obra: {worker} fichó en otra ({date})',
+                loc,
+                worker=worker_name,
+                date=fecha_txt,
+            )
+            cuerpo = translate(
+                'Hola {jefe},\n\n'
+                '{worker} estaba planificado hoy en «{plan}», pero ha fichado a las {hora} '
+                'en «{real}» ({date}).\n\n'
+                'No es un “sin fichar”: está en otra obra. En Auditoría de fichajes puedes '
+                'liberar su plaza en tu obra.\n',
+                loc,
+                jefe=jefe.name or '',
+                worker=worker_name,
+                plan=obra_plan.nombre,
+                real=obra_real.nombre,
+                hora=hora_txt,
+                date=fecha_txt,
+            )
+        else:
+            asunto = translate(
+                'Entrada no planificada: {worker} en tu obra ({date})',
+                loc,
+                worker=worker_name,
+                date=fecha_txt,
+            )
+            cuerpo = translate(
+                'Hola {jefe},\n\n'
+                '{worker} ha fichado a las {hora} en «{real}» sin estar planificado ahí '
+                '({date}). Venía de «{plan}».\n\n'
+                'En Auditoría de fichajes puedes aceptar la entrada en tu obra.\n',
+                loc,
+                jefe=jefe.name or '',
+                worker=worker_name,
+                plan=obra_plan.nombre,
+                real=obra_real.nombre,
+                hora=hora_txt,
+                date=fecha_txt,
+            )
+        send_email(asunto, [jefe.email], cuerpo)
+
+    jefe_plan = obra_plan.jefe_obra
+    jefe_real = obra_real.jefe_obra
+    if jefe_plan and jefe_real and jefe_plan.id == jefe_real.id:
+        _mail_jefe(jefe_plan, rol_lado='ambos')
+        return
+    _mail_jefe(jefe_plan, rol_lado='plan')
+    _mail_jefe(jefe_real, rol_lado='real')
+
+
 def enviar_super_reporte_diario():
     """
     Sustituye a 'notificar_auditoria_diaria_0830'.
@@ -619,8 +721,9 @@ def enviar_super_reporte_diario():
     # CORREOS ESPECÍFICOS PARA CADA JEFE DE OBRA
     # ==========================================
     obras_afectadas_ids = set(
-        [a.obra_planificada_id for a in ausencias_hoy if a.obra_planificada_id] + 
-        [c.obra_real_id for c in conflictos_ayer if c.obra_real_id]
+        [a.obra_planificada_id for a in ausencias_hoy if a.obra_planificada_id] +
+        [c.obra_real_id for c in conflictos_ayer if c.obra_real_id] +
+        [c.obra_planificada_id for c in conflictos_ayer if c.obra_planificada_id]
     )
     
     for obra_id in obras_afectadas_ids:
@@ -628,7 +731,11 @@ def enviar_super_reporte_diario():
         if not obra or not obra.jefe_obra or not obra.jefe_obra.email: continue
             
         aus_obra = [a for a in ausencias_hoy if a.obra_planificada_id == obra.id]
-        con_obra = [c for c in conflictos_ayer if c.obra_real_id == obra.id]
+        con_obra_real = [c for c in conflictos_ayer if c.obra_real_id == obra.id]
+        con_obra_plan = [
+            c for c in conflictos_ayer
+            if c.obra_planificada_id == obra.id and c.obra_real_id != obra.id
+        ]
 
         from app.services.i18n_service import translate
         loc = _user_locale(obra.jefe_obra, bulk=True)
@@ -655,15 +762,46 @@ def enviar_super_reporte_diario():
                 html_jo += f"<li>{a.user.name} {a.user.lastname}</li>"
             html_jo += "</ul>"
 
-        if con_obra:
+        if con_obra_real:
             html_jo += (
                 "<h4 style='color: #f59e0b;'>"
-                f"{translate('FICHARON AYER ({date}) SIN ESTAR PLANIFICADOS:', loc, date=ayer.strftime('%d/%m/%Y'))}"
+                f"{translate('FICHARON AYER ({date}) SIN ESTAR PLANIFICADOS EN TU OBRA:', loc, date=ayer.strftime('%d/%m/%Y'))}"
                 "</h4><ul>"
             )
-            for c in con_obra:
-                html_jo += f"<li>{c.user.name} {c.user.lastname}</li>"
+            for c in con_obra_real:
+                plan_nom = (
+                    c.obra_planificada.nombre
+                    if c.obra_planificada
+                    else translate('NINGUNA', loc)
+                )
+                html_jo += translate(
+                    '<li>{name} (venía de: {plan})</li>',
+                    loc,
+                    name=f'{c.user.name} {c.user.lastname}',
+                    plan=plan_nom,
+                )
             html_jo += "</ul>"
+
+        if con_obra_plan:
+            html_jo += (
+                "<h4 style='color: #dc2626;'>"
+                f"{translate('PLANIFICADOS EN TU OBRA QUE FICHARON AYER EN OTRA:', loc, date=ayer.strftime('%d/%m/%Y'))}"
+                "</h4><ul>"
+            )
+            for c in con_obra_plan:
+                real_nom = (
+                    c.obra_real.nombre if c.obra_real else translate('Desconocida', loc)
+                )
+                html_jo += translate(
+                    '<li>{name} (fichó en: {real})</li>',
+                    loc,
+                    name=f'{c.user.name} {c.user.lastname}',
+                    real=real_nom,
+                )
+            html_jo += "</ul>"
+
+        if not aus_obra and not con_obra_real and not con_obra_plan:
+            continue
 
         html_jo += "</div>"
 

@@ -158,7 +158,24 @@ def odoo_panel():
             get_tenant_config('soltec_sso_shared_secret', default='')
         ),
     }
+    from app.services.odoo_hook_service import hook_dashboard_context
+    ctx['odoo_hook'] = hook_dashboard_context()
     return render_template('sync/odoo_dashboard.html', **ctx)
+
+
+@sync_bp.route('/odoo/hook-key', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def odoo_rotate_hook_key():
+    if not _require_odoo_module():
+        return redirect(url_for('sync.panel'))
+    from app.services.odoo_hook_service import rotate_hook_key
+    rotate_hook_key()
+    flash(
+        translate('Nueva clave de avisos Odoo. La anterior deja de valer; actualízala en Odoo.'),
+        'success',
+    )
+    return redirect(url_for('sync.odoo_panel'))
 
 
 @sync_bp.route('/odoo/save_config', methods=['POST'])
@@ -856,6 +873,8 @@ def auditoria_fichajes():
             .limit(_AUDITORIA_PENDIENTES_LIMIT)
             .all()
         )
+        from app.services.desvio_fichaje_service import enriquecer_pendientes_desvio
+        pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
         historial = (
             RegistroFichaje.query
             .options(*_AUDITORIA_EAGER)
@@ -937,6 +956,9 @@ ACCION_RESOLUCION_TITULOS = {
     'anadir': 'Añadir',
     'borrar_planificacion': 'Borrar Planificación',
     'confirmar_ausencia': 'Confirmar Ausencia',
+    'liberar_plaza': 'Liberar plaza',
+    'aceptar_entrada': 'Aceptar entrada',
+    'confirmar_desvio': 'Confirmar desvío',
 }
 
 # Placeholders / pendientes que dejan la pelotita naranja tras resolver otra fila.
@@ -1123,6 +1145,64 @@ def resolver_fichaje():
         if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
             return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
 
+    from app.services.desvio_fichaje_service import (
+        ACCION_ACEPTAR_ENTRADA,
+        ACCION_CONFIRMAR_DESVIO,
+        ACCION_LIBERAR_PLAZA,
+        DesvioFichajeError,
+        aplicar_accion_desvio,
+        es_desvio_plan_vs_real,
+    )
+
+    # Desvío X→Y: firmas por lado (no sustituye mover/añadir/ignorar del admin)
+    if accion in (ACCION_LIBERAR_PLAZA, ACCION_ACEPTAR_ENTRADA, ACCION_CONFIRMAR_DESVIO):
+        try:
+            resultado = aplicar_accion_desvio(registro, accion, current_user)
+            if resultado.get('resolved'):
+                _cerrar_hermanos_placeholder(
+                    registro, 'mover', estado_anterior='Conflicto'
+                )
+            from app.utils import register_log
+            accion_titulo = ACCION_RESOLUCION_TITULOS.get(
+                accion, accion.replace('_', ' ').title()
+            )
+            register_log(
+                user_id=current_user.id,
+                category='fichajes',
+                action=f"Resolución de Fichaje: {accion_titulo}",
+                detail=resultado.get('message') or registro.notas_resolucion,
+                target_user_id=registro.user_id,
+                target_date=registro.fecha,
+            )
+            db.session.commit()
+            return jsonify({
+                'success': True,
+                'resolved': resultado.get('resolved'),
+                'dismiss_row': resultado.get('dismiss_for_viewer', True),
+                'message': translate(resultado.get('message') or 'OK'),
+                'ack_plan': resultado.get('ack_plan'),
+                'ack_real': resultado.get('ack_real'),
+            })
+        except DesvioFichajeError as err:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': translate(err.message)}), err.status
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Acciones clásicas sobre un desvío: cierran ambas firmas de golpe
+    if es_desvio_plan_vs_real(registro) and accion in (
+        'mover', 'anadir', 'ignorar', 'borrar_planificacion',
+    ):
+        from app.utils.timezone_utils import utc_now as _utc_now
+        ahora = _utc_now()
+        if not registro.desvio_ack_plan_at:
+            registro.desvio_ack_plan_at = ahora
+            registro.desvio_ack_plan_by_id = current_user.id
+        if not registro.desvio_ack_real_at:
+            registro.desvio_ack_real_at = ahora
+            registro.desvio_ack_real_by_id = current_user.id
+
     try:
         registro.resuelto_por_id = current_user.id
         from app.utils.timezone_utils import utc_now
@@ -1212,6 +1292,9 @@ def resolver_fichaje():
 
         elif accion == 'confirmar_ausencia':
             registro.estado = 'Resuelto_Ausencia'
+
+        else:
+            return jsonify({'success': False, 'error': translate('Acción no reconocida')}), 400
 
         registro.notas_resolucion = _detalle_resolucion_fichaje(
             registro, accion, estado_anterior=estado_anterior
@@ -1332,6 +1415,11 @@ def reabrir_fichaje():
         )
         registro.resuelto_por_id = current_user.id
         registro.fecha_auditoria = utc_now()
+        if previo == 'Conflicto':
+            registro.desvio_ack_plan_at = None
+            registro.desvio_ack_plan_by_id = None
+            registro.desvio_ack_real_at = None
+            registro.desvio_ack_real_by_id = None
 
         _reabrir_hermanos_cerrados(registro, fecha_aud_previa)
 

@@ -156,6 +156,57 @@ class TestHoyEnObra:
         fila = next(f for f in resumen['filas'] if f['user'].id == user_operario.id)
         assert fila['estado'] == 'sin_fichar'
 
+    def test_panel_muestra_entrada_en_zona_local(
+        self, session, tenant_soltec, user_operario, obra_activa,
+        authenticated_client, app,
+    ):
+        from datetime import datetime, time
+        from flask import g
+        from sqlalchemy.orm.attributes import flag_modified
+
+        from app.services.config_service import set_tenant_config
+        from app.utils.timezone_utils import format_time, invalidate_app_timezone_cache
+
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+        mods = dict(tenant_soltec.modulos_activos or {})
+        mods['odoo'] = True
+        tenant_soltec.modulos_activos = mods
+        flag_modified(tenant_soltec, 'modulos_activos')
+        session.commit()
+
+        with app.test_request_context('/', base_url='http://soltec.localhost:5000'):
+            g.current_tenant = tenant_soltec
+            session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+            set_tenant_config('zona_horaria', 'Europe/Madrid')
+            invalidate_app_timezone_cache()
+
+        hoy = today_local()
+        Asignacion.query.filter_by(fecha=hoy, user_id=user_operario.id).delete()
+        RegistroFichaje.query.filter_by(fecha=hoy, user_id=user_operario.id).delete()
+        session.add(Asignacion(
+            user_id=user_operario.id, obra_id=obra_activa.id, fecha=hoy,
+        ))
+        entrada_utc = datetime.combine(hoy, time(5, 0))
+        session.add(RegistroFichaje(
+            user_id=user_operario.id,
+            obra_planificada_id=obra_activa.id,
+            obra_real_id=obra_activa.id,
+            fecha=hoy,
+            check_in=entrada_utc,
+            estado='Correcto',
+        ))
+        session.commit()
+
+        hora_local = format_time(entrada_utc)
+        assert hora_local != '05:00'
+
+        response = authenticated_client.get('/admin/panel')
+        assert response.status_code == 200
+        html = response.data.decode('utf-8')
+        assert 'Hoy en obra' in html
+        assert hora_local in html
+        assert '>05:00<' not in html
+
 
 class TestAcademia:
 

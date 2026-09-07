@@ -347,6 +347,13 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/"/g, '&quot;');
     }
 
+    function pmdObraLabel(g) {
+        var codigo = String((g && g.codigo) || '').trim();
+        var nombre = String((g && g.title) || '').trim();
+        if (codigo && nombre && nombre !== codigo) return codigo + ' / ' + nombre;
+        return nombre || codigo || String((g && g.id) || '');
+    }
+
     function pmdShift(days) {
         var input = document.getElementById('pmd-date');
         if (!input || typeof moment === 'undefined') return;
@@ -417,8 +424,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (aCount > 0 && bCount === 0) return -1;
                 if (aCount === 0 && bCount > 0) return 1;
                 if (aCount !== bCount) return bCount - aCount;
-                var ta = a.title || a.codigo || String(a.id);
-                var tb = b.title || b.codigo || String(b.id);
+                var ta = pmdObraLabel(a);
+                var tb = pmdObraLabel(b);
                 return ta.localeCompare(tb);
             });
 
@@ -442,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         '<span class="pmd-person-dates">' + pmdEsc(dates) + '</span></span></div>';
                 }).join('');
                 var obraHref = '/admin/obra_panel/' + encodeURIComponent(gid);
-                var obraTitle = pmdEsc(g.title || g.codigo || gid);
+                var obraTitle = pmdEsc(pmdObraLabel(g));
                 var assignBtn = '';
                 if (window.PLANIFICADOR_CAN_EDIT) {
                     assignBtn = '<button type="button" class="pmd-btn-assign" data-obra-id="' + pmdEsc(gid) +

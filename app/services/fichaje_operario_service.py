@@ -419,7 +419,10 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
             casa_obra_id=casa_id,
             aceptar_primer_fichaje=aceptar_primer_fichaje(),
         )
-        asegurar_asignacion_por_fichaje(user, obra.id, fecha)
+        # Desvío X→Y: no mover el cuadrante hasta que el jefe del plan libere.
+        # En el resto de casos el tablero debe reflejar dónde ha fichado.
+        if clasif.estado != 'Conflicto':
+            asegurar_asignacion_por_fichaje(user, obra.id, fecha)
         proyectar_dia(user.id, fecha)
         registro = RegistroFichaje.query.filter_by(
             user_id=user.id, fecha=fecha,
@@ -428,7 +431,15 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
             registro.estado = clasif.estado
             registro.obra_planificada_id = clasif.obra_planificada_id
             registro.obra_real_id = obra.id
+            if clasif.estado == 'Conflicto':
+                registro.desvio_ack_plan_at = None
+                registro.desvio_ack_plan_by_id = None
+                registro.desvio_ack_real_at = None
+                registro.desvio_ack_real_by_id = None
         db.session.commit()
+        if registro is not None and clasif.estado == 'Conflicto':
+            from app.services.desvio_fichaje_service import notificar_desvio_inmediato
+            notificar_desvio_inmediato(registro)
         return estado_para_pantalla(user, fecha)
 
     proyectar_dia(user.id, fecha)

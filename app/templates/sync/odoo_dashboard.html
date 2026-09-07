@@ -201,6 +201,111 @@
       </div>
     </details>
 
+    {% if odoo_hook %}
+    <section class="sync-hook-card card-modern card mb-4" id="odoo-hook">
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-start justify-content-between mb-3" style="gap:0.75rem;">
+          <div>
+            <h2 class="sync-section-title mb-1" style="margin:0; text-transform:none; letter-spacing:0; font-size:1.05rem;">
+              <i class="fas fa-bolt text-warning mr-1"></i> {{ _('Avisos en tiempo real') }}
+            </h2>
+            <p class="text-muted small mb-0">
+              {{ _('Odoo no envía la ficha: avisa (modelo + id) y SignaPlan tira los mismos datos de siempre por XML-RPC.') }}
+            </p>
+          </div>
+          {% if odoo_hook.last_log %}
+          <span class="badge-soft text-success">
+            {{ _('Último aviso procesado') }}: {{ odoo_hook.last_log.fecha|format_dt }}
+            · {{ odoo_hook.last_log.tipo }}
+          </span>
+          {% else %}
+          <span class="badge-soft text-muted">{{ _('Todavía no ha llegado ningún aviso.') }}</span>
+          {% endif %}
+        </div>
+
+        <ol class="sync-hook-steps small mb-3 pl-3">
+          <li>{{ _('POST JSON a esta URL, en create / write / unlink / archive de estos modelos.') }}</li>
+          <li>{{ _('Respuesta esperada: HTTP 202') }}. {{ _('Reintentar solo si el servidor responde 5xx, no si responde 4xx.') }}</li>
+          <li>{{ _('Agrupa avisos del mismo modelo unos segundos (debounce) antes de llamar.') }} ({{ odoo_hook.debounce_seconds }}s {{ _('en SignaPlan') }})</li>
+          <li>{{ _('No envíes el registro completo; con model, id y action basta.') }}</li>
+          <li>{{ _('Los fichajes siguen con el cron de 30 min; el aviso es opcional.') }} {{ _('La sync de noche sigue como red de seguridad.') }}</li>
+        </ol>
+
+        <div class="row">
+          <div class="col-lg-6 form-group">
+            <label class="form-label-sm" for="odooHookUrl">{{ _('URL del aviso') }}</label>
+            <div class="input-group input-group-sm">
+              <input id="odooHookUrl" type="text" class="form-control form-control-sm font-monospace" readonly
+                     value="{{ odoo_hook.url }}">
+              <div class="input-group-append">
+                <button type="button" class="btn btn-outline-secondary" onclick="copyHookField('odooHookUrl')">{{ _('Copiar') }}</button>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6 form-group">
+            <label class="form-label-sm" for="odooHookKey">{{ _('Clave') }} ({{ odoo_hook.header }})</label>
+            <div class="input-group input-group-sm">
+              <input id="odooHookKey" type="text" class="form-control form-control-sm font-monospace" readonly
+                     value="{{ odoo_hook.key }}">
+              <div class="input-group-append">
+                <button type="button" class="btn btn-outline-secondary" onclick="copyHookField('odooHookKey')">{{ _('Copiar') }}</button>
+              </div>
+            </div>
+            {% if can_write_sync %}
+            <form action="{{ url_for('sync.odoo_rotate_hook_key') }}" method="POST" class="mt-2"
+                  onsubmit="return confirm({{ _('¿Regenerar la clave? Odoo dejará de poder avisar hasta que copies la nueva.')|tojson }});">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn-admin btn-admin-ghost btn-sm">
+                <i class="fas fa-sync-alt"></i> {{ _('Regenerar clave') }}
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+
+        <h3 class="sync-section-title mt-2">{{ _('Modelos a enganchar') }}</h3>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-3 sync-hook-table">
+            <thead>
+              <tr>
+                <th>{{ _('Modelo Odoo') }}</th>
+                <th>{{ _('Módulo SignaPlan') }}</th>
+                <th>{{ _('Qué') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in odoo_hook.models %}
+              <tr>
+                <td><code>{{ row.model }}</code></td>
+                <td><code>{{ row.resource }}</code></td>
+                <td>{{ _(row.label) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="sync-section-title">{{ _('Ejemplo de POST') }}</h3>
+        <pre class="sync-hook-example mb-0" id="odooHookExample">POST {{ odoo_hook.url }}
+Content-Type: application/json
+{{ odoo_hook.header }}: {{ odoo_hook.key }}
+
+{{ odoo_hook.example_json }}</pre>
+        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="copyHookField('odooHookExample')">{{ _('Copiar') }}</button>
+      </div>
+    </section>
+    <script>
+    function copyHookField(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var text = (el.value !== undefined && el.tagName === 'INPUT') ? el.value : (el.textContent || '');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text);
+      }
+    }
+    </script>
+    {% endif %}
+
     <div class="sync-kpi-grid">
       <div class="sync-kpi-card">
         <span class="sync-kpi-label">{{ _('Ejecuciones (7 días)') }}</span>

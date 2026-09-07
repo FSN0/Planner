@@ -1755,3 +1755,5 @@ def check_domain():
 
 from app.api.odoo_alta_auth import register_odoo_alta_auth_routes  # noqa: E402
 register_odoo_alta_auth_routes(api_bp)
+from app.api.odoo_hooks import register_odoo_hook_routes  # noqa: E402
+register_odoo_hook_routes(api_bp)

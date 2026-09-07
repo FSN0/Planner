@@ -24,8 +24,8 @@
         {% for d in dias %}
         <tr>
           <td>{{ d.fecha.strftime('%d/%m/%Y') }}</td>
-          <td>{% if d.entrada %}{{ d.entrada.strftime('%H:%M') }}{% else %}—{% endif %}</td>
-          <td>{% if d.salida %}{{ d.salida.strftime('%H:%M') }}{% else %}—{% endif %}</td>
+          <td>{% if d.entrada %}{{ d.entrada|format_time }}{% else %}—{% endif %}</td>
+          <td>{% if d.salida %}{{ d.salida|format_time }}{% else %}—{% endif %}</td>
           <td>{% if d.obra %}{{ d.obra.nombre }}{% else %}—{% endif %}</td>
           <td>{{ (d.minutos // 60) }}h {{ (d.minutos % 60) }}min</td>
         </tr>
