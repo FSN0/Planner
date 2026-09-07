@@ -482,6 +482,7 @@ window.PersonDayTimeline = (function () {
         document.querySelectorAll(selector).forEach(row => {
             row.addEventListener('click', function (e) {
                 if (opts.ignoreButtonClick !== false) {
+                    if (e.target.closest('.no-row-nav, .audit-desvio-actions, .audit-resolve-cell')) return;
                     if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
                     if (e.target.tagName === 'A' || e.target.closest('a')) return;
                 }

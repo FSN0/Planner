@@ -847,8 +847,12 @@ def auditoria_fichajes():
 
     try:
         # 1. FILTROS BASE MÚLTIPLES
-        filtros_pendientes = [RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Ausencia'])]
-        filtros_historial = [~RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Ausencia', 'Sin_Registro', 'Sobreescrito_RRHH'])]
+        filtros_pendientes = [RegistroFichaje.estado.in_(
+            ['Conflicto', 'Disputa', 'Paracaidista', 'Ausencia']
+        )]
+        filtros_historial = [~RegistroFichaje.estado.in_(
+            ['Conflicto', 'Disputa', 'Paracaidista', 'Ausencia', 'Sin_Registro', 'Sobreescrito_RRHH']
+        )]
         filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH']
 
         # 2. SI ES JEFE DE OBRA, AÑADIMOS RESTRICCIONES
@@ -957,8 +961,11 @@ ACCION_RESOLUCION_TITULOS = {
     'borrar_planificacion': 'Borrar Planificación',
     'confirmar_ausencia': 'Confirmar Ausencia',
     'liberar_plaza': 'Liberar plaza',
+    'mantener_falta': 'Mantener falta',
     'aceptar_entrada': 'Aceptar entrada',
+    'rechazar_entrada': 'Rechazar entrada',
     'confirmar_desvio': 'Confirmar desvío',
+    'rechazar_desvio': 'Mantener plan',
 }
 
 # Placeholders / pendientes que dejan la pelotita naranja tras resolver otra fila.
@@ -966,7 +973,7 @@ ACCION_RESOLUCION_TITULOS = {
 # (p. ej. aceptó multi-obra), no deben dejar la pelotita en rojo/naranja.
 _ESTADOS_HERMANO_PLACEHOLDER = (
     'Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso',
-    'Paracaidista', 'Conflicto',
+    'Paracaidista', 'Conflicto', 'Disputa',
 )
 
 
@@ -1149,18 +1156,33 @@ def resolver_fichaje():
         ACCION_ACEPTAR_ENTRADA,
         ACCION_CONFIRMAR_DESVIO,
         ACCION_LIBERAR_PLAZA,
+        ACCION_MANTENER_FALTA,
+        ACCION_RECHAZAR_DESVIO,
+        ACCION_RECHAZAR_ENTRADA,
         DesvioFichajeError,
         aplicar_accion_desvio,
         es_desvio_plan_vs_real,
     )
 
-    # Desvío X→Y: firmas por lado (no sustituye mover/añadir/ignorar del admin)
-    if accion in (ACCION_LIBERAR_PLAZA, ACCION_ACEPTAR_ENTRADA, ACCION_CONFIRMAR_DESVIO):
+    # Desvío X→Y: a favor / en contra por lado (o cierre completo)
+    if accion in (
+        ACCION_LIBERAR_PLAZA,
+        ACCION_MANTENER_FALTA,
+        ACCION_ACEPTAR_ENTRADA,
+        ACCION_RECHAZAR_ENTRADA,
+        ACCION_CONFIRMAR_DESVIO,
+        ACCION_RECHAZAR_DESVIO,
+    ):
         try:
             resultado = aplicar_accion_desvio(registro, accion, current_user)
             if resultado.get('resolved'):
+                herm_accion = (
+                    'confirmar_ausencia'
+                    if registro.estado == 'Resuelto_Ausencia'
+                    else 'mover'
+                )
                 _cerrar_hermanos_placeholder(
-                    registro, 'mover', estado_anterior='Conflicto'
+                    registro, herm_accion, estado_anterior='Conflicto'
                 )
             from app.utils import register_log
             accion_titulo = ACCION_RESOLUCION_TITULOS.get(
@@ -1415,11 +1437,13 @@ def reabrir_fichaje():
         )
         registro.resuelto_por_id = current_user.id
         registro.fecha_auditoria = utc_now()
-        if previo == 'Conflicto':
-            registro.desvio_ack_plan_at = None
-            registro.desvio_ack_plan_by_id = None
-            registro.desvio_ack_real_at = None
-            registro.desvio_ack_real_by_id = None
+        if previo in ('Conflicto', 'Disputa'):
+            from app.services.desvio_fichaje_service import limpiar_acks_desvio
+            limpiar_acks_desvio(registro)
+            if previo == 'Disputa':
+                # Reabrir disputa → vuelve a Conflicto para que firmen de nuevo
+                registro.estado = 'Conflicto'
+                previo = 'Conflicto'
 
         _reabrir_hermanos_cerrados(registro, fecha_aud_previa)
 

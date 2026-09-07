@@ -33,7 +33,7 @@ FICHAJE_INTERVENCION = {
     'Sobreescrito_RRHH',
 }
 
-FICHAJE_ROJO = {'Conflicto', 'Paracaidista'}
+FICHAJE_ROJO = {'Conflicto', 'Disputa', 'Paracaidista'}
 FICHAJE_NARANJA = {'Ausencia', 'Pendiente', 'Retraso'}
 
 # Semillas de sync: no cuentan si el día ya tiene un fichaje/resolución real.
@@ -151,6 +151,7 @@ def tooltip_fichaje_agregado(estados):
         'Correcto_Automatico': 'Correcto (auto)',
         'Cambio_Tajo': 'Cambio de tajo',
         'Conflicto': 'Conflicto',
+        'Disputa': 'Disputa entre jefes',
         'Paracaidista': 'Paracaidista',
         'Ausencia': 'Ausencia',
         'Pendiente': 'Pendiente',

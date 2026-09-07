@@ -22,10 +22,11 @@
 </td>
 {% endmacro %}
 
-{% macro celda_obra_link(obra) %}
-<td data-sort-value="{{ (obra.nombre if obra else '')|lower }}">
+{% macro celda_obra_link(obra, es_mia=false) %}
+<td class="audit-obra-cell{% if es_mia %} audit-obra-cell--mia{% endif %}" data-sort-value="{{ (obra.nombre if obra else '')|lower }}">
     {% if obra %}
     <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
+        {% if es_mia %}<span class="audit-obra-mia" title="{{ _('Esta es tu obra') }}">{{ _('Tuya') }}</span>{% endif %}
         <a href="{{ url_for('admin.obra_panel', obra_id=obra.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=obra.nombre) }}">{{ obra.codigo }}</a>
         <span class="text-muted flex-shrink-0 mr-1">-</span>
         <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ obra.nombre }}">{{ obra.nombre }}</span>
@@ -84,7 +85,7 @@
 {% endmacro %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260903e">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260907f">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 <style>
@@ -160,7 +161,7 @@ tr.audit-row-highlight {
       </div>
     </div>
 
-    {% set var_conflictos = pendientes | selectattr('estado', 'equalto', 'Conflicto') | list %}
+    {% set var_conflictos = (pendientes | selectattr('estado', 'equalto', 'Conflicto') | list) + (pendientes | selectattr('estado', 'equalto', 'Disputa') | list) %}
     {% set var_paracaidistas = pendientes | selectattr('estado', 'equalto', 'Paracaidista') | list %}
     {% set var_ausencias = pendientes | selectattr('estado', 'equalto', 'Ausencia') | list %}
 
@@ -230,17 +231,18 @@ tr.audit-row-highlight {
                                 {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time', 'salida') }}
                                 {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center', '', 'ubicacion') }}{% endif %}
                                 {{ audit_th_metricas_odoo(metrics_col) }}
-                                {{ audit_sort_th(after_metrics, 'Notas', '10%' if muestra_geo_audit else '12%', '', '', 'notas') }}
-                                {{ audit_sort_th(after_metrics + 1, 'Resolución', '11%' if muestra_geo_audit else '14%', 'right', '', 'resolucion') }}
+                                {{ audit_sort_th(after_metrics, 'Notas', '7%' if muestra_geo_audit else '8%', '', '', 'notas') }}
+                                {{ audit_sort_th(after_metrics + 1, 'Resolución', '15%' if muestra_geo_audit else '18%', 'right', '', 'resolucion') }}
                             </tr>
                         </thead>
                         <tbody>
                             {% for reg in var_conflictos %}
+                            {% set desvio = reg.desvio_ui if reg.desvio_ui is defined else none %}
                             <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 {{ celda_operario(reg) }}
-                                {{ celda_obra_link(reg.obra_planificada) }}
-                                {{ celda_obra_link(reg.obra_real) }}
+                                {{ celda_obra_link(reg.obra_planificada, es_mia=(desvio.mia_plan if desvio else false)) }}
+                                {{ celda_obra_link(reg.obra_real, es_mia=(desvio.mia_real if desvio else false)) }}
                                 <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
                                     {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
@@ -250,34 +252,39 @@ tr.audit-row-highlight {
                                 {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
                                 {{ celda_metricas_odoo(reg) }}
                                 {{ celda_notas(reg) }}
-                                <td class="text-right no-row-nav" data-sort-value="">
+                                    <td class="text-right no-row-nav audit-resolve-cell" data-sort-value="" onclick="event.stopPropagation();">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                      {% set desvio = reg.desvio_ui if reg.desvio_ui is defined else none %}
-                                      {% if desvio and desvio.botones %}
-                                        <div class="audit-desvio-acks small text-muted mb-1">
-                                          {% if desvio.ack_plan %}
-                                            <span class="badge-soft badge-soft-green mr-1">{{ _('Plan OK') }}</span>
-                                          {% else %}
-                                            <span class="badge-soft badge-soft-amber mr-1">{{ _('Plan pendiente') }}</span>
+                                      {% if desvio %}
+                                        <div class="audit-desvio-actions">
+                                          <span class="audit-desvio-status" aria-label="{{ _('Estado del desvío') }}">
+                                            <span class="audit-desvio-dot {% if desvio.ack_plan %}is-ok{% else %}is-pending{% endif %}"
+                                                  title="{% if desvio.ack_plan %}{{ _('Plan OK') }}{% else %}{{ _('Plan pendiente') }}{% endif %}">P</span>
+                                            <span class="audit-desvio-dot {% if desvio.ack_real %}is-ok{% else %}is-pending{% endif %}"
+                                                  title="{% if desvio.ack_real %}{{ _('Fichaje OK') }}{% else %}{{ _('Fichaje pendiente') }}{% endif %}">F</span>
+                                          </span>
+                                          {% for btn in desvio.botones %}
+                                            {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
+                                            <button type="button"
+                                                    class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
+                                                    data-registro-id="{{ reg.id }}"
+                                                    data-accion="{{ btn.accion }}"
+                                                    title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
+                                          {% endfor %}
+                                          {% if desvio.disputa and current_user.role in ['admin', 'laboral', 'rrhh'] %}
+                                            <span class="badge-soft badge-soft-amber" title="{{ _('Los jefes no coinciden') }}">{{ _('Disputa') }}</span>
                                           {% endif %}
-                                          {% if desvio.ack_real %}
-                                            <span class="badge-soft badge-soft-green">{{ _('Fichaje OK') }}</span>
-                                          {% else %}
-                                            <span class="badge-soft badge-soft-amber">{{ _('Fichaje pendiente') }}</span>
+                                          {% if current_user.role in ['admin', 'laboral', 'rrhh'] %}
+                                            <button type="button" class="btn btn-light border btn-audit btn-audit-ignore text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}" aria-label="{{ _('Ignorar') }}"><i class="fas fa-times"></i></button>
+                                          {% elif not desvio.botones %}
+                                            <span class="text-muted small">{{ _('Esperando al otro jefe') }}</span>
                                           {% endif %}
                                         </div>
-                                        {% for btn in desvio.botones %}
-                                          <button class="btn btn-outline-{{ 'danger' if btn.style == 'danger' else 'primary' }} btn-audit mr-1"
-                                                  onclick="event.stopPropagation(); resolver({{ reg.id }}, {{ btn.accion|tojson }})"
-                                                  title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
-                                        {% endfor %}
-                                        {% if current_user.role in ['admin', 'laboral', 'rrhh'] %}
-                                          <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">{{ _('Ignorar') }}</button>
-                                        {% endif %}
                                       {% else %}
-                                        <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'mover')" title="{{ _('Cambia la planificación a la obra donde fichó') }}">{{ _('Mover') }}</button>
-                                        <button class="btn btn-outline-primary btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">{{ _('+ Añadir') }}</button>
-                                        <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}">{{ _('Ignorar') }}</button>
+                                        <div class="audit-desvio-actions">
+                                          <button type="button" class="btn btn-outline-danger btn-audit js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="mover" title="{{ _('Cambia la planificación a la obra donde fichó') }}">{{ _('Mover') }}</button>
+                                          <button type="button" class="btn btn-outline-primary btn-audit js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="anadir" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">{{ _('+ Añadir') }}</button>
+                                          <button type="button" class="btn btn-light border btn-audit btn-audit-ignore text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}" aria-label="{{ _('Ignorar') }}"><i class="fas fa-times"></i></button>
+                                        </div>
                                       {% endif %}
                                     {% else %}
                                     <span class="text-muted small">{{ _('Solo lectura') }}</span>
@@ -347,8 +354,8 @@ tr.audit-row-highlight {
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-primary btn-audit mr-1" data-tour="audit-aceptar" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'anadir')" title="{{ _('Asignar oficialmente a esta obra') }}">{{ _('Aceptar') }}</button>
-                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Ocultar esta alerta') }}">{{ _('Ignorar') }}</button>
+                                    <button type="button" class="btn btn-outline-primary btn-audit mr-1 js-audit-resolve" data-tour="audit-aceptar" data-registro-id="{{ reg.id }}" data-accion="anadir" title="{{ _('Asignar oficialmente a esta obra') }}">{{ _('Aceptar') }}</button>
+                                    <button type="button" class="btn btn-light border btn-audit text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Ocultar esta alerta') }}">{{ _('Ignorar') }}</button>
                                     {% else %}
                                     <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
@@ -399,9 +406,9 @@ tr.audit-row-highlight {
                                 {{ celda_notas(reg) }}
                                 <td class="text-right no-row-nav" data-sort-value="">
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button class="btn btn-outline-danger btn-audit mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'confirmar_ausencia')" title="{{ _('Falta real (Mantiene la planificación)') }}">{{ _('Ausencia') }}</button>
-                                    <button class="btn btn-outline-warning btn-audit text-dark mr-1" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'borrar_planificacion')" title="{{ _('Elimina la planificación asignada para este día') }}">{{ _('Falta') }}</button>
-                                    <button class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); resolver({{ reg.id }}, 'ignorar')" title="{{ _('Oculta esta alerta sin realizar cambios') }}">{{ _('Ignorar') }}</button>
+                                    <button type="button" class="btn btn-outline-danger btn-audit mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="confirmar_ausencia" title="{{ _('Falta real (Mantiene la planificación)') }}">{{ _('Ausencia') }}</button>
+                                    <button type="button" class="btn btn-outline-warning btn-audit text-dark mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="borrar_planificacion" title="{{ _('Elimina la planificación asignada para este día') }}">{{ _('Falta') }}</button>
+                                    <button type="button" class="btn btn-light border btn-audit text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Oculta esta alerta sin realizar cambios') }}">{{ _('Ignorar') }}</button>
                                     {% else %}
                                     <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
@@ -774,7 +781,7 @@ tr.audit-row-highlight {
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
-<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}"></script>
+<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260907e"></script>
 <script src="{{ url_for('static', filename='js/auditoria_marcas.js') }}"></script>
 
 <script>
@@ -933,141 +940,196 @@ function showToast(message, isSuccess = false) {
     }
 }
 
-function resolver(id, accion) {
-    const row = document.getElementById('row-' + id);
-    if(row) {
-        row.style.transition = 'all 0.3s ease';
-        row.style.opacity = '0.3';
-        row.style.transform = 'translateX(20px)';
-        row.style.pointerEvents = 'none';
+var AUDIT_RESOLVE_I18N = {{ {
+  'error_prefix': _('Error:'),
+  'invalid': _('Respuesta inválida'),
+  'network': _('Error de red al resolver'),
+  'http_fail': _('Error al resolver'),
+  'reopen_confirm': _('¿Reabrir esta decisión? Volverá a la clasificación anterior. Si moviste o borraste asignaciones, el cuadrante no se deshace solo.'),
+  'reopened': _('Reabierto'),
+  'reopen_fail': _('No se pudo reabrir'),
+  'reopen_network': _('Fallo de red al reabrir.'),
+}|tojson }};
+
+(function () {
+    function auditI18n() { return AUDIT_RESOLVE_I18N || {}; }
+
+    function csrfHeaders() {
+        var headers = { 'Content-Type': 'application/json' };
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var token = meta ? meta.getAttribute('content') : '';
+        if (!token) {
+            var parts = ('; ' + document.cookie).split('; csrf_token=');
+            if (parts.length === 2) token = parts.pop().split(';').shift();
+        }
+        if (token) headers['X-CSRFToken'] = token;
+        return headers;
     }
-    
-    fetch("{{ url_for('sync.resolver_fichaje') }}", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({registro_id: id, accion: accion})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if(data.success) {
-            const dismiss = (data.dismiss_row !== false);
-            setTimeout(() => {
-                if(row && dismiss) {
-                    // --- MAGIA PARA BAJAR EL CONTADOR ---
-                    let card = row.closest('.card-modern');
-                    if(card) {
-                        let badge = card.querySelector('.badge-count, .badge');
-                        if(badge) {
-                            let count = parseInt(badge.innerText);
-                            if(!isNaN(count) && count > 0) {
-                                badge.innerText = count - 1; // Le restamos 1
-                            }
+
+    function restoreRow(row) {
+        if (!row) return;
+        row.style.opacity = '1';
+        row.style.transform = 'translateX(0)';
+        row.style.pointerEvents = 'auto';
+    }
+
+    window.resolver = function resolver(id, accion) {
+        var t = auditI18n();
+        var row = document.getElementById('row-' + id);
+        if (row) {
+            row.style.transition = 'all 0.3s ease';
+            row.style.opacity = '0.3';
+            row.style.transform = 'translateX(20px)';
+            row.style.pointerEvents = 'none';
+        }
+
+        fetch({{ url_for('sync.resolver_fichaje')|tojson }}, {
+            method: 'POST',
+            headers: csrfHeaders(),
+            body: JSON.stringify({ registro_id: id, accion: accion })
+        })
+        .then(function (res) {
+            return res.text().then(function (raw) {
+                var data = null;
+                try { data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
+                return { ok: res.ok, status: res.status, data: data || {} };
+            });
+        })
+        .then(function (result) {
+            var data = result.data;
+            if (!result.ok) {
+                var msg = (data && data.error) || ((t.http_fail || 'Error') + ' (HTTP ' + result.status + ')');
+                throw new Error(msg);
+            }
+            if (!data.success) {
+                alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.invalid || 'Error'));
+                restoreRow(row);
+                return;
+            }
+            var dismiss = (data.dismiss_row !== false);
+            setTimeout(function () {
+                if (row && dismiss) {
+                    var card = row.closest('.card-modern');
+                    if (card) {
+                        var badge = card.querySelector('.badge-count, .badge');
+                        if (badge) {
+                            var count = parseInt(badge.innerText, 10);
+                            if (!isNaN(count) && count > 0) badge.innerText = count - 1;
                         }
                     }
-                    // ------------------------------------
-                    row.remove(); // Borramos la fila
+                    row.remove();
                 } else if (row && !dismiss) {
-                    // Firma parcial: recargar para ver badges / botones actualizados
                     window.location.reload();
                     return;
                 }
-                
-                // Si ya no quedan filas de ningún tipo, recargamos para limpiar
-                const restantes = document.querySelectorAll('tr[id^="row-"]');
-                if (restantes.length === 0) {
+                if (document.querySelectorAll('tr[id^="row-"]').length === 0) {
                     window.location.reload();
                 }
             }, 300);
-        } else {
-            alert({{ _('Error:')|tojson }} + " " + data.error);
-            if(row) {
-                row.style.opacity = '1';
-                row.style.transform = 'translateX(0)';
-                row.style.pointerEvents = 'auto';
-            }
-        }
-    })
-    .catch(err => {
-        console.error("Error crítico:", err);
-        if(row) {
-            row.style.opacity = '1';
-            row.style.transform = 'translateX(0)';
-            row.style.pointerEvents = 'auto';
-        }
-    });
-}
+        })
+        .catch(function (err) {
+            console.error('Error critico:', err);
+            alert((err && err.message) ? err.message : (t.network || 'Error de red'));
+            restoreRow(row);
+        });
+    };
 
-function reabrirResolucion(id, btn) {
-    if (!confirm({{ _('¿Reabrir esta decisión? Volverá a la clasificación anterior. Si moviste o borraste asignaciones, el cuadrante no se deshace solo.')|tojson }})) {
-        return;
-    }
-    if (btn) {
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
-    }
-    fetch("{{ url_for('sync.reabrir_fichaje') }}", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({registro_id: id})
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            showToast(data.aviso || {{ _('Reabierto')|tojson }}, true);
-            setTimeout(() => window.location.reload(), 700);
-        } else {
-            alert({{ _('Error:')|tojson }} + " " + (data.error || {{ _('No se pudo reabrir')|tojson }}));
+    window.reabrirResolucion = function reabrirResolucion(id, btn) {
+        var t = auditI18n();
+        if (!confirm(t.reopen_confirm || 'Reabrir?')) return;
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        }
+        fetch({{ url_for('sync.reabrir_fichaje')|tojson }}, {
+            method: 'POST',
+            headers: csrfHeaders(),
+            body: JSON.stringify({ registro_id: id })
+        })
+        .then(function (res) {
+            return res.text().then(function (raw) {
+                var data = null;
+                try { data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
+                return { ok: res.ok, data: data || {} };
+            });
+        })
+        .then(function (result) {
+            var data = result.data;
+            if (result.ok && data.success) {
+                showToast(data.aviso || t.reopened || 'OK', true);
+                setTimeout(function () { window.location.reload(); }, 700);
+                return;
+            }
+            alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.reopen_fail || 'Error'));
             if (btn) {
                 btn.disabled = false;
                 btn.style.opacity = '1';
             }
-        }
-    })
-    .catch(err => {
-        console.error(err);
-        alert({{ _('Fallo de red al reabrir.')|tojson }});
-        if (btn) {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-        }
-    });
-}
+        })
+        .catch(function (err) {
+            console.error(err);
+            alert(t.reopen_network || 'Error de red');
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
+        });
+    };
+})();
 
 function forzarSyncFichajes() {
-    // Leemos qué opción has elegido en el desplegable
-    const diasSeleccionados = document.getElementById('diasSync').value;
-    
-    // Mostramos un mensaje u otro dependiendo de los días para dar feedback
-    let msj = diasSeleccionados === "0"
+    var diasSeleccionados = document.getElementById('diasSync').value;
+    var msj = diasSeleccionados === '0'
         ? {{ _('Revisando fichajes de hoy...')|tojson }}
         : {{ _('Revisando hoy y {n} días atrás...')|tojson }}.replace('{n}', diasSeleccionados);
     showToast(msj);
-    
-    fetch("{{ url_for('sync.sync_fichajes_manual') }}", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ dias: diasSeleccionados }) // Pasamos los días al servidor
+
+    function csrfHeaders() {
+        var headers = { 'Content-Type': 'application/json' };
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var token = meta ? meta.getAttribute('content') : '';
+        if (!token) {
+            var parts = ('; ' + document.cookie).split('; csrf_token=');
+            if (parts.length === 2) token = parts.pop().split(';').shift();
+        }
+        if (token) headers['X-CSRFToken'] = token;
+        return headers;
+    }
+
+    fetch({{ url_for('sync.sync_fichajes_manual')|tojson }}, {
+        method: 'POST',
+        headers: csrfHeaders(),
+        body: JSON.stringify({ dias: diasSeleccionados })
     })
-    .then(res => res.json())
-    .then(data => {
-        if(data.success) {
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+        if (data.success) {
             showToast({{ _('¡Revisión y Sincronización completadas!')|tojson }}, true);
-            setTimeout(() => {
-                window.location.reload();
-            }, 800);
+            setTimeout(function () { window.location.reload(); }, 800);
         } else {
-            alert({{ _('Error al conectar con Odoo:')|tojson }} + " " + data.error);
+            alert({{ _('Error al conectar con Odoo:')|tojson }} + ' ' + data.error);
             document.getElementById('customToast').classList.remove('show');
         }
     })
-    .catch(err => {
-        console.error("Error en Fetch:", err);
+    .catch(function (err) {
+        console.error('Error en Fetch:', err);
         alert({{ _('Fallo de red al intentar sincronizar.')|tojson }});
         document.getElementById('customToast').classList.remove('show');
     });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.js-audit-resolve');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var id = parseInt(btn.getAttribute('data-registro-id'), 10);
+        var accion = btn.getAttribute('data-accion');
+        if (!id || !accion || typeof window.resolver !== 'function') return;
+        window.resolver(id, accion);
+    }, true);
+
     PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
         modalId: 'modalTimelineFichaje',
         apiBase: '/sync/timeline_dia',

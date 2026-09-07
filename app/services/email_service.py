@@ -509,8 +509,9 @@ def notificar_desvio_fichaje(registro):
                 'Hola {jefe},\n\n'
                 '{worker} estaba planificado en «{plan}» y ha fichado a las {hora} '
                 'en «{real}» ({date}).\n\n'
-                'Como gestionas ambas obras, confirma el desvío en Auditoría de fichajes: '
-                'libera la plaza del plan y acepta la entrada.\n',
+                'Como gestionas ambas obras, en Auditoría de fichajes puedes:\n'
+                '· Confirmar — valida el desvío (libera plaza y acepta entrada)\n'
+                '· Mantener — rechaza el desvío (falta en el plan, fichaje no aceptado)\n',
                 loc,
                 jefe=jefe.name or '',
                 worker=worker_name,
@@ -530,8 +531,9 @@ def notificar_desvio_fichaje(registro):
                 'Hola {jefe},\n\n'
                 '{worker} estaba planificado hoy en «{plan}», pero ha fichado a las {hora} '
                 'en «{real}» ({date}).\n\n'
-                'No es un “sin fichar”: está en otra obra. En Auditoría de fichajes puedes '
-                'liberar su plaza en tu obra.\n',
+                'No es un “sin fichar”: está en otra obra. En Auditoría de fichajes puedes:\n'
+                '· Liberar — no viene; liberas su plaza\n'
+                '· Falta — debía venir a tu obra; mantienes la falta\n',
                 loc,
                 jefe=jefe.name or '',
                 worker=worker_name,
@@ -551,7 +553,9 @@ def notificar_desvio_fichaje(registro):
                 'Hola {jefe},\n\n'
                 '{worker} ha fichado a las {hora} en «{real}» sin estar planificado ahí '
                 '({date}). Venía de «{plan}».\n\n'
-                'En Auditoría de fichajes puedes aceptar la entrada en tu obra.\n',
+                'En Auditoría de fichajes puedes:\n'
+                '· Aceptar — se queda en tu obra\n'
+                '· Rechazar — ha fichado, pero no lo das por bueno aquí\n',
                 loc,
                 jefe=jefe.name or '',
                 worker=worker_name,

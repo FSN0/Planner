@@ -620,11 +620,15 @@ class RegistroFichaje(db.Model):
     # Trazabilidad: Quién resolvió el conflicto
     resuelto_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
-    # Desvío X→Y: firmas independientes de plan y de obra fichada
+    # Desvío X→Y: firmas/decisiones independientes de plan y de obra fichada
     desvio_ack_plan_at = db.Column(db.DateTime, nullable=True)
     desvio_ack_plan_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     desvio_ack_real_at = db.Column(db.DateTime, nullable=True)
     desvio_ack_real_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # liberar | mantener_falta
+    desvio_decision_plan = db.Column(db.String(20), nullable=True)
+    # aceptar | rechazar
+    desvio_decision_real = db.Column(db.String(20), nullable=True)
 
     # Relaciones para navegar fácilmente desde Jinja
     user = db.relationship('User', backref='fichajes_diarios', foreign_keys=[user_id])

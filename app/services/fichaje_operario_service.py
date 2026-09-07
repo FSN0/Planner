@@ -432,10 +432,8 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
             registro.obra_planificada_id = clasif.obra_planificada_id
             registro.obra_real_id = obra.id
             if clasif.estado == 'Conflicto':
-                registro.desvio_ack_plan_at = None
-                registro.desvio_ack_plan_by_id = None
-                registro.desvio_ack_real_at = None
-                registro.desvio_ack_real_by_id = None
+                from app.services.desvio_fichaje_service import limpiar_acks_desvio
+                limpiar_acks_desvio(registro)
         db.session.commit()
         if registro is not None and clasif.estado == 'Conflicto':
             from app.services.desvio_fichaje_service import notificar_desvio_inmediato
