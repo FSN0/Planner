@@ -281,11 +281,22 @@ def _actions_for(role: str, module: str) -> frozenset:
 
 
 def can_write_assignments(user) -> bool:
-    """Asignar/mover gente: W en planificador, tablero, trabajadores o flota."""
+    """Asignar/mover gente en calendarios (persona, obra, planificador) y flota.
+
+    Preferente: escritura en ``asignaciones``. Compat con matrices antiguas:
+    planificador / tablero / trabajadores / vehiculos.
+    """
+    if user_can(user, 'asignaciones', 'w'):
+        return True
     return any(
         user_can(user, mod, 'w')
         for mod in ('planificador', 'tablero', 'trabajadores', 'vehiculos')
     )
+
+
+def can_edit_planning_calendar(user) -> bool:
+    """UI de calendarios de planificación (persona / obra / planificador)."""
+    return can_write_assignments(user)
 
 
 def user_can(user, module: str, action: str) -> bool:

@@ -13,6 +13,7 @@ PERMISSION_MODULES = (
     ('tablero', 'Tablero de obras', 'Planificación'),
     ('directorio', 'Obras', 'Planificación'),
     ('planificador', 'Planificador', 'Planificación'),
+    ('asignaciones', 'Asignar en calendarios', 'Planificación'),
     ('reuniones', 'Reuniones / notas', 'Planificación'),
     ('trabajadores', 'Trabajadores', 'Personal'),
     ('subcontratas', 'Subcontratas', 'Personal'),
@@ -69,6 +70,9 @@ _DEFAULTS = {
         'tablero': frozenset('rw'),
         'directorio': frozenset('r'),
         'planificador': frozenset('rw'),
+        # Ver fichas + calendarios de cualquiera; W en asignaciones = interactuar.
+        'trabajadores': frozenset('r'),
+        'asignaciones': frozenset('rw'),
         'reuniones': frozenset('rw'),
         'solicitudes': frozenset('rw'),
         'ausencias': frozenset('rw'),
@@ -85,6 +89,7 @@ _DEFAULTS = {
         'auditoria_fichajes': frozenset('rw'),
         'logs': frozenset('rw'),
         'tablero': frozenset('r'),
+        'asignaciones': frozenset('r'),
         'auditoria_vehiculos': frozenset('r'),
         'vehiculos': frozenset('r'),
         'vehiculos_libres': frozenset('r'),
@@ -96,6 +101,7 @@ _DEFAULTS = {
         'auditoria_fichajes': frozenset('rw'),
         'logs': frozenset('rw'),
         'tablero': frozenset('r'),
+        'asignaciones': frozenset('r'),
         'auditoria_vehiculos': frozenset('r'),
         'vehiculos': frozenset('r'),
         'vehiculos_libres': frozenset('r'),
@@ -234,8 +240,9 @@ ADMIN_LOCKED_MODULES = frozenset({'configuracion', 'permisos'})
 SSO_READ_ONLY_MODULES = frozenset({'soltec_alta_odoo', 'soltec_portal'})
 
 MODULE_WRITE_HINTS = {
-    'planificador': 'Mover y asignar en el Gantt',
-    'tablero': 'Arrastrar en kanban / editar calendario de obra',
+    'planificador': 'Abrir el Gantt con edición (preferible: Asignar en calendarios)',
+    'tablero': 'Arrastrar en kanban (calendarios: Asignar en calendarios)',
+    'asignaciones': 'Crear / mover / quitar bloques en calendario de persona, obra y planificador',
     'reuniones': 'Crear, editar y eliminar notas',
     'trabajadores': 'Alta / editar fichas; reset contraseña y PIN',
     'vehiculos': 'Asignar y editar flota',
@@ -259,6 +266,7 @@ MODULE_WRITE_HINTS = {
 }
 
 MODULE_READ_HINTS = {
+    'asignaciones': 'Ver calendarios de planificación (persona / obra); sin escritura no se puede asignar',
     'integraciones': 'Ver el listado de integraciones',
     'sync_odoo': 'Entrar al centro de sincronización Odoo',
     'soltec_alta_odoo': 'Abrir el panel de altas Odoo',

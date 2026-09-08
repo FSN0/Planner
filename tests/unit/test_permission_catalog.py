@@ -55,6 +55,19 @@ def test_jefe_keeps_tablero_and_directorio():
     assert not default_actions(ROLE_JEFE, 'permisos')
 
 
+def test_jefe_can_view_workers_and_assign_on_calendars():
+    assert 'r' in default_actions(ROLE_JEFE, 'trabajadores')
+    assert 'w' not in default_actions(ROLE_JEFE, 'trabajadores')
+    assert 'rw' == ''.join(sorted(default_actions(ROLE_JEFE, 'asignaciones')))
+
+
+def test_laboral_sees_calendars_readonly_by_default():
+    assert 'r' in default_actions(ROLE_LABORAL, 'asignaciones')
+    assert 'w' not in default_actions(ROLE_LABORAL, 'asignaciones')
+    assert 'r' in default_actions(ROLE_RRHH, 'asignaciones')
+    assert 'w' not in default_actions(ROLE_RRHH, 'asignaciones')
+
+
 def test_jefe_soltec_shortcuts_without_integraciones_hub():
     assert not default_actions(ROLE_JEFE, 'integraciones')
     assert not default_actions(ROLE_JEFE, 'sync_odoo')

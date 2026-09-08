@@ -27,27 +27,6 @@ def _obra_label(obra, fallback='Obra desconocida'):
     return obra.nombre or fallback
 
 
-def _jefe_obra_ids():
-    return [
-        o.id for o in Obra.query.filter_by(
-            is_deleted=False, jefe_obra_id=current_user.id
-        ).all()
-    ]
-
-
-def _jefe_puede_ver_worker(user_id):
-    """El jefe solo ve trabajadores ligados a sus obras (asignación o jefatura)."""
-    if user_id == current_user.id:
-        return True
-    obra_ids = _jefe_obra_ids()
-    if not obra_ids:
-        return False
-    return Asignacion.query.filter(
-        Asignacion.user_id == user_id,
-        Asignacion.obra_id.in_(obra_ids),
-    ).first() is not None
-
-
 def _autorizar_calendario(context, entity_id):
     """
     Perfiles de oficina + operario solo sobre su propio calendario (permisos).
@@ -68,14 +47,14 @@ def _autorizar_calendario(context, entity_id):
     if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
         return None
 
-    # Jefe de obra: ámbito por obra / trabajador / vehículo de su círculo
+    # Jefe de obra: ve calendarios de cualquier persona; obras solo las suyas.
     if context == 'obra':
         obra = Obra.query.get(entity_id)
         if not obra or obra.jefe_obra_id != current_user.id:
             return jsonify({'success': False, 'error': translate('No tienes permiso sobre esta obra')}), 403
     elif context == 'worker':
-        if not _jefe_puede_ver_worker(entity_id):
-            return jsonify({'success': False, 'error': translate('No tienes permiso sobre este trabajador')}), 403
+        # Lectura abierta: la escritura la corta can_write_assignments + custodia.
+        return None
     elif context == 'empresa':
         return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
     # vehiculo / solicitud: el jefe puede consultar (planificación compartida)

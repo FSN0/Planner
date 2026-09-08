@@ -52,6 +52,7 @@ from app.services.entity_panel_service import (
     get_vehicle_history_rows,
 )
 from app.services.permission_service import (
+    can_edit_planning_calendar,
     is_laboral,
     laboral_log_categories,
     user_can,
@@ -926,7 +927,7 @@ def worker_panel(user_id):
         history_days=history_days,
         history_open=history_open,
         history_page=history_page,
-        can_edit_calendar=user_can(current_user, 'worker_panel', 'w'),
+        can_edit_calendar=can_edit_planning_calendar(current_user),
         puede_impersonar=(
             admin_puede_impersonar(current_user)
             and puede_ser_impersonado(worker, current_user)
@@ -1373,7 +1374,7 @@ def obra_panel(obra_id):
         operarios_hoy=panel_stats["operarios_hoy"],
         ocupacion_pct=panel_stats["ocupacion_pct"],
         vehicle_rows=get_obra_vehicle_rows(obra),
-        can_edit_calendar=user_can(current_user, 'obra_panel', 'w'),
+        can_edit_calendar=can_edit_planning_calendar(current_user),
         can_edit_obra=user_can(current_user, 'directorio', 'w'),
     )
     
@@ -3546,7 +3547,7 @@ def planificador_jo():
         jefes=jefes,
         empresas=empresas,
         ROLE_ADMIN=ROLE_ADMIN,
-        can_edit_planificador=user_can(current_user, 'planificador', 'w'),
+        can_edit_planificador=can_edit_planning_calendar(current_user),
         planif_sin_obras=planif_sin_obras,
         planif_sin_personal=planif_sin_personal,
     )
