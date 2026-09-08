@@ -90,7 +90,15 @@
           <select id="estado" name="estado" class="form-control custom-select" onchange="this.form.submit()">
             {% for e in estados_posibles %}
               <option value="{{ e }}" {% if e == estado_filtro %}selected{% endif %}>
-                {{ _('Todos') if e == "todas" else _(e) }}
+                {% if e == "todas" %}{{ _('Todos') }}
+                {% elif e == 'PENDIENTE' %}{{ _('Pendiente') }}
+                {% elif e == 'EN_PROCESO' %}{{ _('En proceso') }}
+                {% elif e == 'CUMPLIDA' %}{{ _('Cumplida') }}
+                {% elif e == 'CERRADA_PARCIAL' %}{{ _('Cerrada P.') }}
+                {% elif e == 'DENEGADA' %}{{ _('Denegada') }}
+                {% elif e == 'CANCELADA' %}{{ _('Cancelada') }}
+                {% else %}{{ _(e) }}
+                {% endif %}
               </option>
             {% endfor %}
           </select>
@@ -172,6 +180,7 @@
                   {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
                   {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
                   {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
+                  {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
                   {% endif %}
                 </td>
                 {% if can_resolve_vehiculo %}
@@ -312,6 +321,8 @@
                       <i class="fas fa-check-circle text-success"></i>
                     {% elif s.estado == 'DENEGADA' %}
                       <i class="fas fa-times-circle text-danger"></i>
+                    {% elif s.estado == 'CANCELADA' %}
+                      <i class="fas fa-times-circle text-muted"></i>
                     {% else %}
                       <i class="far fa-clock text-muted"></i>
                     {% endif %}
@@ -331,6 +342,7 @@
                   {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
                   {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
                   {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
+                  {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
                   {% endif %}
                 </td>
               </tr>

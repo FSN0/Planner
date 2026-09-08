@@ -117,7 +117,7 @@
             {% for est, cnt in solicitudes_por_estado.items() %}
             <li>
               <span class="dashboard-legend-dot dashboard-legend-dot--{{ est|lower }}"></span>
-              <span>{{ _( {'PENDIENTE':'Pendiente','EN_PROCESO':'En proceso','CUMPLIDA':'Cumplida','CERRADA_PARCIAL':'Cerrada P.','DENEGADA':'Denegada'}.get(est, est) ) }}</span>
+              <span>{{ _( {'PENDIENTE':'Pendiente','EN_PROCESO':'En proceso','CUMPLIDA':'Cumplida','CERRADA_PARCIAL':'Cerrada P.','DENEGADA':'Denegada','CANCELADA':'Cancelada'}.get(est, est) ) }}</span>
               <strong>{{ cnt }}</strong>
             </li>
             {% else %}
@@ -193,6 +193,7 @@
                 {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
                 {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
                 {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
+                {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
                 {% else %}<span class="badge-soft badge-soft-gray">{{ est }}</span>{% endif %}
               </td>
             </tr>
@@ -433,6 +434,7 @@ document.addEventListener('DOMContentLoaded', function() {
       'CUMPLIDA': chartColors.green,
       'CERRADA_PARCIAL': chartColors.gray,
       'DENEGADA': chartColors.red,
+      'CANCELADA': chartColors.gray,
     };
     new Chart(solCtx, {
       type: 'doughnut',

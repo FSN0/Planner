@@ -655,7 +655,10 @@ def solicitudes_list():
     tipo = request.args.get('tipo', 'todas')
     obra_id = request.args.get('obra_id')
     date_filter_str = request.args.get('date_filter')
-    estados_posibles = ['todas', 'PENDIENTE', 'EN_PROCESO', 'CUMPLIDA', 'CERRADA_PARCIAL', 'DENEGADA']
+    estados_posibles = [
+        'todas', 'PENDIENTE', 'EN_PROCESO', 'CUMPLIDA', 'CERRADA_PARCIAL',
+        'DENEGADA', 'CANCELADA',
+    ]
     tipos_posibles = ['todas', 'generica', 'concreta']
     target_date = parse_date(date_filter_str) if date_filter_str else None
     obra_seleccionada = Obra.query.get(int(obra_id)) if obra_id and obra_id.isdigit() else None
@@ -1090,6 +1093,10 @@ def company_panel(company_id):
 def solicitud_detail(solicitud_id):
     solicitud = Solicitud.query.get_or_404(solicitud_id)
     es_admin = (current_user.role == ROLE_ADMIN)
+    puede_cancelar = (
+        solicitud.requested_by_id == current_user.id
+        and solicitud.estado in ('PENDIENTE', 'EN_PROCESO')
+    )
     fecha_inicio = solicitud.fecha_inicio
     fecha_fin = solicitud.fecha_fin
     cal_initial_date = fecha_inicio or fecha_fin or date.today()
@@ -1208,6 +1215,7 @@ def solicitud_detail(solicitud_id):
         solicitud_notas=get_solicitud_notas(solicitud),
         cobertura_texto=cobertura_texto,
         es_admin=es_admin,
+        puede_cancelar=puede_cancelar,
         fecha_inicio=fecha_inicio,
         fecha_fin=fecha_fin,
         cal_initial_date=cal_initial_date,

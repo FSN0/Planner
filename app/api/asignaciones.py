@@ -1001,20 +1001,31 @@ def api_solicitud_desasignar_candidato(solicitud_id):
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/resolver", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN)
+@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def api_resolver_solicitud(solicitud_id):
     from app.services.solicitud_service import resolver_solicitud_admin
-    
+
     solicitud = Solicitud.query.get_or_404(solicitud_id)
     data = request.get_json() or {}
     accion = data.get('accion')
-    
+
     if not accion:
         return jsonify({'success': False, 'message': translate('Falta la acción a realizar.')}), 400
-        
+
+    # Cancelar: solo el autor (validado en servicio). Resto: solo admin.
+    if accion != 'cancelar' and current_user.role != ROLE_ADMIN:
+        return jsonify({'success': False, 'message': translate('Acceso no autorizado')}), 403
+
     try:
-        mensaje = resolver_solicitud_admin(solicitud, accion, current_user, target_obra_id=data.get('target_obra_id'))
-        flash(translate(mensaje), "success" if accion in ['aceptar_concreta', 'aceptar_concreta_traslado', 'reabrir'] else "warning")
+        mensaje = resolver_solicitud_admin(
+            solicitud, accion, current_user, target_obra_id=data.get('target_obra_id')
+        )
+        flash(
+            translate(mensaje),
+            "success" if accion in [
+                'aceptar_concreta', 'aceptar_concreta_traslado', 'reabrir', 'cancelar',
+            ] else "warning",
+        )
         return jsonify({'success': True, 'message': translate(mensaje)})
     except ValueError as e:
         return jsonify({'success': False, 'message': str(e)}), 400

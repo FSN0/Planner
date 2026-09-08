@@ -850,7 +850,7 @@ class Solicitud(db.Model):
     # Cantidad cubierta actualmente (calculada dinámicamente según asignaciones)
     cantidad_cubierta = db.Column(db.Integer, nullable=False, default=0)
 
-    # ESTADOS: PENDIENTE, EN_PROCESO, CUMPLIDA, CERRADA_PARCIAL, DENEGADA
+    # ESTADOS: PENDIENTE, EN_PROCESO, CUMPLIDA, CERRADA_PARCIAL, DENEGADA, CANCELADA
     estado = db.Column(db.String(20), nullable=False, default='PENDIENTE')
     
     # True si el sistema la marcó como CUMPLIDA automáticamente al detectar asignaciones

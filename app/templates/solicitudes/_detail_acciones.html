@@ -9,6 +9,7 @@
           {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
           {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
           {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
+          {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
           {% else %}<span class="badge-soft badge-soft-gray">{{ est }}</span>
           {% endif %}
           {% if cobertura_texto %}
@@ -20,6 +21,7 @@
 
     <div class="admin-actions-buttons">
         {% if solicitud.estado in ['PENDIENTE', 'EN_PROCESO'] %}
+            {% if es_admin %}
             {% if solicitud.tipo|lower == 'concreta' %}
                 {% if solicitud.accion == 'DESASIGNAR' %}
                 <button type="button" onclick="submitConcretaTotal()" class="btn-admin btn-admin-primary">
@@ -46,7 +48,12 @@
             {% endif %}
             <button type="button" onclick="resolverSolicitudApi('{{ solicitud.id }}', 'denegar')" class="btn-admin btn-admin-danger">
                 <i class="fas fa-ban"></i>{{ _('Denegar') }}</button>
-        {% else %}
+            {% endif %}
+            {% if puede_cancelar %}
+            <button type="button" onclick="resolverSolicitudApi('{{ solicitud.id }}', 'cancelar')" class="btn-admin btn-admin-ghost">
+                <i class="fas fa-times"></i>{{ _('Cancelar solicitud') }}</button>
+            {% endif %}
+        {% elif es_admin %}
             <button type="button" onclick="resolverSolicitudApi('{{ solicitud.id }}', 'reabrir')" class="btn-admin btn-admin-ghost">
                 <i class="fas fa-undo"></i>{{ _('Reabrir') }}</button>
         {% endif %}

@@ -571,6 +571,9 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
             pass
         return "Solicitud denegada."
 
+    elif accion == 'cancelar':
+        return cancelar_solicitud_por_autor(solicitud, user_actor)
+
     elif accion == 'reabrir':
         solicitud.estado = 'PENDIENTE'
         solicitud.resolved_at = None
@@ -579,6 +582,24 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
         return "Solicitud reabierta."
     else:
         raise ValueError("Acción no reconocida.")
+
+
+def cancelar_solicitud_por_autor(solicitud, user_actor):
+    """El autor retira su propia solicitud abierta (no es un denegado de oficina)."""
+    from app.services.i18n_service import translate
+
+    if not user_actor or not getattr(user_actor, 'id', None):
+        raise ValueError(translate('No autorizado.'))
+    if solicitud.requested_by_id != user_actor.id:
+        raise ValueError(translate('Solo quien abrió la solicitud puede cancelarla.'))
+    if solicitud.estado not in ('PENDIENTE', 'EN_PROCESO'):
+        raise ValueError(translate('Solo se pueden cancelar solicitudes abiertas.'))
+
+    solicitud.estado = 'CANCELADA'
+    solicitud.resolved_at = utc_now()
+    solicitud.resolved_by_id = user_actor.id
+    db.session.commit()
+    return "Solicitud cancelada."
 
 
 def solicitud_calendar_title(solicitud, obra_label='?', *, view='worker'):

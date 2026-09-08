@@ -38,6 +38,7 @@ class UniversalCalendarManager {
         this.showFichajes = config.showFichajes || false;
         this.readonly = config.readonly || false;
         this.selfService = config.selfService || false;
+        this.hideInercia = config.hideInercia || false;
         this.partialSelectionMode = config.partialSelectionMode || false;
         this.compact = config.compact || false;
         this.embedded = config.embedded || false;
@@ -2475,16 +2476,17 @@ class UniversalCalendarManager {
     _eventsSourceUrl() {
         let url = `/api/v6/universal-calendar?context=${this.context}&id=${this.entityId}&mode=${this.mode}`;
         if (this.showFichajes) url += '&show_fichajes=1';
-        if (!this.selfService && this._inerciaOn()) url += '&inercia=1';
+        if (!this.selfService && !this.hideInercia && this._inerciaOn()) url += '&inercia=1';
         return url;
     }
 
     _inerciaOn() {
+        if (this.hideInercia) return false;
         return window.SPInerciaPref ? window.SPInerciaPref.get('calendario', false) : false;
     }
 
     _inerciaToggleHtml() {
-        if (this.selfService) return '';
+        if (this.selfService || this.hideInercia) return '';
         const on = this._inerciaOn();
         const label = on ? t('Ocultar inercia') : t('Mostrar inercia');
         const pressed = on ? 'true' : 'false';

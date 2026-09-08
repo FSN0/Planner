@@ -41,6 +41,7 @@
         {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
         {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
         {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
+        {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
         {% endif %}
       </div>
       {% if solicitud.fecha_inicio %}
@@ -58,7 +59,7 @@
         {% include "solicitudes/_detail_tablas.html" %}
     {% endif %}
 
-    {% if es_admin %}
+    {% if es_admin or puede_cancelar %}
         {% include "solicitudes/_detail_acciones.html" %}
     {% endif %}
 
@@ -71,7 +72,7 @@
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260908h"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('candidateSearch');

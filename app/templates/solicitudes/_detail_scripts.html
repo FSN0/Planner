@@ -341,7 +341,8 @@ window.submitTrasladoObra = function() {
 window.resolverSolicitudApi = function(solicitudId, accion) {
     var mensajes = {
         'denegar': t('¿Seguro que quieres DENEGAR esta solicitud?'),
-        'reabrir': t('¿Quieres reabrir esta solicitud?')
+        'reabrir': t('¿Quieres reabrir esta solicitud?'),
+        'cancelar': t('¿Cancelar esta solicitud? Ya no aparecerá como pendiente.'),
     };
     if (mensajes[accion] && !confirm(mensajes[accion])) return;
 
@@ -405,6 +406,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       window.resumenCalendar = new UniversalCalendarManager('solicitud-obra-calendar', {
           context: context, id: id, mode: mode, readonly: true, compact: true,
+          hideInercia: true,
           partialSelectionMode: isSolicitudActiva,
           callbacks: { onDateToggle: function(dateStr) { togglePartialDate(dateStr); } }
       });
