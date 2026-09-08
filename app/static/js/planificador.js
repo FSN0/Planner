@@ -222,53 +222,43 @@ document.addEventListener('DOMContentLoaded', function() {
     function planifRelayoutLanes() {
         if (!window.AppItems) return;
         var items = window.AppItems.get() || [];
-        var range = planifVisibleRangeMs();
         var byGroup = {};
         items.forEach(function (it) {
             if (!it || it.type === 'background') return;
             if (!planifIsPackableWorker(it.worker_id) || it.group == null) return;
-            var start = planifMs(it.start);
-            var end = planifMs(it.end);
-            if (range && !planifRangesOverlap(start, end, range.start, range.end)) return;
             var gid = String(it.group);
             var key = String(it.worker_id);
             if (!byGroup[gid]) byGroup[gid] = {};
             if (!byGroup[gid][key]) {
                 byGroup[gid][key] = {
                     key: key,
-                    order: (it.empresa_nombre || 'ZZ_Sin_Empresa') + '\t' + (it.title || ''),
-                    intervals: [],
+                    order: (it.empresa_nombre || 'ZZ_Sin_Empresa') + '\t' + (it.title || '') + '\t' + key,
                 };
             }
-            byGroup[gid][key].intervals.push({ start: start, end: end });
         });
 
-        var laneByGroupWorker = {};
+        // Un subgrupo estable por operario (W{id}): hecho + fantasma comparten
+        // siempre la misma altura. No empaquetar por huecos temporales.
+        var orderByGroupWorker = {};
         var requestLaneByGroup = {};
         Object.keys(byGroup).forEach(function (gid) {
-            var list = [];
-            Object.keys(byGroup[gid]).forEach(function (k) {
-                var rec = byGroup[gid][k];
-                rec.intervals = planifMergeIntervals(rec.intervals);
-                list.push(rec);
+            var list = Object.keys(byGroup[gid]).map(function (k) {
+                return byGroup[gid][k];
             });
-            planifAssignLanes(list);
+            list.sort(function (a, b) {
+                return a.order.localeCompare(b.order);
+            });
             var map = {};
-            var n = 0;
-            list.forEach(function (w) {
-                map[w.key] = w.lane;
-                if (w.lane + 1 > n) n = w.lane + 1;
+            list.forEach(function (w, idx) {
+                map[w.key] = idx;
             });
-            laneByGroupWorker[gid] = map;
-            requestLaneByGroup[gid] = n;
+            orderByGroupWorker[gid] = map;
+            requestLaneByGroup[gid] = list.length;
         });
 
         var updates = [];
         items.forEach(function (it) {
             if (!it || it.type === 'background' || it.id == null) return;
-            // Las solicitudes no entran en el empaquetado de operarios: si
-            // quedan sin subgroup, vis las pinta encima/entre las barras.
-            // Van en un carril propio debajo de la obra.
             if (planifIsRequestItem(it)) {
                 var reqLane = requestLaneByGroup[String(it.group)];
                 if (reqLane == null) reqLane = 0;
@@ -283,15 +273,55 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 return;
             }
-            var map = laneByGroupWorker[String(it.group)] || {};
-            var lane = map[String(it.worker_id)];
-            if (lane == null) lane = 0;
-            var sg = 'L' + lane;
-            if (it.subgroup !== sg || it.subgroupOrder !== lane) {
-                updates.push({ id: it.id, subgroup: sg, subgroupOrder: lane });
+            var map = orderByGroupWorker[String(it.group)] || {};
+            var wid = String(it.worker_id);
+            var ord = map[wid];
+            if (ord == null) ord = 0;
+            var sg = 'W' + wid;
+            if (it.subgroup !== sg || it.subgroupOrder !== ord) {
+                updates.push({ id: it.id, subgroup: sg, subgroupOrder: ord });
             }
         });
         if (updates.length) window.AppItems.update(updates);
+        // Cinturón: tras el stack de vis, forzar misma altura hecho+fantasma.
+        planifAlignSameWorkerTops();
+    }
+
+    function planifAlignSameWorkerTops() {
+        var itemSet = window.AppTimeline && window.AppTimeline.itemSet;
+        if (!itemSet || !itemSet.groups) return;
+        var groupMap = itemSet.groups;
+        Object.keys(groupMap).forEach(function (gid) {
+            var g = groupMap[gid];
+            if (!g || !g.items) return;
+            var byWorker = {};
+            Object.keys(g.items).forEach(function (iid) {
+                var vi = g.items[iid];
+                if (!vi || !vi.data || vi.data.type === 'background') return;
+                if (!planifIsPackableWorker(vi.data.worker_id)) return;
+                if (typeof vi.top !== 'number') return;
+                var key = String(vi.data.worker_id);
+                if (!byWorker[key]) byWorker[key] = [];
+                byWorker[key].push(vi);
+            });
+            Object.keys(byWorker).forEach(function (wid) {
+                var list = byWorker[wid];
+                if (list.length < 2) return;
+                var top = list[0].top;
+                for (var i = 1; i < list.length; i++) {
+                    if (list[i].top < top) top = list[i].top;
+                }
+                list.forEach(function (vi) {
+                    if (vi.top === top) return;
+                    vi.top = top;
+                    if (typeof vi.repositionY === 'function') {
+                        try { vi.repositionY(); } catch (errY) { /* ignore */ }
+                    } else if (vi.dom && vi.dom.box) {
+                        vi.dom.box.style.top = top + 'px';
+                    }
+                });
+            });
+        });
     }
 
     function planifScheduleLaneLayout() {
@@ -2033,6 +2063,7 @@ document.addEventListener('DOMContentLoaded', function() {
     bindVisPanFallback();
     window.AppTimeline.on('changed', function () {
         if (planifViewPin) planifRestoreViewPin();
+        planifAlignSameWorkerTops();
     });
     window.AppTimeline.on('rangechange', function () {
         if (planifViewPin) planifRestoreViewPin();
@@ -2297,6 +2328,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             if (e.solicitud_id || e.worker_id === 'REQUEST') {
                 base.className = (base.className ? base.className + ' ' : '') + 'solicitud-item';
+                base.subgroup = 'R';
+                base.subgroupOrder = 9999;
+            } else if (planifIsPackableWorker(e.worker_id)) {
+                // Misma altura desde el primer pintado (hecho + fantasma).
+                base.subgroup = 'W' + String(e.worker_id);
+                base.subgroupOrder = 0;
             }
         }
         return base;
@@ -2349,7 +2386,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 fecha_inicio: g.fecha_inicio || '',
                 fecha_fin_iso: g.fecha_fin_iso || '',
                 orden: index,
-                subgroupStack: true,
+                // Objeto (no boolean false): hace doInnerStack=true en vis, pero
+                // los W{id} quedan con stack:false → hecho+fantasma misma altura.
+                // boolean false se ignora (falsy) y cae al stack clásico de todos.
+                // boolean true apila dentro del subgrupo si hecho/fantasma se tocan.
+                subgroupStack: { R: true, __force: true },
                 subgroupOrder: 'subgroupOrder',
             };
         }));
@@ -2403,7 +2444,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 fecha_inicio: g.fecha_inicio || '',
                 fecha_fin_iso: g.fecha_fin_iso || '',
                 orden: orden0 + index,
-                subgroupStack: true,
+                subgroupStack: { R: true, __force: true },
                 subgroupOrder: 'subgroupOrder',
             });
         });

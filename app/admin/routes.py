@@ -3939,6 +3939,8 @@ def api_planificador_events():
             bloque_start, bloque_end, key, info, bloque_leave, False,
         )
 
+    # Fantasma en barra aparte (estilo ghost). El JS asigna subgroup W{id}
+    # con subgroupStack {R:true,__force:true} para misma altura que el hecho.
     for bloque, key, info in inercia_emits:
         crear_bloque(
             bloque['fecha_inicio'], bloque['fecha_fin'], key, info, None, True,
