@@ -1,7 +1,11 @@
 """Tests de matching para notas por voz."""
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.services.nota_audio_service import (
+    SEGMENT_SECONDS,
+    WHISPER_MAX_BYTES,
+    _should_chunk_long_audio,
     allowed_audio_file,
     match_obras_from_queries,
     match_obras_from_text,
@@ -33,6 +37,22 @@ class TestNotaAudioFormats:
         assert allowed_audio_file('reunion.m4a') is True
         assert allowed_audio_file('nota.MP3') is True
         assert allowed_audio_file('documento.pdf') is False
+
+
+class TestLongAudioChunkDecision:
+    def test_chunks_when_duration_over_segment(self):
+        assert _should_chunk_long_audio('/x.m4a', float(SEGMENT_SECONDS + 1)) is True
+
+    def test_no_chunk_for_short_duration(self):
+        assert _should_chunk_long_audio('/x.m4a', 120.0) is False
+
+    def test_chunks_by_size_when_duration_unknown(self):
+        with patch('app.services.nota_audio_service.os.path.getsize', return_value=WHISPER_MAX_BYTES + 1):
+            assert _should_chunk_long_audio('/big.m4a', None) is True
+
+    def test_no_chunk_small_file_unknown_duration(self):
+        with patch('app.services.nota_audio_service.os.path.getsize', return_value=1024):
+            assert _should_chunk_long_audio('/tiny.m4a', None) is False
 
 
 class TestObraMatching:

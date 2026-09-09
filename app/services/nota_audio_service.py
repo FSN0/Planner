@@ -180,11 +180,11 @@ def _run_cmd(args: list[str], *, timeout: int = 600) -> subprocess.CompletedProc
     )
 
 
-def probe_duration_seconds(path: str) -> float:
+def probe_duration_seconds(path: str, *, timeout: int = 60) -> float:
     proc = _run_cmd([
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
         '-of', 'default=noprint_wrappers=1:nokey=1', path,
-    ], timeout=120)
+    ], timeout=timeout)
     if proc.returncode != 0:
         raise ValueError('No se pudo leer la duración del audio.')
     try:
@@ -194,6 +194,7 @@ def probe_duration_seconds(path: str) -> float:
 
 
 def save_audio_upload(file_storage, autor_id: int) -> NotaAudioJob:
+    """Guarda el archivo y encola el job. La duración se valida en Celery."""
     original = secure_filename(file_storage.filename or 'audio.webm')
     if not allowed_audio_file(original):
         exts = ', '.join(sorted(ALLOWED_AUDIO_EXTENSIONS))
@@ -209,22 +210,14 @@ def save_audio_upload(file_storage, autor_id: int) -> NotaAudioJob:
         os.remove(dest)
         raise ValueError('El archivo supera el tamaño máximo permitido (512 MB).')
 
-    try:
-        duration = probe_duration_seconds(dest)
-    except ValueError:
-        os.remove(dest)
-        raise
-
-    if duration > get_max_audio_seconds():
-        os.remove(dest)
-        raise ValueError('El audio supera el máximo de 3 horas.')
-
+    # No ffprobe aquí: la subida HTTP debe terminar al escribir a disco.
+    # Duración + rechazo por max se hacen en process_nota_audio_job.
     job = NotaAudioJob(
         autor_id=autor_id,
         estado=NotaAudioJob.ESTADO_PENDIENTE,
         archivo_path=dest,
         archivo_nombre=original,
-        duracion_segundos=duration,
+        duracion_segundos=None,
         meta_json=json.dumps({
             'fase': 'pendiente',
             'progreso': 5,
@@ -246,7 +239,19 @@ def _normalize_for_whisper(input_path: str, output_path: str) -> None:
         raise RuntimeError('No se pudo convertir el audio para transcripción.')
 
 
+def _list_chunk_files(out_dir: str) -> list[str]:
+    chunks = sorted(
+        os.path.join(out_dir, name)
+        for name in os.listdir(out_dir)
+        if name.startswith('chunk_') and name.endswith('.mp3')
+    )
+    if not chunks:
+        raise RuntimeError('No se generaron trozos de audio.')
+    return chunks
+
+
 def _split_audio(input_path: str, out_dir: str) -> list[str]:
+    """Trocea audio ya normalizado (copy primero; re-encode si falla)."""
     pattern = os.path.join(out_dir, 'chunk_%03d.mp3')
     proc = _run_cmd([
         'ffmpeg', '-y', '-i', input_path,
@@ -262,15 +267,36 @@ def _split_audio(input_path: str, out_dir: str) -> list[str]:
         ], timeout=max(600, int(get_max_audio_seconds())))
     if proc.returncode != 0:
         raise RuntimeError('No se pudo trocear el audio para transcripción.')
+    return _list_chunk_files(out_dir)
 
-    chunks = sorted(
-        os.path.join(out_dir, name)
-        for name in os.listdir(out_dir)
-        if name.startswith('chunk_') and name.endswith('.mp3')
-    )
-    if not chunks:
-        raise RuntimeError('No se generaron trozos de audio.')
-    return chunks
+
+def _split_normalize_from_original(input_path: str, out_dir: str) -> list[str]:
+    """
+    Trocea el original en ~10 min y normaliza cada trozo (mono 16k 64k mp3).
+    Evita normalizar el archivo entero (caro en ~1h y puede matar el worker).
+    """
+    pattern = os.path.join(out_dir, 'chunk_%03d.mp3')
+    proc = _run_cmd([
+        'ffmpeg', '-y', '-i', input_path,
+        '-vn', '-f', 'segment', '-segment_time', str(SEGMENT_SECONDS),
+        '-reset_timestamps', '1',
+        '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '64k',
+        pattern,
+    ], timeout=max(900, int(get_max_audio_seconds())))
+    if proc.returncode != 0:
+        raise RuntimeError('No se pudo trocear/normalizar el audio para transcripción.')
+    return _list_chunk_files(out_dir)
+
+
+def _should_chunk_long_audio(input_path: str, duration: Optional[float]) -> bool:
+    """True si conviene trocear desde el original en vez de normalizar entero."""
+    if duration is not None and duration > SEGMENT_SECONDS:
+        return True
+    # Sin duración: ficheros grandes (~> Whisper limit) suelen ser largos.
+    try:
+        return os.path.getsize(input_path) > WHISPER_MAX_BYTES
+    except OSError:
+        return False
 
 
 def _update_job_progress(
@@ -345,14 +371,14 @@ def _whisper_chunks(paths: list[str], on_chunk=None) -> str:
     return '\n\n'.join(parts).strip()
 
 
-def transcribe_audio_file(input_path: str, on_progress=None) -> str:
+def transcribe_audio_file(
+    input_path: str,
+    on_progress=None,
+    *,
+    duration: Optional[float] = None,
+) -> str:
     work_dir = tempfile.mkdtemp(prefix='nota_audio_')
     try:
-        if on_progress:
-            on_progress('preparando', 12, 'Normalizando audio…')
-        normalized = os.path.join(work_dir, 'normalized.mp3')
-        _normalize_for_whisper(input_path, normalized)
-
         def _on_chunk(idx, total):
             if not on_progress:
                 return
@@ -364,6 +390,25 @@ def transcribe_audio_file(input_path: str, on_progress=None) -> str:
                 f'Transcribiendo trozo {idx + 1} de {total}…',
                 {'trozo_actual': idx + 1, 'trozos_total': total},
             )
+
+        # Audio largo: trocear+normalizar por chunk desde el original (no ffmpeg del archivo entero).
+        if _should_chunk_long_audio(input_path, duration):
+            if on_progress:
+                on_progress('preparando', 12, 'Troceando audio largo…')
+            chunk_dir = os.path.join(work_dir, 'chunks')
+            os.makedirs(chunk_dir, exist_ok=True)
+            chunks = _split_normalize_from_original(input_path, chunk_dir)
+            if on_progress:
+                on_progress('transcribiendo', 15, f'Transcribiendo {len(chunks)} trozos…', {
+                    'trozo_actual': 0, 'trozos_total': len(chunks),
+                })
+            return _whisper_chunks(chunks, on_chunk=_on_chunk)
+
+        # Corto: normalizar entero y Whisper (o trocear si el mp3 resultante > 24MB).
+        if on_progress:
+            on_progress('preparando', 12, 'Normalizando audio…')
+        normalized = os.path.join(work_dir, 'normalized.mp3')
+        _normalize_for_whisper(input_path, normalized)
 
         if os.path.getsize(normalized) <= WHISPER_MAX_BYTES:
             if on_progress:
@@ -904,17 +949,53 @@ def process_nota_audio_job(job_id: int) -> None:
         mensaje='Audio recibido. Preparando procesamiento…',
     )
 
+    def _fail_job(message: str) -> None:
+        db.session.rollback()
+        failed = NotaAudioJob.query.get(job_id)
+        if not failed:
+            return
+        failed.estado = NotaAudioJob.ESTADO_ERROR
+        failed.error_message = message[:2000]
+        failed.meta_json = json.dumps({
+            'fase': 'error',
+            'progreso': 8,
+            'mensaje': message[:500],
+        }, ensure_ascii=False)
+        failed.updated_at = datetime.utcnow()
+        db.session.commit()
+
     try:
         if not audio_path or not os.path.isfile(audio_path):
             raise FileNotFoundError('Archivo de audio no encontrado.')
+
+        # Duración aquí (no en la subida HTTP) para devolver el upload cuanto antes.
+        try:
+            duration = probe_duration_seconds(audio_path, timeout=60)
+        except ValueError as probe_exc:
+            _fail_job(str(probe_exc) or 'No se pudo leer la duración del audio.')
+            return
+
+        if duration > get_max_audio_seconds():
+            _fail_job('El audio supera el máximo de 3 horas.')
+            return
+
+        job = NotaAudioJob.query.get(job_id)
+        if job:
+            job.duracion_segundos = duration
+            job.updated_at = datetime.utcnow()
+            db.session.commit()
 
         def on_progress(fase, progreso, mensaje, extra=None):
             _update_job_progress(
                 job_id, fase=fase, progreso=progreso, mensaje=mensaje, extra=extra,
             )
 
-        current_app.logger.info('NotaAudioJob %s: iniciando transcripción', job_id)
-        transcript = transcribe_audio_file(audio_path, on_progress=on_progress)
+        current_app.logger.info(
+            'NotaAudioJob %s: iniciando transcripción (%.1fs)', job_id, duration,
+        )
+        transcript = transcribe_audio_file(
+            audio_path, on_progress=on_progress, duration=duration,
+        )
         if not transcript:
             transcript = '[inaudible — no se obtuvo texto del audio]'
         current_app.logger.info(

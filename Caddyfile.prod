@@ -10,7 +10,14 @@ www.signaplan.com {
 }
 
 signaplan.com {
-    reverse_proxy web:5000
+    # Match Gunicorn timeout for large notas-por-voz uploads (~10 min).
+    reverse_proxy web:5000 {
+        transport http {
+            read_timeout 600s
+            write_timeout 600s
+            dial_timeout 10s
+        }
+    }
     encode gzip
 
     header {
@@ -25,7 +32,13 @@ signaplan.com {
 
 # Dominio dedicado Soltec (login local SignaPlan, sin Forward Auth)
 planner.soltecgrupo.es {
-    reverse_proxy web:5000
+    reverse_proxy web:5000 {
+        transport http {
+            read_timeout 600s
+            write_timeout 600s
+            dial_timeout 10s
+        }
+    }
     encode gzip
 
     header {
@@ -52,7 +65,13 @@ https:// {
         on_demand
     }
 
-    reverse_proxy web:5000
+    reverse_proxy web:5000 {
+        transport http {
+            read_timeout 600s
+            write_timeout 600s
+            dial_timeout 10s
+        }
+    }
     encode gzip
 
     header {

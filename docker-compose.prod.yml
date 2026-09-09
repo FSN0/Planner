@@ -42,6 +42,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - NOTA_AUDIO_MAX_BYTES=${NOTA_AUDIO_MAX_BYTES:-536870912}
       - NOTA_AUDIO_MAX_SECONDS=${NOTA_AUDIO_MAX_SECONDS:-10800}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-600}
     depends_on:
       db:
         condition: service_healthy
@@ -95,7 +96,8 @@ services:
   celery_worker:
     build: .
     restart: always
-    command: celery -A app.celery_worker.celery worker --loglevel=info --concurrency=2
+    # concurrency=1: ffmpeg+Whisper for 2–3h audio needs RAM; avoid two jobs OOMing together
+    command: celery -A app.celery_worker.celery worker --loglevel=info --concurrency=1
     volumes:
       - uploads_data:/app/uploads
     environment:
@@ -124,7 +126,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          # ffmpeg segment+normalize + Whisper I/O for long notas-por-voz
+          memory: 1536M
 
   celery_beat:
     build: .

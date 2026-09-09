@@ -507,7 +507,7 @@ def process_odoo_hook_task(self, schema_name, resource, meta=None):
             _cleanup_db_session()
 
 
-@celery.task(bind=True, soft_time_limit=60 * 60, time_limit=65 * 60)
+@celery.task(bind=True, soft_time_limit=3 * 60 * 60, time_limit=3 * 60 * 60 + 10 * 60)
 def process_nota_audio_task(self, schema_name: str, job_id: int):
     """Transcribe audio subido y crea nota privada en el tenant indicado."""
     with app.app_context():
