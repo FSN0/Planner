@@ -23,7 +23,7 @@ Si mandáis el payload entero, SignaPlan **lo ignora**: solo usa el aviso para d
 | Campo | Valor |
 |--------|--------|
 | Método | `POST` |
-| URL | `https://planner.soltechgrupo.es/api/v6/odoo/hooks/changed` |
+| URL | `https://planner.soltecgrupo.es/api/v6/odoo/hooks/changed` |
 | Content-Type | `application/json` |
 | Auth | Header `X-Odoo-Sync-Key: <clave>` |
 
@@ -32,6 +32,8 @@ Alternativa de auth (también válida):
 ```http
 Authorization: Bearer <clave>
 ```
+
+Alta Odoo puede llamar al mismo endpoint con `X-Odoo-Alta-Key` = `SSO_SECRET_KEY` (la clave compartida del login `/api/v6/odoo-alta/login`). SignaPlan acepta esa clave aunque la del panel sea distinta.
 
 ### Clave
 
@@ -64,7 +66,7 @@ Si regeneran la clave en SignaPlan, hay que actualizarla en Odoo: la anterior de
 
 ```http
 POST /api/v6/odoo/hooks/changed HTTP/1.1
-Host: planner.soltechgrupo.es
+Host: planner.soltecgrupo.es
 Content-Type: application/json
 X-Odoo-Sync-Key: PEGA_AQUI_LA_CLAVE_DEL_PANEL
 ```
@@ -83,7 +85,7 @@ X-Odoo-Sync-Key: PEGA_AQUI_LA_CLAVE_DEL_PANEL
 ### Ejemplo curl (prueba manual)
 
 ```bash
-curl -sS -X POST 'https://planner.soltechgrupo.es/api/v6/odoo/hooks/changed' \
+curl -sS -X POST 'https://planner.soltecgrupo.es/api/v6/odoo/hooks/changed' \
   -H 'Content-Type: application/json' \
   -H 'X-Odoo-Sync-Key: PEGA_AQUI_LA_CLAVE_DEL_PANEL' \
   -d '{
@@ -124,7 +126,7 @@ Modelos que SignaPlan no conoce → responde **202** con `"ignored": true` (no r
 | **202** | Aviso aceptado (o ignorado si el modelo no aplica) | Éxito. No reintentar. |
 | **401** | Clave incorrecta o ausente | Parar. Revisar `X-Odoo-Sync-Key`. |
 | **403** | Espacio sin módulo Odoo activo | Parar. Avisar a SignaPlan. |
-| **404** | Host / espacio incorrecto | Parar. Debe ser `planner.soltechgrupo.es`. |
+| **404** | Host / espacio incorrecto | Parar. Debe ser `planner.soltecgrupo.es`. |
 | **422** | Falta `id` (salvo `refresh`) o `id` no es entero | Corregir payload. No reintentar ciego. |
 | **400** | JSON vacío/inválido | Corregir payload. |
 | **5xx** | Error de servidor / cola | Reintentar con backoff (p. ej. 1s, 5s, 30s, 2min). |
@@ -159,7 +161,7 @@ import requests  # o urllib si no hay requests
 
 _logger = logging.getLogger(__name__)
 
-SIGNAPLAN_HOOK_URL = "https://planner.soltechgrupo.es/api/v6/odoo/hooks/changed"
+SIGNAPLAN_HOOK_URL = "https://planner.soltecgrupo.es/api/v6/odoo/hooks/changed"
 SIGNAPLAN_HOOK_KEY = "PEGA_AQUI_LA_CLAVE"  # mejor en ir.config_parameter
 
 WATCHED_MODELS = {
@@ -228,7 +230,7 @@ Haced el POST **después** de confirmar el commit (post-commit / cola), para no 
 
 - No enviar el diccionario completo del registro (`name`, `vat`, líneas, etc.).
 - No llamar a XML-RPC desde Odoo hacia SignaPlan para “empujar” datos: el pull lo hace SignaPlan.
-- No usar la URL sin el host del espacio (`planner.soltechgrupo.es`).
+- No usar la URL sin el host del espacio (`planner.soltecgrupo.es`).
 - No reintentar en bucle si la respuesta es 401/403/422.
 - No bloquear la UI de Odoo esperando al sync de SignaPlan: el hook es fire-and-forget + cola.
 
@@ -249,8 +251,8 @@ Haced el POST **después** de confirmar el commit (post-commit / cola), para no 
 ## Contacto técnico SignaPlan (contexto)
 
 - Receptor: `POST /api/v6/odoo/hooks/changed`
-- Auth: `X-Odoo-Sync-Key` (o Bearer)
-- Host de Soltec: `https://planner.soltechgrupo.es`
+- Auth: `X-Odoo-Sync-Key` (o Bearer). Alta Odoo: `X-Odoo-Alta-Key` = `SSO_SECRET_KEY`.
+- Host de Soltec: `https://planner.soltecgrupo.es`
 - Debounce en SignaPlan: ~8 s por módulo
 - Datos: los mismos que el sync XML-RPC actual (no cambia el contrato de campos)
 

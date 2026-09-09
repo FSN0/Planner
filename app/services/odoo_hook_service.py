@@ -107,6 +107,9 @@ def extract_provided_key(headers, json_body=None):
     header = (headers.get('X-Odoo-Sync-Key') or '').strip()
     if header:
         return header
+    alta = (headers.get('X-Odoo-Alta-Key') or '').strip()
+    if alta:
+        return alta
     auth = (headers.get('Authorization') or '').strip()
     if auth.lower().startswith('bearer '):
         return auth[7:].strip()
@@ -261,11 +264,15 @@ def accept_hook(headers, payload):
         raise OdooHookError('Este espacio no tiene el módulo Odoo activo.', status=403, code='no_module')
 
     expected = get_hook_key()
-    if not expected:
-        expected = ensure_hook_key()
+    sso = (current_app.config.get('SSO_SECRET_KEY') or '').strip()
     provided = extract_provided_key(headers, payload)
-    if not keys_match(provided, expected):
-        raise OdooHookError('Clave de aviso no válida.', status=401, code='unauthorized')
+    ok = keys_match(provided, expected) or (sso and keys_match(provided, sso))
+    if not ok:
+        if not expected:
+            expected = ensure_hook_key()
+            ok = keys_match(provided, expected)
+        if not ok:
+            raise OdooHookError('Clave de aviso no válida.', status=401, code='unauthorized')
 
     parsed = parse_hook_payload(payload if isinstance(payload, dict) else {})
     if parsed['ignored']:

@@ -77,6 +77,11 @@ def test_keys_match_and_extract():
     assert keys_match('', secret) is False
     headers = {'X-Odoo-Sync-Key': secret}
     assert extract_provided_key(headers) == secret
+    assert extract_provided_key({'X-Odoo-Alta-Key': secret}) == secret
+    assert extract_provided_key({
+        'X-Odoo-Sync-Key': secret,
+        'X-Odoo-Alta-Key': 'otra-clave',
+    }) == secret
     assert extract_provided_key({'Authorization': f'Bearer {secret}'}) == secret
 
 

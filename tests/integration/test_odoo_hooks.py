@@ -182,6 +182,29 @@ def test_hook_maps_every_integrated_model(
     assert scheduled.call_args[0][0] == resource
 
 
+def test_hook_accepts_sso_secret_via_alta_key(
+    app, session, tenant_soltec, tenant_client, mocker,
+):
+    """Altas puede avisar con SSO_SECRET_KEY aunque la clave del panel sea otra."""
+    _enable_odoo(session, tenant_soltec)
+    _set_hook_key(app, session, tenant_soltec)
+    app.config['SSO_SECRET_KEY'] = 'sso-alta-shared-secret'
+    scheduled = mocker.patch(
+        'app.services.odoo_hook_service.schedule_resource_sync',
+        return_value='scheduled',
+    )
+    response = tenant_client.post(
+        PATH,
+        json=_payload(),
+        headers={'X-Odoo-Alta-Key': 'sso-alta-shared-secret'},
+    )
+    assert response.status_code == 202
+    body = json.loads(response.data)
+    assert body['accepted'] is True
+    assert body['resource'] == 'subcontratas'
+    scheduled.assert_called_once()
+
+
 def test_odoo_dashboard_shows_hook_brief(
     app, session, tenant_soltec, authenticated_client,
 ):
