@@ -7,12 +7,62 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css">
+<style>
+.nota-audio-bg-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.88rem;
+}
+.nota-audio-bg-banner-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  flex: 1;
+  min-width: 12rem;
+}
+.nota-audio-bg-banner-copy i { margin-top: 0.15rem; color: #2563eb; }
+.nota-audio-bg-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.nota-audio-bg-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.82rem;
+  color: #475569;
+}
+</style>
 {% endblock %}
 
 {% block wrapper %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact bitacora-page">
+
+    <div id="notaAudioBgBanner" class="nota-audio-bg-banner d-none" role="status">
+      <div class="nota-audio-bg-banner-copy">
+        <i class="fas fa-spinner fa-spin"></i>
+        <span id="notaAudioBgBannerText">{{ _('Hay una nota por voz procesándose en segundo plano. Puedes seguir trabajando; la nota aparecerá al terminar.') }}</span>
+      </div>
+      <div class="nota-audio-bg-banner-actions">
+        <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="notaAudioBgBannerOpen">
+          <i class="fas fa-microphone mr-1"></i> {{ _('Ver progreso') }}
+        </button>
+        <button type="button" class="btn-admin btn-admin-danger btn-sm" id="notaAudioBgBannerCancel">
+          <i class="fas fa-times mr-1"></i> {{ _('Cancelar') }}
+        </button>
+      </div>
+    </div>
 
     <div class="bitacora-toolbar">
       <div>
@@ -193,7 +243,7 @@
       </div>
       <div class="modal-body nota-audio-body">
         <p class="nota-audio-lead">
-          {{ _('Sube un audio o grábalo en el PC. Se crea una nota privada en español (máx. 3 h).') }}
+          {{ _('Sube un audio o grábalo en el PC. Se crea una nota privada en español (máx. 3 h). Cuando termine la subida puedes cerrar esta ventana: el procesado sigue en segundo plano.') }}
         </p>
 
         <div id="notaAudioIosHint" class="nota-audio-ios-hint d-none">
@@ -222,6 +272,29 @@
               </button>
               <button type="button" class="btn-admin btn-admin-danger btn-sm d-none" id="btnNotaAudioParar">
                 <i class="fas fa-stop mr-1"></i> {{ _('Parar') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="nota-audio-prompt-box" id="notaAudioPromptBox">
+          <button type="button" class="nota-audio-prompt-toggle" id="btnNotaAudioPromptToggle" aria-expanded="false">
+            <i class="fas fa-magic mr-1"></i>
+            <span>{{ _('Cómo resumir (prompt IA)') }}</span>
+            <i class="fas fa-chevron-down nota-audio-prompt-chevron" aria-hidden="true"></i>
+          </button>
+          <div class="nota-audio-prompt-panel d-none" id="notaAudioPromptPanel">
+            <p class="nota-audio-prompt-help">
+              {{ _('Indica cómo quieres el informe a partir de la transcripción. Por defecto se usa el prompt del sistema o el último que guardaste.') }}
+            </p>
+            <textarea id="notaAudioPrompt" class="form-control nota-audio-prompt-textarea" rows="8" spellcheck="true"></textarea>
+            <div class="nota-audio-prompt-actions">
+              <label class="nota-audio-prompt-save mb-0">
+                <input type="checkbox" id="notaAudioPromptSaveDefault" checked>
+                <span>{{ _('Guardar como mi predeterminado') }}</span>
+              </label>
+              <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="btnNotaAudioPromptReset">
+                {{ _('Restablecer defecto') }}
               </button>
             </div>
           </div>
@@ -257,6 +330,16 @@
             <li id="notaAudioStep_resumiendo"><span>4</span>{{ _('Resumen') }}</li>
             <li id="notaAudioStep_guardando"><span>5</span>{{ _('Guardado') }}</li>
           </ol>
+
+          <p id="notaAudioBgHint" class="nota-audio-bg-hint d-none">
+            {{ _('Puedes cerrar esta ventana o salir de Notas: el audio sigue procesándose en el servidor. Al volver verás el progreso o la nota creada.') }}
+          </p>
+
+          <div class="nota-audio-cancel-row">
+            <button type="button" class="btn-admin btn-admin-danger btn-sm d-none" id="btnNotaAudioCancel">
+              <i class="fas fa-times mr-1"></i> {{ _('Cancelar procesamiento') }}
+            </button>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -273,7 +356,7 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('static', filename='js/nota_audio.js') }}?v=20260903b"></script>
+<script src="{{ url_for('static', filename='js/nota_audio.js') }}?v=20260326err"></script>
 
 <script>
 var t = window.SP_T || function (key) { return key; };

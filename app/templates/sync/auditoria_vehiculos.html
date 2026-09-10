@@ -168,7 +168,7 @@
           <input type="date" id="fechaDesde" name="fecha_desde" class="form-control form-control-sm" value="{{ fecha_desde_default }}" style="width:auto;min-width:9.5rem;">
           <label class="mb-0 text-muted small" for="fechaHasta" style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">{{ _('Hasta') }}</label>
           <input type="date" id="fechaHasta" name="fecha_hasta" class="form-control form-control-sm" value="{{ fecha_hasta_default }}" style="width:auto;min-width:9.5rem;">
-          {% if current_user.role == 'admin' %}
+          {% if can_sync_vehiculos %}
           <button type="button" onclick="forzarSyncVehiculos(false)" class="btn-admin btn-admin-primary">
             <i class="fas fa-sync-alt"></i>{{ _('Sincronizar') }}</button>
           <button type="button" onclick="forzarSyncVehiculos(true)" class="btn-admin btn-admin-ghost" title="{{ _('Borra todo el histórico local de uso y regenera desde viajes') }}">

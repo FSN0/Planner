@@ -27,10 +27,38 @@ _AUDITORIA_EAGER = (
     selectinload(RegistroFichaje.user),
     selectinload(RegistroFichaje.obra_planificada),
     selectinload(RegistroFichaje.obra_real),
+    selectinload(RegistroFichaje.resuelto_por),
 )
-_AUDITORIA_PENDIENTES_LIMIT = 800
-_AUDITORIA_HISTORIAL_LIMIT = 800
-_AUDITORIA_CORRECCIONES_LIMIT = 400
+_AUDITORIA_PENDIENTES_LIMIT = 500
+_AUDITORIA_HISTORIAL_LIMIT = 300
+_AUDITORIA_CORRECCIONES_LIMIT = 150
+
+# Módulo de escritura requerido por cada tarea «Auto ahora» / sync manual.
+_SYNC_TASK_WRITE_MODULE = {
+    'obras': 'directorio',
+    'empleados': 'trabajadores',
+    'subcontratas': 'subcontratas',
+    'ausencias': 'ausencias',
+    'fichajes': 'auditoria_fichajes',
+    'fichajes-retro': 'auditoria_fichajes',
+    'vehiculos': 'auditoria_vehiculos',
+    'vehiculos-retro': 'auditoria_vehiculos',
+}
+
+
+def _user_can_sync_task(task_name):
+    from app.services.permission_service import user_can
+    module = _SYNC_TASK_WRITE_MODULE.get(task_name)
+    if not module:
+        return False
+    return user_can(current_user, module, 'w') or user_can(current_user, 'sync_odoo', 'w')
+
+
+def _require_module_write(module):
+    from app.services.permission_service import user_can
+    if user_can(current_user, module, 'w') or user_can(current_user, 'sync_odoo', 'w'):
+        return None
+    return jsonify({'success': False, 'error': translate('No autorizado')}), 403
 
 
 @sync_bp.before_request
@@ -265,7 +293,6 @@ def api_save_config():
 
 @sync_bp.route('/api/run/<task_name>', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN)
 def api_run_sync(task_name):
     labels = {
         'obras': 'obras',
@@ -279,6 +306,8 @@ def api_run_sync(task_name):
     }
     if task_name not in labels:
         return jsonify({'success': False, 'message': translate('Módulo desconocido')}), 400
+    if not _user_can_sync_task(task_name):
+        return jsonify({'success': False, 'message': translate('No autorizado')}), 403
     try:
         from app.celery_worker import (
             auto_sync_obras, auto_sync_empleados, auto_sync_subcontratas,
@@ -750,6 +779,11 @@ def commit_empleados():
 
                 user.external_ids = user.external_ids or {}
                 user.external_ids['odoo'] = str(obj['odoo_id'])
+                user.external_ids['odoo_model'] = 'hr.employee'
+                if obj.get('barcode'):
+                    user.external_ids['barcode'] = str(obj['barcode']).strip()
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(user, 'external_ids')
                 user.name = obj['name']
                 user.lastname = obj['lastname']
                 from app.services.user_role_sync_service import apply_odoo_role_if_allowed
@@ -791,8 +825,11 @@ def commit_empleados():
             dnis_en_transaccion.add(dni_limpio)
             emails_en_transaccion.add(email_limpio)
 
+            ext_new = {'odoo': str(obj['odoo_id']), 'odoo_model': 'hr.employee'}
+            if obj.get('barcode'):
+                ext_new['barcode'] = str(obj['barcode']).strip()
             db.session.add(User(
-                external_ids={'odoo': str(obj['odoo_id'])},
+                external_ids=ext_new,
                 name=obj['name'],
                 lastname=obj['lastname'],
                 dni=dni_limpio,
@@ -869,7 +906,8 @@ def auditoria_fichajes():
             filtros_historial.append(filtro_jefe)
             filtros_correcciones.append(filtro_jefe)
 
-        # 3. EJECUTAR QUERYS (con eager-load: evita N+1 que tumba la página)
+        # 3. Solo pendientes en la carga inicial (historial/correcciones = lazy).
+        # Evita timeout «Esta página no funciona» a la primera visita.
         pendientes = (
             RegistroFichaje.query
             .options(*_AUDITORIA_EAGER)
@@ -879,22 +917,17 @@ def auditoria_fichajes():
             .all()
         )
         from app.services.desvio_fichaje_service import enriquecer_pendientes_desvio
-        pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
-        historial = (
-            RegistroFichaje.query
-            .options(*_AUDITORIA_EAGER)
-            .filter(*filtros_historial)
-            .order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc())
-            .limit(_AUDITORIA_HISTORIAL_LIMIT)
-            .all()
+        try:
+            pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
+        except Exception:
+            current_app.logger.exception('enriquecer_pendientes_desvio falló; se muestran sin UI desvío')
+        historial = []
+        correcciones = []
+        historial_total = (
+            RegistroFichaje.query.filter(*filtros_historial).count()
         )
-        correcciones = (
-            RegistroFichaje.query
-            .options(*_AUDITORIA_EAGER)
-            .filter(*filtros_correcciones)
-            .order_by(RegistroFichaje.fecha.desc())
-            .limit(_AUDITORIA_CORRECCIONES_LIMIT)
-            .all()
+        correcciones_total = (
+            RegistroFichaje.query.filter(*filtros_correcciones).count()
         )
         visible_sections = laboral_auditoria_sections(current_user)
 
@@ -904,8 +937,7 @@ def auditoria_fichajes():
         )
         from app.services.geocerca_service import geocerca_activa
 
-        todos_registros = list(pendientes) + list(historial) + list(correcciones)
-        geo_por_registro = entrada_geo_por_registros(todos_registros)
+        geo_por_registro = entrada_geo_por_registros(list(pendientes))
         geo_dudosa_count = contar_geo_dudosa(geo_por_registro)
         muestra_geo_audit = geocerca_activa()
 
@@ -922,12 +954,14 @@ def auditoria_fichajes():
                     User.role.in_(['operario', 'jefe_obra', 'admin', 'laboral']),
                 )
                 .order_by(User.lastname.asc(), User.name.asc())
+                .limit(500)
                 .all()
             )
             obras_marca = (
                 Obra.query
                 .filter(Obra.estado != 'Finalizada')
                 .order_by(Obra.nombre.asc())
+                .limit(400)
                 .all()
             )
 
@@ -936,10 +970,14 @@ def auditoria_fichajes():
             pendientes=pendientes,
             historial=historial,
             correcciones=correcciones,
+            historial_total=historial_total,
+            correcciones_total=correcciones_total,
+            auditoria_lazy=True,
             auditoria_sections=visible_sections,
             visible_sections=visible_sections,
             can_resolve=can_resolve_fichajes(current_user),
             can_resolve_fichajes=can_resolve_fichajes(current_user),
+            can_sync_fichajes=user_can(current_user, 'auditoria_fichajes', 'w') or user_can(current_user, 'sync_odoo', 'w'),
             trabajadores_marca=trabajadores_marca,
             obras_marca=obras_marca,
             geo_por_registro=geo_por_registro,
@@ -954,6 +992,77 @@ def auditoria_fichajes():
         current_app.logger.exception('Fallo al cargar auditoría de fichajes')
         flash('No se pudo cargar la auditoría. Inténtalo de nuevo.', 'danger')
         return redirect(url_for('main.dashboard'))
+
+
+def _auditoria_filtros_jefe():
+    filtros_historial = [~RegistroFichaje.estado.in_(
+        ['Conflicto', 'Disputa', 'Paracaidista', 'Ausencia', 'Sin_Registro', 'Sobreescrito_RRHH']
+    )]
+    filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH']
+    if current_user.role == 'jefe_obra':
+        obras_jefe_ids = [
+            o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()
+        ]
+        filtro_jefe = or_(
+            RegistroFichaje.obra_planificada_id.in_(obras_jefe_ids),
+            RegistroFichaje.obra_real_id.in_(obras_jefe_ids),
+        )
+        filtros_historial.append(filtro_jefe)
+        filtros_correcciones.append(filtro_jefe)
+    return filtros_historial, filtros_correcciones
+
+
+@sync_bp.route('/auditoria/seccion/<seccion>', methods=['GET'])
+@login_required
+def auditoria_fichajes_seccion(seccion):
+    """Carga diferida de histórico / correcciones (evita tumbar la 1ª visita)."""
+    from flask import current_app
+    from app.services.permission_service import user_can
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+
+    if not user_can(current_user, 'auditoria_fichajes', 'r') or not tenant_muestra_auditoria_fichajes():
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
+    if seccion not in ('historial', 'correcciones'):
+        return jsonify({'success': False, 'error': translate('Sección desconocida')}), 400
+
+    try:
+        filtros_historial, filtros_correcciones = _auditoria_filtros_jefe()
+        if seccion == 'historial':
+            registros = (
+                RegistroFichaje.query
+                .options(*_AUDITORIA_EAGER)
+                .filter(*filtros_historial)
+                .order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc())
+                .limit(_AUDITORIA_HISTORIAL_LIMIT)
+                .all()
+            )
+        else:
+            registros = (
+                RegistroFichaje.query
+                .options(*_AUDITORIA_EAGER)
+                .filter(*filtros_correcciones)
+                .order_by(RegistroFichaje.fecha.desc())
+                .limit(_AUDITORIA_CORRECCIONES_LIMIT)
+                .all()
+            )
+
+        from app.services.fichaje_geo_audit_service import entrada_geo_por_registros
+        from app.services.geocerca_service import geocerca_activa
+        geo_por_registro = entrada_geo_por_registros(registros)
+        visible_sections = laboral_auditoria_sections(current_user)
+        html = render_template(
+            'sync/_auditoria_seccion_rows.html',
+            seccion=seccion,
+            registros=registros,
+            geo_por_registro=geo_por_registro,
+            muestra_geo_audit=geocerca_activa(),
+            can_resolve_fichajes=can_resolve_fichajes(current_user),
+            visible_sections=visible_sections,
+        )
+        return jsonify({'success': True, 'html': html, 'count': len(registros)})
+    except Exception:
+        current_app.logger.exception('Fallo sección auditoría %s', seccion)
+        return jsonify({'success': False, 'error': translate('No se pudo cargar la sección')}), 500
 
 ACCION_RESOLUCION_TITULOS = {
     'ignorar': 'Ignorar',
@@ -1628,9 +1737,10 @@ def anular_marca_auditoria():
 @sync_bp.route('/fichajes_manual', methods=['POST'])
 @login_required
 def sync_fichajes_manual():
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
-        
+    denied = _require_module_write('auditoria_fichajes')
+    if denied:
+        return denied
+
     try:
         data = request.get_json() or {}
         dias_atras = int(data.get('dias', 7))
@@ -1640,6 +1750,58 @@ def sync_fichajes_manual():
         run_fichajes_retro_sync(days=dias_atras, modo='Manual')
 
         return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/vehiculos_manual', methods=['POST'])
+@login_required
+def sync_vehiculos_manual():
+    """Fuerza sync de flota + uso desde viajes tms.shipment (borra basura del rango)."""
+    denied = _require_module_write('auditoria_vehiculos')
+    if denied:
+        return denied
+    if not _require_odoo_module():
+        return jsonify({'success': False, 'error': translate('Módulo Odoo no habilitado')}), 403
+    try:
+        from app.services.vehicle_sync_service import (
+            apply_diff, purge_registros_uso, sync_odometros,
+        )
+        from app.utils.timezone_utils import today_local
+        from datetime import timedelta
+
+        data = request.get_json() or {}
+        hoy = today_local()
+        fecha_desde = data.get('fecha_desde')
+        fecha_hasta = data.get('fecha_hasta')
+        limpiar_todo = bool(data.get('limpiar_todo'))
+        if not fecha_desde and data.get('dias') is not None:
+            dias = max(0, min(365, int(data.get('dias', 7))))
+            fecha_hasta = hoy.isoformat()
+            fecha_desde = (hoy - timedelta(days=dias)).isoformat()
+        if not fecha_desde:
+            fecha_desde = hoy.isoformat()
+        if not fecha_hasta:
+            fecha_hasta = fecha_desde
+
+        purged = 0
+        if limpiar_todo:
+            purged = purge_registros_uso()
+
+        fleet = apply_diff(modo='Manual')
+        odo = sync_odometros(
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            modo='Manual',
+            limpiar_rango=True,
+        )
+        return jsonify({
+            'success': True,
+            'fleet': fleet,
+            'odometros': odo,
+            'purgados_totales': purged,
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1702,6 +1864,7 @@ def auditoria_vehiculos():
         dest = home_url_for_user(current_user) or url_for('auth.login')
         return redirect(dest)
 
+    from app.services.permission_service import user_can
     from app.utils.timezone_utils import today_local
 
     hoy = today_local()
@@ -1941,6 +2104,10 @@ def auditoria_vehiculos():
             len(saltos) + len(desvios) + len(vehiculo_en_ausencia)
             + len(vehiculo_distinto) + len(mismatch) + len(sin_km) + len(sin_plan)
         ),
+        can_sync_vehiculos=(
+            user_can(current_user, 'auditoria_vehiculos', 'w')
+            or user_can(current_user, 'sync_odoo', 'w')
+        ),
     )
 
 
@@ -1974,58 +2141,235 @@ def auditoria_vehiculos_visto():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@sync_bp.route('/vehiculos_manual', methods=['POST'])
+@sync_bp.route('/conciliacion')
 @login_required
 @roles_required(ROLE_ADMIN)
-def sync_vehiculos_manual():
-    """Fuerza sync de flota + uso desde viajes tms.shipment (borra basura del rango)."""
+def conciliacion_personal():
+    """UI de conciliación externo↔interno (vínculo Odoo / código asistencia)."""
     if not _require_odoo_module():
-        return jsonify({'success': False, 'error': translate('Módulo Odoo no habilitado')}), 403
+        return redirect(url_for('admin.panel'))
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import get_conciliation_summary
+
+    if not user_can(current_user, 'sync_odoo', 'r'):
+        flash(translate('Acceso denegado.'), 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    summary = get_conciliation_summary()
+    return render_template(
+        'sync/conciliacion_personal.html',
+        candidates=summary['candidates'],
+        candidates_maintained=summary.get('candidates_maintained') or [],
+        candidates_count=summary['candidates_count'],
+        internal_companies=summary['internal_companies'],
+        companies=summary.get('companies') or [],
+        plantilla_users=summary.get('plantilla_users') or [],
+        log_entries=summary.get('log_entries') or [],
+        can_write=user_can(current_user, 'sync_odoo', 'w'),
+    )
+
+
+@sync_bp.route('/conciliacion/create-user', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_create_user():
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import create_stub_user
+    from app.services.plan_service import PlanLimitError
+    if not user_can(current_user, 'sync_odoo', 'w'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    data = request.get_json(silent=True) or {}
     try:
-        from app.services.vehicle_sync_service import (
-            apply_diff, purge_registros_uso, sync_odometros,
+        result = create_stub_user(
+            name=data.get('name'),
+            lastname=data.get('lastname'),
+            company_id=int(data.get('company_id')),
+            dni=data.get('dni'),
+            email=data.get('email'),
+            actor=current_user,
         )
-        from app.utils.timezone_utils import today_local
-        from datetime import timedelta
-
-        data = request.get_json() or {}
-        hoy = today_local()
-        fecha_desde = data.get('fecha_desde')
-        fecha_hasta = data.get('fecha_hasta')
-        limpiar_todo = bool(data.get('limpiar_todo'))
-        if not fecha_desde and data.get('dias') is not None:
-            dias = max(0, min(365, int(data.get('dias', 7))))
-            fecha_hasta = hoy.isoformat()
-            fecha_desde = (hoy - timedelta(days=dias)).isoformat()
-        if not fecha_desde:
-            fecha_desde = hoy.isoformat()
-        if not fecha_hasta:
-            fecha_hasta = fecha_desde
-
-        purged = 0
-        if limpiar_todo:
-            # Tira TODO el histórico contaminado del odómetro y regenera el rango
-            purged = purge_registros_uso()
-
-        fleet = apply_diff(modo='Manual')
-        odo = sync_odometros(
-            fecha_desde=fecha_desde,
-            fecha_hasta=fecha_hasta,
-            modo='Manual',
-            limpiar_rango=True,
-        )
-        return jsonify({
-            'success': True,
-            'fleet': fleet,
-            'odometros': odo,
-            'purgados_totales': purged,
-        })
+        return jsonify({'success': True, **result})
+    except PlanLimitError as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 403
+    except (TypeError, ValueError) as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
-    
-    
-    
+
+
+@sync_bp.route('/conciliacion/search', methods=['GET'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_search():
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import search_users
+    if not user_can(current_user, 'sync_odoo', 'r'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    q = request.args.get('q', '')
+    return jsonify({'success': True, 'users': search_users(q)})
+
+
+@sync_bp.route('/conciliacion/odoo-dni', methods=['GET'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_odoo_dni():
+    """Busca en Odoo personas (HR + contactos) por DNI, código o nombre."""
+    from flask import current_app
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import search_odoo_people
+    if not user_can(current_user, 'sync_odoo', 'r'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    q = (request.args.get('q') or request.args.get('dni') or '').strip()
+    if len(q) < 3:
+        return jsonify({
+            'success': False,
+            'error': translate('Indica al menos 3 caracteres (DNI, código o nombre)'),
+        }), 400
+    try:
+        hits = search_odoo_people(q)
+        return jsonify({'success': True, 'people': hits, 'count': len(hits)})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        current_app.logger.exception('conciliacion_odoo_dni falló')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/conciliacion/link-odoo', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_link_odoo():
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import link_local_to_odoo
+    if not user_can(current_user, 'sync_odoo', 'w'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        links = data.get('odoo_links') or []
+        extra = []
+        primary_id = data.get('odoo_id')
+        primary_source = data.get('source') or 'employee'
+        primary_barcode = data.get('barcode')
+        if links:
+            primary = links[0]
+            primary_id = primary.get('odoo_id')
+            primary_source = primary.get('source') or 'employee'
+            primary_barcode = primary.get('barcode')
+            extra = links[1:]
+        result = link_local_to_odoo(
+            int(data.get('local_user_id')),
+            primary_id,
+            source=primary_source,
+            force=bool(data.get('force')),
+            actor=current_user,
+            barcode=primary_barcode,
+            extra_links=extra,
+        )
+        return jsonify({'success': True, **result})
+    except (TypeError, ValueError) as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/conciliacion/maintain', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_maintain():
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import maintain_group
+    if not user_can(current_user, 'sync_odoo', 'w'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        result = maintain_group(
+            data.get('user_ids') or [],
+            barcode=data.get('barcode'),
+            group_key=data.get('group_key'),
+            actor=current_user,
+        )
+        return jsonify({'success': True, **result})
+    except (TypeError, ValueError) as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/conciliacion/undo', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_undo():
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import undo_log_entry
+    if not user_can(current_user, 'sync_odoo', 'w'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        entry = undo_log_entry(data.get('entry_id'), actor=current_user)
+        return jsonify({'success': True, 'entry': entry})
+    except (TypeError, ValueError) as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/conciliacion/merge', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_merge():
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import merge_users
+    if not user_can(current_user, 'sync_odoo', 'w'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        keep_id = int(data.get('keep_id'))
+        absorb_id = int(data.get('absorb_id'))
+        result = merge_users(
+            keep_id, absorb_id,
+            actor_id=current_user.id,
+            actor=current_user,
+        )
+        return jsonify({'success': True, **result})
+    except (TypeError, ValueError) as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@sync_bp.route('/conciliacion/promote', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def conciliacion_promote():
+    from app.services.permission_service import user_can
+    from app.services.personal_conciliation_service import promote_as_internal
+    if not user_can(current_user, 'sync_odoo', 'w'):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        user_id = int(data.get('user_id'))
+        company_id = data.get('company_id')
+        company_id = int(company_id) if company_id not in (None, '') else None
+        card = promote_as_internal(user_id, company_id=company_id, actor=current_user)
+        return jsonify({'success': True, 'user': card})
+    except (TypeError, ValueError) as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @sync_bp.route('/timeline_dia/<int:user_id>/<string:fecha_str>', methods=['GET'])
 @login_required
 def get_timeline_dia(user_id, fecha_str):

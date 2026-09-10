@@ -1,0 +1,107 @@
+{# Filas HTML para carga diferida de histórico / correcciones #}
+{% if seccion == 'correcciones' %}
+{% for reg in registros %}
+{% set datos = reg.notas_resolucion.split('||') if reg.notas_resolucion else [] %}
+<tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+  <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark align-middle">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+  <td class="align-middle" data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
+    {% if reg.user %}
+    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
+      <i class="fas fa-user text-muted mr-1" style="font-size:0.65rem;"></i>{{ reg.user.name }} {{ reg.user.lastname }}
+    </a>
+    {% else %}<span class="text-muted">—</span>{% endif %}
+  </td>
+  {% if datos|length >= 8 %}
+  <td class="align-middle">
+    {% if datos[6] == 'Borrado en Odoo' %}
+      <span class="badge-soft badge-soft-red"><i class="fas fa-trash-alt mr-1"></i>{{ _(datos[6]) }}</span>
+    {% else %}
+      <span class="badge-soft badge-soft-amber"><i class="fas fa-edit mr-1"></i>{{ _(datos[6]) }}</span>
+    {% endif %}
+  </td>
+  <td class="align-middle">
+    <a href="{{ url_for('admin.obra_panel', obra_id=datos[0]) }}" class="link-obra text-muted" style="text-decoration: line-through;">{{ datos[1] }} — {{ datos[2] }}</a>
+  </td>
+  <td class="align-middle">
+    {% if datos[3] != "" %}
+      <a href="{{ url_for('admin.obra_panel', obra_id=datos[3]) }}" class="link-obra">{{ datos[4] }} — {{ datos[5] }}</a>
+    {% else %}
+      <span class="text-danger font-weight-bold"><i class="fas fa-times mr-1"></i>{{ _('Sin obra') }}</span>
+    {% endif %}
+  </td>
+  <td class="align-middle text-muted small font-weight-bold">{{ _(datos[7]) }}</td>
+  {% else %}
+  <td colspan="4" class="align-middle text-muted">{{ reg.notas_resolucion }}</td>
+  {% endif %}
+</tr>
+{% else %}
+<tr><td colspan="6" class="text-center text-muted py-3">{{ _('Sin modificaciones') }}</td></tr>
+{% endfor %}
+{% else %}
+{% for reg in registros %}
+<tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
+  <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+  <td data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
+    {% if reg.user %}
+    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">{{ reg.user.name }} {{ reg.user.lastname }}</a>
+    {% else %}<span class="text-muted">—</span>{% endif %}
+  </td>
+  <td>
+    <span class="font-weight-bold" style="font-size:0.75rem;">{{ _(reg.estado or '—') }}</span>
+  </td>
+  <td>
+    <div class="d-flex align-items-center justify-content-center w-100">
+      <div class="px-1" style="width:45%;min-width:0;">
+        {% if reg.obra_planificada %}
+          <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra">{{ reg.obra_planificada.codigo }}</a>
+          <span class="text-muted text-truncate d-inline-block" style="max-width:70%;font-size:0.75rem;">{{ reg.obra_planificada.nombre }}</span>
+        {% else %}<span class="text-muted font-italic" style="font-size:0.75rem;">{{ _('Sin Plan') }}</span>{% endif %}
+      </div>
+      <div class="text-center" style="width:10%;"><i class="fas fa-arrow-right flow-arrow"></i></div>
+      <div class="px-1" style="width:45%;min-width:0;">
+        {% if reg.obra_real %}
+          <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra">{{ reg.obra_real.codigo }}</a>
+          <span class="text-muted text-truncate d-inline-block" style="max-width:70%;font-size:0.75rem;">{{ reg.obra_real.nombre }}</span>
+        {% else %}<span class="text-muted font-italic" style="font-size:0.75rem;">{{ _('Falta') }}</span>{% endif %}
+      </div>
+    </div>
+  </td>
+  <td class="text-center">
+    {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
+  </td>
+  <td class="text-center">
+    {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
+  </td>
+  {% if muestra_geo_audit %}
+  <td class="text-center">
+    {% set g = geo_por_registro.get(reg.id) if geo_por_registro else none %}
+    {% if g and g.geo_estado == 'dudosa' %}<i class="fas fa-exclamation-triangle text-warning"></i>
+    {% elif g and g.geo_estado == 'coincide' %}<i class="fas fa-map-marker-alt text-success"></i>
+    {% else %}<span class="text-muted">—</span>{% endif %}
+  </td>
+  {% endif %}
+  {% if tenant_has_odoo %}
+  <td class="text-center odoo-metric-col">{{ '%.2f'|format(reg.odoo_ud|float) if reg.odoo_ud is not none else '—' }}</td>
+  <td class="text-center odoo-metric-col">{{ '%.2f'|format(reg.odoo_total_hh|float) if reg.odoo_total_hh is not none else '—' }}</td>
+  <td class="text-center odoo-metric-col">{{ '%.2f'|format(reg.odoo_mod|float) if reg.odoo_mod is not none else '—' }}</td>
+  <td class="text-center odoo-metric-col">{{ '%.2f'|format(reg.odoo_moe|float) if reg.odoo_moe is not none else '—' }}</td>
+  {% endif %}
+  <td class="text-muted small">{{ reg.nota_odoo or '—' }}</td>
+  <td class="text-muted small">
+    {% if reg.resuelto_por %}{{ reg.resuelto_por.name }}{% else %}{{ _('Sistema') }}{% endif %}
+  </td>
+  <td class="text-muted small">{{ reg.fecha_auditoria.strftime('%d/%m/%y %H:%M') if reg.fecha_auditoria else '—' }}</td>
+  {% if can_resolve_fichajes %}
+  <td class="text-center" onclick="event.stopPropagation();">
+    {% if reg.estado.startswith('Resuelto_') and reg.estado_antes_resolucion %}
+    <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;padding:0.15rem 0.45rem;" onclick="reabrirResolucion({{ reg.id }}, this)">
+      <i class="fas fa-undo"></i> {{ _('Reabrir') }}
+    </button>
+    {% else %}<span class="text-muted" style="font-size:0.7rem;">—</span>{% endif %}
+  </td>
+  {% endif %}
+</tr>
+{% else %}
+<tr><td colspan="16" class="text-center text-muted py-3">{{ _('Sin histórico') }}</td></tr>
+{% endfor %}
+{% endif %}

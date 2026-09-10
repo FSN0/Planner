@@ -1,10 +1,13 @@
 /**
- * Notas por voz: subir / grabar con progreso de subida y de procesamiento.
+ * Notas por voz: subir / grabar con progreso.
+ * Tras encolar el job, el procesado es Celery (segundo plano): se puede salir
+ * de la pantalla; al volver se retoma el progreso o aparece la nota.
  */
 (function () {
     'use strict';
 
     var t = window.SP_T || function (key) { return key; };
+    var STORAGE_KEY = 'notaAudioActiveJob';
     var mediaRecorder = null;
     var recordedChunks = [];
     var recordStream = null;
@@ -14,8 +17,12 @@
     var processStartedAt = 0;
     var lastProgress = 0;
     var busy = false;
+    var uploadInFlight = false;
+    var activeJobId = null;
     var pollStartedAt = 0;
-    var MAX_POLL_MS = 70 * 60 * 1000; // 70 min techo UI
+    var MAX_POLL_MS = 3.5 * 60 * 60 * 1000; // 3.5 h techo UI (audios largos)
+    var defaultPromptCache = '';
+    var promptLoaded = false;
 
     var STEPS = [
         { id: 'subida', label: 'Subida' },
@@ -57,6 +64,35 @@
         return document.getElementById(id);
     }
 
+    function persistJob(jobId, duracionSeg, archivoNombre) {
+        activeJobId = jobId;
+        try {
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+                job_id: jobId,
+                duracion_segundos: duracionSeg || null,
+                archivo_nombre: archivoNombre || null,
+                started_at: Date.now(),
+            }));
+        } catch (err) { /* ignore */ }
+    }
+
+    function clearPersistedJob() {
+        activeJobId = null;
+        try { sessionStorage.removeItem(STORAGE_KEY); } catch (err) { /* ignore */ }
+    }
+
+    function readPersistedJob() {
+        try {
+            var raw = sessionStorage.getItem(STORAGE_KEY);
+            if (!raw) return null;
+            var data = JSON.parse(raw);
+            if (!data || !data.job_id) return null;
+            return data;
+        } catch (err) {
+            return null;
+        }
+    }
+
     function setBusy(isBusy) {
         busy = !!isBusy;
         var actions = el('notaAudioActions');
@@ -74,6 +110,24 @@
         if (panel) panel.classList.toggle('d-none', !show);
         var idle = el('notaAudioIdleHint');
         if (idle) idle.classList.toggle('d-none', !!show);
+    }
+
+    function setBgHint(show) {
+        var hint = el('notaAudioBgHint');
+        if (hint) hint.classList.toggle('d-none', !show);
+    }
+
+    function setCancelVisible(show) {
+        var btn = el('btnNotaAudioCancel');
+        if (btn) btn.classList.toggle('d-none', !show);
+    }
+
+    function setPageBanner(show, mensaje) {
+        var banner = el('notaAudioBgBanner');
+        if (!banner) return;
+        banner.classList.toggle('d-none', !show);
+        var text = el('notaAudioBgBannerText');
+        if (text && mensaje) text.textContent = mensaje;
     }
 
     function setStepActive(fase) {
@@ -120,7 +174,9 @@
         var detailEl = el('notaAudioDetail');
 
         if (fill) fill.style.width = pct + '%';
-        if (pctEl) pctEl.textContent = pct + '%';
+        if (pctEl) {
+            pctEl.textContent = opts.error ? t('Error') : (pct + '%');
+        }
         if (msgEl && opts.mensaje) msgEl.textContent = opts.mensaje;
         if (detailEl) {
             detailEl.textContent = opts.detalle || '';
@@ -159,7 +215,6 @@
         if (rate <= 0.01) return null;
         var remainingByRate = (100 - progreso) / rate;
 
-        // Heurística por duración del audio (Whisper ~0.15–0.4× realtime + margen)
         var remainingByAudio = null;
         if (duracionSeg && progreso < 75) {
             var expectedTotal = Math.max(40, duracionSeg * 0.35 + 25);
@@ -189,6 +244,8 @@
         lastProgress = 0;
         processStartedAt = 0;
         setBusy(false);
+        setBgHint(false);
+        setCancelVisible(false);
         showPanel(false);
         setProgress(0, { force: true, mensaje: '', fase: 'subida' });
         setFileMeta('', null, null);
@@ -203,10 +260,101 @@
         if (btnParar) btnParar.classList.add('d-none');
     }
 
+    function markProcessingBackground(mensaje) {
+        setBusy(true);
+        setBgHint(true);
+        setCancelVisible(!!activeJobId);
+        setPageBanner(
+            true,
+            mensaje || t('Hay una nota por voz procesándose en segundo plano. Puedes seguir trabajando; la nota aparecerá al terminar.')
+        );
+    }
+
+    function failJobUi(mensaje, opts) {
+        opts = opts || {};
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+        clearPersistedJob();
+        uploadInFlight = false;
+        setPageBanner(false);
+        setBgHint(false);
+        setCancelVisible(false);
+        setBusy(false);
+        showPanel(true);
+        lastProgress = 0;
+        setProgress(0, {
+            force: true,
+            error: true,
+            fase: 'error',
+            mensaje: mensaje || t('Ha habido un error al procesar el audio.'),
+            detalle: opts.detalle || '',
+            etaSeconds: 0,
+        });
+    }
+
+    function currentSummaryPrompt() {
+        var ta = el('notaAudioPrompt');
+        if (ta && ta.value.trim()) return ta.value.trim();
+        return defaultPromptCache || '';
+    }
+
+    function loadSummaryPrompt() {
+        return fetch('/notas/audio/prompt')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || !data.success) return;
+                defaultPromptCache = data.default_prompt || '';
+                var ta = el('notaAudioPrompt');
+                if (ta && !promptLoaded) {
+                    ta.value = data.prompt || data.default_prompt || '';
+                    promptLoaded = true;
+                }
+            })
+            .catch(function () { /* ignore */ });
+    }
+
+    function cancelActiveJob() {
+        if (!activeJobId) return;
+        var jobId = activeJobId;
+        var token = csrfToken();
+        var btn = el('btnNotaAudioCancel');
+        if (btn) btn.disabled = true;
+
+        fetch('/notas/audio/' + jobId + '/cancelar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token || '',
+            },
+            body: JSON.stringify({ csrf_token: token || '' }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (btn) btn.disabled = false;
+                if (!data || !data.success) {
+                    Swal.fire(
+                        t('Cancelar'),
+                        (data && data.message) || t('No se pudo cancelar el procesamiento.'),
+                        'error'
+                    );
+                    return;
+                }
+                failJobUi(t('Procesamiento cancelado.'));
+            })
+            .catch(function () {
+                if (btn) btn.disabled = false;
+                Swal.fire(t('Cancelar'), t('Error de conexión al cancelar.'), 'error');
+            });
+    }
+
     function uploadBlob(blob, filename) {
         if (busy) return;
         setBusy(true);
+        uploadInFlight = true;
         showPanel(true);
+        setBgHint(false);
+        setCancelVisible(false);
+        setPageBanner(false);
         lastProgress = 0;
         processStartedAt = Date.now();
         setFileMeta(filename, blob.size, null);
@@ -218,6 +366,12 @@
 
         var form = new FormData();
         form.append('audio', blob, filename);
+        var promptText = currentSummaryPrompt();
+        if (promptText) form.append('summary_prompt', promptText);
+        var saveDefault = el('notaAudioPromptSaveDefault');
+        if (saveDefault && saveDefault.checked) {
+            form.append('save_prompt_default', '1');
+        }
         var token = csrfToken();
         if (token) form.append('csrf_token', token);
 
@@ -235,6 +389,7 @@
         };
 
         xhr.onload = function () {
+            uploadInFlight = false;
             var data;
             try {
                 data = JSON.parse(xhr.responseText || '{}');
@@ -242,31 +397,29 @@
                 data = { success: false, message: t('Respuesta inválida del servidor') };
             }
             if (xhr.status >= 400 || !data.success) {
-                setBusy(false);
-                setProgress(lastProgress, {
-                    error: true,
-                    fase: 'error',
-                    mensaje: data.message || t('Error al subir el audio'),
-                });
+                failJobUi(
+                    data.message || t('Error al subir el audio. Revisa el archivo e inténtalo de nuevo.')
+                );
                 return;
             }
             if (data.duracion_segundos != null) {
                 setFileMeta(data.archivo_nombre || filename, blob.size, data.duracion_segundos);
             }
+            persistJob(data.job_id, data.duracion_segundos, data.archivo_nombre || filename);
+            markProcessingBackground(
+                t('Audio recibido. Sigue procesándose en segundo plano: puedes cerrar esta ventana o salir de Notas.')
+            );
+            setCancelVisible(true);
             setProgress(15, {
+                force: true,
                 fase: 'preparando',
-                mensaje: t('Audio recibido. Procesando…'),
+                mensaje: t('Audio recibido. Procesando en segundo plano…'),
             });
             pollJob(data.job_id, data.duracion_segundos);
         };
 
         xhr.onerror = function () {
-            setBusy(false);
-            setProgress(lastProgress, {
-                error: true,
-                fase: 'error',
-                mensaje: t('Fallo de conexión al subir el audio'),
-            });
+            failJobUi(t('Fallo de conexión al subir el audio. Comprueba la red e inténtalo de nuevo.'));
         };
 
         xhr.send(form);
@@ -275,24 +428,90 @@
     function pollJob(jobId, duracionSeg) {
         if (pollTimer) clearInterval(pollTimer);
         pollStartedAt = Date.now();
+        activeJobId = jobId;
+        var consecutivePollFails = 0;
 
         function tick() {
             if (Date.now() - pollStartedAt > MAX_POLL_MS) {
                 clearInterval(pollTimer);
                 pollTimer = null;
-                setBusy(false);
+                // No marcar error fatal: el job puede seguir en Celery.
+                markProcessingBackground(
+                    t('Sigue procesándose en el servidor. Vuelve más tarde: la nota aparecerá al terminar.')
+                );
                 setProgress(lastProgress, {
-                    error: true,
-                    fase: 'error',
-                    mensaje: t('El procesamiento está tardando demasiado. Revisa los logs de Celery o inténtalo de nuevo.'),
+                    fase: 'preparando',
+                    mensaje: t('Procesamiento largo en segundo plano. Puedes salir y volver más tarde.'),
                 });
                 return;
             }
 
             fetch('/notas/audio/' + jobId + '/estado')
-                .then(function (r) { return r.json(); })
+                .then(function (r) {
+                    if (r.status === 404) {
+                        return {
+                            success: false,
+                            fatal: true,
+                            message: t('No se encontró el trabajo de audio (puede haberse perdido).'),
+                        };
+                    }
+                    return r.json().then(function (data) {
+                        data = data || {};
+                        data._httpStatus = r.status;
+                        return data;
+                    });
+                })
                 .then(function (data) {
-                    if (!data.success) throw new Error(data.message || t('Error de estado'));
+                    if (!data || data.fatal || (!data.success && data._httpStatus >= 400)) {
+                        consecutivePollFails += 1;
+                        if ((data && data.fatal) || consecutivePollFails >= 5) {
+                            failJobUi(
+                                (data && data.message) ||
+                                t('Error al consultar el estado del audio.')
+                            );
+                            return;
+                        }
+                        markProcessingBackground(
+                            t('Sin conexión momentánea. El audio sigue en el servidor; reintentando…')
+                        );
+                        return;
+                    }
+                    if (!data.success) {
+                        consecutivePollFails += 1;
+                        if (consecutivePollFails >= 5) {
+                            failJobUi(data.message || t('Error al consultar el estado del audio.'));
+                        }
+                        return;
+                    }
+                    consecutivePollFails = 0;
+
+                    if (data.estado === 'completado') {
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                        clearPersistedJob();
+                        setPageBanner(false);
+                        setBgHint(false);
+                        setCancelVisible(false);
+                        setBusy(false);
+                        setProgress(100, {
+                            force: true,
+                            ok: true,
+                            fase: 'completado',
+                            mensaje: t('Nota privada creada. Recargando…'),
+                            etaSeconds: 0,
+                        });
+                        setTimeout(function () { window.location.reload(); }, 1400);
+                        return;
+                    }
+
+                    if (data.estado === 'error' || data.estado === 'cancelado') {
+                        failJobUi(
+                            data.estado === 'cancelado'
+                                ? t('Procesamiento cancelado.')
+                                : (data.error || data.mensaje || t('Error al procesar el audio.'))
+                        );
+                        return;
+                    }
 
                     var pct = Number(data.progreso) || 0;
                     if (data.estado === 'pendiente' || data.estado === 'procesando') {
@@ -312,42 +531,104 @@
                         etaSeconds: eta,
                     });
 
-                    if (data.estado === 'completado') {
-                        clearInterval(pollTimer);
-                        pollTimer = null;
-                        setProgress(100, {
-                            force: true,
-                            ok: true,
-                            fase: 'completado',
-                            mensaje: t('Nota privada creada. Recargando…'),
-                            etaSeconds: 0,
-                        });
-                        setTimeout(function () { window.location.reload(); }, 1400);
-                    } else if (data.estado === 'error') {
-                        clearInterval(pollTimer);
-                        pollTimer = null;
-                        setBusy(false);
-                        setProgress(pct, {
-                            error: true,
-                            fase: 'error',
-                            mensaje: data.error || data.mensaje || t('Error al procesar el audio'),
-                        });
+                    if (data.archivo_nombre) {
+                        setFileMeta(data.archivo_nombre, null, data.duracion_segundos);
                     }
+
+                    setCancelVisible(true);
+                    markProcessingBackground(
+                        t('Procesando nota por voz en segundo plano…') +
+                        ' ' + Math.round(pct) + '%'
+                    );
                 })
-                .catch(function (err) {
-                    clearInterval(pollTimer);
-                    pollTimer = null;
-                    setBusy(false);
-                    setProgress(lastProgress, {
-                        error: true,
-                        fase: 'error',
-                        mensaje: err.message || t('Error de conexión'),
-                    });
+                .catch(function () {
+                    consecutivePollFails += 1;
+                    if (consecutivePollFails >= 8) {
+                        failJobUi(
+                            t('No se pudo comprobar el estado del audio tras varios intentos. Si el problema continúa, cancela e inténtalo de nuevo.')
+                        );
+                        return;
+                    }
+                    markProcessingBackground(
+                        t('Sin conexión momentánea. El audio sigue en el servidor; reintentando…')
+                    );
                 });
         }
 
         tick();
-        pollTimer = setInterval(tick, 1500);
+        pollTimer = setInterval(tick, 2000);
+    }
+
+    function resumeActiveJobs() {
+        fetch('/notas/audio/activos')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var jobs = (data && data.jobs) || [];
+                var job = jobs[0];
+                if (!job) {
+                    var stored = readPersistedJob();
+                    if (stored) {
+                        // Job ya terminó (o no existe): limpiar y no bloquear UI.
+                        fetch('/notas/audio/' + stored.job_id + '/estado')
+                            .then(function (r) { return r.json(); })
+                            .then(function (st) {
+                                if (!st.success) {
+                                    clearPersistedJob();
+                                    return;
+                                }
+                                if (st.estado === 'completado') {
+                                    clearPersistedJob();
+                                    window.location.reload();
+                                    return;
+                                }
+                                if (st.estado === 'error' || st.estado === 'cancelado') {
+                                    clearPersistedJob();
+                                    showPanel(true);
+                                    failJobUi(
+                                        st.estado === 'cancelado'
+                                            ? t('Procesamiento cancelado.')
+                                            : (st.error || st.mensaje || t('La nota por voz falló en el último intento.'))
+                                    );
+                                    return;
+                                }
+                                beginResume(st);
+                            })
+                            .catch(function () { /* ignore */ });
+                    }
+                    return;
+                }
+                if (job.estado === 'error' || job.estado === 'cancelado') {
+                    failJobUi(
+                        job.estado === 'cancelado'
+                            ? t('Procesamiento cancelado.')
+                            : (job.error || job.mensaje || t('Error al procesar el audio.'))
+                    );
+                    return;
+                }
+                beginResume(job);
+            })
+            .catch(function () { /* ignore */ });
+    }
+
+    function beginResume(job) {
+        if (!job || !job.job_id) return;
+        if (pollTimer && activeJobId === job.job_id) return;
+
+        persistJob(job.job_id, job.duracion_segundos, job.archivo_nombre);
+        processStartedAt = Date.now();
+        lastProgress = 0;
+        showPanel(true);
+        setFileMeta(job.archivo_nombre || '', null, job.duracion_segundos);
+        setProgress(Math.max(15, Number(job.progreso) || 15), {
+            force: true,
+            fase: job.fase || job.estado,
+            mensaje: job.mensaje || t('Retomando procesamiento en segundo plano…'),
+        });
+        markProcessingBackground(
+            t('Hay una nota por voz procesándose en segundo plano. Puedes seguir trabajando; la nota aparecerá al terminar.')
+        );
+        setCancelVisible(true);
+        pollJob(job.job_id, job.duracion_segundos);
     }
 
     function startRecording() {
@@ -471,11 +752,75 @@
         if (btnGrabar) btnGrabar.addEventListener('click', startRecording);
         if (btnParar) btnParar.addEventListener('click', stopRecording);
 
+        var btnCancel = el('btnNotaAudioCancel');
+        if (btnCancel) btnCancel.addEventListener('click', cancelActiveJob);
+
+        var promptToggle = el('btnNotaAudioPromptToggle');
+        var promptPanel = el('notaAudioPromptPanel');
+        if (promptToggle && promptPanel) {
+            promptToggle.addEventListener('click', function () {
+                var open = promptPanel.classList.toggle('d-none') === false;
+                promptToggle.classList.toggle('is-open', open);
+                promptToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (open) loadSummaryPrompt();
+            });
+        }
+        var btnResetPrompt = el('btnNotaAudioPromptReset');
+        if (btnResetPrompt) {
+            btnResetPrompt.addEventListener('click', function () {
+                var token = csrfToken();
+                fetch('/notas/audio/prompt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': token || '',
+                    },
+                    body: JSON.stringify({ reset: true, csrf_token: token || '' }),
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (!data || !data.success) return;
+                        defaultPromptCache = data.default_prompt || defaultPromptCache;
+                        var ta = el('notaAudioPrompt');
+                        if (ta) ta.value = data.prompt || data.default_prompt || '';
+                    })
+                    .catch(function () { /* ignore */ });
+            });
+        }
+        loadSummaryPrompt();
+
+        var bannerOpen = el('notaAudioBgBannerOpen');
+        if (bannerOpen) {
+            bannerOpen.addEventListener('click', function () {
+                $('#modalNotaAudio').modal('show');
+            });
+        }
+        var bannerCancel = el('notaAudioBgBannerCancel');
+        if (bannerCancel) {
+            bannerCancel.addEventListener('click', cancelActiveJob);
+        }
+
+        // Solo avisar si se cierra la pestaña a mitad de la subida HTTP.
+        window.addEventListener('beforeunload', function (e) {
+            if (!uploadInFlight) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
         $('#modalNotaAudio').on('hidden.bs.modal', function () {
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 stopRecording();
             }
+            // Si hay job activo, no resetear: sigue en segundo plano.
+            if (activeJobId || pollTimer) {
+                markProcessingBackground(
+                    t('El audio sigue procesándose en segundo plano. La nota aparecerá cuando termine.')
+                );
+                return;
+            }
             if (!busy) resetUi();
         });
+
+        resumeActiveJobs();
     };
 })();

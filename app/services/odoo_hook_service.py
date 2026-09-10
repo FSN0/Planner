@@ -393,11 +393,13 @@ def hook_endpoint_url():
 
 def hook_dashboard_context():
     key = ensure_hook_key()
-    last = (
+    logs_q = (
         SyncLog.query.filter_by(modo=HOOK_MODO)
         .order_by(SyncLog.fecha.desc())
-        .first()
     )
+    logs_count = logs_q.count()
+    recent_logs = logs_q.limit(15).all()
+    last = recent_logs[0] if recent_logs else None
     example = {
         'event_id': '00000000-0000-0000-0000-000000000001',
         'action': 'create',
@@ -419,6 +421,8 @@ def hook_dashboard_context():
             {'model': 'fleet.vehicle', 'resource': 'vehiculos', 'label': 'Vehículos / flota'},
         ],
         'last_log': last,
+        'logs_count': logs_count,
+        'recent_logs': recent_logs,
         'debounce_seconds': DEBOUNCE_SECONDS,
         'example': example,
         'example_json': json.dumps(example, indent=2, ensure_ascii=False),

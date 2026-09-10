@@ -76,9 +76,8 @@ def _estado_deseado(fichajes, fecha_obj):
         if entrada is None:
             continue
 
-        usuario = User.query.filter(
-            User.external_ids['odoo'].astext == str(fichaje.get('empleado_external_id'))
-        ).first()
+        from app.services.personal_conciliation_service import find_user_by_any_odoo
+        usuario = find_user_by_any_odoo(fichaje.get('empleado_external_id'))
         if usuario is None:
             continue
 

@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from typing import Any, Optional
 
@@ -40,6 +40,84 @@ WEAK_LOCATION_TOKENS = {
     'catarroja', 'valencia', 'madrid', 'barcelona', 'teruel', 'alicante',
     'castellon', 'sevilla', 'zaragoza', 'murcia', 'bilbao',
 }
+
+# Preferencia de usuario (sidebar_prefs) para el prompt de resumen.
+USER_PREF_SUMMARY_PROMPT = 'nota_audio_summary_prompt'
+AUDIO_JOB_STALE_HOURS = 12
+
+DEFAULT_SUMMARY_PROMPT = (
+    'Eres un asistente de bitácora de obra. Redactas un ACTA / RESUMEN COMPLETO '
+    'en español a partir de la transcripción.\n'
+    'Reglas:\n'
+    '- NO inventes hechos, cifras ni nombres que no aparezcan.\n'
+    '- Marca con [inaudible] lo que no se entienda.\n'
+    '- El resumen debe ser AMPLIO y útil para quien no estuvo: no te limites a 3-4 frases.\n'
+    '- Extiende el detalle según la longitud de la transcripción '
+    '(reunión corta: 8–15 viñetas; reunión larga: más secciones y más puntos).\n'
+    '- Estructura el campo "resumen" con estos apartados (omite solo si no hay contenido):\n'
+    '  ## Contexto\n'
+    '  ## Temas tratados\n'
+    '  ## Acuerdos\n'
+    '  ## Acciones / pendientes (quién / qué / cuándo si se menciona)\n'
+    '  ## Incidencias o riesgos\n'
+    '  ## Otras menciones relevantes\n'
+    '- Usa viñetas claras dentro de cada apartado.'
+)
+
+SUMMARY_JSON_FOOTER = (
+    '\n\nIMPORTANTE: responde SOLO con JSON válido '
+    '{"titulo": "...", "resumen": "..."} '
+    '(titulo descriptivo, máx. 120 caracteres). '
+    'No inventes hechos que no estén en la transcripción.'
+)
+
+
+class NotaAudioCancelled(Exception):
+    """El usuario canceló el job mientras se procesaba."""
+
+
+def get_default_summary_prompt() -> str:
+    return DEFAULT_SUMMARY_PROMPT
+
+
+def get_user_summary_prompt(user: Optional[User]) -> str:
+    """Prompt efectivo: último guardado del usuario o el del sistema."""
+    if user is not None:
+        prefs = getattr(user, 'sidebar_prefs', None) or {}
+        if isinstance(prefs, dict):
+            custom = (prefs.get(USER_PREF_SUMMARY_PROMPT) or '').strip()
+            if custom:
+                return custom
+    return DEFAULT_SUMMARY_PROMPT
+
+
+def set_user_summary_prompt(user: User, prompt: Optional[str]) -> str:
+    """Guarda o restablece el prompt del usuario. Devuelve el prompt efectivo."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    prefs = dict(getattr(user, 'sidebar_prefs', None) or {})
+    text = (prompt or '').strip()
+    if not text or text == DEFAULT_SUMMARY_PROMPT.strip():
+        prefs.pop(USER_PREF_SUMMARY_PROMPT, None)
+        user.sidebar_prefs = prefs
+        flag_modified(user, 'sidebar_prefs')
+        db.session.commit()
+        return DEFAULT_SUMMARY_PROMPT
+    if len(text) > 12000:
+        raise ValueError('El prompt es demasiado largo (máx. 12.000 caracteres).')
+    prefs[USER_PREF_SUMMARY_PROMPT] = text
+    user.sidebar_prefs = prefs
+    flag_modified(user, 'sidebar_prefs')
+    db.session.commit()
+    return text
+
+
+def _compose_summary_system_prompt(custom: Optional[str] = None) -> str:
+    base = (custom or DEFAULT_SUMMARY_PROMPT).strip() or DEFAULT_SUMMARY_PROMPT
+    lower = base.lower()
+    if '"titulo"' in lower and '"resumen"' in lower:
+        return base
+    return base + SUMMARY_JSON_FOOTER
 
 
 @dataclass
@@ -193,7 +271,12 @@ def probe_duration_seconds(path: str, *, timeout: int = 60) -> float:
         raise ValueError('Duración de audio inválida.')
 
 
-def save_audio_upload(file_storage, autor_id: int) -> NotaAudioJob:
+def save_audio_upload(
+    file_storage,
+    autor_id: int,
+    *,
+    summary_prompt: Optional[str] = None,
+) -> NotaAudioJob:
     """Guarda el archivo y encola el job. La duración se valida en Celery."""
     original = secure_filename(file_storage.filename or 'audio.webm')
     if not allowed_audio_file(original):
@@ -210,23 +293,145 @@ def save_audio_upload(file_storage, autor_id: int) -> NotaAudioJob:
         os.remove(dest)
         raise ValueError('El archivo supera el tamaño máximo permitido (512 MB).')
 
+    prompt_text = (summary_prompt or '').strip()
+    if prompt_text and len(prompt_text) > 12000:
+        os.remove(dest)
+        raise ValueError('El prompt es demasiado largo (máx. 12.000 caracteres).')
+
     # No ffprobe aquí: la subida HTTP debe terminar al escribir a disco.
     # Duración + rechazo por max se hacen en process_nota_audio_job.
+    meta: dict[str, Any] = {
+        'fase': 'pendiente',
+        'progreso': 5,
+        'mensaje': 'Audio recibido. En cola de procesamiento…',
+    }
+    if prompt_text:
+        meta['summary_prompt'] = prompt_text
+
     job = NotaAudioJob(
         autor_id=autor_id,
         estado=NotaAudioJob.ESTADO_PENDIENTE,
         archivo_path=dest,
         archivo_nombre=original,
         duracion_segundos=None,
-        meta_json=json.dumps({
-            'fase': 'pendiente',
-            'progreso': 5,
-            'mensaje': 'Audio recibido. En cola de procesamiento…',
-        }, ensure_ascii=False),
+        meta_json=json.dumps(meta, ensure_ascii=False),
     )
     db.session.add(job)
     db.session.commit()
     return job
+
+
+def attach_celery_task_id(job_id: int, task_id: str) -> None:
+    job = NotaAudioJob.query.get(job_id)
+    if not job:
+        return
+    meta: dict[str, Any] = {}
+    if job.meta_json:
+        try:
+            parsed = json.loads(job.meta_json)
+            if isinstance(parsed, dict):
+                meta = parsed
+        except json.JSONDecodeError:
+            pass
+    meta['celery_task_id'] = task_id
+    job.meta_json = json.dumps(meta, ensure_ascii=False)
+    job.updated_at = datetime.utcnow()
+    db.session.commit()
+
+
+def _job_meta(job: NotaAudioJob) -> dict[str, Any]:
+    if not job.meta_json:
+        return {}
+    try:
+        data = json.loads(job.meta_json)
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _ensure_not_cancelled(job_id: int) -> None:
+    job = NotaAudioJob.query.get(job_id)
+    if job and job.estado == NotaAudioJob.ESTADO_CANCELADO:
+        raise NotaAudioCancelled('Procesamiento cancelado por el usuario.')
+
+
+def cancel_audio_job(job: NotaAudioJob) -> NotaAudioJob:
+    """Marca el job como cancelado, revoca Celery si hay task_id y limpia el archivo."""
+    if job.estado in (
+        NotaAudioJob.ESTADO_COMPLETADO,
+        NotaAudioJob.ESTADO_ERROR,
+        NotaAudioJob.ESTADO_CANCELADO,
+    ):
+        return job
+
+    meta = _job_meta(job)
+    task_id = meta.get('celery_task_id')
+    if task_id:
+        try:
+            from app.celery_worker import celery
+            celery.control.revoke(task_id, terminate=True, signal='SIGTERM')
+        except Exception as exc:
+            current_app.logger.warning(
+                'No se pudo revocar Celery task %s del job %s: %s',
+                task_id, job.id, exc,
+            )
+
+    audio_path = job.archivo_path
+    job.estado = NotaAudioJob.ESTADO_CANCELADO
+    job.error_message = 'Cancelado por el usuario.'
+    job.updated_at = datetime.utcnow()
+    job.completed_at = datetime.utcnow()
+    meta.update({
+        'fase': 'cancelado',
+        'progreso': 0,
+        'mensaje': 'Procesamiento cancelado.',
+    })
+    job.meta_json = json.dumps(meta, ensure_ascii=False)
+    if audio_path and os.path.isfile(audio_path):
+        try:
+            os.remove(audio_path)
+        except OSError:
+            pass
+        job.archivo_path = None
+    db.session.commit()
+    return job
+
+
+def sweep_stale_audio_jobs(autor_id: Optional[int] = None) -> int:
+    """Marca como error jobs pendientes/procesando sin actividad reciente."""
+    cutoff = datetime.utcnow() - timedelta(hours=AUDIO_JOB_STALE_HOURS)
+    q = NotaAudioJob.query.filter(
+        NotaAudioJob.estado.in_([
+            NotaAudioJob.ESTADO_PENDIENTE,
+            NotaAudioJob.ESTADO_PROCESANDO,
+        ]),
+        NotaAudioJob.updated_at < cutoff,
+    )
+    if autor_id is not None:
+        q = q.filter(NotaAudioJob.autor_id == autor_id)
+    stale = q.limit(50).all()
+    count = 0
+    for job in stale:
+        meta = _job_meta(job)
+        msg = (
+            f'Proceso abandonado (sin progreso en más de {AUDIO_JOB_STALE_HOURS} h). '
+            'Puedes volver a subir el audio.'
+        )
+        job.estado = NotaAudioJob.ESTADO_ERROR
+        job.error_message = msg
+        job.updated_at = datetime.utcnow()
+        meta.update({'fase': 'error', 'mensaje': msg[:500], 'stale': True})
+        job.meta_json = json.dumps(meta, ensure_ascii=False)
+        if job.archivo_path and os.path.isfile(job.archivo_path):
+            try:
+                os.remove(job.archivo_path)
+            except OSError:
+                pass
+            job.archivo_path = None
+        count += 1
+    if count:
+        db.session.commit()
+    return count
 
 
 def _normalize_for_whisper(input_path: str, output_path: str) -> None:
@@ -311,6 +516,8 @@ def _update_job_progress(
     job = NotaAudioJob.query.get(job_id)
     if not job:
         return
+    if job.estado == NotaAudioJob.ESTADO_CANCELADO:
+        raise NotaAudioCancelled('Procesamiento cancelado por el usuario.')
     payload = {
         'fase': fase,
         'progreso': max(0, min(100, int(progreso))),
@@ -322,8 +529,8 @@ def _update_job_progress(
         try:
             previous = json.loads(job.meta_json)
             if isinstance(previous, dict):
-                # Conserva datos finales (obras/personas) si ya existieran
-                for key in ('obras', 'personas'):
+                # Conserva datos finales / config entre updates de progreso
+                for key in ('obras', 'personas', 'summary_prompt', 'celery_task_id'):
                     if key in previous and key not in payload:
                         payload[key] = previous[key]
         except json.JSONDecodeError:
@@ -753,7 +960,10 @@ def _extract_entities_gpt(transcript: str) -> dict[str, list[str]]:
         return {'obras': [], 'personas': []}
 
 
-def _summarize_gpt(transcript: str) -> tuple[str, str]:
+def _summarize_gpt(
+    transcript: str,
+    summary_prompt: Optional[str] = None,
+) -> tuple[str, str]:
     fallback_titulo = f'Nota de voz {date.today().strftime("%d/%m/%Y")}'
     fallback_resumen = (
         'No se pudo generar el resumen automático. Se adjunta la transcripción completa.'
@@ -769,26 +979,7 @@ def _summarize_gpt(transcript: str) -> tuple[str, str]:
         sample = transcript[:50000] + '\n[...]\n' + transcript[-50000:]
         truncated = True
 
-    instr = (
-        'Eres un asistente de bitácora de obra. Redactas un ACTA / RESUMEN COMPLETO '
-        'en español a partir de la transcripción.\n'
-        'Reglas:\n'
-        '- NO inventes hechos, cifras ni nombres que no aparezcan.\n'
-        '- Marca con [inaudible] lo que no se entienda.\n'
-        '- El resumen debe ser AMPLIO y útil para quien no estuvo: no te limites a 3-4 frases.\n'
-        '- Extiende el detalle según la longitud de la transcripción '
-        '(reunión corta: 8–15 viñetas; reunión larga: más secciones y más puntos).\n'
-        '- Estructura el campo "resumen" con estos apartados (omite solo si no hay contenido):\n'
-        '  ## Contexto\n'
-        '  ## Temas tratados\n'
-        '  ## Acuerdos\n'
-        '  ## Acciones / pendientes (quién / qué / cuándo si se menciona)\n'
-        '  ## Incidencias o riesgos\n'
-        '  ## Otras menciones relevantes\n'
-        '- Usa viñetas claras dentro de cada apartado.\n'
-        'Devuelve SOLO JSON válido: {"titulo": "...", "resumen": "..."}\n'
-        'titulo: descriptivo, max 120 caracteres.'
-    )
+    instr = _compose_summary_system_prompt(summary_prompt)
     if truncated:
         instr += ' La transcripción está truncada; indícalo al final del resumen.'
 
@@ -932,12 +1123,19 @@ def process_nota_audio_job(job_id: int) -> None:
     if not job:
         current_app.logger.error('NotaAudioJob %s no encontrado', job_id)
         return
+    if job.estado == NotaAudioJob.ESTADO_CANCELADO:
+        return
     if job.estado not in (NotaAudioJob.ESTADO_PENDIENTE, NotaAudioJob.ESTADO_PROCESANDO):
         return
 
     # Snapshot antes de commits intermedios (evita DetachedInstanceError)
     autor_id = job.autor_id
     audio_path = job.archivo_path
+    job_meta = _job_meta(job)
+    summary_prompt = (job_meta.get('summary_prompt') or '').strip() or None
+    if not summary_prompt:
+        autor = User.query.get(autor_id)
+        summary_prompt = get_user_summary_prompt(autor)
 
     job.estado = NotaAudioJob.ESTADO_PROCESANDO
     job.updated_at = datetime.utcnow()
@@ -952,7 +1150,7 @@ def process_nota_audio_job(job_id: int) -> None:
     def _fail_job(message: str) -> None:
         db.session.rollback()
         failed = NotaAudioJob.query.get(job_id)
-        if not failed:
+        if not failed or failed.estado == NotaAudioJob.ESTADO_CANCELADO:
             return
         failed.estado = NotaAudioJob.ESTADO_ERROR
         failed.error_message = message[:2000]
@@ -965,6 +1163,7 @@ def process_nota_audio_job(job_id: int) -> None:
         db.session.commit()
 
     try:
+        _ensure_not_cancelled(job_id)
         if not audio_path or not os.path.isfile(audio_path):
             raise FileNotFoundError('Archivo de audio no encontrado.')
 
@@ -981,6 +1180,8 @@ def process_nota_audio_job(job_id: int) -> None:
 
         job = NotaAudioJob.query.get(job_id)
         if job:
+            if job.estado == NotaAudioJob.ESTADO_CANCELADO:
+                return
             job.duracion_segundos = duration
             job.updated_at = datetime.utcnow()
             db.session.commit()
@@ -1002,12 +1203,14 @@ def process_nota_audio_job(job_id: int) -> None:
             'NotaAudioJob %s: transcripción OK (%s chars)', job_id, len(transcript),
         )
 
+        _ensure_not_cancelled(job_id)
         _update_job_progress(
             job_id, fase='resumiendo', progreso=78, mensaje='Generando resumen de la nota…',
         )
-        titulo, resumen = _summarize_gpt(transcript)
+        titulo, resumen = _summarize_gpt(transcript, summary_prompt=summary_prompt)
         current_app.logger.info('NotaAudioJob %s: resumen OK (%s)', job_id, titulo[:80])
 
+        _ensure_not_cancelled(job_id)
         _update_job_progress(
             job_id, fase='vinculando', progreso=88,
             mensaje='Detectando obras y personas mencionadas…',
@@ -1057,6 +1260,7 @@ def process_nota_audio_job(job_id: int) -> None:
         obra_matches = _dedupe_obra_matches(obra_matches)
         person_matches = _dedupe_person_matches(person_matches)
 
+        _ensure_not_cancelled(job_id)
         _update_job_progress(
             job_id, fase='guardando', progreso=95, mensaje='Guardando nota privada…',
         )
@@ -1086,6 +1290,9 @@ def process_nota_audio_job(job_id: int) -> None:
         job = NotaAudioJob.query.get(job_id)
         if not job:
             raise RuntimeError(f'Job {job_id} desapareció al guardar la nota')
+        if job.estado == NotaAudioJob.ESTADO_CANCELADO:
+            db.session.rollback()
+            return
         job.nota_id = nota.id
         job.estado = NotaAudioJob.ESTADO_COMPLETADO
         job.completed_at = datetime.utcnow()
@@ -1139,11 +1346,15 @@ def process_nota_audio_job(job_id: int) -> None:
             'NotaAudioJob %s: COMPLETADO → nota_id=%s', job_id, nota.id,
         )
 
+    except NotaAudioCancelled:
+        current_app.logger.info('NotaAudioJob %s: cancelado durante el proceso', job_id)
+        db.session.rollback()
+        return
     except Exception as exc:
         current_app.logger.exception('NotaAudioJob %s: ERROR %s', job_id, exc)
         db.session.rollback()
         job = NotaAudioJob.query.get(job_id)
-        if job:
+        if job and job.estado != NotaAudioJob.ESTADO_CANCELADO:
             job.estado = NotaAudioJob.ESTADO_ERROR
             job.error_message = str(exc)[:2000]
             try:
@@ -1162,16 +1373,26 @@ def process_nota_audio_job(job_id: int) -> None:
             db.session.commit()
         raise
     finally:
-        if audio_path and os.path.isfile(audio_path):
-            try:
-                os.remove(audio_path)
-            except OSError:
-                pass
+        # No borrar archivo si sigue pendiente/procesando (no debería ocurrir aquí).
+        # Si está cancelado/error/completado, limpiar disco.
         try:
             job = NotaAudioJob.query.get(job_id)
+            path_to_clear = audio_path
             if job and job.archivo_path:
-                job.archivo_path = None
-                db.session.commit()
+                path_to_clear = job.archivo_path
+            if path_to_clear and os.path.isfile(path_to_clear):
+                if not job or job.estado in (
+                    NotaAudioJob.ESTADO_COMPLETADO,
+                    NotaAudioJob.ESTADO_ERROR,
+                    NotaAudioJob.ESTADO_CANCELADO,
+                ):
+                    try:
+                        os.remove(path_to_clear)
+                    except OSError:
+                        pass
+                    if job and job.archivo_path:
+                        job.archivo_path = None
+                        db.session.commit()
         except Exception:
             db.session.rollback()
 
@@ -1203,6 +1424,10 @@ def job_to_status_dict(job: NotaAudioJob) -> dict[str, Any]:
     elif job.estado == NotaAudioJob.ESTADO_ERROR:
         fase = 'error'
         mensaje = job.error_message or mensaje or 'Error al procesar el audio'
+    elif job.estado == NotaAudioJob.ESTADO_CANCELADO:
+        fase = 'cancelado'
+        progreso = 0
+        mensaje = job.error_message or mensaje or 'Procesamiento cancelado.'
 
     data: dict[str, Any] = {
         'job_id': job.id,

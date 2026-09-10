@@ -320,11 +320,16 @@ def _parse_sync_errores_detail(sync_log):
         lines.append('Suele deberse a jefe o encargado no encontrado en la plataforma.')
     elif 'Empleados' in tipo:
         lines.append('Suele deberse a conflictos de email, DNI o rol duplicado.')
+    elif 'Ausencias' in tipo:
+        lines.append(
+            'Las omitidas suelen ser bajas de Odoo cuyo empleado no está vinculado en SignaPlan.'
+        )
     else:
         lines.append('Registros omitidos por conflictos o datos incompletos.')
     if det and det not in lines:
         lines.append(det)
-    lines.append('Revisa el preview en Sincronizar Odoo para ver cada registro.')
+    if 'Ausencias' not in tipo:
+        lines.append('Revisa el preview en Sincronizar Odoo para ver cada registro.')
     return lines
 
 

@@ -334,12 +334,15 @@ def sync_odometros(fecha_desde=None, fecha_hasta=None, modo='Automático', limpi
                 if abs(float(desvio)) >= 25:
                     desvio_alerts += 1
 
-        # IMPORTANTE: escribir SIEMPRE los días del viaje que devolvió Odoo.
-        # El adapter ya filtró por rango; NO volver a filtrar aquí (era el bug
-        # que dejaba 57 registros con 7904 viajes).
+        # Solo persistir días dentro de la ventana pedida. Si un viaje solapa
+        # el rango pero empieza ayer, NO reescribir/borrar fuera de la ventana
+        # (eso machacaba el retrospectivo nocturno con un sync «solo hoy»).
         wrote_any = False
         cur = d0
         while cur <= d1:
+            if cur < fecha_desde or cur > fecha_hasta:
+                cur += timedelta(days=1)
+                continue
             wrote_any = True
             dates_seen.add(cur.isoformat())
             key = (veh.id, cur.isoformat())
@@ -411,18 +414,9 @@ def sync_odometros(fecha_desde=None, fecha_hasta=None, modo='Automático', limpi
 
     users_by_odoo, users_by_name = _build_user_indexes()
 
-    # Rango real a persistir = unión del filtro pedido + días de los viajes
+    # Purge y planificación SOLO en la ventana pedida (nunca ensanchar el borrado).
     look_asign_desde = fecha_desde
     look_asign_hasta = fecha_hasta
-    for _vid, date_str in covered_days.keys():
-        try:
-            d = datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
-            continue
-        if d < look_asign_desde:
-            look_asign_desde = d
-        if d > look_asign_hasta:
-            look_asign_hasta = d
 
     borrados = 0
     if limpiar_rango:
@@ -544,11 +538,25 @@ def sync_odometros(fecha_desde=None, fecha_hasta=None, modo='Automático', limpi
 
 
 def run_vehiculos_en_vivo(modo='Automático'):
-    """Master data de flota + odómetros de hoy."""
+    """
+    Flota + viajes de los últimos N días (misma ventana que el retrospectivo).
+
+    Antes solo pedía «hoy» y la auditoría de días pasados no se actualizaba
+    hasta pulsar sincronizar a mano. El intervalo diurno debe traer el mismo
+    alcance que la madrugada (configurable: sync_vehiculos_retro_days).
+    """
+    from app.services.sync_config_service import SyncConfigService
+
+    cfg = SyncConfigService.get_config()
+    dias = int(cfg.get('vehiculos_retro_days', 14) or 14)
+    dias = max(1, min(365, dias))
+    hasta = today_local()
+    desde = hasta - timedelta(days=dias)
+
     result_fleet = apply_diff(modo=modo)
     result_odo = sync_odometros(
-        fecha_desde=today_local(),
-        fecha_hasta=today_local(),
+        fecha_desde=desde,
+        fecha_hasta=hasta,
         modo=modo,
     )
     return {'fleet': result_fleet, 'odometros': result_odo}
@@ -558,7 +566,7 @@ def run_vehiculos_retro(days=None, modo='Automático'):
     from app.services.sync_config_service import SyncConfigService
 
     cfg = SyncConfigService.get_config()
-    dias = int(days if days is not None else cfg.get('vehiculos_retro_days', 30))
+    dias = int(days if days is not None else cfg.get('vehiculos_retro_days', 14))
     dias = max(1, min(365, dias))
     apply_diff(modo=modo)
     hasta = today_local()

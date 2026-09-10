@@ -282,7 +282,11 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
         if not u_local or not odoo_user_id or not o_real or not odoo_obra_id:
             continue
 
-        obras_odoo_del_usuario = obras_por_usuario_odoo.get(str(odoo_user_id), [])
+        from app.services.personal_conciliation_service import odoo_ids_for_user
+        odoo_ids_usuario = odoo_ids_for_user(u_local) or [str(odoo_user_id)]
+        obras_odoo_del_usuario = []
+        for oid_u in odoo_ids_usuario:
+            obras_odoo_del_usuario.extend(obras_por_usuario_odoo.get(str(oid_u), []))
 
         if str(odoo_obra_id) not in obras_odoo_del_usuario:
             asig_fantasma = Asignacion.query.filter_by(
@@ -301,7 +305,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             accion = "Borrado en Odoo"
 
             for f in fichajes_unicos.values():
-                if f['odoo_user'] == str(odoo_user_id) and f['odoo_obra']:
+                if f['odoo_user'] in {str(x) for x in odoo_ids_usuario} and f['odoo_obra']:
                     o_nueva = Obra.query.filter(
                         Obra.external_ids['odoo'].astext == f['odoo_obra']
                     ).first()
@@ -330,9 +334,8 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
         if not f['odoo_obra']:
             continue
 
-        local_user = User.query.filter(
-            User.external_ids['odoo'].astext == f['odoo_user']
-        ).first()
+        from app.services.personal_conciliation_service import find_user_by_any_odoo
+        local_user = find_user_by_any_odoo(f['odoo_user'])
         local_obra = Obra.query.filter(
             Obra.external_ids['odoo'].astext == f['odoo_obra']
         ).first()

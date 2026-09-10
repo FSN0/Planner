@@ -1,0 +1,669 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Conciliación de personal') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<style>
+  .conc-card { border: 1px solid var(--color-border-strong, #e2e8f0); border-radius: 12px; padding: 1rem 1.15rem; margin-bottom: 1rem; background: #fff; }
+  .conc-users { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: stretch; }
+  .conc-user { flex: 1 1 220px; border: 1px solid #e5e7eb; border-radius: 10px; padding: 0.75rem; background: #fafafa; position: relative; }
+  .conc-user.is-picked { outline: 2px solid #2563eb; outline-offset: 1px; }
+  .conc-user--interno { border-color: #86efac; background: #f0fdf4; }
+  .conc-user--externo { border-color: #fcd34d; background: #fffbeb; }
+  .conc-pick { display: flex; align-items: flex-start; gap: 0.45rem; margin-bottom: 0.35rem; }
+  .conc-pick input { margin-top: 0.2rem; }
+  .conc-merge-bar { display: none; margin-top: 0.5rem; }
+  .conc-merge-bar.is-ready { display: block; }
+  .conc-user-keep { display: none; margin-top: 0.65rem; }
+  .conc-user.is-picked.conc-can-keep .conc-user-keep { display: block; }
+  .conc-badge { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .conc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+  .conc-manual { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+  @media (max-width: 900px) { .conc-manual { grid-template-columns: 1fr; } }
+  .conc-search-hit { cursor: pointer; padding: 0.45rem 0.65rem; border-radius: 6px; border: 1px solid transparent; }
+  .conc-search-hit:hover { background: #f1f5f9; }
+  .conc-search-hit.is-selected { background: #dbeafe; border-color: #93c5fd; }
+  .conc-odoo-hit.is-selected { background: #ecfdf5; border-color: #86efac; }
+  .conc-step { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin-bottom: 0.35rem; }
+  .conc-panel { border: 1px solid #e5e7eb; border-radius: 10px; padding: 0.85rem; background: #fafafa; min-height: 12rem; }
+  .conc-selected-box { margin-top: 0.5rem; padding: 0.5rem 0.65rem; border-radius: 8px; background: #fff; border: 1px dashed #cbd5e1; font-size: 0.85rem; }
+  .conc-maintained { opacity: 0.85; border-style: dashed; }
+  .conc-log-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: space-between; padding: 0.55rem 0; border-bottom: 1px solid #f1f5f9; }
+  .conc-log-row.is-undone { opacity: 0.45; text-decoration: line-through; }
+  #selectLocal + .select2-container { width: 100% !important; }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact">
+    <div class="page-toolbar mb-3">
+      <div>
+        <h1 class="page-title mb-1"><i class="fas fa-link mr-2"></i>{{ _('Conciliación de personal') }}</h1>
+        <p class="text-muted mb-0 small">
+          {{ _('Vincula plantilla con Odoo, o resuelve duplicados por código de asistencia. Todas las acciones quedan registradas abajo y se pueden deshacer.') }}
+        </p>
+      </div>
+      <div class="page-toolbar-actions">
+        <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-arrow-left"></i> {{ _('Centro Odoo') }} · {{ _('Subcontratas') }}
+        </a>
+      </div>
+    </div>
+
+    <div class="conc-card">
+      <h2 class="h5 mb-2"><i class="fas fa-handshake mr-1"></i> {{ _('Vincular plantilla ↔ Odoo') }}</h2>
+      <p class="text-muted small mb-3">
+        {{ _('Elige a alguien de plantilla (o créalo aquí si aún no existe), busca en Odoo y marca uno o varios registros. La sincronización imputará fichajes de todos ellos a esta ficha. El primero marcado es el vínculo principal.') }}
+      </p>
+      {% if can_write %}
+      <div class="conc-manual">
+        <div class="conc-panel">
+          <div class="conc-step">{{ _('Paso 1 · Persona en plantilla') }}</div>
+          <label class="small font-weight-bold d-block" for="selectLocal">{{ _('Trabajador (interno o externo)') }}</label>
+          <select id="selectLocal" class="form-control" style="width:100%;">
+            <option value="">{{ _('Selecciona…') }}</option>
+            <option value="__new__">＋ {{ _('Crear nuevo contacto…') }}</option>
+            {% for u in plantilla_users %}
+            <option value="{{ u.id }}"
+                    data-tipo="{{ u.tipo }}"
+                    data-dni="{{ u.dni }}"
+                    data-barcode="{{ u.barcode }}"
+                    data-name="{{ u.label }}"
+                    data-odoo="{{ u.odoo_id or '' }}">
+              {{ u.label }} · {{ u.tipo }}{% if u.barcode %} · {{ u.barcode }}{% endif %}{% if u.dni %} · {{ u.dni }}{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="conc-selected-box" id="selLocalBox">
+            <span class="text-muted">{{ _('Ninguno seleccionado') }}</span>
+          </div>
+        </div>
+        <div class="conc-panel">
+          <div class="conc-step">{{ _('Paso 2 · Buscar en Odoo') }}</div>
+          <label class="small font-weight-bold d-block" for="odooDni">{{ _('DNI / código o nombre') }}</label>
+          <div class="d-flex" style="gap:0.4rem;">
+            <input type="text" id="odooDni" class="form-control form-control-sm" placeholder="{{ _('Ej. 12345678A, código o Juan García') }}" autocomplete="off">
+            <button type="button" class="btn btn-sm btn-outline-primary" id="btnSearchOdoo" style="white-space:nowrap;">
+              <i class="fas fa-search"></i> {{ _('Buscar') }}
+            </button>
+          </div>
+          <p class="small text-muted mb-1 mt-1">{{ _('Con nombre y apellido acotas mejor; con solo el nombre verás todas las coincidencias.') }}</p>
+          <div id="hitsOdoo" class="mt-2" style="max-height:12rem;overflow:auto;"></div>
+          <div class="conc-selected-box" id="selOdooBox">
+            <span class="text-muted">{{ _('Ningún registro Odoo seleccionado') }}</span>
+          </div>
+          <p class="small text-muted mb-0 mt-1">{{ _('Puedes marcar varios resultados: haz clic para añadir/quitar.') }}</p>
+        </div>
+      </div>
+      <button type="button" class="btn-admin btn-admin-primary mt-3" id="btnLinkOdoo">
+        <i class="fas fa-link"></i> {{ _('Vincular sincronización') }}
+      </button>
+      {% else %}
+      <p class="text-muted mb-0">{{ _('Solo lectura: no puedes vincular fichas.') }}</p>
+      {% endif %}
+    </div>
+
+    <div class="conc-card">
+      <h2 class="h5 mb-2"><i class="fas fa-user-friends mr-1"></i> {{ _('Candidatos a conciliar') }} ({{ candidates_count }})</h2>
+      <p class="text-muted small mb-3">
+        {{ _('Se detectan por código de asistencia, DNI solo entre internos (nunca CIF de externos) y el mismo nombre (tokens iguales, aunque el orden cambie). En cada bloque marca las fichas que son la misma persona (2 o más) y elige cuál conservar.') }}
+      </p>
+      {% if not candidates %}
+      <p class="text-muted mb-0">{{ _('No hay candidatos pendientes ahora mismo.') }}</p>
+      {% endif %}
+      {% for c in candidates %}
+      <div class="conc-card conc-candidate" style="background:#fcfcfc;" data-group-key="{{ c.group_key }}">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+          <div>
+            <strong>{{ _('Posible duplicado') }}</strong>
+            {% if c.reason_labels %}
+            <span class="text-muted small">· {{ c.reason_labels|join(' + ') }}</span>
+            {% endif %}
+            {% if c.barcode %}
+            <div class="small text-muted">{{ _('Código asistencia') }}: {{ c.barcode }}</div>
+            {% elif c.barcodes %}
+            <div class="small text-muted">{{ _('Códigos') }}: {{ c.barcodes|join(', ') }}</div>
+            {% endif %}
+            {% if c.dnis and 'dni_interno' in (c.reasons or []) %}
+            <div class="small text-muted">{{ _('DNI interno') }}: {{ c.dnis|join(', ') }}</div>
+            {% endif %}
+          </div>
+          {% if 'nombre' in (c.reasons or []) %}
+          <span class="text-muted small">{{ _('Similitud nombre') }}: {{ (c.name_similarity * 100)|int }}%</span>
+          {% endif %}
+        </div>
+        <div class="conc-users">
+          {% for u in c.users %}
+          <div class="conc-user conc-user--{{ u.tipo|lower }}" data-user-id="{{ u.id }}" data-user-label="{{ u.label|e }}">
+            {% if can_write %}
+            <label class="conc-pick mb-0">
+              <input type="checkbox" class="conc-pick-cb" value="{{ u.id }}">
+              <span class="small text-muted">{{ _('Seleccionar') }}</span>
+            </label>
+            {% endif %}
+            <div class="d-flex justify-content-between">
+              <a href="{{ u.url }}" class="font-weight-bold">{{ u.label }}</a>
+              <span class="conc-badge badge-soft">{{ u.tipo }}</span>
+            </div>
+            <div class="small text-muted mt-1">{{ u.dni }} · {{ u.company }}</div>
+            <div class="small text-muted">
+              {% if u.barcode %}{{ _('cód.') }} {{ u.barcode }} · {% endif %}
+              {{ u.role }}{% if u.odoo_id %} · Odoo #{{ u.odoo_id }}{% endif %}
+            </div>
+            <div class="small mt-1" title="{% if u.ultima_asignacion %}{{ _('Última') }}: {{ u.ultima_asignacion }}{% endif %}{% if u.primera_asignacion %} · {{ _('Primera') }}: {{ u.primera_asignacion }}{% endif %}">
+              <span class="font-weight-bold text-dark">{{ u.asignaciones_count or 0 }}</span>
+              {{ _('asignaciones') }}
+              <span class="text-muted">· {{ u.dias_asignados or 0 }} {{ _('días') }}</span>
+            </div>
+            {% if can_write %}
+            <div class="conc-user-keep">
+              <button type="button" class="btn btn-sm btn-success conc-merge-keep" data-keep-id="{{ u.id }}">
+                {{ _('Conservar este') }}
+              </button>
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% if can_write %}
+        <div class="conc-merge-bar">
+          <span class="small text-muted">{{ _('Pulsa «Conservar este» en la ficha que quieras mantener; el resto de seleccionados se archivan.') }}</span>
+        </div>
+        <div class="mt-2 d-flex flex-wrap align-items-center" style="gap:0.5rem;">
+          <span class="small text-muted conc-pick-hint">{{ _('Marca 2 o más fichas del mismo bloque para unificarlas.') }}</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary conc-maintain-btn"
+                  data-user-ids="{{ c.users|map(attribute='id')|list|tojson|e }}"
+                  data-barcode="{{ c.barcode or '' }}"
+                  data-group-key="{{ c.group_key }}">
+            <i class="fas fa-equals"></i> {{ _('Mantener (son distintos)') }}
+          </button>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      {% if candidates_maintained %}
+      <h3 class="h6 mt-4 mb-2 text-muted">{{ _('Marcados como mantener') }}</h3>
+      {% for c in candidates_maintained %}
+      <div class="conc-card conc-maintained" style="background:#f8fafc;">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-1">
+          <strong>
+            {% if c.barcode %}{{ _('Código') }}: {{ c.barcode }}
+            {% elif c.reason_labels %}{{ c.reason_labels|join(' + ') }}
+            {% else %}{{ _('Grupo') }}{% endif %}
+          </strong>
+          <span class="badge-soft">{{ _('Manteniendo') }}</span>
+        </div>
+        <div class="small text-muted">
+          {% for u in c.users %}{{ u.label }}{% if not loop.last %} · {% endif %}{% endfor %}
+        </div>
+        <p class="small text-muted mb-0 mt-1">{{ _('Para volver a tratarlos como candidatos, deshaz la acción en el historial de abajo.') }}</p>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+    <div class="conc-card">
+      <h2 class="h5 mb-2"><i class="fas fa-history mr-1"></i> {{ _('Historial de acciones') }}</h2>
+      <p class="text-muted small mb-3">{{ _('Vínculos, unificaciones, mantener y promociones. Puedes deshacer.') }}</p>
+      {% if not log_entries %}
+      <p class="text-muted mb-0">{{ _('Todavía no hay acciones registradas.') }}</p>
+      {% endif %}
+      {% for e in log_entries %}
+      <div class="conc-log-row {% if e.undone %}is-undone{% endif %}">
+        <div>
+          <span class="badge-soft mr-1">{{ e.action }}</span>
+          <strong>{{ e.summary }}</strong>
+          <div class="small text-muted">{{ e.at }} · {{ e.actor_name }}{% if e.undone %} · {{ _('deshecho') }}{% endif %}</div>
+        </div>
+        {% if can_write and not e.undone %}
+        <button type="button" class="btn btn-sm btn-outline-danger conc-undo-btn" data-entry-id="{{ e.id }}">
+          {{ _('Deshacer') }}
+        </button>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </main>
+</div>
+
+{% if can_write %}
+<div class="modal fade" id="modalNuevoContacto" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ _('Nuevo contacto en plantilla') }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">{{ _('Alta rápida para vincular ya con Odoo. Si dejas el DNI vacío se genera uno temporal.') }}</p>
+        <div class="form-group">
+          <label class="small font-weight-bold" for="newName">{{ _('Nombre') }}</label>
+          <input type="text" id="newName" class="form-control form-control-sm" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="small font-weight-bold" for="newLastname">{{ _('Apellidos') }}</label>
+          <input type="text" id="newLastname" class="form-control form-control-sm" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="small font-weight-bold" for="newDni">{{ _('DNI / NIF') }} <span class="text-muted font-weight-normal">({{ _('opcional') }})</span></label>
+          <input type="text" id="newDni" class="form-control form-control-sm" autocomplete="off">
+        </div>
+        <div class="form-group mb-0">
+          <label class="small font-weight-bold" for="newCompany">{{ _('Empresa') }}</label>
+          <select id="newCompany" class="form-control form-control-sm">
+            {% for c in companies %}
+            <option value="{{ c.id }}" {% if loop.first %}selected{% endif %}>
+              {{ c.label }}{% if c.is_internal %} · {{ _('interna') }}{% else %} · {{ _('externa') }}{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">{{ _('Cancelar') }}</button>
+        <button type="button" class="btn btn-sm btn-primary" id="btnCreateContact">
+          <i class="fas fa-user-plus"></i> {{ _('Crear y seleccionar') }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var localId = null;
+  var odooPicks = [];
+  var lastOdooPeople = [];
+  var mergeUrl = {{ url_for('sync.conciliacion_merge')|tojson }};
+  var maintainUrl = {{ url_for('sync.conciliacion_maintain')|tojson }};
+  var undoUrl = {{ url_for('sync.conciliacion_undo')|tojson }};
+  var odooDniUrl = {{ url_for('sync.conciliacion_odoo_dni')|tojson }};
+  var linkUrl = {{ url_for('sync.conciliacion_link_odoo')|tojson }};
+  var createUserUrl = {{ url_for('sync.conciliacion_create_user')|tojson }};
+  var canWrite = {{ can_write|tojson }};
+  var companies = {{ (companies or [])|tojson }};
+
+  function postJson(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify(body)
+    }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, status: r.status, data: data }; }); });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function selectedInCard(card) {
+    var picks = [];
+    card.querySelectorAll('.conc-pick-cb:checked').forEach(function(cb) {
+      var box = cb.closest('.conc-user');
+      picks.push({
+        id: parseInt(cb.value, 10),
+        label: box ? (box.getAttribute('data-user-label') || ('#' + cb.value)) : ('#' + cb.value)
+      });
+    });
+    return picks;
+  }
+
+  function refreshMergeBar(card) {
+    var picks = selectedInCard(card);
+    var bar = card.querySelector('.conc-merge-bar');
+    var hint = card.querySelector('.conc-pick-hint');
+    var ready = picks.length >= 2;
+    card.querySelectorAll('.conc-user').forEach(function(box) {
+      var cb = box.querySelector('.conc-pick-cb');
+      var picked = !!(cb && cb.checked);
+      box.classList.toggle('is-picked', picked);
+      box.classList.toggle('conc-can-keep', ready && picked);
+      var btn = box.querySelector('.conc-merge-keep');
+      if (!btn) return;
+      if (ready && picked) {
+        var keepId = parseInt(box.getAttribute('data-user-id'), 10);
+        var absorbIds = picks.filter(function(p) { return p.id !== keepId; }).map(function(p) { return p.id; });
+        btn.setAttribute('data-absorb-ids', JSON.stringify(absorbIds));
+        btn.disabled = false;
+      } else {
+        btn.removeAttribute('data-absorb-ids');
+        btn.disabled = true;
+      }
+    });
+    if (bar) bar.classList.toggle('is-ready', ready);
+    if (hint) hint.style.display = ready ? 'none' : '';
+  }
+
+  function doMergeMany(keepId, absorbIds) {
+    var n = (absorbIds || []).length;
+    if (n < 1) return;
+    var msg = n === 1
+      ? {{ _('¿Conservar esta ficha y archivar la otra seleccionada, moviendo calendarios y obras?')|tojson }}
+      : ({{ _('¿Conservar esta ficha y archivar las otras seleccionadas')|tojson }} + ' (' + n + '), ' + {{ _('moviendo calendarios y obras?')|tojson }});
+    if (!confirm(msg)) return;
+    var chain = Promise.resolve();
+    absorbIds.forEach(function(aid) {
+      chain = chain.then(function() {
+        return postJson(mergeUrl, { keep_id: keepId, absorb_id: aid }).then(function(res) {
+          if (!res.data || !res.data.success) {
+            throw new Error((res.data && res.data.error) || 'Error');
+          }
+        });
+      });
+    });
+    chain.then(function() { location.reload(); }).catch(function(err) {
+      alert(err.message || 'Error');
+      location.reload();
+    });
+  }
+
+  document.addEventListener('change', function(ev) {
+    var cb = ev.target.closest('.conc-pick-cb');
+    if (!cb) return;
+    var card = cb.closest('.conc-candidate');
+    if (!card) return;
+    refreshMergeBar(card);
+  });
+
+  document.addEventListener('click', function(ev) {
+    var mergeBtn = ev.target.closest('.conc-merge-keep');
+    if (mergeBtn && !mergeBtn.disabled) {
+      var keepId = parseInt(mergeBtn.getAttribute('data-keep-id'), 10);
+      var absorbIds = [];
+      try { absorbIds = JSON.parse(mergeBtn.getAttribute('data-absorb-ids') || '[]'); } catch (e) {}
+      if (keepId && absorbIds.length) doMergeMany(keepId, absorbIds);
+      return;
+    }
+    var mantBtn = ev.target.closest('.conc-maintain-btn');
+    if (mantBtn) {
+      var uids = [];
+      try { uids = JSON.parse(mantBtn.getAttribute('data-user-ids') || '[]'); } catch (e) {}
+      if (!confirm({{ _('¿Mantener estas fichas por separado? No se volverán a pedir como candidatos hasta que deshagas la acción.')|tojson }})) return;
+      postJson(maintainUrl, { user_ids: uids, barcode: mantBtn.getAttribute('data-barcode'), group_key: mantBtn.getAttribute('data-group-key') }).then(function(res) {
+        if (!res.data || !res.data.success) { alert((res.data && res.data.error) || 'Error'); return; }
+        location.reload();
+      });
+      return;
+    }
+    var undoBtn = ev.target.closest('.conc-undo-btn');
+    if (undoBtn) {
+      if (!confirm({{ _('¿Deshacer esta acción?')|tojson }})) return;
+      postJson(undoUrl, { entry_id: undoBtn.getAttribute('data-entry-id') }).then(function(res) {
+        if (!res.data || !res.data.success) { alert((res.data && res.data.error) || 'Error'); return; }
+        location.reload();
+      });
+    }
+  });
+
+  if (!canWrite) return;
+
+  var $sel = $('#selectLocal');
+  $sel.select2({
+    placeholder: {{ _('Buscar trabajador…')|tojson }},
+    allowClear: true,
+    width: '100%',
+    dropdownCssClass: 'admin-select2-dropdown'
+  });
+
+  function splitOdooName(full) {
+    var parts = String(full || '').trim().split(/\s+/);
+    if (!parts.length) return { name: '', lastname: '' };
+    if (parts.length === 1) return { name: parts[0], lastname: '' };
+    return { name: parts[0], lastname: parts.slice(1).join(' ') };
+  }
+
+  function openNewContactModal() {
+    var seed = odooPicks.length ? odooPicks[0] : null;
+    var split = seed ? splitOdooName(seed.name) : { name: '', lastname: '' };
+    document.getElementById('newName').value = split.name || '';
+    document.getElementById('newLastname').value = split.lastname || '';
+    document.getElementById('newDni').value = (seed && seed.dni) ? String(seed.dni) : '';
+    if (seed && seed.company_name && companies && companies.length) {
+      var match = companies.find(function(c) {
+        return String(c.label || '').toLowerCase() === String(seed.company_name).toLowerCase();
+      });
+      if (match) document.getElementById('newCompany').value = String(match.id);
+    }
+    $('#modalNuevoContacto').modal('show');
+  }
+
+  function selectCreatedUser(u) {
+    var label = (u.label || ((u.name || '') + ' ' + (u.lastname || '')).trim() || ('#' + u.id));
+    var text = label + ' · ' + (u.tipo || '')
+      + (u.barcode ? ' · ' + u.barcode : '')
+      + (u.dni ? ' · ' + u.dni : '');
+    var opt = new Option(text, String(u.id), true, true);
+    opt.setAttribute('data-tipo', u.tipo || '');
+    opt.setAttribute('data-dni', u.dni || '');
+    opt.setAttribute('data-barcode', u.barcode || '');
+    opt.setAttribute('data-name', label);
+    opt.setAttribute('data-odoo', u.odoo_id || '');
+    $sel.append(opt).trigger('change');
+  }
+
+  $sel.on('select2:select', function(e) {
+    if (e.params && e.params.data && e.params.data.id === '__new__') {
+      $sel.val(null).trigger('change');
+      openNewContactModal();
+    }
+  });
+
+  $sel.on('change', function() {
+    var val = $sel.val();
+    if (val === '__new__') {
+      $sel.val(null).trigger('change');
+      openNewContactModal();
+      return;
+    }
+    localId = val ? parseInt(val, 10) : null;
+    var $opt = $sel.find('option:selected');
+    var box = document.getElementById('selLocalBox');
+    if (!localId) {
+      box.innerHTML = '<span class="text-muted">{{ _("Ninguno seleccionado") }}</span>';
+      return;
+    }
+    box.innerHTML = '<strong>' + esc($opt.text()) + '</strong>'
+      + '<div class="text-muted small">' + esc($opt.data('tipo'))
+      + ($opt.data('barcode') ? ' · {{ _("cód.") }} ' + esc($opt.data('barcode')) : '')
+      + ($opt.data('dni') ? ' · ' + esc($opt.data('dni')) : '')
+      + ($opt.data('odoo') ? ' · Odoo #' + esc($opt.data('odoo')) : ' · {{ _("sin vínculo Odoo") }}')
+      + '</div>';
+    var seed = ($opt.data('dni') || $opt.data('barcode') || $opt.data('name') || '').toString();
+    if (seed) {
+      seed = seed.replace(/-EXT\d+$/i, '').replace(/-ODOO\d+$/i, '');
+      if (!document.getElementById('odooDni').value) document.getElementById('odooDni').value = seed;
+    }
+  });
+
+  document.getElementById('btnCreateContact').addEventListener('click', function() {
+    var name = document.getElementById('newName').value.trim();
+    var lastname = document.getElementById('newLastname').value.trim();
+    var dni = document.getElementById('newDni').value.trim();
+    var companyId = document.getElementById('newCompany').value;
+    if (!name || !lastname) {
+      alert({{ _('Nombre y apellidos son obligatorios.')|tojson }});
+      return;
+    }
+    if (!companyId) {
+      alert({{ _('Elige una empresa.')|tojson }});
+      return;
+    }
+    var btn = document.getElementById('btnCreateContact');
+    btn.disabled = true;
+    postJson(createUserUrl, {
+      name: name,
+      lastname: lastname,
+      dni: dni || null,
+      company_id: parseInt(companyId, 10)
+    }).then(function(res) {
+      btn.disabled = false;
+      if (!res.data || !res.data.success) {
+        alert((res.data && res.data.error) || 'Error');
+        return;
+      }
+      $('#modalNuevoContacto').modal('hide');
+      selectCreatedUser(res.data.user);
+    }).catch(function(err) {
+      btn.disabled = false;
+      alert(err && err.message ? err.message : 'Error');
+    });
+  });
+
+  function odooPickKey(p) {
+    return String(p.source || 'employee') + ':' + String(p.odoo_id);
+  }
+
+  function refreshOdooSelectionBox() {
+    var box = document.getElementById('selOdooBox');
+    if (!odooPicks.length) {
+      box.innerHTML = '<span class="text-muted">{{ _("Ningún registro Odoo seleccionado") }}</span>';
+      return;
+    }
+    box.innerHTML = odooPicks.map(function(p, i) {
+      var tag = i === 0
+        ? ' <span class="badge-soft">{{ _("principal") }}</span>'
+        : ' <span class="badge-soft">{{ _("alias sync") }}</span>';
+      return '<div class="mb-1"><strong>' + esc(p.name) + '</strong>' + tag
+        + '<div class="text-muted small">#' + esc(p.odoo_id)
+        + ' · ' + esc(p.source_label || p.source)
+        + (p.barcode ? ' · ' + esc(p.barcode) : '')
+        + (p.dni ? ' · ' + esc(p.dni) : '') + '</div></div>';
+    }).join('');
+  }
+
+  function renderOdooHits(people) {
+    lastOdooPeople = people || [];
+    var $hits = document.getElementById('hitsOdoo');
+    if (!people || !people.length) {
+      $hits.innerHTML = '<span class="text-muted small">{{ _("Sin coincidencias en Odoo") }}</span>';
+      return;
+    }
+    var selected = {};
+    odooPicks.forEach(function(p) { selected[odooPickKey(p)] = true; });
+    $hits.innerHTML = people.map(function(p, idx) {
+      var linked = p.already_linked
+        ? ' · {{ _("ya vinculado a") }} ' + esc(p.already_linked.label)
+        : '';
+      var active = p.active === false ? ' · {{ _("inactivo") }}' : '';
+      var key = odooPickKey(p);
+      var isSel = selected[key] ? ' is-selected' : '';
+      return '<div class="conc-search-hit conc-odoo-hit' + isSel + '" data-idx="' + idx + '" data-key="' + esc(key) + '">'
+        + '<strong>' + esc(p.name) + '</strong>'
+        + ' <span class="text-muted small">' + esc(p.source_label || p.source)
+        + ' · #' + esc(p.odoo_id)
+        + (p.barcode ? ' · {{ _("cód.") }} ' + esc(p.barcode) : '')
+        + (p.dni ? ' · ' + esc(p.dni) : '')
+        + (p.company_name ? ' · ' + esc(p.company_name) : '')
+        + active + linked + '</span></div>';
+    }).join('');
+    Array.prototype.forEach.call($hits.querySelectorAll('.conc-odoo-hit'), function(el) {
+      el.addEventListener('click', function() {
+        var idx = parseInt(el.getAttribute('data-idx'), 10);
+        var person = lastOdooPeople[idx];
+        if (!person) return;
+        var key = odooPickKey(person);
+        var found = -1;
+        for (var i = 0; i < odooPicks.length; i++) {
+          if (odooPickKey(odooPicks[i]) === key) { found = i; break; }
+        }
+        if (found >= 0) {
+          odooPicks.splice(found, 1);
+          el.classList.remove('is-selected');
+        } else {
+          odooPicks.push(person);
+          el.classList.add('is-selected');
+        }
+        refreshOdooSelectionBox();
+      });
+    });
+  }
+
+  function searchOdoo() {
+    var q = document.getElementById('odooDni').value.trim();
+    if (q.length < 3) {
+      alert({{ _('Indica al menos 3 caracteres (DNI, código o nombre)')|tojson }});
+      return;
+    }
+    odooPicks = [];
+    refreshOdooSelectionBox();
+    document.getElementById('hitsOdoo').innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin"></i> {{ _("Buscando en Odoo…") }}</span>';
+    fetch(odooDniUrl + '?q=' + encodeURIComponent(q), {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function(r) {
+        return r.json().then(function(data) {
+          return { ok: r.ok, data: data };
+        });
+      })
+      .then(function(res) {
+        if (!res.data || !res.data.success) {
+          document.getElementById('hitsOdoo').innerHTML =
+            '<span class="text-danger small">' + esc((res.data && res.data.error) || {{ _('Error al buscar')|tojson }}) + '</span>';
+          return;
+        }
+        renderOdooHits(res.data.people || []);
+      })
+      .catch(function(err) {
+        document.getElementById('hitsOdoo').innerHTML =
+          '<span class="text-danger small">{{ _("Error de red") }}: ' + esc(err && err.message) + '</span>';
+      });
+  }
+
+  document.getElementById('btnSearchOdoo').addEventListener('click', searchOdoo);
+  document.getElementById('odooDni').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); searchOdoo(); }
+  });
+
+  document.getElementById('btnLinkOdoo').addEventListener('click', function() {
+    if (!localId) {
+      alert({{ _('Selecciona primero el trabajador de plantilla.')|tojson }});
+      return;
+    }
+    if (!odooPicks.length) {
+      alert({{ _('Busca en Odoo y selecciona al menos un registro (puedes marcar varios).')|tojson }});
+      return;
+    }
+    var msg = odooPicks.length === 1
+      ? {{ _('¿Vincular esta ficha al registro Odoo seleccionado?')|tojson }}
+      : ({{ _('¿Vincular esta ficha a')|tojson }} + ' ' + odooPicks.length + ' ' + {{ _('registros Odoo? La sync imputará a esta persona todo lo de esos IDs.')|tojson }});
+    if (!confirm(msg)) return;
+
+    function doLink(force) {
+      postJson(linkUrl, {
+        local_user_id: localId,
+        odoo_links: odooPicks.map(function(p) {
+          return {
+            odoo_id: p.odoo_id,
+            source: p.source,
+            barcode: p.barcode || null
+          };
+        }),
+        force: !!force
+      }).then(function(res) {
+        if (!res.data || !res.data.success) {
+          if (res.data && /ya est/i.test(res.data.error || '') && !force) {
+            if (confirm((res.data.error || '') + '\n\n' + {{ _('¿Forzar? Unificará aquí las fichas locales ya ligadas a esos Odoo.')|tojson }})) {
+              doLink(true);
+            }
+            return;
+          }
+          alert((res.data && res.data.error) || 'Error');
+          return;
+        }
+        location.reload();
+      });
+    }
+    doLink(false);
+  });
+})();
+</script>
+{% endblock %}

@@ -143,7 +143,7 @@ tr.audit-row-highlight {
           <i class="fas fa-clock"></i> {{ _('Registrar / corregir marca') }}
         </button>
         {% endif %}
-        {% if current_user.role != 'laboral' and tenant_has_odoo %}
+        {% if can_sync_fichajes and tenant_has_odoo %}
         <select id="diasSync" class="form-control custom-select mr-2">
           <option value="0">{{ _('Solo hoy') }}</option>
           <option value="7" selected>{{ _('Últimos 7 días') }}</option>
@@ -181,12 +181,10 @@ tr.audit-row-highlight {
         <i class="fas fa-user-slash"></i> {{ var_ausencias|length }} {{ _('ausencias') }}
       </span>
       {% endif %}
-      {% if correcciones and 'modificacion_odoo' in visible_sections %}
-      {% if correcciones %}
+      {% if (correcciones_total|default(0) > 0 or correcciones) and 'modificacion_odoo' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseCorrecciones" title="{{ _('Ir a modificaciones Odoo') }}">
-        <i class="fas fa-pen"></i> {{ correcciones|length }} {{ _('cambios Odoo') }}
+        <i class="fas fa-pen"></i> {{ correcciones_total|default(correcciones|length) }} {{ _('cambios Odoo') }}
       </span>
-      {% endif %}
       {% endif %}
       {% if muestra_geo_audit and geo_dudosa_count %}
       <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" id="auditGeoDudosaStat" data-audit-target="#collapseHistorial" title="{{ _('Filtrar ubicación dudosa') }}">
@@ -200,7 +198,7 @@ tr.audit-row-highlight {
       {% endif %}
       {% if 'historico_global' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseHistorial" title="{{ _('Ir al histórico') }}">
-        <i class="fas fa-archive"></i> {{ historial|length }} {{ _('en histórico') }}
+        <i class="fas fa-archive"></i> {{ historial_total|default(historial|length) }} {{ _('en histórico') }}
       </span>
       {% endif %}
     </div>
@@ -426,14 +424,13 @@ tr.audit-row-highlight {
         </div>
         {% endif %}
 
-        {% if correcciones and 'modificacion_odoo' in visible_sections %}
-        {% if correcciones %}
+        {% if (correcciones_total|default(0) > 0 or correcciones) and 'modificacion_odoo' in visible_sections %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;">
             <div class="auditoria-section-header card-header collapsed" data-target="#collapseCorrecciones" role="button" aria-expanded="false">
                 <h6 class="auditoria-section-title mb-0" style="color: #c2410c;">
                     <span class="section-icon-wrap section-icon-wrap--odoo"><i class="fas fa-pen-fancy"></i></span>
                     {{ _('Modificaciones Odoo (RRHH)') }}
-                    <span class="badge-count badge-count-odoo">{{ correcciones|length }}</span>
+                    <span class="badge-count badge-count-odoo">{{ correcciones_total|default(correcciones|length) }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
@@ -450,7 +447,8 @@ tr.audit-row-highlight {
                                 {{ audit_sort_th(5, 'Estado previo') }}
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="correccionesTableBody" data-lazy-seccion="correcciones" data-loaded="0">
+                            {% if correcciones %}
                             {% for reg in correcciones %}
                             {% set datos = reg.notas_resolucion.split('||') if reg.notas_resolucion else [] %}
                             <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
@@ -488,12 +486,14 @@ tr.audit-row-highlight {
                                 {% endif %}
                             </tr>
                             {% endfor %}
+                            {% else %}
+                            <tr class="audit-lazy-placeholder"><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _('Cargando…') }}</td></tr>
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-        {% endif %}
         {% endif %}
 
         {% if 'historico_global' in visible_sections %}
@@ -502,7 +502,7 @@ tr.audit-row-highlight {
                 <h6 class="auditoria-section-title mb-0 text-secondary">
                     <span class="section-icon-wrap section-icon-wrap--archive"><i class="fas fa-history"></i></span>
                     {{ _('Histórico global') }}
-                    <span class="badge-count badge-count-muted">{{ historial|length }}</span>
+                    <span class="badge-count badge-count-muted">{{ historial_total|default(historial|length) }}</span>
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
@@ -527,7 +527,8 @@ tr.audit-row-highlight {
                         {% endif %}
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="historialTableBody" data-lazy-seccion="historial" data-loaded="{% if historial %}1{% else %}0{% endif %}">
+                    {% if historial %}
                     {% for reg in historial %}
                     <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
                         <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
@@ -631,6 +632,9 @@ tr.audit-row-highlight {
                         {% endif %}
                     </tr>
                     {% endfor %}
+                    {% else %}
+                    <tr class="audit-lazy-placeholder"><td colspan="16" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _('Se cargará al abrir esta sección') }}</td></tr>
+                    {% endif %}
                 </tbody>
             </table>
                 </div>
@@ -905,21 +909,51 @@ $(document).ready(function() {
         $header.attr('aria-expanded', isOpen ? 'true' : 'false');
     });
 
-    $('#collapseCorrecciones').on('shown.bs.collapse', function() {
-        if (!dtCorrecciones) {
-            dtCorrecciones = initAuditDataTable('correccionesTable', {
-                pageLength: 10,
-                lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, {{ _('Todos')|tojson }}]]
-            });
+    function loadAuditoriaSeccion(seccion, $tbody, onDone) {
+        if (!$tbody.length || $tbody.attr('data-loaded') === '1') {
+            if (onDone) onDone();
+            return;
         }
+        $tbody.html('<tr class="audit-lazy-placeholder"><td colspan="16" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _("Cargando…") }}</td></tr>');
+        fetch({{ url_for('sync.auditoria_fichajes_seccion', seccion='__SEC__')|tojson }}.replace('__SEC__', seccion), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || !data.success) {
+                $tbody.html('<tr><td colspan="16" class="text-center text-danger py-3">' + ((data && data.error) || {{ _('Error al cargar')|tojson }}) + '</td></tr>');
+                return;
+            }
+            $tbody.html(data.html);
+            $tbody.attr('data-loaded', '1');
+            if (onDone) onDone();
+        })
+        .catch(function() {
+            $tbody.html('<tr><td colspan="16" class="text-center text-danger py-3">{{ _("Error de red") }}</td></tr>');
+        });
+    }
+
+    $('#collapseCorrecciones').on('shown.bs.collapse', function() {
+        var $body = $('#correccionesTableBody');
+        loadAuditoriaSeccion('correcciones', $body, function() {
+            if (!dtCorrecciones) {
+                dtCorrecciones = initAuditDataTable('correccionesTable', {
+                    pageLength: 10,
+                    lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, {{ _('Todos')|tojson }}]]
+                });
+            }
+        });
     });
     $('#collapseHistorial').on('shown.bs.collapse', function() {
-        if (!dtHistorial) {
-            dtHistorial = initAuditDataTable('historialTable', {
-                pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, {{ _('Todos')|tojson }}]]
-            });
-        }
+        var $body = $('#historialTableBody');
+        loadAuditoriaSeccion('historial', $body, function() {
+            if (!dtHistorial) {
+                dtHistorial = initAuditDataTable('historialTable', {
+                    pageLength: 25,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, {{ _('Todos')|tojson }}]]
+                });
+            }
+        });
     });
 
     applyAuditoriaDeepLink();

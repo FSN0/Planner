@@ -207,7 +207,7 @@ class User(UserMixin, db.Model):
     # Estados y Ciclo de vida
     active = db.Column(db.Boolean, default=False)  # Aprobado por RRHH (para operarios)
     is_deleted = db.Column(db.Boolean, default=False)  # Soft delete
-    # Motivo de inactividad: pending | manual | odoo | deleted
+    # Motivo de inactividad: pending | manual | odoo | deleted | merged
     deactivation_reason = db.Column(db.String(40), nullable=True)
     deactivated_at = db.Column(db.DateTime, nullable=True)
     deactivated_by_id = db.Column(
@@ -266,8 +266,16 @@ class User(UserMixin, db.Model):
         if self.active and not self.is_deleted:
             return ''
 
-        if self.is_deleted or self.deactivation_reason == 'deleted':
-            base = translate('Eliminado (archivado)')
+        if self.is_deleted or self.deactivation_reason in ('deleted', 'merged'):
+            ext = self.external_ids or {}
+            if self.deactivation_reason == 'merged' or ext.get('merged_into_user_id'):
+                nombre = (ext.get('merged_into_label') or '').strip()
+                if nombre:
+                    base = translate('Unificado en {nombre}', nombre=nombre)
+                else:
+                    base = translate('Unificado por conciliación de personal')
+            else:
+                base = translate('Eliminado (archivado)')
         elif self.scheduled_activation_date and not self.active:
             base = translate(
                 'Activación programada para el {fecha}',
@@ -293,7 +301,7 @@ class User(UserMixin, db.Model):
                 base = translate('Inactivo (motivo no registrado)')
 
         if self.deactivated_at and (
-            self.deactivation_reason in ('manual', 'odoo', 'deleted')
+            self.deactivation_reason in ('manual', 'odoo', 'deleted', 'merged')
             or (
                 (self.external_ids or {}).get('odoo')
                 and self.deactivation_reason in (None, '', 'pending')
@@ -1266,6 +1274,7 @@ class NotaAudioJob(db.Model):
     ESTADO_PROCESANDO = 'procesando'
     ESTADO_COMPLETADO = 'completado'
     ESTADO_ERROR = 'error'
+    ESTADO_CANCELADO = 'cancelado'
 
     id = db.Column(db.Integer, primary_key=True)
     autor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)

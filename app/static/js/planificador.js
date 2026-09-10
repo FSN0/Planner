@@ -2399,6 +2399,12 @@ document.addEventListener('DOMContentLoaded', function() {
         window.committedEventState = {};
         window.allEventsMaster.forEach(rememberCommitted);
         window.renderItems();
+        // Misma regla que «Ordenar vista»: activas en la ventana visible arriba.
+        setTimeout(function () {
+            if (typeof window.reordenarPorVentanaVisible === 'function') {
+                window.reordenarPorVentanaVisible({ silent: true });
+            }
+        }, 0);
     }
 
     function planifFilterParams() {
@@ -3153,7 +3159,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    window.reordenarPorVentanaVisible = function() {
+    window.reordenarPorVentanaVisible = function(opts) {
+        opts = opts || {};
         if (!window.AppTimeline || !window.allGroupsMaster || !window.allEventsMaster) return;
 
         // 1. Obtener la ventana de fechas que el usuario está viendo en pantalla
@@ -3203,14 +3210,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
         window.AppGroups.update(updatedGroups);
 
-        // 5. Notificación sutil (Toast de SweetAlert)
-        Swal.fire({
-            toast: true,
-            position: 'top-end',
-            icon: 'success',
-            title: t('Vista ordenada'),
-            showConfirmButton: false,
-            timer: 1500
-        });
+        // 5. Toast solo si el usuario pulsa el botón (no en carga automática)
+        if (!opts.silent) {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: t('Vista ordenada'),
+                showConfirmButton: false,
+                timer: 1500
+            });
+        }
     };
 });

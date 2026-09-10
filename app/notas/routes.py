@@ -258,13 +258,33 @@ def subir_audio_nota():
         return jsonify({'success': False, 'message': 'No se recibió ningún archivo de audio.'}), 400
 
     try:
-        from app.services.nota_audio_service import save_audio_upload
+        from app.services.nota_audio_service import (
+            save_audio_upload,
+            attach_celery_task_id,
+            set_user_summary_prompt,
+            get_user_summary_prompt,
+        )
         from app.celery_worker import process_nota_audio_task
 
-        job = save_audio_upload(archivo, current_user.id)
+        summary_prompt = (request.form.get('summary_prompt') or '').strip()
+        save_default = (request.form.get('save_prompt_default') or '').lower() in (
+            '1', 'true', 'yes', 'on',
+        )
+        if not summary_prompt:
+            summary_prompt = get_user_summary_prompt(current_user)
+        if save_default:
+            set_user_summary_prompt(current_user, summary_prompt)
+
+        job = save_audio_upload(
+            archivo, current_user.id, summary_prompt=summary_prompt,
+        )
         tenant = getattr(g, 'current_tenant', None)
         schema_name = getattr(tenant, 'schema_name', None) or 'public'
-        process_nota_audio_task.delay(schema_name, job.id)
+        async_result = process_nota_audio_task.delay(schema_name, job.id)
+        try:
+            attach_celery_task_id(job.id, async_result.id)
+        except Exception:
+            pass
 
         return jsonify({
             'success': True,
@@ -291,3 +311,120 @@ def estado_audio_nota(job_id):
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
 
     return jsonify({'success': True, **job_to_status_dict(job)})
+
+
+@notas_bp.route('/audio/<int:job_id>/cancelar', methods=['POST'])
+@login_required
+def cancelar_audio_nota(job_id):
+    from app.models import NotaAudioJob
+    from app.services.nota_audio_service import cancel_audio_job, job_to_status_dict
+
+    job = NotaAudioJob.query.get_or_404(job_id)
+    if job.autor_id != current_user.id and current_user.role != ROLE_ADMIN:
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+
+    if job.estado in (NotaAudioJob.ESTADO_COMPLETADO,):
+        return jsonify({
+            'success': False,
+            'message': 'La nota ya se creó; no se puede cancelar.',
+        }), 400
+
+    try:
+        cancel_audio_job(job)
+        return jsonify({
+            'success': True,
+            'message': 'Procesamiento cancelado.',
+            **job_to_status_dict(job),
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@notas_bp.route('/audio/prompt', methods=['GET', 'POST'])
+@login_required
+def audio_summary_prompt():
+    if not _can_upload_audio():
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+
+    from app.services.nota_audio_service import (
+        get_default_summary_prompt,
+        get_user_summary_prompt,
+        set_user_summary_prompt,
+        USER_PREF_SUMMARY_PROMPT,
+    )
+
+    default_prompt = get_default_summary_prompt()
+    if request.method == 'GET':
+        prompt = get_user_summary_prompt(current_user)
+        prefs = getattr(current_user, 'sidebar_prefs', None) or {}
+        is_custom = bool(
+            isinstance(prefs, dict) and (prefs.get(USER_PREF_SUMMARY_PROMPT) or '').strip()
+        )
+        return jsonify({
+            'success': True,
+            'prompt': prompt,
+            'default_prompt': default_prompt,
+            'is_custom': is_custom,
+        })
+
+    data = request.get_json(silent=True) or {}
+    reset = bool(data.get('reset'))
+    try:
+        if reset:
+            prompt = set_user_summary_prompt(current_user, None)
+            is_custom = False
+        else:
+            prompt = set_user_summary_prompt(
+                current_user, (data.get('prompt') or '').strip() or None,
+            )
+            prefs = getattr(current_user, 'sidebar_prefs', None) or {}
+            is_custom = bool(
+                isinstance(prefs, dict) and (prefs.get(USER_PREF_SUMMARY_PROMPT) or '').strip()
+            )
+        return jsonify({
+            'success': True,
+            'prompt': prompt,
+            'default_prompt': default_prompt,
+            'is_custom': is_custom,
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@notas_bp.route('/audio/activos', methods=['GET'])
+@login_required
+def audio_jobs_activos():
+    """Jobs de audio del usuario aún en cola o procesando (para retomar al volver)."""
+    from app.models import NotaAudioJob
+    from app.services.nota_audio_service import job_to_status_dict, sweep_stale_audio_jobs
+
+    if not _can_upload_audio():
+        return jsonify({'success': True, 'jobs': []})
+
+    # Limpia zombies (p.ej. worker caído ayer) para que no bloqueen la UI.
+    try:
+        sweep_stale_audio_jobs(current_user.id)
+    except Exception:
+        db.session.rollback()
+
+    jobs = (
+        NotaAudioJob.query
+        .filter(
+            NotaAudioJob.autor_id == current_user.id,
+            NotaAudioJob.estado.in_([
+                NotaAudioJob.ESTADO_PENDIENTE,
+                NotaAudioJob.ESTADO_PROCESANDO,
+            ]),
+        )
+        .order_by(NotaAudioJob.id.desc())
+        .limit(10)
+        .all()
+    )
+    return jsonify({
+        'success': True,
+        'jobs': [job_to_status_dict(j) for j in jobs],
+    })

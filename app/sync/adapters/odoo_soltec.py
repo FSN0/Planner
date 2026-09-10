@@ -538,8 +538,13 @@ class Adapter(BaseSyncAdapter):
 
     def get_diff_empleados(self):
         domain = [['active', '=', True]]
-        fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id']
-        odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
+        fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id', 'barcode']
+        try:
+            odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
+        except Exception:
+            # Instancias sin barcode en hr.employee
+            fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id']
+            odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
         
         diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'desactivados': [], 'omitidos': []}
         seen_odoo_ids = set()
@@ -587,7 +592,13 @@ class Adapter(BaseSyncAdapter):
 
             email = emp.get('work_email') or f"sin_email_{emp['id']}@local.tuappsaas.com"
             
-            local_user = User.query.filter(User.external_ids['odoo'].astext == str(emp['id'])).first()
+            from app.services.personal_conciliation_service import (
+                find_user_by_any_odoo,
+                odoo_ids_for_user,
+            )
+            local_user = find_user_by_any_odoo(emp['id'], include_deleted=True)
+            if local_user and local_user.is_deleted:
+                local_user = None
             if not local_user and dni:
                 local_user = User.query.filter(User.dni == dni).first()
             if not local_user and email:
@@ -605,6 +616,7 @@ class Adapter(BaseSyncAdapter):
                 'email': email,
                 'role': role,
                 'categoria_profesional': categoria,
+                'barcode': (emp.get('barcode') or '') if emp.get('barcode') not in (False, None) else '',
                 'cambios': {},
                 'bloqueos': []
             }
@@ -613,10 +625,11 @@ class Adapter(BaseSyncAdapter):
             if local_user:
                 data['local_id'] = local_user.id
                 seen_local_ids.add(local_user.id)
+                linked_oids = set(odoo_ids_for_user(local_user))
+                for oid in linked_oids:
+                    seen_odoo_ids.add(oid)
                 stored_oid = str((local_user.external_ids or {}).get('odoo') or '')
-                if stored_oid:
-                    seen_odoo_ids.add(stored_oid)
-                if stored_oid and stored_oid != str(emp['id']):
+                if stored_oid and stored_oid != str(emp['id']) and str(emp['id']) not in linked_oids:
                     data['cambios']['Id Odoo'] = f"{stored_oid} ➔ {emp['id']}"
                 
                 choque = User.query.filter(((User.dni == dni) | (User.email == email)), User.id != local_user.id).first()
@@ -687,6 +700,20 @@ class Adapter(BaseSyncAdapter):
         return result
 
     def _resolve_employee_uncached(self, emp_id, emp_name, as_partner=True):
+        """Resuelve M2O Odoo → User local.
+
+        - as_partner=True: el campo es un res.partner (p.ej. nexecution_manager).
+          Primero mira vínculo directo local.external_ids.odoo == partner_id
+          (conciliación contacto↔plantilla); luego intenta hr.employee ligado.
+        - as_partner=False: el campo es hr.employee (o user_id).
+        """
+        # 1) Vínculo directo por ID de partner/empleado ya conciliado en plantilla
+        if emp_id:
+            from app.services.personal_conciliation_service import find_user_by_any_odoo
+            local_direct = find_user_by_any_odoo(emp_id)
+            if local_direct:
+                return local_direct.id, False
+
         emp_fields = getattr(self, '_hr_employee_fields', None)
         if emp_fields is None:
             emp_fields = self._odoo_fields_get('hr.employee') or {}
@@ -733,12 +760,13 @@ class Adapter(BaseSyncAdapter):
                 dni = None
             real_id = emps[0]['id']
 
-            if dni:
+            from app.services.personal_conciliation_service import find_user_by_any_odoo
+            local_user = find_user_by_any_odoo(real_id)
+            if not local_user and dni:
                 local_user = User.query.filter(
-                    (User.external_ids['odoo'].astext == str(real_id)) | (User.dni == dni)
+                    User.is_deleted.is_(False),
+                    User.dni == dni,
                 ).first()
-            else:
-                local_user = User.query.filter(User.external_ids['odoo'].astext == str(real_id)).first()
 
             if local_user:
                 return local_user.id, False
@@ -853,7 +881,13 @@ class Adapter(BaseSyncAdapter):
 
             email = o_cont.get('email') or f"ext_{o_cont['id']}@subcontrata.local"
             
-            local_user = User.query.filter(User.external_ids['odoo'].astext == str(o_cont['id'])).first()
+            from app.services.personal_conciliation_service import (
+                find_user_by_any_odoo,
+                odoo_ids_for_user,
+            )
+            local_user = find_user_by_any_odoo(o_cont['id'], include_deleted=True)
+            if local_user and local_user.is_deleted:
+                local_user = None
             if not local_user:
                 local_user = User.query.filter(User.dni == dni_seguro).first()
             
@@ -877,10 +911,11 @@ class Adapter(BaseSyncAdapter):
             if local_user:
                 data_cont['local_id'] = local_user.id
                 seen_local_ids.add(local_user.id)
+                linked_oids = set(odoo_ids_for_user(local_user))
+                for oid in linked_oids:
+                    seen_odoo_ids.add(oid)
                 stored_oid = str((local_user.external_ids or {}).get('odoo') or '')
-                if stored_oid:
-                    seen_odoo_ids.add(stored_oid)
-                if stored_oid and stored_oid != str(o_cont['id']):
+                if stored_oid and stored_oid != str(o_cont['id']) and str(o_cont['id']) not in linked_oids:
                     data_cont['cambios']['Id Odoo'] = f"{stored_oid} ➔ {o_cont['id']}"
                 if local_user.name != name:
                     data_cont['cambios']['Nombre'] = f"{local_user.name} -> {name}"
@@ -907,6 +942,313 @@ class Adapter(BaseSyncAdapter):
 
         self._append_desactivados_subcontratas(diff, seen_odoo_ids, seen_local_ids)
         return diff
+
+    def search_people_by_dni(self, dni: str) -> list:
+        """Busca en Odoo por DNI/NIF (identification_id / vat) y por código de asistencia (barcode)."""
+        raw = (dni or '').strip()
+        if len(raw) < 3:
+            return []
+
+        variants = []
+        for v in (raw, raw.upper(), raw.replace(' ', ''), raw.upper().replace(' ', '')):
+            if v and v not in variants:
+                variants.append(v)
+
+        results = []
+        seen = set()
+        emp_fields = ['id', 'name', 'identification_id', 'work_email', 'active', 'department_id', 'barcode']
+
+        def _or_leaves(field, ops_variants, op='=ilike'):
+            leaves = [[field, op, v] for v in ops_variants]
+            if len(leaves) == 1:
+                return leaves
+            return ['|'] * (len(leaves) - 1) + leaves
+
+        def _emp_domain_id_or_barcode(ops_variants, op='=ilike'):
+            # (identification_id OR barcode) for each variant set
+            id_part = _or_leaves('identification_id', ops_variants, op=op)
+            bar_part = _or_leaves('barcode', ops_variants, op=op)
+            return ['|'] + id_part + bar_part
+
+        def _partner_domain(ops_variants, op='=ilike'):
+            vat_part = _or_leaves('vat', ops_variants, op=op)
+            try_bar = _or_leaves('barcode', ops_variants, op=op)
+            identity = ['|'] + vat_part + try_bar
+            return [['is_company', '=', False]] + identity
+
+        def _read_emps(domain):
+            try:
+                return self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'hr.employee', 'search_read', [domain],
+                    {'fields': emp_fields, 'limit': 40},
+                ) or []
+            except Exception:
+                # sin campo barcode
+                try:
+                    return self.models.execute_kw(
+                        self.db_name, self.uid, self.pwd,
+                        'hr.employee', 'search_read',
+                        [_or_leaves('identification_id', variants)],
+                        {
+                            'fields': ['id', 'name', 'identification_id', 'work_email', 'active', 'department_id'],
+                            'limit': 40,
+                        },
+                    ) or []
+                except Exception:
+                    return []
+
+        emps = _read_emps(_emp_domain_id_or_barcode(variants))
+        if not emps:
+            wild = [f'%{v}%' for v in variants]
+            emps = _read_emps(_emp_domain_id_or_barcode(wild, op='ilike'))
+
+        for emp in emps:
+            key = ('employee', emp['id'])
+            if key in seen:
+                continue
+            seen.add(key)
+            dep = emp.get('department_id')
+            dep_name = dep[1] if isinstance(dep, (list, tuple)) and len(dep) > 1 else ''
+            bar = emp.get('barcode')
+            if bar in (False, None):
+                bar = ''
+            results.append({
+                'odoo_id': emp['id'],
+                'source': 'employee',
+                'source_label': 'Empleado HR',
+                'name': emp.get('name') or '',
+                'dni': emp.get('identification_id') or '',
+                'barcode': bar or '',
+                'email': emp.get('work_email') or '',
+                'company_name': dep_name or '',
+                'active': bool(emp.get('active', True)),
+            })
+
+        def _read_partners(domain):
+            try:
+                return self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'res.partner', 'search_read', [domain],
+                    {
+                        'fields': ['id', 'name', 'vat', 'email', 'active', 'parent_id', 'function', 'barcode'],
+                        'limit': 40,
+                    },
+                ) or []
+            except Exception:
+                try:
+                    return self.models.execute_kw(
+                        self.db_name, self.uid, self.pwd,
+                        'res.partner', 'search_read',
+                        [[['is_company', '=', False]] + _or_leaves('vat', variants)],
+                        {
+                            'fields': ['id', 'name', 'vat', 'email', 'active', 'parent_id', 'function'],
+                            'limit': 40,
+                        },
+                    ) or []
+                except Exception:
+                    return []
+
+        partners = _read_partners(_partner_domain(variants))
+        if not partners:
+            wild = [f'%{v}%' for v in variants]
+            partners = _read_partners(_partner_domain(wild, op='ilike'))
+
+        for p in partners:
+            key = ('partner', p['id'])
+            if key in seen:
+                continue
+            seen.add(key)
+            parent = p.get('parent_id')
+            parent_name = parent[1] if isinstance(parent, (list, tuple)) and len(parent) > 1 else ''
+            bar = p.get('barcode')
+            if bar in (False, None):
+                bar = ''
+            results.append({
+                'odoo_id': p['id'],
+                'source': 'partner',
+                'source_label': 'Contacto / subcontrata',
+                'name': p.get('name') or '',
+                'dni': p.get('vat') or '',
+                'barcode': bar or '',
+                'email': p.get('email') or '',
+                'company_name': parent_name or (p.get('function') or ''),
+                'active': bool(p.get('active', True)),
+            })
+
+        return results
+
+    def search_people_by_name(self, name: str) -> list:
+        """Busca empleados HR y contactos por nombre (ilike, todos los tokens)."""
+        import re
+
+        raw = (name or '').strip()
+        if len(raw) < 3:
+            return []
+
+        tokens = [t for t in re.split(r'\s+', raw) if len(t) >= 2]
+        if not tokens:
+            tokens = [raw]
+
+        # Lista de hojas = AND implícito en Odoo.
+        name_leaves = [['name', 'ilike', f'%{tok}%'] for tok in tokens]
+        name_domain = list(name_leaves)
+
+        results = []
+        seen = set()
+        emp_fields = ['id', 'name', 'identification_id', 'work_email', 'active', 'department_id', 'barcode']
+
+        def _read_emps(domain):
+            try:
+                return self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'hr.employee', 'search_read', [domain],
+                    {'fields': emp_fields, 'limit': 50},
+                ) or []
+            except Exception:
+                try:
+                    return self.models.execute_kw(
+                        self.db_name, self.uid, self.pwd,
+                        'hr.employee', 'search_read', [domain],
+                        {
+                            'fields': [
+                                'id', 'name', 'identification_id',
+                                'work_email', 'active', 'department_id',
+                            ],
+                            'limit': 50,
+                        },
+                    ) or []
+                except Exception:
+                    return []
+
+        for emp in _read_emps(name_domain):
+            key = ('employee', emp['id'])
+            if key in seen:
+                continue
+            seen.add(key)
+            dep = emp.get('department_id')
+            dep_name = dep[1] if isinstance(dep, (list, tuple)) and len(dep) > 1 else ''
+            bar = emp.get('barcode')
+            if bar in (False, None):
+                bar = ''
+            results.append({
+                'odoo_id': emp['id'],
+                'source': 'employee',
+                'source_label': 'Empleado HR',
+                'name': emp.get('name') or '',
+                'dni': emp.get('identification_id') or '',
+                'barcode': bar or '',
+                'email': emp.get('work_email') or '',
+                'company_name': dep_name or '',
+                'active': bool(emp.get('active', True)),
+                'matched_by': 'name',
+            })
+
+        partner_domain = [['is_company', '=', False]] + name_leaves
+
+        def _read_partners(domain):
+            try:
+                return self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'res.partner', 'search_read', [domain],
+                    {
+                        'fields': [
+                            'id', 'name', 'vat', 'email', 'active',
+                            'parent_id', 'function', 'barcode',
+                        ],
+                        'limit': 50,
+                    },
+                ) or []
+            except Exception:
+                try:
+                    return self.models.execute_kw(
+                        self.db_name, self.uid, self.pwd,
+                        'res.partner', 'search_read',
+                        [[['is_company', '=', False]] + name_leaves],
+                        {
+                            'fields': [
+                                'id', 'name', 'vat', 'email', 'active',
+                                'parent_id', 'function',
+                            ],
+                            'limit': 50,
+                        },
+                    ) or []
+                except Exception:
+                    return []
+
+        for p in _read_partners(partner_domain):
+            key = ('partner', p['id'])
+            if key in seen:
+                continue
+            seen.add(key)
+            parent = p.get('parent_id')
+            parent_name = parent[1] if isinstance(parent, (list, tuple)) and len(parent) > 1 else ''
+            bar = p.get('barcode')
+            if bar in (False, None):
+                bar = ''
+            results.append({
+                'odoo_id': p['id'],
+                'source': 'partner',
+                'source_label': 'Contacto / subcontrata',
+                'name': p.get('name') or '',
+                'dni': p.get('vat') or '',
+                'barcode': bar or '',
+                'email': p.get('email') or '',
+                'company_name': parent_name or (p.get('function') or ''),
+                'active': bool(p.get('active', True)),
+                'matched_by': 'name',
+            })
+
+        # Más relevantes primero: nombre más corto / empieza por el query
+        needle = raw.lower()
+        results.sort(key=lambda r: (
+            0 if (r.get('name') or '').lower().startswith(needle) else 1,
+            len(r.get('name') or ''),
+            (r.get('name') or '').lower(),
+        ))
+        return results
+
+    def fetch_barcodes_for_ids(self, employee_ids=None, partner_ids=None) -> dict:
+        """Devuelve {(employee|partner, id_str): barcode}."""
+        out = {}
+        employee_ids = [int(x) for x in (employee_ids or []) if x]
+        partner_ids = [int(x) for x in (partner_ids or []) if x]
+
+        if employee_ids:
+            try:
+                rows = self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'hr.employee', 'read',
+                    [employee_ids],
+                    {'fields': ['id', 'barcode']},
+                ) or []
+                for r in rows:
+                    bar = r.get('barcode')
+                    if bar in (False, None, ''):
+                        continue
+                    out[('employee', str(r['id']))] = str(bar).strip()
+            except Exception:
+                logger = logging.getLogger(__name__)
+                logger.debug('fetch_barcodes employees no disponible', exc_info=True)
+
+        if partner_ids:
+            try:
+                rows = self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'res.partner', 'read',
+                    [partner_ids],
+                    {'fields': ['id', 'barcode']},
+                ) or []
+                for r in rows:
+                    bar = r.get('barcode')
+                    if bar in (False, None, ''):
+                        continue
+                    out[('partner', str(r['id']))] = str(bar).strip()
+            except Exception:
+                logger = logging.getLogger(__name__)
+                logger.debug('fetch_barcodes partners no disponible', exc_info=True)
+
+        return out
 
     # ------------------------------------------------------------------
     # Flota / odómetros (Odoo Fleet)

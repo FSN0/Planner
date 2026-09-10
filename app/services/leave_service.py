@@ -46,7 +46,7 @@ def _parse_date(value):
 def _find_user_id_by_odoo_external(external_id: str):
     """
     Resuelve users.id en el esquema actual (search_path del tenant).
-    Evita objetos huérfanos / public schema.
+    Incluye vínculo principal y aliases de conciliación.
     """
     if not external_id:
         return None
@@ -55,7 +55,10 @@ def _find_user_id_by_odoo_external(external_id: str):
             """
             SELECT id FROM users
             WHERE COALESCE(is_deleted, false) = false
-              AND external_ids->>'odoo' = :ext
+              AND (
+                external_ids->>'odoo' = :ext
+                OR (external_ids->'odoo_alias_ids') ? :ext
+              )
             LIMIT 1
             """
         ),
@@ -423,7 +426,17 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
     adapter = get_sync_adapter()
     raw = adapter.get_leaves(date_from=date_from, date_to=date_to) or []
 
-    stats = {'nuevos': 0, 'actualizados': 0, 'omitidos': 0, 'errores': 0}
+    stats = {
+        'nuevos': 0,
+        'actualizados': 0,
+        'omitidos': 0,
+        'errores': 0,
+        'omit_sin_usuario': 0,
+        'omit_sin_id': 0,
+        'omit_sin_fecha': 0,
+        'omit_no_aprobada': 0,
+    }
+    omit_samples = []
     range_from = _parse_date(date_from) if date_from else today_local() - timedelta(days=7)
     range_to = _parse_date(date_to) if date_to else today_local() + timedelta(days=400)
 
@@ -434,12 +447,19 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                 ext_id = str(item.get('external_id') or '')
                 if not ext_id:
                     stats['omitidos'] += 1
+                    stats['omit_sin_id'] += 1
                     nested.commit()
                     continue
 
-                user_id = _find_user_id_by_odoo_external(item.get('empleado_external_id'))
+                emp_ext = item.get('empleado_external_id')
+                user_id = _find_user_id_by_odoo_external(emp_ext)
                 if not user_id:
                     stats['omitidos'] += 1
+                    stats['omit_sin_usuario'] += 1
+                    if len(omit_samples) < 12:
+                        omit_samples.append(
+                            f"Odoo empleado #{emp_ext or '?'} (leave {ext_id}): sin ficha vinculada"
+                        )
                     nested.commit()
                     continue
 
@@ -447,6 +467,7 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                 fecha_fin = _parse_date(item.get('fecha_fin'))
                 if not fecha_inicio or not fecha_fin:
                     stats['omitidos'] += 1
+                    stats['omit_sin_fecha'] += 1
                     nested.commit()
                     continue
                 if fecha_fin < fecha_inicio:
@@ -473,6 +494,7 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                 if origen == LEAVE_SOURCE_ODOO:
                     if payload['estado'] != LEAVE_STATUS_APROBADA:
                         stats['omitidos'] += 1
+                        stats['omit_no_aprobada'] += 1
                         nested.commit()
                         continue
                     payload['estado'] = LEAVE_STATUS_APROBADA
@@ -507,18 +529,39 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
 
     try:
         detect_and_upsert_conflicts(date_from=range_from, date_to=range_to)
+        partes = [
+            f"+{stats['nuevos']} nuevas",
+            f"~{stats['actualizados']} actualizadas",
+        ]
+        if stats['omit_sin_usuario']:
+            partes.append(
+                f"{stats['omit_sin_usuario']} omitidas (empleado Odoo sin ficha vinculada en SignaPlan)"
+            )
+        otros_omit = (
+            stats['omit_sin_id'] + stats['omit_sin_fecha'] + stats['omit_no_aprobada']
+        )
+        if otros_omit:
+            partes.append(f"{otros_omit} omitidas (datos incompletos o no aprobadas)")
+        if stats['errores']:
+            partes.append(f"{stats['errores']} con error al guardar")
+        if healed:
+            partes.append(f"{healed} sanadas (pendiente→aprobada)")
+        detalle_lines = ['; '.join(partes) + '.']
+        if omit_samples:
+            detalle_lines.append('Ejemplos sin vincular:')
+            detalle_lines.extend(omit_samples)
+            rest = stats['omit_sin_usuario'] - len(omit_samples)
+            if rest > 0:
+                detalle_lines.append(f'… y {rest} más.')
+        # errores = solo fallos reales; omitidos van explicados en detalles (no alarmar KPI)
         db.session.add(SyncLog(
             tipo='Ausencias',
             modo=modo,
             nuevos=stats['nuevos'],
             actualizados=stats['actualizados'],
             finalizados=0,
-            errores=stats['omitidos'] + stats['errores'],
-            detalles=(
-                f"omitidos_sin_usuario={stats['omitidos']}; "
-                f"errores={stats['errores']}"
-                + (f"; sanadas_pendientes_odoo={healed}" if healed else '')
-            ),
+            errores=stats['errores'],
+            detalles='\n'.join(detalle_lines),
             estado='ok' if stats['errores'] == 0 else 'parcial',
         ))
         db.session.commit()

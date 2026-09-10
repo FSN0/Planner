@@ -510,11 +510,13 @@ class SyncConfigService:
         live = (
             f"En vivo cada {cfg['vehiculos_interval']} min "
             f"({cfg['vehiculos_hour_start']:02d}:00–{cfg['vehiculos_hour_end']:02d}:59)"
+            f", últimos {cfg['vehiculos_retro_days']} días"
         )
         if cfg['vehiculos_retro_enabled']:
             live += (
                 f" · Retrospectivo {cfg['vehiculos_retro_hour']:02d}:"
-                f"{cfg['vehiculos_retro_minute']:02d} ({cfg['vehiculos_retro_days']} días)"
+                f"{cfg['vehiculos_retro_minute']:02d} "
+                f"(mismos {cfg['vehiculos_retro_days']} días)"
             )
         return live
 

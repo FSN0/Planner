@@ -1155,6 +1155,74 @@
   .nota-audio-rec-btns { width: 100%; justify-content: flex-end; }
 }
 
+.nota-audio-prompt-box {
+  margin-top: 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+.nota-audio-prompt-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 0;
+  background: transparent;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  text-align: left;
+}
+.nota-audio-prompt-toggle:hover { background: #f1f5f9; }
+.nota-audio-prompt-chevron {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  transition: transform 0.15s ease;
+}
+.nota-audio-prompt-toggle.is-open .nota-audio-prompt-chevron {
+  transform: rotate(180deg);
+}
+.nota-audio-prompt-panel {
+  padding: 0 0.85rem 0.85rem;
+  border-top: 1px solid #e2e8f0;
+}
+.nota-audio-prompt-help {
+  margin: 0.65rem 0 0.5rem;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+.nota-audio-prompt-textarea {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  min-height: 9rem;
+  resize: vertical;
+}
+.nota-audio-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+.nota-audio-prompt-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: #475569;
+  cursor: pointer;
+}
+.nota-audio-cancel-row {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .nota-sugerencias-audio {
   margin-top: 0.75rem;
   padding: 0.75rem 0.9rem;

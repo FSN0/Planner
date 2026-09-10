@@ -43,6 +43,18 @@ _ADMIN_RULES = (
     ('/admin/sso/odoo_contactos', 'soltec_alta_odoo', 'r', {}),
 )
 
+# Sync «Auto ahora» por módulo: escritura del panel del elemento (o sync_odoo vía path_allows_user).
+_SYNC_API_RUN_MODULE = {
+    'obras': 'directorio',
+    'empleados': 'trabajadores',
+    'subcontratas': 'subcontratas',
+    'ausencias': 'ausencias',
+    'fichajes': 'auditoria_fichajes',
+    'fichajes-retro': 'auditoria_fichajes',
+    'vehiculos': 'auditoria_vehiculos',
+    'vehiculos-retro': 'auditoria_vehiculos',
+}
+
 _SYNC_RULES = (
     ('/sync/auditoria-vehiculos', 'auditoria_vehiculos', 'r', {'POST': 'w'}),
     ('/sync/auditoria', 'auditoria_fichajes', 'r', {'POST': 'w'}),
@@ -54,9 +66,11 @@ _SYNC_RULES = (
     ('/sync/preview', 'sync_odoo', 'w', {'POST': 'w'}),
     ('/sync/commit', 'sync_odoo', 'w', {'POST': 'w'}),
     ('/sync/resolve_conflict', 'sync_odoo', 'w', {'POST': 'w'}),
-    ('/sync/api/run', 'sync_odoo', 'w', {'POST': 'w'}),
+    # api/run/<task> se resuelve en match_request_permission (módulo del task)
     ('/sync/odoo', 'sync_odoo', 'r', {'POST': 'w'}),
     ('/sync/fichajes_manual', 'auditoria_fichajes', 'w', {'POST': 'w'}),
+    ('/sync/vehiculos_manual', 'auditoria_vehiculos', 'w', {'POST': 'w'}),
+    ('/sync/conciliacion', 'sync_odoo', 'r', {'POST': 'w'}),
     ('/sync', 'integraciones', 'r', {'POST': 'w'}),
 )
 
@@ -129,6 +143,13 @@ def match_request_permission():
     """Si la ruta está en el mapa, (module, action); si no, None."""
     path = request.path or ''
     method = request.method or 'GET'
+    # /sync/api/run/<task> → permiso del módulo de ese task (no el hub Odoo entero)
+    if path.startswith('/sync/api/run/'):
+        task = path[len('/sync/api/run/'):].split('/', 1)[0]
+        module = _SYNC_API_RUN_MODULE.get(task)
+        if module:
+            action = 'w' if (method or 'GET').upper() in ('POST', 'PUT', 'PATCH', 'DELETE') else 'r'
+            return module, action
     for rules in _ALL_RULE_SETS:
         matched = _match_rule(rules, path, method)
         if matched:
@@ -137,12 +158,18 @@ def match_request_permission():
 
 
 def path_allows_user(user) -> bool:
-    """True si la ruta actual está en el mapa y el usuario tiene el permiso."""
+    """True si la ruta está en el mapa y el usuario tiene el permiso."""
     matched = match_request_permission()
     if not matched:
         return False
     module, action = matched
-    return user_can(user, module, action)
+    if user_can(user, module, action):
+        return True
+    # Quien tiene sync_odoo w puede lanzar cualquier sync de módulo
+    path = request.path or ''
+    if action == 'w' and path.startswith('/sync/api/run/') and user_can(user, 'sync_odoo', 'w'):
+        return True
+    return False
 
 
 def _wants_json_response() -> bool:
@@ -233,6 +260,13 @@ def enforce_admin_permissions():
 
 
 def enforce_sync_permissions():
+    path = request.path or ''
+    if path.startswith('/sync/api/run/'):
+        if not current_user.is_authenticated:
+            return None
+        if path_allows_user(current_user):
+            return None
+        return _deny(action='w')
     return enforce_rules(_SYNC_RULES)
 
 
