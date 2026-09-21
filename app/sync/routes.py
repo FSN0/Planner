@@ -16,7 +16,7 @@ from app.services.sync_config_service import SyncConfigService
 from app.services.config_service import set_tenant_config, get_tenant_config
 from app.sync.dispatcher import get_sync_adapter
 from app.decorators import roles_required
-from app.services.permission_service import can_resolve_fichajes, is_laboral, laboral_auditoria_sections
+from app.services.permission_service import can_resolve_fichajes, can_unassign_cuadrante_pasado, is_laboral, laboral_auditoria_sections
 from app.services.i18n_service import translate
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
@@ -995,6 +995,7 @@ def auditoria_fichajes():
             visible_sections=visible_sections,
             can_resolve=can_resolve_fichajes(current_user),
             can_resolve_fichajes=can_resolve_fichajes(current_user),
+            can_unassign_cuadrante_pasado=can_unassign_cuadrante_pasado(current_user),
             can_sync_fichajes=user_can(current_user, 'auditoria_fichajes', 'w') or user_can(current_user, 'sync_odoo', 'w'),
             trabajadores_marca=trabajadores_marca,
             obras_marca=obras_marca,
@@ -1288,6 +1289,7 @@ def resolver_fichaje():
     scope = (data.get('scope') or 'day').strip().lower()
     if scope not in ('day', 'future'):
         scope = 'day'
+    force_past = bool(data.get('force'))
     notas_desasign = (data.get('notas') or '').strip() or None
     
     registro = RegistroFichaje.query.get(registro_id)
@@ -1300,13 +1302,30 @@ def resolver_fichaje():
         if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
             return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
 
-    def _desasignar_futuro_desde_registro():
-        """Desde hoy (o la fecha del registro si es futura) hasta el final en esa obra de plan.
+    from app.services.permission_service import can_unassign_cuadrante_pasado
+    if force_past and not can_unassign_cuadrante_pasado(current_user):
+        return jsonify({
+            'success': False,
+            'error': translate('No tienes permiso para forzar desasignación en pasado/validado.'),
+        }), 403
 
-        Si no hay más días que cortar, no es error: el liberar del desvío
-        sigue quitando la plaza del día del registro.
+    def _desasignar_futuro_desde_registro(force=False):
+        """Corta plan del conflicto + días posteriores según alcance seguro.
+
+        Seguro (force=False):
+        - día del registro
+        - posteriores con incidencia ABIERTA en auditoría (misma obra de plan)
+        - plan ≥ hoy sin registro validado
+        Protegidos (validados / fuera de cola) no se tocan.
+
+        Force (permiso cuadrante_pasado): incluye protegidos y pasado.
+        Nunca toca el libro de fichajes (solo Asignacion).
         """
         from app.services.assignment_service import process_unassign_action
+        from app.services.audit_unassign_scope_service import (
+            collect_audit_unassign_scope,
+            cerrar_incidencias_abiertas_desasignadas,
+        )
         from app.utils.timezone_utils import today_local
 
         obra_id = registro.obra_planificada_id
@@ -1315,46 +1334,93 @@ def resolver_fichaje():
                 'success': False,
                 'message': translate('No hay obra planificada que desasignar.'),
             }
-        hoy = today_local()
-        # process_unassign solo toca >= hoy; el día pasado del desvío lo libera
-        # aplicar_accion_desvio (liberar_plaza) a continuación.
-        desde = registro.fecha if registro.fecha >= hoy else hoy
-        fechas = sorted({
-            a.fecha
-            for a in Asignacion.query.filter(
-                Asignacion.user_id == registro.user_id,
-                Asignacion.obra_id == obra_id,
-                Asignacion.fecha >= desde,
-            ).all()
-        })
-        if not fechas:
-            # Sin filas futuras: aún intentamos cortar inercia ese día; si no hay
-            # nada, seguimos (noop) para no tumbar el desasignado del desvío.
-            un = process_unassign_action(
-                actor_user=current_user,
-                worker_id=registro.user_id,
-                target_obra_id=obra_id,
-                date_list=[desde.isoformat()],
-                mode='selected',
-                notas=notas_desasign,
-            )
-            if un.get('success'):
-                return un
-            return {
-                'success': True,
-                'action': 'noop',
-                'message': translate(
-                    'No había más días futuros que desasignar en esta obra.'
-                ),
-            }
-        return process_unassign_action(
+
+        scope_info = collect_audit_unassign_scope(
+            user_id=registro.user_id,
+            obra_id=obra_id,
+            conflict_fecha=registro.fecha,
+            force=bool(force),
+            hoy=today_local(),
+        )
+        fechas = scope_info.get('cut_dates') or [registro.fecha]
+        protected = scope_info.get('protected_dates') or []
+        fechas_cut = list(fechas) or [registro.fecha]
+
+        allow_past = bool(force) or any(d < today_local() for d in fechas_cut)
+
+        un = process_unassign_action(
             actor_user=current_user,
             worker_id=registro.user_id,
             target_obra_id=obra_id,
-            date_list=[d.isoformat() for d in fechas],
+            date_list=[d.isoformat() for d in fechas_cut],
             mode='selected',
             notas=notas_desasign,
+            allow_past=allow_past,
         )
+
+        # Si la baja va por solicitud (jefe sin asignación directa), no cerrar
+        # aún la cola: el plan no se ha cortado de verdad.
+        if un.get('action') == 'requested':
+            return un
+
+        # Cerrar Ausencia/Conflicto/… posteriores aunque el plan ya estuviera vacío
+        # (p.ej. segunda pasada, o solo quedaban incidencias en cola).
+        closed_ids = cerrar_incidencias_abiertas_desasignadas(
+            user_id=registro.user_id,
+            obra_id=obra_id,
+            desde_fecha=registro.fecha,
+            actor_id=current_user.id,
+            exclude_registro_id=registro.id,
+            origen_fecha=registro.fecha,
+            notas_extra=notas_desasign,
+        )
+
+        if not un.get('success') and not closed_ids:
+            return un
+
+        parts = []
+        if un.get('success'):
+            parts.append(un.get('message') or translate('Desasignación aplicada.'))
+        elif closed_ids:
+            parts.append(
+                translate('El plan ya estaba vacío; se cerraron incidencias abiertas.')
+            )
+        extras = [d for d in fechas_cut if d != registro.fecha]
+        if closed_ids:
+            parts.append(
+                translate(
+                    'Se cerraron {n} incidencia(s) abierta(s) posteriores en esta obra.',
+                    n=len(closed_ids),
+                )
+            )
+        if un.get('success') and not extras and protected and not force and not closed_ids:
+            parts = [
+                translate(
+                    'No había más días pendientes que desasignar en esta obra '
+                    '({n} día(s) ya validados se han respetado).',
+                    n=len(protected),
+                )
+            ]
+        elif protected and not force:
+            parts.append(
+                translate(
+                    'Se han respetado {n} día(s) ya validados.',
+                    n=len(protected),
+                )
+            )
+        if force:
+            parts.append(translate('Modo forzado (cuadrante pasado).'))
+
+        out = dict(un) if isinstance(un, dict) else {}
+        out['success'] = True
+        out['message'] = ' '.join(parts) if parts else translate('OK')
+        out['protected_dates'] = [d.isoformat() for d in protected]
+        out['cut_dates'] = [d.isoformat() for d in fechas_cut]
+        out['closed_registro_ids'] = closed_ids
+        if closed_ids and out.get('action') in (None, 'noop'):
+            out['action'] = 'closed_open'
+        return out
+
 
     from app.services.desvio_fichaje_service import (
         ACCION_ACEPTAR_ENTRADA,
@@ -1381,7 +1447,7 @@ def resolver_fichaje():
     ):
         try:
             if accion == ACCION_LIBERAR_PLAZA and scope == 'future':
-                un = _desasignar_futuro_desde_registro()
+                un = _desasignar_futuro_desde_registro(force=force_past)
                 if not un.get('success'):
                     return jsonify({
                         'success': False,
@@ -1561,7 +1627,7 @@ def resolver_fichaje():
 
         elif accion == 'borrar_planificacion':
             if scope == 'future':
-                un = _desasignar_futuro_desde_registro()
+                un = _desasignar_futuro_desde_registro(force=force_past)
                 if not un.get('success'):
                     return jsonify({
                         'success': False,

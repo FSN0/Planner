@@ -396,9 +396,19 @@ def api_unassign_worker():
     refs = data.get('refs', [])
     mode = data.get('mode', 'selected')
     notas = data.get('notas')
+    allow_past = bool(data.get('allow_past'))
 
     if not worker_id:
         return jsonify({'success': False, 'message': translate('Faltan datos (worker_id)')}), 400
+
+    if allow_past:
+        from app.services.permission_service import can_unassign_cuadrante_pasado
+        if not can_unassign_cuadrante_pasado(current_user):
+            return jsonify({
+                'success': False,
+                'message': translate('No tienes permiso para desasignar días del pasado.'),
+                'permission_denied': True,
+            }), 403
 
     try:
         result = process_unassign_action(
@@ -409,6 +419,7 @@ def api_unassign_worker():
             mode=mode,
             assignment_refs=refs,
             notas=notas,
+            allow_past=allow_past,
         )
         
         status_code = 200 if result.get('success') else 400
@@ -615,6 +626,16 @@ def api_planificador_action():
     include_weekends = data.get('include_weekends', False)
     overwrite_mode = _assignment_mode_from_payload(data, 'check')
     notas = (data.get('notas') or '').strip() or None
+    allow_past = bool(data.get('allow_past'))
+
+    if allow_past:
+        from app.services.permission_service import can_unassign_cuadrante_pasado
+        if not can_unassign_cuadrante_pasado(current_user):
+            return jsonify({
+                "success": False,
+                "error": translate("No tienes permiso para editar el cuadrante en pasado."),
+                "permission_denied": True,
+            }), 403
 
     if target_obra_id is None:
         return jsonify({"success": False, "error": translate("Obra destino no válida.")})
@@ -625,7 +646,7 @@ def api_planificador_action():
         from app.utils.timezone_utils import today_local
         hoy = today_local()
 
-        if str(worker_id) == 'GENERICO' and start_date < hoy:
+        if str(worker_id) == 'GENERICO' and start_date < hoy and not allow_past:
             return jsonify({"success": False, "error": translate("No puedes solicitar personal en fechas pasadas.")})
 
         obra = Obra.query.get(target_obra_id)
@@ -658,7 +679,7 @@ def api_planificador_action():
             fechas_a_borrar = []
             curr_borrar = orig_start
             while curr_borrar <= orig_end:
-                if curr_borrar >= hoy:
+                if curr_borrar >= hoy or allow_past:
                     if curr_borrar not in fechas:
                         if old_obra_id == target_obra_id or overwrite_mode == 'overwrite':
                             fechas_a_borrar.append(curr_borrar)

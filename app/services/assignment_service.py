@@ -479,7 +479,7 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
         'message': f'Asignación realizada ({count} días).',
     }
 
-def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mode='selected', assignment_refs=None, notas=None):
+def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mode='selected', assignment_refs=None, notas=None, allow_past=False):
     from app.services.solicitud_service import SolicitudService, update_solicitudes_for_assignment
     from app.services.email_service import notificar_movimiento_admin_a_jo
     
@@ -493,6 +493,7 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
         return {'success': False, 'message': 'Falta ID trabajador'}
 
     hoy = today_local()
+    allow_past = bool(allow_past)
 
     if mode == 'by_refs':
         rows = []
@@ -510,7 +511,7 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
                     continue
             except (TypeError, ValueError):
                 continue
-            if d < hoy:
+            if d < hoy and not allow_past:
                 continue
             key = (worker_id, oid, d)
             if key in seen:
@@ -530,11 +531,12 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
         date_objs = []
         asignaciones = []
         if mode == 'all_obra':
-            asignaciones = query.filter(Asignacion.fecha >= hoy).all()
+            q = query if allow_past else query.filter(Asignacion.fecha >= hoy)
+            asignaciones = q.all()
             date_objs = [a.fecha for a in asignaciones]
         else:
             raw_dates = sorted([datetime.strptime(d, '%Y-%m-%d').date() if isinstance(d, str) else d for d in date_list])
-            date_objs = [d for d in raw_dates if d >= hoy]
+            date_objs = [d for d in raw_dates if d >= hoy or allow_past]
             asignaciones = query.filter(Asignacion.fecha.in_(date_objs)).all() if date_objs else []
 
         rows = [(int(a.user_id), int(a.obra_id), a.fecha) for a in asignaciones]

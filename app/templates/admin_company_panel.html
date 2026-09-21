@@ -100,7 +100,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260921past"></script>
 <script>
 let companyCalendarInstance = null;
 
@@ -110,7 +110,8 @@ document.addEventListener('DOMContentLoaded', function() {
         id: {{ company.id }},
         entityName: {{ company.nombre|tojson }},
         mode: 'obras',
-        hideTitle: true
+        hideTitle: true,
+        canEditPast: {{ (can_unassign_cuadrante_pasado|default(false))|tojson }}
     });
 });
 </script>

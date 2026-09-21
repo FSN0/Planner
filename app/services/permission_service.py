@@ -351,6 +351,13 @@ def can_resolve_fichajes(user) -> bool:
     return False
 
 
+def can_unassign_cuadrante_pasado(user) -> bool:
+    """Forzar desasignar plan en días pasados / ya validados (no toca el ledger)."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    return user_can(user, 'cuadrante_pasado', 'w')
+
+
 def roles_with_module(module: str, action: str = 'r') -> tuple:
     """Roles que tienen el permiso (para decoradores)."""
     module = normalize_module(module)

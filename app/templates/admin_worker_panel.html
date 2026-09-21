@@ -397,7 +397,7 @@
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260921past"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var workerId = {{ worker.id }};
@@ -409,7 +409,8 @@ document.addEventListener('DOMContentLoaded', function() {
         entityName: {{ (worker.name ~ ' ' ~ worker.lastname)|tojson }},
         showFichajes: {{ puede_ver_estado_fichaje|tojson }},
         hideTitle: true,
-        readonly: {{ (not can_edit_calendar)|tojson }}
+        readonly: {{ (not can_edit_calendar)|tojson }},
+        canEditPast: {{ (can_unassign_cuadrante_pasado|default(false))|tojson }}
     });
 
     {% if puede_ver_estado_fichaje %}

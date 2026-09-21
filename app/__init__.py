@@ -551,6 +551,7 @@ def create_app():
 
         from app.services.permission_service import (
             user_can, is_laboral, is_admin, can_resolve_fichajes,
+            can_unassign_cuadrante_pasado,
         )
         mostrar_onboarding = False
         onboarding_import_done = {}
@@ -660,6 +661,10 @@ def create_app():
             is_laboral=is_laboral,
             is_admin=is_admin,
             can_resolve_fichajes=can_resolve_fichajes,
+            can_unassign_cuadrante_pasado=(
+                can_unassign_cuadrante_pasado(current_user)
+                if current_user.is_authenticated else False
+            ),
             **tz_ctx,
         )
 

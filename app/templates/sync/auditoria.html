@@ -1337,6 +1337,7 @@ var AUDIT_RESOLVE_I18N = {{ {
         var payload = { registro_id: id, accion: accion };
         if (extra.scope) payload.scope = extra.scope;
         if (extra.notas) payload.notas = extra.notas;
+        if (extra.force) payload.force = true;
 
         fetch({{ url_for('sync.resolver_fichaje')|tojson }}, {
             method: 'POST',
@@ -1430,33 +1431,76 @@ var AUDIT_RESOLVE_I18N = {{ {
     function promptDesasignarAuditoria(id, accion) {
         var t = auditI18n();
         var pideSolicitud = {{ (current_user.role == 'jefe_obra' and not (jefes_asignan_directo|default(false)))|tojson }};
+        var canForcePast = {{ (can_unassign_cuadrante_pasado|default(false))|tojson }};
         var notasHint = pideSolicitud
-            ? {{ _('Si eliges a futuro, se creará una solicitud de baja con este comentario.')|tojson }}
+            ? {{ _('Si eliges pendientes posteriores, se creará una solicitud de baja con este comentario.')|tojson }}
             : {{ _('Comentario opcional (si la baja pasa por solicitud, irá en ella).')|tojson }};
 
-        function continuar(scope, notas) {
-            window.resolver(id, accion, { scope: scope, notas: notas, _desasignPromptDone: true });
+        function continuar(scope, notas, force) {
+            window.resolver(id, accion, {
+                scope: scope,
+                notas: notas,
+                force: !!force,
+                _desasignPromptDone: true
+            });
+        }
+
+        function confirmForceThen(scope, notas) {
+            if (typeof Swal === 'undefined') {
+                if (!window.confirm({{ _('FORZAR: también se desasignarán días ya validados o del pasado. El libro de fichajes no se borra. ¿Continuar?')|tojson }})) {
+                    return;
+                }
+                continuar(scope, notas, true);
+                return;
+            }
+            Swal.fire({
+                title: {{ _('Confirmar modo forzado')|tojson }},
+                html: '<p class="text-left small mb-0">' +
+                    {{ _('Vas a desasignar también días ya validados o del pasado en esta obra. Las marcas del libro de fichajes no se borran.')|tojson }} +
+                    '</p>',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#b91c1c',
+                confirmButtonText: {{ _('Sí, forzar')|tojson }},
+                cancelButtonText: {{ _('Cancelar')|tojson }}
+            }).then(function (res) {
+                if (res.isConfirmed) continuar(scope, notas, true);
+            });
         }
 
         if (typeof Swal === 'undefined') {
             var futuro = window.confirm(
-                {{ _('¿Desasignar también a futuro? (Cancelar = solo este día)')|tojson }}
+                {{ _('¿Desasignar también pendientes posteriores en esta obra? (Cancelar = solo este día)')|tojson }}
             );
             var notas = futuro ? (window.prompt(notasHint, '') || '') : '';
-            continuar(futuro ? 'future' : 'day', notas);
+            var force = false;
+            if (futuro && canForcePast && window.confirm({{ _('¿Forzar también días ya validados/pasado? (Cancelar = solo pendientes)')|tojson }})) {
+                force = true;
+            }
+            continuar(futuro ? 'future' : 'day', notas, force);
             return;
         }
+
+        var forceHtml = canForcePast
+            ? (
+                '<label class="d-block text-left small mt-3 mb-0">' +
+                '<input type="checkbox" id="audit-desasign-force" class="mr-1"> ' +
+                {{ _('Avanzado: incluir días ya validados / pasado (no borra el libro de fichajes)')|tojson }} +
+                '</label>'
+              )
+            : '';
 
         Swal.fire({
             title: {{ _('Desasignar')|tojson }},
             html:
-                '<p class="text-muted small mb-3">' + {{ _('¿Solo este día o desde este día a futuro?')|tojson }} + '</p>' +
+                '<p class="text-muted small mb-3">' + {{ _('¿Solo el día del conflicto o también pendientes posteriores en esta obra?')|tojson }} + '</p>' +
                 '<div class="text-left mb-2">' +
                 '<label class="d-block mb-2"><input type="radio" name="audit-desasign-scope" value="day" checked> ' +
                 {{ _('Solo este día')|tojson }} + '</label>' +
                 '<label class="d-block"><input type="radio" name="audit-desasign-scope" value="future"> ' +
-                {{ _('Desde este día a futuro')|tojson }} + '</label>' +
+                {{ _('Este día + pendientes posteriores (auditoría abierta / plan futuro no validado)')|tojson }} + '</label>' +
                 '</div>' +
+                forceHtml +
                 '<label class="d-block text-left text-muted small mt-3 mb-1" for="audit-desasign-notas">' +
                 {{ _('Notas / comentario')|tojson }} + '</label>' +
                 '<textarea id="audit-desasign-notas" class="form-control" rows="2" maxlength="500" placeholder="' +
@@ -1470,14 +1514,20 @@ var AUDIT_RESOLVE_I18N = {{ {
                 var checked = document.querySelector('input[name="audit-desasign-scope"]:checked');
                 var scope = checked ? checked.value : 'day';
                 var notasEl = document.getElementById('audit-desasign-notas');
+                var forceEl = document.getElementById('audit-desasign-force');
                 return {
                     scope: scope,
-                    notas: notasEl ? (notasEl.value || '').trim() : ''
+                    notas: notasEl ? (notasEl.value || '').trim() : '',
+                    force: !!(forceEl && forceEl.checked && scope === 'future')
                 };
             }
         }).then(function (result) {
             if (!result.isConfirmed || !result.value) return;
-            continuar(result.value.scope, result.value.notas);
+            if (result.value.force) {
+                confirmForceThen(result.value.scope, result.value.notas);
+            } else {
+                continuar(result.value.scope, result.value.notas, false);
+            }
         });
     }
 

@@ -43,6 +43,9 @@ class UniversalCalendarManager {
         this.compact = config.compact || false;
         this.embedded = config.embedded || false;
         this.hideTitle = config.hideTitle || false;
+        // Permiso cuadrante_pasado: NO abre el pasado solo; ofrece «modificar aún así».
+        this.canEditPast = !!(config.canEditPast || (typeof window !== 'undefined' && window.SP_CAN_EDIT_PAST));
+        this.forceEditPast = false;
         this.kanbanSourceObraId = config.kanbanSourceObraId;
         this.kanbanPrefill = null;
         this._pendingPrefill = null;
@@ -631,29 +634,79 @@ class UniversalCalendarManager {
 
                 if (!isEditable) {
                     if (typeof Swal !== 'undefined') {
-                        if (targetUrl) {
-                            const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
-                            calendarSwal(swalBase({
+                        const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
+                        const allowForcePast = isPast && _this.canEditPast;
+                        if (allowForcePast || targetUrl) {
+                            const opts = swalBase({
                                 title: isPast ? t('Bloque Histórico') : t('Acción no permitida'),
-                                text: reasonText,
+                                html: '<p class="mb-0">' + reasonText + '</p>' +
+                                    (allowForcePast
+                                        ? '<p class="text-muted small mt-2 mb-0">' +
+                                          t('Si tienes permiso, puedes forzar la edición. El libro de fichajes no se borra.') +
+                                          '</p>'
+                                        : ''),
                                 icon: 'info',
-                                showDenyButton: true,
-                                showCancelButton: false,
-                                confirmButtonText: t('Cerrar'),
-                                denyButtonText: `${targetName}`,
+                                showCancelButton: true,
+                                showDenyButton: !!targetUrl,
+                                showConfirmButton: allowForcePast,
+                                confirmButtonText: t('Modificar aún así'),
+                                denyButtonText: targetName || t('Abrir ficha'),
+                                cancelButtonText: t('Cerrar'),
                                 customClass: {
                                     popup: 'admin-swal-popup',
                                     title: 'admin-swal-title',
                                     htmlContainer: 'admin-swal-html',
-                                    confirmButton: 'admin-swal-btn admin-swal-btn-ghost',
+                                    confirmButton: 'admin-swal-btn admin-swal-btn-warning',
                                     denyButton: 'admin-swal-btn admin-swal-btn-info',
+                                    cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
                                     actions: 'admin-swal-actions',
                                 },
-                            })).then((result) => {
-                                if (result.isDenied) window.open(targetUrl, '_blank'); 
+                            });
+                            // Sin permiso de forzar: el botón principal es Cerrar (como antes)
+                            if (!allowForcePast) {
+                                opts.showConfirmButton = true;
+                                opts.confirmButtonText = t('Cerrar');
+                                opts.showCancelButton = false;
+                                opts.customClass.confirmButton = 'admin-swal-btn admin-swal-btn-ghost';
+                            }
+                            calendarSwal(opts).then((result) => {
+                                if (result.isDenied && targetUrl) {
+                                    window.open(targetUrl, '_blank');
+                                    return;
+                                }
+                                if (allowForcePast && result.isConfirmed) {
+                                    calendarSwal(swalBase({
+                                        title: t('Confirmar edición en pasado'),
+                                        html: '<p class="mb-0">' +
+                                            t('Vas a editar un bloque histórico. Las marcas del libro de fichajes no se borran.') +
+                                            '</p>',
+                                        icon: 'warning',
+                                        showCancelButton: true,
+                                        confirmButtonText: t('Sí, editar'),
+                                        cancelButtonText: t('Cancelar'),
+                                        confirmButtonColor: '#b91c1c',
+                                        customClass: {
+                                            popup: 'admin-swal-popup',
+                                            title: 'admin-swal-title',
+                                            htmlContainer: 'admin-swal-html',
+                                            confirmButton: 'admin-swal-btn admin-swal-btn-danger',
+                                            cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+                                            actions: 'admin-swal-actions',
+                                        },
+                                    })).then((res2) => {
+                                        if (!res2.isConfirmed) return;
+                                        _this.forceEditPast = true;
+                                        let ghost = _this.calendar.getEventById(_this.ghostEventId);
+                                        if (ghost) ghost.remove();
+                                        if (!props.real_original_start) {
+                                            info.event.setExtendedProp('real_original_start', info.event.startStr);
+                                            info.event.setExtendedProp('real_original_end', info.event.endStr || moment(info.event.startStr).add(1, 'days').format('YYYY-MM-DD'));
+                                        }
+                                        _this.showBottomPanel(info.event, false);
+                                    });
+                                }
                             });
                         } else {
-                            const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
                             calendarSwal(swalBase({ title: t('Acción no permitida'), text: reasonText, icon: 'warning', confirmButtonText: t('Entendido') }));
                         }
                     } else {
@@ -943,7 +996,9 @@ class UniversalCalendarManager {
 
         const today = moment().startOf('day');
         const originalStart = rangeStart.clone();
-        const start = rangeStart.isBefore(today) ? today.clone() : rangeStart.clone();
+        const start = (rangeStart.isBefore(today) && !this.forceEditPast)
+            ? today.clone()
+            : rangeStart.clone();
 
         const dates = [];
         const curr = start.clone();
@@ -957,7 +1012,8 @@ class UniversalCalendarManager {
             filteredRefs = props.delete_refs.filter((r) => {
                 if (!r || !r.fecha) return false;
                 const d = moment(r.fecha, 'YYYY-MM-DD', true);
-                if (!d.isValid() || d.isBefore(today, 'day')) return false;
+                if (!d.isValid()) return false;
+                if (!this.forceEditPast && d.isBefore(today, 'day')) return false;
                 return d.isSameOrAfter(start, 'day') && d.isSameOrBefore(rangeEnd, 'day');
             });
         }
@@ -1620,7 +1676,7 @@ class UniversalCalendarManager {
             let includeWeekends = includeWeekendsCheck ? includeWeekendsCheck.checked : false;
 
             if (this.activeEvent.id === this.ghostEventId) {
-                if (moment(startVal).isBefore(today)) {
+                if (moment(startVal).isBefore(today) && !this.forceEditPast) {
                     if(typeof Swal !== 'undefined') calendarSwal(t('Error'), t('No puedes planificar en el pasado.'), 'error');
                     return;
                 }
@@ -1809,11 +1865,11 @@ class UniversalCalendarManager {
             } else {
                 let originalStart = moment(this.activeEvent.extendedProps.real_original_start || this.activeEvent.start).startOf('day');
                 
-                if (originalStart.isSameOrAfter(today) && moment(startVal).isBefore(today)) {
+                if (!this.forceEditPast && originalStart.isSameOrAfter(today) && moment(startVal).isBefore(today)) {
                     if(typeof Swal !== 'undefined') calendarSwal(t('Error'), t('No puedes mover hacia el pasado.'), 'error');
                     return;
                 }
-                if (moment(endVal).isBefore(today)) {
+                if (!this.forceEditPast && moment(endVal).isBefore(today)) {
                     if(typeof Swal !== 'undefined') calendarSwal(t('Error'), t('La fecha de fin no puede apuntar al pasado.'), 'error');
                     return;
                 }
@@ -2138,6 +2194,32 @@ class UniversalCalendarManager {
             
             const delCtx = this._resolvePanelDeleteContext();
             if (!delCtx || delCtx.daysCount <= 0) {
+                if (this.canEditPast && !this.forceEditPast) {
+                    const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
+                    calendarSwal(swalBase({
+                        title: t('Histórico Protegido'),
+                        html: '<p class="mb-0">' + t('Este bloque pertenece íntegramente al pasado.') + '</p>' +
+                            '<p class="text-muted small mt-2 mb-0">' + t('Puedes forzar el borrado del plan. El libro de fichajes no se borra.') + '</p>',
+                        icon: 'info',
+                        showCancelButton: true,
+                        confirmButtonText: t('Borrar aún así'),
+                        cancelButtonText: t('Cancelar'),
+                        customClass: {
+                            popup: 'admin-swal-popup',
+                            title: 'admin-swal-title',
+                            htmlContainer: 'admin-swal-html',
+                            confirmButton: 'admin-swal-btn admin-swal-btn-danger',
+                            cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+                            actions: 'admin-swal-actions',
+                        },
+                    })).then((resForce) => {
+                        if (!resForce.isConfirmed) return;
+                        this.forceEditPast = true;
+                        var delBtnEl = document.getElementById(`${this.panelId}-delete`);
+                        if (delBtnEl) delBtnEl.click();
+                    });
+                    return;
+                }
                 if (typeof Swal !== 'undefined') {
                     calendarSwal(t('Histórico Protegido'), t('Este bloque pertenece íntegramente al pasado y no se puede borrar.'), 'info');
                 }
@@ -2148,15 +2230,18 @@ class UniversalCalendarManager {
             const deleteTitle = isVehicleBlock ? t('¿Desasignar vehículo?') : t('¿Desasignar bloque?');
             const deleteMsg = isVehicleBlock
                 ? `${t('Se quitará la asignación del vehículo en')} <b class="text-danger">${daysCount} ${t('día(s)')}</b>.`
-                : (originalStart.isBefore(today)
+                : (originalStart.isBefore(today) && !this.forceEditPast
                     ? `${t('Se conservará el histórico pasado, pero se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('desde hoy en adelante.')}`
                     : `${t('Se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('del bloque seleccionado.')}`);
+            const deleteMsgForce = this.forceEditPast
+                ? `<p class="text-danger small">${t('Modo forzado: incluye días del pasado. El libro de fichajes no se borra.')}</p>${deleteMsg}`
+                : deleteMsg;
 
             if (typeof Swal !== 'undefined') {
                 const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
                 calendarSwal(swalBase({
                     title: deleteTitle,
-                    html: deleteMsg,
+                    html: deleteMsgForce,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonText: t('Sí, borrar'),
@@ -2173,7 +2258,7 @@ class UniversalCalendarManager {
                     if (!res.isConfirmed) return;
 
                     if (this.callbacks.onDeleteAssignment) {
-                        this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today));
+                        this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today) && !this.forceEditPast);
                         this.hidePanel();
                         return;
                     }
@@ -2213,6 +2298,7 @@ class UniversalCalendarManager {
                         payload = { worker_id: wId, dates: dates, mode: 'selected' };
                         if (oId != null) payload.obra_id = oId;
                     }
+                    if (this.forceEditPast) payload.allow_past = true;
 
                     this._postUnassignWorker(payload).then((data) => {
                         if (data.success) {
@@ -2278,6 +2364,7 @@ class UniversalCalendarManager {
         this._pendingPrefill = null;
         this._pendingObraVehicleWorkerId = null;
         this.activeEvent = null;
+        this.forceEditPast = false;
         this._toggleVehicleRow(false);
         if (this.embedded && !opts.skipScroll) {
             this._scrollEmbeddedToCalendar();
@@ -2330,7 +2417,7 @@ class UniversalCalendarManager {
         const today = moment().startOf('day');
         let start = moment(startVal).startOf('day');
         let end = moment(endVal).startOf('day');
-        if (start.isBefore(today)) start = today.clone();
+        if (start.isBefore(today) && !this.forceEditPast) start = today.clone();
         const dates = [];
         let curr = start.clone();
         while (curr.isSameOrBefore(end)) {
@@ -2350,10 +2437,12 @@ class UniversalCalendarManager {
     }
 
     _unassignThenSave(workerId, obraId, dates, assignPayload, afterSave) {
+        const body = { worker_id: workerId, obra_id: obraId, dates: dates, mode: 'selected' };
+        if (this.forceEditPast) body.allow_past = true;
         fetch('/api/v6/unassign_worker', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this._csrfToken() },
-            body: JSON.stringify({ worker_id: workerId, obra_id: obraId, dates: dates, mode: 'selected' })
+            body: JSON.stringify(body)
         }).then(r => r.json()).then(data => {
             if (!data.success) {
                 if (typeof Swal !== 'undefined') calendarSwal(t('Error'), data.message || t('No se pudo desasignar al trabajador anterior.'), 'error');
@@ -2612,6 +2701,7 @@ class UniversalCalendarManager {
     executeSave(payload, revertFunc, options) {
         if (!payload.overwrite_mode) payload.overwrite_mode = 'check';
         payload.check_conflicts = true;
+        if (this.forceEditPast) payload.allow_past = true;
         options = options || {};
 
         $.ajax({

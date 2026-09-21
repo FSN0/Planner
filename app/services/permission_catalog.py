@@ -14,6 +14,7 @@ PERMISSION_MODULES = (
     ('directorio', 'Obras', 'Planificación'),
     ('planificador', 'Planificador', 'Planificación'),
     ('asignaciones', 'Asignar en calendarios', 'Planificación'),
+    ('cuadrante_pasado', 'Editar cuadrante en pasado', 'Planificación'),
     ('reuniones', 'Reuniones / notas', 'Planificación'),
     ('trabajadores', 'Trabajadores', 'Personal'),
     ('subcontratas', 'Subcontratas', 'Personal'),
@@ -243,6 +244,7 @@ MODULE_WRITE_HINTS = {
     'planificador': 'Abrir el Gantt con edición (preferible: Asignar en calendarios)',
     'tablero': 'Arrastrar en kanban (calendarios: Asignar en calendarios)',
     'asignaciones': 'Crear / mover / quitar bloques en calendario de persona, obra y planificador',
+    'cuadrante_pasado': 'Forzar editar/desasignar plan en días pasados o validados (calendario y auditoría); el libro de fichajes no se borra',
     'reuniones': 'Crear, editar y eliminar notas',
     'trabajadores': 'Alta / editar fichas; reset contraseña y PIN',
     'vehiculos': 'Asignar y editar flota',
@@ -267,6 +269,7 @@ MODULE_WRITE_HINTS = {
 
 MODULE_READ_HINTS = {
     'asignaciones': 'Ver calendarios de planificación (persona / obra); sin escritura no se puede asignar',
+    'cuadrante_pasado': 'Ver la opción «modificar/borrar aún así» en bloques históricos del calendario y en auditoría',
     'integraciones': 'Ver el listado de integraciones',
     'sync_odoo': 'Entrar al centro de sincronización Odoo',
     'soltec_alta_odoo': 'Abrir el panel de altas Odoo',

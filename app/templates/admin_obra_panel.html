@@ -157,7 +157,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260921past"></script>
 <script>
 let obraCalendarInstance = null;
 const CURRENT_OBRA_ID = {{ obra.id }};
@@ -176,7 +176,8 @@ document.addEventListener('DOMContentLoaded', function() {
         entityName: {{ obra.nombre|tojson }},
         mode: 'empresas',
         hideTitle: true,
-        readonly: {{ (not can_edit_calendar)|tojson }}
+        readonly: {{ (not can_edit_calendar)|tojson }},
+        canEditPast: {{ (can_unassign_cuadrante_pasado|default(false))|tojson }}
     });
 
     setTimeout(() => {
