@@ -1209,6 +1209,15 @@
   gap: 0.5rem;
   margin-top: 0.55rem;
 }
+.nota-audio-prompt-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.nota-audio-prompt-status { min-height: 1.1rem; }
+.nota-audio-prompt-status.is-ok { color: #166534; }
+.nota-audio-prompt-status.is-warn { color: #9a3412; }
 .nota-audio-prompt-save {
   display: inline-flex;
   align-items: center;

@@ -860,6 +860,90 @@ col.col-actions-fixed { width: 7.5rem; }
   white-space: nowrap;
   overflow: visible;
 }
+.auditoria-page .audit-desvio-chevron {
+  transition: transform 0.15s ease;
+  font-size: 0.7rem;
+}
+.auditoria-page .audit-desvio-main.is-expanded .audit-desvio-chevron {
+  transform: rotate(90deg);
+}
+.auditoria-page .audit-desvio-main.is-expanded {
+  background: #fef2f2;
+}
+.auditoria-page tr.audit-desvio-detail > td {
+  background: #fafafa;
+  border-top: 0;
+  padding: 0.75rem 1rem 1rem;
+}
+.auditoria-page .audit-desvio-ambos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.auditoria-page .audit-desvio-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.auditoria-page .audit-desvio-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  background: #fff;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.auditoria-page .audit-desvio-panel.is-mia {
+  border-color: #93c5fd;
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
+.auditoria-page .audit-desvio-panel.is-resolved {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+.auditoria-page .audit-desvio-panel.is-resolved.is-mia {
+  border-color: #86efac;
+  box-shadow: inset 3px 0 0 #22c55e;
+}
+.auditoria-page tr.audit-desvio-espejo > td:first-child {
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+.auditoria-page .audit-desvio-meta {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: #475569;
+}
+.auditoria-page .audit-desvio-meta-k {
+  color: #64748b;
+  font-weight: 600;
+  margin-right: 0.2rem;
+}
+.auditoria-page .audit-desvio-meta-k::after {
+  content: ':';
+}
+.auditoria-page .audit-desvio-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+.auditoria-page .audit-desvio-panel-body {
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  min-width: 0;
+}
+.auditoria-page .audit-desvio-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+@media (max-width: 768px) {
+  .auditoria-page .audit-desvio-panels {
+    grid-template-columns: 1fr;
+  }
+}
 .auditoria-page .audit-desvio-actions {
   display: inline-flex;
   flex-wrap: nowrap;

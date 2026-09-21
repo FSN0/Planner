@@ -820,135 +820,217 @@ def api_solicitud_asignar_candidatos(solicitud_id):
     solicitud = Solicitud.query.get_or_404(solicitud_id)
     data = request.get_json() or {}
     worker_ids = data.get('worker_ids', [])
-    force_move = data.get('force_move', False)
+    force_move = bool(data.get('force_move', False))
+    # Preferir el modo elegido en el pop-up de conflicto; force_move queda por compatibilidad.
+    overwrite_mode = (data.get('overwrite_mode') or '').strip()
+    if not overwrite_mode:
+        overwrite_mode = 'overwrite' if force_move else 'keep_both'
+    if overwrite_mode == 'assign_and_request':
+        overwrite_mode = 'overwrite'
 
     if not worker_ids:
         return jsonify({'success': False, 'message': translate('No has seleccionado ningún trabajador.')}), 400
 
-    dias_base = []
     try:
-        config = json.loads(solicitud.comentarios or '{}')
-        fechas_json = config.get('original_dates') or config.get('dates', [])
-        if fechas_json:
-            dias_base = [datetime.strptime(d, '%Y-%m-%d').date() for d in fechas_json if solicitud.fecha_inicio <= datetime.strptime(d, '%Y-%m-%d').date() <= solicitud.fecha_fin]
-    except Exception:
-        pass
-
-    if not dias_base:
-        festivos = Festivo.query.filter(Festivo.fecha >= solicitud.fecha_inicio, Festivo.fecha <= solicitud.fecha_fin).all()
-        fechas_festivas = [f.fecha for f in festivos]
-        curr = solicitud.fecha_inicio
-        while curr <= solicitud.fecha_fin:
-            if curr.weekday() < 5 and curr not in fechas_festivas:
-                dias_base.append(curr)
-            curr += timedelta(days=1)
-
-    count_exito = 0
-    # Obtenemos qué tipo de acción es la solicitud antes de entrar al bucle
-    accion = getattr(solicitud, 'accion', 'ASIGNAR') 
-    
-    for wid in worker_ids:
+        dias_base = []
         try:
-            # =========================================================================
-            # BLOQUE NUEVO: BYPASS PARA SOLICITUDES DE DESASIGNACIÓN (BAJAS)
-            # =========================================================================
-            if accion == 'DESASIGNAR':
-                asignaciones_a_borrar = Asignacion.query.filter(
-                    Asignacion.obra_id == solicitud.obra_id,
-                    Asignacion.user_id == int(wid),
-                    Asignacion.fecha.in_(dias_base)
-                ).all()
-                
-                if asignaciones_a_borrar:
-                    fechas = sorted({a.fecha for a in asignaciones_a_borrar})
-                    for a in asignaciones_a_borrar:
-                        CoreAssignmentService.desasignar(
-                            a.user_id, a.obra_id, a.fecha, current_user.id,
-                            "Resolución de Solicitud de Baja",
-                            registrar_log=False,
-                        )
-                    CoreAssignmentService.registrar_log_rango(
-                        int(wid), solicitud.obra_id,
-                        fechas[0], fechas[-1], len(asignaciones_a_borrar),
-                        current_user.id, "Resolución de Solicitud de Baja", False,
-                        fechas=fechas,
-                    )
-                    count_exito += 1
-                    
-                continue # Saltamos a la siguiente iteración del for, no validamos nada más
-            # =========================================================================
+            config = json.loads(solicitud.comentarios or '{}')
+            fechas_json = config.get('original_dates') or config.get('dates', [])
+            if fechas_json:
+                dias_base = [
+                    datetime.strptime(d, '%Y-%m-%d').date()
+                    for d in fechas_json
+                    if solicitud.fecha_inicio
+                    <= datetime.strptime(d, '%Y-%m-%d').date()
+                    <= solicitud.fecha_fin
+                ]
+        except Exception:
+            dias_base = []
 
-            dias_para_este_trabajador = []
-            
-            # LÓGICA ESTRICTA DÍA A DÍA (Solo para asignaciones reales)
-            if solicitud.tipo == "GENERICA":
-                requested = solicitud.cantidad_solicitada or 1
-                for d_obj in dias_base:
-                    # Auto-Corrección: Si el simulador JS lo insertó libre, lo atamos
-                    existing = Asignacion.query.filter_by(user_id=int(wid), obra_id=solicitud.obra_id, fecha=d_obj).first()
-                    if existing and existing.solicitud_id is None:
-                        existing.solicitud_id = solicitud.id
-                        db.session.add(existing)
-                        db.session.flush()
-                        
-                    asignados_actuales = Asignacion.query.filter_by(
-                        obra_id=solicitud.obra_id, solicitud_id=solicitud.id, fecha=d_obj
-                    ).count()
-                    
-                    if asignados_actuales < requested:
-                        dias_para_este_trabajador.append(d_obj.strftime("%Y-%m-%d"))
-            else:
-                for d_obj in dias_base:
-                    existing = Asignacion.query.filter_by(user_id=int(wid), obra_id=solicitud.obra_id, fecha=d_obj).first()
-                    if existing and existing.solicitud_id is None:
-                        existing.solicitud_id = solicitud.id
-                        db.session.add(existing)
-                        db.session.flush()
-                dias_para_este_trabajador = [d.strftime("%Y-%m-%d") for d in dias_base]
+        if not dias_base:
+            festivos = Festivo.query.filter(
+                Festivo.fecha >= solicitud.fecha_inicio,
+                Festivo.fecha <= solicitud.fecha_fin,
+            ).all()
+            fechas_festivas = {f.fecha for f in festivos}
+            curr = solicitud.fecha_inicio
+            while curr <= solicitud.fecha_fin:
+                if curr.weekday() < 5 and curr not in fechas_festivas:
+                    dias_base.append(curr)
+                curr += timedelta(days=1)
 
-            if not dias_para_este_trabajador:
-                # El operario se salta porque ya no queda hueco para él en ninguno de los días
-                continue
-                
-            res = process_assignment_action(
-                actor_user=current_user,
-                worker_id=int(wid),
-                target_obra_id=solicitud.obra_id,
-                date_list=dias_para_este_trabajador,
-                overwrite=force_move,
-                solicitud_id=solicitud.id # <-- SIEMPRE PASAMOS EL ID PARA ATARLO
-            )
-            
-            if res.get('success') or (existing and existing.solicitud_id == solicitud.id):
-                count_exito += 1
-                db.session.flush()
-                    
-        except Exception as e:
-            continue
+        if not dias_base:
+            return jsonify({
+                'success': False,
+                'message': translate('Esta solicitud no tiene días laborables válidos para asignar.'),
+            }), 400
 
-    if count_exito > 0:
-        db.session.commit()
-        db.session.refresh(solicitud)
-        
-        # Le decimos al motor que recalcule visuales
-        for d_obj in dias_base:
-            update_solicitudes_for_assignment(solicitud.obra_id, int(worker_ids[0]), d_obj, resolved_by_id=current_user.id)
-            
-        db.session.commit()
-        db.session.refresh(solicitud)
-        
-        if solicitud.estado == 'CUMPLIDA':
+        count_exito = 0
+        errores = []
+        accion = getattr(solicitud, 'accion', 'ASIGNAR')
+
+        for wid in worker_ids:
             try:
-                from app.services.email_service import notificar_resolucion_solicitud
-                notificar_resolucion_solicitud(solicitud, current_user.name)
-            except Exception:
-                pass
+                worker_id = int(wid)
+            except (TypeError, ValueError):
+                errores.append(translate('ID de trabajador inválido: {id}', id=wid))
+                continue
 
-        accion_txt = translate("desasignaciones") if accion == 'DESASIGNAR' else translate("asignaciones")
-        flash(translate('Se han procesado {count} {accion} correctamente.', count=count_exito, accion=accion_txt), 'success')
-        return jsonify({'success': True})
-    
-    return jsonify({'success': False, 'message': translate('No hay hueco en ningún día de esta solicitud o ya estaban cubiertos.')}), 400
+            worker = User.query.get(worker_id)
+            worker_label = (
+                f'{(worker.name or "")} {(worker.lastname or "")}'.strip()
+                if worker else f'#{worker_id}'
+            )
+
+            try:
+                if accion == 'DESASIGNAR':
+                    asignaciones_a_borrar = Asignacion.query.filter(
+                        Asignacion.obra_id == solicitud.obra_id,
+                        Asignacion.user_id == worker_id,
+                        Asignacion.fecha.in_(dias_base),
+                    ).all()
+
+                    if asignaciones_a_borrar:
+                        fechas = sorted({a.fecha for a in asignaciones_a_borrar})
+                        for a in asignaciones_a_borrar:
+                            CoreAssignmentService.desasignar(
+                                a.user_id, a.obra_id, a.fecha, current_user.id,
+                                "Resolución de Solicitud de Baja",
+                                registrar_log=False,
+                            )
+                        CoreAssignmentService.registrar_log_rango(
+                            worker_id, solicitud.obra_id,
+                            fechas[0], fechas[-1], len(asignaciones_a_borrar),
+                            current_user.id, "Resolución de Solicitud de Baja", False,
+                            fechas=fechas,
+                        )
+                        count_exito += 1
+                    else:
+                        errores.append(
+                            translate('{name}: no tenía asignaciones que quitar en esas fechas.', name=worker_label)
+                        )
+                    continue
+
+                dias_para_este_trabajador = []
+
+                if solicitud.tipo == "GENERICA":
+                    requested = solicitud.cantidad_solicitada or 1
+                    for d_obj in dias_base:
+                        existing = Asignacion.query.filter_by(
+                            user_id=worker_id, obra_id=solicitud.obra_id, fecha=d_obj,
+                        ).first()
+                        if existing and existing.solicitud_id is None:
+                            existing.solicitud_id = solicitud.id
+                            db.session.add(existing)
+                            db.session.flush()
+
+                        asignados_actuales = Asignacion.query.filter_by(
+                            obra_id=solicitud.obra_id,
+                            solicitud_id=solicitud.id,
+                            fecha=d_obj,
+                        ).count()
+
+                        # Ya está en esta obra ese día, o aún queda plaza en la solicitud.
+                        if existing or asignados_actuales < requested:
+                            dias_para_este_trabajador.append(d_obj.strftime("%Y-%m-%d"))
+                else:
+                    for d_obj in dias_base:
+                        existing = Asignacion.query.filter_by(
+                            user_id=worker_id, obra_id=solicitud.obra_id, fecha=d_obj,
+                        ).first()
+                        if existing and existing.solicitud_id is None:
+                            existing.solicitud_id = solicitud.id
+                            db.session.add(existing)
+                            db.session.flush()
+                    dias_para_este_trabajador = [d.strftime("%Y-%m-%d") for d in dias_base]
+
+                if not dias_para_este_trabajador:
+                    errores.append(
+                        translate(
+                            '{name}: no queda hueco en ningún día de esta solicitud (ya cubiertos).',
+                            name=worker_label,
+                        )
+                    )
+                    continue
+
+                res = process_assignment_action(
+                    actor_user=current_user,
+                    worker_id=worker_id,
+                    target_obra_id=solicitud.obra_id,
+                    date_list=dias_para_este_trabajador,
+                    mode=overwrite_mode,
+                    solicitud_id=solicitud.id,
+                )
+
+                if res.get('success'):
+                    count_exito += 1
+                    db.session.flush()
+                else:
+                    msg = res.get('message') or res.get('error') or translate('No se pudo asignar.')
+                    errores.append(f'{worker_label}: {msg}')
+
+            except Exception as e:
+                db.session.rollback()
+                from flask import current_app
+                current_app.logger.exception(
+                    'asignar_candidatos fallo worker=%s solicitud=%s', worker_id, solicitud_id,
+                )
+                errores.append(f'{worker_label}: {e}')
+
+        if count_exito > 0:
+            db.session.commit()
+            db.session.refresh(solicitud)
+
+            for wid in worker_ids:
+                try:
+                    w_id = int(wid)
+                except (TypeError, ValueError):
+                    continue
+                for d_obj in dias_base:
+                    update_solicitudes_for_assignment(
+                        solicitud.obra_id, w_id, d_obj, resolved_by_id=current_user.id,
+                    )
+
+            db.session.commit()
+            db.session.refresh(solicitud)
+
+            if solicitud.estado == 'CUMPLIDA':
+                try:
+                    from app.services.email_service import notificar_resolucion_solicitud
+                    notificar_resolucion_solicitud(solicitud, current_user.name)
+                except Exception:
+                    pass
+
+            accion_txt = (
+                translate("desasignaciones") if accion == 'DESASIGNAR' else translate("asignaciones")
+            )
+            flash(
+                translate(
+                    'Se han procesado {count} {accion} correctamente.',
+                    count=count_exito,
+                    accion=accion_txt,
+                ),
+                'success',
+            )
+            payload = {'success': True, 'count': count_exito}
+            if errores:
+                payload['warnings'] = errores
+            return jsonify(payload)
+
+        detail = '; '.join(errores[:5]) if errores else translate(
+            'No hay hueco en ningún día de esta solicitud o ya estaban cubiertos.'
+        )
+        return jsonify({'success': False, 'message': detail, 'errors': errores}), 400
+
+    except Exception as e:
+        db.session.rollback()
+        from flask import current_app
+        current_app.logger.exception('asignar_candidatos error solicitud=%s', solicitud_id)
+        return jsonify({
+            'success': False,
+            'message': translate('Error del servidor: {error}', error=str(e)),
+        }), 500
+
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/desasignar_candidato", methods=["POST"])
 @login_required

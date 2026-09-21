@@ -22,9 +22,13 @@
     {% elif st == 'Ausencia' or st == 'Pendiente' or st == 'Retraso' %}
         {% set dot_class = 'dot-warning' %}
         {% set dot_title = _(st) %}
-    {% elif st == 'Conflicto' or st == 'Paracaidista' %}
+    {% elif st == 'Falta' %}
+        {% set dot_class = '' %}
+        {% set ns_dot.style = 'background:#e11d48;' %}
+        {% set dot_title = _('Falta') %}
+    {% elif st == 'Conflicto' or st == 'Paracaidista' or st == 'Disputa' %}
         {% set dot_class = 'dot-danger' %}
-        {% set dot_title = _('Conflicto') if st == 'Conflicto' else _('Sin planificar') %}
+        {% set dot_title = _('Conflicto') if st == 'Conflicto' else (_('Disputa') if st == 'Disputa' else _('Sin planificar')) %}
     {% elif st.startswith('Resuelto') or st == 'Cerrado_Multiobra' %}
         {% set dot_class = 'dot-success' %}
         {% set dot_title = _('Resuelto / correcto') %}

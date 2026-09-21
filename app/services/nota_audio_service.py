@@ -43,6 +43,7 @@ WEAK_LOCATION_TOKENS = {
 
 # Preferencia de usuario (sidebar_prefs) para el prompt de resumen.
 USER_PREF_SUMMARY_PROMPT = 'nota_audio_summary_prompt'
+USER_PREF_INCLUDE_TRANSCRIPT = 'nota_audio_include_transcript'
 AUDIO_JOB_STALE_HOURS = 12
 
 DEFAULT_SUMMARY_PROMPT = (
@@ -65,10 +66,13 @@ DEFAULT_SUMMARY_PROMPT = (
 )
 
 SUMMARY_JSON_FOOTER = (
-    '\n\nIMPORTANTE: responde SOLO con JSON válido '
-    '{"titulo": "...", "resumen": "..."} '
-    '(titulo descriptivo, máx. 120 caracteres). '
-    'No inventes hechos que no estén en la transcripción.'
+    '\n\nIMPORTANTE (formato de respuesta):\n'
+    '- Cumple PRIORITARIAMENTE las instrucciones del usuario de arriba.\n'
+    '- Si piden un informe amplio o con apartados, NO lo reduzcas a unas pocas líneas.\n'
+    '- Responde SOLO con JSON válido: {"titulo": "...", "resumen": "..."}\n'
+    '- "titulo": descriptivo, máx. 120 caracteres.\n'
+    '- "resumen": el informe completo pedido (markdown permitido).\n'
+    '- No inventes hechos que no estén en la transcripción.'
 )
 
 
@@ -89,6 +93,17 @@ def get_user_summary_prompt(user: Optional[User]) -> str:
             if custom:
                 return custom
     return DEFAULT_SUMMARY_PROMPT
+
+
+def get_user_include_transcript(user: Optional[User]) -> bool:
+    if user is None:
+        return True
+    prefs = getattr(user, 'sidebar_prefs', None) or {}
+    if not isinstance(prefs, dict):
+        return True
+    if USER_PREF_INCLUDE_TRANSCRIPT not in prefs:
+        return True
+    return bool(prefs.get(USER_PREF_INCLUDE_TRANSCRIPT))
 
 
 def set_user_summary_prompt(user: User, prompt: Optional[str]) -> str:
@@ -112,12 +127,34 @@ def set_user_summary_prompt(user: User, prompt: Optional[str]) -> str:
     return text
 
 
+def set_user_include_transcript(user: User, include: bool) -> bool:
+    from sqlalchemy.orm.attributes import flag_modified
+
+    prefs = dict(getattr(user, 'sidebar_prefs', None) or {})
+    prefs[USER_PREF_INCLUDE_TRANSCRIPT] = bool(include)
+    user.sidebar_prefs = prefs
+    flag_modified(user, 'sidebar_prefs')
+    db.session.commit()
+    return bool(include)
+
+
 def _compose_summary_system_prompt(custom: Optional[str] = None) -> str:
-    base = (custom or DEFAULT_SUMMARY_PROMPT).strip() or DEFAULT_SUMMARY_PROMPT
-    lower = base.lower()
-    if '"titulo"' in lower and '"resumen"' in lower:
-        return base
-    return base + SUMMARY_JSON_FOOTER
+    """El prompt del usuario manda; solo añadimos marco + formato JSON obligatorio."""
+    user_instr = (custom or DEFAULT_SUMMARY_PROMPT).strip() or DEFAULT_SUMMARY_PROMPT
+    lower = user_instr.lower()
+    has_json_shape = '"titulo"' in lower and '"resumen"' in lower
+    header = (
+        'Eres un asistente que redacta informes a partir de transcripciones de reuniones laborales.\n'
+        'Debes cumplir PRIORITARIAMENTE las instrucciones del usuario.\n'
+        'Si piden estructura, apartados o un informe amplio, NO lo comprimas en 3–5 líneas.\n'
+        'No inventes hechos, cifras ni nombres ausentes en la transcripción.\n\n'
+        '=== INSTRUCCIONES DEL USUARIO (obligatorias) ===\n'
+        f'{user_instr}\n'
+        '=== FIN INSTRUCCIONES DEL USUARIO ==='
+    )
+    if has_json_shape:
+        return header
+    return header + SUMMARY_JSON_FOOTER
 
 
 @dataclass
@@ -276,6 +313,7 @@ def save_audio_upload(
     autor_id: int,
     *,
     summary_prompt: Optional[str] = None,
+    include_transcript: Optional[bool] = None,
 ) -> NotaAudioJob:
     """Guarda el archivo y encola el job. La duración se valida en Celery."""
     original = secure_filename(file_storage.filename or 'audio.webm')
@@ -304,9 +342,12 @@ def save_audio_upload(
         'fase': 'pendiente',
         'progreso': 5,
         'mensaje': 'Audio recibido. En cola de procesamiento…',
+        'include_transcript': True if include_transcript is None else bool(include_transcript),
     }
     if prompt_text:
         meta['summary_prompt'] = prompt_text
+        meta['summary_prompt_chars'] = len(prompt_text)
+        meta['summary_prompt_preview'] = prompt_text[:180]
 
     job = NotaAudioJob(
         autor_id=autor_id,
@@ -530,7 +571,10 @@ def _update_job_progress(
             previous = json.loads(job.meta_json)
             if isinstance(previous, dict):
                 # Conserva datos finales / config entre updates de progreso
-                for key in ('obras', 'personas', 'summary_prompt', 'celery_task_id'):
+                for key in (
+                    'obras', 'personas', 'summary_prompt', 'summary_prompt_chars',
+                    'summary_prompt_preview', 'celery_task_id', 'include_transcript',
+                ):
                     if key in previous and key not in payload:
                         payload[key] = previous[key]
         except json.JSONDecodeError:
@@ -981,33 +1025,65 @@ def _summarize_gpt(
 
     instr = _compose_summary_system_prompt(summary_prompt)
     if truncated:
-        instr += ' La transcripción está truncada; indícalo al final del resumen.'
-
-    try:
-        resp = client.chat.completions.create(
-            model='gpt-4o-mini',
-            messages=[
-                {'role': 'system', 'content': instr},
-                {'role': 'user', 'content': sample},
-            ],
-            temperature=0.2,
-            max_tokens=4500,
+        instr += (
+            '\nLa transcripción está truncada por longitud; indícalo al final del resumen.'
         )
-        raw = (resp.choices[0].message.content or '').strip()
-        raw = re.sub(r'^```json\s*|\s*```$', '', raw, flags=re.I).strip()
+
+    user_payload = (
+        'Usa exclusivamente esta transcripción como fuente de hechos.\n'
+        'Redacta el informe según las instrucciones del sistema.\n\n'
+        '--- TRANSCRIPCIÓN ---\n'
+        f'{sample}\n'
+        '--- FIN TRANSCRIPCIÓN ---'
+    )
+
+    def _parse_response(raw_text: str) -> tuple[str, str]:
+        cleaned = re.sub(r'^```json\s*|\s*```$', '', (raw_text or '').strip(), flags=re.I).strip()
         try:
-            data = json.loads(raw)
+            data = json.loads(cleaned)
             titulo = (data.get('titulo') or '').strip()[:200]
             resumen = (data.get('resumen') or '').strip()
         except json.JSONDecodeError:
             titulo = fallback_titulo
-            resumen = raw[:20000] or fallback_resumen
-
+            resumen = cleaned[:20000] or fallback_resumen
         if not titulo:
             titulo = fallback_titulo
         if not resumen:
             resumen = fallback_resumen
         return titulo, resumen
+
+    try:
+        current_app.logger.info(
+            'Resumen GPT: prompt_chars=%s preview=%r',
+            len(summary_prompt or ''),
+            (summary_prompt or '')[:120],
+        )
+        try:
+            resp = client.chat.completions.create(
+                model='gpt-4o-mini',
+                messages=[
+                    {'role': 'system', 'content': instr},
+                    {'role': 'user', 'content': user_payload},
+                ],
+                temperature=0.2,
+                max_tokens=6000,
+                response_format={'type': 'json_object'},
+            )
+        except Exception as fmt_exc:
+            current_app.logger.info(
+                'Resumen GPT sin response_format (%s); reintento clásico', fmt_exc,
+            )
+            resp = client.chat.completions.create(
+                model='gpt-4o-mini',
+                messages=[
+                    {'role': 'system', 'content': instr},
+                    {'role': 'user', 'content': user_payload},
+                ],
+                temperature=0.2,
+                max_tokens=6000,
+            )
+        raw = (resp.choices[0].message.content or '').strip()
+        return _parse_response(raw)
     except Exception as exc:
         current_app.logger.warning('Resumen GPT falló: %s', exc)
         return fallback_titulo, fallback_resumen
@@ -1061,10 +1137,18 @@ def _build_nota_content(
     transcript: str,
     obra_matches: list[ObraMatch],
     person_matches: list[PersonMatch],
+    *,
+    include_transcript: bool = True,
 ) -> str:
     obra_matches = _dedupe_obra_matches(obra_matches)
     person_matches = _dedupe_person_matches(person_matches)
-    lines = [resumen, '', '---', '', 'Transcripción:', '', transcript or '[Sin transcripción]', '', '---', '']
+    lines = [resumen or '']
+    if include_transcript:
+        lines.extend([
+            '', '---', '', 'Transcripción:', '',
+            transcript or '[Sin transcripción]',
+        ])
+    lines.extend(['', '---', ''])
 
     linked_obras = [m for m in obra_matches if m.obra_id]
     suggest_obras = [m for m in obra_matches if not m.obra_id]
@@ -1133,9 +1217,24 @@ def process_nota_audio_job(job_id: int) -> None:
     audio_path = job.archivo_path
     job_meta = _job_meta(job)
     summary_prompt = (job_meta.get('summary_prompt') or '').strip() or None
+    include_transcript = job_meta.get('include_transcript')
+    if include_transcript is None:
+        include_transcript = True
+    else:
+        include_transcript = bool(include_transcript)
     if not summary_prompt:
         autor = User.query.get(autor_id)
         summary_prompt = get_user_summary_prompt(autor)
+        if 'include_transcript' not in job_meta:
+            include_transcript = get_user_include_transcript(autor)
+
+    current_app.logger.info(
+        'NotaAudioJob %s: prompt_chars=%s include_transcript=%s preview=%r',
+        job_id,
+        len(summary_prompt or ''),
+        include_transcript,
+        (summary_prompt or '')[:120],
+    )
 
     job.estado = NotaAudioJob.ESTADO_PROCESANDO
     job.updated_at = datetime.utcnow()
@@ -1145,6 +1244,12 @@ def process_nota_audio_job(job_id: int) -> None:
         fase='encola',
         progreso=8,
         mensaje='Audio recibido. Preparando procesamiento…',
+        extra={
+            'summary_prompt': summary_prompt,
+            'summary_prompt_chars': len(summary_prompt or ''),
+            'summary_prompt_preview': (summary_prompt or '')[:180],
+            'include_transcript': include_transcript,
+        },
     )
 
     def _fail_job(message: str) -> None:
@@ -1264,7 +1369,13 @@ def process_nota_audio_job(job_id: int) -> None:
         _update_job_progress(
             job_id, fase='guardando', progreso=95, mensaje='Guardando nota privada…',
         )
-        contenido = _build_nota_content(resumen, transcript, obra_matches, person_matches)
+        contenido = _build_nota_content(
+            resumen,
+            transcript,
+            obra_matches,
+            person_matches,
+            include_transcript=include_transcript,
+        )
 
         nota = Nota(
             titulo=titulo[:200],

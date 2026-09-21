@@ -280,6 +280,12 @@ class UniversalCalendarManager {
                     eventData.startEditable = false;
                     eventData.durationEditable = false;
                 }
+                var xpFalta = eventData.extendedProps || {};
+                if (xpFalta.es_falta || xpFalta.estado_fichaje === 'Falta') {
+                    if (!eventData.classNames.includes('fc-event-falta')) {
+                        eventData.classNames.push('fc-event-falta');
+                    }
+                }
                 eventData.borderColor = bgColor;
 
                 if (bgColor.toLowerCase() === '#ffffff' || bgColor.toLowerCase() === '#fff' || bgColor.toLowerCase() === 'white') {
@@ -428,17 +434,31 @@ class UniversalCalendarManager {
                     info.el.title = info.el.title || (info.event.title || t('Vehículo'));
                 }
 
-                if (info.event.extendedProps && info.event.extendedProps.tooltipContent) {
-                    if (typeof tippy !== 'undefined') {
-                        tippy(info.el, { content: info.event.extendedProps.tooltipContent, allowHTML: true, placement: 'top', theme: 'light-border' });
-                    } else if (typeof $ !== 'undefined' && $.fn.tooltip) {
-                        $(info.el).tooltip({ title: info.event.extendedProps.tooltipContent, html: true, sanitize: false, placement: 'top', container: 'body' });
-                    } else {
-                        info.el.title = info.event.extendedProps.tooltipText
-                            || String(info.event.extendedProps.tooltipContent).replace(/<br\s*\/?>/gi, ' · ').replace(/<[^>]+>/g, '');
+                var xpMount = info.event.extendedProps || {};
+                if (xpMount.es_falta || xpMount.estado_fichaje === 'Falta') {
+                    info.el.classList.add('fc-event-falta');
+                    if (!xpMount.tooltipContent && !xpMount.tooltipText) {
+                        var FE = window.SPFichajeEstado;
+                        var faltaTip = (FE && FE.labelDeEstado)
+                            ? FE.labelDeEstado('Falta')
+                            : t('Falta');
+                        var obraTip = (info.event.title || '').replace(/\s*·\s*Falta\s*$/i, '').trim();
+                        xpMount.tooltipText = obraTip
+                            ? (faltaTip + ': ' + obraTip + ' — ' + t('debía acudir y no fichó'))
+                            : (faltaTip + ' — ' + t('debía acudir y no fichó'));
                     }
-                } else if (info.event.extendedProps && info.event.extendedProps.tooltipText) {
-                    info.el.title = info.event.extendedProps.tooltipText;
+                }
+                if (xpMount.tooltipContent) {
+                    if (typeof tippy !== 'undefined') {
+                        tippy(info.el, { content: xpMount.tooltipContent, allowHTML: true, placement: 'top', theme: 'light-border' });
+                    } else if (typeof $ !== 'undefined' && $.fn.tooltip) {
+                        $(info.el).tooltip({ title: xpMount.tooltipContent, html: true, sanitize: false, placement: 'top', container: 'body' });
+                    } else {
+                        info.el.title = xpMount.tooltipText
+                            || String(xpMount.tooltipContent).replace(/<br\s*\/?>/gi, ' · ').replace(/<[^>]+>/g, '');
+                    }
+                } else if (xpMount.tooltipText) {
+                    info.el.title = xpMount.tooltipText;
                 }
 
                 info.el.addEventListener('dblclick', function(e) {

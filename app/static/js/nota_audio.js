@@ -22,7 +22,10 @@
     var pollStartedAt = 0;
     var MAX_POLL_MS = 3.5 * 60 * 60 * 1000; // 3.5 h techo UI (audios largos)
     var defaultPromptCache = '';
+    var savedPromptCache = '';
     var promptLoaded = false;
+    var promptDirty = false;
+    var promptLoadPromise = null;
 
     var STEPS = [
         { id: 'subida', label: 'Subida' },
@@ -292,25 +295,104 @@
         });
     }
 
+    function setPromptStatus(msg, kind) {
+        var st = el('notaAudioPromptStatus');
+        if (!st) return;
+        st.textContent = msg || '';
+        st.classList.remove('is-ok', 'is-warn');
+        if (kind === 'ok') st.classList.add('is-ok');
+        if (kind === 'warn') st.classList.add('is-warn');
+    }
+
     function currentSummaryPrompt() {
         var ta = el('notaAudioPrompt');
         if (ta && ta.value.trim()) return ta.value.trim();
-        return defaultPromptCache || '';
+        return savedPromptCache || defaultPromptCache || '';
     }
 
-    function loadSummaryPrompt() {
-        return fetch('/notas/audio/prompt')
+    function currentIncludeTranscript() {
+        var cb = el('notaAudioIncludeTranscript');
+        return !cb || !!cb.checked;
+    }
+
+    function markPromptDirty() {
+        promptDirty = true;
+        setPromptStatus(t('Cambios sin guardar. Pulsa «Guardar prompt» o súbelos con «Recordar al subir».'), 'warn');
+    }
+
+    function loadSummaryPrompt(force) {
+        if (promptLoadPromise && !force) return promptLoadPromise;
+        promptLoadPromise = fetch('/notas/audio/prompt')
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (!data || !data.success) return;
+                if (!data || !data.success) return data;
                 defaultPromptCache = data.default_prompt || '';
+                savedPromptCache = data.prompt || data.default_prompt || '';
                 var ta = el('notaAudioPrompt');
-                if (ta && !promptLoaded) {
-                    ta.value = data.prompt || data.default_prompt || '';
-                    promptLoaded = true;
+                if (ta && (force || !promptLoaded || !promptDirty)) {
+                    ta.value = savedPromptCache;
+                    promptDirty = false;
                 }
+                var inc = el('notaAudioIncludeTranscript');
+                if (inc && typeof data.include_transcript === 'boolean' && (force || !promptDirty)) {
+                    inc.checked = !!data.include_transcript;
+                }
+                promptLoaded = true;
+                if (!promptDirty) {
+                    setPromptStatus(
+                        data.is_custom
+                            ? t('Prompt personalizado cargado.')
+                            : t('Prompt por defecto del sistema.'),
+                        'ok'
+                    );
+                }
+                return data;
             })
-            .catch(function () { /* ignore */ });
+            .catch(function () { return null; });
+        return promptLoadPromise;
+    }
+
+    function saveSummaryPrompt() {
+        var token = csrfToken();
+        var promptText = currentSummaryPrompt();
+        var btn = el('btnNotaAudioPromptSave');
+        if (btn) btn.disabled = true;
+        return fetch('/notas/audio/prompt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token || '',
+            },
+            body: JSON.stringify({
+                prompt: promptText,
+                include_transcript: currentIncludeTranscript(),
+                csrf_token: token || '',
+            }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (btn) btn.disabled = false;
+                if (!data || !data.success) {
+                    setPromptStatus(
+                        (data && data.message) || t('No se pudo guardar el prompt.'),
+                        'warn'
+                    );
+                    return false;
+                }
+                savedPromptCache = data.prompt || promptText;
+                defaultPromptCache = data.default_prompt || defaultPromptCache;
+                var ta = el('notaAudioPrompt');
+                if (ta) ta.value = savedPromptCache;
+                promptDirty = false;
+                promptLoaded = true;
+                setPromptStatus(t('Prompt guardado. Se usará en las próximas notas.'), 'ok');
+                return true;
+            })
+            .catch(function () {
+                if (btn) btn.disabled = false;
+                setPromptStatus(t('Error de conexión al guardar el prompt.'), 'warn');
+                return false;
+            });
     }
 
     function cancelActiveJob() {
@@ -349,6 +431,14 @@
 
     function uploadBlob(blob, filename) {
         if (busy) return;
+        // Asegura que el prompt esté cargado antes de enviar (evita mandar vacío).
+        loadSummaryPrompt().finally(function () {
+            uploadBlobReady(blob, filename);
+        });
+    }
+
+    function uploadBlobReady(blob, filename) {
+        if (busy) return;
         setBusy(true);
         uploadInFlight = true;
         showPanel(true);
@@ -368,6 +458,7 @@
         form.append('audio', blob, filename);
         var promptText = currentSummaryPrompt();
         if (promptText) form.append('summary_prompt', promptText);
+        form.append('include_transcript', currentIncludeTranscript() ? '1' : '0');
         var saveDefault = el('notaAudioPromptSaveDefault');
         if (saveDefault && saveDefault.checked) {
             form.append('save_prompt_default', '1');
@@ -406,6 +497,11 @@
                 setFileMeta(data.archivo_nombre || filename, blob.size, data.duracion_segundos);
             }
             persistJob(data.job_id, data.duracion_segundos, data.archivo_nombre || filename);
+            if (saveDefault && saveDefault.checked && promptText) {
+                savedPromptCache = promptText;
+                promptDirty = false;
+                setPromptStatus(t('Prompt recordado para próximas notas.'), 'ok');
+            }
             markProcessingBackground(
                 t('Audio recibido. Sigue procesándose en segundo plano: puedes cerrar esta ventana o salir de Notas.')
             );
@@ -765,6 +861,20 @@
                 if (open) loadSummaryPrompt();
             });
         }
+        var promptTa = el('notaAudioPrompt');
+        if (promptTa) {
+            promptTa.addEventListener('input', markPromptDirty);
+        }
+        var includeCb = el('notaAudioIncludeTranscript');
+        if (includeCb) {
+            includeCb.addEventListener('change', markPromptDirty);
+        }
+        var btnSavePrompt = el('btnNotaAudioPromptSave');
+        if (btnSavePrompt) {
+            btnSavePrompt.addEventListener('click', function () {
+                saveSummaryPrompt();
+            });
+        }
         var btnResetPrompt = el('btnNotaAudioPromptReset');
         if (btnResetPrompt) {
             btnResetPrompt.addEventListener('click', function () {
@@ -775,16 +885,32 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': token || '',
                     },
-                    body: JSON.stringify({ reset: true, csrf_token: token || '' }),
+                    body: JSON.stringify({
+                        reset: true,
+                        include_transcript: currentIncludeTranscript(),
+                        csrf_token: token || '',
+                    }),
                 })
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
-                        if (!data || !data.success) return;
+                        if (!data || !data.success) {
+                            setPromptStatus(
+                                (data && data.message) || t('No se pudo restablecer el prompt.'),
+                                'warn'
+                            );
+                            return;
+                        }
                         defaultPromptCache = data.default_prompt || defaultPromptCache;
+                        savedPromptCache = data.prompt || data.default_prompt || '';
                         var ta = el('notaAudioPrompt');
-                        if (ta) ta.value = data.prompt || data.default_prompt || '';
+                        if (ta) ta.value = savedPromptCache;
+                        promptDirty = false;
+                        promptLoaded = true;
+                        setPromptStatus(t('Prompt restablecido al defecto del sistema.'), 'ok');
                     })
-                    .catch(function () { /* ignore */ });
+                    .catch(function () {
+                        setPromptStatus(t('Error de conexión al restablecer el prompt.'), 'warn');
+                    });
             });
         }
         loadSummaryPrompt();

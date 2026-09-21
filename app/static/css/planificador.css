@@ -628,6 +628,10 @@
     color: #86efac;
     font-weight: 600;
 }
+.planificador-item-tooltip .planificador-tt-falta {
+    color: #fda4af;
+    font-weight: 600;
+}
 .operario-micro i {
     font-size: 8px !important; margin-right: 4px !important;
     background: rgba(255,255,255,0.2); padding: 3px; border-radius: 50%;
@@ -680,6 +684,26 @@
 }
 .vis-timeline .vis-item.inercia-item.vis-selected {
     opacity: 0.55 !important;
+}
+/* Falta confirmada: fantasma rojo (mismo lenguaje que inercia) */
+.vis-timeline .vis-item.falta-item {
+    opacity: 0.42 !important;
+    border: 1.5px dashed rgba(225, 29, 72, 0.75) !important;
+    box-shadow: none !important;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.45) 0,
+        rgba(255, 255, 255, 0.45) 5px,
+        rgba(255, 255, 255, 0) 5px,
+        rgba(255, 255, 255, 0) 10px
+    ) !important;
+}
+.vis-timeline .vis-item.falta-item .vis-item-content {
+    font-weight: 500 !important;
+}
+.vis-timeline .vis-item.falta-item.vis-selected,
+.vis-timeline .vis-item.falta-item:hover {
+    opacity: 0.72 !important;
 }
 .planificador-inercia-toggle.is-on {
     background: #e2e8f0 !important;

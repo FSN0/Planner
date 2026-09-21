@@ -401,6 +401,12 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
             casa_en_fecha,
             clasificar_entrada_fichaje,
         )
+        from app.services.desvio_fichaje_service import (
+            materializar_conflictos_entrada,
+            resolver_plan_cumplido_por_fichaje,
+            limpiar_acks_desvio,
+            notificar_desvio_inmediato,
+        )
         ya_planificado = Asignacion.query.filter_by(
             user_id=user.id, obra_id=obra.id, fecha=fecha,
         ).first() is not None
@@ -409,13 +415,14 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
             Asignacion.fecha == fecha,
             Asignacion.obra_id != obra.id,
         ).all()
+        otras_ids = [a.obra_id for a in otras_hoy]
         casa_id = None
         if not ya_planificado and not otras_hoy:
             casa_id = casa_en_fecha(user.id, fecha)
         clasif = clasificar_entrada_fichaje(
             obra_fichada_id=obra.id,
             planificado_en_obra_fichada=ya_planificado,
-            otras_obras_planificadas_ids=[a.obra_id for a in otras_hoy],
+            otras_obras_planificadas_ids=otras_ids,
             casa_obra_id=casa_id,
             aceptar_primer_fichaje=aceptar_primer_fichaje(),
         )
@@ -424,20 +431,59 @@ def fichar(user, tipo, obra_id=None, latitud=None, longitud=None,
         if clasif.estado != 'Conflicto':
             asegurar_asignacion_por_fichaje(user, obra.id, fecha)
         proyectar_dia(user.id, fecha)
-        registro = RegistroFichaje.query.filter_by(
+
+        check_in = None
+        primary = RegistroFichaje.query.filter_by(
             user_id=user.id, fecha=fecha,
         ).first()
+        if primary is not None:
+            check_in = primary.check_in
+
+        if clasif.estado == 'Conflicto':
+            # Multi-desvío: un Conflicto por cada obra de plan.
+            conflictos, a_notificar = materializar_conflictos_entrada(
+                user_id=user.id,
+                fecha=fecha,
+                obra_real_id=obra.id,
+                obras_plan_ids=otras_ids,
+                check_in=check_in,
+            )
+            # Si proyectar_dia dejó una fila huérfana (sin plan), reutilízala o limpia.
+            if primary is not None and primary not in conflictos:
+                if not primary.obra_planificada_id or primary.obra_planificada_id == obra.id:
+                    if conflictos:
+                        db.session.delete(primary)
+                    else:
+                        primary.estado = 'Conflicto'
+                        primary.obra_planificada_id = clasif.obra_planificada_id
+                        primary.obra_real_id = obra.id
+                        limpiar_acks_desvio(primary)
+                        a_notificar.append(primary)
+            db.session.commit()
+            for reg in a_notificar:
+                notificar_desvio_inmediato(reg)
+            return estado_para_pantalla(user, fecha)
+
+        # Cumplió (o ficha en) una obra del plan: cae pendiente/conflicto/falta de esa pata.
+        if ya_planificado:
+            resolver_plan_cumplido_por_fichaje(
+                user.id, fecha, obra.id, check_in=check_in,
+            )
+
+        registro = RegistroFichaje.query.filter_by(
+            user_id=user.id, fecha=fecha, obra_planificada_id=obra.id,
+        ).first()
+        if registro is None:
+            registro = RegistroFichaje.query.filter_by(
+                user_id=user.id, fecha=fecha, obra_real_id=obra.id,
+            ).first()
+        if registro is None:
+            registro = primary
         if registro is not None:
             registro.estado = clasif.estado
             registro.obra_planificada_id = clasif.obra_planificada_id
             registro.obra_real_id = obra.id
-            if clasif.estado == 'Conflicto':
-                from app.services.desvio_fichaje_service import limpiar_acks_desvio
-                limpiar_acks_desvio(registro)
         db.session.commit()
-        if registro is not None and clasif.estado == 'Conflicto':
-            from app.services.desvio_fichaje_service import notificar_desvio_inmediato
-            notificar_desvio_inmediato(registro)
         return estado_para_pantalla(user, fecha)
 
     proyectar_dia(user.id, fecha)

@@ -46,7 +46,9 @@ def clasificar_entrada_fichaje(
     Matriz única PWA / Odoo tras una entrada física.
 
     1. Hecho hoy en la obra fichada → Correcto
-    2. Hecho hoy en otra obra → Conflicto (desvió el plan)
+    2. Hecho hoy en otra obra → Conflicto (desvió el plan).
+       `obra_planificada_id` es la primera; el llamador debe materializar
+       un Conflicto por cada id de `otras_obras_planificadas_ids`.
     3. Sin hecho, ficha en su casa → Correcto_Automatico
     4. Sin hecho ni casa → primer fichaje (auto o Paracaidista)
     5. Sin hecho, ficha fuera de casa → Cambio_Tajo (no es alerta)

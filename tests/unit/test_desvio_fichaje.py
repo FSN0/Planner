@@ -98,9 +98,10 @@ class TestDesvioDeteccion:
         )
         assert mismo_jefe_desvio(reg) is True
         botones = botones_desvio_para(reg, desvio_ctx.jefe_x)
-        assert [b['accion'] for b in botones] == [
-            ACCION_CONFIRMAR_DESVIO, ACCION_RECHAZAR_DESVIO,
-        ]
+        acciones = [b['accion'] for b in botones]
+        assert ACCION_CONFIRMAR_DESVIO in acciones
+        assert ACCION_LIBERAR_PLAZA in acciones
+        assert ACCION_ACEPTAR_ENTRADA in acciones
 
 
 class TestFirmasIndependientes:
@@ -118,12 +119,12 @@ class TestFirmasIndependientes:
         assert r1['resolved'] is False
         assert r1['dismiss_for_viewer'] is True
         assert reg.desvio_decision_plan == 'liberar'
-        # Cuadrante aún no se toca hasta que el otro firme
+        # Desasignar ya quita la plaza del plan
         assert Asignacion.query.filter_by(
             user_id=desvio_ctx.operario.id,
             obra_id=desvio_ctx.obra_x.id,
             fecha=reg.fecha,
-        ).first() is not None
+        ).first() is None
         assert debe_mostrar_pendiente_a(reg, desvio_ctx.jefe_x) is False
         assert debe_mostrar_pendiente_a(reg, desvio_ctx.jefe_y) is True
 
@@ -144,34 +145,27 @@ class TestFirmasIndependientes:
             fecha=reg.fecha,
         ).first() is not None
 
-    def test_mantener_falta_luego_rechazar(self, session, tenant_soltec, desvio_ctx):
+    def test_mantener_falta_confirma_inmediato(self, session, tenant_soltec, desvio_ctx):
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
         reg = _registro_desvio(
             session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
         )
         reg_id = reg.id
 
-        aplicar_accion_desvio(reg, ACCION_MANTENER_FALTA, desvio_ctx.jefe_x)
-        session.commit()
-        reg = RegistroFichaje.query.get(reg_id)
-        r2 = aplicar_accion_desvio(reg, ACCION_RECHAZAR_ENTRADA, desvio_ctx.jefe_y)
+        r1 = aplicar_accion_desvio(reg, ACCION_MANTENER_FALTA, desvio_ctx.jefe_x)
         session.commit()
         reg = RegistroFichaje.query.get(reg_id)
 
-        assert r2['resolved'] is True
-        assert reg.estado == 'Resuelto_Ausencia'
+        assert r1['resolved'] is True
+        assert reg.estado == 'Falta'
         assert Asignacion.query.filter_by(
             user_id=desvio_ctx.operario.id,
             obra_id=desvio_ctx.obra_x.id,
             fecha=reg.fecha,
         ).first() is not None
-        assert Asignacion.query.filter_by(
-            user_id=desvio_ctx.operario.id,
-            obra_id=desvio_ctx.obra_y.id,
-            fecha=reg.fecha,
-        ).first() is None
 
-    def test_cruce_libera_disputa(self, session, tenant_soltec, desvio_ctx):
+    def test_liberar_luego_rechazar_legado_acepta(self, session, tenant_soltec, desvio_ctx):
+        """Rechazar entrada ya no niega el fichaje: se trata como aceptar."""
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
         reg = _registro_desvio(
             session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
@@ -184,38 +178,54 @@ class TestFirmasIndependientes:
         session.commit()
         reg = RegistroFichaje.query.get(reg_id)
 
-        assert r2['resolved'] is False
-        assert r2['disputa'] is True
-        assert es_desvio_disputa(reg) is True
-        assert debe_mostrar_pendiente_a(reg, desvio_ctx.jefe_x) is False
-        assert debe_mostrar_pendiente_a(reg, desvio_ctx.jefe_y) is False
-        assert debe_mostrar_pendiente_a(reg, desvio_ctx.admin) is True
-        # Sin mover cuadrante
+        assert r2['resolved'] is True
+        assert reg.estado == 'Resuelto_Movido'
+
+    def test_aceptar_propaga_hermanos(self, session, tenant_soltec, desvio_ctx):
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+        obra_z = _obra(session, 'Obra Plan Z', 'Z-01', jefe_id=desvio_ctx.jefe_x.id)
+        session.commit()
+        reg1 = _registro_desvio(
+            session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
+        )
+        session.add(Asignacion(
+            user_id=desvio_ctx.operario.id, obra_id=obra_z.id, fecha=reg1.fecha,
+        ))
+        reg2 = RegistroFichaje(
+            user_id=desvio_ctx.operario.id,
+            fecha=reg1.fecha,
+            obra_planificada_id=obra_z.id,
+            obra_real_id=desvio_ctx.obra_y.id,
+            estado='Conflicto',
+            check_in=reg1.check_in,
+        )
+        session.add(reg2)
+        session.commit()
+        id1, id2 = reg1.id, reg2.id
+
+        aplicar_accion_desvio(reg1, ACCION_ACEPTAR_ENTRADA, desvio_ctx.jefe_y)
+        session.commit()
+        reg1 = RegistroFichaje.query.get(id1)
+        reg2 = RegistroFichaje.query.get(id2)
+        assert reg1.desvio_ack_real_at is not None
+        assert reg2.desvio_ack_real_at is not None
         assert Asignacion.query.filter_by(
             user_id=desvio_ctx.operario.id,
-            obra_id=desvio_ctx.obra_x.id,
-            fecha=reg.fecha,
+            obra_id=desvio_ctx.obra_y.id,
+            fecha=reg1.fecha,
         ).first() is not None
 
-    def test_admin_resuelve_disputa_confirmando(self, session, tenant_soltec, desvio_ctx):
+    def test_admin_falta_desvio(self, session, tenant_soltec, desvio_ctx):
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
         reg = _registro_desvio(
             session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
         )
         reg_id = reg.id
-        aplicar_accion_desvio(reg, ACCION_MANTENER_FALTA, desvio_ctx.jefe_x)
-        session.commit()
-        reg = RegistroFichaje.query.get(reg_id)
-        aplicar_accion_desvio(reg, ACCION_ACEPTAR_ENTRADA, desvio_ctx.jefe_y)
-        session.commit()
-        reg = RegistroFichaje.query.get(reg_id)
-        assert es_desvio_disputa(reg)
-
-        r = aplicar_accion_desvio(reg, ACCION_CONFIRMAR_DESVIO, desvio_ctx.admin)
+        r = aplicar_accion_desvio(reg, ACCION_RECHAZAR_DESVIO, desvio_ctx.admin)
         session.commit()
         reg = RegistroFichaje.query.get(reg_id)
         assert r['resolved'] is True
-        assert reg.estado == 'Resuelto_Movido'
+        assert reg.estado == 'Falta'
 
     def test_jefe_plan_no_puede_aceptar_entrada(self, session, tenant_soltec, desvio_ctx):
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
@@ -238,18 +248,6 @@ class TestFirmasIndependientes:
         assert reg.estado == 'Resuelto_Movido'
         assert reg.desvio_ack_plan_at and reg.desvio_ack_real_at
 
-    def test_admin_mantener_rechaza_desvio(self, session, tenant_soltec, desvio_ctx):
-        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
-        reg = _registro_desvio(
-            session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
-        )
-        reg_id = reg.id
-        r = aplicar_accion_desvio(reg, ACCION_RECHAZAR_DESVIO, desvio_ctx.admin)
-        session.commit()
-        reg = RegistroFichaje.query.get(reg_id)
-        assert r['resolved'] is True
-        assert reg.estado == 'Resuelto_Ausencia'
-
     def test_botones_jefe_ambos_lados(self, session, tenant_soltec, desvio_ctx):
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
         reg = _registro_desvio(
@@ -258,7 +256,9 @@ class TestFirmasIndependientes:
         bx = botones_desvio_para(reg, desvio_ctx.jefe_x)
         by = botones_desvio_para(reg, desvio_ctx.jefe_y)
         assert [b['accion'] for b in bx] == [ACCION_LIBERAR_PLAZA, ACCION_MANTENER_FALTA]
-        assert [b['accion'] for b in by] == [ACCION_ACEPTAR_ENTRADA, ACCION_RECHAZAR_ENTRADA]
+        assert [b['label'] for b in bx] == ['Desasignar', 'Confirmar falta']
+        assert [b['accion'] for b in by] == [ACCION_ACEPTAR_ENTRADA]
+        assert [b['label'] for b in by] == ['Aceptar']
         assert lados_pendientes_para(reg, desvio_ctx.jefe_x) == {'plan'}
         assert lados_pendientes_para(reg, desvio_ctx.jefe_y) == {'real'}
 
@@ -268,16 +268,64 @@ class TestFirmasIndependientes:
             session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
         )
         botones = botones_desvio_para(reg, desvio_ctx.admin)
-        assert [b['accion'] for b in botones] == [
-            ACCION_CONFIRMAR_DESVIO, ACCION_RECHAZAR_DESVIO,
-        ]
+        acciones = [b['accion'] for b in botones]
+        assert ACCION_CONFIRMAR_DESVIO in acciones
+        assert ACCION_LIBERAR_PLAZA in acciones
+        assert ACCION_MANTENER_FALTA in acciones
+        assert ACCION_ACEPTAR_ENTRADA in acciones
 
-    def test_admin_no_libera_a_trozos_si_ambos_pendientes(
+    def test_admin_puede_liberar_con_ambos_pendientes(
         self, session, tenant_soltec, desvio_ctx,
     ):
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
         reg = _registro_desvio(
             session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
         )
-        with pytest.raises(DesvioFichajeError):
-            aplicar_accion_desvio(reg, ACCION_LIBERAR_PLAZA, desvio_ctx.admin)
+        r = aplicar_accion_desvio(reg, ACCION_LIBERAR_PLAZA, desvio_ctx.admin)
+        assert r['resolved'] is False
+        assert reg.desvio_decision_plan == 'liberar'
+
+
+def test_repartir_secciones_proyecta_espejos():
+    from app.services.desvio_fichaje_service import (
+        DesvioEspejoView,
+        repartir_secciones_auditoria,
+    )
+
+    desvio = SimpleNamespace(
+        id=1,
+        estado='Conflicto',
+        obra_planificada_id=10,
+        obra_real_id=20,
+        desvio_ui={
+            'es_desvio': True,
+            'ack_plan': False,
+            'ack_real': False,
+        },
+    )
+    desvio_ack_real = SimpleNamespace(
+        id=2,
+        estado='Conflicto',
+        obra_planificada_id=11,
+        obra_real_id=21,
+        desvio_ui={
+            'es_desvio': True,
+            'ack_plan': False,
+            'ack_real': True,
+        },
+    )
+    ausencia = SimpleNamespace(id=3, estado='Ausencia', desvio_ui=None)
+    para = SimpleNamespace(id=4, estado='Paracaidista', desvio_ui=None)
+
+    out = repartir_secciones_auditoria(
+        [desvio, desvio_ack_real, ausencia, para]
+    )
+    assert len(out['conflictos']) == 2
+    assert ausencia in out['ausencias']
+    assert para in out['paracaidistas']
+    espejos_aus = [x for x in out['ausencias'] if isinstance(x, DesvioEspejoView)]
+    espejos_para = [x for x in out['paracaidistas'] if isinstance(x, DesvioEspejoView)]
+    assert len(espejos_aus) == 2  # ambos desvíos con plan pendiente
+    assert len(espejos_para) == 1  # solo el que aún no ack_real
+    assert espejos_para[0].desvio_espejo == 'real'
+    assert espejos_para[0].id == 1

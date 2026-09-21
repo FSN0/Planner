@@ -11,13 +11,15 @@ window.SPFichajeEstado = (function () {
         Exento_Ausencia: 1, Cerrado_Multiobra: 1,
     };
     var INTERVENCION = { Sobreescrito_RRHH: 1 };
-    var ROJO = { Conflicto: 1, Paracaidista: 1 };
+    var FALTA = { Falta: 1 };
+    var ROJO = { Conflicto: 1, Paracaidista: 1, Disputa: 1 };
     var NARANJA = { Ausencia: 1, Pendiente: 1, Retraso: 1 };
     var COLOR = {
         rojo: '#ef4444',
         naranja: '#f59e0b',
         verde: '#10b981',
         violeta: '#7c3aed',
+        falta: '#e11d48',
         gris: '#94a3b8',
     };
 
@@ -27,6 +29,7 @@ window.SPFichajeEstado = (function () {
 
     function colorDeEstado(estado) {
         if (ROJO[estado]) return COLOR.rojo;
+        if (FALTA[estado]) return COLOR.falta;
         if (NARANJA[estado] || estado === 'Pendiente') return COLOR.naranja;
         if (INTERVENCION[estado] || estado === 'Exento_Ausencia') return COLOR.violeta;
         if (esOk(estado)) return COLOR.verde;
@@ -40,8 +43,10 @@ window.SPFichajeEstado = (function () {
             Correcto_Automatico: t('Correcto (auto)'),
             Cambio_Tajo: t('Cambio de tajo'),
             Conflicto: t('Conflicto'),
+            Disputa: t('Disputa entre jefes'),
             Paracaidista: t('Paracaidista'),
             Ausencia: t('Ausencia'),
+            Falta: t('Falta'),
             Pendiente: t('Pendiente'),
             Retraso: t('Retraso'),
             Sin_Registro: t('Sin fichaje'),
@@ -52,7 +57,7 @@ window.SPFichajeEstado = (function () {
             Resuelto_Asignado: t('Resuelto (asignado)'),
             Resuelto_Dividido: t('Resuelto (multi-obra)'),
             Resuelto_Ignorado: t('Resuelto (ignorado)'),
-            Resuelto_Falta: t('Resuelto (falta)'),
+            Resuelto_Falta: t('Resuelto (desasignado)'),
             Resuelto_Ausencia: t('Resuelto (ausencia)'),
         };
         if ((estado || '').indexOf('Resuelto') === 0) return labels[estado] || t('Resuelto / correcto');
@@ -61,6 +66,7 @@ window.SPFichajeEstado = (function () {
 
     function badgeClass(estado) {
         if (ROJO[estado]) return 'badge-soft-red';
+        if (FALTA[estado]) return 'badge-soft-red';
         if (NARANJA[estado] || estado === 'Pendiente') return 'badge-soft-amber';
         if (INTERVENCION[estado] || estado === 'Exento_Ausencia') return 'badge-soft-blue';
         if (esOk(estado)) return 'badge-soft-green';

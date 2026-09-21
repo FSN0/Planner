@@ -1851,7 +1851,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Estilo para Operarios normales (tooltip vía itemover)
             const emp = formatEmpresaLabel(item.empresa_nombre);
-            const icon = item.inercia ? 'fa-ghost' : 'fa-user';
+            const icon = item.inercia ? 'fa-ghost' : (item.es_falta ? 'fa-user-slash' : 'fa-user');
             return `<div class="operario-micro" data-empresa="${emp.replace(/"/g, '&quot;')}"><i class="fas ${icon}"></i>${item.title}</div>`;
         },
         onUpdate: function (item, callback) {
@@ -2018,9 +2018,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (['NEW', 'SYSTEM', 'REQUEST'].includes(String(item.worker_id))) return;
             if (isPlanificadorGhost(item)) return;
             const emp = formatEmpresaLabel(item.empresa_nombre);
+            let extra = '';
+            if (item.es_falta) {
+                extra = '<span class="planificador-tt-falta"><i class="fas fa-user-slash"></i> '
+                    + (item.tooltipText || (t('Falta') + ' — ' + t('debía acudir y no fichó')))
+                    + '</span>';
+            } else if (item.inercia) {
+                extra = '<span class="planificador-tt-empresa"><i class="fas fa-ghost"></i> ' + t('Inercia') + '</span>';
+            }
             tooltipEl.innerHTML =
                 '<strong>' + item.title + '</strong>' +
-                '<span class="planificador-tt-empresa"><i class="fas fa-building"></i> ' + emp + '</span>';
+                '<span class="planificador-tt-empresa"><i class="fas fa-building"></i> ' + emp + '</span>' +
+                extra;
             tooltipEl.classList.remove('d-none');
             tooltipEl.setAttribute('aria-hidden', 'false');
             let x = clientX + 14;
@@ -2325,6 +2334,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 base.inercia = true;
                 base.editable = false;
                 base.className = (e.className ? e.className + ' ' : '') + 'inercia-item';
+            }
+            if (e.es_falta) {
+                base.es_falta = true;
+                base.className = (base.className ? base.className + ' ' : '') + 'falta-item';
+                base.tooltipText = e.tooltipText || (t('Falta') + ' — ' + t('debía acudir y no fichó'));
+            } else if (e.tooltipText) {
+                base.tooltipText = e.tooltipText;
             }
             if (e.solicitud_id || e.worker_id === 'REQUEST') {
                 base.className = (base.className ? base.className + ' ' : '') + 'solicitud-item';

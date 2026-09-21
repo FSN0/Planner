@@ -387,15 +387,36 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
         assigned_dates.append(d)
         count += 1
 
+    kept_label = CoreAssignmentService.format_obra_label(obra)
+    dropped_labels = []
+    seen_oids = set()
+    for oid, _, _ in deleted_info:
+        if oid in seen_oids:
+            continue
+        seen_oids.add(oid)
+        dropped_labels.append(
+            CoreAssignmentService.format_obra_label(Obra.query.get(oid)) or f'#{oid}'
+        )
+    if deleted_info and dropped_labels:
+        overwrite_detail = (
+            f"Se mantiene '{kept_label}'. "
+            f"Se quitó de: {', '.join(dropped_labels)} "
+            f"({len(deleted_info)} día(s))."
+        )
+    elif deleted_info:
+        overwrite_detail = (
+            f"Se mantiene '{kept_label}'. "
+            f"Incluye sobreescritura de {len(deleted_info)} día(s)."
+        )
+    else:
+        overwrite_detail = None
+
     if count:
         CoreAssignmentService.registrar_log_rango(
             worker_id, obra_id,
             min(assigned_dates), max(assigned_dates), count,
             actor_id, "Planificación Manual", True,
-            detalle_extra=(
-                f"Incluye sobreescritura de {len(deleted_info)} día(s)."
-                if deleted_info else None
-            ),
+            detalle_extra=overwrite_detail,
             fechas=assigned_dates,
         )
     elif deleted_info:
@@ -405,7 +426,10 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
             max(d for _, _, d in deleted_info),
             len(deleted_info),
             actor_id, "Planificación Manual", True,
-            detalle_extra=f"Limpieza de {len(deleted_info)} día(s) en otras obras.",
+            detalle_extra=(
+                overwrite_detail
+                or f"Limpieza de {len(deleted_info)} día(s) en otras obras."
+            ),
             fechas=[d for _, _, d in deleted_info],
         )
 

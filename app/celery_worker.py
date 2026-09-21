@@ -189,9 +189,10 @@ def send_async_email(subject, recipients, body, html):
 def verificar_hora_corte():
     with app.app_context():
         from app.models import ConfiguracionGlobal
-        from datetime import datetime
+        from datetime import datetime, timedelta
         from app.services.email_service import enviar_super_reporte_diario
         from app.services.sync_service import procesar_fichajes_diarios
+        from app.services.desvio_fichaje_service import consolidar_pendientes_a_ausencia
         from app.utils.timezone_utils import now_local, today_local
 
         def _run_for_tenant(_tenant_data):
@@ -212,8 +213,12 @@ def verificar_hora_corte():
             if conf_ultimo and conf_ultimo.valor == hoy_str:
                 return
 
-            app.logger.info(f">>> HORA DE CORTE ALCANZADA ({hora_str}). MARCANDO AUSENCIAS Y ENVIANDO REPORTE.")
+            app.logger.info(
+                f">>> HORA DE REPORTE ({hora_str}). "
+                f"Consolidando ausencias de AYER y enviando reporte del día cerrado."
+            )
             procesar_fichajes_diarios()
+            consolidar_pendientes_a_ausencia(today_local() - timedelta(days=1))
             enviar_super_reporte_diario()
 
             if not conf_ultimo:
@@ -224,7 +229,7 @@ def verificar_hora_corte():
         try:
             # Todos los tenants activos: con o sin Odoo. Sin ERP el adaptador
             # local no trae fichajes externos, pero sí siembra Sin_Registro y
-            # marca Ausencia tras la hora de corte (PWA / plan local).
+            # consolida ausencias del día anterior.
             _for_each_tenant(_run_for_tenant, solo_odoo=False)
         finally:
             _cleanup_db_session()

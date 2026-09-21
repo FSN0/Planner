@@ -921,6 +921,21 @@ def auditoria_fichajes():
             pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
         except Exception:
             current_app.logger.exception('enriquecer_pendientes_desvio falló; se muestran sin UI desvío')
+        from app.services.desvio_fichaje_service import repartir_secciones_auditoria
+        try:
+            _secciones = repartir_secciones_auditoria(pendientes)
+            var_conflictos = _secciones['conflictos']
+            var_ausencias = _secciones['ausencias']
+            var_paracaidistas = _secciones['paracaidistas']
+        except Exception:
+            current_app.logger.exception('repartir_secciones_auditoria falló')
+            var_conflictos = [
+                r for r in pendientes if r.estado in ('Conflicto', 'Disputa')
+            ]
+            var_ausencias = [r for r in pendientes if r.estado == 'Ausencia']
+            var_paracaidistas = [
+                r for r in pendientes if r.estado == 'Paracaidista'
+            ]
         historial = []
         correcciones = []
         historial_total = (
@@ -968,6 +983,9 @@ def auditoria_fichajes():
         return render_template(
             'sync/auditoria.html',
             pendientes=pendientes,
+            var_conflictos=var_conflictos,
+            var_ausencias=var_ausencias,
+            var_paracaidistas=var_paracaidistas,
             historial=historial,
             correcciones=correcciones,
             historial_total=historial_total,
@@ -1075,7 +1093,7 @@ ACCION_RESOLUCION_TITULOS = {
     'aceptar_entrada': 'Aceptar entrada',
     'rechazar_entrada': 'Rechazar entrada',
     'confirmar_desvio': 'Confirmar desvío',
-    'rechazar_desvio': 'Mantener plan',
+    'rechazar_desvio': 'Confirmar falta (desvío)',
 }
 
 # Placeholders / pendientes que dejan la pelotita naranja tras resolver otra fila.
@@ -1094,24 +1112,23 @@ _ESTADOS_RESUELTOS = (
     'Resuelto_Ignorado',
     'Resuelto_Falta',
     'Resuelto_Ausencia',
+    'Falta',
 )
 
 
 def _cerrar_hermanos_placeholder(registro, accion, estado_anterior=None):
     """
-    Al aceptar/mover/borrar, cierra filas hermanas del mismo día que solo son
-    semillas de sync o incidencias ya cubiertas por la resolución principal.
-    Así el día queda verde si el admin ya resolvió el caso.
+    Al aceptar/mover/borrar, cierra semillas hermanas del mismo día.
 
-    Si aceptamos un Paracaidista, las semillas Sin_Registro/Ausencia de LA MISMA
-    obra se eliminan (no Resuelto_Ignorado): si no, el histórico muestra dos
-    filas absurdas («asignado» + «ignorado / faltó») y el correo de corte puede
-    haberse basado en esa Ausencia fantasma.
+    No cierra otros Conflicto/Disputa de distintas obras de plan (multi-desvío):
+    cada pata se resuelve aparte.
     """
     if accion not in (
         'anadir', 'mover', 'borrar_planificacion', 'ignorar', 'confirmar_ausencia',
     ):
         return
+
+    semillas = ('Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso')
     hermanos = RegistroFichaje.query.filter(
         RegistroFichaje.user_id == registro.user_id,
         RegistroFichaje.fecha == registro.fecha,
@@ -1123,36 +1140,53 @@ def _cerrar_hermanos_placeholder(registro, accion, estado_anterior=None):
         'mover': 'Cerrado: el fichaje se movió a otra obra.',
         'borrar_planificacion': 'Cerrado: se eliminó la planificación asociada.',
         'ignorar': 'Cerrado junto con la incidencia ignorada.',
-        'confirmar_ausencia': 'Cerrado: ausencia confirmada para el día.',
+        'confirmar_ausencia': 'Cerrado: falta confirmada en esa obra de plan.',
     }.get(accion, 'Cerrado tras resolución de auditoría.')
 
     obra_real = registro.obra_real_id
+    obra_plan = registro.obra_planificada_id
+
     for h in hermanos:
-        # Aceptar Paracaidista: las semillas Sin_Registro/Ausencia del día son
-        # falsos positivos (sí fichó). Borrarlas; no dejar Resuelto_Ignorado.
-        semilla_dia = (
+        # Falta / desasignar: solo semillas de la misma obra de plan.
+        if accion in ('confirmar_ausencia', 'borrar_planificacion'):
+            if h.estado not in semillas:
+                continue
+            if obra_plan and h.obra_planificada_id and h.obra_planificada_id != obra_plan:
+                continue
+            h.estado_antes_resolucion = h.estado
+            h.estado = 'Resuelto_Ignorado'
+            h.resuelto_por_id = registro.resuelto_por_id
+            h.fecha_auditoria = registro.fecha_auditoria
+            h.notas_resolucion = nota
+            continue
+
+        # No tocar desvíos de otras obras de plan.
+        if h.estado in ('Conflicto', 'Disputa'):
+            if (
+                h.obra_planificada_id
+                and obra_plan
+                and h.obra_planificada_id != obra_plan
+            ):
+                continue
+
+        # Aceptar Paracaidista: borrar semillas fantasma del día.
+        if (
             estado_anterior == 'Paracaidista'
             and accion == 'anadir'
-            and h.estado in ('Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso')
-        )
-        misma_obra = (
-            estado_anterior == 'Paracaidista'
-            and accion == 'anadir'
-            and obra_real
-            and (
-                h.obra_planificada_id == obra_real
-                or h.obra_real_id == obra_real
-            )
-            and h.estado in ('Sin_Registro', 'Ausencia', 'Pendiente', 'Retraso')
-        )
-        if semilla_dia or misma_obra:
+            and h.estado in semillas
+        ):
             db.session.delete(h)
             continue
-        h.estado_antes_resolucion = h.estado
-        h.estado = 'Resuelto_Ignorado'
-        h.resuelto_por_id = registro.resuelto_por_id
-        h.fecha_auditoria = registro.fecha_auditoria
-        h.notas_resolucion = nota
+
+        if h.estado in semillas or (
+            h.estado in ('Conflicto', 'Disputa', 'Paracaidista')
+            and (not obra_plan or h.obra_planificada_id == obra_plan)
+        ):
+            h.estado_antes_resolucion = h.estado
+            h.estado = 'Resuelto_Ignorado'
+            h.resuelto_por_id = registro.resuelto_por_id
+            h.fecha_auditoria = registro.fecha_auditoria
+            h.notas_resolucion = nota
 
 
 def _reabrir_hermanos_cerrados(registro, fecha_auditoria_previa):
@@ -1218,15 +1252,15 @@ def _detalle_resolucion_fichaje(registro, accion, estado_anterior=None):
     if accion == 'borrar_planificacion':
         if obra_plan:
             return (
-                f"Se elimina la planificación en '{obra_plan}' "
-                f"(el operario no fichó en esa obra)."
+                f"Se desasigna de '{obra_plan}' "
+                f"(la planificación no aplicaba / se elimina del cuadrante)."
             )
         return "Planificación eliminada."
 
     if accion == 'confirmar_ausencia':
         if obra_plan:
-            return f"Ausencia confirmada: no acudió a '{obra_plan}'."
-        return "Ausencia confirmada manualmente."
+            return f"Falta confirmada: debía acudir a '{obra_plan}' y no fichó."
+        return "Falta confirmada."
 
     return "Ajuste manual del cuadrante/fichaje."
 
@@ -1288,7 +1322,7 @@ def resolver_fichaje():
             if resultado.get('resolved'):
                 herm_accion = (
                     'confirmar_ausencia'
-                    if registro.estado == 'Resuelto_Ausencia'
+                    if registro.estado in ('Resuelto_Ausencia', 'Falta')
                     else 'mover'
                 )
                 _cerrar_hermanos_placeholder(
@@ -1307,6 +1341,14 @@ def resolver_fichaje():
                 target_date=registro.fecha,
             )
             db.session.commit()
+            def _ack_nombre(uid):
+                if not uid:
+                    return None
+                from app.models import User as _UserAck
+                u = _UserAck.query.get(uid)
+                if not u:
+                    return None
+                return f"{(u.name or '').strip()} {(u.lastname or '').strip()}".strip() or None
             return jsonify({
                 'success': True,
                 'resolved': resultado.get('resolved'),
@@ -1314,6 +1356,8 @@ def resolver_fichaje():
                 'message': translate(resultado.get('message') or 'OK'),
                 'ack_plan': resultado.get('ack_plan'),
                 'ack_real': resultado.get('ack_real'),
+                'ack_plan_por': _ack_nombre(registro.desvio_ack_plan_by_id),
+                'ack_real_por': _ack_nombre(registro.desvio_ack_real_by_id),
             })
         except DesvioFichajeError as err:
             db.session.rollback()
@@ -1417,13 +1461,29 @@ def resolver_fichaje():
             for asig in asignaciones_viejas:
                 CoreAssignmentService.desasignar(
                     asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                    "Borrar Planificación",
+                    "Desasignar (planificación incorrecta)",
                 )
 
             registro.estado = 'Resuelto_Falta'
 
         elif accion == 'confirmar_ausencia':
-            registro.estado = 'Resuelto_Ausencia'
+            # Falta real: sigue planificado con estado visual Falta.
+            from app.services.desvio_fichaje_service import ESTADO_FALTA
+            if registro.obra_planificada_id:
+                existe = Asignacion.query.filter_by(
+                    user_id=registro.user_id,
+                    fecha=registro.fecha,
+                    obra_id=registro.obra_planificada_id,
+                ).first()
+                if not existe:
+                    CoreAssignmentService.asignar(
+                        registro.user_id,
+                        registro.obra_planificada_id,
+                        registro.fecha,
+                        current_user.id,
+                        "Confirmar falta: se mantiene la planificación",
+                    )
+            registro.estado = ESTADO_FALTA
 
         else:
             return jsonify({'success': False, 'error': translate('Acción no reconocida')}), 400

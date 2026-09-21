@@ -161,9 +161,9 @@ tr.audit-row-highlight {
       </div>
     </div>
 
-    {% set var_conflictos = (pendientes | selectattr('estado', 'equalto', 'Conflicto') | list) + (pendientes | selectattr('estado', 'equalto', 'Disputa') | list) %}
-    {% set var_paracaidistas = pendientes | selectattr('estado', 'equalto', 'Paracaidista') | list %}
-    {% set var_ausencias = pendientes | selectattr('estado', 'equalto', 'Ausencia') | list %}
+    {% set var_conflictos = var_conflictos if var_conflictos is defined else ((pendientes | selectattr('estado', 'equalto', 'Conflicto') | list) + (pendientes | selectattr('estado', 'equalto', 'Disputa') | list)) %}
+    {% set var_paracaidistas = var_paracaidistas if var_paracaidistas is defined else (pendientes | selectattr('estado', 'equalto', 'Paracaidista') | list) %}
+    {% set var_ausencias = var_ausencias if var_ausencias is defined else (pendientes | selectattr('estado', 'equalto', 'Ausencia') | list) %}
 
     <div class="auditoria-stats">
       {% if 'conflictos' in visible_sections %}
@@ -236,8 +236,24 @@ tr.audit-row-highlight {
                         <tbody>
                             {% for reg in var_conflictos %}
                             {% set desvio = reg.desvio_ui if reg.desvio_ui is defined else none %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-audit-row style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                            {% set desvio_colspan = after_metrics + 2 %}
+                            {% set btns = desvio.botones if desvio else [] %}
+                            {% set btns_plan = btns | selectattr('lado', 'equalto', 'plan') | list %}
+                            {% set btns_real = btns | selectattr('lado', 'equalto', 'real') | list %}
+                            {% set btns_ambos = btns | selectattr('lado', 'equalto', 'ambos') | list %}
+                            <tr id="row-{{ reg.id }}"
+                                class="audit-data-row audit-desvio-main{% if desvio and desvio.mia_plan %} audit-desvio-main--mia-plan{% endif %}{% if desvio and desvio.mia_real %} audit-desvio-main--mia-real{% endif %}"
+                                data-desvio-toggle="{{ reg.id }}"
+                                data-user-id="{{ reg.user_id }}"
+                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
+                                {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
+                                {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %}
+                                data-tour-audit-row
+                                aria-expanded="false"
+                                style="cursor: pointer;">
+                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">
+                                    <i class="fas fa-chevron-right audit-desvio-chevron text-muted mr-1" aria-hidden="true"></i>{{ reg.fecha.strftime('%d/%m/%Y') }}
+                                </td>
                                 {{ celda_operario(reg) }}
                                 {{ celda_obra_link(reg.obra_planificada, es_mia=(desvio.mia_plan if desvio else false)) }}
                                 {{ celda_obra_link(reg.obra_real, es_mia=(desvio.mia_real if desvio else false)) }}
@@ -250,42 +266,136 @@ tr.audit-row-highlight {
                                 {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
                                 {{ celda_metricas_odoo(reg) }}
                                 {{ celda_notas(reg) }}
-                                    <td class="text-right no-row-nav audit-resolve-cell" data-sort-value="" onclick="event.stopPropagation();">
-                                    {% if can_resolve|default(can_resolve_fichajes) %}
+                                <td class="text-right no-row-nav audit-resolve-cell" data-sort-value="" onclick="event.stopPropagation();">
+                                    <span class="audit-desvio-status" aria-label="{{ _('Estado del desvío') }}">
                                       {% if desvio %}
-                                        <div class="audit-desvio-actions">
-                                          <span class="audit-desvio-status" aria-label="{{ _('Estado del desvío') }}">
-                                            <span class="audit-desvio-dot {% if desvio.ack_plan %}is-ok{% else %}is-pending{% endif %}"
-                                                  title="{% if desvio.ack_plan %}{{ _('Plan OK') }}{% else %}{{ _('Plan pendiente') }}{% endif %}">P</span>
-                                            <span class="audit-desvio-dot {% if desvio.ack_real %}is-ok{% else %}is-pending{% endif %}"
-                                                  title="{% if desvio.ack_real %}{{ _('Fichaje OK') }}{% else %}{{ _('Fichaje pendiente') }}{% endif %}">F</span>
-                                          </span>
-                                          {% for btn in desvio.botones %}
-                                            {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
-                                            <button type="button"
-                                                    class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
-                                                    data-registro-id="{{ reg.id }}"
-                                                    data-accion="{{ btn.accion }}"
-                                                    title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
-                                          {% endfor %}
-                                          {% if desvio.disputa and current_user.role in ['admin', 'laboral', 'rrhh'] %}
-                                            <span class="badge-soft badge-soft-amber" title="{{ _('Los jefes no coinciden') }}">{{ _('Disputa') }}</span>
-                                          {% endif %}
-                                          {% if current_user.role in ['admin', 'laboral', 'rrhh'] %}
-                                            <button type="button" class="btn btn-light border btn-audit btn-audit-ignore text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}" aria-label="{{ _('Ignorar') }}"><i class="fas fa-times"></i></button>
-                                          {% elif not desvio.botones %}
-                                            <span class="text-muted small">{{ _('Esperando al otro jefe') }}</span>
-                                          {% endif %}
-                                        </div>
-                                      {% else %}
-                                        <div class="audit-desvio-actions">
-                                          <button type="button" class="btn btn-outline-danger btn-audit js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="mover" title="{{ _('Cambia la planificación a la obra donde fichó') }}">{{ _('Mover') }}</button>
-                                          <button type="button" class="btn btn-outline-primary btn-audit js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="anadir" title="{{ _('Mantiene la obra planificada y añade también la del fichaje') }}">{{ _('+ Añadir') }}</button>
-                                          <button type="button" class="btn btn-light border btn-audit btn-audit-ignore text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Oculta esta alerta sin cambiar el cuadrante') }}" aria-label="{{ _('Ignorar') }}"><i class="fas fa-times"></i></button>
-                                        </div>
+                                        <span class="audit-desvio-dot {% if desvio.ack_plan %}is-ok{% else %}is-pending{% endif %}"
+                                              title="{% if desvio.ack_plan %}{{ _('Plan OK') }}{% else %}{{ _('Plan pendiente') }}{% endif %}">P</span>
+                                        <span class="audit-desvio-dot {% if desvio.ack_real %}is-ok{% else %}is-pending{% endif %}"
+                                              title="{% if desvio.ack_real %}{{ _('Fichaje OK') }}{% else %}{{ _('Fichaje pendiente') }}{% endif %}">F</span>
                                       {% endif %}
-                                    {% else %}
-                                    <span class="text-muted small">{{ _('Solo lectura') }}</span>
+                                    </span>
+                                    <span class="text-muted small d-none d-md-inline">{{ _('Clic para expandir') }}</span>
+                                </td>
+                            </tr>
+                            <tr id="desvio-detail-{{ reg.id }}" class="audit-desvio-detail" hidden>
+                                <td colspan="{{ desvio_colspan }}" class="audit-desvio-detail-cell no-row-nav">
+                                    {% if can_resolve|default(can_resolve_fichajes) and btns_ambos %}
+                                    <div class="audit-desvio-ambos mb-2">
+                                      {% for btn in btns_ambos %}
+                                        {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
+                                        <button type="button"
+                                                class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
+                                                data-registro-id="{{ reg.id }}"
+                                                data-accion="{{ btn.accion }}"
+                                                title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
+                                      {% endfor %}
+                                      <span class="text-muted small ml-2">{{ _('Atajo (gestionas ambos lados)') }}</span>
+                                    </div>
+                                    {% endif %}
+                                    <div class="audit-desvio-panels">
+                                        <div class="audit-desvio-panel audit-desvio-panel--plan{% if desvio and desvio.mia_plan %} is-mia{% endif %}{% if desvio and desvio.ack_plan %} is-resolved{% endif %}">
+                                            <div class="audit-desvio-panel-head">
+                                                <span class="badge-soft badge-soft-amber">{{ _('Ausencia / pendiente') }}</span>
+                                                {% if desvio and desvio.mia_plan %}<span class="audit-obra-mia">{{ _('Tuya') }}</span>{% endif %}
+                                                {% if desvio and desvio.ack_plan %}
+                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _('Resuelto') }}</span>
+                                                {% else %}
+                                                <span class="text-muted small ml-auto">{{ _('Estaba planificado aquí y aún no ha fichado') }}</span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="audit-desvio-panel-body">
+                                                {% if reg.obra_planificada %}
+                                                <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra">{{ reg.obra_planificada.codigo }}</a>
+                                                <span class="text-muted">— {{ reg.obra_planificada.nombre }}</span>
+                                                {% else %}
+                                                <span class="text-muted">—</span>
+                                                {% endif %}
+                                                {% if desvio and desvio.planificado_por %}
+                                                <div class="audit-desvio-meta">
+                                                  {% if desvio.planificado_por_es_jefe %}
+                                                  <span class="audit-desvio-meta-k">{{ _('Responsable obra') }}</span>
+                                                  {% else %}
+                                                  <span class="audit-desvio-meta-k">{{ _('Planificado por') }}</span>
+                                                  {% endif %}
+                                                  {{ desvio.planificado_por }}
+                                                </div>
+                                                {% endif %}
+                                                {% if desvio and desvio.ack_plan and desvio.ack_plan_por %}
+                                                <div class="audit-desvio-meta">
+                                                  <span class="audit-desvio-meta-k">{{ _('Resuelto por') }}</span> {{ desvio.ack_plan_por }}
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="audit-desvio-panel-actions">
+                                                {% if can_resolve|default(can_resolve_fichajes) %}
+                                                  {% for btn in btns_plan %}
+                                                    {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
+                                                            data-registro-id="{{ reg.id }}"
+                                                            data-accion="{{ btn.accion }}"
+                                                            title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
+                                                  {% else %}
+                                                    {% if desvio and desvio.ack_plan %}
+                                                    <span class="text-muted small">{{ _('Ya resuelto') }}</span>
+                                                    {% elif not (desvio and desvio.mia_plan) and current_user.role == 'jefe_obra' %}
+                                                    <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
+                                                    {% endif %}
+                                                  {% endfor %}
+                                                {% else %}
+                                                <span class="text-muted small">{{ _('Solo lectura') }}</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="audit-desvio-panel audit-desvio-panel--real{% if desvio and desvio.mia_real %} is-mia{% endif %}{% if desvio and desvio.ack_real %} is-resolved{% endif %}">
+                                            <div class="audit-desvio-panel-head">
+                                                <span class="badge-soft badge-soft-blue">{{ _('Fichaje sin planificar') }}</span>
+                                                {% if desvio and desvio.mia_real %}<span class="audit-obra-mia">{{ _('Tuya') }}</span>{% endif %}
+                                                {% if desvio and desvio.ack_real %}
+                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _('Aceptado') }}</span>
+                                                {% else %}
+                                                <span class="text-muted small ml-auto">{{ _('Ha fichado aquí sin estar planificado') }}</span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="audit-desvio-panel-body">
+                                                {% if reg.obra_real %}
+                                                <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra">{{ reg.obra_real.codigo }}</a>
+                                                <span class="text-muted">— {{ reg.obra_real.nombre }}</span>
+                                                {% if reg.check_in %}<span class="audit-chip audit-chip-in ml-2"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% endif %}
+                                                {% else %}
+                                                <span class="text-muted">—</span>
+                                                {% endif %}
+                                                {% if desvio and desvio.ack_real and desvio.ack_real_por %}
+                                                <div class="audit-desvio-meta">
+                                                  <span class="audit-desvio-meta-k">{{ _('Aceptado por') }}</span> {{ desvio.ack_real_por }}
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="audit-desvio-panel-actions">
+                                                {% if can_resolve|default(can_resolve_fichajes) %}
+                                                  {% for btn in btns_real %}
+                                                    {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
+                                                    <button type="button"
+                                                            class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
+                                                            data-registro-id="{{ reg.id }}"
+                                                            data-accion="{{ btn.accion }}"
+                                                            title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
+                                                  {% else %}
+                                                    {% if desvio and desvio.ack_real %}
+                                                    <span class="text-muted small">{{ _('Ya aceptado') }}</span>
+                                                    {% elif not (desvio and desvio.mia_real) and current_user.role == 'jefe_obra' %}
+                                                    <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
+                                                    {% endif %}
+                                                  {% endfor %}
+                                                {% else %}
+                                                <span class="text-muted small">{{ _('Solo lectura') }}</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% if desvio and desvio.disputa and current_user.role in ['admin', 'laboral', 'rrhh'] %}
+                                    <div class="mt-2"><span class="badge-soft badge-soft-amber">{{ _('Disputa entre jefes — solo oficina') }}</span></div>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -330,7 +440,12 @@ tr.audit-row-highlight {
                         </thead>
                         <tbody>
                             {% for reg in var_paracaidistas %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row"
+                            {% set es_espejo = reg.desvio_espejo is defined and reg.desvio_espejo == 'real' %}
+                            {% set desvio = reg.desvio_ui if es_espejo and reg.desvio_ui is defined else none %}
+                            {% set btns_real = (desvio.botones if desvio else []) | selectattr('lado', 'equalto', 'real') | list %}
+                            <tr id="{% if es_espejo %}row-espejo-real-{{ reg.id }}{% else %}row-{{ reg.id }}{% endif %}"
+                                class="fila-fichaje-auditoria audit-data-row{% if es_espejo %} audit-desvio-espejo{% endif %}"
+                                {% if es_espejo %}data-desvio-espejo="real" data-desvio-registro-id="{{ reg.id }}"{% endif %}
                                 data-user-id="{{ reg.user_id }}"
                                 data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
                                 {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
@@ -339,8 +454,17 @@ tr.audit-row-highlight {
                                 style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 {{ celda_operario(reg) }}
-                                <td data-sort-value="libre"><span class="text-muted font-italic" style="font-size: 0.75rem;">{{ _('Libre / Inercia') }}</span></td>
-                                {{ celda_obra_link(reg.obra_real) }}
+                                <td data-sort-value="{% if es_espejo %}desvio{% else %}libre{% endif %}">
+                                  {% if es_espejo %}
+                                    <span class="badge-soft badge-soft-amber" style="font-size: 0.65rem;" title="{{ _('También en Desviaciones de plan') }}">{{ _('Desvío de plan') }}</span>
+                                    {% if reg.obra_planificada %}
+                                    <div class="text-muted small mt-1">{{ _('Venía de') }} {{ reg.obra_planificada.codigo }}</div>
+                                    {% endif %}
+                                  {% else %}
+                                    <span class="text-muted font-italic" style="font-size: 0.75rem;">{{ _('Libre / Inercia') }}</span>
+                                  {% endif %}
+                                </td>
+                                {{ celda_obra_link(reg.obra_real, es_mia=(desvio.mia_real if desvio else false)) }}
                                 <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
                                     {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
@@ -350,10 +474,23 @@ tr.audit-row-highlight {
                                 {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
                                 {{ celda_metricas_odoo(reg) }}
                                 {{ celda_notas(reg) }}
-                                <td class="text-right no-row-nav" data-sort-value="">
+                                <td class="text-right no-row-nav" data-sort-value="" {% if es_espejo %}onclick="event.stopPropagation();"{% endif %}>
                                     {% if can_resolve|default(can_resolve_fichajes) %}
+                                      {% if es_espejo %}
+                                        {% for btn in btns_real %}
+                                        <button type="button" class="btn btn-outline-primary btn-audit mr-1 js-audit-resolve"
+                                                data-registro-id="{{ reg.id }}" data-accion="{{ btn.accion }}"
+                                                title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
+                                        {% else %}
+                                          {% if desvio and desvio.ack_real %}
+                                          <span class="text-muted small">{{ _('Ya aceptado') }}</span>
+                                          {% elif not (desvio and desvio.mia_real) and current_user.role == 'jefe_obra' %}
+                                          <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
+                                          {% endif %}
+                                        {% endfor %}
+                                      {% else %}
                                     <button type="button" class="btn btn-outline-primary btn-audit mr-1 js-audit-resolve" data-tour="audit-aceptar" data-registro-id="{{ reg.id }}" data-accion="anadir" title="{{ _('Asignar oficialmente a esta obra') }}">{{ _('Aceptar') }}</button>
-                                    <button type="button" class="btn btn-light border btn-audit text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Ocultar esta alerta') }}">{{ _('Ignorar') }}</button>
+                                      {% endif %}
                                     {% else %}
                                     <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
@@ -396,17 +533,47 @@ tr.audit-row-highlight {
                         </thead>
                         <tbody>
                             {% for reg in var_ausencias %}
-                            <tr id="row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
+                            {% set es_espejo = reg.desvio_espejo is defined and reg.desvio_espejo == 'plan' %}
+                            {% set desvio = reg.desvio_ui if es_espejo and reg.desvio_ui is defined else none %}
+                            {% set btns_plan = (desvio.botones if desvio else []) | selectattr('lado', 'equalto', 'plan') | list %}
+                            <tr id="{% if es_espejo %}row-espejo-plan-{{ reg.id }}{% else %}row-{{ reg.id }}{% endif %}"
+                                class="fila-fichaje-auditoria audit-data-row{% if es_espejo %} audit-desvio-espejo{% endif %}"
+                                {% if es_espejo %}data-desvio-espejo="plan" data-desvio-registro-id="{{ reg.id }}"{% endif %}
+                                data-user-id="{{ reg.user_id }}"
+                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
+                                style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 {{ celda_operario(reg) }}
-                                {{ celda_obra_link(reg.obra_planificada) }}
-                                <td data-sort-value="ausencia"><span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> {{ sin_fichaje_lbl }}</span></td>
+                                {{ celda_obra_link(reg.obra_planificada, es_mia=(desvio.mia_plan if desvio else false)) }}
+                                <td data-sort-value="{% if es_espejo %}desvio{% else %}ausencia{% endif %}">
+                                  {% if es_espejo %}
+                                    <span class="badge-soft badge-soft-amber" style="font-size: 0.65rem;" title="{{ _('También en Desviaciones de plan') }}">{{ _('Desvío de plan') }}</span>
+                                    {% if reg.obra_real %}
+                                    <div class="text-muted small mt-1">{{ _('Fichó en') }} {{ reg.obra_real.codigo }}</div>
+                                    {% endif %}
+                                  {% else %}
+                                    <span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> {{ sin_fichaje_lbl }}</span>
+                                  {% endif %}
+                                </td>
                                 {{ celda_notas(reg) }}
-                                <td class="text-right no-row-nav" data-sort-value="">
+                                <td class="text-right no-row-nav" data-sort-value="" {% if es_espejo %}onclick="event.stopPropagation();"{% endif %}>
                                     {% if can_resolve|default(can_resolve_fichajes) %}
-                                    <button type="button" class="btn btn-outline-danger btn-audit mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="confirmar_ausencia" title="{{ _('Falta real (Mantiene la planificación)') }}">{{ _('Ausencia') }}</button>
-                                    <button type="button" class="btn btn-outline-warning btn-audit text-dark mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="borrar_planificacion" title="{{ _('Elimina la planificación asignada para este día') }}">{{ _('Falta') }}</button>
-                                    <button type="button" class="btn btn-light border btn-audit text-muted js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="ignorar" title="{{ _('Oculta esta alerta sin realizar cambios') }}">{{ _('Ignorar') }}</button>
+                                      {% if es_espejo %}
+                                        {% for btn in btns_plan %}
+                                        <button type="button" class="btn btn-outline-{% if btn.style == 'warning' %}warning text-dark{% elif btn.style == 'danger' %}danger{% else %}primary{% endif %} btn-audit mr-1 js-audit-resolve"
+                                                data-registro-id="{{ reg.id }}" data-accion="{{ btn.accion }}"
+                                                title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
+                                        {% else %}
+                                          {% if desvio and desvio.ack_plan %}
+                                          <span class="text-muted small">{{ _('Ya resuelto') }}</span>
+                                          {% elif not (desvio and desvio.mia_plan) and current_user.role == 'jefe_obra' %}
+                                          <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
+                                          {% endif %}
+                                        {% endfor %}
+                                      {% else %}
+                                    <button type="button" class="btn btn-outline-warning btn-audit text-dark mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="borrar_planificacion" title="{{ _('Quita la planificación de esta obra (estaba mal / ya no aplica)') }}">{{ _('Desasignar') }}</button>
+                                    <button type="button" class="btn btn-outline-danger btn-audit mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="confirmar_ausencia" title="{{ _('Falta real: sigue planificado con marca de falta en el calendario') }}">{{ _('Confirmar falta') }}</button>
+                                      {% endif %}
                                     {% else %}
                                     <span class="text-muted small">{{ _('Solo lectura') }}</span>
                                     {% endif %}
@@ -559,7 +726,10 @@ tr.audit-row-highlight {
                                 <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>{{ _('Ausencia OK') }}</span>
                             
                             {% elif reg.estado == 'Resuelto_Falta' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>{{ _('Plan. Borrada') }}</span>
+                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>{{ _('Desasignado') }}</span>
+
+                            {% elif reg.estado == 'Falta' %}
+                                <span class="font-weight-bold" style="font-size:0.75rem; color:#e11d48;" title="{{ reg.notas_resolucion }}"><span class="status-dot" style="background:#e11d48;"></span>{{ _('Falta') }}</span>
                             
                             {% else %}
                                 <span class="text-secondary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Ignorado o Falta justificada') }}"><span class="status-dot dot-secondary"></span>{{ _('Ignorado/Justif.') }}</span>
@@ -1007,15 +1177,127 @@ var AUDIT_RESOLVE_I18N = {{ {
         row.style.pointerEvents = 'auto';
     }
 
+    function removeEspejoRows(id, lados) {
+        var sides = lados || ['plan', 'real'];
+        sides.forEach(function (lado) {
+            var el = document.getElementById('row-espejo-' + lado + '-' + id);
+            if (!el) return;
+            var card = el.closest('.card-modern');
+            if (card) {
+                var badge = card.querySelector('.badge-count, .badge');
+                if (badge) {
+                    var count = parseInt(badge.innerText, 10);
+                    if (!isNaN(count) && count > 0) badge.innerText = count - 1;
+                }
+            }
+            el.remove();
+        });
+    }
+
+    function removeDesvioRow(row, id) {
+        if (!row) return;
+        var card = row.closest('.card-modern');
+        if (card) {
+            var badge = card.querySelector('.badge-count, .badge');
+            if (badge) {
+                var count = parseInt(badge.innerText, 10);
+                if (!isNaN(count) && count > 0) badge.innerText = count - 1;
+            }
+        }
+        var detail = document.getElementById('desvio-detail-' + id);
+        if (detail) detail.remove();
+        row.remove();
+        removeEspejoRows(id);
+    }
+
+    function applyDesvioPartialUpdate(id, data) {
+        var row = document.getElementById('row-' + id);
+        var detail = document.getElementById('desvio-detail-' + id);
+        if (!row) return;
+        restoreRow(row);
+
+        var dots = row.querySelectorAll('.audit-desvio-dot');
+        if (dots.length >= 2) {
+            if (data.ack_plan) {
+                dots[0].classList.add('is-ok');
+                dots[0].classList.remove('is-pending');
+                dots[0].title = {{ _('Plan OK')|tojson }};
+            }
+            if (data.ack_real) {
+                dots[1].classList.add('is-ok');
+                dots[1].classList.remove('is-pending');
+                dots[1].title = {{ _('Fichaje OK')|tojson }};
+            }
+        }
+
+        if (data.ack_plan) removeEspejoRows(id, ['plan']);
+        if (data.ack_real) removeEspejoRows(id, ['real']);
+
+        if (!detail) return;
+        if (data.ack_plan) {
+            var planPanel = detail.querySelector('.audit-desvio-panel--plan');
+            if (planPanel) {
+                planPanel.classList.add('is-resolved');
+                var head = planPanel.querySelector('.audit-desvio-panel-head .text-muted, .audit-desvio-panel-head .text-success');
+                if (head) {
+                    head.className = 'text-success small ml-auto';
+                    head.innerHTML = '<i class="fas fa-check"></i> ' + {{ _('Resuelto')|tojson }};
+                }
+                var actions = planPanel.querySelector('.audit-desvio-panel-actions');
+                if (actions) {
+                    actions.innerHTML = '<span class="text-muted small">' + {{ _('Ya resuelto')|tojson }} + '</span>';
+                }
+                if (data.ack_plan_por) {
+                    var bodyP = planPanel.querySelector('.audit-desvio-panel-body');
+                    if (bodyP && !bodyP.querySelector('[data-ack-plan-por]')) {
+                        var metaP = document.createElement('div');
+                        metaP.className = 'audit-desvio-meta';
+                        metaP.setAttribute('data-ack-plan-por', '1');
+                        metaP.innerHTML = '<span class="audit-desvio-meta-k">' + {{ _('Resuelto por')|tojson }} + '</span> ' + data.ack_plan_por;
+                        bodyP.appendChild(metaP);
+                    }
+                }
+            }
+        }
+        if (data.ack_real) {
+            var realPanel = detail.querySelector('.audit-desvio-panel--real');
+            if (realPanel) {
+                realPanel.classList.add('is-resolved');
+                var headR = realPanel.querySelector('.audit-desvio-panel-head .text-muted, .audit-desvio-panel-head .text-success');
+                if (headR) {
+                    headR.className = 'text-success small ml-auto';
+                    headR.innerHTML = '<i class="fas fa-check"></i> ' + {{ _('Aceptado')|tojson }};
+                }
+                var actionsR = realPanel.querySelector('.audit-desvio-panel-actions');
+                if (actionsR) {
+                    actionsR.innerHTML = '<span class="text-muted small">' + {{ _('Ya aceptado')|tojson }} + '</span>';
+                }
+                if (data.ack_real_por) {
+                    var bodyR = realPanel.querySelector('.audit-desvio-panel-body');
+                    if (bodyR && !bodyR.querySelector('[data-ack-real-por]')) {
+                        var metaR = document.createElement('div');
+                        metaR.className = 'audit-desvio-meta';
+                        metaR.setAttribute('data-ack-real-por', '1');
+                        metaR.innerHTML = '<span class="audit-desvio-meta-k">' + {{ _('Aceptado por')|tojson }} + '</span> ' + data.ack_real_por;
+                        bodyR.appendChild(metaR);
+                    }
+                }
+            }
+        }
+        // Atajo "ambos" ya no aplica si un lado quedó hecho
+        var ambos = detail.querySelector('.audit-desvio-ambos');
+        if (ambos && (data.ack_plan || data.ack_real)) ambos.remove();
+    }
+
     window.resolver = function resolver(id, accion) {
         var t = auditI18n();
         var row = document.getElementById('row-' + id);
-        if (row) {
-            row.style.transition = 'all 0.3s ease';
-            row.style.opacity = '0.3';
-            row.style.transform = 'translateX(20px)';
-            row.style.pointerEvents = 'none';
-        }
+        var isDesvio = !!(row && row.getAttribute('data-desvio-toggle'));
+        var desvioAcciones = {
+            liberar_plaza: 1, mantener_falta: 1, aceptar_entrada: 1,
+            rechazar_entrada: 1, confirmar_desvio: 1, rechazar_desvio: 1
+        };
+        var isDesvioAction = !!desvioAcciones[accion];
 
         fetch({{ url_for('sync.resolver_fichaje')|tojson }}, {
             method: 'POST',
@@ -1037,33 +1319,50 @@ var AUDIT_RESOLVE_I18N = {{ {
             }
             if (!data.success) {
                 alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.invalid || 'Error'));
-                restoreRow(row);
                 return;
             }
-            var dismiss = (data.dismiss_row !== false);
+
+            // Desvío (desde expand o espejo en ausencias/sin planificar)
+            if ((isDesvio || isDesvioAction) && !data.resolved && data.dismiss_row === false) {
+                if (row) applyDesvioPartialUpdate(id, data);
+                else {
+                    if (data.ack_plan) removeEspejoRows(id, ['plan']);
+                    if (data.ack_real) removeEspejoRows(id, ['real']);
+                }
+                return;
+            }
+
+            if (row) {
+                row.style.transition = 'all 0.3s ease';
+                row.style.opacity = '0.3';
+                row.style.transform = 'translateX(20px)';
+                row.style.pointerEvents = 'none';
+            }
             setTimeout(function () {
-                if (row && dismiss) {
-                    var card = row.closest('.card-modern');
-                    if (card) {
-                        var badge = card.querySelector('.badge-count, .badge');
-                        if (badge) {
-                            var count = parseInt(badge.innerText, 10);
-                            if (!isNaN(count) && count > 0) badge.innerText = count - 1;
-                        }
+                if (isDesvioAction) {
+                    if (data.resolved || data.dismiss_row !== false) {
+                        if (row) removeDesvioRow(row, id);
+                        else removeEspejoRows(id);
+                    } else if (row) {
+                        restoreRow(row);
+                        applyDesvioPartialUpdate(id, data);
+                    } else {
+                        if (data.ack_plan) removeEspejoRows(id, ['plan']);
+                        if (data.ack_real) removeEspejoRows(id, ['real']);
                     }
-                    row.remove();
-                } else if (row && !dismiss) {
-                    window.location.reload();
                     return;
                 }
-                if (document.querySelectorAll('tr[id^="row-"]').length === 0) {
-                    window.location.reload();
+                if (row && data.dismiss_row !== false) {
+                    removeDesvioRow(row, id);
+                } else if (row) {
+                    restoreRow(row);
+                    if (isDesvio) applyDesvioPartialUpdate(id, data);
                 }
             }, 300);
         })
         .catch(function (err) {
             console.error('Error critico:', err);
-            alert((err && err.message) ? err.message : (t.network || 'Error de red'));
+            alert((t.error_prefix || 'Error:') + ' ' + ((err && err.message) ? err.message : (t.network || 'Error de red')));
             restoreRow(row);
         });
     };
@@ -1163,6 +1462,22 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!id || !accion || typeof window.resolver !== 'function') return;
         window.resolver(id, accion);
     }, true);
+
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('.js-audit-resolve') || e.target.closest('a') || e.target.closest('.no-row-nav')) return;
+        var main = e.target.closest('[data-desvio-toggle]');
+        if (!main) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var id = main.getAttribute('data-desvio-toggle');
+        var detail = document.getElementById('desvio-detail-' + id);
+        if (!detail) return;
+        var open = !detail.hidden;
+        detail.hidden = open;
+        if (!open) detail.style.display = '';
+        main.classList.toggle('is-expanded', !open);
+        main.setAttribute('aria-expanded', open ? 'false' : 'true');
+    });
 
     PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
         modalId: 'modalTimelineFichaje',

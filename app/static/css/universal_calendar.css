@@ -461,6 +461,25 @@ body > .select2-container--open {
     rgba(255, 255, 255, 0) 10px
   );
 }
+/* Falta confirmada: mismo lenguaje “fantasma” que inercia, con acento rojo */
+.univ-calendar-root .fc-event.fc-event-falta,
+.layout-admin .fc-event.fc-event-falta {
+  opacity: 0.42 !important;
+  border-style: dashed !important;
+  border-width: 1.5px !important;
+  box-shadow: none !important;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.45) 0,
+    rgba(255, 255, 255, 0.45) 5px,
+    rgba(255, 255, 255, 0) 5px,
+    rgba(255, 255, 255, 0) 10px
+  ) !important;
+}
+.univ-calendar-root .fc-event.fc-event-falta:hover,
+.layout-admin .fc-event.fc-event-falta:hover {
+  opacity: 0.72 !important;
+}
 .univ-calendar-inercia-toggle {
   flex-shrink: 0;
 }

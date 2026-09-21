@@ -180,11 +180,12 @@ window.submitGenericTotal = function() {
       if (hasConflict) {
           var mockData = { conflict_type: 'admin_hard', message: t('Hay trabajadores ocupados.'), conflict_details: conflicts };
           window.resolverConflictoAsignacion(mockData, { action: 'total' }, function(payload) {
-              var forceMove = (payload.overwrite_mode === 'overwrite' || payload.overwrite_mode === 'assign_and_request');
-              ejecutarAsignacionTotalApi(workerIds, forceMove); 
+              var mode = (payload && payload.overwrite_mode) || 'overwrite';
+              var forceMove = (mode === 'overwrite' || mode === 'assign_and_request');
+              ejecutarAsignacionTotalApi(workerIds, forceMove, mode);
           });
       } else {
-          ejecutarAsignacionTotalApi(workerIds, false);
+          ejecutarAsignacionTotalApi(workerIds, false, 'keep_both');
       }
   }).catch(err => { 
       $btn.prop('disabled', false).html(originalHtml);
@@ -192,16 +193,35 @@ window.submitGenericTotal = function() {
   });
 };
 
-function ejecutarAsignacionTotalApi(workerIds, forceMove) {
+function _ajaxErrorMessage(xhr, fallback) {
+    try {
+        var data = (xhr && xhr.responseJSON) || JSON.parse((xhr && xhr.responseText) || '{}');
+        if (data && (data.message || data.error)) return data.message || data.error;
+        if (data && data.errors && data.errors.length) return data.errors.join('\n');
+    } catch (e) {}
+    if (xhr && xhr.statusText && xhr.statusText !== 'error') {
+        return (fallback || t('Error del servidor')) + ': ' + xhr.statusText;
+    }
+    return fallback || t('Error del servidor. Revisa el detalle en consola o inténtalo de nuevo.');
+}
+
+function ejecutarAsignacionTotalApi(workerIds, forceMove, overwriteMode) {
     $.ajax({
         url: "/api/v6/solicitudes/{{ solicitud.id }}/asignar_candidatos",
         type: "POST", contentType: "application/json",
-        data: JSON.stringify({ worker_ids: workerIds, force_move: forceMove }),
+        data: JSON.stringify({
+            worker_ids: workerIds,
+            force_move: !!forceMove,
+            overwrite_mode: overwriteMode || (forceMove ? 'overwrite' : 'keep_both'),
+            conflict_resolved: true
+        }),
         success: function(res) {
             if(res.success) location.reload(); 
-            else alert(res.message);
+            else alert(res.message || t('No se pudo completar la asignación.'));
         },
-        error: function(xhr) { alert(t('Error del servidor:') + ' ' + xhr.statusText); }
+        error: function(xhr) {
+            alert(_ajaxErrorMessage(xhr, t('Error del servidor')));
+        }
     });
 }
 
@@ -262,13 +282,8 @@ function ejecutarAsignacionConcretaApi() {
             else { alert(res.message || t('No se pudo completar.')); $btn.prop('disabled', false).html(originalHtml); }
         },
         error: function(xhr) {
-            var msg = t('Error del servidor.');
-            try {
-                var data = xhr.responseJSON || JSON.parse(xhr.responseText || '{}');
-                if (data && data.message) msg = data.message;
-            } catch (e) {}
-            alert(msg);
             $btn.prop('disabled', false).html(originalHtml);
+            alert(_ajaxErrorMessage(xhr, t('Error del servidor')));
         }
     });
 }
@@ -536,7 +551,7 @@ document.addEventListener('DOMContentLoaded', function() {
               },
               error: function(xhr) { 
                   if (btn) { btn.disabled = false; updatePartialButtonBadge(); }
-                  alert(t('Error') + ': ' + (xhr.responseJSON ? xhr.responseJSON.message : t('Error desconocido'))); 
+                  alert(_ajaxErrorMessage(xhr, t('Error al procesar la asignación')));
               }
           });
       };

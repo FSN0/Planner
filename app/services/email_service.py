@@ -469,16 +469,19 @@ def notificar_movimiento_admin_a_jo(obra_id, worker_name, accion, fecha_str, adm
     _send_localized(destinatarios, subject, text)
 
 
-def notificar_desvio_fichaje(registro):
+def notificar_desvio_fichaje(registro, *, omitir_lado_real=False):
     """
     Aviso inmediato a los jefes de la obra planificada y de la obra fichada.
     Si es el mismo jefe, un solo correo con ambos lados.
+    Solo para el día de hoy (un sync histórico no debe bombardear el buzón).
     """
     from app.services.i18n_service import translate
     from app.services.desvio_fichaje_service import es_desvio_plan_vs_real
-    from app.utils.timezone_utils import format_time
+    from app.utils.timezone_utils import format_time, today_local
 
     if not es_desvio_plan_vs_real(registro):
+        return
+    if registro.fecha and registro.fecha != today_local():
         return
     user = registro.user
     if not user:
@@ -510,8 +513,8 @@ def notificar_desvio_fichaje(registro):
                 '{worker} estaba planificado en «{plan}» y ha fichado a las {hora} '
                 'en «{real}» ({date}).\n\n'
                 'Como gestionas ambas obras, en Auditoría de fichajes puedes:\n'
-                '· Confirmar — valida el desvío (libera plaza y acepta entrada)\n'
-                '· Mantener — rechaza el desvío (falta en el plan, fichaje no aceptado)\n',
+                '· Confirmar — libera la plaza del plan y acepta el fichaje\n'
+                '· Falta — confirma falta en el plan; el fichaje queda registrado\n',
                 loc,
                 jefe=jefe.name or '',
                 worker=worker_name,
@@ -533,7 +536,7 @@ def notificar_desvio_fichaje(registro):
                 'en «{real}» ({date}).\n\n'
                 'No es un “sin fichar”: está en otra obra. En Auditoría de fichajes puedes:\n'
                 '· Liberar — no viene; liberas su plaza\n'
-                '· Falta — debía venir a tu obra; mantienes la falta\n',
+                '· Falta — debía venir; confirmas falta (sigue planificado con marca de falta)\n',
                 loc,
                 jefe=jefe.name or '',
                 worker=worker_name,
@@ -553,9 +556,8 @@ def notificar_desvio_fichaje(registro):
                 'Hola {jefe},\n\n'
                 '{worker} ha fichado a las {hora} en «{real}» sin estar planificado ahí '
                 '({date}). Venía de «{plan}».\n\n'
-                'En Auditoría de fichajes puedes:\n'
-                '· Aceptar — se queda en tu obra\n'
-                '· Rechazar — ha fichado, pero no lo das por bueno aquí\n',
+                'El fichaje es un hecho (no se puede rechazar). En Auditoría puedes:\n'
+                '· Aceptar — lo integras al cuadrante de tu obra\n',
                 loc,
                 jefe=jefe.name or '',
                 worker=worker_name,
@@ -572,23 +574,28 @@ def notificar_desvio_fichaje(registro):
         _mail_jefe(jefe_plan, rol_lado='ambos')
         return
     _mail_jefe(jefe_plan, rol_lado='plan')
-    _mail_jefe(jefe_real, rol_lado='real')
+    if not omitir_lado_real:
+        _mail_jefe(jefe_real, rol_lado='real')
 
 
 def enviar_super_reporte_diario():
     """
-    Sustituye a 'notificar_auditoria_diaria_0830'.
-    Manda correos agrupados a JO y Admins sobre ausencias de HOY y paracaidistas/conflictos de AYER.
+    Correo de cierre del día anterior: ausencias a resolver y desvíos/sin planificar
+    pendientes de AYER (ya no «quién no ha fichado esta mañana»).
     """
     from app.utils.timezone_utils import today_local
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     from app.services.tenant_modules import hora_corte_destinatario_ids
+    from app.services.desvio_fichaje_service import consolidar_pendientes_a_ausencia
 
     if not tenant_muestra_auditoria_fichajes():
         return
 
     hoy = today_local()
     ayer = hoy - timedelta(days=1)
+
+    # Asegura que los Sin_Registro de ayer ya son Ausencia a resolver.
+    consolidar_pendientes_a_ausencia(ayer)
 
     def _falso_positivo_ausencia(reg):
         """Si ya fichó (aunque sea Paracaidista) o hay resolución, no es «no ha fichado»."""
@@ -601,24 +608,36 @@ def enviar_super_reporte_diario():
             est = h.estado or ''
             if h.obra_real_id or h.check_in or est.startswith('Resuelto') or est in (
                 'Correcto', 'Correcto_Automatico', 'Cerrado_Multiobra',
-                'Paracaidista', 'Conflicto',
+                'Paracaidista', 'Conflicto', 'Falta',
             ):
-                return True
+                # Hermano con fichaje real: esta semilla de otra obra SÍ puede
+                # ser ausencia pendiente (multi-plan). Solo descartar si es la
+                # misma obra_planificada.
+                if h.obra_planificada_id and h.obra_planificada_id == reg.obra_planificada_id:
+                    return True
+                if est in ('Correcto', 'Correcto_Automatico') and h.obra_real_id == reg.obra_planificada_id:
+                    return True
         return False
 
-    # 1. Ausencias tempranas de HOY (sin falsos positivos por semillas de sync)
-    ausencias_hoy = [
-        a for a in RegistroFichaje.query.filter_by(fecha=hoy, estado='Ausencia').all()
-        if not _falso_positivo_ausencia(a)
-    ] 
-    # 2. Paracaidistas/Conflictos de AYER (por si en la BD guardas Paracaidista o Conflicto)
+    # Ausencias / sin fichar del día YA CERRADO (ayer)
+    ausencias_ayer = [
+        a for a in RegistroFichaje.query.filter(
+            RegistroFichaje.fecha == ayer,
+            RegistroFichaje.estado.in_(['Ausencia', 'Sin_Registro']),
+        ).all()
+        if not a.check_in and not _falso_positivo_ausencia(a)
+    ]
+    # Desvíos y sin planificar aún abiertos de ayer
     conflictos_ayer = RegistroFichaje.query.filter(
         RegistroFichaje.fecha == ayer,
-        RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista'])
+        RegistroFichaje.estado.in_(['Conflicto', 'Paracaidista', 'Disputa']),
     ).all()
 
-    if not ausencias_hoy and not conflictos_ayer:
-        return 
+    if not ausencias_ayer and not conflictos_ayer:
+        return
+
+    # Alias para el resto del cuerpo del correo (antes usaba ausencias_hoy)
+    ausencias_hoy = ausencias_ayer
 
     # ==========================================
     # CORREO GLOBAL PARA LOS ADMINISTRADORES
@@ -648,14 +667,14 @@ def enviar_super_reporte_diario():
             asunto_admin = translate(
                 'Alerta de Fichajes Global ({date})',
                 loc,
-                date=hoy.strftime('%d/%m/%Y'),
+                date=ayer.strftime('%d/%m/%Y'),
             )
             html_admin = (
                 '<div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">'
                 f'<h2 style="color: #1d4ed8;">{translate("Reporte de Presencia y Fichajes 📋", loc)}</h2>'
-                f'<p>{translate("Resumen automático generado en la hora de corte de entrada.", loc)}</p>'
+                f'<p>{translate("Resumen del día ya cerrado (pendientes de ayer).", loc)}</p>'
                 '<h3 style="color: #dc2626; border-bottom: 1px solid #ddd; padding-bottom: 5px;">'
-                f'{translate("Ausencias Detectadas HOY ({date}):", loc, date=hoy.strftime("%d/%m/%Y"))}'
+                f'{translate("Ausencias a resolver ({date}):", loc, date=ayer.strftime("%d/%m/%Y"))}'
                 '</h3><ul>'
             )
             if ausencias_hoy:

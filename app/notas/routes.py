@@ -263,6 +263,7 @@ def subir_audio_nota():
             attach_celery_task_id,
             set_user_summary_prompt,
             get_user_summary_prompt,
+            set_user_include_transcript,
         )
         from app.celery_worker import process_nota_audio_task
 
@@ -270,13 +271,19 @@ def subir_audio_nota():
         save_default = (request.form.get('save_prompt_default') or '').lower() in (
             '1', 'true', 'yes', 'on',
         )
+        include_raw = (request.form.get('include_transcript') or '1').lower()
+        include_transcript = include_raw in ('1', 'true', 'yes', 'on')
         if not summary_prompt:
             summary_prompt = get_user_summary_prompt(current_user)
         if save_default:
             set_user_summary_prompt(current_user, summary_prompt)
+            set_user_include_transcript(current_user, include_transcript)
 
         job = save_audio_upload(
-            archivo, current_user.id, summary_prompt=summary_prompt,
+            archivo,
+            current_user.id,
+            summary_prompt=summary_prompt,
+            include_transcript=include_transcript,
         )
         tenant = getattr(g, 'current_tenant', None)
         schema_name = getattr(tenant, 'schema_name', None) or 'public'
@@ -351,6 +358,8 @@ def audio_summary_prompt():
         get_default_summary_prompt,
         get_user_summary_prompt,
         set_user_summary_prompt,
+        get_user_include_transcript,
+        set_user_include_transcript,
         USER_PREF_SUMMARY_PROMPT,
     )
 
@@ -366,6 +375,7 @@ def audio_summary_prompt():
             'prompt': prompt,
             'default_prompt': default_prompt,
             'is_custom': is_custom,
+            'include_transcript': get_user_include_transcript(current_user),
         })
 
     data = request.get_json(silent=True) or {}
@@ -374,6 +384,11 @@ def audio_summary_prompt():
         if reset:
             prompt = set_user_summary_prompt(current_user, None)
             is_custom = False
+            include_transcript = get_user_include_transcript(current_user)
+            if 'include_transcript' in data:
+                include_transcript = set_user_include_transcript(
+                    current_user, bool(data.get('include_transcript')),
+                )
         else:
             prompt = set_user_summary_prompt(
                 current_user, (data.get('prompt') or '').strip() or None,
@@ -382,11 +397,19 @@ def audio_summary_prompt():
             is_custom = bool(
                 isinstance(prefs, dict) and (prefs.get(USER_PREF_SUMMARY_PROMPT) or '').strip()
             )
+            if 'include_transcript' in data:
+                include_transcript = set_user_include_transcript(
+                    current_user, bool(data.get('include_transcript')),
+                )
+            else:
+                include_transcript = get_user_include_transcript(current_user)
         return jsonify({
             'success': True,
             'prompt': prompt,
             'default_prompt': default_prompt,
             'is_custom': is_custom,
+            'include_transcript': include_transcript,
+            'message': 'Prompt guardado.',
         })
     except ValueError as e:
         return jsonify({'success': False, 'message': str(e)}), 400

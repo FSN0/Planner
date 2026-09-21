@@ -33,6 +33,9 @@ FICHAJE_INTERVENCION = {
     'Sobreescrito_RRHH',
 }
 
+# Falta confirmada (planificado + no fichó). Distinto de presencia OK.
+FICHAJE_FALTA = {'Falta'}
+
 FICHAJE_ROJO = {'Conflicto', 'Disputa', 'Paracaidista'}
 FICHAJE_NARANJA = {'Ausencia', 'Pendiente', 'Retraso'}
 
@@ -43,6 +46,7 @@ COLOR_ROJO = '#ef4444'
 COLOR_NARANJA = '#f59e0b'
 COLOR_VERDE = '#10b981'
 COLOR_VIOLETA = '#7c3aed'
+COLOR_FALTA = '#e11d48'
 COLOR_GRIS = '#94a3b8'
 
 
@@ -73,7 +77,7 @@ def estado_fichaje_agregado(estados):
     """
     Devuelve un único estado representativo del día para pintar la pelotita.
 
-    Precedencia: rojo > naranja > violeta (intervención) > verde (OK) > gris.
+    Precedencia: rojo > falta > naranja > violeta (intervención) > verde (OK) > gris.
     """
     limpios = [e for e in (estados or []) if e]
     if not limpios:
@@ -87,6 +91,9 @@ def estado_fichaje_agregado(estados):
         for est in limpios:
             if est in FICHAJE_ROJO:
                 return est
+
+    if any(est in FICHAJE_FALTA for est in limpios):
+        return 'Falta'
 
     if any(est in FICHAJE_NARANJA for est in limpios):
         for est in limpios:
@@ -130,6 +137,8 @@ def color_fichaje_agregado(estados):
     estado = estado_fichaje_agregado(estados)
     if estado in FICHAJE_ROJO:
         return COLOR_ROJO
+    if estado in FICHAJE_FALTA:
+        return COLOR_FALTA
     if estado in FICHAJE_NARANJA or estado == 'Pendiente':
         return COLOR_NARANJA
     if estado in FICHAJE_INTERVENCION:
@@ -159,6 +168,7 @@ def label_estado_fichaje(estado):
         'Disputa': 'Disputa entre jefes',
         'Paracaidista': 'Paracaidista',
         'Ausencia': 'Ausencia',
+        'Falta': 'Falta',
         'Pendiente': 'Pendiente',
         'Retraso': 'Retraso',
         'Sin_Registro': 'Sin fichaje',
@@ -169,7 +179,7 @@ def label_estado_fichaje(estado):
         'Resuelto_Asignado': 'Resuelto (asignado)',
         'Resuelto_Dividido': 'Resuelto (multi-obra)',
         'Resuelto_Ignorado': 'Resuelto (ignorado)',
-        'Resuelto_Falta': 'Resuelto (falta)',
+        'Resuelto_Falta': 'Resuelto (desasignado)',
         'Resuelto_Ausencia': 'Resuelto (ausencia)',
     }
     if (estado or '').startswith('Resuelto'):
@@ -190,3 +200,39 @@ def fichajes_agregados_por_fecha(fecha):
         str(uid): estado_fichaje_agregado(estados)
         for uid, estados in por_usuario.items()
     }
+
+
+def faltas_confirmadas_set(start_date, end_date, user_ids=None, obra_ids=None,
+                           end_exclusive=True):
+    """
+    Conjunto (user_id, fecha, obra_planificada_id) de faltas confirmadas
+    en el rango, para pintar bloques fantasma en calendarios.
+    """
+    from app.models import RegistroFichaje
+
+    q = RegistroFichaje.query.filter(
+        RegistroFichaje.estado == 'Falta',
+        RegistroFichaje.obra_planificada_id.isnot(None),
+        RegistroFichaje.fecha >= start_date,
+    )
+    if end_exclusive:
+        q = q.filter(RegistroFichaje.fecha < end_date)
+    else:
+        q = q.filter(RegistroFichaje.fecha <= end_date)
+    if user_ids is not None:
+        ids = list(user_ids) if not isinstance(user_ids, list) else user_ids
+        if not ids:
+            return set()
+        q = q.filter(RegistroFichaje.user_id.in_(ids))
+    if obra_ids is not None:
+        oids = list(obra_ids) if not isinstance(obra_ids, list) else obra_ids
+        if not oids:
+            return set()
+        q = q.filter(RegistroFichaje.obra_planificada_id.in_(oids))
+    return {
+        (r.user_id, r.fecha, r.obra_planificada_id)
+        for r in q.all()
+    }
+
+
+TOOLTIP_FALTA = 'Falta confirmada: debía acudir y no fichó'

@@ -175,6 +175,7 @@ function filterTableAll(tableId, value) {
     var visible = 0;
     tbody.querySelectorAll("tr").forEach(function (tr) {
         if (tr.classList.contains("table-empty-state")) return;
+        if (tr.classList.contains("audit-desvio-detail")) return; // se sincroniza con su fila main
         if (tr.querySelector("th")) {
             tr.style.display = "none";
             return;
@@ -182,11 +183,26 @@ function filterTableAll(tableId, value) {
         if (!filter) {
             tr.style.display = "";
             visible++;
+            var clearId = tr.getAttribute("data-desvio-toggle");
+            if (clearId) {
+                var clearDetail = document.getElementById("desvio-detail-" + clearId);
+                if (clearDetail) clearDetail.style.display = "";
+            }
             return;
         }
         var haystack = getAdminTableRowSearchText(tr).toUpperCase();
         var match = haystack.indexOf(filter) > -1;
         tr.style.display = match ? "" : "none";
+        var detailId = tr.getAttribute("data-desvio-toggle");
+        if (detailId) {
+            var detail = document.getElementById("desvio-detail-" + detailId);
+            if (detail) {
+                // Si la fila está filtrada fuera, oculta el detalle; si coincide, no fuerces abierto.
+                if (!match) detail.style.display = "none";
+                else if (detail.hidden) detail.style.display = "none";
+                else detail.style.display = "";
+            }
+        }
         if (match) visible++;
     });
 
@@ -426,7 +442,16 @@ function sortAdminTableWithState(thElement, forcedState) {
 
     if (newState === 'none') {
         const original = _adminTableOriginalOrder[tableId];
-        if (original) original.forEach(function(row) { tbody.appendChild(row); });
+        if (original) {
+            original.forEach(function(row) {
+                tbody.appendChild(row);
+                var detailId = row.getAttribute('data-desvio-toggle');
+                if (detailId) {
+                    var detail = document.getElementById('desvio-detail-' + detailId);
+                    if (detail) tbody.appendChild(detail);
+                }
+            });
+        }
         return;
     }
 
@@ -434,7 +459,14 @@ function sortAdminTableWithState(thElement, forcedState) {
         const cmp = compareAdminRows(a, b, colIndex, sortType);
         return newState === 'asc' ? cmp : -cmp;
     });
-    rows.forEach(function(row) { tbody.appendChild(row); });
+    rows.forEach(function(row) {
+        tbody.appendChild(row);
+        var detailId = row.getAttribute('data-desvio-toggle');
+        if (detailId) {
+            var detail = document.getElementById('desvio-detail-' + detailId);
+            if (detail) tbody.appendChild(detail);
+        }
+    });
 }
 
 function sortAdminTable(thElement) {

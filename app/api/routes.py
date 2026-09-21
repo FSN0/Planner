@@ -371,6 +371,15 @@ def get_universal_calendar_events():
             vehicle_by_date = {}
             vehicle_meta_by_date = {}
 
+        from app.services.fichaje_estado_service import (
+            COLOR_FALTA,
+            TOOLTIP_FALTA,
+            faltas_confirmadas_set,
+        )
+        faltas_set = faltas_confirmadas_set(
+            start_date, end_date, user_ids=[entity_id], end_exclusive=True,
+        )
+
         for a in asignaciones:
             obra = a.obra
             if not obra and a.obra_id: obra = Obra.query.get(a.obra_id)
@@ -382,6 +391,10 @@ def get_universal_calendar_events():
             title, overlay_color, is_overlay = apply_leave_overlay_title(obra_name, leave)
             color = overlay_color or obra_color
             obra_id_val = int(obra.id) if obra else (int(a.obra_id) if a.obra_id else 0)
+            es_falta = (a.user_id, a.fecha, obra_id_val) in faltas_set
+            if es_falta and not is_overlay:
+                color = COLOR_FALTA
+                title = f"{obra_name} · Falta"
             raw_events.append({
                 'title': title,
                 'start_date': a.fecha,
@@ -399,6 +412,9 @@ def get_universal_calendar_events():
                     'en_ausencia': is_overlay,
                     'ausencia_tipo': leave.tipo if leave else None,
                     'ausencia_estado': leave.estado if leave else None,
+                    'es_falta': es_falta and not is_overlay,
+                    'estado_fichaje': 'Falta' if (es_falta and not is_overlay) else None,
+                    'tooltipText': translate(TOOLTIP_FALTA) if (es_falta and not is_overlay) else None,
                 }
             })
 
@@ -714,10 +730,23 @@ def get_universal_calendar_events():
             {a.user_id for a in asignaciones}, start_date, range_end_inclusive
         )
 
+        from app.services.fichaje_estado_service import (
+            COLOR_FALTA,
+            TOOLTIP_FALTA,
+            faltas_confirmadas_set,
+        )
+        obra_worker_ids = {a.user_id for a in asignaciones if a.user_id}
+        faltas_set = faltas_confirmadas_set(
+            start_date, end_date,
+            user_ids=obra_worker_ids or None,
+            obra_ids=[entity_id],
+            end_exclusive=True,
+        )
+
         if mode == 'empleados':
             from app.models import AsignacionVehiculo, Vehiculo
 
-            worker_ids = {a.user_id for a in asignaciones if a.user_id}
+            worker_ids = obra_worker_ids
             veh_by_user_date = {}
             if worker_ids:
                 veh_rows = AsignacionVehiculo.query.filter(
@@ -754,12 +783,17 @@ def get_universal_calendar_events():
                 title, overlay_color, is_overlay = apply_leave_overlay_title(
                     base_title, leave, name_first=True
                 )
+                es_falta = (worker.id, a.fecha, entity_id) in faltas_set and not is_overlay
+                color = overlay_color or c_color
+                if es_falta:
+                    color = COLOR_FALTA
+                    title = f"{worker.name} {worker.lastname} · Falta"
                 v_info = veh_by_user_date.get((worker.id, a.fecha), {})
                 raw_events.append({
                     'title': title,
                     'start_date': a.fecha,
                     'end_date': a.fecha,
-                    'color': overlay_color or c_color,
+                    'color': color,
                     'worker_id': worker.id,
                     'inercia': False,
                     'extendedProps': {
@@ -769,6 +803,9 @@ def get_universal_calendar_events():
                         'vehiculo_id': v_info.get('vehiculo_id'),
                         'en_ausencia': is_overlay,
                         'ausencia_tipo': leave.tipo if leave else None,
+                        'es_falta': es_falta,
+                        'estado_fichaje': 'Falta' if es_falta else None,
+                        'tooltipText': translate(TOOLTIP_FALTA) if es_falta else None,
                     }
                 })
 
@@ -807,7 +844,9 @@ def get_universal_calendar_events():
             events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'worker_id', 'inercia']))
         
         elif mode == 'empresas':
-            events.extend(procesar_bloques_empresa(asignaciones, leaves_by_user=leaves_idx))
+            events.extend(procesar_bloques_empresa(
+                asignaciones, leaves_by_user=leaves_idx, faltas_set=faltas_set,
+            ))
 
         # --- AÑADIR SOLICITUDES ---
         solicitudes = Solicitud.query.filter(
@@ -860,6 +899,18 @@ def get_universal_calendar_events():
             {a.user_id for a in asignaciones}, start_date, range_end_inclusive
         )
 
+        from app.services.fichaje_estado_service import (
+            COLOR_FALTA,
+            TOOLTIP_FALTA,
+            faltas_confirmadas_set,
+        )
+        emp_worker_ids = {a.user_id for a in asignaciones if a.user_id}
+        faltas_set = faltas_confirmadas_set(
+            start_date, end_date,
+            user_ids=emp_worker_ids or None,
+            end_exclusive=True,
+        )
+
         if mode == 'empleados':
             raw_events = []
             for a in asignaciones:
@@ -877,25 +928,38 @@ def get_universal_calendar_events():
                 title, overlay_color, is_overlay = apply_leave_overlay_title(
                     base_title, leave, name_first=True
                 )
+                obra_id_val = obra.id if obra else (a.obra_id or 0)
+                es_falta = (
+                    (worker.id, a.fecha, obra_id_val) in faltas_set and not is_overlay
+                )
+                color = overlay_color or obra_color
+                if es_falta:
+                    color = COLOR_FALTA
+                    title = f"{worker.name} {worker.lastname} · Falta ({obra_name})"
 
                 raw_events.append({
                     'title': title,
                     'start_date': a.fecha,
                     'end_date': a.fecha,
-                    'color': overlay_color or obra_color,
+                    'color': color,
                     'worker_id': worker.id,
-                    'obra_id': obra.id if obra else 0,
+                    'obra_id': obra_id_val,
                     'extendedProps': {
                         'type': 'asignacion',
                         'worker_id': worker.id,
-                        'obra_id': obra.id if obra else 0,
+                        'obra_id': obra_id_val,
                         'en_ausencia': is_overlay,
+                        'es_falta': es_falta,
+                        'estado_fichaje': 'Falta' if es_falta else None,
+                        'tooltipText': translate(TOOLTIP_FALTA) if es_falta else None,
                     }
                 })
 
             events.extend(merge_events_v2(raw_events, group_by=['title', 'color', 'worker_id', 'obra_id']))
         else:
-            events.extend(procesar_bloques_obra(asignaciones, leaves_by_user=leaves_idx))
+            events.extend(procesar_bloques_obra(
+                asignaciones, leaves_by_user=leaves_idx, faltas_set=faltas_set,
+            ))
 
         # --- AÑADIR SOLICITUDES ---
         solicitudes = Solicitud.query.filter(
@@ -1426,16 +1490,17 @@ def format_event(ev):
         'extendedProps': extended,
     }
 
-def procesar_bloques_empresa(asignaciones, leaves_by_user=None):
+def procesar_bloques_empresa(asignaciones, leaves_by_user=None, faltas_set=None):
     from app.services.leave_service import leave_covering, leave_overlay_meta
 
     leaves_by_user = leaves_by_user or {}
+    faltas_set = faltas_set or set()
     day_counts = defaultdict(lambda: defaultdict(int))
     day_workers = defaultdict(lambda: defaultdict(list))
     day_leave_flags = defaultdict(lambda: defaultdict(bool))  # empresa -> fecha -> algún leave
     colors = {}
     company_ids = {}
-    
+
     for a in asignaciones:
         worker = getattr(a, 'user_obj', getattr(a, 'user', None))
         if not worker and a.user_id: worker = User.query.get(a.user_id)
@@ -1457,7 +1522,11 @@ def procesar_bloques_empresa(asignaciones, leaves_by_user=None):
         if meta:
             label = f"{label} · {meta['label_prefix']}"
             day_leave_flags[c_name][a.fecha] = True
-            
+        else:
+            obra_id = a.obra_id or (a.obra.id if getattr(a, 'obra', None) else 0)
+            if (worker.id, a.fecha, obra_id) in faltas_set:
+                label = f"{label} · Falta"
+
         day_counts[c_name][a.fecha] += 1
         day_workers[c_name][a.fecha].append(label)
         colors[c_name] = c_color
@@ -1577,11 +1646,12 @@ def crear_evento_empresa(empresa, empresa_id, start_date, end_date, count, color
     )
 
 
-def procesar_bloques_obra(asignaciones, leaves_by_user=None):
+def procesar_bloques_obra(asignaciones, leaves_by_user=None, faltas_set=None):
     """Agrupa las asignaciones de una empresa por obra; el tooltip lista el personal."""
     from app.services.leave_service import leave_covering, leave_overlay_meta
 
     leaves_by_user = leaves_by_user or {}
+    faltas_set = faltas_set or set()
     day_counts = defaultdict(lambda: defaultdict(int))
     day_workers = defaultdict(lambda: defaultdict(list))
     day_leave_flags = defaultdict(lambda: defaultdict(bool))
@@ -1608,6 +1678,8 @@ def procesar_bloques_obra(asignaciones, leaves_by_user=None):
         if meta:
             label = f"{label} · {meta['label_prefix']}"
             day_leave_flags[obra_id][a.fecha] = True
+        elif (worker.id, a.fecha, obra_id) in faltas_set:
+            label = f"{label} · Falta"
 
         day_counts[obra_id][a.fecha] += 1
         if label not in day_workers[obra_id][a.fecha]:

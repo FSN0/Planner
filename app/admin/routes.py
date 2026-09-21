@@ -3882,28 +3882,46 @@ def api_planificador_events():
         build_leaves_by_user,
         leave_covering,
     )
+    from app.services.fichaje_estado_service import (
+        COLOR_FALTA,
+        TOOLTIP_FALTA,
+        faltas_confirmadas_set,
+    )
     leaves_idx = build_leaves_by_user(
         {info['worker_id'] for info in workers_info.values()},
         start_date,
         end_date,
     )
+    faltas_set = faltas_confirmadas_set(
+        start_date, end_date,
+        user_ids={info['worker_id'] for info in workers_info.values()} or None,
+        obra_ids=obras_ids or None,
+        end_exclusive=False,
+    )
     
-    def crear_bloque(start_d, end_d, curr_key, curr_info, leave=None, inercia=False):
+    def crear_bloque(start_d, end_d, curr_key, curr_info, leave=None, inercia=False, es_falta=False):
         base_title = curr_info["name"]
         title, overlay_color, is_overlay = apply_leave_overlay_title(
             base_title, leave, name_first=True
         )
+        color = overlay_color or curr_info["color"]
+        class_name = "inercia-item" if inercia else None
+        if es_falta and not is_overlay and not inercia:
+            color = COLOR_FALTA
+            title = f"{base_title} · Falta"
+            class_name = "falta-item"
         events.append({
-            "id": f"{curr_key}_{start_d}{'_i' if inercia else ''}",
+            "id": f"{curr_key}_{start_d}{'_i' if inercia else ''}{'_f' if es_falta and not inercia else ''}",
             "resourceId": str(curr_info["obra_id"]),
             "title": title,
             "start": start_d.strftime("%Y-%m-%d"),
             "end": (end_d + timedelta(days=1)).strftime("%Y-%m-%d"),
-            "color": overlay_color or curr_info["color"],
+            "color": color,
             "worker_id": curr_info["worker_id"],
             "editable": not inercia,
             "inercia": inercia,
-            "className": "inercia-item" if inercia else None,
+            "es_falta": bool(es_falta and not is_overlay and not inercia),
+            "className": class_name,
             "empresa_nombre": curr_info["empresa_nombre"],
             "empresa_id": curr_info["empresa_id"],
             "categoria": curr_info["categoria"],
@@ -3911,6 +3929,7 @@ def api_planificador_events():
             "nota": curr_info["nota"],
             "en_ausencia": is_overlay,
             "ausencia_tipo": leave.tipo if leave else None,
+            "tooltipText": translate(TOOLTIP_FALTA) if (es_falta and not is_overlay and not inercia) else None,
         })
 
     for key, fechas in events_map.items():
@@ -3919,40 +3938,46 @@ def api_planificador_events():
         info = workers_info[key]
         user_leaves = leaves_idx.get(info["worker_id"], [])
         festivos_win = festivos_en(fechas[0], fechas[-1]) if compact else set()
+        obra_id_key = info["obra_id"]
+        wid = info["worker_id"]
 
         bloque_start = fechas[0]
         bloque_end = fechas[0]
         bloque_leave = leave_covering(user_leaves, fechas[0])
         bloque_leave_id = bloque_leave.id if bloque_leave else None
+        bloque_falta = (wid, fechas[0], obra_id_key) in faltas_set and not bloque_leave
 
         for i in range(1, len(fechas)):
             d = fechas[i]
             leave_d = leave_covering(user_leaves, d)
             leave_id = leave_d.id if leave_d else None
+            falta_d = (wid, d, obra_id_key) in faltas_set and not leave_d
             contiguous = (d - bloque_end).days == 1 or (
                 compact and _hueco_solo_no_laborable(bloque_end, d, festivos_win)
             )
             same_leave = leave_id == bloque_leave_id
-            if contiguous and same_leave:
+            same_falta = falta_d == bloque_falta
+            if contiguous and same_leave and same_falta:
                 bloque_end = d
             else:
                 crear_bloque(
-                    bloque_start, bloque_end, key, info, bloque_leave, False,
+                    bloque_start, bloque_end, key, info, bloque_leave, False, bloque_falta,
                 )
                 bloque_start = d
                 bloque_end = d
                 bloque_leave = leave_d
                 bloque_leave_id = leave_id
+                bloque_falta = falta_d
 
         crear_bloque(
-            bloque_start, bloque_end, key, info, bloque_leave, False,
+            bloque_start, bloque_end, key, info, bloque_leave, False, bloque_falta,
         )
 
     # Fantasma en barra aparte (estilo ghost). El JS asigna subgroup W{id}
     # con subgroupStack {R:true,__force:true} para misma altura que el hecho.
     for bloque, key, info in inercia_emits:
         crear_bloque(
-            bloque['fecha_inicio'], bloque['fecha_fin'], key, info, None, True,
+            bloque['fecha_inicio'], bloque['fecha_fin'], key, info, None, True, False,
         )
 
     # MARCADOR FIN DE OBRA

@@ -38,10 +38,9 @@
           <button type="button" class="btn btn-outline-primary btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'anadir')">{{ _('+ Añadir') }}</button>
           {% elif reg.estado == 'Paracaidista' %}
           <button type="button" class="btn btn-outline-primary btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'anadir')">{{ _('Aceptar') }}</button>
-          <button type="button" class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'ignorar')">{{ _('Ignorar') }}</button>
           {% elif reg.estado == 'Ausencia' %}
-          <button type="button" class="btn btn-outline-danger btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'confirmar_ausencia')">{{ _('Ausencia') }}</button>
-          <button type="button" class="btn btn-light border btn-audit text-muted" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'ignorar')">{{ _('Ignorar') }}</button>
+          <button type="button" class="btn btn-outline-warning btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'borrar_planificacion')">{{ _('Desasignar') }}</button>
+          <button type="button" class="btn btn-outline-danger btn-audit" onclick="event.stopPropagation(); dashboardResolverFichaje({{ reg.id }}, 'confirmar_ausencia')">{{ _('Confirmar falta') }}</button>
           {% endif %}
         </div>
       </td>

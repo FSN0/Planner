@@ -285,18 +285,28 @@
           </button>
           <div class="nota-audio-prompt-panel d-none" id="notaAudioPromptPanel">
             <p class="nota-audio-prompt-help">
-              {{ _('Indica cómo quieres el informe a partir de la transcripción. Por defecto se usa el prompt del sistema o el último que guardaste.') }}
+              {{ _('Este texto es el que se envía a la IA para redactar el informe. Guárdalo si quieres reutilizarlo en próximas notas.') }}
             </p>
             <textarea id="notaAudioPrompt" class="form-control nota-audio-prompt-textarea" rows="8" spellcheck="true"></textarea>
+            <label class="nota-audio-prompt-save mt-2 mb-1">
+              <input type="checkbox" id="notaAudioIncludeTranscript" checked>
+              <span>{{ _('Incluir la transcripción completa al final de la nota') }}</span>
+            </label>
             <div class="nota-audio-prompt-actions">
               <label class="nota-audio-prompt-save mb-0">
                 <input type="checkbox" id="notaAudioPromptSaveDefault" checked>
-                <span>{{ _('Guardar como mi predeterminado') }}</span>
+                <span>{{ _('Recordar al subir') }}</span>
               </label>
-              <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="btnNotaAudioPromptReset">
-                {{ _('Restablecer defecto') }}
-              </button>
+              <div class="nota-audio-prompt-btns">
+                <button type="button" class="btn-admin btn-admin-primary btn-sm" id="btnNotaAudioPromptSave">
+                  <i class="fas fa-save mr-1"></i> {{ _('Guardar prompt') }}
+                </button>
+                <button type="button" class="btn-admin btn-admin-ghost btn-sm" id="btnNotaAudioPromptReset">
+                  {{ _('Restablecer defecto') }}
+                </button>
+              </div>
             </div>
+            <div id="notaAudioPromptStatus" class="nota-audio-prompt-status text-muted small mt-1"></div>
           </div>
         </div>
 
@@ -356,7 +366,7 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="{{ url_for('static', filename='js/nota_audio.js') }}?v=20260326err"></script>
+<script src="{{ url_for('static', filename='js/nota_audio.js') }}?v=20260326prompt2"></script>
 
 <script>
 var t = window.SP_T || function (key) { return key; };

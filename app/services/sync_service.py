@@ -353,6 +353,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
         nuevo_estado = ''
         nuevo_plan_id = None
         crear_asignacion_magica = False
+        otras_plan_ids = []
 
         if plan_exacto:
             nuevo_estado = 'Correcto'
@@ -381,19 +382,42 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             nuevo_estado = clasif.estado
             nuevo_plan_id = clasif.obra_planificada_id
             crear_asignacion_magica = clasif.materializar
+            otras_plan_ids = [a.obra_id for a in otras_hoy]
 
         registro_vacio_exacto = RegistroFichaje.query.filter(
             RegistroFichaje.user_id == local_user.id,
             RegistroFichaje.fecha == fecha_obj,
             RegistroFichaje.obra_planificada_id == local_obra.id,
-            RegistroFichaje.estado.in_(['Sin_Registro', 'Ausencia']),
+            RegistroFichaje.estado.in_(['Sin_Registro', 'Ausencia', 'Falta']),
         ).first()
 
+        if nuevo_estado == 'Conflicto' and otras_plan_ids:
+            from app.services.desvio_fichaje_service import materializar_conflictos_entrada
+            _, a_notif = materializar_conflictos_entrada(
+                user_id=local_user.id,
+                fecha=fecha_obj,
+                obra_real_id=local_obra.id,
+                obras_plan_ids=otras_plan_ids,
+                check_in=check_in_dt,
+                check_out=check_out_dt,
+                nota_odoo=f.get('note'),
+            )
+            desvios_a_notificar.extend(a_notif)
+            for reg in a_notif:
+                _apply_odoo_metrics(reg, f)
+            continue
+
+        if plan_exacto:
+            from app.services.desvio_fichaje_service import resolver_plan_cumplido_por_fichaje
+            resolver_plan_cumplido_por_fichaje(
+                local_user.id, fecha_obj, local_obra.id, check_in=check_in_dt,
+            )
+
         if registro_vacio_exacto:
-            if registro_vacio_exacto.estado == 'Ausencia':
+            if registro_vacio_exacto.estado in ('Ausencia', 'Falta'):
                 registro_vacio_exacto.estado = 'Retraso'
                 registro_vacio_exacto.notas_resolucion = (
-                    f"Fichaje recibido después del corte horario. "
+                    f"Fichaje recibido después del cierre del día. "
                     f"Hora detectada: {format_time(check_in_dt) if check_in_dt else 'N/A'}"
                 )
             else:
@@ -456,7 +480,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                 ))
             else:
                 prev_estado = registro_existente.estado
-                if not registro_existente.estado.startswith('Resuelto'):
+                if not registro_existente.estado.startswith('Resuelto') and registro_existente.estado != 'Falta':
                     registro_existente.estado = nuevo_estado
                     registro_existente.obra_planificada_id = nuevo_plan_id
                     if nuevo_estado == 'Conflicto' and prev_estado != 'Conflicto':
@@ -482,107 +506,44 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     "Auto-asignación por Fichaje Físico",
                 )
 
-    if fecha_obj == today_local():
-        conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
-        hora_str = conf_hora.valor if conf_hora else "08:30"
-
-        try:
-            hora_corte = datetime.strptime(hora_str, "%H:%M").time()
-        except ValueError:
-            hora_corte = datetime.strptime("08:30", "%H:%M").time()
-
-        ahora_local = now_local()
-
-        if ahora_local.time() >= hora_corte:
-            from app.services.leave_service import user_has_approved_leave
-            from app.services.fichaje_estado_service import FICHAJE_OK
-
-            candidatos = RegistroFichaje.query.filter(
-                RegistroFichaje.fecha == fecha_obj,
-                RegistroFichaje.estado.in_(['Sin_Registro', 'Ausencia']),
-            ).all()
-            for reg in candidatos:
-                if user_has_approved_leave(reg.user_id, fecha_obj):
-                    # Asignado pero de vacaciones/baja/permiso: no marcar ausencia
-                    reg.estado = 'Exento_Ausencia'
-                    reg.notas_resolucion = 'Cubierto por ausencia planificada (no cuenta como ausencia).'
-                    continue
-                if reg.estado == 'Sin_Registro':
-                    # No inventar Ausencia si el día ya tiene fichaje/resolución real
-                    hermano_ok = RegistroFichaje.query.filter(
-                        RegistroFichaje.user_id == reg.user_id,
-                        RegistroFichaje.fecha == fecha_obj,
-                        RegistroFichaje.id != reg.id,
-                    ).filter(
-                        db.or_(
-                            RegistroFichaje.obra_real_id.isnot(None),
-                            RegistroFichaje.check_in.isnot(None),
-                            RegistroFichaje.estado.like('Resuelto%'),
-                            RegistroFichaje.estado.in_(
-                                list(FICHAJE_OK) + ['Paracaidista', 'Conflicto', 'Cerrado_Multiobra']
-                            ),
-                        )
-                    ).first()
-                    if hermano_ok:
-                        reg.estado = 'Cerrado_Multiobra'
-                        reg.notas_resolucion = (
-                            'Cerrado automáticamente: ya hay fichaje o resolución '
-                            'el mismo día.'
-                        )
-                        continue
-                    reg.estado = 'Ausencia'
-                    reg.notas_resolucion = 'Generada automáticamente tras superar la hora de corte.'
-        else:
-            ausencias_tempranas = RegistroFichaje.query.filter_by(
-                fecha=fecha_obj, estado='Ausencia'
-            ).all()
-            for reg in ausencias_tempranas:
-                if not reg.check_in:
+    # Cierre de día anterior: pendientes → Ausencia (aún no Falta).
+    # Hoy no se marca Ausencia por hora límite: puede fichar más tarde.
+    if fecha_obj < today_local():
+        from app.services.desvio_fichaje_service import consolidar_pendientes_a_ausencia
+        consolidar_pendientes_a_ausencia(fecha_obj)
+    elif fecha_obj == today_local():
+        # Solo exenciones por baja/vacaciones; no convertir Sin_Registro→Ausencia.
+        from app.services.leave_service import user_has_approved_leave
+        candidatos = RegistroFichaje.query.filter(
+            RegistroFichaje.fecha == fecha_obj,
+            RegistroFichaje.estado == 'Sin_Registro',
+        ).all()
+        for reg in candidatos:
+            if user_has_approved_leave(reg.user_id, fecha_obj):
+                reg.estado = 'Exento_Ausencia'
+                reg.notas_resolucion = 'Cubierto por ausencia planificada (no cuenta como ausencia).'
+        # Revertir Ausencias tempranas inventadas por el corte antiguo (sin fichaje).
+        ausencias_tempranas = RegistroFichaje.query.filter_by(
+            fecha=fecha_obj, estado='Ausencia'
+        ).all()
+        for reg in ausencias_tempranas:
+            if not reg.check_in and not reg.obra_real_id:
+                if (reg.notas_resolucion or '').startswith('Generada automáticamente'):
                     reg.estado = 'Sin_Registro'
                     reg.notas_resolucion = None
-
-        # Multi-obra: si el día ya tiene fichaje/resolución real, las semillas
-        # Sin_Registro / Ausencia dejan de ensuciar la pelotita.
-        from app.services.fichaje_estado_service import (
-            FICHAJE_INTERVENCION,
-            FICHAJE_OK,
-            FICHAJE_ROJO,
-        )
-        semillas = RegistroFichaje.query.filter(
-            RegistroFichaje.fecha == fecha_obj,
-            RegistroFichaje.estado.in_(['Sin_Registro', 'Ausencia']),
-        ).all()
-        if semillas:
-            by_user = {}
-            for s in semillas:
-                by_user.setdefault(s.user_id, []).append(s)
-            for uid, seeds in by_user.items():
-                hermanos = RegistroFichaje.query.filter(
-                    RegistroFichaje.user_id == uid,
-                    RegistroFichaje.fecha == fecha_obj,
-                    RegistroFichaje.id.notin_([s.id for s in seeds]),
-                ).all()
-                if any(
-                    (h.estado in FICHAJE_OK)
-                    or (h.estado in FICHAJE_INTERVENCION)
-                    or (h.estado in FICHAJE_ROJO)
-                    or (h.estado or '').startswith('Resuelto')
-                    for h in hermanos
-                ):
-                    for s in seeds:
-                        s.estado = 'Cerrado_Multiobra'
-                        s.notas_resolucion = (
-                            'Cerrado automáticamente: el trabajador fichó u '
-                            'obtuvo resolución en otra obra el mismo día.'
-                        )
 
     if desvios_a_notificar:
         db.session.flush()
         from app.services.desvio_fichaje_service import notificar_desvio_inmediato
         vistos = set()
+        reales_avisados = set()
         for reg in desvios_a_notificar:
             key = (reg.user_id, reg.fecha, reg.obra_planificada_id, reg.obra_real_id)
             if key in vistos:
                 continue
             vistos.add(key)
-            notificar_desvio_inmediato(reg)
+            key_real = (reg.user_id, reg.fecha, reg.obra_real_id)
+            omitir_real = key_real in reales_avisados
+            if not omitir_real:
+                reales_avisados.add(key_real)
+            notificar_desvio_inmediato(reg, omitir_lado_real=omitir_real)

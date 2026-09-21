@@ -1,23 +1,18 @@
 """Desvío de fichaje: planificado en X, ficha en Y.
 
-Contrato de producto (a favor / en contra por lado):
-- Jefe de X (plan):
-    Liberar          → a favor del desvío
-    Mantener falta   → en contra (sigue debiendo venir a X)
-- Jefe de Y (ficha):
-    Aceptar          → a favor (se queda en Y)
-    Rechazar         → en contra (fichaje no vale en Y)
-- Mismo jefe / oficina:
-    Confirmar        → Liberar + Aceptar
-    Mantener         → Mantener falta + Rechazar
-    (+ Ignorar oficina: archiva sin tocar cuadrante)
+Contrato de producto:
+- Un desvío por cada obra de plan afectada (multi-plan → N filas).
+- El fichaje en Y es único: aceptar propaga a todos los hermanos
+  (mismo user/fecha/obra_real).
+- El fichaje físico no se «rechaza»; solo se decide el cuadrante.
+- Jefe de X (plan): Liberar plaza | Confirmar falta.
+- Jefe de Y (ficha): Aceptar (integrar al cuadrante).
+- Mismo jefe / oficina: Confirmar (liberar+aceptar) | Falta (falta en plan + aceptar Y).
 
-Matriz al decidir ambos lados:
-- Liberar + Aceptar           → mueve cuadrante X→Y (Resuelto_Movido)
-- Mantener falta + Rechazar   → falta en X, fichaje Y no oficial (Resuelto_Ausencia)
-- Cruce                       → Disputa (oficina)
-
-Los cambios de cuadrante se aplican solo al cerrar la matriz (o Confirmar/Mantener).
+Matriz:
+- Liberar + Aceptar     → mueve X→Y (Resuelto_Movido)
+- Falta + Aceptar       → Falta en X (sigue planificado), Y aceptada
+- Confirmar falta (solo plan, corte anticipado) → Falta en X sin esperar Y
 """
 from __future__ import annotations
 
@@ -32,9 +27,9 @@ logger = logging.getLogger(__name__)
 ACCION_LIBERAR_PLAZA = 'liberar_plaza'
 ACCION_MANTENER_FALTA = 'mantener_falta'
 ACCION_ACEPTAR_ENTRADA = 'aceptar_entrada'
-ACCION_RECHAZAR_ENTRADA = 'rechazar_entrada'
+ACCION_RECHAZAR_ENTRADA = 'rechazar_entrada'  # legado; ya no se ofrece en UI
 ACCION_CONFIRMAR_DESVIO = 'confirmar_desvio'
-ACCION_RECHAZAR_DESVIO = 'rechazar_desvio'
+ACCION_RECHAZAR_DESVIO = 'rechazar_desvio'  # legado; ahora = falta en plan + aceptar Y
 
 DECISION_LIBERAR = 'liberar'
 DECISION_MANTENER_FALTA = 'mantener_falta'
@@ -42,6 +37,11 @@ DECISION_ACEPTAR = 'aceptar'
 DECISION_RECHAZAR = 'rechazar'
 
 ESTADO_DISPUTA = 'Disputa'
+ESTADO_FALTA = 'Falta'
+
+_ESTADOS_ABIERTOS_PLAN = frozenset({
+    'Sin_Registro', 'Ausencia', 'Conflicto', 'Disputa', 'Cerrado_Multiobra', ESTADO_FALTA,
+})
 
 _ACCIONES_DESVIO = frozenset({
     ACCION_LIBERAR_PLAZA,
@@ -204,6 +204,10 @@ def _liberar_plaza_plan(registro, actor):
             asig.fecha,
             actor.id if actor else None,
             'Desvío fichaje: liberar plaza',
+            detalle_extra=(
+                f"Se libera la plaza en "
+                f"'{CoreAssignmentService.format_obra_label(Obra.query.get(plan_id))}'."
+            ),
         )
 
 
@@ -226,6 +230,10 @@ def _aceptar_entrada_real(registro, actor):
         registro.fecha,
         actor.id if actor else None,
         'Desvío fichaje: aceptar entrada',
+        detalle_extra=(
+            f"Se asigna a la obra del fichaje "
+            f"'{CoreAssignmentService.format_obra_label(Obra.query.get(real_id))}'."
+        ),
     )
 
 
@@ -248,6 +256,9 @@ def _asegurar_asignacion_plan(registro, actor):
         registro.fecha,
         actor.id if actor else None,
         'Desvío fichaje: mantener falta en plan',
+        detalle_extra=(
+            f"Se conserva la plaza en '{CoreAssignmentService.format_obra_label(Obra.query.get(plan_id))}'."
+        ),
     )
 
 
@@ -269,6 +280,10 @@ def _quitar_asignacion_real(registro, actor):
             asig.fecha,
             actor.id if actor else None,
             'Desvío fichaje: rechazar entrada',
+            detalle_extra=(
+                f"Se quita la asignación de la obra del fichaje "
+                f"'{CoreAssignmentService.format_obra_label(Obra.query.get(real_id))}'."
+            ),
         )
 
 
@@ -282,8 +297,35 @@ def _labels_obras(registro):
     return plan_lbl, real_lbl
 
 
+def _label_decision(decision: str | None) -> str:
+    return {
+        DECISION_LIBERAR: 'liberar plaza',
+        DECISION_MANTENER_FALTA: 'mantener falta',
+        DECISION_ACEPTAR: 'aceptar entrada',
+        DECISION_RECHAZAR: 'rechazar entrada',
+    }.get(decision or '', decision or '—')
+
+
+def _marcar_falta_plan(registro, actor, nota=None):
+    """Confirma falta real en la obra del plan (sigue planificado, estado Falta)."""
+    _asegurar_asignacion_plan(registro, actor)
+    plan_lbl, real_lbl = _labels_obras(registro)
+    registro.estado_antes_resolucion = (
+        registro.estado_antes_resolucion
+        or ('Disputa' if es_desvio_disputa(registro) else 'Conflicto')
+    )
+    registro.estado = ESTADO_FALTA
+    registro.resuelto_por_id = actor.id if actor else registro.resuelto_por_id
+    registro.fecha_auditoria = utc_now()
+    registro.notas_resolucion = nota or (
+        f"Falta confirmada en '{plan_lbl}'"
+        + (f" (había fichado en '{real_lbl}')." if real_lbl and real_lbl != '—' else '.')
+    )
+    return {'resolved': True, 'disputa': False, 'falta': True}
+
+
 def _aplicar_matriz(registro, actor):
-    """Con ambos lados decididos: mueve, mantiene falta o marca Disputa."""
+    """Con ambos lados decididos: mueve o marca falta en plan (el fichaje no se niega)."""
     if not desvio_completo(registro):
         return {'resolved': False, 'disputa': False}
 
@@ -302,26 +344,30 @@ def _aplicar_matriz(registro, actor):
         _aceptar_entrada_real(registro, actor)
         registro.estado = 'Resuelto_Movido'
         registro.notas_resolucion = (
-            f"Desvío cerrado: liberada plaza en '{plan_lbl}' "
-            f"y aceptada entrada en '{real_lbl}'."
+            f"Desvío cerrado: se libera la plaza en '{plan_lbl}' "
+            f"y se acepta el fichaje en '{real_lbl}'. "
+            f"El operario queda asignado a '{real_lbl}'."
         )
         return {'resolved': True, 'disputa': False}
 
-    if plan_d == DECISION_MANTENER_FALTA and real_d == DECISION_RECHAZAR:
-        _asegurar_asignacion_plan(registro, actor)
-        _quitar_asignacion_real(registro, actor)
-        registro.estado = 'Resuelto_Ausencia'
-        registro.notas_resolucion = (
-            f"Desvío rechazado: se mantiene falta en '{plan_lbl}' "
-            f"y no se acepta el fichaje en '{real_lbl}'."
+    # Falta en plan + aceptar (o legado rechazar): el fichaje físico no se borra.
+    if plan_d == DECISION_MANTENER_FALTA and real_d in (DECISION_ACEPTAR, DECISION_RECHAZAR):
+        _aceptar_entrada_real(registro, actor)
+        return _marcar_falta_plan(
+            registro,
+            actor,
+            nota=(
+                f"Falta confirmada en '{plan_lbl}'. "
+                f"El fichaje en '{real_lbl}' queda registrado."
+            ),
         )
-        return {'resolved': True, 'disputa': False}
 
-    # Cruce → oficina
+    # Cruce raro (liberar + rechazar legado) → oficina
     registro.estado = ESTADO_DISPUTA
     registro.notas_resolucion = (
-        f"Disputa entre jefes (plan={plan_d}, fichaje={real_d}): "
-        f"'{plan_lbl}' vs '{real_lbl}'. Requiere oficina."
+        f"Disputa entre jefes: en el plan ('{plan_lbl}') se decidió "
+        f"«{_label_decision(plan_d)}» y en el fichaje ('{real_lbl}') se decidió "
+        f"«{_label_decision(real_d)}». Las decisiones no cuadran; requiere oficina."
     )
     return {'resolved': False, 'disputa': True}
 
@@ -343,7 +389,6 @@ def _autorizar_accion(registro, user, accion):
     if not es_desvio_plan_vs_real(registro):
         raise DesvioFichajeError('Este registro no es un desvío plan→ficha.', status=400)
 
-    pendientes = lados_pendientes_para(registro, user)
     gestiona_ambos = lados_visibles_para(registro, user) == {'plan', 'real'} or _es_oficina(user)
 
     if accion in (ACCION_CONFIRMAR_DESVIO, ACCION_RECHAZAR_DESVIO):
@@ -354,24 +399,19 @@ def _autorizar_accion(registro, user, accion):
             status=403,
         )
 
+    visibles = lados_visibles_para(registro, user)
     if accion in (ACCION_LIBERAR_PLAZA, ACCION_MANTENER_FALTA):
-        if pendientes == {'plan', 'real'}:
-            raise DesvioFichajeError(
-                'Usa Confirmar o Mantener para cerrar el desvío completo.',
-                status=400,
-            )
-        if 'plan' not in pendientes:
+        if 'plan' not in visibles and not _es_oficina(user):
             raise DesvioFichajeError('No te corresponde decidir el lado del plan.', status=403)
+        if desvio_ack_plan_hecho(registro):
+            raise DesvioFichajeError('El lado del plan ya está decidido.', status=400)
         return
 
     if accion in (ACCION_ACEPTAR_ENTRADA, ACCION_RECHAZAR_ENTRADA):
-        if pendientes == {'plan', 'real'}:
-            raise DesvioFichajeError(
-                'Usa Confirmar o Mantener para cerrar el desvío completo.',
-                status=400,
-            )
-        if 'real' not in pendientes:
+        if 'real' not in visibles and not _es_oficina(user):
             raise DesvioFichajeError('No te corresponde decidir el lado del fichaje.', status=403)
+        if desvio_ack_real_hecho(registro):
+            raise DesvioFichajeError('El lado del fichaje ya está decidido.', status=400)
         return
 
     raise DesvioFichajeError('Acción de desvío no reconocida.', status=400)
@@ -388,33 +428,98 @@ def aplicar_accion_desvio(registro, accion, user):
         raise DesvioFichajeError('Este registro no es un desvío plan→ficha.', status=400)
 
     _autorizar_accion(registro, user, accion)
+    plan_lbl, real_lbl = _labels_obras(registro)
+
+    afectados_ids = {registro.id}
 
     if accion == ACCION_LIBERAR_PLAZA:
+        # Desasignar ya (como en Ausencias): no espera al otro lado.
         _marcar_decision_plan(registro, user, DECISION_LIBERAR)
-        msg = 'Registrado: liberar plaza (pendiente del otro jefe).'
+        _liberar_plaza_plan(registro, user)
+        if desvio_ack_real_hecho(registro):
+            _aceptar_entrada_real(registro, user)
+            registro.estado_antes_resolucion = registro.estado_antes_resolucion or 'Conflicto'
+            registro.estado = 'Resuelto_Movido'
+            registro.resuelto_por_id = user.id if user else registro.resuelto_por_id
+            registro.fecha_auditoria = utc_now()
+            registro.notas_resolucion = (
+                f"Desasignado de '{plan_lbl}' y fichaje aceptado en '{real_lbl}'."
+            )
+            return {
+                'resolved': True,
+                'disputa': False,
+                'dismiss_for_viewer': True,
+                'message': registro.notas_resolucion,
+                'ack_plan': True,
+                'ack_real': True,
+                'decision_plan': decision_plan(registro),
+                'decision_real': decision_real(registro),
+                'estado': registro.estado,
+                'afectados_ids': list(afectados_ids),
+            }
+        msg = (
+            f"Desasignado de '{plan_lbl}'. "
+            f"Pendiente aceptar el fichaje en '{real_lbl}'."
+        )
     elif accion == ACCION_MANTENER_FALTA:
+        # Confirmar falta ya (como en Ausencias).
         _marcar_decision_plan(registro, user, DECISION_MANTENER_FALTA)
-        msg = 'Registrado: mantener falta en la obra del plan.'
+        _marcar_falta_plan(registro, user)
+        msg = registro.notas_resolucion or (
+            f"Falta confirmada en '{plan_lbl}'."
+        )
+        return {
+            'resolved': True,
+            'disputa': False,
+            'dismiss_for_viewer': True,
+            'message': msg,
+            'ack_plan': True,
+            'ack_real': desvio_ack_real_hecho(registro),
+            'decision_plan': decision_plan(registro),
+            'decision_real': decision_real(registro),
+            'estado': registro.estado,
+            'afectados_ids': list(afectados_ids),
+            'falta': True,
+        }
     elif accion == ACCION_ACEPTAR_ENTRADA:
         _marcar_decision_real(registro, user, DECISION_ACEPTAR)
-        msg = 'Registrado: aceptar entrada (pendiente del otro jefe).'
+        _aceptar_entrada_real(registro, user)
+        afectados_ids |= _propagar_ack_real_hermanos(registro, user)
+        msg = (
+            f"Fichaje aceptado en '{real_lbl}' "
+            f"(vale para todos los desvíos de este fichaje). "
+            f"Pendiente desasignar o confirmar falta en '{plan_lbl}'."
+        )
     elif accion == ACCION_RECHAZAR_ENTRADA:
-        _marcar_decision_real(registro, user, DECISION_RECHAZAR)
-        msg = 'Registrado: rechazar entrada en la obra del fichaje.'
+        # Legado: el fichaje no se niega; se trata como aceptar sin integrar plaza.
+        _marcar_decision_real(registro, user, DECISION_ACEPTAR)
+        afectados_ids |= _propagar_ack_real_hermanos(registro, user)
+        msg = (
+            f"Fichaje en '{real_lbl}' registrado (ya no se puede rechazar). "
+            f"Pendiente decidir la plaza en '{plan_lbl}'."
+        )
     elif accion == ACCION_CONFIRMAR_DESVIO:
         _marcar_decision_plan(registro, user, DECISION_LIBERAR)
         _marcar_decision_real(registro, user, DECISION_ACEPTAR)
-        msg = 'Desvío confirmado en ambas obras.'
-    else:  # rechazar_desvio
+        afectados_ids |= _propagar_ack_real_hermanos(registro, user)
+        msg = (
+            f"Desvío confirmado: liberar '{plan_lbl}' y aceptar fichaje en '{real_lbl}'."
+        )
+    else:  # rechazar_desvio → falta en plan + aceptar Y (sin negar fichaje)
         _marcar_decision_plan(registro, user, DECISION_MANTENER_FALTA)
-        _marcar_decision_real(registro, user, DECISION_RECHAZAR)
-        msg = 'Desvío rechazado: se mantiene la falta del plan.'
+        _marcar_decision_real(registro, user, DECISION_ACEPTAR)
+        afectados_ids |= _propagar_ack_real_hermanos(registro, user)
+        msg = (
+            f"Falta en '{plan_lbl}' y fichaje aceptado en '{real_lbl}'."
+        )
 
     cierre = _aplicar_matriz(registro, user)
     if cierre.get('resolved'):
         msg = registro.notas_resolucion or msg
     elif cierre.get('disputa'):
-        msg = registro.notas_resolucion or 'Desvío en disputa: requiere oficina.'
+        msg = registro.notas_resolucion or (
+            f"Disputa entre jefes sobre '{plan_lbl}' vs '{real_lbl}': requiere oficina."
+        )
 
     dismiss = (
         cierre.get('resolved')
@@ -431,11 +536,17 @@ def aplicar_accion_desvio(registro, accion, user):
         'decision_plan': decision_plan(registro),
         'decision_real': decision_real(registro),
         'estado': registro.estado,
+        'afectados_ids': list(afectados_ids),
     }
 
 
 def botones_desvio_para(registro, user):
-    """Botones según rol: a favor + en contra, o cierre completo."""
+    """
+    Botones del desvío expandido = mismos de Ausencia + Sin planificar.
+
+    Plan (ausencia / pendiente): Desasignar | Confirmar falta
+    Real (sin planificar): Aceptar
+    """
     if not es_desvio_accionable(registro) or not user:
         return []
     pendientes = lados_pendientes_para(registro, user)
@@ -447,55 +558,41 @@ def botones_desvio_para(registro, user):
         or _es_oficina(user)
     )
 
-    if pendientes == {'plan', 'real'} and gestiona_ambos:
-        return [
-            {
-                'accion': ACCION_CONFIRMAR_DESVIO,
-                'label': 'Confirmar',
-                'title': 'Valida el desvío: libera la plaza del plan y acepta la entrada',
-                'style': 'primary',
-            },
-            {
-                'accion': ACCION_RECHAZAR_DESVIO,
-                'label': 'Mantener',
-                'title': 'Rechaza el desvío: mantiene la falta en el plan y no acepta el fichaje',
-                'style': 'warning',
-            },
-        ]
-
-    if pendientes == {'plan'}:
-        return [
+    botones = []
+    if 'plan' in pendientes:
+        botones.extend([
             {
                 'accion': ACCION_LIBERAR_PLAZA,
-                'label': 'Liberar',
-                'title': 'A favor: no viene a tu obra; se liberará su plaza al cerrar el caso',
-                'style': 'danger',
+                'label': 'Desasignar',
+                'title': 'Quita la planificación de esta obra (estaba mal / ya no aplica)',
+                'style': 'warning',
+                'lado': 'plan',
             },
             {
                 'accion': ACCION_MANTENER_FALTA,
-                'label': 'Falta',
-                'title': 'En contra: debía venir a tu obra; se mantiene la falta',
-                'style': 'warning',
-            },
-        ]
-
-    if pendientes == {'real'}:
-        return [
-            {
-                'accion': ACCION_ACEPTAR_ENTRADA,
-                'label': 'Aceptar',
-                'title': 'A favor: acepta en tu obra a quien venía de otra',
-                'style': 'primary',
-            },
-            {
-                'accion': ACCION_RECHAZAR_ENTRADA,
-                'label': 'Rechazar',
-                'title': 'En contra: ha fichado aquí pero no lo das por bueno en tu obra',
+                'label': 'Confirmar falta',
+                'title': 'Falta real: sigue planificado con marca de falta en el calendario',
                 'style': 'danger',
+                'lado': 'plan',
             },
-        ]
-
-    return []
+        ])
+    if 'real' in pendientes:
+        botones.append({
+            'accion': ACCION_ACEPTAR_ENTRADA,
+            'label': 'Aceptar',
+            'title': 'Asigna oficialmente a la obra del fichaje',
+            'style': 'primary',
+            'lado': 'real',
+        })
+    if pendientes == {'plan', 'real'} and gestiona_ambos:
+        botones.insert(0, {
+            'accion': ACCION_CONFIRMAR_DESVIO,
+            'label': 'Desasignar y aceptar',
+            'title': 'Atajo: quita el plan y acepta el fichaje de una vez',
+            'style': 'primary',
+            'lado': 'ambos',
+        })
+    return botones
 
 
 def contexto_desvio_para_plantilla(registro, user):
@@ -521,26 +618,187 @@ def contexto_desvio_para_plantilla(registro, user):
     }
 
 
+def _nombre_usuario(user):
+    if not user:
+        return None
+    return f"{(user.name or '').strip()} {(user.lastname or '').strip()}".strip() or None
+
+
+def _meta_desvio_batch(registros):
+    """Quién planificó / quién aceptó, para el panel expandido. Nunca debe tumbar la UI."""
+    from datetime import timedelta
+
+    from app.models import SystemLog, User
+    from app.services.core_assignment_service import CoreAssignmentService
+    from app.services.log_coverage import planif_detail_covers_day
+
+    regs = [r for r in (registros or []) if r and r.user_id and r.fecha]
+    if not regs:
+        return {}
+
+    user_ids = {r.user_id for r in regs}
+    jefe_ids = set()
+    ack_ids = set()
+    obra_ids = set()
+    for r in regs:
+        if r.obra_planificada_id:
+            obra_ids.add(r.obra_planificada_id)
+        if r.obra_real_id:
+            obra_ids.add(r.obra_real_id)
+        if getattr(r, 'desvio_ack_plan_by_id', None):
+            ack_ids.add(r.desvio_ack_plan_by_id)
+        if getattr(r, 'desvio_ack_real_by_id', None):
+            ack_ids.add(r.desvio_ack_real_by_id)
+
+    obras = {
+        o.id: o for o in Obra.query.filter(Obra.id.in_(obra_ids)).all()
+    } if obra_ids else {}
+    for o in obras.values():
+        if o.jefe_obra_id:
+            jefe_ids.add(o.jefe_obra_id)
+
+    fechas = {r.fecha for r in regs}
+    min_f, max_f = min(fechas), max(fechas)
+    logs = (
+        SystemLog.query.filter(
+            SystemLog.category == 'planificacion',
+            SystemLog.target_user_id.in_(user_ids),
+            SystemLog.target_date.isnot(None),
+            SystemLog.target_date <= max_f,
+            SystemLog.target_date >= (min_f - timedelta(days=400)),
+        )
+        .order_by(SystemLog.timestamp.desc())
+        .all()
+    )
+    autor_ids = {lg.user_id for lg in logs if lg.user_id}
+    need_users = user_ids | jefe_ids | ack_ids | autor_ids
+    users = {
+        u.id: u for u in User.query.filter(User.id.in_(need_users)).all()
+    } if need_users else {}
+
+    planif_por_clave = {}
+    for lg in logs:
+        detail = lg.detail or ''
+        if 'Asignado' not in detail or not lg.target_user_id:
+            continue
+        for r in regs:
+            if r.user_id != lg.target_user_id:
+                continue
+            if not planif_detail_covers_day(detail, r.fecha):
+                continue
+            oid = r.obra_planificada_id
+            if not oid:
+                continue
+            obra = obras.get(oid)
+            if not obra:
+                continue
+            label = CoreAssignmentService.format_obra_label(obra)
+            codigo = (obra.codigo or '').strip()
+            nombre = (obra.nombre or '').strip()
+            if not (
+                (label and label in detail)
+                or (codigo and codigo in detail)
+                or (nombre and nombre in detail)
+            ):
+                continue
+            key = (r.user_id, r.fecha, oid)
+            if key not in planif_por_clave:
+                planif_por_clave[key] = lg
+
+    out = {}
+    for r in regs:
+        obra_plan = obras.get(r.obra_planificada_id) if r.obra_planificada_id else None
+        planif_log = planif_por_clave.get(
+            (r.user_id, r.fecha, r.obra_planificada_id)
+        ) if r.obra_planificada_id else None
+        planif_autor = users.get(planif_log.user_id) if planif_log and planif_log.user_id else None
+        jefe_plan = (
+            users.get(obra_plan.jefe_obra_id)
+            if obra_plan and obra_plan.jefe_obra_id else None
+        )
+        ack_plan_u = users.get(getattr(r, 'desvio_ack_plan_by_id', None))
+        ack_real_u = users.get(getattr(r, 'desvio_ack_real_by_id', None))
+
+        out[r.id] = {
+            'planificado_por': _nombre_usuario(planif_autor) or _nombre_usuario(jefe_plan),
+            'planificado_por_es_jefe': bool(not planif_autor and jefe_plan),
+            'ack_plan_por': _nombre_usuario(ack_plan_u),
+            'ack_real_por': _nombre_usuario(ack_real_u),
+        }
+    return out
+
+
 def enriquecer_pendientes_desvio(pendientes, user):
+    # Meta es opcional: si falla, la UI de desvío (P/F + botones) sigue intacta.
+    meta_map = {}
+    try:
+        meta_map = _meta_desvio_batch(
+            [r for r in pendientes if es_desvio_accionable(r)]
+        )
+    except Exception:
+        logger.exception('meta desvío (planificador/aceptador) falló; UI básica OK')
+
     out = []
     for reg in pendientes:
         if es_desvio_accionable(reg) and not debe_mostrar_pendiente_a(reg, user):
             continue
-        reg.desvio_ui = contexto_desvio_para_plantilla(reg, user)
+        ctx = contexto_desvio_para_plantilla(reg, user)
+        if ctx and reg.id in meta_map:
+            ctx.update(meta_map[reg.id])
+        reg.desvio_ui = ctx
         out.append(reg)
     return out
 
 
-def notificar_desvio_inmediato(registro):
-    if not es_desvio_plan_vs_real(registro):
-        return
-    try:
-        from app.services.email_service import notificar_desvio_fichaje
-        notificar_desvio_fichaje(registro)
-    except Exception:
-        logger.exception(
-            'No se pudo notificar desvío fichaje id=%s', getattr(registro, 'id', None)
-        )
+class DesvioEspejoView:
+    """
+    Vista proxy de un Conflicto para listarlo también en Ausencias (lado plan)
+    o Sin planificar (lado real), sin duplicar el registro en BD.
+    """
+
+    __slots__ = ('_reg', 'desvio_espejo', 'desvio_ui')
+
+    def __init__(self, registro, lado):
+        self._reg = registro
+        self.desvio_espejo = lado  # 'plan' | 'real'
+        self.desvio_ui = getattr(registro, 'desvio_ui', None)
+
+    def __getattr__(self, name):
+        return getattr(self._reg, name)
+
+
+def repartir_secciones_auditoria(pendientes):
+    """
+    Conflicto/Disputa → desviaciones.
+    Ausencia + espejo plan de desvíos pendientes → ausencias.
+    Paracaidista + espejo real de desvíos pendientes → sin planificar.
+    """
+    conflictos = []
+    ausencias = []
+    paracaidistas = []
+    for r in pendientes or []:
+        if r.estado in ('Conflicto', 'Disputa'):
+            conflictos.append(r)
+            ui = getattr(r, 'desvio_ui', None) or {}
+            if ui.get('es_desvio'):
+                if not ui.get('ack_plan') and r.obra_planificada_id:
+                    ausencias.append(DesvioEspejoView(r, 'plan'))
+                if not ui.get('ack_real') and r.obra_real_id:
+                    paracaidistas.append(DesvioEspejoView(r, 'real'))
+        elif r.estado == 'Ausencia':
+            ausencias.append(r)
+        elif r.estado == 'Paracaidista':
+            paracaidistas.append(r)
+    return {
+        'conflictos': conflictos,
+        'ausencias': ausencias,
+        'paracaidistas': paracaidistas,
+    }
+
+
+def notificar_desvio_inmediato(registro, *, omitir_lado_real=False):
+    """Avisos inmediatos de desvío desactivados (no bombardear el buzón)."""
+    return
 
 
 def limpiar_acks_desvio(registro):
@@ -550,3 +808,166 @@ def limpiar_acks_desvio(registro):
     registro.desvio_ack_real_by_id = None
     registro.desvio_decision_plan = None
     registro.desvio_decision_real = None
+
+
+def hermanos_desvio_mismo_fichaje(registro):
+    """Otros Conflicto/Disputa del mismo user/fecha/obra_real (fichaje compartido)."""
+    from app.models import RegistroFichaje
+
+    if not registro or not registro.obra_real_id:
+        return []
+    return (
+        RegistroFichaje.query.filter(
+            RegistroFichaje.user_id == registro.user_id,
+            RegistroFichaje.fecha == registro.fecha,
+            RegistroFichaje.obra_real_id == registro.obra_real_id,
+            RegistroFichaje.id != registro.id,
+            RegistroFichaje.estado.in_(['Conflicto', ESTADO_DISPUTA]),
+        ).all()
+    )
+
+
+def _propagar_ack_real_hermanos(registro, user):
+    """Aceptar Y una vez: copia ack_real a todos los desvíos del mismo fichaje."""
+    ids = set()
+    for herm in hermanos_desvio_mismo_fichaje(registro):
+        if not desvio_ack_real_hecho(herm):
+            _marcar_decision_real(herm, user, DECISION_ACEPTAR)
+        ids.add(herm.id)
+        # Si el plan ya había decidido, cierra la matriz del hermano.
+        if desvio_completo(herm):
+            _aplicar_matriz(herm, user)
+    return ids
+
+
+def materializar_conflictos_entrada(
+    *,
+    user_id,
+    fecha,
+    obra_real_id,
+    obras_plan_ids,
+    check_in=None,
+    check_out=None,
+    nota_odoo=None,
+):
+    """
+    Crea/actualiza un Conflicto por cada obra de plan distinta de la fichada.
+    Comparte obra_real y horarios. Devuelve (regs_conflicto, regs_nuevos_a_notificar).
+    """
+    from app import db
+    from app.models import RegistroFichaje
+
+    plan_ids = []
+    seen = set()
+    for oid in obras_plan_ids or []:
+        if not oid or oid == obra_real_id or oid in seen:
+            continue
+        seen.add(oid)
+        plan_ids.append(oid)
+
+    conflictos = []
+    a_notificar = []
+    for plan_id in plan_ids:
+        reg = RegistroFichaje.query.filter_by(
+            user_id=user_id,
+            fecha=fecha,
+            obra_planificada_id=plan_id,
+        ).first()
+        if reg is None:
+            reg = RegistroFichaje(
+                user_id=user_id,
+                fecha=fecha,
+                obra_planificada_id=plan_id,
+                obra_real_id=obra_real_id,
+                estado='Conflicto',
+                check_in=check_in,
+                check_out=check_out,
+                nota_odoo=nota_odoo,
+            )
+            db.session.add(reg)
+            limpiar_acks_desvio(reg)
+            conflictos.append(reg)
+            a_notificar.append(reg)
+            continue
+
+        est = reg.estado or ''
+        # Si ya resolvió/confirmó falta, no reabrir salvo que el fichaje gane
+        # (eso lo hace resolver_plan_cumplido_por_fichaje al fichar en el plan).
+        if est.startswith('Resuelto') or est == ESTADO_FALTA:
+            continue
+        if est in ('Correcto', 'Correcto_Automatico', 'Cambio_Tajo'):
+            continue
+
+        prev = est
+        reg.obra_real_id = obra_real_id
+        reg.estado = 'Conflicto'
+        if check_in is not None:
+            reg.check_in = check_in
+        if check_out is not None:
+            reg.check_out = check_out
+        if nota_odoo:
+            reg.nota_odoo = nota_odoo
+        if prev != 'Conflicto':
+            limpiar_acks_desvio(reg)
+            a_notificar.append(reg)
+        conflictos.append(reg)
+
+    db.session.flush()
+    return conflictos, a_notificar
+
+
+def resolver_plan_cumplido_por_fichaje(user_id, fecha, obra_id, check_in=None):
+    """
+    Si el operario acaba fichando en una obra del plan, esa pata deja de ser
+    pendiente/conflicto/falta anticipada: el fichaje gana.
+    """
+    from app.models import RegistroFichaje
+
+    regs = RegistroFichaje.query.filter_by(
+        user_id=user_id,
+        fecha=fecha,
+        obra_planificada_id=obra_id,
+    ).all()
+    cerrados = []
+    for reg in regs:
+        est = reg.estado or ''
+        if est in (
+            'Conflicto', ESTADO_DISPUTA, 'Ausencia', 'Sin_Registro',
+            'Cerrado_Multiobra', ESTADO_FALTA, 'Retraso',
+            'Resuelto_Ausencia', 'Resuelto_Falta', 'Resuelto_Ignorado',
+        ):
+            reg.estado = 'Correcto'
+            reg.obra_real_id = obra_id
+            if check_in is not None:
+                reg.check_in = check_in
+            reg.notas_resolucion = 'Cumplió el plan: fichó en esta obra.'
+            limpiar_acks_desvio(reg)
+            cerrados.append(reg)
+    return cerrados
+
+
+def consolidar_pendientes_a_ausencia(fecha):
+    """
+    Al cerrar el día: Sin_Registro sin fichaje → Ausencia (aún no es Falta).
+    No toca Conflicto/Paracaidista ni filas con check_in.
+    """
+    from app.models import RegistroFichaje
+    from app.services.leave_service import user_has_approved_leave
+
+    candidatos = RegistroFichaje.query.filter(
+        RegistroFichaje.fecha == fecha,
+        RegistroFichaje.estado == 'Sin_Registro',
+    ).all()
+    n = 0
+    for reg in candidatos:
+        if reg.check_in or reg.obra_real_id:
+            continue
+        if user_has_approved_leave(reg.user_id, fecha):
+            reg.estado = 'Exento_Ausencia'
+            reg.notas_resolucion = 'Cubierto por ausencia planificada (no cuenta como ausencia).'
+            n += 1
+            continue
+        reg.estado = 'Ausencia'
+        reg.notas_resolucion = 'Pendiente de resolución: no fichó en la obra del plan ese día.'
+        n += 1
+    return n
