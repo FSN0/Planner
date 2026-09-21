@@ -330,9 +330,9 @@
                     {% endif %}
                   {% endif %}
                 </td>
-                <td class="text-center col-mobile-omit" data-sort-value="{{ s.cantidad_cubierta if s.tipo == 'GENERICA' else 0 }}">
+                <td class="text-center col-mobile-omit" data-sort-value="{{ stat.cubiertas_total if s.tipo == 'GENERICA' else 0 }}">
                   {% if s.tipo == 'GENERICA' %}
-                    <span class="font-weight-bold">{{ s.cantidad_cubierta }}</span><span class="text-muted"> / {{ s.cantidad_solicitada }}</span>
+                    <span class="font-weight-bold">{{ stat.cubiertas_total }}</span><span class="text-muted"> / {{ s.cantidad_solicitada }}</span>
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}

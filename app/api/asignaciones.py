@@ -16,6 +16,7 @@ from app.services.solicitud_service import (
     merge_notas,
     build_comentarios_config,
     log_nueva_solicitud,
+    get_solicitud_valid_dates,
 )
 from app.services.core_assignment_service import CoreAssignmentService
 from app.services.email_service import (
@@ -394,6 +395,7 @@ def api_unassign_worker():
     dates = data.get('dates', [])
     refs = data.get('refs', [])
     mode = data.get('mode', 'selected')
+    notas = data.get('notas')
 
     if not worker_id:
         return jsonify({'success': False, 'message': translate('Faltan datos (worker_id)')}), 400
@@ -406,6 +408,7 @@ def api_unassign_worker():
             date_list=dates,
             mode=mode,
             assignment_refs=refs,
+            notas=notas,
         )
         
         status_code = 200 if result.get('success') else 400
@@ -832,32 +835,7 @@ def api_solicitud_asignar_candidatos(solicitud_id):
         return jsonify({'success': False, 'message': translate('No has seleccionado ningún trabajador.')}), 400
 
     try:
-        dias_base = []
-        try:
-            config = json.loads(solicitud.comentarios or '{}')
-            fechas_json = config.get('original_dates') or config.get('dates', [])
-            if fechas_json:
-                dias_base = [
-                    datetime.strptime(d, '%Y-%m-%d').date()
-                    for d in fechas_json
-                    if solicitud.fecha_inicio
-                    <= datetime.strptime(d, '%Y-%m-%d').date()
-                    <= solicitud.fecha_fin
-                ]
-        except Exception:
-            dias_base = []
-
-        if not dias_base:
-            festivos = Festivo.query.filter(
-                Festivo.fecha >= solicitud.fecha_inicio,
-                Festivo.fecha <= solicitud.fecha_fin,
-            ).all()
-            fechas_festivas = {f.fecha for f in festivos}
-            curr = solicitud.fecha_inicio
-            while curr <= solicitud.fecha_fin:
-                if curr.weekday() < 5 and curr not in fechas_festivas:
-                    dias_base.append(curr)
-                curr += timedelta(days=1)
+        dias_base = get_solicitud_valid_dates(solicitud)
 
         if not dias_base:
             return jsonify({

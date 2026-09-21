@@ -685,25 +685,24 @@
 .vis-timeline .vis-item.inercia-item.vis-selected {
     opacity: 0.55 !important;
 }
-/* Falta confirmada: fantasma rojo (mismo lenguaje que inercia) */
+/* Falta confirmada: rojo sólido + tachado */
 .vis-timeline .vis-item.falta-item {
-    opacity: 0.42 !important;
-    border: 1.5px dashed rgba(225, 29, 72, 0.75) !important;
+    opacity: 1 !important;
+    background-color: #e11d48 !important;
+    border: 1px solid #be123c !important;
     box-shadow: none !important;
-    background-image: repeating-linear-gradient(
-        -45deg,
-        rgba(255, 255, 255, 0.45) 0,
-        rgba(255, 255, 255, 0.45) 5px,
-        rgba(255, 255, 255, 0) 5px,
-        rgba(255, 255, 255, 0) 10px
-    ) !important;
+    background-image: none !important;
+    color: #ffffff !important;
 }
 .vis-timeline .vis-item.falta-item .vis-item-content {
-    font-weight: 500 !important;
+    font-weight: 600 !important;
+    text-decoration: line-through !important;
+    color: #ffffff !important;
 }
 .vis-timeline .vis-item.falta-item.vis-selected,
 .vis-timeline .vis-item.falta-item:hover {
-    opacity: 0.72 !important;
+    opacity: 1 !important;
+    filter: brightness(1.05);
 }
 .planificador-inercia-toggle.is-on {
     background: #e2e8f0 !important;

@@ -461,24 +461,29 @@ body > .select2-container--open {
     rgba(255, 255, 255, 0) 10px
   );
 }
-/* Falta confirmada: mismo lenguaje “fantasma” que inercia, con acento rojo */
+/* Falta confirmada: bloque rojo sólido + texto tachado */
 .univ-calendar-root .fc-event.fc-event-falta,
 .layout-admin .fc-event.fc-event-falta {
-  opacity: 0.42 !important;
-  border-style: dashed !important;
-  border-width: 1.5px !important;
+  opacity: 1 !important;
+  background-color: #e11d48 !important;
+  background-image: none !important;
+  border-style: solid !important;
+  border-color: #be123c !important;
+  color: #ffffff !important;
   box-shadow: none !important;
-  background-image: repeating-linear-gradient(
-    -45deg,
-    rgba(255, 255, 255, 0.45) 0,
-    rgba(255, 255, 255, 0.45) 5px,
-    rgba(255, 255, 255, 0) 5px,
-    rgba(255, 255, 255, 0) 10px
-  ) !important;
+  text-decoration: line-through !important;
+}
+.univ-calendar-root .fc-event.fc-event-falta .fc-event-title,
+.univ-calendar-root .fc-event.fc-event-falta .text-truncate,
+.layout-admin .fc-event.fc-event-falta .fc-event-title,
+.layout-admin .fc-event.fc-event-falta .text-truncate {
+  text-decoration: line-through !important;
+  color: #ffffff !important;
 }
 .univ-calendar-root .fc-event.fc-event-falta:hover,
 .layout-admin .fc-event.fc-event-falta:hover {
-  opacity: 0.72 !important;
+  opacity: 1 !important;
+  filter: brightness(1.05);
 }
 .univ-calendar-inercia-toggle {
   flex-shrink: 0;

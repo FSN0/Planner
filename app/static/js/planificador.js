@@ -3070,7 +3070,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 ? `<br><br><small class="text-info"><i class="fas fa-info-circle"></i> ${t('Se conservará el histórico de trabajo desde el')} ${startDate.format('DD/MM')} ${t('hasta ayer.')}</small>` 
                 : '';
             
-            lanzarConfirmacionBaja(workerId, obraId, dates, `${t('Se van a eliminar')} ${dates.length} ${t('días de asignación.')}` + msjExtra);
+            lanzarConfirmacionBaja(workerId, obraId, dates, `${t('Se van a eliminar')} ${dates.length} ${t('días de asignación.')}` + msjExtra, '');
             
         } else if (mode === 'futuro') {
             let maxEnd = endDate.clone();
@@ -3095,6 +3095,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 html: `
                     <p class="mb-3 text-muted small">${t('Elige a partir de qué día (incluido) quieres eliminar las asignaciones futuras.')}</p>
                     <input type="date" id="input-fecha-baja" class="form-control text-center font-weight-bold" value="${hoyStr}" min="${hoyStr}">
+                    <label class="d-block text-left text-muted small mt-3 mb-1" for="input-notas-baja">${t('Notas / comentario')}</label>
+                    <textarea id="input-notas-baja" class="form-control" rows="2" maxlength="500"
+                              placeholder="${t('Opcional. Si la baja genera una solicitud, este texto irá en la solicitud.')}"></textarea>
                 `,
                 icon: 'question',
                 showCancelButton: true,
@@ -3106,15 +3109,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     let val = document.getElementById('input-fecha-baja').value;
                     if (!val) {
                         Swal.showValidationMessage(t('Debes seleccionar una fecha válida'));
+                        return false;
                     } else if (moment(val).startOf('day').isBefore(hoy)) {
-                        // PROTECCIÓN FRONT: Por si intentan trampear el input escribiendo a mano
                         Swal.showValidationMessage(t('No puedes dar de baja en una fecha pasada'));
+                        return false;
                     }
-                    return val;
+                    let notasEl = document.getElementById('input-notas-baja');
+                    return {
+                        fecha: val,
+                        notas: notasEl ? (notasEl.value || '').trim() : ''
+                    };
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
-                    let selectedDate = moment(result.value).startOf('day');
+                    let selectedDate = moment(result.value.fecha).startOf('day');
+                    let notasBaja = result.value.notas || '';
                     
                     if (selectedDate.isAfter(maxEnd)) {
                         Swal.fire(t('Aviso'), t('La fecha seleccionada es posterior al último día que tiene asignado. No hay nada que borrar.'), 'info');
@@ -3128,14 +3137,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         current.add(1, 'days');
                     }
 
-                    lanzarConfirmacionBaja(workerId, obraId, dates, `${t('Se van a eliminar')} ${dates.length} ${t('días de asignación a partir del')} ${selectedDate.format('DD/MM/YYYY')}.`);
+                    lanzarConfirmacionBaja(
+                        workerId, obraId, dates,
+                        `${t('Se van a eliminar')} ${dates.length} ${t('días de asignación a partir del')} ${selectedDate.format('DD/MM/YYYY')}.`,
+                        notasBaja
+                    );
                 }
             });
         }
     };
 
     // Función auxiliar para no repetir código de borrado
-    function lanzarConfirmacionBaja(workerId, obraId, dates, mensajeTexto) {
+    function lanzarConfirmacionBaja(workerId, obraId, dates, mensajeTexto, notas) {
         Swal.fire({
             title: t('¿Confirmar Desasignación?'),
             text: mensajeTexto + ' ' + t('Esta acción es inmediata.'),
@@ -3156,7 +3169,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         worker_id: workerId,
                         obra_id: obraId,
                         dates: dates,
-                        mode: 'selected' 
+                        mode: 'selected',
+                        notas: notas || ''
                     })
                 })
                 .then(response => response.json())

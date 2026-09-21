@@ -1285,6 +1285,10 @@ def resolver_fichaje():
     data = request.json
     registro_id = data.get('registro_id')
     accion = data.get('accion')
+    scope = (data.get('scope') or 'day').strip().lower()
+    if scope not in ('day', 'future'):
+        scope = 'day'
+    notas_desasign = (data.get('notas') or '').strip() or None
     
     registro = RegistroFichaje.query.get(registro_id)
     if not registro:
@@ -1295,6 +1299,41 @@ def resolver_fichaje():
         obras_del_jefe = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()]
         if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
             return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
+
+    def _desasignar_futuro_desde_registro():
+        """Desde la fecha del registro (o hoy) hasta el final en esa obra de plan."""
+        from app.services.assignment_service import process_unassign_action
+        from app.utils.timezone_utils import today_local
+
+        obra_id = registro.obra_planificada_id
+        if not obra_id:
+            return {
+                'success': False,
+                'message': translate('No hay obra planificada que desasignar.'),
+            }
+        hoy = today_local()
+        desde = registro.fecha if registro.fecha >= hoy else hoy
+        fechas = sorted({
+            a.fecha
+            for a in Asignacion.query.filter(
+                Asignacion.user_id == registro.user_id,
+                Asignacion.obra_id == obra_id,
+                Asignacion.fecha >= desde,
+            ).all()
+        })
+        if not fechas:
+            return {
+                'success': False,
+                'message': translate('No hay asignaciones futuras para desasignar.'),
+            }
+        return process_unassign_action(
+            actor_user=current_user,
+            worker_id=registro.user_id,
+            target_obra_id=obra_id,
+            date_list=[d.isoformat() for d in fechas],
+            mode='selected',
+            notas=notas_desasign,
+        )
 
     from app.services.desvio_fichaje_service import (
         ACCION_ACEPTAR_ENTRADA,
@@ -1318,6 +1357,37 @@ def resolver_fichaje():
         ACCION_RECHAZAR_DESVIO,
     ):
         try:
+            if accion == ACCION_LIBERAR_PLAZA and scope == 'future':
+                un = _desasignar_futuro_desde_registro()
+                if not un.get('success'):
+                    return jsonify({
+                        'success': False,
+                        'error': translate(un.get('message') or 'Error'),
+                    }), 400
+                if un.get('action') == 'requested':
+                    from app.utils import register_log
+                    register_log(
+                        user_id=current_user.id,
+                        category='fichajes',
+                        action='Resolución de Fichaje: Desasignar (solicitud)',
+                        detail=un.get('message'),
+                        target_user_id=registro.user_id,
+                        target_date=registro.fecha,
+                    )
+                    return jsonify({
+                        'success': True,
+                        'resolved': False,
+                        'dismiss_row': False,
+                        'requested': True,
+                        'message': translate(un.get('message') or 'OK'),
+                        'ack_plan': False,
+                        'ack_real': bool(getattr(registro, 'desvio_ack_real_at', None)),
+                    })
+                # Desasignación directa a futuro: cerrar también el lado plan del desvío
+                try:
+                    db.session.refresh(registro)
+                except Exception:
+                    pass
             resultado = aplicar_accion_desvio(registro, accion, current_user)
             if resultado.get('resolved'):
                 herm_accion = (
@@ -1453,16 +1523,41 @@ def resolver_fichaje():
                 registro.estado = 'Resuelto_Dividido'
 
         elif accion == 'borrar_planificacion':
-            asignaciones_viejas = Asignacion.query.filter_by(
-                user_id=registro.user_id, 
-                fecha=registro.fecha, 
-                obra_id=registro.obra_planificada_id
-            ).all()
-            for asig in asignaciones_viejas:
-                CoreAssignmentService.desasignar(
-                    asig.user_id, asig.obra_id, asig.fecha, current_user.id,
-                    "Desasignar (planificación incorrecta)",
-                )
+            if scope == 'future':
+                un = _desasignar_futuro_desde_registro()
+                if not un.get('success'):
+                    return jsonify({
+                        'success': False,
+                        'error': translate(un.get('message') or 'Error'),
+                    }), 400
+                if un.get('action') == 'requested':
+                    from app.utils import register_log
+                    register_log(
+                        user_id=current_user.id,
+                        category='fichajes',
+                        action='Resolución de Fichaje: Desasignar (solicitud)',
+                        detail=un.get('message'),
+                        target_user_id=registro.user_id,
+                        target_date=registro.fecha,
+                    )
+                    return jsonify({
+                        'success': True,
+                        'resolved': False,
+                        'dismiss_row': False,
+                        'requested': True,
+                        'message': translate(un.get('message') or 'OK'),
+                    })
+            else:
+                asignaciones_viejas = Asignacion.query.filter_by(
+                    user_id=registro.user_id,
+                    fecha=registro.fecha,
+                    obra_id=registro.obra_planificada_id
+                ).all()
+                for asig in asignaciones_viejas:
+                    CoreAssignmentService.desasignar(
+                        asig.user_id, asig.obra_id, asig.fecha, current_user.id,
+                        "Desasignar (planificación incorrecta)",
+                    )
 
             registro.estado = 'Resuelto_Falta'
 

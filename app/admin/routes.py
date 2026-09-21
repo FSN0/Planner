@@ -22,7 +22,13 @@ from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta, date
 
 
-from app.services.solicitud_service import update_solicitudes_for_assignment, get_solicitud_notas
+from app.services.solicitud_service import (
+    update_solicitudes_for_assignment,
+    get_solicitud_notas,
+    compute_generica_coverage,
+    get_solicitud_valid_dates,
+    _recalculate_solicitud_coverage,
+)
 from app.services.assignment_service import process_assignment_action
 from app.services.core_assignment_service import CoreAssignmentService
 from app.decorators import roles_required
@@ -728,61 +734,29 @@ def solicitudes_list():
             
     solicitudes = query.order_by(Solicitud.created_at.desc()).all()
 
-    # --- CÁLCULO DE ESTADÍSTICAS (PORCENTAJE REAL DE JORNADAS) ---
+    # --- CÁLCULO DE ESTADÍSTICAS (misma lógica que el motor de cobertura) ---
     stats = {}
 
-    
     for s in solicitudes:
-        num_dias = (s.fecha_fin - s.fecha_inicio).days + 1
-        if num_dias < 1: num_dias = 1
-        
         if s.tipo == 'GENERICA':
-            total_jornadas_necesarias = s.cantidad_solicitada * num_dias
-            
-            # --- MISMA LÓGICA DE AISLAMIENTO QUE EN EL MOTOR ---
-            cond_explicita = (Asignacion.solicitud_id == s.id)
-            cond_libre = [Asignacion.solicitud_id == None]
-            
-            if s.created_at:
-                cond_libre.append(Asignacion.created_at >= s.created_at)
-            if s.perfil_categoria:
-                cond_libre.append(User.categoria_profesional.ilike(f"%{s.perfil_categoria}%"))
-            if s.perfil_empresa_id:
-                cond_libre.append(User.company_id == s.perfil_empresa_id)
-
-            q_asig = Asignacion.query.filter(
-                Asignacion.obra_id == s.obra_id,
-                Asignacion.fecha >= s.fecha_inicio,
-                Asignacion.fecha <= s.fecha_fin
-            ).join(User).filter(User.is_deleted == False, or_(cond_explicita, and_(*cond_libre)))
-            
-            total_jornadas_cubiertas = q_asig.count()
-            
-            if total_jornadas_necesarias > 0:
-                pct = int((total_jornadas_cubiertas / total_jornadas_necesarias) * 100)
-            else:
-                pct = 0
-            
+            cov = compute_generica_coverage(s)
             stats[s.id] = {
-                'pct': min(pct, 100),
-                'cubiertas_total': s.cantidad_cubierta, 
-                'plazas_total': s.cantidad_solicitada
+                'pct': cov['pct'],
+                'cubiertas_total': cov['min_coverage'],
+                'plazas_total': s.cantidad_solicitada,
             }
-            
         else:
-            # CONCRETA: Calculamos % en base a si el empleado específico está asignado esos días
-            if s.empleado_id:
+            valid_dates = get_solicitud_valid_dates(s)
+            num_dias = len(valid_dates) or 1
+            if s.empleado_id and valid_dates:
                 dias_asignados = Asignacion.query.filter(
                     Asignacion.obra_id == s.obra_id,
                     Asignacion.user_id == s.empleado_id,
-                    Asignacion.fecha >= s.fecha_inicio,
-                    Asignacion.fecha <= s.fecha_fin
+                    Asignacion.fecha.in_(valid_dates),
                 ).count()
-                
                 pct = int((dias_asignados / num_dias) * 100)
             else:
                 pct = 0
-                
             stats[s.id] = {'pct': min(pct, 100)}
 
     solicitudes_inbox_vacio = (
@@ -1092,6 +1066,13 @@ def company_panel(company_id):
 @roles_required(ROLE_ADMIN, ROLE_JEFE)
 def solicitud_detail(solicitud_id):
     solicitud = Solicitud.query.get_or_404(solicitud_id)
+
+    # Sincroniza progreso/cobertura al abrir (corrige estados atascados tras asignar).
+    if solicitud.estado in ('PENDIENTE', 'EN_PROCESO'):
+        _recalculate_solicitud_coverage(solicitud)
+        db.session.commit()
+        db.session.refresh(solicitud)
+
     es_admin = (current_user.role == ROLE_ADMIN)
     puede_cancelar = (
         solicitud.requested_by_id == current_user.id
@@ -1203,8 +1184,13 @@ def solicitud_detail(solicitud_id):
                 'days_busy': days_busy
             }
 
-    # 3. Cobertura
-    cobertura_texto = f"{solicitud.cantidad_cubierta}/{solicitud.cantidad_solicitada}" if solicitud.tipo == 'GENERICA' else ""
+    # 3. Cobertura (progreso + % de jornadas, misma lógica que el listado)
+    cobertura_texto = ""
+    if solicitud.tipo == 'GENERICA':
+        cov = compute_generica_coverage(solicitud)
+        cobertura_texto = (
+            f"{cov['pct']}% · {solicitud.cantidad_cubierta}/{solicitud.cantidad_solicitada}"
+        )
 
     from app.utils.nav_back import resolve_back_url
     back_url = resolve_back_url('admin.solicitudes_list')

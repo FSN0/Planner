@@ -5,7 +5,7 @@ from app import db
 from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_OPERARIO
 from app.services.permission_service import is_laboral
 from app.services.i18n_service import translate
-from app.services.solicitud_service import solicitud_calendar_title
+from app.services.solicitud_service import solicitud_calendar_title, get_solicitud_valid_dates
 from app.decorators import roles_required_api
 from datetime import datetime, timedelta
 import json
@@ -1037,36 +1037,38 @@ def get_universal_calendar_events():
                 curr += timedelta(days=1)
 
         elif solicitud.tipo == 'GENERICA':
-            # Contar cuántos están cubriendo el perfil cada día
+            # Solo días válidos de la solicitud y solo asignaciones vinculadas a ella.
+            valid_dates = set(get_solicitud_valid_dates(solicitud))
+            requested = solicitud.cantidad_solicitada or 1
             day_counts = defaultdict(int)
             for a in asignaciones:
+                if a.fecha not in valid_dates:
+                    continue
+                if a.solicitud_id != solicitud.id:
+                    continue
                 worker = getattr(a, 'user_obj', getattr(a, 'user', None))
-                if not worker and a.user_id: worker = User.query.get(a.user_id)
-                if not worker or worker.is_deleted: continue
-                
-                # Si la solicitud exige una empresa concreta, filtramos y descartamos a los demás
-                if solicitud.perfil_empresa_id and worker.company_id != solicitud.perfil_empresa_id:
+                if not worker and a.user_id:
+                    worker = User.query.get(a.user_id)
+                if not worker or worker.is_deleted:
                     continue
                 day_counts[a.fecha] += 1
-                
-            curr = max(solicitud.fecha_inicio, start_date)
-            fin_loop = min(solicitud.fecha_fin, end_date - timedelta(days=1))
-            
-            while curr <= fin_loop:
+
+            for curr in sorted(valid_dates):
+                if curr < start_date or curr >= end_date:
+                    continue
                 assigned = day_counts[curr]
-                missing = solicitud.cantidad_solicitada - assigned
-                
+                missing = requested - assigned
+
                 if assigned > 0:
                     raw_events.append({
-                        'title': f"✅ Cubiertos ({min(assigned, solicitud.cantidad_solicitada)})", 
+                        'title': f"✅ Cubiertos ({min(assigned, requested)})",
                         'start_date': curr, 'end_date': curr, 'color': '#10B981'
                     })
                 if missing > 0:
                     raw_events.append({
-                        'title': f"⚠️ Faltan ({missing})", 
+                        'title': f"⚠️ Faltan ({missing})",
                         'start_date': curr, 'end_date': curr, 'color': '#F59E0B'
                     })
-                curr += timedelta(days=1)
                 
         # Usamos nuestro motor de fusión para agrupar los días seguidos y que quede limpio
         events.extend(merge_events_v2(raw_events, group_by=['title', 'color']))

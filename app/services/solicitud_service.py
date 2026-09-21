@@ -141,15 +141,91 @@ def get_solicitud_notas(solicitud):
     text = comentarios.strip()
     return text or None
 
+def get_solicitud_valid_dates(solicitud):
+    """Días que realmente pide la solicitud (original_dates / laborables, no el span calendario)."""
+    start = solicitud.fecha_inicio
+    end = solicitud.fecha_fin
+    if not start or not end:
+        return []
+
+    explicit_dates = []
+    if solicitud.comentarios:
+        try:
+            raw = solicitud.comentarios.strip()
+            if raw.startswith('{'):
+                data = json.loads(raw)
+                fechas_base = data.get('original_dates') or data.get('dates', [])
+                if fechas_base:
+                    explicit_dates = [
+                        datetime.strptime(d, '%Y-%m-%d').date() for d in fechas_base
+                    ]
+        except Exception:
+            explicit_dates = []
+
+    if explicit_dates:
+        return sorted({d for d in explicit_dates if start <= d <= end})
+
+    festivos = Festivo.query.filter(Festivo.fecha >= start, Festivo.fecha <= end).all()
+    fechas_festivas = {f.fecha for f in festivos}
+    valid_dates = []
+    curr = start
+    while curr <= end:
+        if curr.weekday() < 5 and curr not in fechas_festivas:
+            valid_dates.append(curr)
+        curr += timedelta(days=1)
+
+    if valid_dates:
+        return valid_dates
+
+    return [start + timedelta(days=i) for i in range((end - start).days + 1)]
+
+
+def compute_generica_coverage(solicitud, counts_by_day=None):
+    """
+    Cobertura GENERICA unificada:
+    - progreso (cantidad_cubierta) = mínimo de personas vinculadas por día válido
+    - % = jornadas cubiertas (tope por día = solicitadas) / (solicitadas × días válidos)
+    """
+    valid_dates = get_solicitud_valid_dates(solicitud)
+    requested = solicitud.cantidad_solicitada or 1
+
+    if counts_by_day is None:
+        counts_by_day = {d: 0 for d in valid_dates}
+        if valid_dates and solicitud.id:
+            asignaciones_vinculadas = Asignacion.query.filter(
+                Asignacion.obra_id == solicitud.obra_id,
+                Asignacion.solicitud_id == solicitud.id,
+                Asignacion.fecha.in_(valid_dates),
+            ).all()
+            for a in asignaciones_vinculadas:
+                if a.fecha in counts_by_day:
+                    counts_by_day[a.fecha] += 1
+
+    min_coverage = min(counts_by_day.values()) if counts_by_day else 0
+    jornadas_filled = sum(min(c, requested) for c in counts_by_day.values())
+    jornadas_needed = requested * len(valid_dates) if valid_dates else 0
+    if jornadas_needed > 0:
+        pct = int((jornadas_filled / jornadas_needed) * 100)
+    else:
+        pct = 0
+
+    return {
+        'valid_dates': valid_dates,
+        'counts_by_day': counts_by_day,
+        'requested': requested,
+        'min_coverage': min_coverage,
+        'jornadas_filled': jornadas_filled,
+        'jornadas_needed': jornadas_needed,
+        'pct': min(pct, 100),
+        'total_assignments': sum(counts_by_day.values()) if counts_by_day else 0,
+    }
+
+
 def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=None):
-    from datetime import date
-    if fecha < today_local():
-        return
-    
     worker_id = int(worker_id)
     if obra_id:
         obra_id = int(obra_id)
-        
+
     worker = User.query.get(worker_id)
     if not worker:
         return
@@ -177,65 +253,24 @@ def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=
             except Exception:
                 pass
 
+
 def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
-    start = solicitud.fecha_inicio
-    end = solicitud.fecha_fin
-    valid_dates = []
-
-    explicit_dates = []
-    if solicitud.comentarios:
-        try:
-            if not solicitud.comentarios.strip().startswith('{'):
-                data = {}
-            else:
-                data = json.loads(solicitud.comentarios)
-            
-            fechas_base = data.get('original_dates') or data.get('dates', [])
-            if fechas_base:
-                explicit_dates = [datetime.strptime(d, '%Y-%m-%d').date() for d in fechas_base]
-        except Exception:
-            pass
-
-    if explicit_dates:
-        valid_dates = [d for d in explicit_dates if start <= d <= end]
-
-    if not valid_dates:
-        festivos = Festivo.query.filter(Festivo.fecha >= start, Festivo.fecha <= end).all()
-        fechas_festivas = [f.fecha for f in festivos]
-        curr = start
-        while curr <= end:
-            if curr.weekday() < 5 and curr not in fechas_festivas:
-                valid_dates.append(curr)
-            curr += timedelta(days=1)
-            
-        if not valid_dates:
-            valid_dates = [start + timedelta(days=i) for i in range((end - start).days + 1)]
-
+    valid_dates = get_solicitud_valid_dates(solicitud)
     total_validos = len(valid_dates)
     prev_estado = solicitud.estado
 
     if solicitud.tipo == "GENERICA":
-        requested = solicitud.cantidad_solicitada or 1
+        cov = compute_generica_coverage(solicitud)
+        requested = cov['requested']
+        counts_by_day = cov['counts_by_day']
+        min_coverage = cov['min_coverage']
+        total_assignments_count = cov['total_assignments']
 
-        # FIX DEFINITIVO: Ahora el motor es puro. No roba asignaciones huérfanas o fantasmas.
-        # SÓLO cuenta aquellas que tú le inyectas directamente desde los endpoints, 
-        # que siempre vendrán atadas con su solicitud.id.
-        asignaciones_vinculadas = Asignacion.query.filter(
-            Asignacion.obra_id == solicitud.obra_id,
-            Asignacion.solicitud_id == solicitud.id,
-            Asignacion.fecha.in_(valid_dates)
-        ).all()
-
-        counts_by_day = {d: 0 for d in valid_dates}
-        for a in asignaciones_vinculadas:
-            counts_by_day[a.fecha] += 1
-
-        min_coverage = min(counts_by_day.values()) if counts_by_day else 0
         solicitud.cantidad_cubierta = min_coverage
-        total_assignments_count = sum(counts_by_day.values())
 
-        # --- AUTO-MANTENIMIENTO DEL FRONTEND (Días Verdes) ---
-        dias_incompletos = [d.strftime("%Y-%m-%d") for d, c in counts_by_day.items() if c < requested]
+        dias_incompletos = [
+            d.strftime("%Y-%m-%d") for d, c in counts_by_day.items() if c < requested
+        ]
         try:
             if not solicitud.comentarios or not solicitud.comentarios.strip().startswith('{'):
                 config = {}
@@ -244,23 +279,23 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
                     config['mensaje_original'] = plain
             else:
                 config = json.loads(solicitud.comentarios)
-                
+
             if 'original_dates' not in config:
                 config['original_dates'] = config.get('dates', [])
-            if not config['original_dates'] and valid_dates:
+            if not config.get('original_dates') and valid_dates:
                 config['original_dates'] = [d.strftime("%Y-%m-%d") for d in valid_dates]
-            
+
             config['mode'] = 'selected'
             config['dates'] = dias_incompletos
             solicitud.comentarios = json.dumps(config)
         except Exception:
             pass
-        # ----------------------------------------------------
 
-        if min_coverage >= requested:
+        if min_coverage >= requested and requested > 0 and valid_dates:
             solicitud.estado = "CUMPLIDA"
             solicitud.resolved_at = utc_now()
-            if resolved_by_id: solicitud.resolved_by_id = resolved_by_id
+            if resolved_by_id:
+                solicitud.resolved_by_id = resolved_by_id
         elif total_assignments_count > 0:
             solicitud.estado = "EN_PROCESO"
             solicitud.resolved_at = None
@@ -270,21 +305,18 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
 
     elif solicitud.tipo == "CONCRETA":
         accion = getattr(solicitud, 'accion', 'ASIGNAR')
-        
+
         if accion == 'DESASIGNAR' and prev_estado == 'CUMPLIDA':
             return
-        
+
         asignaciones_reales = Asignacion.query.filter(
             Asignacion.obra_id == solicitud.obra_id,
             Asignacion.user_id == solicitud.empleado_id,
-            Asignacion.fecha.in_(valid_dates)
-        ).all()
-        
+            Asignacion.fecha.in_(valid_dates),
+        ).all() if valid_dates else []
+
         asignados_dias = [a.fecha for a in asignaciones_reales]
         cobertura_count = len(set(asignados_dias))
-        
-        is_fulfilled = False
-        is_in_process = False
 
         if accion == 'DESASIGNAR':
             is_fulfilled = (cobertura_count == 0)
@@ -578,6 +610,8 @@ def resolver_solicitud_admin(solicitud, accion, user_actor, target_obra_id=None)
         solicitud.estado = 'PENDIENTE'
         solicitud.resolved_at = None
         solicitud.resolved_by_id = None
+        # Recalcula progreso/cobertura con lo que haya vinculado ahora mismo.
+        _recalculate_solicitud_coverage(solicitud, resolved_by_id=None)
         db.session.commit()
         return "Solicitud reabierta."
     else:

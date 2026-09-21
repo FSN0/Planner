@@ -375,6 +375,14 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
                 )
 
         if already_on_target:
+            # Ya estaba en la obra ese día: reclama el vínculo a la solicitud si venía huérfano.
+            if solicitud_id:
+                existing_row = Asignacion.query.filter_by(
+                    user_id=worker_id, fecha=d, obra_id=obra_id,
+                ).first()
+                if existing_row and existing_row.solicitud_id is None:
+                    existing_row.solicitud_id = solicitud_id
+                    db.session.add(existing_row)
             continue
 
         creada = CoreAssignmentService.asignar(
@@ -456,7 +464,7 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
         'message': f'Asignación realizada ({count} días).',
     }
 
-def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mode='selected', assignment_refs=None):
+def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mode='selected', assignment_refs=None, notas=None):
     from app.services.solicitud_service import SolicitudService, update_solicitudes_for_assignment
     from app.services.email_service import notificar_movimiento_admin_a_jo
     
@@ -556,7 +564,8 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
             return {'success': False, 'message': 'El trabajador no tiene asignaciones en este periodo.'}
 
         sol, status = SolicitudService.create_or_merge_solicitud_baja(
-            actor_user.id, target_obra_id, worker_id, fechas_sol
+            actor_user.id, target_obra_id, worker_id, fechas_sol,
+            notas=(notas or '').strip() or None,
         )
         if not sol or status == 'none':
             return {

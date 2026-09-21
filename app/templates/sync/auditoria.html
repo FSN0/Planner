@@ -1289,8 +1289,15 @@ var AUDIT_RESOLVE_I18N = {{ {
         if (ambos && (data.ack_plan || data.ack_real)) ambos.remove();
     }
 
-    window.resolver = function resolver(id, accion) {
+    window.resolver = function resolver(id, accion, extra) {
         var t = auditI18n();
+        extra = extra || {};
+
+        if ((accion === 'liberar_plaza' || accion === 'borrar_planificacion') && !extra._desasignPromptDone) {
+            promptDesasignarAuditoria(id, accion);
+            return;
+        }
+
         var row = document.getElementById('row-' + id);
         var isDesvio = !!(row && row.getAttribute('data-desvio-toggle'));
         var desvioAcciones = {
@@ -1298,11 +1305,14 @@ var AUDIT_RESOLVE_I18N = {{ {
             rechazar_entrada: 1, confirmar_desvio: 1, rechazar_desvio: 1
         };
         var isDesvioAction = !!desvioAcciones[accion];
+        var payload = { registro_id: id, accion: accion };
+        if (extra.scope) payload.scope = extra.scope;
+        if (extra.notas) payload.notas = extra.notas;
 
         fetch({{ url_for('sync.resolver_fichaje')|tojson }}, {
             method: 'POST',
             headers: csrfHeaders(),
-            body: JSON.stringify({ registro_id: id, accion: accion })
+            body: JSON.stringify(payload)
         })
         .then(function (res) {
             return res.text().then(function (raw) {
@@ -1319,6 +1329,19 @@ var AUDIT_RESOLVE_I18N = {{ {
             }
             if (!data.success) {
                 alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.invalid || 'Error'));
+                return;
+            }
+
+            if (data.requested) {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: {{ _('Solicitud creada')|tojson }},
+                        text: data.message || {{ _('Se ha generado una solicitud de baja.')|tojson }},
+                    });
+                } else {
+                    alert(data.message || {{ _('Se ha generado una solicitud de baja.')|tojson }});
+                }
                 return;
             }
 
@@ -1366,6 +1389,60 @@ var AUDIT_RESOLVE_I18N = {{ {
             restoreRow(row);
         });
     };
+
+    function promptDesasignarAuditoria(id, accion) {
+        var t = auditI18n();
+        var pideSolicitud = {{ (current_user.role == 'jefe_obra' and not (jefes_asignan_directo|default(false)))|tojson }};
+        var notasHint = pideSolicitud
+            ? {{ _('Si eliges a futuro, se creará una solicitud de baja con este comentario.')|tojson }}
+            : {{ _('Comentario opcional (si la baja pasa por solicitud, irá en ella).')|tojson }};
+
+        function continuar(scope, notas) {
+            window.resolver(id, accion, { scope: scope, notas: notas, _desasignPromptDone: true });
+        }
+
+        if (typeof Swal === 'undefined') {
+            var futuro = window.confirm(
+                {{ _('¿Desasignar también a futuro? (Cancelar = solo este día)')|tojson }}
+            );
+            var notas = futuro ? (window.prompt(notasHint, '') || '') : '';
+            continuar(futuro ? 'future' : 'day', notas);
+            return;
+        }
+
+        Swal.fire({
+            title: {{ _('Desasignar')|tojson }},
+            html:
+                '<p class="text-muted small mb-3">' + {{ _('¿Solo este día o desde este día a futuro?')|tojson }} + '</p>' +
+                '<div class="text-left mb-2">' +
+                '<label class="d-block mb-2"><input type="radio" name="audit-desasign-scope" value="day" checked> ' +
+                {{ _('Solo este día')|tojson }} + '</label>' +
+                '<label class="d-block"><input type="radio" name="audit-desasign-scope" value="future"> ' +
+                {{ _('Desde este día a futuro')|tojson }} + '</label>' +
+                '</div>' +
+                '<label class="d-block text-left text-muted small mt-3 mb-1" for="audit-desasign-notas">' +
+                {{ _('Notas / comentario')|tojson }} + '</label>' +
+                '<textarea id="audit-desasign-notas" class="form-control" rows="2" maxlength="500" placeholder="' +
+                notasHint.replace(/"/g, '&quot;') + '"></textarea>',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#d97706',
+            confirmButtonText: {{ _('Continuar')|tojson }},
+            cancelButtonText: {{ _('Cancelar')|tojson }},
+            preConfirm: function () {
+                var checked = document.querySelector('input[name="audit-desasign-scope"]:checked');
+                var scope = checked ? checked.value : 'day';
+                var notasEl = document.getElementById('audit-desasign-notas');
+                return {
+                    scope: scope,
+                    notas: notasEl ? (notasEl.value || '').trim() : ''
+                };
+            }
+        }).then(function (result) {
+            if (!result.isConfirmed || !result.value) return;
+            continuar(result.value.scope, result.value.notas);
+        });
+    }
 
     window.reabrirResolucion = function reabrirResolucion(id, btn) {
         var t = auditI18n();
