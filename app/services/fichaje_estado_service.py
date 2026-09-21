@@ -206,14 +206,27 @@ def faltas_confirmadas_set(start_date, end_date, user_ids=None, obra_ids=None,
                            end_exclusive=True):
     """
     Conjunto (user_id, fecha, obra_planificada_id) de faltas confirmadas
-    en el rango, para pintar bloques fantasma en calendarios.
+    en el rango, para pintar el bloque de esa obra (rojo + tachado).
+
+    Incluye:
+    - estado Falta (ausencia confirmada / desvío cerrado)
+    - desvío con decisión «confirmar falta» en el plan (aunque el fichaje
+      en otra obra siga pendiente)
     """
+    from sqlalchemy import and_, or_
+
     from app.models import RegistroFichaje
 
     q = RegistroFichaje.query.filter(
-        RegistroFichaje.estado == 'Falta',
         RegistroFichaje.obra_planificada_id.isnot(None),
         RegistroFichaje.fecha >= start_date,
+        or_(
+            RegistroFichaje.estado == 'Falta',
+            and_(
+                RegistroFichaje.desvio_decision_plan == 'mantener_falta',
+                RegistroFichaje.desvio_ack_plan_at.isnot(None),
+            ),
+        ),
     )
     if end_exclusive:
         q = q.filter(RegistroFichaje.fecha < end_date)

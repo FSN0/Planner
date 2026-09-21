@@ -57,9 +57,22 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
 
     if user.role == ROLE_JEFE:
         query = query.filter(Obra.jefe_obra_id == user.id)
-    elif view_param == 'mis':
-        query = query.filter(Obra.jefe_obra_id == user.id)
-    
+    else:
+        from app.services.panel_scope_service import (
+            PANEL_TABLERO,
+            apply_obra_scope_filter,
+            user_panel_mode,
+        )
+        mode = user_panel_mode(user, PANEL_TABLERO)
+        if mode == 'none':
+            query = query.filter(Obra.id.is_(None))
+        elif mode == 'custody':
+            query = apply_obra_scope_filter(query, user, PANEL_TABLERO)
+        elif view_param == 'mis':
+            # Alcance «todos» pero eligió vista «mis»: solo si es jefe de alguna.
+            query = query.filter(Obra.jefe_obra_id == user.id)
+        # mode office + view todas → sin filtro extra
+ 
     # Obtenemos la lista inicial
     obras = query.order_by(Obra.fecha_inicio.desc()).all()
 

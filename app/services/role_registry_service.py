@@ -304,6 +304,11 @@ def create_role(
     db.session.commit()
     _clear_cache()
     _seed_permissions_for_role(role_key, template)
+    try:
+        from app.services.panel_scope_service import copy_role_panel_scopes
+        copy_role_panel_scopes(template, role_key)
+    except Exception:
+        pass
     return row
 
 
@@ -322,6 +327,11 @@ def delete_role(key: str) -> None:
             f'Hay {users} usuario(s) con este rol. Reasígnarlos antes de eliminarlo.'
         )
     RolePermission.query.filter_by(role=key).delete()
+    try:
+        from app.services.panel_scope_service import clear_role_panel_scopes
+        clear_role_panel_scopes(key)
+    except Exception:
+        pass
     db.session.delete(row)
     db.session.commit()
     _clear_cache()

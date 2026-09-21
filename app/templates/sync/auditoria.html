@@ -299,7 +299,7 @@ tr.audit-row-highlight {
                                                 <span class="badge-soft badge-soft-amber">{{ _('Ausencia / pendiente') }}</span>
                                                 {% if desvio and desvio.mia_plan %}<span class="audit-obra-mia">{{ _('Tuya') }}</span>{% endif %}
                                                 {% if desvio and desvio.ack_plan %}
-                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _('Resuelto') }}</span>
+                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _(desvio.ack_plan_label or 'Resuelto') }}</span>
                                                 {% else %}
                                                 <span class="text-muted small ml-auto">{{ _('Estaba planificado aquí y aún no ha fichado') }}</span>
                                                 {% endif %}
@@ -322,8 +322,8 @@ tr.audit-row-highlight {
                                                 </div>
                                                 {% endif %}
                                                 {% if desvio and desvio.ack_plan and desvio.ack_plan_por %}
-                                                <div class="audit-desvio-meta">
-                                                  <span class="audit-desvio-meta-k">{{ _('Resuelto por') }}</span> {{ desvio.ack_plan_por }}
+                                                <div class="audit-desvio-meta" data-ack-plan-por="1">
+                                                  <span class="audit-desvio-meta-k">{{ _(desvio.ack_plan_label or 'Resuelto') }} {{ _('por') }}</span> {{ desvio.ack_plan_por }}
                                                 </div>
                                                 {% endif %}
                                             </div>
@@ -338,7 +338,7 @@ tr.audit-row-highlight {
                                                             title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
                                                   {% else %}
                                                     {% if desvio and desvio.ack_plan %}
-                                                    <span class="text-muted small">{{ _('Ya resuelto') }}</span>
+                                                    <span class="text-muted small">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}</span>
                                                     {% elif not (desvio and desvio.mia_plan) and current_user.role == 'jefe_obra' %}
                                                     <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                                     {% endif %}
@@ -353,7 +353,7 @@ tr.audit-row-highlight {
                                                 <span class="badge-soft badge-soft-blue">{{ _('Fichaje sin planificar') }}</span>
                                                 {% if desvio and desvio.mia_real %}<span class="audit-obra-mia">{{ _('Tuya') }}</span>{% endif %}
                                                 {% if desvio and desvio.ack_real %}
-                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _('Aceptado') }}</span>
+                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _(desvio.ack_real_label or 'Aceptado') }}</span>
                                                 {% else %}
                                                 <span class="text-muted small ml-auto">{{ _('Ha fichado aquí sin estar planificado') }}</span>
                                                 {% endif %}
@@ -367,8 +367,8 @@ tr.audit-row-highlight {
                                                 <span class="text-muted">—</span>
                                                 {% endif %}
                                                 {% if desvio and desvio.ack_real and desvio.ack_real_por %}
-                                                <div class="audit-desvio-meta">
-                                                  <span class="audit-desvio-meta-k">{{ _('Aceptado por') }}</span> {{ desvio.ack_real_por }}
+                                                <div class="audit-desvio-meta" data-ack-real-por="1">
+                                                  <span class="audit-desvio-meta-k">{{ _(desvio.ack_real_label or 'Aceptado') }} {{ _('por') }}</span> {{ desvio.ack_real_por }}
                                                 </div>
                                                 {% endif %}
                                             </div>
@@ -383,7 +383,7 @@ tr.audit-row-highlight {
                                                             title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
                                                   {% else %}
                                                     {% if desvio and desvio.ack_real %}
-                                                    <span class="text-muted small">{{ _('Ya aceptado') }}</span>
+                                                    <span class="text-muted small">{{ _(desvio.ack_real_label or 'Ya aceptado') }}</span>
                                                     {% elif not (desvio and desvio.mia_real) and current_user.role == 'jefe_obra' %}
                                                     <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                                     {% endif %}
@@ -483,7 +483,7 @@ tr.audit-row-highlight {
                                                 title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
                                         {% else %}
                                           {% if desvio and desvio.ack_real %}
-                                          <span class="text-muted small">{{ _('Ya aceptado') }}</span>
+                                          <span class="text-muted small">{{ _(desvio.ack_real_label or 'Ya aceptado') }}{% if desvio.ack_real_por %} · {{ desvio.ack_real_por }}{% endif %}</span>
                                           {% elif not (desvio and desvio.mia_real) and current_user.role == 'jefe_obra' %}
                                           <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                           {% endif %}
@@ -565,7 +565,7 @@ tr.audit-row-highlight {
                                                 title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
                                         {% else %}
                                           {% if desvio and desvio.ack_plan %}
-                                          <span class="text-muted small">{{ _('Ya resuelto') }}</span>
+                                          <span class="text-muted small">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}{% if desvio.ack_plan_por %} · {{ desvio.ack_plan_por }}{% endif %}</span>
                                           {% elif not (desvio and desvio.mia_plan) and current_user.role == 'jefe_obra' %}
                                           <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                           {% endif %}
@@ -1106,22 +1106,43 @@ $(document).ready(function() {
     $('#collapseCorrecciones').on('shown.bs.collapse', function() {
         var $body = $('#correccionesTableBody');
         loadAuditoriaSeccion('correcciones', $body, function() {
+            var table = document.getElementById('correccionesTable');
             if (!dtCorrecciones) {
+                // Quitar hides CSS previos: DataTables debe arrancar con header/body alineados
+                if (table) {
+                    table.querySelectorAll('.sp-col-hidden').forEach(function (cell) {
+                        cell.classList.remove('sp-col-hidden');
+                        cell.style.display = '';
+                    });
+                }
                 dtCorrecciones = initAuditDataTable('correccionesTable', {
                     pageLength: 10,
                     lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, {{ _('Todos')|tojson }}]]
                 });
+                if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
+            } else if (window.reapplyTableColumnPrefs) {
+                reapplyTableColumnPrefs(table);
             }
         });
     });
     $('#collapseHistorial').on('shown.bs.collapse', function() {
         var $body = $('#historialTableBody');
         loadAuditoriaSeccion('historial', $body, function() {
+            var table = document.getElementById('historialTable');
             if (!dtHistorial) {
+                if (table) {
+                    table.querySelectorAll('.sp-col-hidden').forEach(function (cell) {
+                        cell.classList.remove('sp-col-hidden');
+                        cell.style.display = '';
+                    });
+                }
                 dtHistorial = initAuditDataTable('historialTable', {
                     pageLength: 25,
                     lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, {{ _('Todos')|tojson }}]]
                 });
+                if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
+            } else if (window.reapplyTableColumnPrefs) {
+                reapplyTableColumnPrefs(table);
             }
         });
     });
@@ -1238,23 +1259,27 @@ var AUDIT_RESOLVE_I18N = {{ {
             var planPanel = detail.querySelector('.audit-desvio-panel--plan');
             if (planPanel) {
                 planPanel.classList.add('is-resolved');
+                var planLabel = data.ack_plan_label || {{ _('Resuelto')|tojson }};
                 var head = planPanel.querySelector('.audit-desvio-panel-head .text-muted, .audit-desvio-panel-head .text-success');
                 if (head) {
                     head.className = 'text-success small ml-auto';
-                    head.innerHTML = '<i class="fas fa-check"></i> ' + {{ _('Resuelto')|tojson }};
+                    head.innerHTML = '<i class="fas fa-check"></i> ' + planLabel;
                 }
                 var actions = planPanel.querySelector('.audit-desvio-panel-actions');
                 if (actions) {
-                    actions.innerHTML = '<span class="text-muted small">' + {{ _('Ya resuelto')|tojson }} + '</span>';
+                    actions.innerHTML = '<span class="text-muted small">' + planLabel + '</span>';
                 }
                 if (data.ack_plan_por) {
                     var bodyP = planPanel.querySelector('.audit-desvio-panel-body');
-                    if (bodyP && !bodyP.querySelector('[data-ack-plan-por]')) {
-                        var metaP = document.createElement('div');
-                        metaP.className = 'audit-desvio-meta';
-                        metaP.setAttribute('data-ack-plan-por', '1');
-                        metaP.innerHTML = '<span class="audit-desvio-meta-k">' + {{ _('Resuelto por')|tojson }} + '</span> ' + data.ack_plan_por;
-                        bodyP.appendChild(metaP);
+                    if (bodyP) {
+                        var metaP = bodyP.querySelector('[data-ack-plan-por]');
+                        if (!metaP) {
+                            metaP = document.createElement('div');
+                            metaP.className = 'audit-desvio-meta';
+                            metaP.setAttribute('data-ack-plan-por', '1');
+                            bodyP.appendChild(metaP);
+                        }
+                        metaP.innerHTML = '<span class="audit-desvio-meta-k">' + planLabel + ' ' + {{ _('por')|tojson }} + '</span> ' + data.ack_plan_por;
                     }
                 }
             }
@@ -1263,23 +1288,27 @@ var AUDIT_RESOLVE_I18N = {{ {
             var realPanel = detail.querySelector('.audit-desvio-panel--real');
             if (realPanel) {
                 realPanel.classList.add('is-resolved');
+                var realLabel = data.ack_real_label || {{ _('Aceptado')|tojson }};
                 var headR = realPanel.querySelector('.audit-desvio-panel-head .text-muted, .audit-desvio-panel-head .text-success');
                 if (headR) {
                     headR.className = 'text-success small ml-auto';
-                    headR.innerHTML = '<i class="fas fa-check"></i> ' + {{ _('Aceptado')|tojson }};
+                    headR.innerHTML = '<i class="fas fa-check"></i> ' + realLabel;
                 }
                 var actionsR = realPanel.querySelector('.audit-desvio-panel-actions');
                 if (actionsR) {
-                    actionsR.innerHTML = '<span class="text-muted small">' + {{ _('Ya aceptado')|tojson }} + '</span>';
+                    actionsR.innerHTML = '<span class="text-muted small">' + realLabel + '</span>';
                 }
                 if (data.ack_real_por) {
                     var bodyR = realPanel.querySelector('.audit-desvio-panel-body');
-                    if (bodyR && !bodyR.querySelector('[data-ack-real-por]')) {
-                        var metaR = document.createElement('div');
-                        metaR.className = 'audit-desvio-meta';
-                        metaR.setAttribute('data-ack-real-por', '1');
-                        metaR.innerHTML = '<span class="audit-desvio-meta-k">' + {{ _('Aceptado por')|tojson }} + '</span> ' + data.ack_real_por;
-                        bodyR.appendChild(metaR);
+                    if (bodyR) {
+                        var metaR = bodyR.querySelector('[data-ack-real-por]');
+                        if (!metaR) {
+                            metaR = document.createElement('div');
+                            metaR.className = 'audit-desvio-meta';
+                            metaR.setAttribute('data-ack-real-por', '1');
+                            bodyR.appendChild(metaR);
+                        }
+                        metaR.innerHTML = '<span class="audit-desvio-meta-k">' + realLabel + ' ' + {{ _('por')|tojson }} + '</span> ' + data.ack_real_por;
                     }
                 }
             }
@@ -1346,9 +1375,26 @@ var AUDIT_RESOLVE_I18N = {{ {
             }
 
             // Desvío (desde expand o espejo en ausencias/sin planificar)
-            if ((isDesvio || isDesvioAction) && !data.resolved && data.dismiss_row === false) {
-                if (row) applyDesvioPartialUpdate(id, data);
-                else {
+            if ((isDesvio || isDesvioAction) && !data.resolved) {
+                if (row) {
+                    restoreRow(row);
+                    applyDesvioPartialUpdate(id, data);
+                    // Viewer ya no tiene lados pendientes: oculta la fila principal
+                    // sin cargar el espejo del otro lado (sigue pendiente).
+                    if (data.dismiss_row) {
+                        var card = row.closest('.card-modern');
+                        if (card) {
+                            var badge = card.querySelector('.badge-count, .badge');
+                            if (badge) {
+                                var count = parseInt(badge.innerText, 10);
+                                if (!isNaN(count) && count > 0) badge.innerText = count - 1;
+                            }
+                        }
+                        var detailOnly = document.getElementById('desvio-detail-' + id);
+                        if (detailOnly) detailOnly.remove();
+                        row.remove();
+                    }
+                } else {
                     if (data.ack_plan) removeEspejoRows(id, ['plan']);
                     if (data.ack_real) removeEspejoRows(id, ['real']);
                 }
@@ -1362,24 +1408,15 @@ var AUDIT_RESOLVE_I18N = {{ {
                 row.style.pointerEvents = 'none';
             }
             setTimeout(function () {
-                if (isDesvioAction) {
-                    if (data.resolved || data.dismiss_row !== false) {
-                        if (row) removeDesvioRow(row, id);
-                        else removeEspejoRows(id);
-                    } else if (row) {
-                        restoreRow(row);
-                        applyDesvioPartialUpdate(id, data);
-                    } else {
-                        if (data.ack_plan) removeEspejoRows(id, ['plan']);
-                        if (data.ack_real) removeEspejoRows(id, ['real']);
-                    }
+                if (isDesvioAction || isDesvio) {
+                    if (row) removeDesvioRow(row, id);
+                    else removeEspejoRows(id);
                     return;
                 }
                 if (row && data.dismiss_row !== false) {
                     removeDesvioRow(row, id);
                 } else if (row) {
                     restoreRow(row);
-                    if (isDesvio) applyDesvioPartialUpdate(id, data);
                 }
             }, 300);
         })

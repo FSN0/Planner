@@ -5,14 +5,14 @@ Contrato de producto:
 - El fichaje en Y es único: aceptar propaga a todos los hermanos
   (mismo user/fecha/obra_real).
 - El fichaje físico no se «rechaza»; solo se decide el cuadrante.
-- Jefe de X (plan): Liberar plaza | Confirmar falta.
+- Jefe de X (plan): Desasignar | Confirmar falta (solo cierra el lado plan;
+  el fichaje en Y sigue pendiente hasta Aceptar).
 - Jefe de Y (ficha): Aceptar (integrar al cuadrante).
-- Mismo jefe / oficina: Confirmar (liberar+aceptar) | Falta (falta en plan + aceptar Y).
+- Mismo jefe / oficina: Desasignar y aceptar | Falta+aceptar (cierre completo).
 
 Matriz:
 - Liberar + Aceptar     → mueve X→Y (Resuelto_Movido)
 - Falta + Aceptar       → Falta en X (sigue planificado), Y aceptada
-- Confirmar falta (solo plan, corte anticipado) → Falta en X sin esperar Y
 """
 from __future__ import annotations
 
@@ -298,12 +298,29 @@ def _labels_obras(registro):
 
 
 def _label_decision(decision: str | None) -> str:
+    """Etiqueta corta para notas internas / disputa."""
     return {
-        DECISION_LIBERAR: 'liberar plaza',
-        DECISION_MANTENER_FALTA: 'mantener falta',
+        DECISION_LIBERAR: 'desasignar',
+        DECISION_MANTENER_FALTA: 'confirmar falta',
         DECISION_ACEPTAR: 'aceptar entrada',
         DECISION_RECHAZAR: 'rechazar entrada',
     }.get(decision or '', decision or '—')
+
+
+def label_resolucion_plan(decision: str | None) -> str:
+    """Texto UI del lado plan (misma semántica que los botones)."""
+    return {
+        DECISION_LIBERAR: 'Desasignado',
+        DECISION_MANTENER_FALTA: 'Falta confirmada',
+    }.get(decision or '', 'Resuelto')
+
+
+def label_resolucion_real(decision: str | None) -> str:
+    """Texto UI del lado fichaje."""
+    return {
+        DECISION_ACEPTAR: 'Aceptado',
+        DECISION_RECHAZAR: 'Aceptado',
+    }.get(decision or '', 'Aceptado')
 
 
 def _marcar_falta_plan(registro, actor, nota=None):
@@ -462,25 +479,37 @@ def aplicar_accion_desvio(registro, accion, user):
             f"Pendiente aceptar el fichaje en '{real_lbl}'."
         )
     elif accion == ACCION_MANTENER_FALTA:
-        # Confirmar falta ya (como en Ausencias).
+        # Confirmar falta en el plan: solo cierra el lado plan.
+        # El fichaje en Y sigue pendiente (igual que Desasignar).
         _marcar_decision_plan(registro, user, DECISION_MANTENER_FALTA)
-        _marcar_falta_plan(registro, user)
-        msg = registro.notas_resolucion or (
-            f"Falta confirmada en '{plan_lbl}'."
+        _asegurar_asignacion_plan(registro, user)
+        if desvio_ack_real_hecho(registro):
+            _aceptar_entrada_real(registro, user)
+            cierre = _marcar_falta_plan(
+                registro,
+                user,
+                nota=(
+                    f"Falta confirmada en '{plan_lbl}'. "
+                    f"El fichaje en '{real_lbl}' queda registrado."
+                ),
+            )
+            return {
+                'resolved': True,
+                'disputa': False,
+                'dismiss_for_viewer': True,
+                'message': registro.notas_resolucion,
+                'ack_plan': True,
+                'ack_real': True,
+                'decision_plan': decision_plan(registro),
+                'decision_real': decision_real(registro),
+                'estado': registro.estado,
+                'afectados_ids': list(afectados_ids),
+                'falta': True,
+            }
+        msg = (
+            f"Falta confirmada en '{plan_lbl}'. "
+            f"Pendiente aceptar el fichaje en '{real_lbl}'."
         )
-        return {
-            'resolved': True,
-            'disputa': False,
-            'dismiss_for_viewer': True,
-            'message': msg,
-            'ack_plan': True,
-            'ack_real': desvio_ack_real_hecho(registro),
-            'decision_plan': decision_plan(registro),
-            'decision_real': decision_real(registro),
-            'estado': registro.estado,
-            'afectados_ids': list(afectados_ids),
-            'falta': True,
-        }
     elif accion == ACCION_ACEPTAR_ENTRADA:
         _marcar_decision_real(registro, user, DECISION_ACEPTAR)
         _aceptar_entrada_real(registro, user)
@@ -610,6 +639,14 @@ def contexto_desvio_para_plantilla(registro, user):
         'ack_real': desvio_ack_real_hecho(registro),
         'decision_plan': decision_plan(registro),
         'decision_real': decision_real(registro),
+        'ack_plan_label': (
+            label_resolucion_plan(decision_plan(registro))
+            if desvio_ack_plan_hecho(registro) else None
+        ),
+        'ack_real_label': (
+            label_resolucion_real(decision_real(registro))
+            if desvio_ack_real_hecho(registro) else None
+        ),
         'botones': botones_desvio_para(registro, user),
         'pendientes_viewer': sorted(lados_pendientes_para(registro, user)),
         'lados_viewer': sorted(lados_mia),

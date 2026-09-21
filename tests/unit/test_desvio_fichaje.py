@@ -145,7 +145,8 @@ class TestFirmasIndependientes:
             fecha=reg.fecha,
         ).first() is not None
 
-    def test_mantener_falta_confirma_inmediato(self, session, tenant_soltec, desvio_ctx):
+    def test_mantener_falta_luego_aceptar(self, session, tenant_soltec, desvio_ctx):
+        """Confirmar falta solo cierra el lado plan; el fichaje sigue pendiente."""
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
         reg = _registro_desvio(
             session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
@@ -156,11 +157,33 @@ class TestFirmasIndependientes:
         session.commit()
         reg = RegistroFichaje.query.get(reg_id)
 
-        assert r1['resolved'] is True
+        assert r1['resolved'] is False
+        assert r1['ack_plan'] is True
+        assert r1['ack_real'] is False
+        assert reg.estado == 'Conflicto'
+        assert reg.desvio_decision_plan == 'mantener_falta'
+        assert Asignacion.query.filter_by(
+            user_id=desvio_ctx.operario.id,
+            obra_id=desvio_ctx.obra_x.id,
+            fecha=reg.fecha,
+        ).first() is not None
+        assert debe_mostrar_pendiente_a(reg, desvio_ctx.jefe_x) is False
+        assert debe_mostrar_pendiente_a(reg, desvio_ctx.jefe_y) is True
+
+        r2 = aplicar_accion_desvio(reg, ACCION_ACEPTAR_ENTRADA, desvio_ctx.jefe_y)
+        session.commit()
+        reg = RegistroFichaje.query.get(reg_id)
+
+        assert r2['resolved'] is True
         assert reg.estado == 'Falta'
         assert Asignacion.query.filter_by(
             user_id=desvio_ctx.operario.id,
             obra_id=desvio_ctx.obra_x.id,
+            fecha=reg.fecha,
+        ).first() is not None
+        assert Asignacion.query.filter_by(
+            user_id=desvio_ctx.operario.id,
+            obra_id=desvio_ctx.obra_y.id,
             fecha=reg.fecha,
         ).first() is not None
 
@@ -329,3 +352,17 @@ def test_repartir_secciones_proyecta_espejos():
     assert len(espejos_para) == 1  # solo el que aún no ack_real
     assert espejos_para[0].desvio_espejo == 'real'
     assert espejos_para[0].id == 1
+
+
+def test_labels_resolucion_desvio():
+    from app.services.desvio_fichaje_service import (
+        DECISION_ACEPTAR,
+        DECISION_LIBERAR,
+        DECISION_MANTENER_FALTA,
+        label_resolucion_plan,
+        label_resolucion_real,
+    )
+
+    assert label_resolucion_plan(DECISION_LIBERAR) == 'Desasignado'
+    assert label_resolucion_plan(DECISION_MANTENER_FALTA) == 'Falta confirmada'
+    assert label_resolucion_real(DECISION_ACEPTAR) == 'Aceptado'

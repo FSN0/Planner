@@ -281,7 +281,9 @@ class UniversalCalendarManager {
                     eventData.durationEditable = false;
                 }
                 var xpFalta = eventData.extendedProps || {};
-                if (xpFalta.es_falta || xpFalta.estado_fichaje === 'Falta') {
+                // Solo el bloque de asignación (es_falta). Nunca el fondo del día
+                // (isFichaje): si no, se pinta toda la celda en rojo.
+                if (xpFalta.es_falta && !xpFalta.isFichaje) {
                     if (!eventData.classNames.includes('fc-event-falta')) {
                         eventData.classNames.push('fc-event-falta');
                     }
@@ -435,7 +437,8 @@ class UniversalCalendarManager {
                 }
 
                 var xpMount = info.event.extendedProps || {};
-                if (xpMount.es_falta || xpMount.estado_fichaje === 'Falta') {
+                // Solo bloques de obra con es_falta; no el fondo/pelotita del día.
+                if (xpMount.es_falta && !xpMount.isFichaje) {
                     info.el.classList.add('fc-event-falta');
                     if (!xpMount.tooltipContent && !xpMount.tooltipText) {
                         var FE = window.SPFichajeEstado;

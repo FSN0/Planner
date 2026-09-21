@@ -3509,41 +3509,46 @@ def planificador_jo():
     if not user_can(current_user, 'planificador', 'r'):
         flash(translate("Acceso no autorizado"), "danger")
         return redirect(url_for('main.dashboard'))
-    todas_obras = []
-    jefes = []
-    
-    # --- CAMBIO AQUÍ ---
-    # Sacamos la consulta fuera del 'if' para que TODOS (Admins y Jefes)
-    # reciban la lista de empresas y puedan usar el filtro.
+
+    from app.services.panel_scope_service import (
+        PANEL_PLANIFICADOR,
+        apply_obra_scope_filter,
+        list_jefes_for_scope_ui,
+        user_panel_mode,
+        planning_acts_as_office,
+    )
+    from app.services.tenant_modules import jefes_asignan_directo
+
     empresas = Company.query.filter_by(active=True).order_by(Company.nombre).all()
-    
-    if current_user.role in [ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH]:
-        # Misma lógica que el API: no finalizadas / no borradas.
-        # Sin filtro por fecha_fin (imports con fin pasado siguen listables).
-        todas_obras = Obra.query.filter(
-            func.lower(Obra.estado) != 'finalizada',
-            Obra.is_deleted.is_(False),
-        ).order_by(Obra.nombre).all()
-        
-        # Cargamos los Jefes de Obra para el nuevo desplegable
-        if current_user.role == ROLE_ADMIN:
-            jefes = User.query.filter(User.role == ROLE_JEFE, User.is_deleted == False).order_by(User.name).all()
+
+    base_q = Obra.query.filter(
+        func.lower(Obra.estado) != 'finalizada',
+        Obra.is_deleted.is_(False),
+    )
+    scope_q = apply_obra_scope_filter(base_q, current_user, PANEL_PLANIFICADOR)
+    todas_obras = scope_q.order_by(Obra.nombre).all()
+
+    planif_office = planning_acts_as_office(current_user)
+    jefes = list_jefes_for_scope_ui() if planif_office else []
 
     from app.services.oficina_obra_service import es_obra_oficina
-    planif_sin_obras = all(es_obra_oficina(o) for o in todas_obras)
+    planif_sin_obras = all(es_obra_oficina(o) for o in todas_obras) if todas_obras else True
     planif_sin_personal = (
         User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).count() == 0
     )
-        
+
     return render_template(
         "planificador.html",
         todas_obras=todas_obras,
         jefes=jefes,
         empresas=empresas,
         ROLE_ADMIN=ROLE_ADMIN,
+        planif_office=planif_office,
+        planif_direct_assign=planif_office or jefes_asignan_directo(),
         can_edit_planificador=can_edit_planning_calendar(current_user),
         planif_sin_obras=planif_sin_obras,
         planif_sin_personal=planif_sin_personal,
+        planif_scope_mode=user_panel_mode(current_user, PANEL_PLANIFICADOR),
     )
 
 
@@ -3628,20 +3633,21 @@ def api_planificador_resources():
                 or_(Obra.fecha_inicio.is_(None), Obra.fecha_inicio <= win_end),
                 or_(Obra.fecha_fin.is_(None), Obra.fecha_fin >= win_start),
             ])
-    
-    if current_user.role == ROLE_JEFE:
-        obras = Obra.query.filter(Obra.jefe_obra_id == current_user.id, *base_filters).all()
-    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        if jefe_id:
-            obras = Obra.query.filter(Obra.jefe_obra_id == jefe_id, *base_filters).all()
-        else:
-            obras_ids = request.args.getlist('obra_ids[]')
-            if not obras_ids:
-                obras = Obra.query.filter(*base_filters).all()
-            else:
-                obras = Obra.query.filter(Obra.id.in_(obras_ids), *base_filters).all()
-    else:
+
+    from app.services.panel_scope_service import (
+        PANEL_PLANIFICADOR,
+        apply_obra_scope_filter,
+        user_panel_mode,
+    )
+    if user_panel_mode(current_user, PANEL_PLANIFICADOR) == 'none':
         return jsonify([])
+
+    q = Obra.query.filter(*base_filters)
+    q = apply_obra_scope_filter(q, current_user, PANEL_PLANIFICADOR, jefe_id_filter=jefe_id)
+    obras_ids = request.args.getlist('obra_ids[]')
+    if obras_ids and user_panel_mode(current_user, PANEL_PLANIFICADOR) == 'office' and not jefe_id:
+        q = q.filter(Obra.id.in_(obras_ids))
+    obras = q.all()
 
     worker_ids = _planificador_worker_ids_from_request()
     if worker_ids and win_start and win_end:
@@ -3688,18 +3694,19 @@ def api_planificador_events():
         ])
     
     # Recopilamos IDs asegurándonos de aplicar los mismos filtros blindados
-    if current_user.role == ROLE_JEFE:
-        obras_ids = [o.id for o in Obra.query.filter(Obra.jefe_obra_id == current_user.id, *base_filters).all()]
-    elif current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        if jefe_id:
-            obras_ids = [o.id for o in Obra.query.filter(Obra.jefe_obra_id == jefe_id, *base_filters).all()]
-        else:
-            if not req_ids:
-                obras_ids = [o.id for o in Obra.query.filter(*base_filters).all()]
-            else:
-                obras_ids = [o.id for o in Obra.query.filter(Obra.id.in_(req_ids), *base_filters).all()]
-    else:
+    from app.services.panel_scope_service import (
+        PANEL_PLANIFICADOR,
+        apply_obra_scope_filter,
+        user_panel_mode,
+    )
+    if user_panel_mode(current_user, PANEL_PLANIFICADOR) == 'none':
         return jsonify([])
+
+    q = Obra.query.filter(*base_filters)
+    q = apply_obra_scope_filter(q, current_user, PANEL_PLANIFICADOR, jefe_id_filter=jefe_id)
+    if req_ids and user_panel_mode(current_user, PANEL_PLANIFICADOR) == 'office' and not jefe_id:
+        q = q.filter(Obra.id.in_(req_ids))
+    obras_ids = [o.id for o in q.all()]
 
     worker_ids = _planificador_worker_ids_from_request()
     if worker_ids:
@@ -3707,6 +3714,9 @@ def api_planificador_events():
             worker_ids, start_date, end_date, obras_ids
         )
         obras_ids = [oid for oid in obras_ids if oid in allowed]
+
+    if not obras_ids:
+        return jsonify([])
 
     asignaciones_rows = (
         db.session.query(
@@ -4249,6 +4259,13 @@ def permisos_roles(role=None):
         is_role_locked,
         list_roles,
     )
+    from app.services.panel_scope_service import (
+        PANEL_PLANIFICADOR,
+        PANEL_TABLERO,
+        get_role_panel_scope,
+        list_jefes_for_scope_ui,
+    )
+    from app.models import ROLE_ADMIN, ROLE_JEFE
     if not user_can(current_user, 'permisos', 'r'):
         flash(translate('Acceso denegado.'), 'danger')
         return redirect(url_for('main.dashboard'))
@@ -4260,6 +4277,33 @@ def permisos_roles(role=None):
     modules = modules_for_role(active)
     visible_keys = {m for m, _, _ in modules}
     active_meta = get_role(active)
+
+    scope_plan = get_role_panel_scope(active, PANEL_PLANIFICADOR)
+    scope_tab = get_role_panel_scope(active, PANEL_TABLERO)
+    panel_scopes = {
+        PANEL_PLANIFICADOR: {
+            'title': 'Alcance del planificador',
+            'hint': 'Qué obras ve en el Gantt. La escritura del módulo decide si puede asignar.',
+            'mode': scope_plan['mode'],
+            'jefe_ids': set(scope_plan.get('jefe_ids') or []),
+            'locked': active == ROLE_ADMIN,
+            'locked_note': translate('Administrador: siempre ve todas las obras.'),
+        },
+        PANEL_TABLERO: {
+            'title': 'Alcance del tablero',
+            'hint': 'Qué obras ve en el kanban. Independiente del planificador.',
+            'mode': scope_tab['mode'],
+            'jefe_ids': set(scope_tab.get('jefe_ids') or []),
+            'locked': active == ROLE_ADMIN,
+            'locked_note': translate('Administrador: siempre ve todas las obras.'),
+        },
+    }
+    if active == ROLE_JEFE:
+        for meta in panel_scopes.values():
+            meta['locked'] = True
+            meta['locked_note'] = translate('Jefe de obra: siempre ve solo sus obras.')
+            meta['mode'] = 'jefe'
+
     return render_template(
         'admin_permisos.html',
         roles=roles,
@@ -4277,6 +4321,8 @@ def permisos_roles(role=None):
             visible_keys & {'soltec_alta_odoo', 'soltec_portal', 'sync_odoo', 'integraciones'}
         ),
         can_manage_roles=user_can(current_user, 'permisos', 'w'),
+        panel_scopes=panel_scopes,
+        scope_jefes=list_jefes_for_scope_ui(),
     )
 
 
@@ -4290,6 +4336,13 @@ def permisos_roles_save():
         user_can,
     )
     from app.services.role_registry_service import list_roles, valid_role_keys
+    from app.services.panel_scope_service import (
+        PANEL_PLANIFICADOR,
+        PANEL_TABLERO,
+        parse_scope_from_form,
+        set_role_panel_scope,
+    )
+    from app.models import ROLE_ADMIN, ROLE_JEFE
     if not user_can(current_user, 'permisos', 'w'):
         flash(translate('Acceso denegado.'), 'danger')
         return redirect(url_for('main.dashboard'))
@@ -4304,6 +4357,10 @@ def permisos_roles_save():
     try:
         role_modules = [m for m, _, _ in modules_for_role(role)]
         save_role_matrix(role, request.form, modules=role_modules)
+        if role not in (ROLE_ADMIN, ROLE_JEFE):
+            for panel in (PANEL_PLANIFICADOR, PANEL_TABLERO):
+                mode, jefe_ids = parse_scope_from_form(request.form, panel)
+                set_role_panel_scope(role, panel, mode, jefe_ids)
     except Exception as exc:
         db.session.rollback()
         flash(translate('No se pudieron guardar los permisos: {error}', error=exc), 'danger')

@@ -1458,11 +1458,15 @@ document.addEventListener('DOMContentLoaded', function() {
         calendarRoot.addEventListener('wheel', function(event) {
             if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
 
+            // Columna de nombres de obra: scroll vertical de página, no zoom del timeline.
+            var onObraLabels = !!(event.target && event.target.closest &&
+                event.target.closest('.vis-panel.vis-left, .vis-labelset, .vis-label'));
+
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
 
-            if (event.ctrlKey || event.metaKey) {
+            if (onObraLabels || event.ctrlKey || event.metaKey) {
                 planifAbandonViewPin();
                 scrollPlanificadorPage(event.deltaY);
                 return;

@@ -99,6 +99,52 @@
     padding-top: 0.45rem;
     border-top: 1px solid #fecaca;
   }
+  .perm-page .perm-scope-inline {
+    margin-top: 0.45rem;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.45rem;
+    background: #f8fafc;
+  }
+  .perm-page .perm-scope-inline-label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 650;
+    color: #475569;
+    margin-bottom: 0.25rem;
+  }
+  .perm-page .perm-scope-inline select {
+    width: 100%;
+    max-width: 22rem;
+    font-size: 0.78rem;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.35rem;
+    background: #fff;
+  }
+  .perm-page .perm-scope-jefes {
+    margin-top: 0.4rem;
+    max-height: 8rem;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.35rem;
+    padding: 0.3rem 0.45rem;
+    background: #fff;
+  }
+  .perm-page .perm-scope-jefes label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.74rem;
+    color: #334155;
+    margin: 0.12rem 0;
+    font-weight: 500;
+  }
+  .perm-page .perm-scope-locked {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    margin: 0;
+  }
   .perm-page .perm-admin-danger p {
     font-size: 0.68rem;
     color: #9f1239;
@@ -237,6 +283,7 @@
     <form method="POST" action="{{ url_for('admin.permisos_roles_save') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="role" value="{{ active_role }}">
+
       {% if modules %}
       <table class="perm-table">
         <thead>
@@ -258,6 +305,7 @@
             {% set flags = matrix.get(module, {}) %}
             {% set r_hint = read_hints.get(module) if read_hints is defined else none %}
             {% set w_hint = write_hints.get(module) if write_hints is defined else none %}
+            {% set panel_meta = panel_scopes.get(module) if panel_scopes is defined else none %}
             <tr class="{% if locked or sso_ro %}perm-locked{% endif %}">
               <td>
                 {{ _(label) }}
@@ -266,6 +314,34 @@
                   {% if r_hint %}<span>{{ _('Lectura') }}: {{ _(r_hint) }}</span>{% endif %}
                   {% if r_hint and w_hint %}<br>{% endif %}
                   {% if w_hint %}<span>{{ _('Escritura') }}: {{ _(w_hint) }}</span>{% endif %}
+                </div>
+                {% endif %}
+                {% if panel_meta %}
+                <div class="perm-scope-inline" data-scope-panel="{{ module }}">
+                  <span class="perm-scope-inline-label">{{ _('Alcance de obras') }}</span>
+                  {% if panel_meta.locked %}
+                  <p class="perm-scope-locked">{{ panel_meta.locked_note }}</p>
+                  <input type="hidden" name="scope__{{ module }}__mode" value="{{ panel_meta.mode }}">
+                  {% else %}
+                  <label class="sr-only" for="scope-{{ module }}-mode">{{ _('Alcance de obras') }}</label>
+                  <select id="scope-{{ module }}-mode" name="scope__{{ module }}__mode" class="js-scope-mode">
+                    <option value="none" {% if panel_meta.mode == 'none' %}selected{% endif %}>{{ _('Ninguno (no ve obras)') }}</option>
+                    <option value="jefe" {% if panel_meta.mode == 'jefe' %}selected{% endif %}>{{ _('Como jefe (sus obras)') }}</option>
+                    <option value="jefes" {% if panel_meta.mode == 'jefes' %}selected{% endif %}>{{ _('Jefes concretos') }}</option>
+                    <option value="all" {% if panel_meta.mode == 'all' %}selected{% endif %}>{{ _('Todos (como administración)') }}</option>
+                  </select>
+                  <div class="perm-scope-jefes js-scope-jefes" {% if panel_meta.mode != 'jefes' %}hidden{% endif %}>
+                    {% for jefe in scope_jefes %}
+                    <label>
+                      <input type="checkbox" name="scope__{{ module }}__jefe_ids" value="{{ jefe.id }}"
+                             {% if jefe.id in panel_meta.jefe_ids %}checked{% endif %}>
+                      {{ jefe.name }} {{ jefe.lastname }}
+                    </label>
+                    {% else %}
+                    <span class="text-muted" style="font-size:0.72rem;">{{ _('No hay jefes de obra activos.') }}</span>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
                 </div>
                 {% endif %}
               </td>
@@ -298,4 +374,18 @@
     </form>
   </main>
 </div>
+<script>
+(function () {
+  document.querySelectorAll('.perm-scope-inline').forEach(function (box) {
+    var sel = box.querySelector('.js-scope-mode');
+    var jefes = box.querySelector('.js-scope-jefes');
+    if (!sel || !jefes) return;
+    function sync() {
+      jefes.hidden = sel.value !== 'jefes';
+    }
+    sel.addEventListener('change', sync);
+    sync();
+  });
+})();
+</script>
 {% endblock %}

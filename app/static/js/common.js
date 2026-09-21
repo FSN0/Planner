@@ -568,14 +568,96 @@ function _spColPrefsSlug(label, index) {
     return s || ('col_' + index);
 }
 
+function _spTableHasDataTables(table) {
+    try {
+        return !!(window.jQuery && $.fn.DataTable && $.fn.DataTable.isDataTable(table));
+    } catch (e) {
+        return false;
+    }
+}
+
+function _spRowSkipsColPrefs(tr) {
+    if (!tr) return true;
+    if (tr.classList.contains('audit-desvio-detail')) return true;
+    if (tr.classList.contains('audit-lazy-placeholder')) return true;
+    if (tr.cells.length === 1 && tr.cells[0] && tr.cells[0].colSpan > 1) return true;
+    return false;
+}
+
+function _spClearManualColHides(table) {
+    if (!table) return;
+    Array.prototype.forEach.call(table.querySelectorAll('.sp-col-hidden'), function (cell) {
+        cell.classList.remove('sp-col-hidden');
+        cell.style.display = '';
+    });
+}
+
 function _spSetTableColVisible(table, index, visible) {
+    visible = !!visible;
+    if (_spTableHasDataTables(table)) {
+        var api = $(table).DataTable();
+        if (api.column(index).visible() !== visible) {
+            api.column(index).visible(visible, false);
+        }
+        return;
+    }
     Array.prototype.forEach.call(table.rows, function (tr) {
+        if (_spRowSkipsColPrefs(tr)) return;
         var cell = tr.cells[index];
-        if (!cell) return;
+        if (!cell || cell.colSpan > 1) return;
         cell.classList.toggle('sp-col-hidden', !visible);
         cell.style.display = visible ? '' : 'none';
     });
 }
+
+/**
+ * Reaplica preferencias de columnas (p.ej. tras carga lazy o init DataTables).
+ * Si la tabla ya es DataTable, usa column().visible() para no desalinear header/body.
+ */
+function reapplyTableColumnPrefs(table) {
+    if (!table || !table.id) return;
+    var thead = table.tHead;
+    if (!thead || !thead.rows.length) return;
+    var headerCells = thead.rows[0].cells || [];
+    if (!headerCells.length) return;
+
+    var stored = {};
+    try {
+        stored = JSON.parse(localStorage.getItem(_spColPrefsKey(table.id)) || '{}') || {};
+    } catch (e) {
+        stored = {};
+    }
+
+    var usingDt = _spTableHasDataTables(table);
+    if (usingDt) {
+        _spClearManualColHides(table);
+    }
+
+    var changedDt = false;
+    Array.prototype.forEach.call(headerCells, function (th, index) {
+        if (th.classList.contains('col-check') || th.classList.contains('no-col-prefs')) return;
+        var locked = th.classList.contains('no-col-hide') || th.classList.contains('col-identity');
+        var labelEl = th.querySelector('.sortable-label');
+        var label = ((labelEl ? labelEl.textContent : th.textContent) || '').replace(/\s+/g, ' ').trim();
+        var key = th.getAttribute('data-col-key') || _spColPrefsSlug(label, index);
+        var visible = locked ? true : stored[key] !== false;
+        if (usingDt) {
+            var api = $(table).DataTable();
+            if (api.column(index).visible() !== visible) {
+                api.column(index).visible(visible, false);
+                changedDt = true;
+            }
+        } else {
+            _spSetTableColVisible(table, index, visible);
+        }
+    });
+    if (usingDt && changedDt) {
+        try {
+            $(table).DataTable().columns.adjust().draw(false);
+        } catch (e2) { /* ignore */ }
+    }
+}
+window.reapplyTableColumnPrefs = reapplyTableColumnPrefs;
 
 function setupTableColumnPrefs(table) {
     if (!table || !table.id || table.dataset.colPrefsReady === '1') return;
@@ -691,6 +773,11 @@ function setupTableColumnPrefs(table) {
                     return;
                 }
                 _spSetTableColVisible(table, col.index, on);
+                if (_spTableHasDataTables(table)) {
+                    try {
+                        $(table).DataTable().columns.adjust().draw(false);
+                    } catch (eAdj) { /* ignore */ }
+                }
                 try {
                     var cur = JSON.parse(localStorage.getItem(_spColPrefsKey(table.id)) || '{}') || {};
                     cur[col.key] = on;

@@ -1301,7 +1301,11 @@ def resolver_fichaje():
             return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
 
     def _desasignar_futuro_desde_registro():
-        """Desde la fecha del registro (o hoy) hasta el final en esa obra de plan."""
+        """Desde hoy (o la fecha del registro si es futura) hasta el final en esa obra de plan.
+
+        Si no hay más días que cortar, no es error: el liberar del desvío
+        sigue quitando la plaza del día del registro.
+        """
         from app.services.assignment_service import process_unassign_action
         from app.utils.timezone_utils import today_local
 
@@ -1312,6 +1316,8 @@ def resolver_fichaje():
                 'message': translate('No hay obra planificada que desasignar.'),
             }
         hoy = today_local()
+        # process_unassign solo toca >= hoy; el día pasado del desvío lo libera
+        # aplicar_accion_desvio (liberar_plaza) a continuación.
         desde = registro.fecha if registro.fecha >= hoy else hoy
         fechas = sorted({
             a.fecha
@@ -1322,9 +1328,24 @@ def resolver_fichaje():
             ).all()
         })
         if not fechas:
+            # Sin filas futuras: aún intentamos cortar inercia ese día; si no hay
+            # nada, seguimos (noop) para no tumbar el desasignado del desvío.
+            un = process_unassign_action(
+                actor_user=current_user,
+                worker_id=registro.user_id,
+                target_obra_id=obra_id,
+                date_list=[desde.isoformat()],
+                mode='selected',
+                notas=notas_desasign,
+            )
+            if un.get('success'):
+                return un
             return {
-                'success': False,
-                'message': translate('No hay asignaciones futuras para desasignar.'),
+                'success': True,
+                'action': 'noop',
+                'message': translate(
+                    'No había más días futuros que desasignar en esta obra.'
+                ),
             }
         return process_unassign_action(
             actor_user=current_user,
@@ -1345,6 +1366,8 @@ def resolver_fichaje():
         DesvioFichajeError,
         aplicar_accion_desvio,
         es_desvio_plan_vs_real,
+        label_resolucion_plan,
+        label_resolucion_real,
     )
 
     # Desvío X→Y: a favor / en contra por lado (o cierre completo)
@@ -1362,7 +1385,7 @@ def resolver_fichaje():
                 if not un.get('success'):
                     return jsonify({
                         'success': False,
-                        'error': translate(un.get('message') or 'Error'),
+                        'error': un.get('message') or translate('Error'),
                     }), 400
                 if un.get('action') == 'requested':
                     from app.utils import register_log
@@ -1389,6 +1412,12 @@ def resolver_fichaje():
                 except Exception:
                     pass
             resultado = aplicar_accion_desvio(registro, accion, current_user)
+            if notas_desasign and accion == ACCION_LIBERAR_PLAZA:
+                base = (registro.notas_resolucion or resultado.get('message') or '').strip()
+                comentario = f"Comentario: {notas_desasign}"
+                registro.notas_resolucion = (
+                    f"{base} {comentario}".strip() if base else comentario
+                )
             if resultado.get('resolved'):
                 herm_accion = (
                     'confirmar_ausencia'
@@ -1428,6 +1457,14 @@ def resolver_fichaje():
                 'ack_real': resultado.get('ack_real'),
                 'ack_plan_por': _ack_nombre(registro.desvio_ack_plan_by_id),
                 'ack_real_por': _ack_nombre(registro.desvio_ack_real_by_id),
+                'ack_plan_label': (
+                    translate(label_resolucion_plan(resultado.get('decision_plan') or registro.desvio_decision_plan))
+                    if resultado.get('ack_plan') else None
+                ),
+                'ack_real_label': (
+                    translate(label_resolucion_real(resultado.get('decision_real') or registro.desvio_decision_real))
+                    if resultado.get('ack_real') else None
+                ),
             })
         except DesvioFichajeError as err:
             db.session.rollback()
@@ -1528,7 +1565,7 @@ def resolver_fichaje():
                 if not un.get('success'):
                     return jsonify({
                         'success': False,
-                        'error': translate(un.get('message') or 'Error'),
+                        'error': un.get('message') or translate('Error'),
                     }), 400
                 if un.get('action') == 'requested':
                     from app.utils import register_log
@@ -1586,6 +1623,12 @@ def resolver_fichaje():
         registro.notas_resolucion = _detalle_resolucion_fichaje(
             registro, accion, estado_anterior=estado_anterior
         )
+        if notas_desasign and accion == 'borrar_planificacion':
+            base = (registro.notas_resolucion or '').strip()
+            comentario = f"Comentario: {notas_desasign}"
+            registro.notas_resolucion = (
+                f"{base} {comentario}".strip() if base else comentario
+            )
 
         _cerrar_hermanos_placeholder(
             registro, accion, estado_anterior=estado_anterior or estado_previo

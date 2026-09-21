@@ -93,7 +93,7 @@
                   aria-label="{{ _('Filtrar por operarios') }}"></select>
         </div>
 
-        {% if current_user.role == ROLE_ADMIN %}
+        {% if current_user.role == ROLE_ADMIN or planif_office|default(false) %}
         <div class="planificador-filter-divider" aria-hidden="true"></div>
         <div class="planificador-jefe-filter planificador-filter-control">
           <span class="planificador-filter-control-label">{{ _('Jefe') }}</span>
@@ -216,7 +216,7 @@
                 <p class="small text-muted mb-4">{{ _('¿Cómo deseas proceder con esta planificación?') }}</p>
                 <div class="d-flex flex-column gap-2 px-3">
                     <button type="button" class="btn btn-outline-danger btn-block text-left mb-2 p-2 shadow-sm" onclick="resolveConflicto('overwrite')">
-                        {% if current_user.role == ROLE_ADMIN or jefes_asignan_directo %}
+                        {% if planif_direct_assign|default(current_user.role == ROLE_ADMIN or jefes_asignan_directo) %}
                             <strong class="d-block"><i class="fas fa-skull-crossbones mr-2"></i>{{ _('Sobrescribir Todo') }}</strong>
                             <span class="small text-muted">{{ _('Desasigna al operario de sus obras anteriores en estos días.') }}</span>
                         {% else %}
@@ -226,7 +226,7 @@
                     </button>
                     
                     <button type="button" class="btn btn-outline-warning btn-block text-left mb-2 p-2 shadow-sm" onclick="resolveConflicto('keep_both')">
-                        {% if current_user.role == ROLE_ADMIN or jefes_asignan_directo %}
+                        {% if planif_direct_assign|default(current_user.role == ROLE_ADMIN or jefes_asignan_directo) %}
                             <strong class="d-block"><i class="fas fa-clone mr-2"></i>{{ _('Permitir Solapamiento') }}</strong>
                             <span class="small text-muted">{{ _('Asigna al operario a ambas obras a la vez (Pluriempleo).') }}</span>
                         {% else %}

@@ -17,6 +17,7 @@ _ADMIN_RULES = (
     ('/admin/primeros-pasos', 'primeros_pasos', 'r', {'POST': 'w'}),
     ('/admin/obras_detailed', 'tablero', 'r', {}),
     ('/admin/planificador', 'planificador', 'r', {'POST': 'w'}),
+    ('/admin/api/planificador/', 'planificador', 'r', {'POST': 'w'}),
     ('/admin/api/planificador/fichajes-estado', 'planificador', 'r', {}),
     ('/admin/solicitudes', 'solicitudes', 'r', {'POST': 'w'}),
     ('/admin/ausencias', 'ausencias', 'r', {'POST': 'w'}),
