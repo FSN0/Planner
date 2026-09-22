@@ -47,7 +47,29 @@
     {% else %}<span class="text-muted">—</span>{% endif %}
   </td>
   <td>
-    <span class="font-weight-bold" style="font-size:0.75rem;">{{ _(reg.estado or '—') }}</span>
+    {% if reg.estado == 'Correcto' %}
+      <span class="font-weight-bold" style="font-size:0.75rem;"><span class="status-dot dot-success"></span>{{ _('Correcto') }}</span>
+    {% elif reg.estado == 'Correcto_Automatico' %}
+      <span class="font-weight-bold" style="font-size:0.75rem;"><span class="status-dot dot-auto"></span>{{ _('Inercia (Auto)') }}</span>
+    {% elif reg.estado == 'Cambio_Tajo' %}
+      <span class="font-weight-bold" style="font-size:0.75rem;"><span class="status-dot dot-auto"></span>{{ _('Cambio de tajo') }}</span>
+    {% elif reg.estado == 'Resuelto_Movido' %}
+      <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot dot-success"></span>{{ _('Reasignado') }}</span>
+    {% elif reg.estado == 'Resuelto_Asignado' %}
+      <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot dot-success"></span>{{ _('Asignado') }}</span>
+    {% elif reg.estado == 'Resuelto_Dividido' %}
+      <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot dot-success"></span>{{ _('Multitarea') }}</span>
+    {% elif reg.estado == 'Resuelto_Ausencia' %}
+      <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot dot-success"></span>{{ _('Ausencia OK') }}</span>
+    {% elif reg.estado == 'Resuelto_Falta' %}
+      <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot dot-success"></span>{{ _('Desasignado') }}</span>
+    {% elif reg.estado == 'Falta' %}
+      <span class="font-weight-bold" style="font-size:0.75rem; color:#e11d48;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot" style="background:#e11d48;"></span>{{ _('Falta') }}</span>
+    {% elif reg.estado == 'Resuelto_Ignorado' %}
+      <span class="text-secondary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot dot-secondary"></span>{{ _('Ignorado/Justif.') }}</span>
+    {% else %}
+      <span class="text-secondary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion or '' }}"><span class="status-dot dot-secondary"></span>{{ _(reg.estado or '—') }}</span>
+    {% endif %}
   </td>
   <td>
     <div class="d-flex align-items-center justify-content-center w-100">
@@ -86,22 +108,22 @@
   <td class="text-center odoo-metric-col">{{ '%.2f'|format(reg.odoo_mod|float) if reg.odoo_mod is not none else '—' }}</td>
   <td class="text-center odoo-metric-col">{{ '%.2f'|format(reg.odoo_moe|float) if reg.odoo_moe is not none else '—' }}</td>
   {% endif %}
-  <td class="text-muted small">{{ reg.nota_odoo or '—' }}</td>
+  <td class="text-muted small" title="{{ reg.notas_resolucion or reg.nota_odoo or '' }}">{{ reg.notas_resolucion or reg.nota_odoo or '—' }}</td>
   <td class="text-muted small">
     {% if reg.resuelto_por %}{{ reg.resuelto_por.name }}{% else %}{{ _('Sistema') }}{% endif %}
   </td>
-  <td class="text-muted small">{{ reg.fecha_auditoria.strftime('%d/%m/%y %H:%M') if reg.fecha_auditoria else '—' }}</td>
+  <td class="text-muted small" data-order="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '0' }}">{{ reg.fecha_auditoria.strftime('%d/%m/%y %H:%M') if reg.fecha_auditoria else '—' }}</td>
   {% if can_resolve_fichajes %}
   <td class="text-center" onclick="event.stopPropagation();">
-    {% if reg.estado.startswith('Resuelto_') and reg.estado_antes_resolucion %}
-    <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;padding:0.15rem 0.45rem;" onclick="reabrirResolucion({{ reg.id }}, this)">
+    {% if ((reg.estado or '').startswith('Resuelto_') or reg.estado == 'Falta') and reg.estado_antes_resolucion %}
+    <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:0.7rem;padding:0.15rem 0.45rem;"
+            title="{{ _('Vuelve a la clasificación anterior (el cuadrante no se deshace solo)') }}"
+            onclick="reabrirResolucion({{ reg.id }}, this)">
       <i class="fas fa-undo"></i> {{ _('Reabrir') }}
     </button>
     {% else %}<span class="text-muted" style="font-size:0.7rem;">—</span>{% endif %}
   </td>
   {% endif %}
 </tr>
-{% else %}
-<tr><td colspan="16" class="text-center text-muted py-3">{{ _('Sin histórico') }}</td></tr>
 {% endfor %}
 {% endif %}

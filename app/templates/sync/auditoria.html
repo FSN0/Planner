@@ -85,7 +85,7 @@
 {% endmacro %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260907f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260922b">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
 <style>
@@ -674,23 +674,42 @@ tr.audit-row-highlight {
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
             <div id="collapseHistorial" class="collapse">
+                <div class="audit-historial-toolbar px-3 pt-3 pb-2 d-flex flex-wrap align-items-center" style="gap:0.5rem;">
+                    <div class="input-group input-group-sm" style="max-width:22rem;">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        </div>
+                        <input type="search" id="historialSearchInput" class="form-control"
+                               placeholder="{{ _('Operario, DNI, obra, nota…') }}"
+                               autocomplete="off"
+                               aria-label="{{ _('Buscar en histórico') }}">
+                    </div>
+                    <span class="text-muted small" id="historialSearchHint">
+                        {{ _('Las resoluciones recientes salen primero. Busca en servidor si no aparece.') }}
+                    </span>
+                </div>
                 <div class="audit-table-wrap">
-            <table id="historialTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+            <table id="historialTable" class="table table-audit table-audit--historial audit-sortable-table filterable-table mb-0">
                 <thead>
                     <tr>
-                        {{ audit_sort_th(0, 'Fecha', '6%', '', 'date', 'fecha') }}
-                        {{ audit_sort_th(1, 'Operario', '12%', '', '', 'operario') }}
-                        {{ audit_sort_th(2, 'Estado final', '10%', '', '', 'estado') }}
-                        {{ audit_sort_th(3, 'Trazabilidad', '20%', 'center', '', 'trazabilidad') }}
-                        {{ audit_sort_th(4, 'Entrada', '6%', 'center', 'time', 'entrada') }}
-                        {{ audit_sort_th(5, 'Salida', '6%', 'center', 'time', 'salida') }}
-                        {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '6%', 'center', '', 'ubicacion') }}{% endif %}
-                        {{ audit_th_metricas_odoo(metrics_col) }}
-                        {{ audit_sort_th(after_metrics, 'Notas', '8%' if muestra_geo_audit else '10%', '', '', 'notas') }}
-                        {{ audit_sort_th(after_metrics + 1, 'Auditado por', '8%', '', '', 'auditor') }}
-                        {{ audit_sort_th(after_metrics + 2, 'Hora reg.', '7%', '', 'date', 'hora_reg') }}
+                        {{ audit_sort_th(0, 'Fecha', '5.8rem', '', 'date', 'fecha') }}
+                        {{ audit_sort_th(1, 'Operario', '10rem', '', '', 'operario') }}
+                        {{ audit_sort_th(2, 'Estado final', '7.5rem', '', '', 'estado') }}
+                        {{ audit_sort_th(3, 'Trazabilidad', 'auto', 'center', '', 'trazabilidad') }}
+                        {{ audit_sort_th(4, 'Entrada', '5.2rem', 'center', 'time', 'entrada') }}
+                        {{ audit_sort_th(5, 'Salida', '5.2rem', 'center', 'time', 'salida') }}
+                        {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '2.4rem', 'center', '', 'ubicacion') }}{% endif %}
+                        {% if tenant_has_odoo %}
+                        {{ audit_sort_th(metrics_col, 'UD', '2.6rem', 'center', 'num', 'odoo_ud') }}
+                        {{ audit_sort_th(metrics_col + 1, 'HH', '2.6rem', 'center', 'num', 'odoo_hh') }}
+                        {{ audit_sort_th(metrics_col + 2, 'MOD', '2.6rem', 'center', 'num', 'odoo_mod') }}
+                        {{ audit_sort_th(metrics_col + 3, 'MOE', '2.6rem', 'center', 'num', 'odoo_moe') }}
+                        {% endif %}
+                        {{ audit_sort_th(after_metrics, 'Notas', '7rem', '', '', 'notas') }}
+                        {{ audit_sort_th(after_metrics + 1, 'Auditado por', '6.5rem', '', '', 'auditor') }}
+                        {{ audit_sort_th(after_metrics + 2, 'Hora reg.', '6rem', '', 'date', 'hora_reg') }}
                         {% if can_resolve_fichajes %}
-                        <th style="width:7%;" class="text-center no-sort no-col-hide" data-col-key="accion">{{ _('Acción') }}</th>
+                        <th style="width:5.8rem;" class="text-center no-sort no-col-hide" data-col-key="accion">{{ _('Acción') }}</th>
                         {% endif %}
                     </tr>
                 </thead>
@@ -787,7 +806,7 @@ tr.audit-row-highlight {
                         </td>
                         {% if can_resolve_fichajes %}
                         <td class="text-center" onclick="event.stopPropagation();">
-                            {% if reg.estado.startswith('Resuelto_') and reg.estado_antes_resolucion %}
+                            {% if ((reg.estado or '').startswith('Resuelto_') or reg.estado == 'Falta') and reg.estado_antes_resolucion %}
                             <button type="button"
                                     class="btn btn-sm btn-outline-secondary"
                                     style="font-size:0.7rem; padding:0.15rem 0.45rem;"
@@ -802,8 +821,6 @@ tr.audit-row-highlight {
                         {% endif %}
                     </tr>
                     {% endfor %}
-                    {% else %}
-                    <tr class="audit-lazy-placeholder"><td colspan="16" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _('Se cargará al abrir esta sección') }}</td></tr>
                     {% endif %}
                 </tbody>
             </table>
@@ -961,7 +978,7 @@ tr.audit-row-highlight {
 <script>
 var dtCorrecciones = null;
 var dtHistorial = null;
-var SP_HISTORIAL_DATE_COL = {{ 9 if muestra_geo_audit else 8 }};
+var SP_HISTORIAL_DATE_COL = {{ (6 + (1 if muestra_geo_audit else 0) + (4 if tenant_has_odoo else 0) + 2) }};
 var SP_GEO_FILTER_DUDOSA = false;
 
 function applyGeoDudosaFilter(active) {
@@ -982,6 +999,10 @@ function applyGeoDudosaFilter(active) {
 function initAuditDataTable(tableId, options) {
     var $el = $('#' + tableId);
     if (!$el.length || $.fn.DataTable.isDataTable($el)) return;
+    // DataTables no admite filas con una sola celda colspan (tn/1, tn/4)
+    $el.find('tbody tr').each(function () {
+        if ($(this).find('> td[colspan]').length) $(this).remove();
+    });
     $el.find('thead th[onclick]').removeAttr('onclick');
     var dtLang = {es:'es-ES', en:'en-GB', pt:'pt-PT', fr:'fr-FR'}[window.SP_LOCALE || 'es'] || 'es-ES';
     var defaults = {
@@ -1045,7 +1066,63 @@ function applyAuditoriaDeepLink() {
 }
 window.applyAuditoriaDeepLink = applyAuditoriaDeepLink;
 
+var AUDIT_UI_STATE_KEY = 'sp_auditoria_ui';
+
+function saveAuditoriaUiState() {
+    var open = [];
+    document.querySelectorAll('#accordionAuditoria .collapse.show').forEach(function (el) {
+        if (el.id) open.push(el.id);
+    });
+    try {
+        sessionStorage.setItem(AUDIT_UI_STATE_KEY, JSON.stringify({
+            y: window.scrollY || window.pageYOffset || 0,
+            open: open,
+            t: Date.now()
+        }));
+    } catch (e) { /* ignore */ }
+}
+
+function restoreAuditoriaUiState() {
+    var raw;
+    try {
+        raw = sessionStorage.getItem(AUDIT_UI_STATE_KEY);
+        sessionStorage.removeItem(AUDIT_UI_STATE_KEY);
+    } catch (e) {
+        return false;
+    }
+    if (!raw) return false;
+    var st;
+    try { st = JSON.parse(raw); } catch (e) { return false; }
+    if (!st || (Date.now() - (st.t || 0)) > 90000) return false;
+
+    (st.open || []).forEach(function (id) {
+        var $c = $('#' + id);
+        if ($c.length && !$c.hasClass('show')) $c.addClass('show');
+        var $h = $c.prev('.auditoria-section-header');
+        if ($h.length) {
+            $h.removeClass('collapsed').attr('aria-expanded', 'true');
+        }
+    });
+
+    var y = st.y || 0;
+    var applyScroll = function () { window.scrollTo(0, y); };
+    applyScroll();
+    requestAnimationFrame(applyScroll);
+    setTimeout(applyScroll, 80);
+    setTimeout(applyScroll, 250);
+    return true;
+}
+
+function softReloadAuditoria(delayMs) {
+    saveAuditoriaUiState();
+    var ms = (typeof delayMs === 'number') ? delayMs : 350;
+    setTimeout(function () { window.location.reload(); }, ms);
+}
+window.softReloadAuditoria = softReloadAuditoria;
+
 $(document).ready(function() {
+    restoreAuditoriaUiState();
+
     ['auditConflictosTable', 'auditParacaidistasTable', 'auditAusenciasTable'].forEach(function(id) {
         if (document.getElementById(id)) applyDefaultDateSort(id, 0);
     });
@@ -1079,28 +1156,124 @@ $(document).ready(function() {
         $header.attr('aria-expanded', isOpen ? 'true' : 'false');
     });
 
-    function loadAuditoriaSeccion(seccion, $tbody, onDone) {
-        if (!$tbody.length || $tbody.attr('data-loaded') === '1') {
+    var historialSearchTimer = null;
+    var historialSearchQ = '';
+
+    function destroyAuditDataTable(tableId) {
+        var $el = $('#' + tableId);
+        if ($el.length && $.fn.DataTable && $.fn.DataTable.isDataTable($el)) {
+            try { $el.DataTable().clear().destroy(); } catch (e) {
+                try { $el.DataTable().destroy(); } catch (e2) { /* ignore */ }
+            }
+        }
+        if (tableId === 'historialTable') dtHistorial = null;
+        if (tableId === 'correccionesTable') dtCorrecciones = null;
+    }
+
+    function historialColCount() {
+        var table = document.getElementById('historialTable');
+        if (!table) return 12;
+        var ths = table.querySelectorAll('thead tr:first-child th');
+        return ths.length || 12;
+    }
+
+    function loadAuditoriaSeccion(seccion, $tbody, onDone, opts) {
+        opts = opts || {};
+        var force = !!opts.force;
+        var q = (opts.q != null) ? String(opts.q) : '';
+        if (!$tbody.length) {
             if (onDone) onDone();
             return;
         }
-        $tbody.html('<tr class="audit-lazy-placeholder"><td colspan="16" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _("Cargando…") }}</td></tr>');
-        fetch({{ url_for('sync.auditoria_fichajes_seccion', seccion='__SEC__')|tojson }}.replace('__SEC__', seccion), {
+        if (!force && $tbody.attr('data-loaded') === '1' && seccion !== 'historial') {
+            if (onDone) onDone();
+            return;
+        }
+        // Histórico: permitir recarga con búsqueda aunque ya estuviera cargado
+        if (!force && seccion === 'historial' && $tbody.attr('data-loaded') === '1' && q === ($tbody.attr('data-q') || '')) {
+            if (onDone) onDone();
+            return;
+        }
+        // IMPORTANTE: destruir DataTables ANTES de tocar el tbody
+        if (seccion === 'historial') destroyAuditDataTable('historialTable');
+        if (seccion === 'correcciones') destroyAuditDataTable('correccionesTable');
+
+        var cols = seccion === 'historial' ? historialColCount() : 16;
+        $tbody.html(
+            '<tr class="audit-lazy-placeholder"><td colspan="' + cols +
+            '" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _("Cargando…") }}</td></tr>'
+        );
+        var url = {{ url_for('sync.auditoria_fichajes_seccion', seccion='__SEC__')|tojson }}.replace('__SEC__', seccion);
+        if (q) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'q=' + encodeURIComponent(q);
+        fetch(url, {
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data || !data.success) {
-                $tbody.html('<tr><td colspan="16" class="text-center text-danger py-3">' + ((data && data.error) || {{ _('Error al cargar')|tojson }}) + '</td></tr>');
+                $tbody.html(
+                    '<tr><td colspan="' + cols +
+                    '" class="text-center text-danger py-3">' +
+                    ((data && data.error) || {{ _('Error al cargar')|tojson }}) +
+                    '</td></tr>'
+                );
+                if (onDone) onDone({ empty: true, error: true });
                 return;
             }
-            $tbody.html(data.html);
+            // Vacío: tbody sin filas (DataTables no admite una sola celda con colspan)
+            var html = (data.html || '').trim();
+            $tbody.html(html);
             $tbody.attr('data-loaded', '1');
-            if (onDone) onDone();
+            $tbody.attr('data-q', q || '');
+            var count = data.count || 0;
+            var hint = document.getElementById('historialSearchHint');
+            if (hint && seccion === 'historial') {
+                hint.textContent = q
+                    ? ({{ _('Resultados')|tojson }} + ': ' + count)
+                    : {{ _('Las resoluciones recientes salen primero. Busca en servidor si no aparece.')|tojson }};
+            }
+            if (onDone) onDone({ empty: count === 0, count: count });
         })
         .catch(function() {
-            $tbody.html('<tr><td colspan="16" class="text-center text-danger py-3">{{ _("Error de red") }}</td></tr>');
+            $tbody.html(
+                '<tr><td colspan="' + cols +
+                '" class="text-center text-danger py-3">{{ _("Error de red") }}</td></tr>'
+            );
+            if (onDone) onDone({ empty: true, error: true });
         });
+    }
+
+    function refreshHistorialTable(q) {
+        var $body = $('#historialTableBody');
+        loadAuditoriaSeccion('historial', $body, function (meta) {
+            meta = meta || {};
+            var table = document.getElementById('historialTable');
+            // Quitar filas placeholder/error con colspan antes de init
+            if (table) {
+                table.querySelectorAll('tbody tr').forEach(function (tr) {
+                    if (tr.querySelector('td[colspan]')) tr.remove();
+                });
+                table.querySelectorAll('.sp-col-hidden').forEach(function (cell) {
+                    cell.classList.remove('sp-col-hidden');
+                    cell.style.display = '';
+                });
+            }
+            destroyAuditDataTable('historialTable');
+            dtHistorial = initAuditDataTable('historialTable', {
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, {{ _('Todos')|tojson }}]],
+                searching: false,
+                autoWidth: false,
+                language: {
+                    emptyTable: {{ _('Sin histórico')|tojson }},
+                    zeroRecords: {{ _('Sin coincidencias')|tojson }}
+                }
+            });
+            if (dtHistorial && dtHistorial.columns) {
+                try { dtHistorial.columns.adjust(); } catch (e) { /* ignore */ }
+            }
+            if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
+        }, { force: true, q: q || '' });
     }
 
     $('#collapseCorrecciones').on('shown.bs.collapse', function() {
@@ -1126,25 +1299,20 @@ $(document).ready(function() {
         });
     });
     $('#collapseHistorial').on('shown.bs.collapse', function() {
-        var $body = $('#historialTableBody');
-        loadAuditoriaSeccion('historial', $body, function() {
-            var table = document.getElementById('historialTable');
-            if (!dtHistorial) {
-                if (table) {
-                    table.querySelectorAll('.sp-col-hidden').forEach(function (cell) {
-                        cell.classList.remove('sp-col-hidden');
-                        cell.style.display = '';
-                    });
-                }
-                dtHistorial = initAuditDataTable('historialTable', {
-                    pageLength: 25,
-                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, {{ _('Todos')|tojson }}]]
-                });
-                if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
-            } else if (window.reapplyTableColumnPrefs) {
-                reapplyTableColumnPrefs(table);
+        refreshHistorialTable(historialSearchQ);
+    });
+
+    $('#historialSearchInput').on('input', function () {
+        var val = (this.value || '').trim();
+        historialSearchQ = val;
+        clearTimeout(historialSearchTimer);
+        historialSearchTimer = setTimeout(function () {
+            if (!$('#collapseHistorial').hasClass('show')) {
+                $('#collapseHistorial').collapse('show');
+                return;
             }
-        });
+            refreshHistorialTable(historialSearchQ);
+        }, 350);
     });
 
     applyAuditoriaDeepLink();
@@ -1328,12 +1496,6 @@ var AUDIT_RESOLVE_I18N = {{ {
         }
 
         var row = document.getElementById('row-' + id);
-        var isDesvio = !!(row && row.getAttribute('data-desvio-toggle'));
-        var desvioAcciones = {
-            liberar_plaza: 1, mantener_falta: 1, aceptar_entrada: 1,
-            rechazar_entrada: 1, confirmar_desvio: 1, rechazar_desvio: 1
-        };
-        var isDesvioAction = !!desvioAcciones[accion];
         var payload = { registro_id: id, accion: accion };
         if (extra.scope) payload.scope = extra.scope;
         if (extra.notas) payload.notas = extra.notas;
@@ -1372,54 +1534,21 @@ var AUDIT_RESOLVE_I18N = {{ {
                 } else {
                     alert(data.message || {{ _('Se ha generado una solicitud de baja.')|tojson }});
                 }
+                softReloadAuditoria(700);
                 return;
             }
 
-            // Desvío (desde expand o espejo en ausencias/sin planificar)
-            if ((isDesvio || isDesvioAction) && !data.resolved) {
-                if (row) {
-                    restoreRow(row);
-                    applyDesvioPartialUpdate(id, data);
-                    // Viewer ya no tiene lados pendientes: oculta la fila principal
-                    // sin cargar el espejo del otro lado (sigue pendiente).
-                    if (data.dismiss_row) {
-                        var card = row.closest('.card-modern');
-                        if (card) {
-                            var badge = card.querySelector('.badge-count, .badge');
-                            if (badge) {
-                                var count = parseInt(badge.innerText, 10);
-                                if (!isNaN(count) && count > 0) badge.innerText = count - 1;
-                            }
-                        }
-                        var detailOnly = document.getElementById('desvio-detail-' + id);
-                        if (detailOnly) detailOnly.remove();
-                        row.remove();
-                    }
-                } else {
-                    if (data.ack_plan) removeEspejoRows(id, ['plan']);
-                    if (data.ack_real) removeEspejoRows(id, ['real']);
-                }
-                return;
-            }
-
+            // Feedback rápido y recarga de filas (mantiene scroll / secciones abiertas).
+            // Evita filas zombis en otras secciones tras desasignar a futuro u otras resoluciones.
             if (row) {
-                row.style.transition = 'all 0.3s ease';
-                row.style.opacity = '0.3';
-                row.style.transform = 'translateX(20px)';
+                row.style.transition = 'opacity 0.2s ease';
+                row.style.opacity = '0.45';
                 row.style.pointerEvents = 'none';
             }
-            setTimeout(function () {
-                if (isDesvioAction || isDesvio) {
-                    if (row) removeDesvioRow(row, id);
-                    else removeEspejoRows(id);
-                    return;
-                }
-                if (row && data.dismiss_row !== false) {
-                    removeDesvioRow(row, id);
-                } else if (row) {
-                    restoreRow(row);
-                }
-            }, 300);
+            if (data.message) {
+                try { showToast(data.message, true); } catch (e) { /* ignore */ }
+            }
+            softReloadAuditoria(320);
         })
         .catch(function (err) {
             console.error('Error critico:', err);
@@ -1554,7 +1683,7 @@ var AUDIT_RESOLVE_I18N = {{ {
             var data = result.data;
             if (result.ok && data.success) {
                 showToast(data.aviso || t.reopened || 'OK', true);
-                setTimeout(function () { window.location.reload(); }, 700);
+                softReloadAuditoria(700);
                 return;
             }
             alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.reopen_fail || 'Error'));
@@ -1602,7 +1731,7 @@ function forzarSyncFichajes() {
     .then(function (data) {
         if (data.success) {
             showToast({{ _('¡Revisión y Sincronización completadas!')|tojson }}, true);
-            setTimeout(function () { window.location.reload(); }, 800);
+            softReloadAuditoria(800);
         } else {
             alert({{ _('Error al conectar con Odoo:')|tojson }} + ' ' + data.error);
             document.getElementById('customToast').classList.remove('show');

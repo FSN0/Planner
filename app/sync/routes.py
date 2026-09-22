@@ -30,8 +30,19 @@ _AUDITORIA_EAGER = (
     selectinload(RegistroFichaje.resuelto_por),
 )
 _AUDITORIA_PENDIENTES_LIMIT = 500
-_AUDITORIA_HISTORIAL_LIMIT = 300
+_AUDITORIA_HISTORIAL_LIMIT = 500
 _AUDITORIA_CORRECCIONES_LIMIT = 150
+
+# Decisiones humanas de auditoría (prioridad en histórico frente a Correcto/inercia).
+_ESTADOS_HISTORIAL_DECISION = (
+    'Resuelto_Movido',
+    'Resuelto_Asignado',
+    'Resuelto_Dividido',
+    'Resuelto_Ignorado',
+    'Resuelto_Falta',
+    'Resuelto_Ausencia',
+    'Falta',
+)
 
 # Módulo de escritura requerido por cada tarea «Auto ahora» / sync manual.
 _SYNC_TASK_WRITE_MODULE = {
@@ -590,13 +601,19 @@ def commit_subcontratas():
         mapa_empresas = {} 
         
         # 1. ACTUALIZAR O CREAR EMPRESAS
-        for obj in data.get('empresas', {}).get('actualizadas', []):
+        # 1. ACTUALIZAR O CREAR EMPRESAS
+        empresas_touch = list(data.get('empresas', {}).get('actualizadas', []) or [])
+        empresas_touch.extend(data.get('empresas', {}).get('rellenar_cif', []) or [])
+        for obj in empresas_touch:
             comp = Company.query.get(obj['local_id'])
             if comp:
                 ext_ids = dict(comp.external_ids or {})
                 ext_ids['odoo'] = str(obj['odoo_id'])
                 comp.external_ids = ext_ids
-                comp.nombre = obj['nombre']
+                if obj.get('nombre'):
+                    comp.nombre = obj['nombre']
+                if obj.get('cif'):
+                    comp.nif = obj['cif']
                 comp.active = True
                 mapa_empresas[obj['odoo_id']] = comp.id
                 db.session.add(comp)
@@ -605,9 +622,12 @@ def commit_subcontratas():
             nueva_comp = Company(
                 external_ids={'odoo': str(obj['odoo_id'])},
                 nombre=obj['nombre'],
+                nif=(obj.get('cif') or None) or None,
+                is_internal=False,
+                active=True,
             )
             db.session.add(nueva_comp)
-            db.session.flush() 
+            db.session.flush()
             mapa_empresas[obj['odoo_id']] = nueva_comp.id
 
         # 2. ACTUALIZAR EMPLEADOS (Seguro Anti-Colisiones DNI)
@@ -625,6 +645,7 @@ def commit_subcontratas():
                 user.name = obj['name']
                 user.lastname = obj['lastname']
                 user.categoria_profesional = obj.get('categoria_profesional')
+                user.is_deleted = False
                 db.session.add(user)
 
                 if obj['dni'] and not 'SINDNI' in obj['dni']:
@@ -634,7 +655,16 @@ def commit_subcontratas():
                         user.dni = f"{obj['dni']}-EXT{obj['odoo_id']}"
                     else:
                         user.dni = obj['dni']
-                
+
+                # Email: solo si no choca con otro; el sintético ext_* suele ser el mismo.
+                email_nuevo = (obj.get('email') or '').strip()
+                if email_nuevo and email_nuevo != (user.email or ''):
+                    choque_email = User.query.filter(
+                        User.email == email_nuevo, User.id != user.id
+                    ).first()
+                    if not choque_email:
+                        user.email = email_nuevo
+
                 # --- CORRECCIÓN: Búsqueda dinámica de la empresa ---
                 odoo_c_id = obj.get('odoo_company_id')
                 if odoo_c_id:
@@ -642,7 +672,7 @@ def commit_subcontratas():
                         comp_existente = _company_by_odoo_id(odoo_c_id)
                         if comp_existente:
                             mapa_empresas[odoo_c_id] = comp_existente.id
-                    
+
                     if odoo_c_id in mapa_empresas:
                         user.company_id = mapa_empresas[odoo_c_id]
                 # ---------------------------------------------------
@@ -651,8 +681,9 @@ def commit_subcontratas():
                 else:
                     user.active = True
 
-        # 3. NUEVOS EMPLEADOS (Seguro Anti-Colisiones DNI + Memoria de Transacción)
-        dnis_en_transaccion = set() # Memoria temporal por si en el mismo guardado vienen varios repetidos
+        # 3. NUEVOS EMPLEADOS (Seguro Anti-Colisiones DNI + email + Memoria de Transacción)
+        dnis_en_transaccion = set()
+        emails_en_transaccion = set()
 
         from app.services.plan_service import PlanLimitError, exigir_cupo, rol_cuenta_como_empleado
 
@@ -669,29 +700,61 @@ def commit_subcontratas():
             # --- CORRECCIÓN: Búsqueda dinámica de la empresa ---
             odoo_c_id = obj.get('odoo_company_id')
             local_comp_id = mapa_empresas.get(odoo_c_id)
-            
+
             if not local_comp_id and odoo_c_id:
                 comp_existente = _company_by_odoo_id(odoo_c_id)
                 if comp_existente:
                     local_comp_id = comp_existente.id
                     mapa_empresas[odoo_c_id] = local_comp_id
             # ---------------------------------------------------
-            
+
             dni_limpio = obj['dni']
-            
+            email_limpio = (obj.get('email') or '').strip() or f"ext_{obj['odoo_id']}@subcontrata.local"
+
+            # Si ya existe por email/DNI (p.ej. archivado no emparejado en preview vieja),
+            # reutilizar en lugar de INSERT que rompe users_email_key.
+            existente = User.query.filter(
+                (User.dni == dni_limpio) | (User.email == email_limpio)
+            ).first()
+            if existente:
+                ext_ids = dict(existente.external_ids or {})
+                ext_ids['odoo'] = str(obj['odoo_id'])
+                existente.external_ids = ext_ids
+                existente.name = obj['name']
+                existente.lastname = obj['lastname']
+                existente.categoria_profesional = obj.get('categoria_profesional')
+                existente.company_id = local_comp_id or existente.company_id
+                existente.is_deleted = False
+                if not existente.active:
+                    reactivar(existente, actor_id=current_user.id, commit=False)
+                else:
+                    existente.active = True
+                db.session.add(existente)
+                dnis_en_transaccion.add(existente.dni)
+                emails_en_transaccion.add(existente.email)
+                continue
+
             # Revisar si existe en la BD o si ya lo hemos procesado en este mismo bucle
-            existe_en_bd = User.query.filter_by(dni=dni_limpio).first()
-            if existe_en_bd or dni_limpio in dnis_en_transaccion:
+            if (
+                User.query.filter_by(dni=dni_limpio).first()
+                or dni_limpio in dnis_en_transaccion
+            ):
                 dni_limpio = f"{dni_limpio}-EXT{obj['odoo_id']}"
-                
+            if (
+                User.query.filter_by(email=email_limpio).first()
+                or email_limpio in emails_en_transaccion
+            ):
+                email_limpio = f"ext_{obj['odoo_id']}_dup@subcontrata.local"
+
             dnis_en_transaccion.add(dni_limpio)
-            
+            emails_en_transaccion.add(email_limpio)
+
             nuevo_user = User(
                 external_ids={'odoo': str(obj['odoo_id'])},
                 name=obj['name'],
                 lastname=obj['lastname'],
                 dni=dni_limpio,
-                email=obj['email'],
+                email=email_limpio,
                 role=obj['role'],
                 categoria_profesional=obj.get('categoria_profesional'),
                 company_id=local_comp_id,
@@ -1031,6 +1094,64 @@ def _auditoria_filtros_jefe():
     return filtros_historial, filtros_correcciones
 
 
+def _historial_order_by():
+    """Decisiones de auditoría primero; luego por hora de resolución (no por día laboral)."""
+    from sqlalchemy import case
+
+    prio = case(
+        (RegistroFichaje.estado.in_(_ESTADOS_HISTORIAL_DECISION), 0),
+        else_=1,
+    )
+    has_aud = case(
+        (RegistroFichaje.fecha_auditoria.isnot(None), 0),
+        else_=1,
+    )
+    return (
+        prio.asc(),
+        has_aud.asc(),
+        RegistroFichaje.fecha_auditoria.desc(),
+        RegistroFichaje.fecha.desc(),
+        RegistroFichaje.id.desc(),
+    )
+
+
+def _aplicar_busqueda_historial(query, q_text):
+    """Filtro servidor por operario / DNI / notas / código de obra."""
+    from sqlalchemy import exists
+    from sqlalchemy.orm import aliased
+
+    q_text = (q_text or '').strip()
+    if not q_text:
+        return query
+    like = f'%{q_text}%'
+    ObraPlan = aliased(Obra)
+    ObraReal = aliased(Obra)
+    user_hit = exists().where(
+        User.id == RegistroFichaje.user_id,
+        or_(
+            User.name.ilike(like),
+            User.lastname.ilike(like),
+            User.dni.ilike(like),
+        ),
+    )
+    plan_hit = exists().where(
+        ObraPlan.id == RegistroFichaje.obra_planificada_id,
+        or_(ObraPlan.codigo.ilike(like), ObraPlan.nombre.ilike(like)),
+    )
+    real_hit = exists().where(
+        ObraReal.id == RegistroFichaje.obra_real_id,
+        or_(ObraReal.codigo.ilike(like), ObraReal.nombre.ilike(like)),
+    )
+    return query.filter(or_(
+        user_hit,
+        plan_hit,
+        real_hit,
+        RegistroFichaje.notas_resolucion.ilike(like),
+        RegistroFichaje.nota_odoo.ilike(like),
+        RegistroFichaje.estado.ilike(like),
+    ))
+
+
 @sync_bp.route('/auditoria/seccion/<seccion>', methods=['GET'])
 @login_required
 def auditoria_fichajes_seccion(seccion):
@@ -1046,12 +1167,18 @@ def auditoria_fichajes_seccion(seccion):
 
     try:
         filtros_historial, filtros_correcciones = _auditoria_filtros_jefe()
+        q_text = (request.args.get('q') or '').strip()
         if seccion == 'historial':
-            registros = (
+            q = (
                 RegistroFichaje.query
                 .options(*_AUDITORIA_EAGER)
                 .filter(*filtros_historial)
-                .order_by(RegistroFichaje.fecha.desc(), RegistroFichaje.fecha_auditoria.desc())
+            )
+            q = _aplicar_busqueda_historial(q, q_text)
+            # Sin búsqueda: prioriza decisiones; con búsqueda, prioriza igual pero
+            # sobre el universo filtrado (así no se pierden resoluciones viejas).
+            registros = (
+                q.order_by(*_historial_order_by())
                 .limit(_AUDITORIA_HISTORIAL_LIMIT)
                 .all()
             )
@@ -1078,7 +1205,12 @@ def auditoria_fichajes_seccion(seccion):
             can_resolve_fichajes=can_resolve_fichajes(current_user),
             visible_sections=visible_sections,
         )
-        return jsonify({'success': True, 'html': html, 'count': len(registros)})
+        return jsonify({
+            'success': True,
+            'html': html,
+            'count': len(registros),
+            'q': q_text,
+        })
     except Exception:
         current_app.logger.exception('Fallo sección auditoría %s', seccion)
         return jsonify({'success': False, 'error': translate('No se pudo cargar la sección')}), 500
@@ -1389,7 +1521,8 @@ def resolver_fichaje():
         if closed_ids:
             parts.append(
                 translate(
-                    'Se cerraron {n} incidencia(s) abierta(s) posteriores en esta obra.',
+                    'Se actualizaron {n} incidencia(s) abierta(s) posteriores en esta obra '
+                    '(desvíos: solo plan; el fichaje real queda pendiente).',
                     n=len(closed_ids),
                 )
             )

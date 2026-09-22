@@ -75,14 +75,11 @@ class TestRecursosActivosAuthz:
         ids = {u['id'] for u in data['users']}
         assert user_operario.id in ids
 
-    def test_jefe_recursos_activos_no_es_403_y_acotado_a_sus_obras(
+    def test_jefe_recursos_activos_ve_plantilla_si_tiene_trabajadores(
         self, jefe_client, tenant_soltec, user_jefe, user_operario,
         obra_activa, company_internal, session,
     ):
-        """
-        El jefe recibe 200. Los users son él + asignados a sus obras
-        (no la plantilla completa).
-        """
+        """Con ``trabajadores`` r el jefe ve la plantilla completa (lectura abierta)."""
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
 
         ajeno = User(
@@ -111,7 +108,7 @@ class TestRecursosActivosAuthz:
         ids = {u['id'] for u in data['users']}
         assert user_jefe.id in ids
         assert user_operario.id in ids
-        assert ajeno.id not in ids
+        assert ajeno.id in ids
 
 
 class TestUniversalCalendarAuthz:

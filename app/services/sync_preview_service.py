@@ -148,23 +148,34 @@ def analyze_subcontratas_preview(diff):
     for emp in diff.get('empresas', {}).get('actualizadas', []):
         listos_empresas.append({**emp, 'accion': 'actualizar_empresa', 'razones': []})
 
+    rellenar_cif = list(diff.get('empresas', {}).get('rellenar_cif') or [])
+    sin_cambios_empresas = [{
+        **emp, 'accion': 'sin_cambios', 'razones': [],
+    } for emp in diff.get('empresas', {}).get('sin_cambios', [])]
+
     listos_empleados = []
     incidencias_empleados = []
     omitidos_auto = []
 
     for emp in diff.get('empleados', {}).get('nuevos', []):
-        choque = User.query.filter_by(dni=emp['dni']).first()
-        if choque:
-            entry = {
-                **emp, 'accion': 'nuevo_externo',
-                'razones': [
-                    f"DNI «{emp['dni']}» ya existe ({choque.name} {choque.lastname}). "
-                    f"Al importar se renombrará a {emp['dni']}-EXT{emp['odoo_id']}."
-                ],
-            }
+        choque_dni = User.query.filter_by(dni=emp['dni']).first()
+        choque_email = User.query.filter_by(email=emp['email']).first()
+        razones = []
+        if choque_dni:
+            razones.append(
+                f"DNI «{emp['dni']}» ya existe ({choque_dni.name} {choque_dni.lastname}). "
+                f"Al importar se reutilizará o renombrará a {emp['dni']}-EXT{emp['odoo_id']}."
+            )
+        if choque_email and (not choque_dni or choque_email.id != choque_dni.id):
+            razones.append(
+                f"Email «{emp['email']}» ya existe ({choque_email.name} {choque_email.lastname}). "
+                f"Al importar se reutilizará esa ficha (no se crea duplicado)."
+            )
+        entry = {**emp, 'accion': 'nuevo_externo', 'razones': razones}
+        if razones:
             incidencias_empleados.append(entry)
         else:
-            listos_empleados.append({**emp, 'accion': 'nuevo_externo', 'razones': []})
+            listos_empleados.append(entry)
 
     for emp in diff.get('empleados', {}).get('actualizados', []):
         listos_empleados.append({**emp, 'accion': 'actualizar_externo', 'razones': []})
@@ -179,6 +190,7 @@ def analyze_subcontratas_preview(diff):
     } for d in diff.get('empleados', {}).get('desactivados', [])]
 
     sin_cambios = []
+    meta = diff.get('meta') or {}
 
     stats = {
         'listos': len(listos_empresas) + len(listos_empleados),
@@ -186,6 +198,9 @@ def analyze_subcontratas_preview(diff):
         'omitidos_auto': len(omitidos_auto),
         'empresas_nuevas': len(diff.get('empresas', {}).get('nuevas', [])),
         'empresas_act': len(diff.get('empresas', {}).get('actualizadas', [])),
+        'empresas_rellenar_cif': len(rellenar_cif),
+        'empresas_sin_cambios': len(sin_cambios_empresas),
+        'empresas_odoo': meta.get('empresas_odoo', 0),
         'externos_nuevos': len(diff.get('empleados', {}).get('nuevos', [])),
         'externos_act': len(diff.get('empleados', {}).get('actualizados', [])),
         'desactivados': len(desactivados),
@@ -196,7 +211,10 @@ def analyze_subcontratas_preview(diff):
         'modulo_label': 'Subcontratas y externos',
         'icon': 'fa-hard-hat',
         'stats': stats,
+        'meta': meta,
         'listos_empresas': listos_empresas,
+        'rellenar_cif': rellenar_cif,
+        'sin_cambios_empresas': sin_cambios_empresas,
         'incidencias_empresas': incidencias_empresas,
         'listos_empleados': listos_empleados,
         'incidencias_empleados': incidencias_empleados,

@@ -559,6 +559,10 @@ def run_vehiculos_en_vivo(modo='Automático'):
         fecha_hasta=hasta,
         modo=modo,
     )
+    # Viajes pueden auto-crear un fleet.vehicle archivado como active=True;
+    # re-diff para bajar el flag active desde Odoo en el mismo ciclo.
+    if result_odo.get('vehiculos_auto_creados'):
+        result_fleet = apply_diff(modo=modo)
     return {'fleet': result_fleet, 'odometros': result_odo}
 
 
@@ -571,4 +575,7 @@ def run_vehiculos_retro(days=None, modo='Automático'):
     apply_diff(modo=modo)
     hasta = today_local()
     desde = hasta - timedelta(days=dias)
-    return sync_odometros(fecha_desde=desde, fecha_hasta=hasta, modo=modo)
+    result_odo = sync_odometros(fecha_desde=desde, fecha_hasta=hasta, modo=modo)
+    if result_odo.get('vehiculos_auto_creados'):
+        apply_diff(modo=modo)
+    return result_odo

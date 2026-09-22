@@ -177,6 +177,60 @@ def collect_audit_unassign_scope(
     return result
 
 
+def aplicar_cierre_tras_desasignar_plan(reg, *, actor_id: int | None, nota: str, now=None) -> str:
+    """Ajusta un ``RegistroFichaje`` abierto tras cortar el plan.
+
+    - Conflicto/Disputa: solo ack del lado plan (como «Desasignar»).
+      El fichaje real sigue pendiente → espejo «sin planificar».
+      Si el lado real ya estaba aceptado, cierra del todo (Resuelto_Movido).
+    - Paracaidista: no tocar (es lado real; no depende del plan cortado).
+    - Ausencia / Sin_Registro / resto: Resuelto_Falta.
+
+    Devuelve ``'plan_acked'`` | ``'closed'`` | ``'skipped'``.
+    """
+    from app.utils.timezone_utils import utc_now
+
+    if now is None:
+        now = utc_now()
+
+    estado = (getattr(reg, 'estado', None) or '').strip()
+
+    if estado == 'Paracaidista':
+        return 'skipped'
+
+    if estado in ('Conflicto', 'Disputa'):
+        from app.services.desvio_fichaje_service import DECISION_LIBERAR
+
+        if not getattr(reg, 'desvio_ack_plan_at', None):
+            reg.desvio_decision_plan = DECISION_LIBERAR
+            reg.desvio_ack_plan_at = now
+            reg.desvio_ack_plan_by_id = actor_id
+
+        prev_nota = (getattr(reg, 'notas_resolucion', None) or '').strip()
+        reg.notas_resolucion = f"{prev_nota} {nota}".strip() if prev_nota else nota
+
+        if getattr(reg, 'desvio_ack_real_at', None):
+            prev = estado or None
+            if prev and not (getattr(reg, 'estado_antes_resolucion', None) or '').strip():
+                reg.estado_antes_resolucion = prev
+            reg.estado = 'Resuelto_Movido'
+            reg.resuelto_por_id = actor_id
+            reg.fecha_auditoria = now
+            return 'closed'
+
+        # Plan liberado; real pendiente (sigue en cola como desvío parcial).
+        return 'plan_acked'
+
+    prev = estado or None
+    if prev and not (getattr(reg, 'estado_antes_resolucion', None) or '').strip():
+        reg.estado_antes_resolucion = prev
+    reg.estado = 'Resuelto_Falta'
+    reg.resuelto_por_id = actor_id
+    reg.fecha_auditoria = now
+    reg.notas_resolucion = nota
+    return 'closed'
+
+
 def cerrar_incidencias_abiertas_desasignadas(
     *,
     user_id: int,
@@ -187,10 +241,11 @@ def cerrar_incidencias_abiertas_desasignadas(
     origen_fecha: date | None = None,
     notas_extra: str | None = None,
 ) -> list[int]:
-    """Cierra en auditoría las incidencias abiertas de esa obra (mismo plan).
+    """Cierra / ack-plan en auditoría las incidencias abiertas de esa obra.
 
-    No toca el libro de fichajes: solo cambia estado del ``RegistroFichaje``.
-    Devuelve IDs cerrados.
+    No toca el libro de fichajes: solo cambia el ``RegistroFichaje``.
+    En Conflicto/Disputa no mata el lado real (queda pendiente de aceptar).
+    Devuelve IDs tocados (cerrados o con plan ack).
     """
     from app.models import RegistroFichaje
     from app.utils.timezone_utils import utc_now
@@ -214,23 +269,12 @@ def cerrar_incidencias_abiertas_desasignadas(
     if notas_extra:
         nota = f"{nota} Comentario: {notas_extra}".strip()
 
-    closed = []
+    touched = []
     now = utc_now()
     for reg in q.all():
-        prev = (reg.estado or '').strip() or None
-        if prev and not (reg.estado_antes_resolucion or '').strip():
-            reg.estado_antes_resolucion = prev
-        reg.estado = 'Resuelto_Falta'
-        reg.resuelto_por_id = actor_id
-        reg.fecha_auditoria = now
-        reg.notas_resolucion = nota
-        # Limpia acks de desvío a medias si los hubiera
-        for attr in (
-            'desvio_decision_plan', 'desvio_decision_real',
-            'desvio_ack_plan_at', 'desvio_ack_real_at',
-            'desvio_ack_plan_by_id', 'desvio_ack_real_by_id',
-        ):
-            if hasattr(reg, attr):
-                setattr(reg, attr, None)
-        closed.append(int(reg.id))
-    return closed
+        result = aplicar_cierre_tras_desasignar_plan(
+            reg, actor_id=actor_id, nota=nota, now=now,
+        )
+        if result != 'skipped':
+            touched.append(int(reg.id))
+    return touched

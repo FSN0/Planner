@@ -3,10 +3,17 @@ from flask_login import login_required, current_user
 # IMPORTAMOS db AQUÍ
 from app import db 
 from app.models import Asignacion, User, Solicitud, Obra, Company, UserObraConfig, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_OPERARIO
-from app.services.permission_service import is_laboral
+from app.services.permission_service import (
+    is_laboral,
+    user_can,
+    can_view_worker_calendar,
+    can_view_obra_calendar,
+    can_view_vehicle_calendar,
+    can_view_empresa_calendar,
+    can_list_recursos_activos,
+)
 from app.services.i18n_service import translate
 from app.services.solicitud_service import solicitud_calendar_title, get_solicitud_valid_dates
-from app.decorators import roles_required_api
 from datetime import datetime, timedelta
 import json
 from collections import defaultdict # AÑADIDO PARA LA LÓGICA DE AGRUPACIÓN
@@ -14,8 +21,6 @@ from collections import defaultdict # AÑADIDO PARA LA LÓGICA DE AGRUPACIÓN
 
 
 api_bp = Blueprint('api_v6', __name__, url_prefix='/api/v6')
-
-_ROLES_OFICINA = (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH)
 
 
 def _obra_label(obra, fallback='Obra desconocida'):
@@ -27,74 +32,80 @@ def _obra_label(obra, fallback='Obra desconocida'):
     return obra.nombre or fallback
 
 
+def _deny_cal():
+    return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
+
+
 def _autorizar_calendario(context, entity_id):
+    """Autorización por matriz de permisos (sin listas de roles).
+
+    - worker: ``trabajadores`` r (cualquier persona) o portal propio.
+    - obra: ``tablero`` / ``directorio`` r.
+    - vehiculo: ``vehiculos`` r.
+    - empresa: ``subcontratas`` r.
+    - solicitud: ``solicitudes`` r.
+    La escritura la cortan ``asignaciones`` w + custodia/solicitudes.
     """
-    Perfiles de oficina + operario solo sobre su propio calendario (permisos).
-    El PIN del operario no abre calendarios ajenos (RGPD).
-    """
-    if current_user.role == ROLE_OPERARIO:
-        if context == 'worker' and entity_id == current_user.id:
-            from app.services.permission_service import user_can
-            if user_can(current_user, 'operario_calendario', 'r') or user_can(
-                current_user, 'operario_web', 'r'
-            ):
-                return None
-        return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
+    ctx = (context or '').strip().lower()
 
-    if current_user.role not in _ROLES_OFICINA:
-        return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
+    if ctx == 'worker':
+        if can_view_worker_calendar(current_user, entity_id):
+            return None
+        return _deny_cal()
 
-    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        return None
-
-    # Jefe de obra: ve calendarios de cualquier persona; obras solo las suyas.
-    if context == 'obra':
+    if ctx == 'obra':
+        if not can_view_obra_calendar(current_user):
+            return _deny_cal()
         obra = Obra.query.get(entity_id)
-        if not obra or obra.jefe_obra_id != current_user.id:
-            return jsonify({'success': False, 'error': translate('No tienes permiso sobre esta obra')}), 403
-    elif context == 'worker':
-        # Lectura abierta: la escritura la corta can_write_assignments + custodia.
+        if not obra:
+            return _deny_cal()
         return None
-    elif context == 'empresa':
-        return jsonify({'success': False, 'error': translate('Acceso no autorizado')}), 403
-    # vehiculo / solicitud: el jefe puede consultar (planificación compartida)
-    return None
+
+    if ctx == 'vehiculo':
+        if can_view_vehicle_calendar(current_user):
+            return None
+        return _deny_cal()
+
+    if ctx == 'empresa':
+        if can_view_empresa_calendar(current_user):
+            return None
+        return _deny_cal()
+
+    if ctx == 'solicitud':
+        if user_can(current_user, 'solicitudes', 'r'):
+            return None
+        return _deny_cal()
+
+    return _deny_cal()
 
 
 @api_bp.route('/recursos_activos', methods=['GET'])
 @login_required
-@roles_required_api(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def recursos_activos():
-    """Devuelve las obras y usuarios activos filtrados por el rol (Para selectores y modales)"""
-    
-    # 1. Filtro de seguridad para Obras
-    if current_user.role == ROLE_ADMIN:
-        obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
-    elif current_user.role == ROLE_JEFE:
-        obras = Obra.query.filter_by(is_deleted=False, jefe_obra_id=current_user.id).order_by(Obra.nombre).all()
-    elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
+    """Obras y usuarios para selectores de calendario / asignación (matriz)."""
+    if not can_list_recursos_activos(current_user):
+        return jsonify({
+            'success': False,
+            'error': translate('Acceso no autorizado'),
+            'permission_denied': True,
+        }), 403
+
+    # Obras: quien planifica o ve tablero/directorio ve el catálogo completo.
+    # (La escritura real la acota custodia/solicitudes al asignar.)
+    if any(
+        user_can(current_user, mod, 'r')
+        for mod in ('tablero', 'directorio', 'planificador', 'asignaciones', 'vehiculos')
+    ):
         obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
     else:
         obras = []
 
-    # 2. Usuarios: nunca la plantilla completa a quien no sea admin/laboral
-    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
+    # Usuarios: lectura de trabajadores ⇒ plantilla completa.
+    if user_can(current_user, 'trabajadores', 'r'):
         users = User.query.filter_by(is_deleted=False).order_by(User.name).all()
-    elif current_user.role == ROLE_JEFE:
-        obra_ids = [o.id for o in obras]
-        user_ids = {current_user.id}
-        if obra_ids:
-            for row in Asignacion.query.filter(Asignacion.obra_id.in_(obra_ids)).with_entities(Asignacion.user_id).distinct():
-                user_ids.add(row[0])
-        users = (
-            User.query.filter(User.id.in_(user_ids), User.is_deleted.is_(False))
-            .order_by(User.name)
-            .all()
-            if user_ids else []
-        )
     else:
         users = []
-    
+
     return jsonify({
         'obras': [
             {
@@ -1741,7 +1752,7 @@ def person_day_timeline(user_id, fecha_str):
     from flask import current_app
     from app.services.person_day_timeline_service import build_person_day_timeline
 
-    if current_user.role not in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH):
+    if not can_view_worker_calendar(current_user, user_id):
         return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
     try:
@@ -1765,7 +1776,7 @@ def person_day_timeline_range(user_id):
     """Rango de fechas: ?from=YYYY-MM-DD&to=YYYY-MM-DD (uno solo = un día)."""
     from app.services.person_day_timeline_service import build_person_day_timeline_range
 
-    if current_user.role not in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH):
+    if not can_view_worker_calendar(current_user, user_id):
         return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
     fecha_from = request.args.get('from') or request.args.get('fecha_inicio')

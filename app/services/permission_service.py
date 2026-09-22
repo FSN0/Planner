@@ -299,6 +299,45 @@ def can_edit_planning_calendar(user) -> bool:
     return can_write_assignments(user)
 
 
+def can_view_worker_calendar(user, worker_id: int | None = None) -> bool:
+    """Lectura de calendario de persona: matriz ``trabajadores`` (o el propio portal)."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    uid = getattr(user, 'id', None)
+    if worker_id is not None and uid is not None and int(worker_id) == int(uid):
+        if user_can(user, 'operario_calendario', 'r') or user_can(user, 'operario_web', 'r'):
+            return True
+        # Oficina viendo su propia ficha
+        if user_can(user, 'trabajadores', 'r'):
+            return True
+        return False
+    return user_can(user, 'trabajadores', 'r')
+
+
+def can_view_obra_calendar(user) -> bool:
+    """Lectura de calendario de obra: si puedes abrir la ficha de obra."""
+    return user_can(user, 'tablero', 'r') or user_can(user, 'directorio', 'r')
+
+
+def can_view_vehicle_calendar(user) -> bool:
+    return user_can(user, 'vehiculos', 'r')
+
+
+def can_view_empresa_calendar(user) -> bool:
+    return user_can(user, 'subcontratas', 'r')
+
+
+def can_list_recursos_activos(user) -> bool:
+    """Selectores del calendario / modales de asignación."""
+    return any(
+        user_can(user, mod, 'r')
+        for mod in (
+            'trabajadores', 'planificador', 'tablero', 'directorio',
+            'asignaciones', 'vehiculos',
+        )
+    )
+
+
 def user_can(user, module: str, action: str) -> bool:
     """
     Comprueba permiso de módulo. action in r|w|x.

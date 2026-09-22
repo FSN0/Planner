@@ -1099,6 +1099,64 @@ col.col-actions-fixed { width: 7.5rem; }
 .auditoria-page .audit-chip-in { background: #ecfdf5; color: #047857; }
 .auditoria-page .audit-chip-out { background: #fef2f2; color: #b91c1c; }
 .auditoria-page .audit-chip-muted { background: #f1f5f9; color: #94a3b8; }
+
+/* Histórico global: columnas cortas al contenido; el resto cede espacio */
+.auditoria-page #historialTable.table-audit--historial {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 980px;
+}
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="fecha"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="entrada"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="salida"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="hora_reg"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="ubicacion"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_ud"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_hh"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_mod"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_moe"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="accion"] {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="fecha"] { width: 5.8rem !important; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="entrada"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="salida"] { width: 5.2rem !important; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="ubicacion"] { width: 2.4rem !important; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_ud"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_hh"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_mod"],
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="odoo_moe"] {
+  width: 2.6rem !important;
+  padding-left: 0.15rem;
+  padding-right: 0.15rem;
+}
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="estado"] { width: 7.5rem !important; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="auditor"] { width: 6.5rem !important; max-width: 7rem; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="hora_reg"] { width: 6rem !important; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="accion"] { width: 5.8rem !important; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="operario"] { width: 10rem !important; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="trazabilidad"] { width: auto !important; min-width: 12rem; }
+.auditoria-page #historialTable.table-audit--historial th[data-col-key="notas"] { width: 7rem !important; }
+.auditoria-page #historialTable.table-audit--historial td.odoo-metric-col,
+.auditoria-page #historialTable.table-audit--historial td.geo-audit-cell {
+  padding-left: 0.15rem;
+  padding-right: 0.15rem;
+  text-align: center;
+}
+.auditoria-page #historialTable.table-audit--historial td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Fecha / horas / métricas: no cortar el chip ni la fecha */
+.auditoria-page #historialTable.table-audit--historial tbody td:nth-child(1),
+.auditoria-page #historialTable.table-audit--historial .audit-chip {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
 .auditoria-page .auditoria-empty {
   padding: 1.25rem; text-align: center; color: var(--color-text-muted);
   font-size: 0.78rem; background: #fff;

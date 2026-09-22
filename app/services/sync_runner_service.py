@@ -190,11 +190,14 @@ def run_auto_sync_subcontratas(modo='Automático'):
         reactivar,
     )
 
-    for obj in diff['empresas']['actualizadas']:
+    for obj in list(diff['empresas'].get('actualizadas') or []) + list(diff['empresas'].get('rellenar_cif') or []):
         comp = Company.query.get(obj['local_id'])
         if comp:
             _set_odoo_external_id(comp, obj['odoo_id'])
-            comp.nombre = obj['nombre']
+            if obj.get('nombre'):
+                comp.nombre = obj['nombre']
+            if obj.get('cif'):
+                comp.nif = obj['cif']
             if not getattr(comp, 'active', True):
                 comp.active = True
             mapa_empresas[obj['odoo_id']] = comp.id
@@ -203,7 +206,9 @@ def run_auto_sync_subcontratas(modo='Automático'):
         nueva = Company(
             external_ids={'odoo': str(obj['odoo_id'])},
             nombre=obj['nombre'],
+            nif=(obj.get('cif') or None) or None,
             active=True,
+            is_internal=False,
         )
         db.session.add(nueva)
         db.session.flush()
@@ -215,8 +220,14 @@ def run_auto_sync_subcontratas(modo='Automático'):
             _set_odoo_external_id(user, obj['odoo_id'])
             user.name = obj['name']
             user.lastname = obj['lastname']
+            user.is_deleted = False
             if obj['dni'] and 'SINDNI' not in obj['dni']:
-                user.dni = obj['dni']
+                choque = User.query.filter(User.dni == obj['dni'], User.id != user.id).first()
+                user.dni = f"{obj['dni']}-EXT{obj['odoo_id']}" if choque else obj['dni']
+            email_nuevo = (obj.get('email') or '').strip()
+            if email_nuevo and email_nuevo != (user.email or ''):
+                if not User.query.filter(User.email == email_nuevo, User.id != user.id).first():
+                    user.email = email_nuevo
             user.categoria_profesional = obj.get('categoria_profesional')
             odoo_c_id = obj.get('odoo_company_id')
             if odoo_c_id:
@@ -232,6 +243,7 @@ def run_auto_sync_subcontratas(modo='Automático'):
                 user.active = True
 
     dnis_en_tx = set()
+    emails_en_tx = set()
     for obj in diff['empleados']['nuevos']:
         odoo_c_id = obj.get('odoo_company_id')
         local_comp_id = mapa_empresas.get(odoo_c_id)
@@ -241,13 +253,34 @@ def run_auto_sync_subcontratas(modo='Automático'):
                 local_comp_id = comp.id
                 mapa_empresas[odoo_c_id] = local_comp_id
         dni = obj['dni']
+        email = (obj.get('email') or '').strip() or f"ext_{obj['odoo_id']}@subcontrata.local"
+
+        existente = User.query.filter((User.dni == dni) | (User.email == email)).first()
+        if existente:
+            _set_odoo_external_id(existente, obj['odoo_id'])
+            existente.name = obj['name']
+            existente.lastname = obj['lastname']
+            existente.categoria_profesional = obj.get('categoria_profesional')
+            existente.company_id = local_comp_id or existente.company_id
+            existente.is_deleted = False
+            if not existente.active:
+                reactivar(existente, commit=False)
+            else:
+                existente.active = True
+            dnis_en_tx.add(existente.dni)
+            emails_en_tx.add(existente.email)
+            continue
+
         if User.query.filter_by(dni=dni).first() or dni in dnis_en_tx:
             dni = f"{dni}-EXT{obj['odoo_id']}"
+        if User.query.filter_by(email=email).first() or email in emails_en_tx:
+            email = f"ext_{obj['odoo_id']}_dup@subcontrata.local"
         dnis_en_tx.add(dni)
+        emails_en_tx.add(email)
         db.session.add(User(
             external_ids={'odoo': str(obj['odoo_id'])},
             name=obj['name'], lastname=obj['lastname'],
-            dni=dni, email=obj['email'], role=obj['role'],
+            dni=dni, email=email, role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional'),
             company_id=local_comp_id, active=True, email_verified=True,
             password_hash=generate_password_hash(secrets.token_urlsafe(24)),

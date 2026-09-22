@@ -117,3 +117,79 @@ def test_open_audit_dates_include_later_ausencia():
     assert conflict in out['cut_dates']
     assert ausencia in out['cut_dates']
     assert ausencia in out['open_audit_dates']
+
+
+class _FakeReg:
+    def __init__(self, **kwargs):
+        self.estado = kwargs.get('estado')
+        self.estado_antes_resolucion = kwargs.get('estado_antes_resolucion')
+        self.desvio_decision_plan = kwargs.get('desvio_decision_plan')
+        self.desvio_decision_real = kwargs.get('desvio_decision_real')
+        self.desvio_ack_plan_at = kwargs.get('desvio_ack_plan_at')
+        self.desvio_ack_real_at = kwargs.get('desvio_ack_real_at')
+        self.desvio_ack_plan_by_id = kwargs.get('desvio_ack_plan_by_id')
+        self.desvio_ack_real_by_id = kwargs.get('desvio_ack_real_by_id')
+        self.resuelto_por_id = kwargs.get('resuelto_por_id')
+        self.fecha_auditoria = kwargs.get('fecha_auditoria')
+        self.notas_resolucion = kwargs.get('notas_resolucion')
+
+
+def test_cierre_conflicto_solo_ack_plan():
+    from datetime import datetime
+    from app.services.audit_unassign_scope_service import aplicar_cierre_tras_desasignar_plan
+
+    reg = _FakeReg(estado='Conflicto')
+    now = datetime(2026, 9, 21, 12, 0, 0)
+    result = aplicar_cierre_tras_desasignar_plan(
+        reg, actor_id=7, nota='lote', now=now,
+    )
+    assert result == 'plan_acked'
+    assert reg.estado == 'Conflicto'
+    assert reg.desvio_ack_plan_at == now
+    assert reg.desvio_ack_plan_by_id == 7
+    assert reg.desvio_decision_plan == 'liberar'
+    assert reg.desvio_ack_real_at is None
+
+
+def test_cierre_conflicto_con_real_ya_ack_resuelve():
+    from datetime import datetime
+    from app.services.audit_unassign_scope_service import aplicar_cierre_tras_desasignar_plan
+
+    now = datetime(2026, 9, 21, 12, 0, 0)
+    reg = _FakeReg(
+        estado='Conflicto',
+        desvio_ack_real_at=now,
+        desvio_ack_real_by_id=3,
+    )
+    result = aplicar_cierre_tras_desasignar_plan(
+        reg, actor_id=7, nota='lote', now=now,
+    )
+    assert result == 'closed'
+    assert reg.estado == 'Resuelto_Movido'
+    assert reg.desvio_ack_plan_at == now
+
+
+def test_cierre_ausencia_resuelto_falta():
+    from datetime import datetime
+    from app.services.audit_unassign_scope_service import aplicar_cierre_tras_desasignar_plan
+
+    now = datetime(2026, 9, 21, 12, 0, 0)
+    reg = _FakeReg(estado='Ausencia')
+    result = aplicar_cierre_tras_desasignar_plan(
+        reg, actor_id=7, nota='lote', now=now,
+    )
+    assert result == 'closed'
+    assert reg.estado == 'Resuelto_Falta'
+    assert reg.estado_antes_resolucion == 'Ausencia'
+
+
+def test_cierre_paracaidista_skipped():
+    from datetime import datetime
+    from app.services.audit_unassign_scope_service import aplicar_cierre_tras_desasignar_plan
+
+    reg = _FakeReg(estado='Paracaidista')
+    result = aplicar_cierre_tras_desasignar_plan(
+        reg, actor_id=7, nota='lote', now=datetime(2026, 9, 21),
+    )
+    assert result == 'skipped'
+    assert reg.estado == 'Paracaidista'

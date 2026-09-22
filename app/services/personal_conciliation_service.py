@@ -917,24 +917,79 @@ def _reassign_user_fks(from_id: int, to_id: int, *, actor_id: int | None = None)
 
 
 def _merge_odoo_ids(keep: User, absorb: User) -> None:
+    """Pasa vínculos Odoo del absorbido al que se conserva.
+
+    Si el keep ya tiene un odoo distinto (p.ej. hr.employee) y el absorbido
+    traía otro (p.ej. res.partner de subcontrata), el partner NO se pierde:
+    pasa a odoo_alias_ids. Si se pierde, el sync de subcontratas intenta
+    recrear al externo y choca con el email sintético del archivado.
+    """
     keep_ext = dict(keep.external_ids or {})
     abs_ext = dict(absorb.external_ids or {})
-    if abs_ext.get('odoo') and not keep_ext.get('odoo'):
-        keep_ext['odoo'] = str(abs_ext['odoo'])
-        if abs_ext.get('odoo_model'):
-            keep_ext['odoo_model'] = abs_ext['odoo_model']
+
+    keep_oids = set(odoo_ids_for_user(keep))
+    abs_oids = odoo_ids_for_user(absorb)
+
+    alias_ids = [str(x) for x in (keep_ext.get('odoo_alias_ids') or []) if str(x).strip()]
+    alias_detail = list(keep_ext.get('odoo_aliases') or [])
+    if not isinstance(alias_detail, list):
+        alias_detail = []
+
+    def _add_alias(oid: str, model: str | None = None, barcode: str | None = None):
+        oid = str(oid or '').strip()
+        if not oid or oid in keep_oids:
+            return
+        keep_oids.add(oid)
+        if oid not in alias_ids:
+            alias_ids.append(oid)
+        alias_detail.append({
+            'odoo_id': oid,
+            'odoo_model': model or abs_ext.get('odoo_model') or 'res.partner',
+            'barcode': barcode or None,
+        })
+
+    abs_primary = str(abs_ext.get('odoo') or '').strip()
+    if abs_primary:
+        if not keep_ext.get('odoo'):
+            keep_ext['odoo'] = abs_primary
+            if abs_ext.get('odoo_model'):
+                keep_ext['odoo_model'] = abs_ext['odoo_model']
+            keep_oids.add(abs_primary)
+        elif abs_primary not in keep_oids:
+            _add_alias(abs_primary, abs_ext.get('odoo_model'), abs_ext.get('barcode'))
+
+    for raw in abs_ext.get('odoo_alias_ids') or []:
+        _add_alias(str(raw))
+    for raw in abs_ext.get('odoo_aliases') or []:
+        if isinstance(raw, dict):
+            _add_alias(raw.get('odoo_id'), raw.get('odoo_model'), raw.get('barcode'))
+        else:
+            _add_alias(raw)
+
     if abs_ext.get('barcode') and not keep_ext.get('barcode'):
         keep_ext['barcode'] = abs_ext['barcode']
+
+    if alias_ids:
+        keep_ext['odoo_alias_ids'] = alias_ids
+        keep_ext['odoo_aliases'] = alias_detail
+
     abs_base = normalize_dni(absorb.dni)
     keep_base = normalize_dni(keep.dni)
     if abs_base and keep_base == abs_base:
         if keep.dni and ('-EXT' in keep.dni.upper() or '-ODOO' in keep.dni.upper()):
             if absorb.dni and '-EXT' not in absorb.dni.upper() and '-ODOO' not in absorb.dni.upper():
                 keep._pending_dni = absorb.dni  # type: ignore[attr-defined]
+
     keep.external_ids = keep_ext
     flag_modified(keep, 'external_ids')
-    if 'odoo' in abs_ext:
-        abs_ext.pop('odoo', None)
+
+    # Liberar ids Odoo en la ficha absorbida (ya viven en keep).
+    changed_abs = False
+    for key in ('odoo', 'odoo_model', 'odoo_alias_ids', 'odoo_aliases', 'barcode'):
+        if key in abs_ext:
+            abs_ext.pop(key, None)
+            changed_abs = True
+    if changed_abs:
         absorb.external_ids = abs_ext
         flag_modified(absorb, 'external_ids')
 
@@ -949,6 +1004,14 @@ def _mark_merged_archive(absorb: User, keep: User, *, actor_id: int | None = Non
         f'Unificado por conciliación de personal en «{keep_label}» (#{keep.id}). '
         f'Esta ficha se archiva; el contacto vivo queda en ese registro.'
     )
+    # Liberar email antes del soft_delete: soft_delete solo libera DNI.
+    # Si no, el sync de subcontratas choca con ext_*@subcontrata.local.
+    old_email = (absorb.email or '').strip()
+    if old_email:
+        absorb.email = f"merged_{absorb.id}_{old_email}"
+        if len(absorb.email) > 120:
+            absorb.email = f"merged_{absorb.id}@subcontrata.local"
+
     absorb.soft_delete(actor_id=actor_id)
     absorb.deactivation_reason = 'merged'
     ext = dict(absorb.external_ids or {})
@@ -956,6 +1019,8 @@ def _mark_merged_archive(absorb: User, keep: User, *, actor_id: int | None = Non
     ext['merged_into_label'] = keep_label
     ext['merged_reason'] = motivo
     ext['merged_at'] = utc_now().isoformat()
+    if old_email:
+        ext['merged_from_email'] = old_email
     absorb.external_ids = ext
     flag_modified(absorb, 'external_ids')
     db.session.add(SystemLog(

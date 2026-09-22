@@ -31,13 +31,31 @@
     </header>
 
     <div class="sync-preview-stats">
+      {{ stat_chip('En Odoo', preview.stats.empresas_odoo, 'muted') }}
       {{ stat_chip('Empresas nuevas', preview.stats.empresas_nuevas, 'ok') }}
       {{ stat_chip('Empresas act.', preview.stats.empresas_act, 'ok') }}
+      {{ stat_chip('CIF a rellenar', preview.stats.empresas_rellenar_cif, 'muted') }}
+      {{ stat_chip('Sin cambios', preview.stats.empresas_sin_cambios, 'muted') }}
       {{ stat_chip('Externos nuevos', preview.stats.externos_nuevos, 'ok') }}
       {{ stat_chip('Externos act.', preview.stats.externos_act, 'ok') }}
       {{ stat_chip('Bajas', preview.stats.desactivados, 'warn') }}
       {{ stat_chip('Avisos DNI', preview.incidencias_empleados|length, 'warn') }}
     </div>
+
+    {% if preview.stats.empresas_odoo == 0 %}
+    <div class="alert alert-warning">
+      <i class="fas fa-exclamation-triangle mr-1"></i>
+      {{ _('Odoo no ha devuelto ninguna empresa con etiqueta de subcontrata.') }}
+      {{ _('Comprueba: 1) etiqueta cuyo nombre contenga Subcontrata/Subcontractor, 2) contacto marcado como empresa o sin empresa padre, 3) no archivado.') }}
+    </div>
+    {% endif %}
+
+    {% if preview.rellenar_cif %}
+    <div class="alert alert-light border small mb-3">
+      <i class="fas fa-info-circle mr-1"></i>
+      {{ _('Al guardar se rellenarán {n} CIF vacíos desde Odoo (no son cambios reales de ficha).').format(n=preview.rellenar_cif|length) }}
+    </div>
+    {% endif %}
 
     {% if preview.incidencias_empleados %}
     <section class="sync-preview-section sync-preview-section--warn">
@@ -77,6 +95,25 @@
         {% else %}<p class="text-muted small">{{ _('Ninguno.') }}</p>{% endfor %}
       </section>
     </div>
+
+    {% if preview.sin_cambios_empresas %}
+    <section class="sync-preview-section">
+      <h2 class="sync-preview-section-title text-muted">
+        <i class="fas fa-equals"></i>
+        {{ _('Empresas ya vinculadas (sin cambios)') }} ({{ preview.sin_cambios_empresas|length }})
+      </h2>
+      <p class="text-muted small">{{ _('Están en Odoo y en SignaPlan; no hay nada que guardar. Si buscas una y está aquí, ya está importada.') }}</p>
+      <div class="sync-preview-two-col">
+        {% for emp in preview.sin_cambios_empresas %}
+        <div class="sync-preview-card">
+          <strong>{{ emp.nombre }}</strong>
+          {% if emp.cif %}<span class="text-muted small">({{ emp.cif }})</span>{% endif %}
+          <div class="small text-muted">Odoo #{{ emp.odoo_id }}{% if emp.local_id %} · local #{{ emp.local_id }}{% endif %}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
 
     {% if preview.desactivados %}
     <section class="sync-preview-section sync-preview-section--warn">

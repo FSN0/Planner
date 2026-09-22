@@ -819,18 +819,183 @@ class Adapter(BaseSyncAdapter):
             })
         diff['empleados']['desactivados'] = desactivados
 
+    def _subcontrata_category_ids(self):
+        """IDs de etiquetas res.partner.category de subcontrata (ES/EN/PT/FR)."""
+        # Odoo a menudo guarda el name en inglés («Subcontractor»): NO contiene
+        # «subcontrat» (subcontraCt vs subcontraT), así que había que ampliar.
+        name_patterns = (
+            'subcontrat',   # Subcontrata, Subcontratas, Subcontratista
+            'subcontract',  # Subcontractor, Subcontractors
+            'sous-trait',   # Sous-traitant
+            'subempreit',   # Subempreiteira
+        )
+        domain = []
+        if len(name_patterns) > 1:
+            domain.extend(['|'] * (len(name_patterns) - 1))
+        for pat in name_patterns:
+            domain.append(('name', 'ilike', pat))
+        try:
+            ids = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'res.partner.category', 'search',
+                [domain],
+            ) or []
+            if ids:
+                try:
+                    rows = self.models.execute_kw(
+                        self.db_name, self.uid, self.pwd,
+                        'res.partner.category', 'read',
+                        [ids],
+                        {'fields': ['id', 'name']},
+                    ) or []
+                    logger.info(
+                        "[Odoo Adapter - Tenant %s] Categorías subcontrata: %s",
+                        self.tenant_id,
+                        ', '.join(f"{r.get('id')}={r.get('name')!r}" for r in rows),
+                    )
+                except Exception:
+                    pass
+            else:
+                logger.warning(
+                    "[Odoo Adapter - Tenant %s] Ninguna res.partner.category "
+                    "coincide con %s — el pull de empresas saldrá vacío.",
+                    self.tenant_id, name_patterns,
+                )
+            return ids
+        except Exception as exc:
+            logger.warning(
+                "[Odoo Adapter - Tenant %s] No se pudieron leer categorías subcontrata: %s",
+                self.tenant_id, exc,
+            )
+            return []
+
+    def _find_local_externo(self, odoo_id, dni_seguro, email):
+        """Resuelve externo local por Odoo / DNI (con sufijo) / email, incl. archivados.
+
+        Si la ficha encontrada está unificada por conciliación (merged_into_user_id),
+        devolvemos la ficha viva, no el fantasma archivado.
+        """
+        from app.services.personal_conciliation_service import find_user_by_any_odoo
+
+        def _resolve(u):
+            if not u:
+                return None
+            if u.is_deleted and (u.external_ids or {}).get('merged_into_user_id'):
+                keep_id = (u.external_ids or {}).get('merged_into_user_id')
+                try:
+                    keep = User.query.get(int(keep_id))
+                except (TypeError, ValueError):
+                    keep = None
+                if keep and not keep.is_deleted:
+                    return keep
+            return u
+
+        local_user = find_user_by_any_odoo(odoo_id, include_deleted=True)
+        if local_user:
+            return _resolve(local_user)
+        if dni_seguro:
+            local_user = User.query.filter(User.dni == dni_seguro).first()
+            if local_user:
+                return _resolve(local_user)
+            local_user = User.query.filter(
+                User.dni == f"{dni_seguro}-EXT{odoo_id}"
+            ).first()
+            if local_user:
+                return _resolve(local_user)
+        if email:
+            # Preferir ficha viva si hay varias (no debería; email es unique).
+            local_user = (
+                User.query
+                .filter(User.email == email)
+                .order_by(User.is_deleted.asc(), User.id.asc())
+                .first()
+            )
+            if local_user:
+                return _resolve(local_user)
+            # Tras merge el email del fantasma queda merged_*_…; buscar el original.
+            local_user = User.query.filter(
+                User.external_ids['merged_from_email'].astext == email
+            ).first()
+            if local_user:
+                return _resolve(local_user)
+        return None
+
+    def _normalize_vat(self, raw):
+        """Compara CIF/NIF sin ruido (espacios, guiones, prefijo ES, 'None')."""
+        if raw in (False, None, ''):
+            return ''
+        s = str(raw).strip()
+        if s.lower() in ('none', 'null', 'false', '—', '-', 'n/a'):
+            return ''
+        s = s.upper()
+        s = ''.join(ch for ch in s if ch.isalnum())
+        if s.startswith('ES') and len(s) > 2:
+            s = s[2:]
+        return s
+
     def get_diff_subcontratas(self):
-        domain_empresas = [
-            ('is_company', '=', True),
-            ('category_id.name', 'ilike', 'subcontrata')
-        ]
-        odoo_empresas = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'res.partner', 'search_read', [domain_empresas], {'fields': ['id', 'name', 'vat']})
-        
+        cat_ids = self._subcontrata_category_ids()
+        # Empresa = etiqueta + (marca compañía O sin padre). Si olvidan
+        # «Es una empresa» en Odoo pero etiquetan un partner raíz, igual entra.
+        if cat_ids:
+            domain_empresas = [
+                ('category_id', 'in', cat_ids),
+                '|',
+                ('is_company', '=', True),
+                ('parent_id', '=', False),
+            ]
+        else:
+            domain_empresas = [
+                '&',
+                '|', '|', '|',
+                ('category_id.name', 'ilike', 'subcontrat'),
+                ('category_id.name', 'ilike', 'subcontract'),
+                ('category_id.name', 'ilike', 'sous-trait'),
+                ('category_id.name', 'ilike', 'subempreit'),
+                '|',
+                ('is_company', '=', True),
+                ('parent_id', '=', False),
+            ]
+        try:
+            odoo_empresas = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'res.partner', 'search_read',
+                [domain_empresas],
+                {
+                    'fields': ['id', 'name', 'vat', 'category_id', 'is_company', 'parent_id'],
+                    'limit': 10000,
+                },
+            )
+        except Exception as exc:
+            logger.error(
+                "[Odoo Adapter - Tenant %s] search_read subcontratas falló: %s",
+                self.tenant_id, exc,
+            )
+            raise
+
+        if not isinstance(odoo_empresas, list):
+            odoo_empresas = []
+
+        logger.info(
+            "[Odoo Adapter - Tenant %s] Subcontratas Odoo: %s empresas "
+            "(category_ids=%s)",
+            self.tenant_id, len(odoo_empresas), cat_ids,
+        )
+
         diff = {
-            'empresas': {'nuevas': [], 'actualizadas': []},
-            'empleados': {'nuevos': [], 'actualizados': [], 'desactivados': []}
+            'empresas': {
+                'nuevas': [],
+                'actualizadas': [],
+                'sin_cambios': [],
+                'rellenar_cif': [],
+            },
+            'empleados': {'nuevos': [], 'actualizados': [], 'desactivados': []},
+            'meta': {
+                'category_ids': list(cat_ids),
+                'empresas_odoo': len(odoo_empresas),
+            },
         }
-        
+
         if not odoo_empresas:
             # Aun sin empresas en el pull, evaluar bajas de vinculados.
             self._append_desactivados_subcontratas(diff, set())
@@ -843,7 +1008,15 @@ class Adapter(BaseSyncAdapter):
             ('is_company', '=', False),
             ('active', '=', True)
         ]
-        odoo_contactos = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'res.partner', 'search_read', [domain_contactos], {'fields': ['id', 'name', 'email', 'vat', 'function', 'parent_id']})
+        odoo_contactos = self.models.execute_kw(
+            self.db_name, self.uid, self.pwd,
+            'res.partner', 'search_read',
+            [domain_contactos],
+            {
+                'fields': ['id', 'name', 'email', 'vat', 'function', 'parent_id'],
+                'limit': 10000,
+            },
+        ) or []
 
         seen_odoo_ids = set()
         seen_local_ids = set()
@@ -852,49 +1025,75 @@ class Adapter(BaseSyncAdapter):
             local_comp = Company.query.filter(Company.external_ids['odoo'].astext == str(o_emp['id'])).first()
             if not local_comp:
                 local_comp = Company.query.filter(Company.nombre == o_emp['name']).first()
-                
+            vat = o_emp.get('vat') or ''
+            if vat in (False, None):
+                vat = ''
+            vat = str(vat).strip()
+            if not local_comp and vat:
+                # Match por NIF normalizado (local puede tener ES/espacios).
+                vat_norm = self._normalize_vat(vat)
+                if vat_norm:
+                    for cand in Company.query.filter(Company.nif.isnot(None)).all():
+                        if self._normalize_vat(cand.nif) == vat_norm:
+                            local_comp = cand
+                            break
+
             data_emp = {
                 'odoo_id': o_emp['id'],
                 'nombre': o_emp['name'],
-                'cif': o_emp.get('vat') or '',
+                'cif': vat,
                 'cambios': {}
             }
-            
+
             if local_comp:
                 data_emp['local_id'] = local_comp.id
-                if local_comp.nombre != o_emp['name']: data_emp['cambios']['Nombre'] = f"{local_comp.nombre} ➔ {o_emp['name']}"
+                if local_comp.nombre != o_emp['name']:
+                    data_emp['cambios']['Nombre'] = f"{local_comp.nombre} ➔ {o_emp['name']}"
+                local_vat_norm = self._normalize_vat(local_comp.nif)
+                odoo_vat_norm = self._normalize_vat(vat)
+                # Solo ruido visible si AMBOS tienen CIF y discrepan.
+                # Rellenar vacío/None desde Odoo va a rellenar_cif (no satura la lista).
+                if odoo_vat_norm and local_vat_norm and local_vat_norm != odoo_vat_norm:
+                    data_emp['cambios']['CIF'] = f"{local_comp.nif or '—'} ➔ {vat}"
                 if not getattr(local_comp, 'active', True):
                     data_emp['cambios']['Estado'] = 'Inactiva ➔ Activa (reincorporación)'
-                if data_emp['cambios'] or not local_comp.external_ids.get('odoo'):
+                needs_cif_fill = bool(odoo_vat_norm and not local_vat_norm)
+                if data_emp['cambios'] or not (local_comp.external_ids or {}).get('odoo'):
                     diff['empresas']['actualizadas'].append(data_emp)
+                elif needs_cif_fill:
+                    diff['empresas']['rellenar_cif'].append(data_emp)
+                else:
+                    diff['empresas']['sin_cambios'].append(data_emp)
             else:
                 diff['empresas']['nuevas'].append(data_emp)
 
         for o_cont in odoo_contactos:
             raw_vat = o_cont.get('vat')
+            if raw_vat in (False, None):
+                raw_vat = ''
+            raw_vat = str(raw_vat).strip()
             odoo_company_id = o_cont.get('parent_id')[0] if o_cont.get('parent_id') else None
-            
+
             if not raw_vat or raw_vat[0].upper() in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'N', 'P', 'Q', 'R', 'S', 'U', 'V', 'W']:
                 dni_seguro = f"EXT-{o_cont['id']}"
             else:
                 dni_seguro = raw_vat
 
-            email = o_cont.get('email') or f"ext_{o_cont['id']}@subcontrata.local"
-            
-            from app.services.personal_conciliation_service import (
-                find_user_by_any_odoo,
-                odoo_ids_for_user,
-            )
-            local_user = find_user_by_any_odoo(o_cont['id'], include_deleted=True)
-            if local_user and local_user.is_deleted:
-                local_user = None
-            if not local_user:
-                local_user = User.query.filter(User.dni == dni_seguro).first()
-            
-            parts = o_cont.get('name', '').split(' ', 1)
+            raw_email = o_cont.get('email')
+            if raw_email in (False, None, ''):
+                email = f"ext_{o_cont['id']}@subcontrata.local"
+            else:
+                email = str(raw_email).strip()
+
+            from app.services.personal_conciliation_service import odoo_ids_for_user
+            # No descartar is_deleted: si no, se intenta INSERT con el mismo
+            # ext_*@subcontrata.local y peta users_email_key.
+            local_user = self._find_local_externo(o_cont['id'], dni_seguro, email)
+
+            parts = (o_cont.get('name') or '').split(' ', 1)
             name = parts[0]
             lastname = parts[1] if len(parts) > 1 else ''
-            
+
             data_cont = {
                 'odoo_id': o_cont['id'],
                 'name': name,
@@ -907,7 +1106,7 @@ class Adapter(BaseSyncAdapter):
                 'cambios': {}
             }
             seen_odoo_ids.add(str(o_cont['id']))
-            
+
             if local_user:
                 data_cont['local_id'] = local_user.id
                 seen_local_ids.add(local_user.id)
@@ -919,23 +1118,23 @@ class Adapter(BaseSyncAdapter):
                     data_cont['cambios']['Id Odoo'] = f"{stored_oid} ➔ {o_cont['id']}"
                 if local_user.name != name:
                     data_cont['cambios']['Nombre'] = f"{local_user.name} -> {name}"
-                
+
                 dni_local = local_user.dni
                 dni_con_sufijo = f"{dni_seguro}-EXT{o_cont['id']}"
-                
+
                 if dni_local != dni_seguro and dni_local != dni_con_sufijo:
                     data_cont['cambios']['DNI'] = f"{dni_local} -> {dni_seguro}"
-                
+
                 # Extracción segura de la compañía desde JSONB
                 local_odoo_company = int(local_user.company_rel.external_ids.get('odoo')) if local_user.company_rel and local_user.company_rel.external_ids and local_user.company_rel.external_ids.get('odoo') else None
-                
+
                 if local_odoo_company != odoo_company_id:
                     data_cont['cambios']['Empresa'] = "Auto-corrección de empresa huérfana"
 
-                if not local_user.active:
+                if local_user.is_deleted or not local_user.active:
                     data_cont['cambios']['Estado'] = 'Inactivo ➔ Activo (reincorporación)'
-                
-                if data_cont['cambios'] or not local_user.external_ids.get('odoo'):
+
+                if data_cont['cambios'] or not (local_user.external_ids or {}).get('odoo'):
                     diff['empleados']['actualizados'].append(data_cont)
             else:
                 diff['empleados']['nuevos'].append(data_cont)
@@ -1284,7 +1483,12 @@ class Adapter(BaseSyncAdapter):
         return None, None
 
     def get_diff_vehiculos(self):
-        """Diff fleet.vehicle ↔ Vehiculo local (external_ids['odoo'])."""
+        """Diff fleet.vehicle ↔ Vehiculo local (external_ids['odoo']).
+
+        Incluye archivados (active_test=False): si solo pedimos active=True,
+        los inactivos de Odoo no entran al loop y solo se desactivaban locales
+        que ya tenían vínculo odoo — matrícula sin link quedaba asignable.
+        """
         import logging
         logger = logging.getLogger(__name__)
         empty = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'error': None}
@@ -1300,13 +1504,21 @@ class Adapter(BaseSyncAdapter):
         fields = [f for f in wanted if f in available] or ['id', 'name']
         if 'license_plate' not in fields and 'license_plate' in available:
             fields.append('license_plate')
+        # active hace falta para bajar flota archivada; forzar si el modelo lo tiene.
+        if 'active' in available and 'active' not in fields:
+            fields.append('active')
 
         try:
             odoo_vehicles = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd,
                 'fleet.vehicle', 'search_read',
-                [[('active', '=', True)]],
-                {'fields': fields},
+                [[]],
+                {
+                    'fields': fields,
+                    'context': {'active_test': False},
+                    # Evitar el límite por defecto (80) de algunas versiones Odoo.
+                    'limit': 10000,
+                },
             )
         except Exception as e:
             empty['error'] = f'Error leyendo fleet.vehicle: {e}'
@@ -1346,10 +1558,10 @@ class Adapter(BaseSyncAdapter):
                         )
 
         diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'error': None}
-        active_odoo_ids = set()
+        seen_odoo_ids = set()
 
         for veh in odoo_vehicles:
-            active_odoo_ids.add(str(veh['id']))
+            seen_odoo_ids.add(str(veh['id']))
             model_id, modelo_name = self._m2o_id_name(veh.get('model_id'))
             marca = ''
             if 'brand_id' in fields:
@@ -1399,17 +1611,19 @@ class Adapter(BaseSyncAdapter):
                     diff['actualizados'].append(data)
                 else:
                     diff['sin_cambios'].append(data)
-            else:
+            elif active:
+                # No dar de alta en SignaPlan vehículos ya archivados en Odoo.
                 diff['nuevos'].append(data)
 
-        # Si un vehículo enlazado a Odoo ya no aparece entre los activos,
-        # en Soltech lo tratamos como archivado y se desactiva localmente.
+        # Enlazados locales cuyo id Odoo ya no existe (borrado, no solo archivo).
         local_odoo_vehicles = Vehiculo.query.filter(
-            Vehiculo.external_ids['odoo'].astext.isnot(None)
+            Vehiculo.external_ids.has_key('odoo'),
+            Vehiculo.external_ids['odoo'].astext.isnot(None),
+            Vehiculo.external_ids['odoo'].astext != '',
         ).all()
         for local in local_odoo_vehicles:
             odoo_id = str((local.external_ids or {}).get('odoo') or '').strip()
-            if not odoo_id or odoo_id in active_odoo_ids:
+            if not odoo_id or odoo_id in seen_odoo_ids:
                 continue
             if not bool(local.active):
                 continue

@@ -16,7 +16,7 @@ PERMISSION_MODULES = (
     ('asignaciones', 'Asignar en calendarios', 'Planificación'),
     ('cuadrante_pasado', 'Editar cuadrante en pasado', 'Planificación'),
     ('reuniones', 'Reuniones / notas', 'Planificación'),
-    ('trabajadores', 'Trabajadores', 'Personal'),
+    ('trabajadores', 'Trabajadores (fichas y calendarios)', 'Personal'),
     ('subcontratas', 'Subcontratas', 'Personal'),
     ('solicitudes', 'Solicitudes', 'Personal'),
     ('ausencias', 'Ausencias', 'Personal'),
