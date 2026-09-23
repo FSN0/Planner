@@ -1482,12 +1482,32 @@ class Adapter(BaseSyncAdapter):
             )
         return None, None
 
+    def _norm_matricula(self, val):
+        """Compara matrículas ignorando espacios, guiones y mayúsculas."""
+        if not val:
+            return ''
+        return ''.join(c for c in str(val).upper() if c.isalnum())
+
+    def _fleet_vehicle_search_read(self, fields, domain, *, include_archived=False):
+        opts = {
+            'fields': list(fields),
+            'limit': 10000,
+        }
+        if include_archived:
+            opts['context'] = {'active_test': False}
+        return self.models.execute_kw(
+            self.db_name, self.uid, self.pwd,
+            'fleet.vehicle', 'search_read',
+            [domain],
+            opts,
+        ) or []
+
     def get_diff_vehiculos(self):
         """Diff fleet.vehicle ↔ Vehiculo local (external_ids['odoo']).
 
-        Incluye archivados (active_test=False): si solo pedimos active=True,
-        los inactivos de Odoo no entran al loop y solo se desactivaban locales
-        que ya tenían vínculo odoo — matrícula sin link quedaba asignable.
+        Incluye archivados: si el context active_test se pierde en XML-RPC,
+        hacemos una segunda lectura explícita active=False. Matrículas se
+        comparan normalizadas (9431XXX == 9431-XXX).
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -1498,36 +1518,89 @@ class Adapter(BaseSyncAdapter):
             logger.warning(f"[Odoo Adapter - Tenant {self.tenant_id}] {empty['error']}")
             return empty
 
-        available = self._odoo_fields_get('fleet.vehicle')
+        available = self._odoo_fields_get('fleet.vehicle') or {}
         # Campos estándar Fleet; brand_id puede ser related o ausente según versión.
         wanted = ['id', 'name', 'license_plate', 'model_id', 'brand_id', 'active', 'driver_id']
-        fields = [f for f in wanted if f in available] or ['id', 'name']
-        if 'license_plate' not in fields and 'license_plate' in available:
-            fields.append('license_plate')
-        # active hace falta para bajar flota archivada; forzar si el modelo lo tiene.
-        if 'active' in available and 'active' not in fields:
-            fields.append('active')
+        if available:
+            fields = [f for f in wanted if f in available]
+            # active es crítico: sin él todo parece activo y el preview no ve cambios.
+            if 'active' in available and 'active' not in fields:
+                fields.append('active')
+            if 'license_plate' in available and 'license_plate' not in fields:
+                fields.append('license_plate')
+            if not fields:
+                fields = ['id', 'name']
+        else:
+            # fields_get falló: pedir lo habitual; si Odoo rechaza, reintentamos abajo.
+            fields = list(wanted)
 
         try:
-            odoo_vehicles = self.models.execute_kw(
-                self.db_name, self.uid, self.pwd,
-                'fleet.vehicle', 'search_read',
-                [[]],
-                {
-                    'fields': fields,
-                    'context': {'active_test': False},
-                    # Evitar el límite por defecto (80) de algunas versiones Odoo.
-                    'limit': 10000,
-                },
-            )
+            # 1) Activos (comportamiento por defecto Odoo)
+            odoo_vehicles = list(self._fleet_vehicle_search_read(fields, []))
+            # 2) Archivados explícitos (no depende de que el context viaje bien)
+            try:
+                archived = self._fleet_vehicle_search_read(
+                    fields, [['active', '=', False]], include_archived=True,
+                )
+            except Exception:
+                archived = self._fleet_vehicle_search_read(
+                    fields, [], include_archived=True,
+                )
+            by_id = {int(v['id']): v for v in odoo_vehicles if v.get('id') is not None}
+            for row in archived or []:
+                rid = row.get('id')
+                if rid is None:
+                    continue
+                rid = int(rid)
+                # La lectura archivada manda sobre active
+                prev = by_id.get(rid)
+                if prev is None:
+                    by_id[rid] = row
+                else:
+                    prev['active'] = bool(row.get('active', False))
+                    by_id[rid] = prev
+            odoo_vehicles = list(by_id.values())
         except Exception as e:
-            empty['error'] = f'Error leyendo fleet.vehicle: {e}'
-            logger.error(f"[Odoo Adapter - Tenant {self.tenant_id}] {empty['error']}")
-            return empty
+            # Reintento mínimo si pedimos campos de más
+            try:
+                fields = ['id', 'name', 'license_plate', 'active']
+                odoo_vehicles = list(self._fleet_vehicle_search_read(
+                    fields, [], include_archived=True,
+                ))
+                archived = self._fleet_vehicle_search_read(
+                    fields, [['active', '=', False]], include_archived=True,
+                )
+                by_id = {int(v['id']): v for v in odoo_vehicles if v.get('id') is not None}
+                for row in archived or []:
+                    rid = row.get('id')
+                    if rid is None:
+                        continue
+                    by_id[int(rid)] = row
+                odoo_vehicles = list(by_id.values())
+            except Exception as e2:
+                empty['error'] = f'Error leyendo fleet.vehicle: {e2}'
+                logger.error(f"[Odoo Adapter - Tenant {self.tenant_id}] {empty['error']}")
+                return empty
 
         if not isinstance(odoo_vehicles, list):
             empty['error'] = 'Respuesta inválida de Odoo para fleet.vehicle.'
             return empty
+
+        # Fuente de verdad del flag active (aunque search_read lo omita)
+        try:
+            active_map = self._odoo_read_active_map(
+                'fleet.vehicle',
+                [v['id'] for v in odoo_vehicles if v.get('id') is not None],
+            )
+            for v in odoo_vehicles:
+                info = active_map.get(int(v['id'])) if v.get('id') is not None else None
+                if info is not None and 'active' in info:
+                    v['active'] = bool(info['active'])
+        except Exception as exc:
+            logger.warning(
+                "[Odoo Adapter - Tenant %s] active_map flota: %s",
+                self.tenant_id, exc,
+            )
 
         # Cache marca desde fleet.vehicle.model si no hay brand_id en vehicle
         model_brand_cache = {}
@@ -1557,6 +1630,13 @@ class Adapter(BaseSyncAdapter):
                             f"No se pudo resolver marca vía model: {e}"
                         )
 
+        # Índice local por matrícula normalizada (huérfanos sin link Odoo)
+        locals_by_plate = {}
+        for loc in Vehiculo.query.all():
+            key = self._norm_matricula(loc.matricula)
+            if key and key not in locals_by_plate:
+                locals_by_plate[key] = loc
+
         diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'error': None}
         seen_odoo_ids = set()
 
@@ -1574,7 +1654,11 @@ class Adapter(BaseSyncAdapter):
             matricula = (veh.get('license_plate') or '') if isinstance(veh.get('license_plate'), str) else ''
             matricula = matricula.strip() or None
             nombre = (veh.get('name') or matricula or f"Vehículo {veh['id']}").strip()
-            active = bool(veh.get('active', True))
+            # Sin campo active en la fila → no asumir True (archivados quedarían vivos).
+            if 'active' in veh:
+                active = bool(veh.get('active'))
+            else:
+                active = True
 
             data = {
                 'odoo_id': veh['id'],
@@ -1592,27 +1676,33 @@ class Adapter(BaseSyncAdapter):
                 Vehiculo.external_ids['odoo'].astext == str(veh['id'])
             ).first()
             if not local and matricula:
-                local = Vehiculo.query.filter(Vehiculo.matricula == matricula).first()
+                local = locals_by_plate.get(self._norm_matricula(matricula))
+                if not local:
+                    local = Vehiculo.query.filter(Vehiculo.matricula == matricula).first()
 
             if local:
                 data['local_id'] = local.id
                 if (local.nombre or '') != nombre:
                     data['cambios']['Nombre'] = f"{local.nombre} ➔ {nombre}"
-                if (local.matricula or '') != (matricula or ''):
-                    data['cambios']['Matrícula'] = f"{local.matricula or '—'} ➔ {matricula or '—'}"
+                if self._norm_matricula(local.matricula) != self._norm_matricula(matricula):
+                    if (local.matricula or '') != (matricula or ''):
+                        data['cambios']['Matrícula'] = f"{local.matricula or '—'} ➔ {matricula or '—'}"
                 if (local.marca or '') != (marca or ''):
                     data['cambios']['Marca'] = f"{local.marca or '—'} ➔ {marca or '—'}"
                 if (local.modelo or '') != (modelo_name or ''):
                     data['cambios']['Modelo'] = f"{local.modelo or '—'} ➔ {modelo_name or '—'}"
-                if bool(local.active) != active:
+                if bool(local.active) != bool(active):
                     data['cambios']['Activo'] = f"{local.active} ➔ {active}"
 
                 if data['cambios'] or not (local.external_ids or {}).get('odoo'):
                     diff['actualizados'].append(data)
                 else:
                     diff['sin_cambios'].append(data)
-            elif active:
-                # No dar de alta en SignaPlan vehículos ya archivados en Odoo.
+            else:
+                # También los archivados: entran en SignaPlan como inactivos
+                # (visibles en flota con filtro, no asignables).
+                if not active:
+                    data['cambios']['Activo'] = 'nuevo archivado en Odoo ➔ inactivo'
                 diff['nuevos'].append(data)
 
         # Enlazados locales cuyo id Odoo ya no existe (borrado, no solo archivo).

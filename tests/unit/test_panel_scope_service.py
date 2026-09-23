@@ -1,4 +1,4 @@
-"""Alcance de obras por rol (planificador / tablero)."""
+"""Alcance de obras por rol (planificador / tablero / auditoría fichajes)."""
 import json
 from types import SimpleNamespace
 
@@ -6,6 +6,7 @@ import pytest
 
 from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
 from app.services.panel_scope_service import (
+    PANEL_AUDITORIA_FICHAJES,
     PANEL_PLANIFICADOR,
     PANEL_TABLERO,
     SCOPE_ALL,
@@ -119,26 +120,37 @@ def test_custom_role_none(scope_store):
 def test_panels_are_independent(scope_store):
     set_role_panel_scope('coord', PANEL_PLANIFICADOR, SCOPE_ALL, [])
     set_role_panel_scope('coord', PANEL_TABLERO, SCOPE_JEFES, [2])
+    set_role_panel_scope('coord', PANEL_AUDITORIA_FICHAJES, SCOPE_JEFE, [])
     user = SimpleNamespace(id=1, role='coord')
     assert user_panel_mode(user, PANEL_PLANIFICADOR) == 'office'
     assert user_panel_mode(user, PANEL_TABLERO) == 'custody'
     assert user_custody_jefe_ids(user, PANEL_TABLERO) == [2]
+    assert user_panel_mode(user, PANEL_AUDITORIA_FICHAJES) == 'custody'
+    assert user_custody_jefe_ids(user, PANEL_AUDITORIA_FICHAJES) == [1]
+
+
+def test_rrhh_default_auditoria_is_all(scope_store):
+    assert default_scope_for_role(ROLE_RRHH, PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
+    assert get_role_panel_scope(ROLE_RRHH, PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
 
 
 def test_copy_role_panel_scopes(scope_store):
     set_role_panel_scope(ROLE_LABORAL, PANEL_PLANIFICADOR, SCOPE_ALL, [])
     set_role_panel_scope(ROLE_LABORAL, PANEL_TABLERO, SCOPE_JEFES, [4])
+    set_role_panel_scope(ROLE_LABORAL, PANEL_AUDITORIA_FICHAJES, SCOPE_ALL, [])
     copy_role_panel_scopes(ROLE_LABORAL, 'nuevo_rol')
     assert get_role_panel_scope('nuevo_rol', PANEL_PLANIFICADOR)['mode'] == SCOPE_ALL
     assert get_role_panel_scope('nuevo_rol', PANEL_TABLERO) == {
         'mode': SCOPE_JEFES,
         'jefe_ids': [4],
     }
+    assert get_role_panel_scope('nuevo_rol', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
 
 
 def test_clear_role_panel_scopes(scope_store, monkeypatch):
     set_role_panel_scope('tmp_rol', PANEL_PLANIFICADOR, SCOPE_ALL, [])
     set_role_panel_scope('tmp_rol', PANEL_TABLERO, SCOPE_JEFE, [])
+    set_role_panel_scope('tmp_rol', PANEL_AUDITORIA_FICHAJES, SCOPE_ALL, [])
 
     class FakeRow:
         def __init__(self, clave):
@@ -175,6 +187,7 @@ def test_clear_role_panel_scopes(scope_store, monkeypatch):
     clear_role_panel_scopes('tmp_rol')
     assert get_role_panel_scope('tmp_rol', PANEL_PLANIFICADOR)['mode'] == SCOPE_NONE
     assert get_role_panel_scope('tmp_rol', PANEL_TABLERO)['mode'] == SCOPE_NONE
+    assert get_role_panel_scope('tmp_rol', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_NONE
 
 
 def test_parse_scope_from_form():

@@ -252,7 +252,7 @@ MODULE_WRITE_HINTS = {
     'subcontratas': 'Crear / editar empresas',
     'solicitudes': 'Crear y resolver solicitudes',
     'ausencias': 'Crear / aprobar ausencias y conflictos',
-    'auditoria_fichajes': 'Resolver incidencias y sincronizar',
+    'auditoria_fichajes': 'Resolver incidencias y sincronizar (el alcance decide qué obras)',
     'mapa_fichajes': 'Solo consulta: no requiere escritura',
     'auditoria_vehiculos': 'Resolver auditoría de flota',
     'integraciones': 'Acciones del hub (si las hay)',
@@ -270,6 +270,7 @@ MODULE_WRITE_HINTS = {
 MODULE_READ_HINTS = {
     'asignaciones': 'Ver calendarios de planificación (persona / obra); sin escritura no se puede asignar',
     'cuadrante_pasado': 'Ver la opción «modificar/borrar aún así» en bloques históricos del calendario y en auditoría',
+    'auditoria_fichajes': 'Ver todas las secciones; el alcance de obras filtra qué fichajes aparecen',
     'integraciones': 'Ver el listado de integraciones',
     'sync_odoo': 'Entrar al centro de sincronización Odoo',
     'soltec_alta_odoo': 'Abrir el panel de altas Odoo',

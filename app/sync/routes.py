@@ -17,6 +17,11 @@ from app.services.config_service import set_tenant_config, get_tenant_config
 from app.sync.dispatcher import get_sync_adapter
 from app.decorators import roles_required
 from app.services.permission_service import can_resolve_fichajes, can_unassign_cuadrante_pasado, is_laboral, laboral_auditoria_sections
+from app.services.panel_scope_service import (
+    PANEL_AUDITORIA_FICHAJES,
+    registro_fichaje_in_scope,
+    registro_fichaje_scope_clause,
+)
 from app.services.i18n_service import translate
 
 sync_bp = Blueprint('sync', __name__, url_prefix='/sync')
@@ -981,18 +986,12 @@ def auditoria_fichajes():
         )]
         filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH']
 
-        # 2. SI ES JEFE DE OBRA, AÑADIMOS RESTRICCIONES
-        if current_user.role == 'jefe_obra':
-            obras_jefe = Obra.query.filter_by(jefe_obra_id=current_user.id).all()
-            obras_jefe_ids = [obra.id for obra in obras_jefe]
-
-            filtro_jefe = or_(
-                RegistroFichaje.obra_planificada_id.in_(obras_jefe_ids),
-                RegistroFichaje.obra_real_id.in_(obras_jefe_ids)
-            )
-            filtros_pendientes.append(filtro_jefe)
-            filtros_historial.append(filtro_jefe)
-            filtros_correcciones.append(filtro_jefe)
+        # 2. Alcance de obras (matriz: panel auditoría de fichajes)
+        scope_clause = registro_fichaje_scope_clause(current_user, PANEL_AUDITORIA_FICHAJES)
+        if scope_clause is not None:
+            filtros_pendientes.append(scope_clause)
+            filtros_historial.append(scope_clause)
+            filtros_correcciones.append(scope_clause)
 
         # 3. Solo pendientes en la carga inicial (historial/correcciones = lazy).
         # Evita timeout «Esta página no funciona» a la primera visita.
@@ -1106,30 +1105,16 @@ def _auditoria_filtros_jefe():
         ['Conflicto', 'Disputa', 'Paracaidista', 'Ausencia', 'Sin_Registro', 'Sobreescrito_RRHH']
     )]
     filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH']
-    if current_user.role == 'jefe_obra':
-        obras_jefe_ids = [
-            o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()
-        ]
-        filtro_jefe = or_(
-            RegistroFichaje.obra_planificada_id.in_(obras_jefe_ids),
-            RegistroFichaje.obra_real_id.in_(obras_jefe_ids),
-        )
-        filtros_historial.append(filtro_jefe)
-        filtros_correcciones.append(filtro_jefe)
+    scope_clause = registro_fichaje_scope_clause(current_user, PANEL_AUDITORIA_FICHAJES)
+    if scope_clause is not None:
+        filtros_historial.append(scope_clause)
+        filtros_correcciones.append(scope_clause)
     return filtros_historial, filtros_correcciones
 
 
 def _auditoria_visible_para_jefe(registro):
-    """Misma regla de visibilidad que el filtro de auditoría para jefes."""
-    if not registro or current_user.role != 'jefe_obra':
-        return True
-    obras_jefe_ids = {
-        o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()
-    }
-    return (
-        registro.obra_planificada_id in obras_jefe_ids
-        or registro.obra_real_id in obras_jefe_ids
-    )
+    """Visibilidad según alcance del panel auditoría de fichajes."""
+    return registro_fichaje_in_scope(current_user, registro, PANEL_AUDITORIA_FICHAJES)
 
 
 def _historial_order_by():
@@ -1481,11 +1466,9 @@ def resolver_fichaje():
     if not registro:
         return jsonify({'success': False, 'error': translate('Registro no encontrado')}), 404
         
-    # Seguridad Backend: Evitar que un jefe resuelva un registro de otra obra
-    if current_user.role == 'jefe_obra':
-        obras_del_jefe = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()]
-        if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
-            return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
+    # Seguridad: solo registros dentro del alcance de auditoría del perfil
+    if not registro_fichaje_in_scope(current_user, registro, PANEL_AUDITORIA_FICHAJES):
+        return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
 
     from app.services.permission_service import can_unassign_cuadrante_pasado
     if force_past and not can_unassign_cuadrante_pasado(current_user):
@@ -1969,10 +1952,8 @@ def reabrir_fichaje():
     if not registro:
         return jsonify({'success': False, 'error': translate('Registro no encontrado')}), 404
 
-    if current_user.role == 'jefe_obra':
-        obras_del_jefe = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()]
-        if registro.obra_planificada_id not in obras_del_jefe and registro.obra_real_id not in obras_del_jefe:
-            return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
+    if not registro_fichaje_in_scope(current_user, registro, PANEL_AUDITORIA_FICHAJES):
+        return jsonify({'success': False, 'error': translate('No tienes permisos sobre este registro.')}), 403
 
     if registro.estado not in _ESTADOS_RESUELTOS:
         return jsonify({'success': False, 'error': translate('Solo se pueden reabrir registros ya resueltos.')}), 400

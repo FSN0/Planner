@@ -153,7 +153,8 @@
                 {% if vehiculo.active %}
                   <span class="entity-status-badge entity-status-badge--active">{{ _('Activo') }}</span>
                 {% else %}
-                  <span class="entity-status-badge entity-status-badge--inactive">{{ _('Inactivo') }}</span>
+                  <span class="entity-status-badge entity-status-badge--inactive"
+                        title="{{ vehiculo.inactive_reason_label() or _('Inactivo') }}">{{ _('Inactivo') }}</span>
                 {% endif %}
               </p>
             </div>
@@ -182,7 +183,8 @@
             {% endif %}
             <div class="entity-meta-item">
               <span class="entity-meta-item-label">{{ _('Estado') }}</span>
-              <span class="entity-meta-item-value">
+              <span class="entity-meta-item-value"
+                    {% if not vehiculo.active %}title="{{ vehiculo.inactive_reason_label() or _('Inactivo') }}"{% endif %}>
                 {{ _('Activo') if vehiculo.active else _('Inactivo') }}
               </span>
             </div>

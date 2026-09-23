@@ -57,6 +57,24 @@ def preview_diff():
     }
 
 
+def _mark_vehiculo_inactive(veh, *, reason, actor_id=None):
+    """Marca inactivo y guarda motivo (manual | odoo)."""
+    veh.active = False
+    veh.deactivation_reason = reason
+    veh.deactivated_at = utc_now()
+    if reason == 'manual':
+        veh.deactivated_by_id = actor_id
+    else:
+        veh.deactivated_by_id = None
+
+
+def _clear_vehiculo_inactive(veh):
+    veh.active = True
+    veh.deactivation_reason = None
+    veh.deactivated_at = None
+    veh.deactivated_by_id = None
+
+
 def apply_diff(diff=None, modo='Automático'):
     """Crea/actualiza Vehiculo desde el diff de Odoo."""
     t0 = time.time()
@@ -86,16 +104,20 @@ def apply_diff(diff=None, modo='Automático'):
             mat = f"{mat}-Odoo{obj['odoo_id']}"
         if mat:
             mat_en_tx.add(mat)
-        db.session.add(Vehiculo(
+        incoming_active = bool(obj.get('active', True))
+        veh = Vehiculo(
             external_ids={'odoo': str(obj['odoo_id'])},
             nombre=obj['nombre'],
             matricula=mat,
             marca=obj.get('marca'),
             modelo=obj.get('modelo'),
-            active=bool(obj.get('active', True)),
+            active=incoming_active,
             odoo_driver_partner_id=obj.get('driver_partner_id'),
             odoo_driver_name=obj.get('driver_name'),
-        ))
+        )
+        if not incoming_active:
+            _mark_vehiculo_inactive(veh, reason='odoo')
+        db.session.add(veh)
 
     for obj in actualizados:
         veh = Vehiculo.query.get(obj['local_id'])
@@ -114,9 +136,18 @@ def apply_diff(diff=None, modo='Automático'):
             veh.matricula = None
         veh.marca = obj.get('marca')
         veh.modelo = obj.get('modelo')
-        veh.active = bool(obj.get('active', True))
         veh.odoo_driver_partner_id = obj.get('driver_partner_id')
         veh.odoo_driver_name = obj.get('driver_name')
+
+        incoming_active = bool(obj.get('active', True))
+        if not incoming_active:
+            # Archivo Odoo siempre gana (aunque hubiera baja manual previa).
+            _mark_vehiculo_inactive(veh, reason='odoo')
+        elif (veh.deactivation_reason or '') == 'manual' and not veh.active:
+            # Baja manual local: no reactivar aunque Odoo diga activo.
+            pass
+        else:
+            _clear_vehiculo_inactive(veh)
 
     db.session.add(SyncLog(
         fecha=ahora, tipo='Vehículos', modo=modo,
@@ -559,10 +590,9 @@ def run_vehiculos_en_vivo(modo='Automático'):
         fecha_hasta=hasta,
         modo=modo,
     )
-    # Viajes pueden auto-crear un fleet.vehicle archivado como active=True;
-    # re-diff para bajar el flag active desde Odoo en el mismo ciclo.
-    if result_odo.get('vehiculos_auto_creados'):
-        result_fleet = apply_diff(modo=modo)
+    # Odómetros pueden auto-crear flota archivada como active=True; siempre
+    # re-diff para bajar el flag desde Odoo en el mismo ciclo.
+    result_fleet = apply_diff(modo=modo)
     return {'fleet': result_fleet, 'odometros': result_odo}
 
 
@@ -576,6 +606,5 @@ def run_vehiculos_retro(days=None, modo='Automático'):
     hasta = today_local()
     desde = hasta - timedelta(days=dias)
     result_odo = sync_odometros(fecha_desde=desde, fecha_hasta=hasta, modo=modo)
-    if result_odo.get('vehiculos_auto_creados'):
-        apply_diff(modo=modo)
+    apply_diff(modo=modo)
     return result_odo

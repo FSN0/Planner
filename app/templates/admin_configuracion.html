@@ -74,7 +74,6 @@
       <a href="#cfg-horario">{{ _('Horario') }}</a>
       <a href="#cfg-fichajes">{{ _('Fichajes') }}</a>
       <a href="#cfg-ausencias">{{ _('Ausencias') }}</a>
-      <a href="#cfg-laboral">{{ _('Laboral') }}</a>
       {% if tenant_has_auditoria_vehiculos %}
       <a href="#cfg-vehiculos">{{ _('Vehículos') }}</a>
       {% endif %}
@@ -386,37 +385,6 @@
             </div>
             <div class="config-block-actions">
               <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar ausencias') }}</button>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      {# —— 4. Perfil Laboral —— #}
-      <section class="config-block" id="cfg-laboral">
-        <header class="config-block-head">
-          <div class="config-block-icon config-block-icon--slate"><i class="fas fa-user-shield"></i></div>
-          <div>
-            <h2>{{ _('Perfil Laboral') }}</h2>
-            <p>{{ _('Permisos extra del rol Laboral (además de lo que ya puede ver por defecto)') }}</p>
-          </div>
-        </header>
-        <div class="config-block-body">
-          <form action="{{ url_for('admin.update_config') }}" method="POST">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="form_section" value="laboral">
-            <div class="config-switch-box mb-0">
-              <label class="admin-form-switch">
-                <input type="checkbox" id="laboral_puede_resolver_fichajes" name="laboral_puede_resolver_fichajes"
-                       {% if configs.get('laboral_puede_resolver_fichajes', 'False') == 'True' %}checked{% endif %}>
-                <span class="slider"></span>
-              </label>
-              <div>
-                <p class="admin-form-switch-label mb-0">{{ _('Puede resolver incidencias en auditoría de fichajes') }}</p>
-                <p class="admin-form-switch-hint mb-0">{{ _('Si está apagado, Laboral solo consulta (y el histórico). Por defecto: apagado.') }}</p>
-              </div>
-            </div>
-            <div class="config-block-actions">
-              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar laboral') }}</button>
             </div>
           </form>
         </div>

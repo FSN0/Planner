@@ -1512,7 +1512,18 @@ def vehiculos_editar(vehiculo_id):
     v.marca = marca[:80] if marca else None
     v.modelo = modelo[:80] if modelo else None
     if from_form:
-        v.active = request.form.get('active') in ('1', 'on', 'true', 'yes')
+        from app.utils.timezone_utils import utc_now
+        want_active = request.form.get('active') in ('1', 'on', 'true', 'yes')
+        if want_active and not v.active:
+            v.active = True
+            v.deactivation_reason = None
+            v.deactivated_at = None
+            v.deactivated_by_id = None
+        elif (not want_active) and v.active:
+            v.active = False
+            v.deactivation_reason = 'manual'
+            v.deactivated_at = utc_now()
+            v.deactivated_by_id = current_user.id
     db.session.commit()
     flash(translate('Vehículo actualizado.'), 'success')
     return redirect(url_for('admin.vehicle_panel', vehiculo_id=v.id))
@@ -1522,8 +1533,19 @@ def vehiculos_editar(vehiculo_id):
 @login_required
 @roles_required(ROLE_ADMIN)
 def vehiculos_toggle(vehiculo_id):
+    from app.utils.timezone_utils import utc_now
+
     v = Vehiculo.query.get_or_404(vehiculo_id)
-    v.active = not bool(v.active)
+    if v.active:
+        v.active = False
+        v.deactivation_reason = 'manual'
+        v.deactivated_at = utc_now()
+        v.deactivated_by_id = current_user.id
+    else:
+        v.active = True
+        v.deactivation_reason = None
+        v.deactivated_at = None
+        v.deactivated_by_id = None
     db.session.commit()
     estado = translate('activado') if v.active else translate('desactivado')
     flash(
@@ -4275,6 +4297,7 @@ def permisos_roles(role=None):
         list_roles,
     )
     from app.services.panel_scope_service import (
+        PANEL_AUDITORIA_FICHAJES,
         PANEL_PLANIFICADOR,
         PANEL_TABLERO,
         get_role_panel_scope,
@@ -4295,6 +4318,7 @@ def permisos_roles(role=None):
 
     scope_plan = get_role_panel_scope(active, PANEL_PLANIFICADOR)
     scope_tab = get_role_panel_scope(active, PANEL_TABLERO)
+    scope_audit = get_role_panel_scope(active, PANEL_AUDITORIA_FICHAJES)
     panel_scopes = {
         PANEL_PLANIFICADOR: {
             'title': 'Alcance del planificador',
@@ -4309,6 +4333,14 @@ def permisos_roles(role=None):
             'hint': 'Qué obras ve en el kanban. Independiente del planificador.',
             'mode': scope_tab['mode'],
             'jefe_ids': set(scope_tab.get('jefe_ids') or []),
+            'locked': active == ROLE_ADMIN,
+            'locked_note': translate('Administrador: siempre ve todas las obras.'),
+        },
+        PANEL_AUDITORIA_FICHAJES: {
+            'title': 'Alcance de auditoría de fichajes',
+            'hint': 'Qué fichajes ve (por obras). Lectura/escritura del módulo decide entrar y resolver.',
+            'mode': scope_audit['mode'],
+            'jefe_ids': set(scope_audit.get('jefe_ids') or []),
             'locked': active == ROLE_ADMIN,
             'locked_note': translate('Administrador: siempre ve todas las obras.'),
         },
@@ -4352,6 +4384,7 @@ def permisos_roles_save():
     )
     from app.services.role_registry_service import list_roles, valid_role_keys
     from app.services.panel_scope_service import (
+        PANEL_AUDITORIA_FICHAJES,
         PANEL_PLANIFICADOR,
         PANEL_TABLERO,
         parse_scope_from_form,
@@ -4373,7 +4406,7 @@ def permisos_roles_save():
         role_modules = [m for m, _, _ in modules_for_role(role)]
         save_role_matrix(role, request.form, modules=role_modules)
         if role not in (ROLE_ADMIN, ROLE_JEFE):
-            for panel in (PANEL_PLANIFICADOR, PANEL_TABLERO):
+            for panel in (PANEL_PLANIFICADOR, PANEL_TABLERO, PANEL_AUDITORIA_FICHAJES):
                 mode, jefe_ids = parse_scope_from_form(request.form, panel)
                 set_role_panel_scope(role, panel, mode, jefe_ids)
     except Exception as exc:
@@ -4588,10 +4621,6 @@ def update_config():
         _upsert('ausencias_auto_resolucion', 'prefer_leave')
         from app.services.leave_service import release_assignments_blocked_by_leave
         release_assignments_blocked_by_leave(autor_id=current_user.id)
-
-    if 'laboral' in section_keys:
-        laboral_resuelve = 'True' if request.form.get('laboral_puede_resolver_fichajes') else 'False'
-        _upsert('laboral_puede_resolver_fichajes', laboral_resuelve)
 
     if 'vehiculos' in section_keys:
         from app.services.tenant_modules import has_auditoria_vehiculos as _has_aud_veh

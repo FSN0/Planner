@@ -902,6 +902,17 @@ class Vehiculo(db.Model):
     marca = db.Column(db.String(80), nullable=True)
     modelo = db.Column(db.String(80), nullable=True)
     active = db.Column(db.Boolean, default=True, nullable=False)
+    # Motivo de inactividad: manual | odoo (None si activo)
+    deactivation_reason = db.Column(db.String(40), nullable=True)
+    deactivated_at = db.Column(db.DateTime, nullable=True)
+    deactivated_by_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True
+    )
+    deactivated_by = db.relationship(
+        'User',
+        foreign_keys=[deactivated_by_id],
+        post_update=True,
+    )
 
     # Último conductor / odómetro conocidos (sync Odoo — relleno futuro)
     odoo_driver_partner_id = db.Column(db.Integer, nullable=True)
@@ -920,6 +931,24 @@ class Vehiculo(db.Model):
         if mat and nom:
             return f"{mat} — {nom}"
         return mat or nom or f"Vehículo #{self.id}"
+
+    def inactive_reason_label(self):
+        """Texto para tooltip / ficha cuando active=False."""
+        if self.active:
+            return None
+        from app.services.i18n_service import translate
+        reason = (self.deactivation_reason or '').strip()
+        if reason == 'manual':
+            who = None
+            if self.deactivated_by:
+                who = f"{self.deactivated_by.name or ''} {self.deactivated_by.lastname or ''}".strip()
+            base = translate('Inactivo manualmente')
+            if who:
+                return translate('{base} por {who}', base=base, who=who)
+            return base
+        if reason == 'odoo':
+            return translate('Inactivo: archivado en Odoo')
+        return translate('Inactivo')
 
     def __repr__(self):
         return f'<Vehiculo {self.id} {self.matricula or self.nombre}>'

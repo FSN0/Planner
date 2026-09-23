@@ -1,4 +1,4 @@
-"""Alcance de obras por rol en planificador y tablero.
+"""Alcance de obras por rol en planificador, tablero y auditoría de fichajes.
 
 Independiente de la matriz r/w:
 - r/w = puede abrir / actuar en el panel
@@ -16,7 +16,8 @@ from app.services.config_service import get_tenant_config, set_tenant_config
 
 PANEL_PLANIFICADOR = 'planificador'
 PANEL_TABLERO = 'tablero'
-PANELS = (PANEL_PLANIFICADOR, PANEL_TABLERO)
+PANEL_AUDITORIA_FICHAJES = 'auditoria_fichajes'
+PANELS = (PANEL_PLANIFICADOR, PANEL_TABLERO, PANEL_AUDITORIA_FICHAJES)
 
 SCOPE_NONE = 'none'
 SCOPE_JEFE = 'jefe'
@@ -181,6 +182,64 @@ def apply_obra_scope_filter(query, user, panel: str, jefe_id_filter=None):
     if not ids:
         return query.filter(Obra.id.is_(None))
     return query.filter(Obra.jefe_obra_id.in_(ids))
+
+
+def _obras_ids_for_custody_jefes(jefe_ids: list[int]) -> list[int]:
+    if not jefe_ids:
+        return []
+    return [
+        oid
+        for (oid,) in (
+            Obra.query.filter(Obra.jefe_obra_id.in_(jefe_ids))
+            .with_entities(Obra.id)
+            .all()
+        )
+    ]
+
+
+def registro_fichaje_scope_clause(user, panel: str = PANEL_AUDITORIA_FICHAJES):
+    """
+    Cláusula SQLAlchemy para filtrar RegistroFichaje por alcance del panel.
+    None = sin filtro extra (oficina / all). false() = no ve nada.
+    """
+    from sqlalchemy import false, or_
+
+    from app.models import RegistroFichaje
+
+    mode = user_panel_mode(user, panel)
+    if mode == 'none':
+        return false()
+    if mode == 'office':
+        return None
+    jefe_ids = user_custody_jefe_ids(user, panel)
+    obras_ids = _obras_ids_for_custody_jefes(jefe_ids)
+    if not obras_ids:
+        return false()
+    return or_(
+        RegistroFichaje.obra_planificada_id.in_(obras_ids),
+        RegistroFichaje.obra_real_id.in_(obras_ids),
+    )
+
+
+def registro_fichaje_in_scope(user, registro, panel: str = PANEL_AUDITORIA_FICHAJES) -> bool:
+    """Visibilidad de un registro concreto bajo el alcance de auditoría."""
+    if not registro:
+        return False
+    mode = user_panel_mode(user, panel)
+    if mode == 'none':
+        return False
+    if mode == 'office':
+        return True
+    allowed = set(user_custody_jefe_ids(user, panel))
+    if not allowed:
+        return False
+    for oid in (registro.obra_planificada_id, registro.obra_real_id):
+        if not oid:
+            continue
+        obra = Obra.query.get(oid)
+        if obra and obra.jefe_obra_id in allowed:
+            return True
+    return False
 
 
 def list_jefes_for_scope_ui():

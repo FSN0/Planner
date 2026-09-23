@@ -5,7 +5,6 @@ from flask import g, has_request_context
 
 from app import db
 from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLES_LABORAL_LIKE, RolePermission
-from app.services.config_service import get_tenant_config
 from app.services.log_notification_service import LABORAL_LOG_CATEGORIES
 from app.services.permission_catalog import (
     ADMIN_LOCKED_MODULES,
@@ -31,13 +30,16 @@ LABORAL_ACL = {
     'obra_panel': frozenset('r'),
 }
 
-LABORAL_AUDITORIA_SECTIONS = frozenset({
+# Secciones de la UI de auditoría (todas si hay lectura del módulo).
+AUDITORIA_FICHAJES_SECTIONS = frozenset({
+    'conflictos',
+    'paracaidistas',
     'ausencias',
     'modificacion_odoo',
     'historico_global',
 })
-
-CONFIG_LABORAL_RESOLVER = 'laboral_puede_resolver_fichajes'
+# Alias legado (tests / imports)
+LABORAL_AUDITORIA_SECTIONS = AUDITORIA_FICHAJES_SECTIONS
 
 _CACHE_ATTR = '_role_perm_cache'
 _TABLE_READY_ATTR = '_role_perm_table_ready'
@@ -63,22 +65,14 @@ def expand_laboral_roles(*roles):
 
 
 def laboral_puede_resolver_fichajes() -> bool:
-    val = get_tenant_config(CONFIG_LABORAL_RESOLVER, default='False')
-    return str(val).strip().lower() in ('true', '1', 'yes', 'on')
+    """Legado: la escritura la decide la matriz ``auditoria_fichajes`` w."""
+    return True
 
 
 def laboral_auditoria_sections(user) -> set:
-    if is_admin(user):
-        return {
-            'conflictos', 'paracaidistas', 'ausencias',
-            'modificacion_odoo', 'historico_global',
-        }
-    if is_laboral(user):
-        return set(LABORAL_AUDITORIA_SECTIONS)
-    return {
-        'conflictos', 'paracaidistas', 'ausencias',
-        'modificacion_odoo', 'historico_global',
-    }
+    """Todas las secciones si el usuario puede leer auditoría (matriz)."""
+    del user  # el alcance recorta datos, no secciones de UI
+    return set(AUDITORIA_FICHAJES_SECTIONS)
 
 
 def laboral_log_categories(user) -> list:
@@ -368,10 +362,6 @@ def user_can(user, module: str, action: str) -> bool:
     if action not in allowed:
         return False
 
-    # Gate extra histórico: resolver fichajes laboral
-    if module == 'auditoria_fichajes' and action == 'w' and role in ROLES_LABORAL_LIKE:
-        return laboral_puede_resolver_fichajes()
-
     if module == 'operario_ausencias':
         from app.services.tenant_modules import has_portal_ausencias
         if not has_portal_ausencias():
@@ -383,11 +373,7 @@ def user_can(user, module: str, action: str) -> bool:
 def can_resolve_fichajes(user) -> bool:
     if not user or not getattr(user, 'is_authenticated', False):
         return False
-    if user_can(user, 'auditoria_fichajes', 'w'):
-        if is_laboral(user):
-            return laboral_puede_resolver_fichajes()
-        return True
-    return False
+    return user_can(user, 'auditoria_fichajes', 'w')
 
 
 def can_unassign_cuadrante_pasado(user) -> bool:
@@ -410,9 +396,6 @@ def roles_with_module(module: str, action: str = 'r') -> tuple:
         roles = PERMISSION_ROLES
     for role, _ in roles:
         if action in _actions_for(role, module):
-            if module == 'auditoria_fichajes' and action == 'x' and role in ROLES_LABORAL_LIKE:
-                if not laboral_puede_resolver_fichajes():
-                    continue
             found.append(role)
         elif role == ROLE_ADMIN and module in ADMIN_LOCKED_MODULES:
             found.append(role)

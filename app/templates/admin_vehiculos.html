@@ -120,7 +120,7 @@
               <td class="col-mobile-hide" data-sort-value="{{ (v.modelo or '')|lower }}">{{ v.modelo or '—' }}</td>
               <td class="col-status" data-sort-value="{{ 'activo' if v.active else 'inactivo' }}">
                 {% if v.active %}<span class="badge-soft badge-soft-green">{{ _('Activo') }}</span>
-                {% else %}<span class="badge-soft badge-soft-slate">{{ _('Inactivo') }}</span>{% endif %}
+                {% else %}<span class="badge-soft badge-soft-slate" title="{{ v.inactive_reason_label() or _('Inactivo') }}">{{ _('Inactivo') }}</span>{% endif %}
               </td>
               {% if tenant_has_odoo %}
               <td class="col-mobile-hide" data-sort-value="{{ (v.odoo_driver_name or '')|lower }}">{{ v.odoo_driver_name or '—' }}</td>
