@@ -4106,8 +4106,10 @@ def api_planificador_fichajes_estado():
 @admin_bp.route("/api/planificador/search_workers", methods=['GET'])
 @login_required
 def search_workers():
-    """Buscador Select2 filtrado por texto, excluyendo inactivos."""
-    q = request.args.get('q', '').lower()
+    """Select2: plantilla activa completa; busca por nombre o por empresa."""
+    from sqlalchemy.orm import joinedload
+
+    q = (request.args.get('q') or '').strip().lower()
     plain = request.args.get('plain') in ('1', 'true', 'yes')
 
     # 1. Opción Genérica (petición de personal): quien puede planificar periodos
@@ -4116,19 +4118,32 @@ def search_workers():
     if not plain:
         results.append({"id": "GENERICO", "text": "👤 CUALQUIERA (Petición Genérica)"})
 
-    # 2. Buscar en BD
-    query = User.query.filter(User.active == True, User.is_deleted == False)
+    # 2. Plantilla activa (sin tope: al abrir el desplegable deben salir todos)
+    query = (
+        User.query
+        .options(joinedload(User.company_rel))
+        .filter(User.active.is_(True), User.is_deleted.is_(False))
+    )
     if not plain:
-        query = query.filter(User.role == 'operario')
+        query = query.filter(User.role == ROLE_OPERARIO)
     if q:
-        query = query.filter(or_(
-            func.lower(User.name).contains(q),
-            func.lower(User.lastname).contains(q)
-        ))
+        query = (
+            query
+            .outerjoin(Company, User.company_id == Company.id)
+            .filter(or_(
+                func.lower(User.name).contains(q),
+                func.lower(User.lastname).contains(q),
+                func.lower(
+                    func.concat(func.coalesce(User.name, ''), ' ', func.coalesce(User.lastname, ''))
+                ).contains(q),
+                func.lower(func.coalesce(Company.nombre, '')).contains(q),
+            ))
+            .distinct()
+        )
 
-    workers = query.order_by(User.name, User.lastname).limit(40).all()
+    workers = query.order_by(User.name, User.lastname).all()
 
-    # Agrupar para el Select2
+    # Agrupar por empresa (orden alfabético de empresa, luego persona)
     grouped = {}
     for w in workers:
         comp_name = w.company_rel.nombre if w.company_rel else "Sin Empresa"
@@ -4136,13 +4151,13 @@ def search_workers():
             grouped[comp_name] = []
         grouped[comp_name].append({
             "id": w.id,
-            "text": f"{w.name} {w.lastname}"
+            "text": f"{w.name} {w.lastname}".strip(),
         })
 
-    for comp_name, children in grouped.items():
+    for comp_name in sorted(grouped.keys(), key=lambda s: s.casefold()):
         results.append({
             "text": f"🏢 {comp_name}",
-            "children": children
+            "children": grouped[comp_name],
         })
 
     return jsonify({"results": results})
