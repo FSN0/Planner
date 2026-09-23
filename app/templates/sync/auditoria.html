@@ -95,6 +95,11 @@ tr.audit-row-highlight > td {
 tr.audit-row-highlight {
   box-shadow: inset 4px 0 0 #f59e0b;
 }
+.audit-desvio-panel-highlight {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+}
 .auditoria-stat--active {
   outline: 2px solid #f59e0b;
   outline-offset: 2px;
@@ -328,6 +333,15 @@ tr.audit-row-highlight {
                                                 {% endif %}
                                             </div>
                                             <div class="audit-desvio-panel-actions">
+                                                <button type="button"
+                                                        class="btn btn-admin btn-admin-ghost btn-audit js-desvio-jump no-row-nav"
+                                                        data-desvio-jump="plan"
+                                                        data-registro-id="{{ reg.id }}"
+                                                        data-user-id="{{ reg.user_id }}"
+                                                        data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
+                                                        title="{{ _('Abrir la fila en Ausencias o en el histórico') }}">
+                                                  <i class="fas fa-external-link-alt"></i> {{ _('Ver ausencia') }}
+                                                </button>
                                                 {% if can_resolve|default(can_resolve_fichajes) %}
                                                   {% for btn in btns_plan %}
                                                     {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
@@ -338,7 +352,7 @@ tr.audit-row-highlight {
                                                             title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
                                                   {% else %}
                                                     {% if desvio and desvio.ack_plan %}
-                                                    <span class="text-muted small">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}</span>
+                                                    <span class="text-muted small" data-ack-plan-status="1">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}</span>
                                                     {% elif not (desvio and desvio.mia_plan) and current_user.role == 'jefe_obra' %}
                                                     <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                                     {% endif %}
@@ -373,6 +387,15 @@ tr.audit-row-highlight {
                                                 {% endif %}
                                             </div>
                                             <div class="audit-desvio-panel-actions">
+                                                <button type="button"
+                                                        class="btn btn-admin btn-admin-ghost btn-audit js-desvio-jump no-row-nav"
+                                                        data-desvio-jump="real"
+                                                        data-registro-id="{{ reg.id }}"
+                                                        data-user-id="{{ reg.user_id }}"
+                                                        data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
+                                                        title="{{ _('Abrir la fila en Sin planificar o en el histórico') }}">
+                                                  <i class="fas fa-external-link-alt"></i> {{ _('Ver fichaje sin planificar') }}
+                                                </button>
                                                 {% if can_resolve|default(can_resolve_fichajes) %}
                                                   {% for btn in btns_real %}
                                                     {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
@@ -383,7 +406,7 @@ tr.audit-row-highlight {
                                                             title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
                                                   {% else %}
                                                     {% if desvio and desvio.ack_real %}
-                                                    <span class="text-muted small">{{ _(desvio.ack_real_label or 'Ya aceptado') }}</span>
+                                                    <span class="text-muted small" data-ack-real-status="1">{{ _(desvio.ack_real_label or 'Ya aceptado') }}</span>
                                                     {% elif not (desvio and desvio.mia_real) and current_user.role == 'jefe_obra' %}
                                                     <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                                     {% endif %}
@@ -716,7 +739,7 @@ tr.audit-row-highlight {
                 <tbody id="historialTableBody" data-lazy-seccion="historial" data-loaded="{% if historial %}1{% else %}0{% endif %}">
                     {% if historial %}
                     {% for reg in historial %}
-                    <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
+                    <tr id="hist-row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-registro-id="{{ reg.id }}" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
                         <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                         <td data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
                             {% if reg.user %}
@@ -1243,7 +1266,7 @@ $(document).ready(function() {
         });
     }
 
-    function refreshHistorialTable(q) {
+    function refreshHistorialTable(q, onReady) {
         var $body = $('#historialTableBody');
         loadAuditoriaSeccion('historial', $body, function (meta) {
             meta = meta || {};
@@ -1273,8 +1296,141 @@ $(document).ready(function() {
                 try { dtHistorial.columns.adjust(); } catch (e) { /* ignore */ }
             }
             if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
+            if (typeof onReady === 'function') onReady(meta);
         }, { force: true, q: q || '' });
     }
+
+    function clearAuditoriaRowHighlight() {
+        document.querySelectorAll('tr.audit-row-highlight').forEach(function (r) {
+            r.classList.remove('audit-row-highlight');
+        });
+    }
+
+    function highlightAuditoriaRow(el) {
+        clearAuditoriaRowHighlight();
+        if (!el) return;
+        el.classList.add('audit-row-highlight');
+        try {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {
+            el.scrollIntoView(true);
+        }
+    }
+
+    function findHistorialRow(registroId, userId, fecha) {
+        var idStr = String(registroId || '');
+        var byId = document.getElementById('hist-row-' + idStr);
+        if (byId) return byId;
+        var body = document.getElementById('historialTableBody');
+        if (!body) return null;
+        var tr = body.querySelector('tr[data-registro-id="' + idStr + '"]');
+        if (tr) return tr;
+        if (userId && fecha) {
+            var hit = body.querySelector(
+                'tr[data-user-id="' + String(userId) + '"][data-fecha="' + String(fecha) + '"]'
+            );
+            if (hit) return hit;
+        }
+        return null;
+    }
+
+    function jumpToDesvioLado(lado, registroId, userId, fecha) {
+        var idStr = String(registroId || '');
+        if (!idStr || (lado !== 'plan' && lado !== 'real')) return;
+
+        clearAuditoriaRowHighlight();
+
+        var espejo = document.getElementById('row-espejo-' + lado + '-' + idStr);
+        if (espejo) {
+            openAuditoriaSection(lado === 'plan' ? '#collapseAusencias' : '#collapseParacaidistas');
+            setTimeout(function () { highlightAuditoriaRow(espejo); }, 420);
+            return;
+        }
+
+        // Pendiente en esa sección sin espejo (p. ej. solo ausencia / solo libre)
+        var sectionSel = lado === 'plan' ? '#collapseAusencias' : '#collapseParacaidistas';
+        var sectionRow = document.querySelector(
+            sectionSel + ' #row-' + idStr + ', ' +
+            sectionSel + ' tr[data-desvio-registro-id="' + idStr + '"]'
+        );
+        if (sectionRow) {
+            openAuditoriaSection(sectionSel);
+            setTimeout(function () { highlightAuditoriaRow(sectionRow); }, 420);
+            return;
+        }
+
+        // Lado ya ack pero el desvío sigue abierto → ampliar la fila de Desviaciones
+        var main = document.getElementById('row-' + idStr);
+        if (main && main.hasAttribute('data-desvio-toggle')) {
+            openAuditoriaSection('#collapseConflictos');
+            var detail = document.getElementById('desvio-detail-' + idStr);
+            if (detail) {
+                detail.hidden = false;
+                detail.style.display = '';
+                main.classList.add('is-expanded');
+                main.setAttribute('aria-expanded', 'true');
+            }
+            setTimeout(function () {
+                highlightAuditoriaRow(main);
+                var panel = detail && detail.querySelector(
+                    lado === 'plan' ? '.audit-desvio-panel--plan' : '.audit-desvio-panel--real'
+                );
+                if (panel) {
+                    panel.classList.add('audit-desvio-panel-highlight');
+                    try {
+                        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } catch (e) { /* ignore */ }
+                    setTimeout(function () {
+                        panel.classList.remove('audit-desvio-panel-highlight');
+                    }, 4500);
+                }
+            }, 420);
+            return;
+        }
+
+        // Cerrado del todo → histórico global (búsqueda por id de registro)
+        var $hist = $('#collapseHistorial');
+        var histOpen = $hist.hasClass('show');
+        var input = document.getElementById('historialSearchInput');
+        if (input) input.value = idStr;
+        historialSearchQ = idStr;
+
+        function afterHistLoad() {
+            var row = findHistorialRow(idStr, userId, fecha);
+            if (row && dtHistorial && typeof dtHistorial.row === 'function') {
+                try {
+                    var idx = dtHistorial.row(row).index();
+                    if (typeof idx === 'number' && idx >= 0) {
+                        var info = dtHistorial.page.info();
+                        var pageLen = info.length > 0 ? info.length : 25;
+                        dtHistorial.page(Math.floor(idx / pageLen)).draw(false);
+                    }
+                } catch (e) { /* ignore */ }
+            }
+            setTimeout(function () { highlightAuditoriaRow(row); }, 80);
+        }
+
+        if (histOpen) {
+            openAuditoriaSection('#collapseHistorial');
+            refreshHistorialTable(idStr, afterHistLoad);
+        } else {
+            window._auditHistorialJumpReady = afterHistLoad;
+            openAuditoriaSection('#collapseHistorial');
+        }
+    }
+    window.jumpToDesvioLado = jumpToDesvioLado;
+
+    $(document).on('click', '.js-desvio-jump', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var btn = e.currentTarget;
+        jumpToDesvioLado(
+            btn.getAttribute('data-desvio-jump'),
+            btn.getAttribute('data-registro-id'),
+            btn.getAttribute('data-user-id'),
+            btn.getAttribute('data-fecha')
+        );
+    });
 
     $('#collapseCorrecciones').on('shown.bs.collapse', function() {
         var $body = $('#correccionesTableBody');
@@ -1299,7 +1455,13 @@ $(document).ready(function() {
         });
     });
     $('#collapseHistorial').on('shown.bs.collapse', function() {
-        refreshHistorialTable(historialSearchQ);
+        refreshHistorialTable(historialSearchQ, function (meta) {
+            if (typeof window._auditHistorialJumpReady === 'function') {
+                var cb = window._auditHistorialJumpReady;
+                window._auditHistorialJumpReady = null;
+                cb(meta);
+            }
+        });
     });
 
     $('#historialSearchInput').on('input', function () {
@@ -1383,6 +1545,16 @@ var AUDIT_RESOLVE_I18N = {{ {
         });
     }
 
+    function markEspejoResolved(id, lado, label, por) {
+        var el = document.getElementById('row-espejo-' + lado + '-' + id);
+        if (!el) return;
+        var actions = el.querySelector('td.no-row-nav') || el.querySelector('td.text-right');
+        if (!actions) return;
+        var txt = label || {{ _('Resuelto')|tojson }};
+        if (por) txt += ' · ' + por;
+        actions.innerHTML = '<span class="text-muted small">' + txt + '</span>';
+    }
+
     function removeDesvioRow(row, id) {
         if (!row) return;
         var card = row.closest('.card-modern');
@@ -1419,8 +1591,8 @@ var AUDIT_RESOLVE_I18N = {{ {
             }
         }
 
-        if (data.ack_plan) removeEspejoRows(id, ['plan']);
-        if (data.ack_real) removeEspejoRows(id, ['real']);
+        if (data.ack_plan) markEspejoResolved(id, 'plan', data.ack_plan_label || {{ _('Resuelto')|tojson }}, data.ack_plan_por);
+        if (data.ack_real) markEspejoResolved(id, 'real', data.ack_real_label || {{ _('Aceptado')|tojson }}, data.ack_real_por);
 
         if (!detail) return;
         if (data.ack_plan) {
@@ -1435,7 +1607,9 @@ var AUDIT_RESOLVE_I18N = {{ {
                 }
                 var actions = planPanel.querySelector('.audit-desvio-panel-actions');
                 if (actions) {
-                    actions.innerHTML = '<span class="text-muted small">' + planLabel + '</span>';
+                    var jumpP = actions.querySelector('.js-desvio-jump');
+                    var jumpPHtml = jumpP ? jumpP.outerHTML : '';
+                    actions.innerHTML = jumpPHtml + '<span class="text-muted small" data-ack-plan-status="1">' + planLabel + '</span>';
                 }
                 if (data.ack_plan_por) {
                     var bodyP = planPanel.querySelector('.audit-desvio-panel-body');
@@ -1464,7 +1638,9 @@ var AUDIT_RESOLVE_I18N = {{ {
                 }
                 var actionsR = realPanel.querySelector('.audit-desvio-panel-actions');
                 if (actionsR) {
-                    actionsR.innerHTML = '<span class="text-muted small">' + realLabel + '</span>';
+                    var jumpR = actionsR.querySelector('.js-desvio-jump');
+                    var jumpRHtml = jumpR ? jumpR.outerHTML : '';
+                    actionsR.innerHTML = jumpRHtml + '<span class="text-muted small" data-ack-real-status="1">' + realLabel + '</span>';
                 }
                 if (data.ack_real_por) {
                     var bodyR = realPanel.querySelector('.audit-desvio-panel-body');

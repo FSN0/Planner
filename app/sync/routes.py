@@ -702,7 +702,8 @@ def commit_subcontratas():
             local_comp_id = mapa_empresas.get(odoo_c_id)
 
             if not local_comp_id and odoo_c_id:
-                comp_existente = _company_by_odoo_id(odoo_c_id)
+                with db.session.no_autoflush:
+                    comp_existente = _company_by_odoo_id(odoo_c_id)
                 if comp_existente:
                     local_comp_id = comp_existente.id
                     mapa_empresas[odoo_c_id] = local_comp_id
@@ -711,11 +712,12 @@ def commit_subcontratas():
             dni_limpio = obj['dni']
             email_limpio = (obj.get('email') or '').strip() or f"ext_{obj['odoo_id']}@subcontrata.local"
 
-            # Si ya existe por email/DNI (p.ej. archivado no emparejado en preview vieja),
-            # reutilizar en lugar de INSERT que rompe users_email_key.
-            existente = User.query.filter(
-                (User.dni == dni_limpio) | (User.email == email_limpio)
-            ).first()
+            with db.session.no_autoflush:
+                existente = User.query.filter(
+                    (User.dni == dni_limpio) | (User.email == email_limpio)
+                    | (User.external_ids['odoo'].astext == str(obj['odoo_id']))
+                ).order_by(User.is_deleted.asc(), User.id.asc()).first()
+
             if existente:
                 ext_ids = dict(existente.external_ids or {})
                 ext_ids['odoo'] = str(obj['odoo_id'])
@@ -734,21 +736,18 @@ def commit_subcontratas():
                 emails_en_transaccion.add(existente.email)
                 continue
 
-            # Revisar si existe en la BD o si ya lo hemos procesado en este mismo bucle
-            if (
-                User.query.filter_by(dni=dni_limpio).first()
-                or dni_limpio in dnis_en_transaccion
-            ):
+            with db.session.no_autoflush:
+                choque_dni = User.query.filter_by(dni=dni_limpio).first()
+                choque_email = User.query.filter_by(email=email_limpio).first()
+            if choque_dni or dni_limpio in dnis_en_transaccion:
                 dni_limpio = f"{dni_limpio}-EXT{obj['odoo_id']}"
-            if (
-                User.query.filter_by(email=email_limpio).first()
-                or email_limpio in emails_en_transaccion
-            ):
+            if choque_email or email_limpio in emails_en_transaccion:
                 email_limpio = f"ext_{obj['odoo_id']}_dup@subcontrata.local"
 
             dnis_en_transaccion.add(dni_limpio)
             emails_en_transaccion.add(email_limpio)
 
+            from sqlalchemy.exc import IntegrityError
             nuevo_user = User(
                 external_ids={'odoo': str(obj['odoo_id'])},
                 name=obj['name'],
@@ -762,7 +761,33 @@ def commit_subcontratas():
                 email_verified=True,
                 password_hash=generate_password_hash(secrets.token_urlsafe(16)),
             )
-            db.session.add(nuevo_user)
+            try:
+                with db.session.begin_nested():
+                    db.session.add(nuevo_user)
+                    db.session.flush()
+            except IntegrityError:
+                with db.session.no_autoflush:
+                    existente = User.query.filter(
+                        (User.email == email_limpio) | (User.dni == dni_limpio)
+                        | (User.external_ids['odoo'].astext == str(obj['odoo_id']))
+                    ).first()
+                if not existente:
+                    raise
+                ext_ids = dict(existente.external_ids or {})
+                ext_ids['odoo'] = str(obj['odoo_id'])
+                existente.external_ids = ext_ids
+                existente.name = obj['name']
+                existente.lastname = obj['lastname']
+                existente.categoria_profesional = obj.get('categoria_profesional')
+                existente.company_id = local_comp_id or existente.company_id
+                existente.is_deleted = False
+                if not existente.active:
+                    reactivar(existente, actor_id=current_user.id, commit=False)
+                else:
+                    existente.active = True
+                db.session.add(existente)
+                dnis_en_transaccion.add(existente.dni)
+                emails_en_transaccion.add(existente.email)
 
         emp_baja = desactivados_aplicables(data, data.get('empleados', {}).get('desactivados') or [])
         for obj in emp_baja:
@@ -1094,6 +1119,19 @@ def _auditoria_filtros_jefe():
     return filtros_historial, filtros_correcciones
 
 
+def _auditoria_visible_para_jefe(registro):
+    """Misma regla de visibilidad que el filtro de auditoría para jefes."""
+    if not registro or current_user.role != 'jefe_obra':
+        return True
+    obras_jefe_ids = {
+        o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id).all()
+    }
+    return (
+        registro.obra_planificada_id in obras_jefe_ids
+        or registro.obra_real_id in obras_jefe_ids
+    )
+
+
 def _historial_order_by():
     """Decisiones de auditoría primero; luego por hora de resolución (no por día laboral)."""
     from sqlalchemy import case
@@ -1116,7 +1154,7 @@ def _historial_order_by():
 
 
 def _aplicar_busqueda_historial(query, q_text):
-    """Filtro servidor por operario / DNI / notas / código de obra."""
+    """Filtro servidor por id / operario / DNI / notas / código de obra."""
     from sqlalchemy import exists
     from sqlalchemy.orm import aliased
 
@@ -1126,30 +1164,31 @@ def _aplicar_busqueda_historial(query, q_text):
     like = f'%{q_text}%'
     ObraPlan = aliased(Obra)
     ObraReal = aliased(Obra)
-    user_hit = exists().where(
+    clauses = []
+    if q_text.isdigit():
+        clauses.append(RegistroFichaje.id == int(q_text))
+    clauses.append(exists().where(
         User.id == RegistroFichaje.user_id,
         or_(
             User.name.ilike(like),
             User.lastname.ilike(like),
             User.dni.ilike(like),
         ),
-    )
-    plan_hit = exists().where(
+    ))
+    clauses.append(exists().where(
         ObraPlan.id == RegistroFichaje.obra_planificada_id,
         or_(ObraPlan.codigo.ilike(like), ObraPlan.nombre.ilike(like)),
-    )
-    real_hit = exists().where(
+    ))
+    clauses.append(exists().where(
         ObraReal.id == RegistroFichaje.obra_real_id,
         or_(ObraReal.codigo.ilike(like), ObraReal.nombre.ilike(like)),
-    )
-    return query.filter(or_(
-        user_hit,
-        plan_hit,
-        real_hit,
+    ))
+    clauses.extend([
         RegistroFichaje.notas_resolucion.ilike(like),
         RegistroFichaje.nota_odoo.ilike(like),
         RegistroFichaje.estado.ilike(like),
-    ))
+    ])
+    return query.filter(or_(*clauses))
 
 
 @sync_bp.route('/auditoria/seccion/<seccion>', methods=['GET'])
@@ -1169,19 +1208,33 @@ def auditoria_fichajes_seccion(seccion):
         filtros_historial, filtros_correcciones = _auditoria_filtros_jefe()
         q_text = (request.args.get('q') or '').strip()
         if seccion == 'historial':
-            q = (
-                RegistroFichaje.query
-                .options(*_AUDITORIA_EAGER)
-                .filter(*filtros_historial)
-            )
-            q = _aplicar_busqueda_historial(q, q_text)
-            # Sin búsqueda: prioriza decisiones; con búsqueda, prioriza igual pero
-            # sobre el universo filtrado (así no se pierden resoluciones viejas).
-            registros = (
-                q.order_by(*_historial_order_by())
-                .limit(_AUDITORIA_HISTORIAL_LIMIT)
-                .all()
-            )
+            # Salto «Ver ausencia / Ver fichaje»: búsqueda exacta por id sin filtrar
+            # por estado (un lado puede estar ack y el registro seguir en Conflicto).
+            if q_text.isdigit():
+                rid = int(q_text)
+                reg = (
+                    RegistroFichaje.query
+                    .options(*_AUDITORIA_EAGER)
+                    .filter(RegistroFichaje.id == rid)
+                    .first()
+                )
+                registros = (
+                    [reg] if reg and _auditoria_visible_para_jefe(reg) else []
+                )
+            else:
+                q = (
+                    RegistroFichaje.query
+                    .options(*_AUDITORIA_EAGER)
+                    .filter(*filtros_historial)
+                )
+                q = _aplicar_busqueda_historial(q, q_text)
+                # Sin búsqueda: prioriza decisiones; con búsqueda, prioriza igual pero
+                # sobre el universo filtrado (así no se pierden resoluciones viejas).
+                registros = (
+                    q.order_by(*_historial_order_by())
+                    .limit(_AUDITORIA_HISTORIAL_LIMIT)
+                    .all()
+                )
         else:
             registros = (
                 RegistroFichaje.query

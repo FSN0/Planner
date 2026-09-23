@@ -39,7 +39,7 @@
 {% endfor %}
 {% else %}
 {% for reg in registros %}
-<tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
+<tr id="hist-row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-registro-id="{{ reg.id }}" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
   <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
   <td data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
     {% if reg.user %}

@@ -244,18 +244,32 @@ def run_auto_sync_subcontratas(modo='Automático'):
 
     dnis_en_tx = set()
     emails_en_tx = set()
+    from sqlalchemy.exc import IntegrityError
+
     for obj in diff['empleados']['nuevos']:
         odoo_c_id = obj.get('odoo_company_id')
         local_comp_id = mapa_empresas.get(odoo_c_id)
         if not local_comp_id and odoo_c_id:
-            comp = _company_by_odoo_id(odoo_c_id)
+            with db.session.no_autoflush:
+                comp = _company_by_odoo_id(odoo_c_id)
             if comp:
                 local_comp_id = comp.id
                 mapa_empresas[odoo_c_id] = local_comp_id
         dni = obj['dni']
         email = (obj.get('email') or '').strip() or f"ext_{obj['odoo_id']}@subcontrata.local"
 
-        existente = User.query.filter((User.dni == dni) | (User.email == email)).first()
+        with db.session.no_autoflush:
+            existente = User.query.filter(
+                (User.dni == dni) | (User.email == email)
+            ).order_by(User.is_deleted.asc(), User.id.asc()).first()
+            if not existente:
+                # Por si el DNI local quedó con sufijo -EXT / -del-
+                existente = User.query.filter(
+                    User.external_ids['odoo'].astext == str(obj['odoo_id'])
+                ).first()
+            if not existente and email:
+                existente = User.query.filter(User.email == email).first()
+
         if existente:
             _set_odoo_external_id(existente, obj['odoo_id'])
             existente.name = obj['name']
@@ -271,20 +285,49 @@ def run_auto_sync_subcontratas(modo='Automático'):
             emails_en_tx.add(existente.email)
             continue
 
-        if User.query.filter_by(dni=dni).first() or dni in dnis_en_tx:
+        with db.session.no_autoflush:
+            choque_dni = User.query.filter_by(dni=dni).first()
+            choque_email = User.query.filter_by(email=email).first()
+        if choque_dni or dni in dnis_en_tx:
             dni = f"{dni}-EXT{obj['odoo_id']}"
-        if User.query.filter_by(email=email).first() or email in emails_en_tx:
+        if choque_email or email in emails_en_tx:
             email = f"ext_{obj['odoo_id']}_dup@subcontrata.local"
         dnis_en_tx.add(dni)
         emails_en_tx.add(email)
-        db.session.add(User(
+
+        nuevo = User(
             external_ids={'odoo': str(obj['odoo_id'])},
             name=obj['name'], lastname=obj['lastname'],
             dni=dni, email=email, role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional'),
             company_id=local_comp_id, active=True, email_verified=True,
             password_hash=generate_password_hash(secrets.token_urlsafe(24)),
-        ))
+        )
+        try:
+            with db.session.begin_nested():
+                db.session.add(nuevo)
+                db.session.flush()
+        except IntegrityError:
+            # Carrera / fantasma: reutilizar la ficha que ya tiene ese email o DNI.
+            with db.session.no_autoflush:
+                existente = User.query.filter(
+                    (User.email == email) | (User.dni == dni)
+                    | (User.external_ids['odoo'].astext == str(obj['odoo_id']))
+                ).first()
+            if not existente:
+                raise
+            _set_odoo_external_id(existente, obj['odoo_id'])
+            existente.name = obj['name']
+            existente.lastname = obj['lastname']
+            existente.categoria_profesional = obj.get('categoria_profesional')
+            existente.company_id = local_comp_id or existente.company_id
+            existente.is_deleted = False
+            if not existente.active:
+                reactivar(existente, commit=False)
+            else:
+                existente.active = True
+            dnis_en_tx.add(existente.dni)
+            emails_en_tx.add(existente.email)
 
     emp_baja_aplicables = desactivados_aplicables(diff, emp_baja)
     for obj in emp_baja_aplicables:

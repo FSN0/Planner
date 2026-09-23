@@ -818,9 +818,11 @@ def repartir_secciones_auditoria(pendientes):
             conflictos.append(r)
             ui = getattr(r, 'desvio_ui', None) or {}
             if ui.get('es_desvio'):
-                if not ui.get('ack_plan') and r.obra_planificada_id:
+                # Mantener espejo aunque el lado ya esté ack (para «Ver ausencia /
+                # Ver fichaje» y reabrir contexto). Solo desaparece al cerrar el desvío.
+                if r.obra_planificada_id:
                     ausencias.append(DesvioEspejoView(r, 'plan'))
-                if not ui.get('ack_real') and r.obra_real_id:
+                if r.obra_real_id:
                     paracaidistas.append(DesvioEspejoView(r, 'real'))
         elif r.estado == 'Ausencia':
             ausencias.append(r)

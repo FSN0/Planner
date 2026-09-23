@@ -348,10 +348,9 @@ def test_repartir_secciones_proyecta_espejos():
     assert para in out['paracaidistas']
     espejos_aus = [x for x in out['ausencias'] if isinstance(x, DesvioEspejoView)]
     espejos_para = [x for x in out['paracaidistas'] if isinstance(x, DesvioEspejoView)]
-    assert len(espejos_aus) == 2  # ambos desvíos con plan pendiente
-    assert len(espejos_para) == 1  # solo el que aún no ack_real
-    assert espejos_para[0].desvio_espejo == 'real'
-    assert espejos_para[0].id == 1
+    assert len(espejos_aus) == 2  # espejo plan aunque un lado real ya esté ack
+    assert len(espejos_para) == 2  # espejo real se mantiene tras ack (salto «Ver…»)
+    assert {e.id for e in espejos_para} == {1, 2}
 
 
 def test_labels_resolucion_desvio():
