@@ -713,6 +713,25 @@ def create_app():
             **tz_ctx,
         )
 
+    @app.context_processor
+    def inject_valoracion_helpers():
+        """Media/count de reputación respetando el alcance de valoraciones del viewer."""
+        def valoracion_media(worker):
+            if not worker or not current_user.is_authenticated:
+                return 0.0
+            from app.services.rating_service import reputation_for_viewer
+            score, _ = reputation_for_viewer(worker, current_user)
+            return score
+
+        def valoracion_count(worker):
+            if not worker or not current_user.is_authenticated:
+                return 0
+            from app.services.rating_service import reputation_for_viewer
+            _, count = reputation_for_viewer(worker, current_user)
+            return count
+
+        return dict(valoracion_media=valoracion_media, valoracion_count=valoracion_count)
+
     # ---------------------------------------------------------
     # Redirecciones y Seguridad
     # ---------------------------------------------------------

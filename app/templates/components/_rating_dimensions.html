@@ -1,0 +1,26 @@
+{# Selector dual actitud / conocimiento (0–5). Params: btn_class, dim_prefix #}
+{% set btn_class = btn_class|default('rating-btn') %}
+{% set dim_prefix = dim_prefix|default('rating') %}
+<p class="rating-intro text-center mb-2">{{ _('Puntúa de 0 a 5. Al menos una dimensión es obligatoria.') }}</p>
+<div class="entity-rating-dims">
+  <div class="entity-rating-dim" data-dim="actitud">
+    <div class="entity-rating-dim-label">{{ _('Actitud') }}</div>
+    <div class="entity-rating-score-grid entity-rating-score-grid--0to5" data-dim-buttons="actitud">
+      {% for n in range(0, 6) %}
+      <button type="button" class="entity-rating-btn entity-rating-btn--scale {{ btn_class }}"
+              data-dim="actitud" data-score="{{ n }}">{{ n }}</button>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="entity-rating-dim" data-dim="conocimiento">
+    <div class="entity-rating-dim-label">{{ _('Conocimiento') }}</div>
+    <div class="entity-rating-score-grid entity-rating-score-grid--0to5" data-dim-buttons="conocimiento">
+      {% for n in range(0, 6) %}
+      <button type="button" class="entity-rating-btn entity-rating-btn--scale {{ btn_class }}"
+              data-dim="conocimiento" data-score="{{ n }}">{{ n }}</button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<input type="hidden" id="{{ dim_prefix }}Actitud" value="">
+<input type="hidden" id="{{ dim_prefix }}Conocimiento" value="">

@@ -313,27 +313,30 @@ class User(UserMixin, db.Model):
     @property
     def reputation_score(self):
         """
-        Calcula la media de las valoraciones activas.
-        Devuelve un valor redondeado a 1 decimal (ej: 2.5).
+        Media de valoraciones activas en formato v2 (actitud/conocimiento 0–5).
+        Las antiguas (−3…+3) no entran en la media; siguen visibles en el historial.
         """
-        # --- CORRECCIÓN AQUÍ ---
-        # Usamos 'ratings_received' porque así lo llamaste en el backref de la clase Rating
         if not hasattr(self, 'ratings_received'):
             return 0.0
 
-        valid_ratings = [r for r in self.ratings_received if r.is_active]
-        
-        if not valid_ratings:
+        from app.services.rating_service import rating_display_score, rating_is_v2
+
+        valid = [
+            r for r in self.ratings_received
+            if r.is_active and rating_is_v2(r)
+        ]
+        if not valid:
             return 0.0
-            
-        # 2. Suma total de puntos
-        total = sum(r.score for r in valid_ratings)
-        
-        # 3. Cálculo de la media
-        media = total / len(valid_ratings)
-        
-        # 4. Devolver redondeado
-        return round(media, 1)
+        total = sum(rating_display_score(r) for r in valid)
+        return round(total / len(valid), 1)
+
+    @property
+    def reputation_count(self):
+        """Número de valoraciones activas que cuentan para la reputación (v2)."""
+        if not hasattr(self, 'ratings_received'):
+            return 0
+        from app.services.rating_service import rating_is_v2
+        return sum(1 for r in self.ratings_received if r.is_active and rating_is_v2(r))
     
     @property
     def tipo_empleado(self):
@@ -1078,7 +1081,10 @@ class Rating(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    score = db.Column(db.Integer, nullable=False)
+    # Media de dimensiones (v2) o puntuación legacy (−3…+3). Float para medias 0–5.
+    score = db.Column(db.Float, nullable=False)
+    actitud = db.Column(db.Integer, nullable=True)       # 0–5 (v2)
+    conocimiento = db.Column(db.Integer, nullable=True)  # 0–5 (v2)
     reason = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=_utc_now)
     
@@ -1087,6 +1093,16 @@ class Rating(db.Model):
     
     user = db.relationship('User', foreign_keys=[user_id], backref='ratings_received')
     created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+    @property
+    def is_v2(self):
+        from app.services.rating_service import rating_is_v2
+        return rating_is_v2(self)
+
+    @property
+    def display_score(self):
+        from app.services.rating_service import rating_display_score
+        return rating_display_score(self)
     
     
 class Festivo(db.Model):

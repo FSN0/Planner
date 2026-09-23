@@ -102,8 +102,9 @@
               {% if show_valoraciones %}
               {% set ns = namespace(total=0, count=0) %}
               {% for u in c.users %}
-                {% if u.reputation_score and u.reputation_score > 0 %}
-                  {% set ns.total = ns.total + u.reputation_score %}
+                {% set uc = valoracion_count(u) %}
+                {% if uc > 0 %}
+                  {% set ns.total = ns.total + valoracion_media(u) %}
                   {% set ns.count = ns.count + 1 %}
                 {% endif %}
               {% endfor %}

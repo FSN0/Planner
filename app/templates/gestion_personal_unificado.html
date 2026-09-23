@@ -153,11 +153,11 @@
                     {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
                   </td>
                   {% if show_valoraciones %}
-                  {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
-                  {% set r_count = active_ratings|length %}
-                  <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
+                  {% set r_count = valoracion_count(user) %}
+                  {% set r_score = valoracion_media(user) %}
+                  <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(r_score) if r_count > 0 else '' }}">
                     <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary" title="{{ _('Ver valoraciones') }}">
-                      {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ user.reputation_score }} <span class="text-muted">({{ r_count }})</span>{% else %}—{% endif %}
+                      {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ r_score }} <span class="text-muted">({{ r_count }})</span>{% else %}—{% endif %}
                     </a>
                   </td>
                   {% endif %}
@@ -257,11 +257,11 @@
                     {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
                   </td>
                   {% if show_valoraciones %}
-                  {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
-                  {% set r_count = active_ratings|length %}
-                  <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
+                  {% set r_count = valoracion_count(user) %}
+                  {% set r_score = valoracion_media(user) %}
+                  <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(r_score) if r_count > 0 else '' }}">
                     <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="table-link-primary">
-                      {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ user.reputation_score }} ({{ r_count }}){% else %}—{% endif %}
+                      {% if r_count > 0 %}<i class="fas fa-star text-warning" style="font-size:0.65rem;"></i> {{ r_score }} ({{ r_count }}){% else %}—{% endif %}
                     </a>
                   </td>
                   {% endif %}

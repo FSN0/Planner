@@ -1028,7 +1028,16 @@ def get_worker_panel_stats(worker):
         Solicitud.estado.in_(OPEN_SOLICITUD),
     ).count()
 
-    ratings_count = Rating.query.filter_by(user_id=user_id, is_active=True).count()
+    from flask_login import current_user
+    from app.services.rating_service import apply_valoraciones_author_filter, reputation_for_viewer
+
+    ratings_q = Rating.query.filter(
+        Rating.user_id == user_id,
+        Rating.is_active.is_(True),
+        or_(Rating.actitud.isnot(None), Rating.conocimiento.isnot(None)),
+    )
+    ratings_count = apply_valoraciones_author_filter(ratings_q, current_user).count()
+    rep_score, _rep_n = reputation_for_viewer(worker, current_user)
 
     fichajes_30 = RegistroFichaje.query.filter(
         RegistroFichaje.user_id == user_id,
@@ -1092,15 +1101,15 @@ def get_worker_panel_stats(worker):
 
     from app.services.tenant_modules import has_valoraciones
     from app.services.permission_service import user_can
-    from flask_login import current_user
+    from app.services.rating_service import reputation_tone
     if has_valoraciones() and user_can(current_user, 'valoraciones', 'r'):
         stats.append({
             'key': 'reputacion',
             'label': 'Reputación',
-            'value': worker.reputation_score,
+            'value': rep_score,
             'sub': _tf('{n} valoraciones activas', n=ratings_count),
             'icon': 'fa-star',
-            'tone': 'green' if worker.reputation_score > 0 else ('red' if worker.reputation_score < 0 else 'slate'),
+            'tone': reputation_tone(rep_score if ratings_count else None),
         })
 
     stats.append({
@@ -1176,14 +1185,20 @@ def get_company_panel_stats(company):
     ratings_count = 0
     from app.services.tenant_modules import has_valoraciones
     from app.services.permission_service import user_can
+    from app.services.rating_service import apply_valoraciones_author_filter
     from flask_login import current_user
     show_ratings = has_valoraciones() and user_can(current_user, 'valoraciones', 'r')
     if show_ratings and worker_ids:
-        row = (
+        q = (
             db.session.query(func.avg(Rating.score), func.count(Rating.id))
-            .filter(Rating.user_id.in_(worker_ids), Rating.is_active.is_(True))
-            .first()
+            .filter(
+                Rating.user_id.in_(worker_ids),
+                Rating.is_active.is_(True),
+                or_(Rating.actitud.isnot(None), Rating.conocimiento.isnot(None)),
+            )
         )
+        q = apply_valoraciones_author_filter(q, current_user)
+        row = q.first()
         if row and row[1]:
             avg_rating = round(float(row[0]), 1)
             ratings_count = row[1]
@@ -1261,13 +1276,14 @@ def get_company_panel_stats(company):
         },
     ]
     if show_ratings:
+        from app.services.rating_service import reputation_tone
         stats.append({
             'key': 'valoracion',
             'label': 'Valoración media',
             'value': avg_rating if avg_rating is not None else '—',
             'sub': _tf('{n} valoraciones', n=ratings_count) if ratings_count else 'Sin valoraciones',
             'icon': 'fa-star',
-            'tone': 'amber' if avg_rating else 'slate',
+            'tone': reputation_tone(avg_rating),
             'href': personal_url if ratings_count else None,
         })
     stats.extend([

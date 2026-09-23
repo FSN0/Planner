@@ -1,16 +1,17 @@
-"""Alcances de obras por rol (tres dimensiones independientes).
+"""Alcances de obras por rol (cuatro dimensiones independientes).
 
 Kinds:
 - planificacion → tablero, Gantt, directorio visible, planificar gente/flota, ausencias
 - auditoria_fichajes → auditoría + mapa de fichajes
 - solicitudes → buzón al resolver (personal y flota)
+- valoraciones → qué valoraciones ve (por autor): propias / jefes / todas
 
-Matriz r/w = entrar/actuar. Alcance = qué obras entran en cada función.
+Matriz r/w = entrar/actuar. Alcance = qué obras (o qué autores en valoraciones) entran.
 """
 from __future__ import annotations
 
 import json
-from typing import Iterable
+from typing import Iterable, Optional, Set
 
 from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, Obra, User
 from app.services.config_service import get_tenant_config, set_tenant_config
@@ -19,7 +20,8 @@ from app.services.config_service import get_tenant_config, set_tenant_config
 KIND_PLANIFICACION = 'planificacion'
 KIND_AUDITORIA = 'auditoria_fichajes'
 KIND_SOLICITUDES = 'solicitudes'
-SCOPE_KINDS = (KIND_PLANIFICACION, KIND_AUDITORIA, KIND_SOLICITUDES)
+KIND_VALORACIONES = 'valoraciones'
+SCOPE_KINDS = (KIND_PLANIFICACION, KIND_AUDITORIA, KIND_SOLICITUDES, KIND_VALORACIONES)
 
 # Compat: paneles antiguos → kind
 PANEL_PLANIFICADOR = 'planificador'
@@ -28,6 +30,7 @@ PANEL_AUDITORIA_FICHAJES = 'auditoria_fichajes'
 PANEL_OBRAS = 'obras'
 PANEL_SOLICITUDES = 'solicitudes'
 PANEL_MAPA = 'mapa_fichajes'
+PANEL_VALORACIONES = 'valoraciones'
 PANELS = (
     PANEL_PLANIFICADOR,
     PANEL_TABLERO,
@@ -35,6 +38,7 @@ PANELS = (
     PANEL_OBRAS,
     PANEL_SOLICITUDES,
     PANEL_MAPA,
+    PANEL_VALORACIONES,
 )
 
 SCOPE_NONE = 'none'
@@ -47,6 +51,7 @@ _KIND_PREFIX = 'obra_scope.'
 _LEGACY_FLAT_PREFIX = 'obra_scope.'  # obra_scope.{role} sin kind (v1 unified)
 _TRIPLE_MIGRATED = 'obra_scope._kinds_v1'
 _UNIFIED_MIGRATED = 'obra_scope._unified_v1'
+_VALORACIONES_KIND_MIGRATED = 'obra_scope._valoraciones_v1'
 
 
 def _panel_to_kind(panel: str | None) -> str:
@@ -55,6 +60,8 @@ def _panel_to_kind(panel: str | None) -> str:
         return KIND_AUDITORIA
     if p in (PANEL_SOLICITUDES, KIND_SOLICITUDES):
         return KIND_SOLICITUDES
+    if p in (PANEL_VALORACIONES, KIND_VALORACIONES):
+        return KIND_VALORACIONES
     return KIND_PLANIFICACION
 
 
@@ -114,20 +121,25 @@ def _parse_raw_scope(raw, role: str, panel: str | None = None) -> dict | None:
 
 
 def ensure_obra_scope_unified():
-    """Compat: migra panel_scope.* → flat obra_scope.{role}, luego a 3 kinds."""
+    """Compat: migra panel_scope.* → flat obra_scope.{role}, luego a kinds."""
     _ensure_kinds_migrated()
+    _ensure_valoraciones_kind()
+
+
+def _list_scope_roles():
+    from app.services.role_registry_service import list_roles
+
+    try:
+        return [r for r, _ in list_roles()]
+    except Exception:
+        return [ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]
 
 
 def _ensure_kinds_migrated():
     if get_tenant_config(_TRIPLE_MIGRATED, default=None):
         return
 
-    from app.services.role_registry_service import list_roles
-
-    try:
-        roles = [r for r, _ in list_roles()]
-    except Exception:
-        roles = [ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]
+    roles = _list_scope_roles()
 
     # Paso A: panel_scope / flat → base
     if not get_tenant_config(_UNIFIED_MIGRATED, default=None):
@@ -150,7 +162,7 @@ def _ensure_kinds_migrated():
             set_tenant_config(_legacy_flat_key(role), payload)
         set_tenant_config(_UNIFIED_MIGRATED, '1')
 
-    # Paso B: flat → 3 kinds (copia el mismo valor; luego se editan aparte)
+    # Paso B: flat → 3 kinds originales (copia el mismo valor; luego se editan aparte)
     for role in roles:
         flat = _parse_raw_scope(
             get_tenant_config(_legacy_flat_key(role), default=None), role
@@ -159,16 +171,39 @@ def _ensure_kinds_migrated():
             'mode': flat['mode'],
             'jefe_ids': flat.get('jefe_ids') or [],
         })
-        for kind in SCOPE_KINDS:
+        for kind in (KIND_PLANIFICACION, KIND_AUDITORIA, KIND_SOLICITUDES):
             if not get_tenant_config(_config_key(kind, role), default=None):
                 set_tenant_config(_config_key(kind, role), payload)
 
     set_tenant_config(_TRIPLE_MIGRATED, '1')
 
 
+def _ensure_valoraciones_kind():
+    """Semilla del 4.º kind en tenants que ya tenían los tres."""
+    if get_tenant_config(_VALORACIONES_KIND_MIGRATED, default=None):
+        return
+    try:
+        _ensure_kinds_migrated()
+    except Exception:
+        pass
+    for role in _list_scope_roles():
+        if get_tenant_config(_config_key(KIND_VALORACIONES, role), default=None):
+            continue
+        chosen = default_scope_for_role(role)
+        set_tenant_config(
+            _config_key(KIND_VALORACIONES, role),
+            json.dumps({
+                'mode': chosen['mode'],
+                'jefe_ids': chosen.get('jefe_ids') or [],
+            }),
+        )
+    set_tenant_config(_VALORACIONES_KIND_MIGRATED, '1')
+
+
 def get_role_scope(role: str, kind: str = KIND_PLANIFICACION) -> dict:
     try:
         _ensure_kinds_migrated()
+        _ensure_valoraciones_kind()
     except Exception:
         pass
     role = (role or '').strip()
@@ -296,6 +331,39 @@ def planning_acts_as_office(user) -> bool:
 
 def planning_custody_jefe_ids(user) -> list[int]:
     return user_custody_jefe_ids(user, PANEL_PLANIFICADOR)
+
+
+def valoraciones_acts_as_office(user) -> bool:
+    """Oficina en valoraciones: ve (y gestiona) todas las notas."""
+    return user_scope_mode(user, KIND_VALORACIONES) == 'office'
+
+
+def valoraciones_visible_author_ids(user) -> Optional[Set[int]]:
+    """
+    Autores de valoración visibles para el usuario.
+    None = todas; set vacío = ninguna; set = solo esos created_by_id.
+    En custodia (jefe/jefes) siempre incluye al propio usuario.
+    """
+    mode = user_scope_mode(user, KIND_VALORACIONES)
+    if mode == 'none':
+        return set()
+    if mode == 'office':
+        return None
+    ids = set(user_custody_jefe_ids(user, KIND_VALORACIONES))
+    uid = getattr(user, 'id', None)
+    if uid:
+        ids.add(int(uid))
+    return ids
+
+
+def rating_visible_to_user(user, rating) -> bool:
+    """¿Puede el viewer ver esta valoración concreta?"""
+    if not rating:
+        return False
+    allowed = valoraciones_visible_author_ids(user)
+    if allowed is None:
+        return True
+    return int(getattr(rating, 'created_by_id', 0) or 0) in allowed
 
 
 def obra_in_planning_custody(user, obra) -> bool:

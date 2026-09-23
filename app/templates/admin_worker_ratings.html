@@ -23,8 +23,8 @@
         </div>
         <div class="ratings-history-score">
           <span class="ratings-history-score-label">{{ _('Reputación actual') }}</span>
-          <span class="ratings-history-score-value {% if worker.reputation_score > 0 %}ratings-history-score-value--pos{% elif worker.reputation_score < 0 %}ratings-history-score-value--neg{% else %}ratings-history-score-value--zero{% endif %}">
-            {{ '+' if worker.reputation_score > 0 }}{{ worker.reputation_score }}
+          <span class="ratings-history-score-value {% if (reputation_count|default(worker.reputation_count)) == 0 %}ratings-history-score-value--zero{% elif (reputation_score|default(worker.reputation_score)) >= 4 %}ratings-history-score-value--pos{% elif (reputation_score|default(worker.reputation_score)) <= 2 %}ratings-history-score-value--neg{% else %}ratings-history-score-value--zero{% endif %}">
+            {% if (reputation_count|default(worker.reputation_count)) > 0 %}{{ reputation_score|default(worker.reputation_score) }}{% else %}—{% endif %}
           </span>
         </div>
       </header>
@@ -33,11 +33,13 @@
         <table class="ratings-table">
           <thead>
             <tr>
-              <th style="width: 140px;">{{ _('Fecha') }}</th>
-              <th style="width: 80px;" class="text-center">{{ _('Puntos') }}</th>
+              <th style="width: 130px;">{{ _('Fecha') }}</th>
+              <th style="width: 70px;" class="text-center">{{ _('Actitud') }}</th>
+              <th style="width: 90px;" class="text-center">{{ _('Conocimiento') }}</th>
+              <th style="width: 70px;" class="text-center">{{ _('Media') }}</th>
               <th style="width: 90px;" class="text-center">{{ _('Estado') }}</th>
               <th>{{ _('Motivo') }}</th>
-              <th style="width: 180px;">{{ _('Evaluador') }}</th>
+              <th style="width: 160px;">{{ _('Evaluador') }}</th>
               <th style="width: 90px;" class="text-right">{{ _('Acciones') }}</th>
             </tr>
           </thead>
@@ -48,13 +50,36 @@
               <td class="text-muted small text-nowrap">
                 {{ rating.created_at|format_dt }}
               </td>
+              {% if rating.is_v2 %}
               <td class="text-center">
-                {% if rating.score > 0 %}
-                  <span class="rating-score-pill rating-score-pill--pos">+{{ rating.score }}</span>
+                {% if rating.actitud is not none %}
+                  <span class="rating-score-pill rating-score-pill--pos">{{ rating.actitud }}</span>
                 {% else %}
-                  <span class="rating-score-pill rating-score-pill--neg">{{ rating.score }}</span>
+                  <span class="text-muted">—</span>
                 {% endif %}
               </td>
+              <td class="text-center">
+                {% if rating.conocimiento is not none %}
+                  <span class="rating-score-pill rating-score-pill--pos">{{ rating.conocimiento }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                <span class="rating-score-pill {% if rating.display_score >= 4 %}rating-score-pill--pos{% elif rating.display_score <= 2 %}rating-score-pill--neg{% else %}rating-score-pill--pos{% endif %}">{{ rating.display_score }}</span>
+              </td>
+              {% else %}
+              <td class="text-center" colspan="2">
+                <span class="badge-soft" title="{{ _('Formato antiguo (−3…+3)') }}">{{ _('Antiguo') }}</span>
+              </td>
+              <td class="text-center">
+                {% if rating.score > 0 %}
+                  <span class="rating-score-pill rating-score-pill--pos">+{{ rating.score|int }}</span>
+                {% else %}
+                  <span class="rating-score-pill rating-score-pill--neg">{{ rating.score|int }}</span>
+                {% endif %}
+              </td>
+              {% endif %}
               <td class="text-center">
                 {% if rating.is_active %}
                   <span class="badge-soft">{{ _('Activo') }}</span>
@@ -74,13 +99,20 @@
                 <small class="text-muted">({{ rating.created_by.role }})</small>
               </td>
               <td class="text-right">
-                {% if rating.is_active and can_manage %}
+                {% if rating.is_active and can_manage and rating.is_v2 %}
                 <div class="ratings-row-actions">
                   <button type="button" class="btn btn-light border btn-sm btn-icon"
-                          onclick="openEditRating({{ rating.id }}, {{ rating.score }}, {{ rating.reason|tojson }})"
+                          onclick="openEditRating({{ rating.id }}, {{ rating.actitud|tojson }}, {{ rating.conocimiento|tojson }}, {{ rating.reason|tojson }})"
                           title="{{ _('Editar') }}">
                     <i class="fas fa-edit text-primary"></i>
                   </button>
+                  <button type="button" class="btn btn-light border btn-sm btn-icon"
+                          onclick="deleteRating({{ rating.id }})" title="{{ _('Eliminar') }}">
+                    <i class="fas fa-trash-alt text-danger"></i>
+                  </button>
+                </div>
+                {% elif rating.is_active and can_manage %}
+                <div class="ratings-row-actions">
                   <button type="button" class="btn btn-light border btn-sm btn-icon"
                           onclick="deleteRating({{ rating.id }})" title="{{ _('Eliminar') }}">
                     <i class="fas fa-trash-alt text-danger"></i>
@@ -93,7 +125,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="6">
+              <td colspan="8">
                 <div class="ratings-empty">
                   <i class="far fa-folder-open d-block"></i>
                   {{ _('Aún no hay valoraciones registradas para este trabajador.') }}
@@ -118,21 +150,11 @@
       </div>
       <div class="modal-body">
         <input type="hidden" id="editRatingId">
-        <p class="rating-intro text-center mb-0">{{ _('Modifica la puntuación (-3 a +3)') }}</p>
-        <div class="entity-rating-score-grid">
-          <div class="entity-rating-score-group">
-            <button type="button" class="entity-rating-btn entity-rating-btn--neg edit-rating-btn" data-score="-3">-3</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--neg edit-rating-btn" data-score="-2">-2</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--neg edit-rating-btn" data-score="-1">-1</button>
-          </div>
-          <div class="entity-rating-score-group">
-            <button type="button" class="entity-rating-btn entity-rating-btn--pos edit-rating-btn" data-score="1">+1</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--pos edit-rating-btn" data-score="2">+2</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--pos edit-rating-btn" data-score="3">+3</button>
-          </div>
-        </div>
+        {% with btn_class='edit-rating-btn', dim_prefix='editRating' %}
+          {% include 'components/_rating_dimensions.html' %}
+        {% endwith %}
         <label class="form-label-sm" for="editRatingReason">{{ _('Motivo') }}</label>
-        <textarea id="editRatingReason" class="form-control mb-3" rows="3" placeholder="{{ _('Motivo…') }}"></textarea>
+        <textarea id="editRatingReason" class="form-control mb-3" rows="3" placeholder="{{ _('Motivo de la valoración…') }}" required></textarea>
         <button type="button" class="btn-admin btn-admin-primary btn-block" onclick="saveEditRating()">
           <i class="fas fa-save"></i> {{ _('Guardar cambios') }}
         </button>
@@ -144,32 +166,36 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/rating_dims.js') }}?v=20260923a"></script>
 <script>
-var editSelectedScore = null;
+var editRatingDims = RatingDims.bind({
+  btnClass: 'edit-rating-btn',
+  actitudInput: '#editRatingActitud',
+  conocimientoInput: '#editRatingConocimiento'
+});
 
-function openEditRating(id, score, reason) {
-  editSelectedScore = score;
+function openEditRating(id, actitud, conocimiento, reason) {
   $('#editRatingId').val(id);
   $('#editRatingReason').val(reason || '');
-  $('.edit-rating-btn').removeClass('active');
-  $('.edit-rating-btn[data-score="' + score + '"]').addClass('active');
+  editRatingDims.set(actitud, conocimiento);
   $('#editRatingModal').modal('show');
 }
 
-$(document).on('click', '.edit-rating-btn', function() {
-  $('.edit-rating-btn').removeClass('active');
-  $(this).addClass('active');
-  editSelectedScore = $(this).data('score');
-});
-
 function saveEditRating() {
-  if (!editSelectedScore) { alert({{ _('Selecciona una puntuación.')|tojson }}); return; }
+  var dims = editRatingDims.payload();
+  if (!dims) { alert({{ _('Indica al menos actitud o conocimiento.')|tojson }}); return; }
+  var reason = ($('#editRatingReason').val() || '').trim();
+  if (!reason) { alert({{ _('El motivo es obligatorio.')|tojson }}); return; }
   var id = $('#editRatingId').val();
   $.ajax({
     url: '/admin/api/rating/' + id,
     type: 'PUT',
     contentType: 'application/json',
-    data: JSON.stringify({ score: editSelectedScore, reason: $('#editRatingReason').val() }),
+    data: JSON.stringify({
+      actitud: dims.actitud,
+      conocimiento: dims.conocimiento,
+      reason: reason
+    }),
     success: function() { window.location.reload(); },
     error: function(xhr) {
       alert('Error: ' + (xhr.responseJSON ? xhr.responseJSON.message : 'Error'));

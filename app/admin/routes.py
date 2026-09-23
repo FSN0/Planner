@@ -913,12 +913,17 @@ def worker_panel(user_id):
     from app.services.permission_service import can_resolve_fichajes
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     from app.services.impersonation_service import admin_puede_impersonar, puede_ser_impersonado
-    from app.services.panel_scope_service import planning_acts_as_office
+    from app.services.panel_scope_service import (
+        planning_acts_as_office,
+        valoraciones_acts_as_office,
+    )
+    from app.services.rating_service import reputation_for_viewer
     from app.utils.nav_back import resolve_back_url
     if planning_acts_as_office(current_user):
         back_url = resolve_back_url('admin.personal')
     else:
         back_url = resolve_back_url('admin.obras_detailed')
+    rep_score, rep_count = reputation_for_viewer(worker, current_user)
     return render_template(
         "admin_worker_panel.html",
         worker=worker,
@@ -943,8 +948,10 @@ def worker_panel(user_id):
         can_read_valoraciones=user_can(current_user, 'valoraciones', 'r'),
         can_reset_valoraciones=(
             user_can(current_user, 'valoraciones', 'w')
-            and planning_acts_as_office(current_user)
+            and valoraciones_acts_as_office(current_user)
         ),
+        reputation_score=rep_score,
+        reputation_count=rep_count,
     )
 
 
@@ -1834,38 +1841,49 @@ def edit_company(company_id):
 @login_required
 def rate_worker():
     from app.services.tenant_modules import has_valoraciones
+    from app.services.rating_service import parse_rating_payload
     if not has_valoraciones():
         return jsonify({'success': False, 'message': translate('Módulo no activo')}), 404
     if not user_can(current_user, 'valoraciones', 'w'):
         return jsonify({'success': False, 'message': translate('No autorizado')}), 403
-    data = request.get_json()
+    data = request.get_json() or {}
     worker_id = data.get('worker_id')
-    score = data.get('score') 
-    reason = data.get('reason')
-    
-    if not worker_id or not score:
+
+    if not worker_id:
         return jsonify({'success': False, 'message': translate('Faltan datos')}), 400
-        
+
+    try:
+        actitud, conocimiento, media, reason = parse_rating_payload(data)
+    except ValueError as e:
+        return jsonify({'success': False, 'message': translate(str(e))}), 400
+
     try:
         new_rating = Rating(
             user_id=int(worker_id),
             created_by_id=current_user.id,
-            score=int(score),
+            score=media,
+            actitud=actitud,
+            conocimiento=conocimiento,
             reason=reason,
             is_active=True
         )
         db.session.add(new_rating)
-        db.session.commit()
         from app.utils import register_log
         operario = User.query.get(int(worker_id))
         nombre_operario = f"{operario.name} {operario.lastname}" if operario else f"ID {worker_id}"
-        
+        dims = []
+        if actitud is not None:
+            dims.append(f"actitud {actitud}")
+        if conocimiento is not None:
+            dims.append(f"conocimiento {conocimiento}")
         register_log(
             user_id=current_user.id,
             category='valoraciones',
             action='Nueva Valoración',
-            detail=f"Ha puntuado a {nombre_operario} con un {score}. Motivo: {reason}"
+            detail=f"Ha puntuado a {nombre_operario} ({', '.join(dims)}; media {media}). Motivo: {reason}",
+            target_user_id=int(worker_id),
         )
+        db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -1873,19 +1891,20 @@ def rate_worker():
 
 
 def _can_manage_rating(rating):
-    """Editar/borrar: autor con escritura, u oficina con escritura."""
+    """Editar/borrar: autor con escritura, u oficina de valoraciones."""
     if not user_can(current_user, 'valoraciones', 'w'):
         return False
     if rating.created_by_id == current_user.id:
         return True
-    from app.services.panel_scope_service import planning_acts_as_office
-    return planning_acts_as_office(current_user)
+    from app.services.panel_scope_service import valoraciones_acts_as_office
+    return valoraciones_acts_as_office(current_user)
 
 
 @admin_bp.route("/api/rating/<int:rating_id>", methods=["PUT"])
 @login_required
 def update_rating(rating_id):
     from app.services.tenant_modules import has_valoraciones
+    from app.services.rating_service import parse_rating_payload
     if not has_valoraciones():
         return jsonify({'success': False, 'message': translate('Módulo no activo')}), 404
     rating = Rating.query.get_or_404(rating_id)
@@ -1895,23 +1914,25 @@ def update_rating(rating_id):
         return jsonify({'success': False, 'message': translate('Esta valoración ya está archivada')}), 400
 
     data = request.get_json() or {}
-    score = data.get('score')
-    reason = data.get('reason')
-    if score is None:
-        return jsonify({'success': False, 'message': translate('Falta la puntuación')}), 400
+    try:
+        actitud, conocimiento, media, reason = parse_rating_payload(data)
+    except ValueError as e:
+        return jsonify({'success': False, 'message': translate(str(e))}), 400
 
     try:
-        rating.score = int(score)
+        rating.actitud = actitud
+        rating.conocimiento = conocimiento
+        rating.score = media
         rating.reason = reason
-        db.session.commit()
         from app.utils import register_log
         register_log(
             user_id=current_user.id,
             category='valoraciones',
             action='Editar Valoración',
-            detail=f"Editada valoración #{rating.id} → {rating.score}. Motivo: {reason or '—'}",
+            detail=f"Editada valoración #{rating.id} → media {media} (A:{actitud} K:{conocimiento}). Motivo: {reason}",
             target_user_id=rating.user_id,
         )
+        db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -1932,7 +1953,6 @@ def delete_rating(rating_id):
 
     try:
         rating.is_active = False
-        db.session.commit()
         from app.utils import register_log
         register_log(
             user_id=current_user.id,
@@ -1941,6 +1961,7 @@ def delete_rating(rating_id):
             detail=f"Eliminada valoración #{rating.id} ({rating.score} pts).",
             target_user_id=rating.user_id,
         )
+        db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
@@ -1950,13 +1971,13 @@ def delete_rating(rating_id):
 @login_required
 def reset_worker_ratings(user_id):
     from app.services.tenant_modules import has_valoraciones
-    from app.services.panel_scope_service import planning_acts_as_office
+    from app.services.panel_scope_service import valoraciones_acts_as_office
     if not has_valoraciones():
         flash(translate('Módulo no activo.'), 'warning')
         return redirect(url_for('admin.worker_panel', user_id=user_id))
     if not (
         user_can(current_user, 'valoraciones', 'w')
-        and planning_acts_as_office(current_user)
+        and valoraciones_acts_as_office(current_user)
     ):
         flash(translate('No tienes permiso para resetear valoraciones.'), 'danger')
         return redirect(url_for('admin.worker_panel', user_id=user_id))
@@ -1966,15 +1987,16 @@ def reset_worker_ratings(user_id):
     for r in worker.ratings_received:
         if r.is_active:
             r.is_active = False
-            
-    db.session.commit()
+
     from app.utils import register_log
     register_log(
         user_id=current_user.id,
         category='valoraciones',
         action='Reseteo de Historial',
-        detail=f"Ha reseteado a 0.0 todas las valoraciones de {worker.name} {worker.lastname}."
+        detail=f"Ha reseteado a 0.0 todas las valoraciones de {worker.name} {worker.lastname}.",
+        target_user_id=worker.id,
     )
+    db.session.commit()
     flash(translate("Puntuación de {name} restablecida a 0. El historial se ha guardado.", name=worker.name), "success")
     return redirect(url_for('admin.worker_panel', user_id=worker.id))
 
@@ -1982,6 +2004,11 @@ def reset_worker_ratings(user_id):
 @login_required
 def worker_ratings_history(user_id):
     from app.services.tenant_modules import has_valoraciones
+    from app.services.panel_scope_service import (
+        rating_visible_to_user,
+        valoraciones_acts_as_office,
+    )
+    from app.services.rating_service import reputation_for_viewer
     if not has_valoraciones():
         flash(translate('Módulo no activo.'), 'warning')
         return redirect(url_for('admin.worker_panel', user_id=user_id))
@@ -1989,17 +2016,24 @@ def worker_ratings_history(user_id):
         flash(translate('No tienes permiso para ver valoraciones.'), 'danger')
         return redirect(url_for('admin.worker_panel', user_id=user_id))
     worker = User.query.get_or_404(user_id)
-    # Mostramos TODOS (activos e inactivos) ordenados por fecha
-    ratings = Rating.query.filter_by(user_id=worker.id).order_by(Rating.created_at.desc()).all()
-    from app.services.panel_scope_service import planning_acts_as_office
+    all_ratings = Rating.query.filter_by(user_id=worker.id).order_by(Rating.created_at.desc()).all()
+    # Histórico: oficina ve todo; custodia solo las firmadas por autores permitidos
+    # (incluye inactivas propias / de su alcance para trazabilidad).
+    if valoraciones_acts_as_office(current_user):
+        ratings = all_ratings
+    else:
+        ratings = [r for r in all_ratings if rating_visible_to_user(current_user, r)]
+    rep_score, rep_count = reputation_for_viewer(worker, current_user)
     from app.utils.nav_back import resolve_back_url
     back_url = resolve_back_url('admin.worker_panel', user_id=worker.id)
     return render_template(
         "admin_worker_ratings.html",
         worker=worker,
         ratings=ratings,
+        reputation_score=rep_score,
+        reputation_count=rep_count,
         can_write_valoraciones=user_can(current_user, 'valoraciones', 'w'),
-        valoraciones_office=planning_acts_as_office(current_user),
+        valoraciones_office=valoraciones_acts_as_office(current_user),
         back_url=back_url,
     )
 
@@ -3702,19 +3736,24 @@ def _planificador_obras_con_operarios(worker_ids, start_date, end_date, obras_id
 
 
 def _planificador_avg_ratings(user_ids):
-    """Media de valoraciones activas por user_id (una sola consulta)."""
+    """Media de valoraciones activas v2 visibles según alcance del usuario."""
     from app.services.tenant_modules import has_valoraciones
     from app.services.permission_service import user_can
+    from app.services.rating_service import apply_valoraciones_author_filter
 
     ids = [int(u) for u in (user_ids or []) if u]
     if not ids or not has_valoraciones() or not user_can(current_user, 'valoraciones', 'r'):
         return {}
-    rows = (
+    q = (
         db.session.query(Rating.user_id, func.avg(Rating.score))
-        .filter(Rating.user_id.in_(ids), Rating.is_active.is_(True))
-        .group_by(Rating.user_id)
-        .all()
+        .filter(
+            Rating.user_id.in_(ids),
+            Rating.is_active.is_(True),
+            or_(Rating.actitud.isnot(None), Rating.conocimiento.isnot(None)),
+        )
     )
+    q = apply_valoraciones_author_filter(q, current_user)
+    rows = q.group_by(Rating.user_id).all()
     return {uid: round(float(avg), 1) for uid, avg in rows}
 
 
@@ -4389,6 +4428,7 @@ def permisos_roles(role=None):
         KIND_AUDITORIA,
         KIND_PLANIFICACION,
         KIND_SOLICITUDES,
+        KIND_VALORACIONES,
         SCOPE_KINDS,
         ensure_obra_scope_unified,
         get_role_scope,
@@ -4424,6 +4464,15 @@ def permisos_roles(role=None):
         KIND_PLANIFICACION: translate('Planificación'),
         KIND_AUDITORIA: translate('Auditoría fichajes / mapa'),
         KIND_SOLICITUDES: translate('Solicitudes (buzón)'),
+        KIND_VALORACIONES: translate('Valoraciones'),
+    }
+    scope_option_sets = {
+        KIND_VALORACIONES: [
+            ('none', translate('Ninguno')),
+            ('jefe', translate('Solo las suyas')),
+            ('jefes', translate('De jefes concretos')),
+            ('all', translate('Todas (oficina)')),
+        ],
     }
     scopes_meta = {}
     for kind in SCOPE_KINDS:
@@ -4434,7 +4483,17 @@ def permisos_roles(role=None):
             'mode': sc['mode'],
             'jefe_ids': set(sc.get('jefe_ids') or []),
             'locked': active == ROLE_ADMIN,
-            'locked_note': translate('Administrador: siempre ve todas las obras.'),
+            'locked_note': (
+                translate('Administrador: siempre ve todas las valoraciones.')
+                if kind == KIND_VALORACIONES
+                else translate('Administrador: siempre ve todas las obras.')
+            ),
+            'options': scope_option_sets.get(kind),
+            'hint': (
+                translate('Qué valoraciones ve en historial, paneles y reputación.')
+                if kind == KIND_VALORACIONES
+                else None
+            ),
         }
         if active == ROLE_JEFE and kind == KIND_PLANIFICACION:
             meta['locked'] = True
@@ -5046,7 +5105,20 @@ def system_logs():
     logs = []
     laboral_acked_ids = set()
     if category != 'persona_obra':
-        logs = SystemLog.query.filter_by(category=category).order_by(SystemLog.timestamp.desc()).limit(300).all()
+        logs_q = SystemLog.query.filter_by(category=category)
+        if category == 'valoraciones':
+            from app.services.panel_scope_service import (
+                valoraciones_acts_as_office,
+                valoraciones_visible_author_ids,
+            )
+            if not valoraciones_acts_as_office(current_user):
+                allowed = valoraciones_visible_author_ids(current_user) or set()
+                # Solo logs de valoraciones firmadas por autores de su alcance
+                if allowed:
+                    logs_q = logs_q.filter(SystemLog.user_id.in_(list(allowed)))
+                else:
+                    logs_q = logs_q.filter(SystemLog.id.is_(None))
+        logs = logs_q.order_by(SystemLog.timestamp.desc()).limit(300).all()
 
         if current_user.role == ROLE_ADMIN:
             pref = LogPreference.query.filter_by(user_id=current_user.id, category=category).first()

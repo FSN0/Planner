@@ -132,7 +132,8 @@
   {% include "_admin_sidebar.html" %}
   <main class="admin-main entity-panel-page entity-panel-page--worker">
 
-    {% set score = worker.reputation_score %}
+    {% set score = reputation_score|default(worker.reputation_score) %}
+    {% set rcount = reputation_count|default(worker.reputation_count) %}
 
     <article class="entity-panel-card">
       <header class="entity-panel-card-top">
@@ -166,8 +167,8 @@
             <div class="entity-hero-icon-wrap">
               <div class="entity-hero-icon entity-hero-icon--avatar">
                 <i class="fas fa-user"></i>
-                {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and user_can(current_user, 'valoraciones', 'r') %}
-                <div class="entity-rep-badge {{ 'entity-rep-badge--pos' if score > 0 else 'entity-rep-badge--neg' if score < 0 else 'entity-rep-badge--neu' }}"
+                {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and user_can(current_user, 'valoraciones', 'r') and rcount > 0 %}
+                <div class="entity-rep-badge {{ 'entity-rep-badge--pos' if score >= 4 else 'entity-rep-badge--neg' if score <= 2 else 'entity-rep-badge--neu' }}"
                      title="{{ _('Reputación actual') }}">{{ score }}</div>
                 {% endif %}
               </div>
@@ -261,7 +262,7 @@
               <i class="fas fa-history"></i> {{ _('Historial') }}
             </a>
             {% endif %}
-            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and can_reset_valoraciones|default(false) and score != 0 %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and can_reset_valoraciones|default(false) and rcount > 0 %}
             <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline"
                   onsubmit="return confirm({{ _('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.')|tojson }});">
               <button type="submit" class="btn-admin btn-admin-ghost" title="{{ _('Resetear contador') }}">
@@ -358,21 +359,11 @@
         <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
       </div>
       <div class="modal-body">
-        <p class="rating-intro text-center mb-0">{{ _('Selecciona una puntuación entre -3 y +3') }}</p>
-        <div class="entity-rating-score-grid">
-          <div class="entity-rating-score-group">
-            <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-3">-3</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-2">-2</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-1">-1</button>
-          </div>
-          <div class="entity-rating-score-group">
-            <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="1">+1</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="2">+2</button>
-            <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="3">+3</button>
-          </div>
-        </div>
-        <label class="form-label-sm" for="ratingReason">{{ _('Motivo (opcional)') }}</label>
-        <textarea id="ratingReason" class="form-control mb-3" rows="3" placeholder="{{ _('Describe brevemente el motivo de la valoración…') }}"></textarea>
+        {% with btn_class='rating-btn', dim_prefix='rating' %}
+          {% include 'components/_rating_dimensions.html' %}
+        {% endwith %}
+        <label class="form-label-sm" for="ratingReason">{{ _('Motivo') }}</label>
+        <textarea id="ratingReason" class="form-control mb-3" rows="3" placeholder="{{ _('Describe el motivo de la valoración…') }}" required></textarea>
         <button type="button" class="btn-admin btn-admin-primary btn-block" onclick="submitRating()">
           <i class="fas fa-save mr-1"></i> {{ _('Guardar valoración') }}
         </button>
@@ -531,31 +522,40 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     };
 });
+</script>
 
 {% if tenant_has_valoraciones and can_write_valoraciones|default(false) %}
-var selectedScore = null;
-function openRatingModal() {
-    $('#ratingModal').modal('show');
-    selectedScore = null;
-    $('.rating-btn').removeClass('active');
-}
-$(document).on('click', '.rating-btn', function() {
-    $('.rating-btn').removeClass('active');
-    $(this).addClass('active');
-    selectedScore = $(this).data('score');
+<script src="{{ url_for('static', filename='js/rating_dims.js') }}?v=20260923a"></script>
+<script>
+var workerRatingDims = RatingDims.bind({
+    btnClass: 'rating-btn',
+    actitudInput: '#ratingActitud',
+    conocimientoInput: '#ratingConocimiento'
 });
+function openRatingModal() {
+    workerRatingDims.reset();
+    $('#ratingReason').val('');
+    $('#ratingModal').modal('show');
+}
 function submitRating() {
-    if (!selectedScore) { alert({{ _('Selecciona una puntuación.')|tojson }}); return; }
-    var reason = $('#ratingReason').val();
+    var dims = workerRatingDims.payload();
+    if (!dims) { alert({{ _('Indica al menos actitud o conocimiento.')|tojson }}); return; }
+    var reason = ($('#ratingReason').val() || '').trim();
+    if (!reason) { alert({{ _('El motivo es obligatorio.')|tojson }}); return; }
     $.ajax({
         url: "/admin/api/rate_worker",
         type: "POST",
         contentType: "application/json",
-        data: JSON.stringify({ worker_id: {{ worker.id }}, score: selectedScore, reason: reason }),
+        data: JSON.stringify({
+            worker_id: {{ worker.id }},
+            actitud: dims.actitud,
+            conocimiento: dims.conocimiento,
+            reason: reason
+        }),
         success: function() { window.location.reload(); },
         error: function(xhr) { alert({{ _('Error')|tojson }} + ": " + (xhr.responseJSON ? xhr.responseJSON.message : {{ _('Error')|tojson }})); }
     });
 }
-{% endif %}
 </script>
+{% endif %}
 {% endblock %}

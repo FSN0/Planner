@@ -107,7 +107,7 @@
           · <strong>{{ _('Escritura') }}</strong> — {{ _('mutar (crear, editar, resolver…).') }}
           · <strong>{{ _('Tick') }}</strong> — {{ _('capacidad (planificar gente/flota, editar pasado).') }}<br>
           {{ _('Crear solicitudes = planificar en modo «por solicitudes». Resolver = escritura en Solicitudes.') }}
-          {{ _('Tres alcances de obras: planificación, auditoría/mapa y buzón.') }}
+          {{ _('Cuatro alcances: planificación, auditoría/mapa, buzón y valoraciones.') }}
         </p>
         <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">
           {% for role_key, role_label_txt in roles %}
@@ -179,11 +179,18 @@
           <input type="hidden" name="scope__{{ kind }}__mode" value="{{ sm.mode }}">
           {% else %}
           <select name="scope__{{ kind }}__mode" class="js-scope-mode" data-kind="{{ kind }}">
+            {% if sm.options %}
+              {% for opt_val, opt_label in sm.options %}
+            <option value="{{ opt_val }}" {% if sm.mode == opt_val %}selected{% endif %}>{{ opt_label }}</option>
+              {% endfor %}
+            {% else %}
             <option value="none" {% if sm.mode == 'none' %}selected{% endif %}>{{ _('Ninguno') }}</option>
             <option value="jefe" {% if sm.mode == 'jefe' %}selected{% endif %}>{{ _('Sus obras (como jefe)') }}</option>
             <option value="jefes" {% if sm.mode == 'jefes' %}selected{% endif %}>{{ _('Jefes concretos') }}</option>
             <option value="all" {% if sm.mode == 'all' %}selected{% endif %}>{{ _('Todas (oficina)') }}</option>
+            {% endif %}
           </select>
+          {% if sm.hint %}<p class="hint">{{ sm.hint }}</p>{% endif %}
           <div class="perm-scope-jefes js-scope-jefes" data-kind="{{ kind }}" {% if sm.mode != 'jefes' %}hidden{% endif %}>
             {% for jefe in scope_jefes %}
             <label>

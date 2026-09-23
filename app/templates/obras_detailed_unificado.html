@@ -149,21 +149,11 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="ratingWorkerId">
-                <p class="rating-intro text-center mb-0">{{ _('Selecciona una puntuación entre -3 y +3') }}</p>
-                <div class="entity-rating-score-grid">
-                    <div class="entity-rating-score-group">
-                        <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-3">-3</button>
-                        <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-2">-2</button>
-                        <button type="button" class="entity-rating-btn entity-rating-btn--neg rating-btn" data-score="-1">-1</button>
-                    </div>
-                    <div class="entity-rating-score-group">
-                        <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="1">+1</button>
-                        <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="2">+2</button>
-                        <button type="button" class="entity-rating-btn entity-rating-btn--pos rating-btn" data-score="3">+3</button>
-                    </div>
-                </div>
-                <label class="form-label-sm" for="ratingReason">{{ _('Motivo (opcional)') }}</label>
-                <textarea id="ratingReason" class="form-control mb-0" rows="2" placeholder="{{ _('Motivo…') }}"></textarea>
+                {% with btn_class='rating-btn', dim_prefix='rating' %}
+                  {% include 'components/_rating_dimensions.html' %}
+                {% endwith %}
+                <label class="form-label-sm" for="ratingReason">{{ _('Motivo') }}</label>
+                <textarea id="ratingReason" class="form-control mb-0" rows="2" placeholder="{{ _('Motivo de la valoración…') }}" required></textarea>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-admin btn-admin-ghost" data-dismiss="modal">{{ _('Cancelar') }}</button>
@@ -240,7 +230,7 @@
       $('#ratingWorkerId').val(workerId);
       $('#ratingWorkerName').text(workerName);
       $('#ratingReason').val('');
-      $('.rating-btn').removeClass('active');
+      if (window.kanbanRatingDims) { window.kanbanRatingDims.reset(); }
       $('#ratingModal').modal('show');
   }
   {% endif %}
@@ -272,26 +262,37 @@
   {% endif %}
   
   {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'w') %}
+  <script src="{{ url_for('static', filename='js/rating_dims.js') }}?v=20260923a"></script>
   <script>
-    $(document).on('click', '.rating-btn', function() {
-        $('.rating-btn').removeClass('active');
-        $(this).addClass('active');
-        window.selectedRatingScore = $(this).data('score');
+    var kanbanRatingDims = RatingDims.bind({
+        btnClass: 'rating-btn',
+        actitudInput: '#ratingActitud',
+        conocimientoInput: '#ratingConocimiento'
+    });
+    window.kanbanRatingDims = kanbanRatingDims;
+
+    $('#ratingModal').on('show.bs.modal', function() {
+        kanbanRatingDims.reset();
+        $('#ratingReason').val('');
     });
 
     function submitRating() {
-        if (!window.selectedRatingScore) { alert({{ _('Selecciona puntuación')|tojson }}); return; }
+        var dims = kanbanRatingDims.payload();
+        if (!dims) { alert({{ _('Indica al menos actitud o conocimiento.')|tojson }}); return; }
+        var reason = ($('#ratingReason').val() || '').trim();
+        if (!reason) { alert({{ _('El motivo es obligatorio.')|tojson }}); return; }
         $.ajax({
             url: "/admin/api/rate_worker",
             type: "POST",
             contentType: "application/json",
-            data: JSON.stringify({ 
-                worker_id: $('#ratingWorkerId').val(), 
-                score: window.selectedRatingScore, 
-                reason: $('#ratingReason').val() 
+            data: JSON.stringify({
+                worker_id: $('#ratingWorkerId').val(),
+                actitud: dims.actitud,
+                conocimiento: dims.conocimiento,
+                reason: reason
             }),
             success: function() { location.reload(); },
-            error: function(e) { alert({{ _('Error')|tojson }} + ': ' + e.responseJSON.message); }
+            error: function(e) { alert({{ _('Error')|tojson }} + ': ' + (e.responseJSON ? e.responseJSON.message : {{ _('Error')|tojson }})); }
         });
     }
   </script>

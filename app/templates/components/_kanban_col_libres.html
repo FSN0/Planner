@@ -68,11 +68,12 @@
                         </a>
                     </div>
                     
-                    {% set rep = worker.reputation_score %}
-                    {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') and rep != 0 %}
-                        <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}" 
+                    {% set rep = valoracion_media(worker) %}
+                    {% set rcount = valoracion_count(worker) %}
+                    {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') and rcount > 0 %}
+                        <span class="badge {{ 'badge-soft-green' if rep >= 4 else 'badge-soft-red' if rep <= 2 else 'badge-soft-slate' }}" 
                               style="font-size: 0.6rem; padding: 1px 4px;">
-                            {{ '+' if rep > 0 }}{{ rep }}
+                            {{ rep }}
                         </span>
                     {% endif %}
                 </div>
