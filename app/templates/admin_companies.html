@@ -7,6 +7,7 @@
 {% endblock %}
 
 {% block wrapper %}
+{% set show_valoraciones = tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
@@ -18,12 +19,14 @@
         <span class="page-toolbar-count">{{ companies|length }} {{ _('empresas') }}</span>
       </div>
       <div class="page-toolbar-actions">
+        {% if user_can(current_user, 'subcontratas', 'w') %}
         <a href="{{ url_for('admin.import_companies') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-file-import"></i> {{ _('Importar') }}
         </a>
         <a href="{{ url_for('admin.create_company') }}" class="btn-admin btn-admin-primary">
           <i class="fas fa-plus"></i> {{ _('Nueva') }}
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -47,7 +50,7 @@
             <col style="width: 11%">
             <col style="width: 20%">
             <col style="width: 8%">
-            {% if tenant_has_valoraciones %}
+            {% if show_valoraciones %}
             <col style="width: 9%">
             {% endif %}
             <col class="col-actions-fixed">
@@ -61,7 +64,7 @@
               <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Gremio') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
               <th class="sortable-col" data-col-index="6" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Tipo') }}</span><i class="fas fa-sort sort-icon"></i></th>
-              {% if tenant_has_valoraciones %}
+              {% if show_valoraciones %}
               <th class="sortable-col col-mobile-hide" data-col-index="7" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
               {% endif %}
               <th class="col-actions"></th>
@@ -74,7 +77,7 @@
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 4, this.value)" placeholder="…" title="{{ _('Filtrar gremio') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 5, this.value)" placeholder="…" title="{{ _('Filtrar email') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 6, this.value)" placeholder="…" title="{{ _('Filtrar tipo') }}"></th>
-              {% if tenant_has_valoraciones %}
+              {% if show_valoraciones %}
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('companiesTable', 7, this.value)" placeholder="…" title="{{ _('Filtrar valoración') }}"></th>
               {% endif %}
               <th></th>
@@ -96,7 +99,7 @@
                 {% if c.is_internal %}<span class="badge-soft badge-soft-blue">{{ _('Interna') }}</span>
                 {% else %}<span class="badge-soft badge-soft-slate">{{ _('Externa') }}</span>{% endif %}
               </td>
-              {% if tenant_has_valoraciones %}
+              {% if show_valoraciones %}
               {% set ns = namespace(total=0, count=0) %}
               {% for u in c.users %}
                 {% if u.reputation_score and u.reputation_score > 0 %}
@@ -113,13 +116,17 @@
               {% endif %}
               <td class="col-actions">
                 <div class="table-actions">
+                  {% if user_can(current_user, 'subcontratas', 'w') %}
                   <a href="{{ url_for('admin.edit_company', company_id=c.id) }}" class="btn-table-action" title="{{ _('Configurar') }}"><i class="fas fa-cog"></i></a>
                   <a href="{{ url_for('admin.confirm_delete_company', company_id=c.id) }}" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash-alt"></i></a>
+                  {% else %}
+                  <a href="{{ url_for('admin.company_panel', company_id=c.id) }}" class="btn-table-action" title="{{ _('Ver') }}"><i class="fas fa-eye"></i></a>
+                  {% endif %}
                 </div>
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="{{ 9 if tenant_has_valoraciones else 8 }}" class="table-empty-state"><i class="fas fa-building"></i>{{ _('Sin empresas registradas.') }}</td></tr>
+            <tr><td colspan="{{ 9 if show_valoraciones else 8 }}" class="table-empty-state"><i class="fas fa-building"></i>{{ _('Sin empresas registradas.') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>

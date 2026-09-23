@@ -6,6 +6,7 @@
 from app.services.email_service import send_email
 from app.services.signup_service import url_acceso_tenant
 from app.services.i18n_service import translate, get_locale, DEFAULT_LOCALE
+from app.services.notification_dispatch_service import event_allows_send
 from urllib.parse import quote
 
 
@@ -17,6 +18,8 @@ def enviar_enlaces_acceso(email, matches):
     """
     email = (email or '').strip().lower()
     if not email or not matches:
+        return False
+    if not event_allows_send('tenant_access_link'):
         return False
 
     lineas = []

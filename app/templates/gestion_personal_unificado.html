@@ -7,6 +7,7 @@
 {% endblock %}
 
 {% block wrapper %}
+{% set show_valoraciones = tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
@@ -65,7 +66,7 @@
           <i class="fas fa-ban"></i> {{ _('Desactivar') }}
         </button>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if user_can(current_user, 'trabajadores', 'w') %}
         <button type="button" class="btn-bulk btn-bulk-danger" onclick="bulkDeleteUsers('tableExternos', 'externo-checkbox')">
           <i class="fas fa-trash"></i> {{ _('Eliminar') }}
         </button>
@@ -104,7 +105,7 @@
                 <col style="width: 22%">
                 <col style="width: 9%">
                 <col style="width: 17%">
-                {% if tenant_has_valoraciones %}
+                {% if show_valoraciones %}
                 <col style="width: 9%">
                 {% endif %}
                 <col style="width: 9%">
@@ -117,10 +118,10 @@
                   <th class="sortable-col col-mobile-hide" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Email') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Rol') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                  {% if tenant_has_valoraciones %}
+                  {% if show_valoraciones %}
                   <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   {% endif %}
-                  <th class="sortable-col" data-col-index="{{ 6 if tenant_has_valoraciones else 5 }}" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="{{ 6 if show_valoraciones else 5 }}" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="col-actions"></th>
                 </tr>
                 <tr class="filter-row">
@@ -129,10 +130,10 @@
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 2, this.value)" placeholder="…" title="{{ _('Filtrar email') }}"></th>
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 3, this.value)" placeholder="…" title="{{ _('Filtrar rol') }}"></th>
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 4, this.value)" placeholder="…" title="{{ _('Filtrar categoría') }}"></th>
-                  {% if tenant_has_valoraciones %}
+                  {% if show_valoraciones %}
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', 5, this.value)" placeholder="…" title="{{ _('Filtrar valoración') }}"></th>
                   {% endif %}
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', {{ 6 if tenant_has_valoraciones else 5 }}, this.value)" placeholder="…" title="{{ _('Filtrar estado') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableInternos', {{ 6 if show_valoraciones else 5 }}, this.value)" placeholder="…" title="{{ _('Filtrar estado') }}"></th>
                   <th></th>
                 </tr>
               </thead>
@@ -151,7 +152,7 @@
                     {% if user.especialidad %}<span class="text-muted d-block" style="font-size:0.68rem;">{{ user.especialidad }}</span>{% endif %}
                     {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
                   </td>
-                  {% if tenant_has_valoraciones %}
+                  {% if show_valoraciones %}
                   {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
                   {% set r_count = active_ratings|length %}
                   <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
@@ -181,7 +182,7 @@
                         <button type="submit" class="btn-table-action" title="{{ _('Entrar como') }}"><i class="fas fa-user-secret"></i></button>
                       </form>
                       {% endif %}
-                      {% if current_user.role == 'admin' %}
+                      {% if user_can(current_user, 'trabajadores', 'w') %}
                       <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar usuario?')|tojson }});">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>
@@ -191,7 +192,7 @@
                   </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="{{ 8 if tenant_has_valoraciones else 7 }}" class="table-empty-state"><i class="fas fa-users"></i>{{ _('Sin registros internos.') }}</td></tr>
+                <tr><td colspan="{{ 8 if show_valoraciones else 7 }}" class="table-empty-state"><i class="fas fa-users"></i>{{ _('Sin registros internos.') }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -207,7 +208,7 @@
                 <col style="width: 17%">
                 <col style="width: 10%">
                 <col style="width: 16%">
-                {% if tenant_has_valoraciones %}
+                {% if show_valoraciones %}
                 <col style="width: 9%">
                 {% endif %}
                 <col style="width: 9%">
@@ -220,10 +221,10 @@
                   <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="sortable-col col-mobile-hide" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('DNI') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="sortable-col col-mobile-hide" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Categoría') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                  {% if tenant_has_valoraciones %}
+                  {% if show_valoraciones %}
                   <th class="sortable-col col-mobile-hide" data-col-index="5" data-sort="none" data-sort-type="rating" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Valor.') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   {% endif %}
-                  <th class="sortable-col" data-col-index="{{ 6 if tenant_has_valoraciones else 5 }}" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                  <th class="sortable-col" data-col-index="{{ 6 if show_valoraciones else 5 }}" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   <th class="col-actions"></th>
                 </tr>
                 <tr class="filter-row">
@@ -232,10 +233,10 @@
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 2, this.value)" placeholder="…" title="{{ _('Filtrar empresa') }}"></th>
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 3, this.value)" placeholder="…" title="{{ _('Filtrar DNI') }}"></th>
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 4, this.value)" placeholder="…" title="{{ _('Filtrar categoría') }}"></th>
-                  {% if tenant_has_valoraciones %}
+                  {% if show_valoraciones %}
                   <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', 5, this.value)" placeholder="…" title="{{ _('Filtrar valoración') }}"></th>
                   {% endif %}
-                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', {{ 6 if tenant_has_valoraciones else 5 }}, this.value)" placeholder="…" title="{{ _('Filtrar estado') }}"></th>
+                  <th><input type="text" class="table-filter-input" onkeyup="filterTable('tableExternos', {{ 6 if show_valoraciones else 5 }}, this.value)" placeholder="…" title="{{ _('Filtrar estado') }}"></th>
                   <th></th>
                 </tr>
               </thead>
@@ -255,7 +256,7 @@
                     {% if user.especialidad %}<span class="text-muted d-block" style="font-size:0.68rem;">{{ user.especialidad }}</span>{% endif %}
                     {% if not user.categoria_profesional and not user.especialidad %}—{% endif %}
                   </td>
-                  {% if tenant_has_valoraciones %}
+                  {% if show_valoraciones %}
                   {% set active_ratings = user.ratings_received|selectattr('is_active', 'equalto', True)|list %}
                   {% set r_count = active_ratings|length %}
                   <td class="col-mobile-hide" data-sort-tier="{{ 1 if r_count > 0 else 0 }}" data-sort-value="{{ '%08.2f'|format(user.reputation_score) if r_count > 0 else '' }}">
@@ -294,7 +295,7 @@
                       {% if user_can(current_user, 'trabajadores', 'w') %}
                       <button type="button" class="btn-table-action btn-table-action--info schedule-btn" data-user-id="{{ user.id }}" data-action="deactivate" title="{{ _('Programar baja') }}"><i class="far fa-clock"></i></button>
                       {% endif %}
-                      {% if current_user.role == 'admin' %}
+                      {% if user_can(current_user, 'trabajadores', 'w') %}
                       <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar definitivamente?')|tojson }});">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>
@@ -304,7 +305,7 @@
                   </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="{{ 8 if tenant_has_valoraciones else 7 }}" class="table-empty-state"><i class="fas fa-hard-hat"></i>{{ _('Sin operarios externos.') }}</td></tr>
+                <tr><td colspan="{{ 8 if show_valoraciones else 7 }}" class="table-empty-state"><i class="fas fa-hard-hat"></i>{{ _('Sin operarios externos.') }}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -376,7 +377,7 @@
                   <td class="col-actions">
                     <div class="table-actions">
                       <a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="btn-table-action" title="{{ _('Ver ficha') }}"><i class="fas fa-id-card"></i></a>
-                      {% if tenant_has_valoraciones %}
+                      {% if show_valoraciones %}
                       <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="btn-table-action" title="{{ _('Valoraciones') }}"><i class="fas fa-star"></i></a>
                       {% endif %}
                     </div>

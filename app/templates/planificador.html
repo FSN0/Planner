@@ -93,7 +93,7 @@
                   aria-label="{{ _('Filtrar por operarios') }}"></select>
         </div>
 
-        {% if current_user.role == ROLE_ADMIN or planif_office|default(false) %}
+        {% if planif_office|default(false) %}
         <div class="planificador-filter-divider" aria-hidden="true"></div>
         <div class="planificador-jefe-filter planificador-filter-control">
           <span class="planificador-filter-control-label">{{ _('Jefe') }}</span>
@@ -144,7 +144,7 @@
             <div id="col-resizer-ghost"></div>
             <div id="planificador-calendar"></div>
         </div>
-        {% if current_user.role == ROLE_ADMIN %}
+        {% if user_can(current_user, 'directorio', 'w') %}
         <div class="planificador-add-obra">
             <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.create_obra', next='planificador') }}">
                 <i class="fas fa-plus"></i> {{ _('Añadir obra') }}
@@ -178,7 +178,7 @@
                     <i class="fas fa-hard-hat"></i>
                     <span id="wp-role"></span>
                 </p>
-                {% if tenant_has_valoraciones %}
+                {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') %}
                 <p class="mb-0">
                     <i class="fas fa-star text-warning"></i>
                     <a href="#" id="wp-rating" target="_blank"></a>
@@ -186,7 +186,7 @@
                 {% endif %}
             </div>
 
-            {% if current_user.role in ['admin', 'jefe_obra'] %}
+            {% if can_edit_planificador|default(false) %}
             <div class="planificador-popover-actions">
                 <button type="button" id="btn-confirmar-inercia" class="btn btn-success btn-block mb-2 text-left d-none" onclick="window.confirmarInerciaDesdePop(); return false;">
                     <i class="fas fa-user-check mr-2"></i> {{ _('Asignar de verdad') }}
@@ -216,7 +216,7 @@
                 <p class="small text-muted mb-4">{{ _('¿Cómo deseas proceder con esta planificación?') }}</p>
                 <div class="d-flex flex-column gap-2 px-3">
                     <button type="button" class="btn btn-outline-danger btn-block text-left mb-2 p-2 shadow-sm" onclick="resolveConflicto('overwrite')">
-                        {% if planif_direct_assign|default(current_user.role == ROLE_ADMIN or jefes_asignan_directo) %}
+                        {% if planif_direct_assign|default(user_assigns_direct|default(false)) %}
                             <strong class="d-block"><i class="fas fa-skull-crossbones mr-2"></i>{{ _('Sobrescribir Todo') }}</strong>
                             <span class="small text-muted">{{ _('Desasigna al operario de sus obras anteriores en estos días.') }}</span>
                         {% else %}
@@ -226,7 +226,7 @@
                     </button>
                     
                     <button type="button" class="btn btn-outline-warning btn-block text-left mb-2 p-2 shadow-sm" onclick="resolveConflicto('keep_both')">
-                        {% if planif_direct_assign|default(current_user.role == ROLE_ADMIN or jefes_asignan_directo) %}
+                        {% if planif_direct_assign|default(user_assigns_direct|default(false)) %}
                             <strong class="d-block"><i class="fas fa-clone mr-2"></i>{{ _('Permitir Solapamiento') }}</strong>
                             <span class="small text-muted">{{ _('Asigna al operario a ambas obras a la vez (Pluriempleo).') }}</span>
                         {% else %}

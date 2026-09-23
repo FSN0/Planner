@@ -378,7 +378,9 @@ def create_app():
                 tenant_has_notas=False,
                 tenant_has_valoraciones=False,
                 tenant_has_auditoria_vehiculos=False,
-                jefes_asignan_directo=False,
+                user_assigns_direct=False,
+                user_assigns_via_solicitud=False,
+                jefe_obra_assigns_direct=False,
                 mostrar_onboarding=False,
                 onboarding_import_done={},
                 onboarding_fichaje_asked=False,
@@ -416,43 +418,56 @@ def create_app():
                     unread_logs_count = int(_cached.get('logs') or 0)
                     unread_laboral_count = int(_cached.get('laboral') or 0)
                 elif not skip_heavy_badges:
-                    if current_user.role == ROLE_ADMIN:
-                        pending_count = Solicitud.query.filter(
-                            Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                        ).count()
-                        pending_count += SolicitudVehiculo.query.filter(
-                            SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                        ).count()
+                    from app.services.permission_service import user_can as _user_can
+                    from app.services.panel_scope_service import (
+                        PANEL_SOLICITUDES,
+                        planning_acts_as_office,
+                        user_panel_mode,
+                    )
+                    from app.services.assign_mode_service import (
+                        user_assigns_via_solicitud as _ua_sol,
+                        user_assigns_vehicles_via_solicitud as _ua_veh_sol,
+                    )
 
+                    if _user_can(current_user, 'solicitudes', 'w') or _user_can(
+                        current_user, 'solicitudes_vehiculos', 'w'
+                    ):
+                        if user_panel_mode(current_user, PANEL_SOLICITUDES) == 'office':
+                            if _user_can(current_user, 'solicitudes', 'w'):
+                                pending_count += Solicitud.query.filter(
+                                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
+                                ).count()
+                            if _user_can(current_user, 'solicitudes_vehiculos', 'w'):
+                                pending_count += SolicitudVehiculo.query.filter(
+                                    SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
+                                ).count()
+                        elif _ua_sol(current_user) or _ua_veh_sol(current_user):
+                            from sqlalchemy import or_
+                            from app.models import Obra
+                            if _ua_sol(current_user):
+                                pending_count += Solicitud.query.join(Obra).filter(
+                                    or_(
+                                        Solicitud.requested_by_id == current_user.id,
+                                        Obra.jefe_obra_id == current_user.id,
+                                    ),
+                                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                                ).count()
+                            if _ua_veh_sol(current_user):
+                                pending_count += SolicitudVehiculo.query.filter(
+                                    SolicitudVehiculo.requested_by_id == current_user.id,
+                                    SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
+                                ).count()
+
+                    if _user_can(current_user, 'logs', 'r'):
                         from app.services.log_notification_service import get_total_unread_logs
                         unread_logs_count = get_total_unread_logs(current_user.id)
                         from app.services.tenant_modules import has_avisos_laborales
-                        if has_avisos_laborales():
+                        if has_avisos_laborales() and (
+                            _user_can(current_user, 'logs', 'w')
+                            or planning_acts_as_office(current_user)
+                        ):
                             from app.services.log_notification_service import get_unread_laboral_logs
                             unread_laboral_count = get_unread_laboral_logs(current_user.id)
-                    elif current_user.role in (ROLE_LABORAL, ROLE_RRHH):
-                        from app.services.tenant_modules import has_avisos_laborales
-                        if has_avisos_laborales():
-                            from app.services.log_notification_service import get_unread_laboral_logs
-                            unread_laboral_count = get_unread_laboral_logs(current_user.id)
-
-                    # 2. JEFE DE OBRA: solicitudes abiertas de sus obras o creadas por él
-                    elif current_user.role == ROLE_JEFE:
-                        from app.services.tenant_modules import jefes_asignan_directo as _jefe_directo
-                        if not _jefe_directo():
-                            from sqlalchemy import or_
-                            from app.models import Obra
-                            pending_count = Solicitud.query.join(Obra).filter(
-                                or_(
-                                    Solicitud.requested_by_id == current_user.id,
-                                    Obra.jefe_obra_id == current_user.id,
-                                ),
-                                Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                            ).count()
-                            pending_count += SolicitudVehiculo.query.filter(
-                                SolicitudVehiculo.requested_by_id == current_user.id,
-                                SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                            ).count()
 
                     session[_badge_key] = {
                         't': _now,
@@ -493,7 +508,11 @@ def create_app():
         tenant_has_notas = False
         tenant_has_valoraciones = False
         tenant_has_auditoria_vehiculos = False
-        jefes_asignan_directo = False
+        user_assigns_direct = False
+        user_assigns_via_solicitud = False
+        user_assigns_vehicles_direct = False
+        user_assigns_vehicles_via_solicitud = False
+        jefe_obra_assigns_direct = False
         if current_user.is_authenticated:
             tenant = getattr(g, 'current_tenant', None)
             if tenant:
@@ -519,13 +538,34 @@ def create_app():
                     has_auditoria_vehiculos,
                     has_notas,
                     has_valoraciones,
-                    jefes_asignan_directo as _jefes_asignan_directo,
                 )
                 tenant_has_avisos_laborales = has_avisos_laborales(tenant)
                 tenant_has_notas = has_notas(tenant)
                 tenant_has_valoraciones = has_valoraciones(tenant)
                 tenant_has_auditoria_vehiculos = has_auditoria_vehiculos(tenant)
-                jefes_asignan_directo = _jefes_asignan_directo()
+                try:
+                    from app.models import ROLE_JEFE as _ROLE_JEFE
+                    from app.services.assign_mode_service import (
+                        KIND_PEOPLE,
+                        role_assigns_direct,
+                        user_assigns_direct as _user_assigns_direct,
+                        user_assigns_via_solicitud as _user_assigns_via_solicitud,
+                        user_assigns_vehicles_direct as _user_assigns_vehicles_direct,
+                        user_assigns_vehicles_via_solicitud as _user_assigns_vehicles_via_solicitud,
+                    )
+                    user_assigns_direct = _user_assigns_direct(current_user)
+                    user_assigns_via_solicitud = _user_assigns_via_solicitud(current_user)
+                    user_assigns_vehicles_direct = _user_assigns_vehicles_direct(current_user)
+                    user_assigns_vehicles_via_solicitud = _user_assigns_vehicles_via_solicitud(
+                        current_user
+                    )
+                    jefe_obra_assigns_direct = role_assigns_direct(_ROLE_JEFE, KIND_PEOPLE)
+                except Exception:
+                    user_assigns_direct = False
+                    user_assigns_via_solicitud = False
+                    user_assigns_vehicles_direct = False
+                    user_assigns_vehicles_via_solicitud = False
+                    jefe_obra_assigns_direct = False
                 try:
                     from app.services.fichaje_operario_service import (
                         tenant_muestra_auditoria_fichajes,
@@ -614,7 +654,8 @@ def create_app():
                     'tenant_has_notas': tenant_has_notas,
                     'tenant_has_valoraciones': tenant_has_valoraciones,
                     'tenant_has_auditoria_vehiculos': tenant_has_auditoria_vehiculos,
-                    'jefes_asignan_directo': jefes_asignan_directo,
+                    'user_assigns_direct': user_assigns_direct,
+                    'jefe_obra_assigns_direct': jefe_obra_assigns_direct,
                     'mostrar_onboarding': mostrar_onboarding,
                     'tenant_has_onboarding': tenant_has_onboarding,
                     'onboarding_completo': onboarding_completo,
@@ -647,7 +688,11 @@ def create_app():
             tenant_has_notas=tenant_has_notas,
             tenant_has_valoraciones=tenant_has_valoraciones,
             tenant_has_auditoria_vehiculos=tenant_has_auditoria_vehiculos,
-            jefes_asignan_directo=jefes_asignan_directo,
+            user_assigns_direct=user_assigns_direct,
+            user_assigns_via_solicitud=user_assigns_via_solicitud,
+            user_assigns_vehicles_direct=user_assigns_vehicles_direct,
+            user_assigns_vehicles_via_solicitud=user_assigns_vehicles_via_solicitud,
+            jefe_obra_assigns_direct=jefe_obra_assigns_direct,
             tenant_has_onboarding=tenant_has_onboarding,
             onboarding_completo=onboarding_completo,
             academia_visible=academia_visible,

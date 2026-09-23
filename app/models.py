@@ -1216,6 +1216,28 @@ class ConfiguracionGlobal(db.Model):
         return f'<ConfiguracionGlobal {self.clave}={self.valor}>'
 
 
+class EmailNotifQueue(db.Model):
+    """Cola de notificaciones agrupadas (debounce / digest diario)."""
+    __tablename__ = 'email_notif_queue'
+    id = db.Column(db.Integer, primary_key=True)
+    event_key = db.Column(db.String(64), nullable=False, index=True)
+    mode = db.Column(db.String(16), nullable=False, index=True)  # debounce|digest
+    recipient_user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id'), nullable=False, index=True
+    )
+    batch_key = db.Column(db.String(160), nullable=False, index=True)
+    # {lines: [{summary, subject, body}], meta: {...}}
+    payload = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=_utc_now, nullable=False)
+    flush_after = db.Column(db.DateTime, nullable=True, index=True)
+    locale = db.Column(db.String(12), nullable=True)
+
+    recipient = db.relationship('User', foreign_keys=[recipient_user_id])
+
+    def __repr__(self):
+        return f'<EmailNotifQueue {self.id} {self.event_key} →{self.recipient_user_id}>'
+
+
 class RolePermission(db.Model):
     """Matriz de permisos por rol dentro del tenant (R/W/X por módulo)."""
     __tablename__ = 'role_permissions'

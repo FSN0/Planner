@@ -309,6 +309,11 @@ def create_role(
         copy_role_panel_scopes(template, role_key)
     except Exception:
         pass
+    try:
+        from app.services.assign_mode_service import copy_role_assign_mode
+        copy_role_assign_mode(template, role_key)
+    except Exception:
+        pass
     return row
 
 
@@ -330,6 +335,11 @@ def delete_role(key: str) -> None:
     try:
         from app.services.panel_scope_service import clear_role_panel_scopes
         clear_role_panel_scopes(key)
+    except Exception:
+        pass
+    try:
+        from app.services.assign_mode_service import clear_role_assign_mode
+        clear_role_assign_mode(key)
     except Exception:
         pass
     db.session.delete(row)

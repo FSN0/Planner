@@ -121,7 +121,7 @@
         <a href="{{ url_for('admin.vehiculos') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-car"></i> {{ _('Flota') }}
         </a>
-        {% if flota_vacia and current_user.role == 'admin' %}
+        {% if flota_vacia and user_can(current_user, 'vehiculos', 'w') %}
         <a href="{{ url_for('admin.vehiculos_nuevo', next='coches_libres') }}" class="btn-admin btn-admin-primary">
           <i class="fas fa-plus"></i> {{ _('Añadir coche') }}
         </a>
@@ -272,7 +272,7 @@
                 {% if flota_vacia %}
                 <i class="fas fa-car"></i>
                 {{ _('No hay ningún coche en flota.') }}
-                {% if current_user.role == 'admin' %}
+                {% if user_can(current_user, 'vehiculos', 'w') %}
                 <div style="margin-top:0.85rem;">
                   <a class="btn-admin btn-admin-primary" href="{{ url_for('admin.vehiculos_nuevo', next='coches_libres') }}">
                     <i class="fas fa-plus"></i> {{ _('Crear flota') }}

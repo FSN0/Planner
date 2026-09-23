@@ -122,7 +122,8 @@ def recursos_activos():
 @api_bp.route('/toggle_pin_obra', methods=['POST'])
 @login_required
 def toggle_pin_obra():
-    if is_laboral(current_user):
+    # Preferencia personal del tablero (no es CRUD de obras).
+    if not user_can(current_user, 'tablero', 'r'):
         return jsonify({'success': False, 'message': translate('Modo solo lectura')}), 403
     data = request.get_json()
     obra_id = data.get('obra_id')
@@ -141,7 +142,7 @@ def toggle_pin_obra():
 @api_bp.route('/reorder_pinned_obras', methods=['POST'])
 @login_required
 def reorder_pinned_obras():
-    if is_laboral(current_user):
+    if not user_can(current_user, 'tablero', 'r'):
         return jsonify({'success': False, 'message': translate('Modo solo lectura')}), 403
     data = request.get_json()
     ordered_ids = data.get('ordered_ids', [])

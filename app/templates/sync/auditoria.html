@@ -353,7 +353,7 @@ tr.audit-row-highlight {
                                                   {% else %}
                                                     {% if desvio and desvio.ack_plan %}
                                                     <span class="text-muted small" data-ack-plan-status="1">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}</span>
-                                                    {% elif not (desvio and desvio.mia_plan) and current_user.role == 'jefe_obra' %}
+                                                    {% elif not (desvio and desvio.mia_plan) and not es_oficina_auditoria|default(false) %}
                                                     <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                                     {% endif %}
                                                   {% endfor %}
@@ -407,7 +407,7 @@ tr.audit-row-highlight {
                                                   {% else %}
                                                     {% if desvio and desvio.ack_real %}
                                                     <span class="text-muted small" data-ack-real-status="1">{{ _(desvio.ack_real_label or 'Ya aceptado') }}</span>
-                                                    {% elif not (desvio and desvio.mia_real) and current_user.role == 'jefe_obra' %}
+                                                    {% elif not (desvio and desvio.mia_real) and not es_oficina_auditoria|default(false) %}
                                                     <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                                     {% endif %}
                                                   {% endfor %}
@@ -487,7 +487,7 @@ tr.audit-row-highlight {
                                     <span class="text-muted font-italic" style="font-size: 0.75rem;">{{ _('Libre / Inercia') }}</span>
                                   {% endif %}
                                 </td>
-                                {{ celda_obra_link(reg.obra_real, es_mia=(desvio.mia_real if desvio else false)) }}
+                                {{ celda_obra_link(reg.obra_real) }}
                                 <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
                                     {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
                                 </td>
@@ -507,7 +507,7 @@ tr.audit-row-highlight {
                                         {% else %}
                                           {% if desvio and desvio.ack_real %}
                                           <span class="text-muted small">{{ _(desvio.ack_real_label or 'Ya aceptado') }}{% if desvio.ack_real_por %} · {{ desvio.ack_real_por }}{% endif %}</span>
-                                          {% elif not (desvio and desvio.mia_real) and current_user.role == 'jefe_obra' %}
+                                          {% elif not (desvio and desvio.mia_real) and not es_oficina_auditoria|default(false) %}
                                           <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                           {% endif %}
                                         {% endfor %}
@@ -567,7 +567,7 @@ tr.audit-row-highlight {
                                 style="cursor: pointer;">
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 {{ celda_operario(reg) }}
-                                {{ celda_obra_link(reg.obra_planificada, es_mia=(desvio.mia_plan if desvio else false)) }}
+                                {{ celda_obra_link(reg.obra_planificada) }}
                                 <td data-sort-value="{% if es_espejo %}desvio{% else %}ausencia{% endif %}">
                                   {% if es_espejo %}
                                     <span class="badge-soft badge-soft-amber" style="font-size: 0.65rem;" title="{{ _('También en Desviaciones de plan') }}">{{ _('Desvío de plan') }}</span>
@@ -589,7 +589,7 @@ tr.audit-row-highlight {
                                         {% else %}
                                           {% if desvio and desvio.ack_plan %}
                                           <span class="text-muted small">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}{% if desvio.ack_plan_por %} · {{ desvio.ack_plan_por }}{% endif %}</span>
-                                          {% elif not (desvio and desvio.mia_plan) and current_user.role == 'jefe_obra' %}
+                                          {% elif not (desvio and desvio.mia_plan) and not es_oficina_auditoria|default(false) %}
                                           <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
                                           {% endif %}
                                         {% endfor %}
@@ -1735,7 +1735,7 @@ var AUDIT_RESOLVE_I18N = {{ {
 
     function promptDesasignarAuditoria(id, accion) {
         var t = auditI18n();
-        var pideSolicitud = {{ (current_user.role == 'jefe_obra' and not (jefes_asignan_directo|default(false)))|tojson }};
+        var pideSolicitud = {{ (user_assigns_via_solicitud|default(false))|tojson }};
         var canForcePast = {{ (can_unassign_cuadrante_pasado|default(false))|tojson }};
         var notasHint = pideSolicitud
             ? {{ _('Si eliges pendientes posteriores, se creará una solicitud de baja con este comentario.')|tojson }}

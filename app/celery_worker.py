@@ -116,7 +116,11 @@ celery.conf.beat_schedule = {
         # Cada 5 min, todo el día: la hora de corte es configurable por tenant
         # (p. ej. 14:00). Antes solo cubría 6–12 y un corte tarde no se ejecutaba.
         'schedule': crontab(minute='2,7,12,17,22,27,32,37,42,47,52,57'),
-    }
+    },
+    'notif-flush-debounce-digest': {
+        'task': 'app.celery_worker.flush_notification_queues',
+        'schedule': crontab(minute='*/1'),
+    },
 }
 
 
@@ -181,6 +185,29 @@ def send_async_email(subject, recipients, body, html):
             app.logger.info("Correo enviado correctamente.")
         except Exception as e:
             app.logger.error("Error enviando correo: %s", e)
+        finally:
+            _cleanup_db_session()
+
+
+@celery.task
+def flush_notification_queues():
+    """Vacía colas debounce (ventana cerrada) y digest (hora configurada)."""
+    with app.app_context():
+        from app.services.notification_dispatch_service import (
+            flush_debounce_due,
+            flush_digest_for_hour,
+        )
+
+        def _run(_tenant_data):
+            n_deb = flush_debounce_due()
+            n_dig = flush_digest_for_hour()
+            if n_deb or n_dig:
+                app.logger.info(
+                    'Notificaciones flush: debounce=%s digest=%s', n_deb, n_dig
+                )
+
+        try:
+            _for_each_tenant(_run, solo_odoo=False)
         finally:
             _cleanup_db_session()
 

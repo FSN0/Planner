@@ -2,7 +2,7 @@
 from flask_mail import Message
 from flask import current_app
 from app import mail
-from app.models import User, Obra, RegistroFichaje, ConfiguracionGlobal
+from app.models import User, Obra, RegistroFichaje
 from datetime import datetime, date, timedelta
 
 def send_email(subject, recipients, text_body, html_body=None):
@@ -57,53 +57,17 @@ def _send_localized(users, subject_fn, text_fn, html_fn=None, *, bulk=True):
 
 
 def _obtener_destinatarios(evento_clave, obra_id=None, worker_id=None):
-    """
-    Función maestra que lee la Matriz de Configuración.
-    Busca Admin, Jefe y Trabajador solo si están marcados (tick) en la BD.
-    Sin filtros de silencio: si está tickado, se envía siempre.
-    Devuelve usuarios únicos con email (para traducir por locale).
-    """
-    conf = ConfiguracionGlobal.query.filter_by(clave=evento_clave).first()
-    if not conf or not conf.valor:
-        return []  # Nadie suscrito a este evento
+    """Compat: resuelve destinatarios vía matriz nueva (legacy keys ok)."""
+    from app.services.notification_dispatch_service import resolve_recipients
+    return resolve_recipients(evento_clave, obra_id=obra_id, worker_id=worker_id)
 
-    suscritos = conf.valor.split(',')  # Ej: ['admin', 'jefe', 'trabajador']
-    users = []
-
-    if 'admin' in suscritos:
-        users.extend(User.query.filter_by(role='admin', active=True).all())
-
-    if 'jefe' in suscritos and obra_id:
-        obra = Obra.query.get(obra_id)
-        if obra and obra.jefe_obra_id:
-            jefe = User.query.get(obra.jefe_obra_id)
-            if jefe:
-                users.append(jefe)
-
-    if 'trabajador' in suscritos and worker_id:
-        worker = User.query.get(worker_id)
-        if worker:
-            users.append(worker)
-
-    seen = set()
-    out = []
-    for user in users:
-        email = (getattr(user, 'email', None) or '').strip()
-        if not email or email in seen:
-            continue
-        seen.add(email)
-        out.append(user)
-    return out
 
 def notificar_nueva_solicitud(solicitud, solicitante_name):
     """Notifica la creación de una solicitud (Genérica o Concreta)"""
     from app.services.i18n_service import translate
+    from app.services.notification_dispatch_service import dispatch_localized
 
-    clave = 'email_sol_generica' if solicitud.tipo == 'GENERICA' else 'email_sol_concreta'
-    destinatarios = _obtener_destinatarios(clave, obra_id=solicitud.obra_id, worker_id=solicitud.empleado_id)
-    if not destinatarios:
-        return
-
+    event = 'sol_generica' if solicitud.tipo == 'GENERICA' else 'sol_concreta'
     obra = Obra.query.get(solicitud.obra_id)
 
     jefe = User.query.get(solicitud.requested_by_id)
@@ -159,18 +123,23 @@ def notificar_nueva_solicitud(solicitud, solicitante_name):
         )
         return cuerpo
 
-    _send_localized(destinatarios, subject, text)
+    dispatch_localized(
+        event,
+        subject,
+        text,
+        obra_id=solicitud.obra_id,
+        worker_id=solicitud.empleado_id,
+        requester_user_id=solicitud.requested_by_id,
+        batch_key=f'{event}:sol{solicitud.id}',
+    )
+
 
 def notificar_resolucion_solicitud(solicitud, admin_name, worker_id=None):
     """Notifica cuando una solicitud cambia de estado (Aprobada, Denegada, etc.)"""
     from app.services.i18n_service import translate
+    from app.services.notification_dispatch_service import dispatch_localized
 
     id_trabajador = solicitud.empleado_id or worker_id
-
-    destinatarios = _obtener_destinatarios('email_sol_resuelta', obra_id=solicitud.obra_id, worker_id=id_trabajador)
-    if not destinatarios:
-        return
-
     obra = Obra.query.get(solicitud.obra_id) if solicitud.obra_id else None
     worker = User.query.get(id_trabajador) if id_trabajador else None
 
@@ -217,25 +186,21 @@ def notificar_resolucion_solicitud(solicitud, admin_name, worker_id=None):
         cuerpo += translate('Revisa la plataforma para más detalles.', loc)
         return cuerpo
 
-    _send_localized(destinatarios, subject, text)
-
-
-def _clave_email_solicitud_vehiculo():
-    """Config dedicada email_sol_vehiculo; si no existe, reutiliza email_sol_concreta."""
-    conf = ConfiguracionGlobal.query.filter_by(clave='email_sol_vehiculo').first()
-    if conf and conf.valor:
-        return 'email_sol_vehiculo'
-    return 'email_sol_concreta'
+    dispatch_localized(
+        'sol_resuelta',
+        subject,
+        text,
+        obra_id=solicitud.obra_id,
+        worker_id=id_trabajador,
+        requester_user_id=getattr(solicitud, 'requested_by_id', None),
+        batch_key=f'sol_resuelta:sol{solicitud.id}',
+    )
 
 
 def notificar_nueva_solicitud_vehiculo(solicitud, solicitante_name):
     """Notifica la creación de una SolicitudVehiculo (espejo de personal concreta)."""
     from app.services.i18n_service import translate
-
-    clave = _clave_email_solicitud_vehiculo()
-    destinatarios = _obtener_destinatarios(clave, worker_id=solicitud.empleado_id)
-    if not destinatarios:
-        return
+    from app.services.notification_dispatch_service import dispatch_localized
 
     jefe = User.query.get(solicitud.requested_by_id)
     nombre_jefe = f"{jefe.name} {jefe.lastname}" if jefe else solicitante_name
@@ -295,25 +260,20 @@ def notificar_nueva_solicitud_vehiculo(solicitud, solicitante_name):
         )
         return cuerpo
 
-    _send_localized(destinatarios, subject, text)
+    dispatch_localized(
+        'sol_vehiculo',
+        subject,
+        text,
+        worker_id=solicitud.empleado_id,
+        requester_user_id=solicitud.requested_by_id,
+        batch_key=f'sol_vehiculo:sol{solicitud.id}',
+    )
 
 
 def notificar_resolucion_solicitud_vehiculo(solicitud, admin_name):
     """Notifica resolución de SolicitudVehiculo (aceptar/denegar)."""
     from app.services.i18n_service import translate
-
-    destinatarios = _obtener_destinatarios(
-        'email_sol_resuelta', worker_id=solicitud.empleado_id
-    )
-    conf = ConfiguracionGlobal.query.filter_by(clave='email_sol_resuelta').first()
-    if conf and conf.valor and 'jefe' in conf.valor.split(','):
-        requester = User.query.get(solicitud.requested_by_id)
-        if requester and requester.email:
-            emails = {(getattr(u, 'email', None) or '').strip() for u in destinatarios}
-            if requester.email.strip() not in emails:
-                destinatarios = list(destinatarios) + [requester]
-    if not destinatarios:
-        return
+    from app.services.notification_dispatch_service import dispatch_localized
 
     from app.models import Vehiculo
     veh = getattr(solicitud, 'vehiculo', None)
@@ -363,15 +323,20 @@ def notificar_resolucion_solicitud_vehiculo(solicitud, admin_name):
         )
         return cuerpo
 
-    _send_localized(destinatarios, subject, text)
+    dispatch_localized(
+        'sol_resuelta',
+        subject,
+        text,
+        worker_id=solicitud.empleado_id,
+        requester_user_id=solicitud.requested_by_id,
+        batch_key=f'sol_resuelta:veh{solicitud.id}',
+    )
+
 
 def notificar_traslado_interno(jefe_name, worker, target_obra, dates, obras_origen=None):
     """Notifica cuando un Jefe mueve a un operario por custodia entre sus obras"""
     from app.services.i18n_service import translate
-
-    destinatarios = _obtener_destinatarios('email_traslado', obra_id=target_obra.id, worker_id=worker.id)
-    if not destinatarios:
-        return
+    from app.services.notification_dispatch_service import dispatch_localized
 
     jefe_obj = User.query.filter(User.name.like(f"%{jefe_name.split()[0]}%")).first()
     nombre_jefe_completo = f"{jefe_obj.name} {jefe_obj.lastname}" if jefe_obj else jefe_name
@@ -427,14 +392,23 @@ def notificar_traslado_interno(jefe_name, worker, target_obra, dates, obras_orig
             fechas=fecha_str,
         )
 
-    _send_localized(destinatarios, subject, text)
+    dispatch_localized(
+        'traslado',
+        subject,
+        text,
+        obra_id=target_obra.id,
+        worker_id=worker.id,
+        batch_key=f'traslado:w{worker.id}:o{target_obra.id}',
+    )
+
 
 def notificar_movimiento_admin_a_jo(obra_id, worker_name, accion, fecha_str, admin_name):
     """Notifica cuando se asigna o desasigna personal directamente en el planificador"""
     from app.services.i18n_service import translate
+    from app.services.notification_dispatch_service import dispatch_localized
 
     is_baja = 'desasignar' in accion.lower() or 'baja' in accion.lower()
-    clave = 'email_desasignacion' if is_baja else 'email_asignacion'
+    event = 'desasignacion' if is_baja else 'asignacion'
 
     worker_id = None
     if worker_name:
@@ -442,11 +416,9 @@ def notificar_movimiento_admin_a_jo(obra_id, worker_name, accion, fecha_str, adm
         if worker:
             worker_id = worker.id
 
-    destinatarios = _obtener_destinatarios(clave, obra_id=obra_id, worker_id=worker_id)
-    if not destinatarios:
-        return
-
     obra = Obra.query.get(obra_id)
+    if not obra:
+        return
 
     def subject(loc):
         return translate('Actualización de Personal - {obra}', loc, obra=obra.nombre)
@@ -466,17 +438,24 @@ def notificar_movimiento_admin_a_jo(obra_id, worker_name, accion, fecha_str, adm
             fechas=fecha_str,
         )
 
-    _send_localized(destinatarios, subject, text)
+    dispatch_localized(
+        event,
+        subject,
+        text,
+        obra_id=obra_id,
+        worker_id=worker_id,
+        batch_key=f'{event}:o{obra_id}:{fecha_str}',
+    )
 
 
 def notificar_desvio_fichaje(registro, *, omitir_lado_real=False):
     """
-    Aviso inmediato a los jefes de la obra planificada y de la obra fichada.
-    Si es el mismo jefe, un solo correo con ambos lados.
+    Aviso a jefes de obra planificada y fichada (matriz: desvio_fichaje).
     Solo para el día de hoy (un sync histórico no debe bombardear el buzón).
     """
     from app.services.i18n_service import translate
     from app.services.desvio_fichaje_service import es_desvio_plan_vs_real
+    from app.services.notification_dispatch_service import dispatch_localized
     from app.utils.timezone_utils import format_time, today_local
 
     if not es_desvio_plan_vs_real(registro):
@@ -500,59 +479,63 @@ def notificar_desvio_fichaje(registro, *, omitir_lado_real=False):
             return
         if not getattr(jefe, 'active', True):
             return
-        loc = _user_locale(jefe, bulk=True)
-        if rol_lado == 'ambos':
-            asunto = translate(
-                'Desvío de fichaje: {worker} ({date})',
-                loc,
-                worker=worker_name,
-                date=fecha_txt,
-            )
-            cuerpo = translate(
-                'Hola {jefe},\n\n'
-                '{worker} estaba planificado en «{plan}» y ha fichado a las {hora} '
-                'en «{real}» ({date}).\n\n'
-                'Como gestionas ambas obras, en Auditoría de fichajes puedes:\n'
-                '· Confirmar — libera la plaza del plan y acepta el fichaje\n'
-                '· Falta — confirma falta en el plan; el fichaje queda registrado\n',
-                loc,
-                jefe=jefe.name or '',
-                worker=worker_name,
-                plan=obra_plan.nombre,
-                real=obra_real.nombre,
-                hora=hora_txt,
-                date=fecha_txt,
-            )
-        elif rol_lado == 'plan':
-            asunto = translate(
-                'No ha venido a tu obra: {worker} fichó en otra ({date})',
-                loc,
-                worker=worker_name,
-                date=fecha_txt,
-            )
-            cuerpo = translate(
-                'Hola {jefe},\n\n'
-                '{worker} estaba planificado hoy en «{plan}», pero ha fichado a las {hora} '
-                'en «{real}» ({date}).\n\n'
-                'No es un “sin fichar”: está en otra obra. En Auditoría de fichajes puedes:\n'
-                '· Liberar — no viene; liberas su plaza\n'
-                '· Falta — debía venir; confirmas falta (sigue planificado con marca de falta)\n',
-                loc,
-                jefe=jefe.name or '',
-                worker=worker_name,
-                plan=obra_plan.nombre,
-                real=obra_real.nombre,
-                hora=hora_txt,
-                date=fecha_txt,
-            )
-        else:
-            asunto = translate(
+
+        def subject(loc):
+            if rol_lado == 'ambos':
+                return translate(
+                    'Desvío de fichaje: {worker} ({date})',
+                    loc,
+                    worker=worker_name,
+                    date=fecha_txt,
+                )
+            if rol_lado == 'plan':
+                return translate(
+                    'No ha venido a tu obra: {worker} fichó en otra ({date})',
+                    loc,
+                    worker=worker_name,
+                    date=fecha_txt,
+                )
+            return translate(
                 'Entrada no planificada: {worker} en tu obra ({date})',
                 loc,
                 worker=worker_name,
                 date=fecha_txt,
             )
-            cuerpo = translate(
+
+        def text(loc):
+            if rol_lado == 'ambos':
+                return translate(
+                    'Hola {jefe},\n\n'
+                    '{worker} estaba planificado en «{plan}» y ha fichado a las {hora} '
+                    'en «{real}» ({date}).\n\n'
+                    'Como gestionas ambas obras, en Auditoría de fichajes puedes:\n'
+                    '· Confirmar — libera la plaza del plan y acepta el fichaje\n'
+                    '· Falta — confirma falta en el plan; el fichaje queda registrado\n',
+                    loc,
+                    jefe=jefe.name or '',
+                    worker=worker_name,
+                    plan=obra_plan.nombre,
+                    real=obra_real.nombre,
+                    hora=hora_txt,
+                    date=fecha_txt,
+                )
+            if rol_lado == 'plan':
+                return translate(
+                    'Hola {jefe},\n\n'
+                    '{worker} estaba planificado hoy en «{plan}», pero ha fichado a las {hora} '
+                    'en «{real}» ({date}).\n\n'
+                    'No es un “sin fichar”: está en otra obra. En Auditoría de fichajes puedes:\n'
+                    '· Liberar — no viene; liberas su plaza\n'
+                    '· Falta — debía venir; confirmas falta (sigue planificado con marca de falta)\n',
+                    loc,
+                    jefe=jefe.name or '',
+                    worker=worker_name,
+                    plan=obra_plan.nombre,
+                    real=obra_real.nombre,
+                    hora=hora_txt,
+                    date=fecha_txt,
+                )
+            return translate(
                 'Hola {jefe},\n\n'
                 '{worker} ha fichado a las {hora} en «{real}» sin estar planificado ahí '
                 '({date}). Venía de «{plan}».\n\n'
@@ -566,7 +549,15 @@ def notificar_desvio_fichaje(registro, *, omitir_lado_real=False):
                 hora=hora_txt,
                 date=fecha_txt,
             )
-        send_email(asunto, [jefe.email], cuerpo)
+
+        dispatch_localized(
+            'desvio_fichaje',
+            subject,
+            text,
+            users=[jefe],
+            worker_id=user.id,
+            batch_key=f'desvio:{registro.id}:{jefe.id}:{rol_lado}',
+        )
 
     jefe_plan = obra_plan.jefe_obra
     jefe_real = obra_real.jefe_obra
@@ -581,14 +572,29 @@ def notificar_desvio_fichaje(registro, *, omitir_lado_real=False):
 def enviar_super_reporte_diario():
     """
     Correo de cierre del día anterior: ausencias a resolver y desvíos/sin planificar
-    pendientes de AYER (ya no «quién no ha fichado esta mañana»).
+    pendientes de AYER. Respeta matriz ``hora_corte_reporte``.
     """
     from app.utils.timezone_utils import today_local
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
-    from app.services.tenant_modules import hora_corte_destinatario_ids
     from app.services.desvio_fichaje_service import consolidar_pendientes_a_ausencia
+    from app.services.notification_catalog import (
+        MODE_OFF,
+        RECIPIENT_ADMIN,
+        RECIPIENT_JEFE,
+        RECIPIENT_LABORAL,
+        RECIPIENT_RRHH,
+    )
+    from app.services.notification_dispatch_service import (
+        get_event_settings,
+        resolve_recipients,
+    )
+    from app.models import ROLE_JEFE
 
     if not tenant_muestra_auditoria_fichajes():
+        return
+
+    st = get_event_settings('hora_corte_reporte')
+    if st['mode'] == MODE_OFF:
         return
 
     hoy = today_local()
@@ -636,24 +642,17 @@ def enviar_super_reporte_diario():
     if not ausencias_ayer and not conflictos_ayer:
         return
 
-    # Alias para el resto del cuerpo del correo (antes usaba ausencias_hoy)
     ausencias_hoy = ausencias_ayer
+    roles = set(st['recipients'])
+    send_roles_global = roles & {RECIPIENT_ADMIN, RECIPIENT_LABORAL, RECIPIENT_RRHH}
+    send_jefes = RECIPIENT_JEFE in roles
 
-    # ==========================================
-    # CORREO GLOBAL PARA LOS ADMINISTRADORES
-    # ==========================================
-    # Destinatarios: los marcados en Ajustes. Si no hay lista, todos los admin (legado).
-    dest_ids = hora_corte_destinatario_ids()
-    if dest_ids:
+    admin_users = []
+    if send_roles_global:
         admin_users = [
-            u for u in User.query.filter(
-                User.id.in_(dest_ids),
-                User.active.is_(True),
-            ).all()
-            if u.email and not getattr(u, 'is_deleted', False)
+            u for u in resolve_recipients('hora_corte_reporte')
+            if getattr(u, 'role', None) != ROLE_JEFE
         ]
-    else:
-        admin_users = [a for a in User.query.filter_by(role='admin', active=True).all() if a.email]
 
     if admin_users:
         from app.services.i18n_service import translate
@@ -736,22 +735,23 @@ def enviar_super_reporte_diario():
                 html_body=html_admin,
             )
 
-    # Correos por obra al jefe: solo si no hay lista explícita de destinatarios.
-    if dest_ids:
+    if not send_jefes:
         return
 
-    # ==========================================
-    # CORREOS ESPECÍFICOS PARA CADA JEFE DE OBRA
-    # ==========================================
+    from app.services.notification_dispatch_service import user_allowed_for_role
+
     obras_afectadas_ids = set(
         [a.obra_planificada_id for a in ausencias_hoy if a.obra_planificada_id] +
         [c.obra_real_id for c in conflictos_ayer if c.obra_real_id] +
         [c.obra_planificada_id for c in conflictos_ayer if c.obra_planificada_id]
     )
-    
+
     for obra_id in obras_afectadas_ids:
         obra = Obra.query.get(obra_id)
-        if not obra or not obra.jefe_obra or not obra.jefe_obra.email: continue
+        if not obra or not obra.jefe_obra or not obra.jefe_obra.email:
+            continue
+        if not user_allowed_for_role(obra.jefe_obra, RECIPIENT_JEFE):
+            continue
             
         aus_obra = [a for a in ausencias_hoy if a.obra_planificada_id == obra.id]
         con_obra_real = [c for c in conflictos_ayer if c.obra_real_id == obra.id]

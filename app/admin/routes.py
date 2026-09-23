@@ -31,7 +31,7 @@ from app.services.solicitud_service import (
 )
 from app.services.assignment_service import process_assignment_action
 from app.services.core_assignment_service import CoreAssignmentService
-from app.decorators import roles_required
+from app.decorators import roles_required, permission_required
 from itsdangerous import URLSafeTimedSerializer
 import os
 from app.services.import_service import (
@@ -59,9 +59,22 @@ from app.services.entity_panel_service import (
 )
 from app.services.permission_service import (
     can_edit_planning_calendar,
+    can_edit_vehicle_calendar,
+    can_resolve_solicitudes_flota,
+    can_resolve_solicitudes_personal,
+    can_view_solicitudes_flota,
+    can_view_solicitudes_personal,
     is_laboral,
     laboral_log_categories,
     user_can,
+)
+from app.services.panel_scope_service import (
+    PANEL_PLANIFICADOR,
+    PANEL_SOLICITUDES,
+    apply_obra_scope_filter,
+    solicitud_obra_in_scope,
+    user_custody_jefe_ids,
+    user_panel_mode,
 )
 
 from app.services.email_service import notificar_resolucion_solicitud, notificar_movimiento_admin_a_jo
@@ -651,11 +664,20 @@ def import_obras_confirm():
 
 @admin_bp.route('/solicitudes')
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def solicitudes_list():
+    can_personal = can_view_solicitudes_personal(current_user)
+    can_flota = can_view_solicitudes_flota(current_user)
+    if not can_personal and not can_flota:
+        flash(translate('No tienes permiso para ver solicitudes.'), 'danger')
+        return redirect(url_for('main.dashboard'))
+
     seccion = request.args.get('seccion', 'personal')
     if seccion not in ('personal', 'vehiculos'):
         seccion = 'personal'
+    if seccion == 'vehiculos' and not can_flota:
+        seccion = 'personal'
+    elif seccion == 'personal' and not can_personal and can_flota:
+        seccion = 'vehiculos'
 
     estado = request.args.get('estado', 'todas')
     tipo = request.args.get('tipo', 'todas')
@@ -668,11 +690,13 @@ def solicitudes_list():
     tipos_posibles = ['todas', 'generica', 'concreta']
     target_date = parse_date(date_filter_str) if date_filter_str else None
     obra_seleccionada = Obra.query.get(int(obra_id)) if obra_id and obra_id.isdigit() else None
+    can_resolve_vehiculo = can_resolve_solicitudes_flota(current_user)
 
     # --- SECCIÓN VEHÍCULOS ---
     if seccion == 'vehiculos':
         v_query = SolicitudVehiculo.query
-        if current_user.role == ROLE_JEFE:
+        # Sin obra: oficina ve todas; custodia/none → solo las propias
+        if user_panel_mode(current_user, PANEL_SOLICITUDES) != 'office':
             v_query = v_query.filter(SolicitudVehiculo.requested_by_id == current_user.id)
 
         if estado != 'todas':
@@ -697,21 +721,23 @@ def solicitudes_list():
             obra_filtro=obra_seleccionada,
             estados_posibles=estados_posibles,
             tipos_posibles=tipos_posibles,
-            can_resolve_vehiculo=(current_user.role == ROLE_ADMIN),
+            can_resolve_vehiculo=can_resolve_vehiculo,
         )
 
     # --- SECCIÓN PERSONAL (default) ---
     query = Solicitud.query
-    if current_user.role == ROLE_JEFE:
-        # Un Jefe solo debe ver:
-        # 1. Las solicitudes que él mismo creó (requested_by_id)
-        # 2. O las solicitudes de Obras donde él es el Jefe (Obra.jefe_obra_id)
-        query = query.join(Obra).filter(
-            or_(
-                Solicitud.requested_by_id == current_user.id,
-                Obra.jefe_obra_id == current_user.id
+    scope_mode = user_panel_mode(current_user, PANEL_SOLICITUDES)
+    if scope_mode != 'office':
+        custody = user_custody_jefe_ids(current_user, PANEL_SOLICITUDES)
+        if custody:
+            query = query.outerjoin(Obra, Solicitud.obra_id == Obra.id).filter(
+                or_(
+                    Solicitud.requested_by_id == current_user.id,
+                    Obra.jefe_obra_id.in_(custody),
+                )
             )
-        )
+        else:
+            query = query.filter(Solicitud.requested_by_id == current_user.id)
 
     if obra_id:
         try:
@@ -786,7 +812,7 @@ def solicitudes_list():
         obra_filtro=obra_seleccionada,
         estados_posibles=estados_posibles,
         tipos_posibles=tipos_posibles,
-        can_resolve_vehiculo=(current_user.role == ROLE_ADMIN),
+        can_resolve_vehiculo=can_resolve_vehiculo,
         solicitudes_inbox_vacio=solicitudes_inbox_vacio,
         tiene_jefes=tiene_jefes,
     )
@@ -794,7 +820,7 @@ def solicitudes_list():
 
 @admin_bp.route('/solicitudes-vehiculo/<int:solicitud_id>/resolver', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN)
+@permission_required('solicitudes_vehiculos', 'w')
 def resolver_solicitud_vehiculo(solicitud_id):
     from app.services.vehicle_solicitud_service import VehicleSolicitudService
 
@@ -887,11 +913,12 @@ def worker_panel(user_id):
     from app.services.permission_service import can_resolve_fichajes
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     from app.services.impersonation_service import admin_puede_impersonar, puede_ser_impersonado
+    from app.services.panel_scope_service import planning_acts_as_office
     from app.utils.nav_back import resolve_back_url
-    if current_user.role == ROLE_JEFE:
-        back_url = resolve_back_url('admin.obras_detailed')
-    else:
+    if planning_acts_as_office(current_user):
         back_url = resolve_back_url('admin.personal')
+    else:
+        back_url = resolve_back_url('admin.obras_detailed')
     return render_template(
         "admin_worker_panel.html",
         worker=worker,
@@ -911,6 +938,12 @@ def worker_panel(user_id):
         ),
         puede_resolver_auditoria=(
             can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
+        ),
+        can_write_valoraciones=user_can(current_user, 'valoraciones', 'w'),
+        can_read_valoraciones=user_can(current_user, 'valoraciones', 'r'),
+        can_reset_valoraciones=(
+            user_can(current_user, 'valoraciones', 'w')
+            and planning_acts_as_office(current_user)
         ),
     )
 
@@ -1063,9 +1096,19 @@ def company_panel(company_id):
     
 @admin_bp.route('/solicitudes/<int:solicitud_id>')
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def solicitud_detail(solicitud_id):
+    if not can_view_solicitudes_personal(current_user):
+        flash(translate('No tienes permiso para ver solicitudes de personal.'), 'danger')
+        return redirect(url_for('main.dashboard'))
+
     solicitud = Solicitud.query.get_or_404(solicitud_id)
+
+    if not (
+        solicitud.requested_by_id == current_user.id
+        or solicitud_obra_in_scope(current_user, solicitud.obra)
+    ):
+        flash(translate('No tienes acceso a esta solicitud.'), 'danger')
+        return redirect(url_for('admin.solicitudes_list'))
 
     # Sincroniza progreso/cobertura al abrir (corrige estados atascados tras asignar).
     if solicitud.estado in ('PENDIENTE', 'EN_PROCESO'):
@@ -1073,7 +1116,7 @@ def solicitud_detail(solicitud_id):
         db.session.commit()
         db.session.refresh(solicitud)
 
-    es_admin = (current_user.role == ROLE_ADMIN)
+    es_admin = can_resolve_solicitudes_personal(current_user)
     puede_cancelar = (
         solicitud.requested_by_id == current_user.id
         and solicitud.estado in ('PENDIENTE', 'EN_PROCESO')
@@ -1340,21 +1383,36 @@ def obra_panel(obra_id):
     Panel específico de una obra (Ficha de Obra).
     (Los datos del calendario ahora se cargan dinámicamente vía API universal).
     """
-    obra = Obra.query.get_or_404(obra_id)
-    
-    # Seguridad: si es jefe, solo ve sus obras
-    if current_user.role == ROLE_JEFE and obra.jefe_obra_id != current_user.id:
+    from app.services.panel_scope_service import (
+        PANEL_TABLERO,
+        obra_in_planning_custody,
+        planning_acts_as_office,
+        user_panel_mode,
+    )
+
+    if not (
+        user_can(current_user, 'tablero', 'r')
+        or user_can(current_user, 'directorio', 'r')
+    ):
         flash(translate("No tienes permisos para ver esta obra."), "danger")
-        return redirect(url_for("jefe.panel"))
+        return redirect(url_for("main.dashboard"))
+
+    obra = Obra.query.get_or_404(obra_id)
+
+    if user_panel_mode(current_user, PANEL_TABLERO) == 'none' or not obra_in_planning_custody(
+        current_user, obra
+    ):
+        flash(translate("No tienes permisos para ver esta obra."), "danger")
+        return redirect(url_for("main.dashboard"))
 
     jefes = User.query.filter(User.role.in_([ROLE_JEFE, ROLE_ADMIN])).all()
     panel_stats = get_obra_panel_stats(obra)
 
     from app.utils.nav_back import resolve_back_url
-    if current_user.role == ROLE_JEFE:
-        back_url = resolve_back_url('admin.obras_detailed')
-    else:
+    if planning_acts_as_office(current_user):
         back_url = resolve_back_url('admin.obras_list')
+    else:
+        back_url = resolve_back_url('admin.obras_detailed')
 
     return render_template(
         "admin_obra_panel.html",
@@ -1387,7 +1445,7 @@ def companies():
 
 @admin_bp.route("/vehiculos", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+@permission_required('vehiculos', 'r')
 def vehiculos():
     """Listado de flota (alta manual y/o sync Odoo)."""
     show_inactive = request.args.get('show_inactive') in ('1', 'true', 'on', 'yes')
@@ -1418,7 +1476,7 @@ def _render_vehiculo_form(*, vehiculo=None, form_data=None):
 
 @admin_bp.route("/vehiculos/nuevo", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN)
+@permission_required('vehiculos', 'w')
 def vehiculos_nuevo():
     """Formulario de alta (misma plantilla que editar)."""
     return _render_vehiculo_form()
@@ -1426,7 +1484,7 @@ def vehiculos_nuevo():
 
 @admin_bp.route("/vehiculos/crear", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN)
+@permission_required('vehiculos', 'w')
 def vehiculos_crear():
     """Alta manual de vehículo (sin ERP)."""
     nombre = (request.form.get('nombre') or '').strip()
@@ -1466,7 +1524,7 @@ def vehiculos_crear():
 
 @admin_bp.route("/vehiculos/<int:vehiculo_id>/editar", methods=["GET", "POST"])
 @login_required
-@roles_required(ROLE_ADMIN)
+@permission_required('vehiculos', 'w')
 def vehiculos_editar(vehiculo_id):
     v = Vehiculo.query.get_or_404(vehiculo_id)
     if request.method == "GET":
@@ -1531,7 +1589,7 @@ def vehiculos_editar(vehiculo_id):
 
 @admin_bp.route("/vehiculos/<int:vehiculo_id>/toggle", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN)
+@permission_required('vehiculos', 'w')
 def vehiculos_toggle(vehiculo_id):
     from app.utils.timezone_utils import utc_now
 
@@ -1557,9 +1615,14 @@ def vehiculos_toggle(vehiculo_id):
 
 @admin_bp.route("/vehiculos/libres", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
 def vehiculos_libres():
     """Coches libres a futuro: sin plan o conductor de ausencia."""
+    if not (
+        user_can(current_user, 'vehiculos_libres', 'r')
+        or user_can(current_user, 'vehiculos', 'r')
+    ):
+        flash(translate('No tienes permiso para ver coches libres.'), 'danger')
+        return redirect(url_for('main.dashboard'))
     from app.services.vehicle_availability_service import (
         DEFAULT_HORIZON_MONTHS,
         HORIZON_MONTHS_ALLOWED,
@@ -1609,7 +1672,7 @@ def vehiculos_libres():
 
 @admin_bp.route("/vehicle_panel/<int:vehiculo_id>", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+@permission_required('vehiculos', 'r')
 def vehicle_panel(vehiculo_id):
     """Ficha de vehículo con historial (plegable) y calendario de asignaciones."""
     vehiculo = Vehiculo.query.get_or_404(vehiculo_id)
@@ -1634,15 +1697,13 @@ def vehicle_panel(vehiculo_id):
         history_days=history_days,
         history_open=history_open,
         history_rows=get_vehicle_history_rows(vehiculo, days=history_days) if history_open else [],
-        can_edit_calendar=(
-            current_user.role in (ROLE_ADMIN, ROLE_JEFE) and not is_laboral(current_user)
-        ),
+        can_edit_calendar=can_edit_vehicle_calendar(current_user),
     )
 
 
 @admin_bp.route("/vehicle_panel/<int:vehiculo_id>/historial", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL)
+@permission_required('vehiculos', 'r')
 def vehicle_panel_historial(vehiculo_id):
     """Fragmento HTML del historial de uso (rango configurable, máx. 730 días)."""
     vehiculo = Vehiculo.query.get_or_404(vehiculo_id)
@@ -1771,11 +1832,12 @@ def edit_company(company_id):
 
 @admin_bp.route("/api/rate_worker", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def rate_worker():
     from app.services.tenant_modules import has_valoraciones
     if not has_valoraciones():
         return jsonify({'success': False, 'message': translate('Módulo no activo')}), 404
+    if not user_can(current_user, 'valoraciones', 'w'):
+        return jsonify({'success': False, 'message': translate('No autorizado')}), 403
     data = request.get_json()
     worker_id = data.get('worker_id')
     score = data.get('score') 
@@ -1811,13 +1873,17 @@ def rate_worker():
 
 
 def _can_manage_rating(rating):
-    from app.models import ROLE_ADMIN
-    return current_user.role == ROLE_ADMIN or rating.created_by_id == current_user.id
+    """Editar/borrar: autor con escritura, u oficina con escritura."""
+    if not user_can(current_user, 'valoraciones', 'w'):
+        return False
+    if rating.created_by_id == current_user.id:
+        return True
+    from app.services.panel_scope_service import planning_acts_as_office
+    return planning_acts_as_office(current_user)
 
 
 @admin_bp.route("/api/rating/<int:rating_id>", methods=["PUT"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def update_rating(rating_id):
     from app.services.tenant_modules import has_valoraciones
     if not has_valoraciones():
@@ -1854,7 +1920,6 @@ def update_rating(rating_id):
 
 @admin_bp.route("/api/rating/<int:rating_id>", methods=["DELETE"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def delete_rating(rating_id):
     from app.services.tenant_modules import has_valoraciones
     if not has_valoraciones():
@@ -1883,11 +1948,17 @@ def delete_rating(rating_id):
 
 @admin_bp.route("/worker/<int:user_id>/reset_ratings", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN) # Solo Admin puede resetear
 def reset_worker_ratings(user_id):
     from app.services.tenant_modules import has_valoraciones
+    from app.services.panel_scope_service import planning_acts_as_office
     if not has_valoraciones():
         flash(translate('Módulo no activo.'), 'warning')
+        return redirect(url_for('admin.worker_panel', user_id=user_id))
+    if not (
+        user_can(current_user, 'valoraciones', 'w')
+        and planning_acts_as_office(current_user)
+    ):
+        flash(translate('No tienes permiso para resetear valoraciones.'), 'danger')
         return redirect(url_for('admin.worker_panel', user_id=user_id))
     worker = User.query.get_or_404(user_id)
     
@@ -1909,35 +1980,37 @@ def reset_worker_ratings(user_id):
 
 @admin_bp.route("/worker/<int:user_id>/ratings_history")
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def worker_ratings_history(user_id):
     from app.services.tenant_modules import has_valoraciones
     if not has_valoraciones():
         flash(translate('Módulo no activo.'), 'warning')
         return redirect(url_for('admin.worker_panel', user_id=user_id))
+    if not user_can(current_user, 'valoraciones', 'r'):
+        flash(translate('No tienes permiso para ver valoraciones.'), 'danger')
+        return redirect(url_for('admin.worker_panel', user_id=user_id))
     worker = User.query.get_or_404(user_id)
     # Mostramos TODOS (activos e inactivos) ordenados por fecha
     ratings = Rating.query.filter_by(user_id=worker.id).order_by(Rating.created_at.desc()).all()
+    from app.services.panel_scope_service import planning_acts_as_office
     from app.utils.nav_back import resolve_back_url
     back_url = resolve_back_url('admin.worker_panel', user_id=worker.id)
     return render_template(
         "admin_worker_ratings.html",
         worker=worker,
         ratings=ratings,
+        can_write_valoraciones=user_can(current_user, 'valoraciones', 'w'),
+        valoraciones_office=planning_acts_as_office(current_user),
         back_url=back_url,
     )
 
 @admin_bp.route("/obras", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
+@permission_required('directorio', 'r')
 def obras_list():
     # Filtros básicos de SQL (opcional, ya que haremos filtrado en cliente también)
-    obras = (
-        Obra.query
-        .filter(Obra.is_deleted != True)
-        .order_by(Obra.fecha_inicio.desc())
-        .all()
-    )
+    query = Obra.query.filter(Obra.is_deleted != True)
+    query = apply_obra_scope_filter(query, current_user, PANEL_PLANIFICADOR)
+    obras = query.order_by(Obra.fecha_inicio.desc()).all()
     
     # NECESARIO: Obtener lista de jefes para el desplegable de edición rápida
     jefes = User.query.filter(
@@ -2035,8 +2108,7 @@ def obras_detailed():
     context['next_month_url'] = url_for('admin.obras_detailed', selected_date=context['next_date_str'])
     
     # 4. Configurar modo vista (para activar botones de edición en el HTML)
-    can_write_tablero = user_can(current_user, 'tablero', 'w')
-    context['view_mode'] = 'readonly' if (is_laboral(current_user) or not can_write_tablero) else 'admin'
+    context['view_mode'] = 'readonly' if not can_edit_planning_calendar(current_user) else 'admin'
     from app.services.permission_service import can_resolve_fichajes
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     context['puede_resolver_auditoria'] = (
@@ -2050,7 +2122,7 @@ def obras_detailed():
 
 @admin_bp.route("/personal", methods=["GET"])
 @login_required
-@roles_required(ROLE_ADMIN)
+@permission_required('trabajadores', 'r')
 def personal():
     # 1. Usuarios INTERNOS (No operarios, O operarios de empresa interna)
     internos = User.query.join(Company, User.company_id == Company.id, isouter=True).filter(
@@ -2291,12 +2363,22 @@ def edit_operario(user_id):
 @login_required
 @roles_required(ROLE_ADMIN)
 def panel():
+    from app.services.permission_service import user_can, can_resolve_fichajes
+    from app.services.user_home_service import resolve_inicio_panel_url
+    if not user_can(current_user, 'inicio', 'r'):
+        flash(translate('Acceso no autorizado'), 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    dest = resolve_inicio_panel_url(current_user)
+    admin_panel_url = url_for('admin.panel')
+    if dest and dest != admin_panel_url:
+        return redirect(dest)
+
     from app.services.panel_service import get_admin_panel_context
     from app.services.onboarding_service import necesita_onboarding, estado_onboarding
     ctx = get_admin_panel_context()
     ctx['mostrar_onboarding'] = necesita_onboarding()
     ctx['onboarding'] = estado_onboarding() if ctx['mostrar_onboarding'] else None
-    from app.services.permission_service import can_resolve_fichajes
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     ctx['puede_resolver_auditoria'] = (
         can_resolve_fichajes(current_user) and tenant_muestra_auditoria_fichajes()
@@ -2327,7 +2409,17 @@ def api_panel_kpi_detail():
 @login_required
 @roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def panel_laboral():
-    """Landing de inicio para perfiles laboral / RRHH."""
+    """Landing de inicio para perfiles laboral / RRHH / custom de jornada."""
+    from app.services.permission_service import user_can
+    from app.services.user_home_service import resolve_inicio_panel_url
+    if not user_can(current_user, 'inicio', 'r'):
+        flash(translate('Acceso no autorizado'), 'danger')
+        return redirect(url_for('main.dashboard'))
+    dest = resolve_inicio_panel_url(current_user)
+    laboral_url = url_for('admin.panel_laboral')
+    if dest and dest != laboral_url:
+        return redirect(dest)
+
     from app.services.panel_service import get_laboral_panel_context
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     ctx = get_laboral_panel_context(
@@ -3490,8 +3582,11 @@ def import_companies_confirm():
 @admin_bp.route("/active_obras", methods=["GET"])
 @login_required
 def active_obras():
-    # >>> roles con constante
-    if current_user.role != ROLE_ADMIN:
+    if not (
+        user_can(current_user, 'directorio', 'r')
+        or user_can(current_user, 'planificador', 'r')
+        or user_can(current_user, 'tablero', 'r')
+    ):
         return jsonify([]), 403
     start_date_str = request.args.get("start_date")
     end_date_str = request.args.get("end_date")
@@ -3539,7 +3634,7 @@ def planificador_jo():
         user_panel_mode,
         planning_acts_as_office,
     )
-    from app.services.tenant_modules import jefes_asignan_directo
+    from app.services.assign_mode_service import user_assigns_direct
 
     empresas = Company.query.filter_by(active=True).order_by(Company.nombre).all()
 
@@ -3566,7 +3661,7 @@ def planificador_jo():
         empresas=empresas,
         ROLE_ADMIN=ROLE_ADMIN,
         planif_office=planif_office,
-        planif_direct_assign=planif_office or jefes_asignan_directo(),
+        planif_direct_assign=user_assigns_direct(current_user),
         can_edit_planificador=can_edit_planning_calendar(current_user),
         planif_sin_obras=planif_sin_obras,
         planif_sin_personal=planif_sin_personal,
@@ -3609,9 +3704,10 @@ def _planificador_obras_con_operarios(worker_ids, start_date, end_date, obras_id
 def _planificador_avg_ratings(user_ids):
     """Media de valoraciones activas por user_id (una sola consulta)."""
     from app.services.tenant_modules import has_valoraciones
+    from app.services.permission_service import user_can
 
     ids = [int(u) for u in (user_ids or []) if u]
-    if not ids or not has_valoraciones():
+    if not ids or not has_valoraciones() or not user_can(current_user, 'valoraciones', 'r'):
         return {}
     rows = (
         db.session.query(Rating.user_id, func.avg(Rating.score))
@@ -4200,8 +4296,6 @@ def configuracion_global():
         conforme_jornada_activo,
         has_auditoria_vehiculos,
         hora_corte_activa,
-        hora_corte_destinatario_ids,
-        jefes_asignan_directo,
     )
     festivos = Festivo.query.order_by(Festivo.fecha.asc()).all()
     
@@ -4213,19 +4307,14 @@ def configuracion_global():
     limite_custodia = int(configs_dict.get('limite_custodia', 15))
     
     tenant_modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
-    office_users = (
-        User.query.filter(
-            User.role.in_([ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]),
-            User.is_deleted.is_(False),
-        )
-        .order_by(User.name, User.lastname)
-        .all()
-    )
 
     academia_pref = False
     if tenant_modulos.get('onboarding'):
         from app.services.onboarding_service import academia_visible as _academia_visible
         academia_pref = _academia_visible()
+
+    from app.services.notification_dispatch_service import matrix_for_ui
+    notif_matrix = matrix_for_ui()
 
     return render_template(
         'admin_configuracion.html',
@@ -4237,11 +4326,9 @@ def configuracion_global():
         tenant_has_onboarding=bool(tenant_modulos.get('onboarding')),
         academia_visible=academia_pref,
         tenant_has_auditoria_vehiculos=has_auditoria_vehiculos(),
-        jefes_asignan_directo=jefes_asignan_directo(),
         hora_corte_activa=hora_corte_activa(),
-        hora_corte_destinatario_ids=hora_corte_destinatario_ids(),
         conforme_jornada_activo=conforme_jornada_activo(),
-        office_users=office_users,
+        notif_matrix=notif_matrix,
     )
 
 
@@ -4280,9 +4367,11 @@ def reiniciar_guia_onboarding():
 def permisos_roles(role=None):
     from app.services.permission_catalog import (
         ADMIN_LOCKED_MODULES,
+        BINARY_TICK_MODULES,
         MODULE_READ_HINTS,
         MODULE_WRITE_HINTS,
         SSO_READ_ONLY_MODULES,
+        WRITE_DISABLED_MODULES,
         modules_for_role,
     )
     from app.services.permission_service import (
@@ -4297,11 +4386,21 @@ def permisos_roles(role=None):
         list_roles,
     )
     from app.services.panel_scope_service import (
-        PANEL_AUDITORIA_FICHAJES,
-        PANEL_PLANIFICADOR,
-        PANEL_TABLERO,
-        get_role_panel_scope,
+        KIND_AUDITORIA,
+        KIND_PLANIFICACION,
+        KIND_SOLICITUDES,
+        SCOPE_KINDS,
+        ensure_obra_scope_unified,
+        get_role_scope,
         list_jefes_for_scope_ui,
+    )
+    from app.services.assign_mode_service import (
+        ASSIGN_MODE_DIRECT,
+        ASSIGN_MODE_SOLICITUD,
+        KIND_PEOPLE,
+        KIND_VEHICLES,
+        ensure_assign_modes_migrated,
+        get_role_assign_mode,
     )
     from app.models import ROLE_ADMIN, ROLE_JEFE
     if not user_can(current_user, 'permisos', 'r'):
@@ -4309,6 +4408,11 @@ def permisos_roles(role=None):
         return redirect(url_for('main.dashboard'))
     ensure_tenant_roles()
     ensure_role_permissions()
+    ensure_assign_modes_migrated()
+    try:
+        ensure_obra_scope_unified()
+    except Exception:
+        pass
     roles = list_roles()
     valid = {r for r, _ in roles}
     active = role if role in valid else 'admin'
@@ -4316,40 +4420,31 @@ def permisos_roles(role=None):
     visible_keys = {m for m, _, _ in modules}
     active_meta = get_role(active)
 
-    scope_plan = get_role_panel_scope(active, PANEL_PLANIFICADOR)
-    scope_tab = get_role_panel_scope(active, PANEL_TABLERO)
-    scope_audit = get_role_panel_scope(active, PANEL_AUDITORIA_FICHAJES)
-    panel_scopes = {
-        PANEL_PLANIFICADOR: {
-            'title': 'Alcance del planificador',
-            'hint': 'Qué obras ve en el Gantt. La escritura del módulo decide si puede asignar.',
-            'mode': scope_plan['mode'],
-            'jefe_ids': set(scope_plan.get('jefe_ids') or []),
-            'locked': active == ROLE_ADMIN,
-            'locked_note': translate('Administrador: siempre ve todas las obras.'),
-        },
-        PANEL_TABLERO: {
-            'title': 'Alcance del tablero',
-            'hint': 'Qué obras ve en el kanban. Independiente del planificador.',
-            'mode': scope_tab['mode'],
-            'jefe_ids': set(scope_tab.get('jefe_ids') or []),
-            'locked': active == ROLE_ADMIN,
-            'locked_note': translate('Administrador: siempre ve todas las obras.'),
-        },
-        PANEL_AUDITORIA_FICHAJES: {
-            'title': 'Alcance de auditoría de fichajes',
-            'hint': 'Qué fichajes ve (por obras). Lectura/escritura del módulo decide entrar y resolver.',
-            'mode': scope_audit['mode'],
-            'jefe_ids': set(scope_audit.get('jefe_ids') or []),
-            'locked': active == ROLE_ADMIN,
-            'locked_note': translate('Administrador: siempre ve todas las obras.'),
-        },
+    scope_labels = {
+        KIND_PLANIFICACION: translate('Planificación'),
+        KIND_AUDITORIA: translate('Auditoría fichajes / mapa'),
+        KIND_SOLICITUDES: translate('Solicitudes (buzón)'),
     }
-    if active == ROLE_JEFE:
-        for meta in panel_scopes.values():
+    scopes_meta = {}
+    for kind in SCOPE_KINDS:
+        sc = get_role_scope(active, kind)
+        meta = {
+            'kind': kind,
+            'label': scope_labels[kind],
+            'mode': sc['mode'],
+            'jefe_ids': set(sc.get('jefe_ids') or []),
+            'locked': active == ROLE_ADMIN,
+            'locked_note': translate('Administrador: siempre ve todas las obras.'),
+        }
+        if active == ROLE_JEFE and kind == KIND_PLANIFICACION:
             meta['locked'] = True
-            meta['locked_note'] = translate('Jefe de obra: siempre ve solo sus obras.')
+            meta['locked_note'] = translate('Jefe de obra: planificación = solo sus obras.')
             meta['mode'] = 'jefe'
+        scopes_meta[kind] = meta
+
+    assign_mode_people = get_role_assign_mode(active, KIND_PEOPLE)
+    assign_mode_vehicles = get_role_assign_mode(active, KIND_VEHICLES)
+    assign_mode_locked = active == ROLE_ADMIN
 
     return render_template(
         'admin_permisos.html',
@@ -4362,14 +4457,21 @@ def permisos_roles(role=None):
         matrix=matrix_for_role(active),
         locked_modules=ADMIN_LOCKED_MODULES,
         sso_read_only_modules=SSO_READ_ONLY_MODULES,
+        write_disabled_modules=WRITE_DISABLED_MODULES,
+        binary_tick_modules=BINARY_TICK_MODULES,
         read_hints=MODULE_READ_HINTS,
         write_hints=MODULE_WRITE_HINTS,
         show_integration_perm_hint=bool(
             visible_keys & {'soltec_alta_odoo', 'soltec_portal', 'sync_odoo', 'integraciones'}
         ),
         can_manage_roles=user_can(current_user, 'permisos', 'w'),
-        panel_scopes=panel_scopes,
+        scopes_meta=scopes_meta,
         scope_jefes=list_jefes_for_scope_ui(),
+        assign_mode_people=assign_mode_people,
+        assign_mode_vehicles=assign_mode_vehicles,
+        assign_mode_locked=assign_mode_locked,
+        ASSIGN_MODE_DIRECT=ASSIGN_MODE_DIRECT,
+        ASSIGN_MODE_SOLICITUD=ASSIGN_MODE_SOLICITUD,
     )
 
 
@@ -4382,13 +4484,11 @@ def permisos_roles_save():
         save_role_matrix,
         user_can,
     )
-    from app.services.role_registry_service import list_roles, valid_role_keys
+    from app.services.role_registry_service import valid_role_keys
     from app.services.panel_scope_service import (
-        PANEL_AUDITORIA_FICHAJES,
-        PANEL_PLANIFICADOR,
-        PANEL_TABLERO,
-        parse_scope_from_form,
-        set_role_panel_scope,
+        KIND_PLANIFICACION,
+        parse_all_scopes_from_form,
+        set_role_scope,
     )
     from app.models import ROLE_ADMIN, ROLE_JEFE
     if not user_can(current_user, 'permisos', 'w'):
@@ -4405,10 +4505,23 @@ def permisos_roles_save():
     try:
         role_modules = [m for m, _, _ in modules_for_role(role)]
         save_role_matrix(role, request.form, modules=role_modules)
-        if role not in (ROLE_ADMIN, ROLE_JEFE):
-            for panel in (PANEL_PLANIFICADOR, PANEL_TABLERO, PANEL_AUDITORIA_FICHAJES):
-                mode, jefe_ids = parse_scope_from_form(request.form, panel)
-                set_role_panel_scope(role, panel, mode, jefe_ids)
+        if role != ROLE_ADMIN:
+            for kind, (mode, jefe_ids) in parse_all_scopes_from_form(request.form).items():
+                if role == ROLE_JEFE and kind == KIND_PLANIFICACION:
+                    continue  # forzado a sus obras
+                set_role_scope(role, kind, mode, jefe_ids)
+        from app.services.assign_mode_service import (
+            KIND_PEOPLE,
+            KIND_VEHICLES,
+            parse_assign_mode_from_form,
+            set_role_assign_mode,
+        )
+        set_role_assign_mode(
+            role, parse_assign_mode_from_form(request.form, role, KIND_PEOPLE), KIND_PEOPLE
+        )
+        set_role_assign_mode(
+            role, parse_assign_mode_from_form(request.form, role, KIND_VEHICLES), KIND_VEHICLES
+        )
     except Exception as exc:
         db.session.rollback()
         flash(translate('No se pudieron guardar los permisos: {error}', error=exc), 'danger')
@@ -4515,39 +4628,9 @@ def update_config():
             from app.utils.timezone_utils import invalidate_app_timezone_cache
             invalidate_app_timezone_cache()
 
-        hora_limite = request.form.get('hora_limite_entrada')
-        if hora_limite:
-            _upsert('hora_limite_entrada', hora_limite)
-
         limite = request.form.get('limite_custodia')
         if limite and str(limite).isdigit():
             _upsert('limite_custodia', limite)
-
-        from app.services.tenant_modules import (
-            CONFIG_HORA_CORTE_ACTIVA,
-            CONFIG_HORA_CORTE_DESTINATARIOS,
-            CONFIG_JEFES_ASIGNAN_DIRECTO,
-        )
-        _upsert(
-            CONFIG_JEFES_ASIGNAN_DIRECTO,
-            'True' if request.form.get('jefes_asignan_directo') else 'False',
-        )
-        _upsert(
-            CONFIG_HORA_CORTE_ACTIVA,
-            'True' if request.form.get('hora_corte_activa') else 'False',
-        )
-        from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
-        allowed_dest = {
-            int(u.id) for u in User.query.filter(
-                User.role.in_([ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH]),
-                User.is_deleted.is_(False),
-            ).all()
-        }
-        dest_ids = [
-            str(int(x)) for x in request.form.getlist('hora_corte_destinatarios')
-            if str(x).isdigit() and int(x) in allowed_dest
-        ]
-        _upsert(CONFIG_HORA_CORTE_DESTINATARIOS, ','.join(dest_ids))
 
     if 'fichajes' in section_keys:
         primer_fichaje_val = 'True' if request.form.get('aceptar_primer_fichaje') else 'False'
@@ -4650,14 +4733,8 @@ def update_config():
             )
 
     if 'emails' in section_keys:
-        eventos_email = [
-            'email_sol_generica', 'email_sol_concreta', 'email_sol_vehiculo',
-            'email_sol_resuelta',
-            'email_asignacion', 'email_desasignacion', 'email_traslado',
-        ]
-        for evento in eventos_email:
-            valores_marcados = request.form.getlist(evento)
-            _upsert(evento, ",".join(valores_marcados))
+        from app.services.notification_dispatch_service import save_matrix_from_form
+        save_matrix_from_form(request.form)
 
     if 'guia' in section_keys:
         from app.services.onboarding_service import CONFIG_ACADEMIA_VISIBLE
@@ -4704,9 +4781,6 @@ def update_config():
 @admin_bp.route('/configuracion/festivos/add', methods=['POST'])
 @login_required
 def add_festivo():
-    if current_user.role != 'admin':
-        return redirect(url_for('main.dashboard'))
-        
     from app.models import Festivo
     fecha_str = request.form.get('fecha')
     descripcion = request.form.get('descripcion')
@@ -4733,9 +4807,6 @@ def add_festivo():
 @admin_bp.route('/configuracion/festivos/delete/<int:id>')
 @login_required
 def delete_festivo(id):
-    if current_user.role != 'admin':
-        return redirect(url_for('main.dashboard'))
-        
     from app.models import Festivo
     f = Festivo.query.get_or_404(id)
     db.session.delete(f)
@@ -4756,8 +4827,8 @@ def batch_update_obras_status():
         return jsonify({'success': False, 'message': translate('Datos incompletos.')}), 400
 
     # AQUÍ ESTABA EL ERROR: Cambiamos 'Ejecucion' por 'En Curso'
-    valid_estados = ['Pendiente', 'En Curso', 'Finalizada'] 
-    
+    valid_estados = ['Pendiente', 'En Curso', 'En Garantía', 'Finalizada']
+
     if new_estado not in valid_estados:
         return jsonify({'success': False, 'message': translate('Estado no válido.')}), 400
 
@@ -5013,7 +5084,7 @@ def system_logs():
         default_date=today.strftime('%Y-%m-%d'),
         default_date_from=(today - timedelta(days=7)).strftime('%Y-%m-%d'),
         default_date_to=today.strftime('%Y-%m-%d'),
-        can_manage_log_prefs=(current_user.role == ROLE_ADMIN),
+        can_manage_log_prefs=user_can(current_user, 'logs', 'w'),
         log_tabs=allowed_categories,
         tenant_has_avisos_laborales=avisos_laborales,
     )
@@ -5090,26 +5161,31 @@ def save_log_preferences():
 def ausencias_list():
     from datetime import date as date_cls
     from app.services.leave_service import (
-        jefe_puede_resolver_ausencias,
+        actor_puede_crear_ausencia,
+        actor_puede_gestionar_ausencias,
+        actor_puede_resolver_conflictos_ausencia,
         get_pending_conflicts,
         get_pending_manual_leaves,
         get_upcoming_leaves,
         get_leaves_scoped,
         obras_for_leave,
+        obra_ids_for_leave_actor,
         auto_resolucion_ausencias,
         heal_odoo_pending_leaves,
     )
+    from app.services.permission_service import user_can
+
+    if not user_can(current_user, 'ausencias', 'r'):
+        flash(translate('No tienes permisos para ver ausencias.'), 'danger')
+        return redirect(url_for('main.dashboard'))
 
     # Vacaciones de Odoo no pasan por validación local.
     heal_odoo_pending_leaves()
 
     estado = request.args.get('estado') or ''
-    puede_resolver = current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH) or (
-        current_user.role == ROLE_JEFE and jefe_puede_resolver_ausencias()
-    )
-    obra_ids = None
-    if current_user.role == ROLE_JEFE:
-        obra_ids = [o.id for o in Obra.query.filter_by(jefe_obra_id=current_user.id, is_deleted=False).all()]
+    puede_resolver = actor_puede_resolver_conflictos_ausencia(current_user)
+    puede_gestionar = actor_puede_gestionar_ausencias(current_user)
+    obra_ids = obra_ids_for_leave_actor(current_user)
 
     auto_mode = auto_resolucion_ausencias()
     conflictos = []
@@ -5127,9 +5203,7 @@ def ausencias_list():
     ))
     ausencias = get_leaves_scoped(current_user, estado=estado or None, limit=200)
     pendientes = []
-    if current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        pendientes = get_pending_manual_leaves(current_user, limit=100)
-    elif current_user.role == ROLE_JEFE:
+    if user_can(current_user, 'ausencias', 'w'):
         pendientes = get_pending_manual_leaves(current_user, limit=100)
 
     return render_template(
@@ -5140,8 +5214,9 @@ def ausencias_list():
         proximas_rows=proximas_rows,
         conflictos=conflictos,
         puede_resolver=puede_resolver,
-        puede_validar_pendientes=current_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH),
-        puede_alta_manual=current_user.role in (ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH),
+        puede_validar_pendientes=puede_gestionar,
+        puede_alta_manual=actor_puede_crear_ausencia(current_user),
+        ausencias_es_oficina=puede_gestionar,
         filtro_estado=estado,
         auto_mode=auto_mode,
         today=date_cls.today(),
@@ -5180,15 +5255,20 @@ def ausencias_sync():
 @roles_required(ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH)
 def ausencias_crear():
     from app.services.leave_service import (
+        actor_puede_crear_ausencia,
         create_manual_leave,
-        estado_alta_por_rol,
+        estado_alta_por_permiso,
     )
+
+    if not actor_puede_crear_ausencia(current_user):
+        flash(translate('No tienes permiso para crear ausencias.'), 'danger')
+        return redirect(url_for('admin.ausencias_list'))
 
     user_id = request.form.get('user_id', type=int)
     fecha_inicio = request.form.get('fecha_inicio')
     fecha_fin = request.form.get('fecha_fin')
     tipo = (request.form.get('tipo') or 'Vacaciones').strip()
-    estado = estado_alta_por_rol(current_user, request.form.get('estado'))
+    estado = estado_alta_por_permiso(current_user, request.form.get('estado'))
     descripcion = request.form.get('descripcion') or None
 
     if not user_id or not fecha_inicio or not fecha_fin:
@@ -5284,14 +5364,12 @@ def ausencias_borrar(leave_id):
 def ausencias_resolver_conflicto(conflict_id):
     from app.models import AusenciaConflicto, CONFLICT_KEEP_LEAVE, CONFLICT_KEEP_ASSIGNMENT
     from app.services.leave_service import (
-        jefe_puede_resolver_ausencias,
+        actor_puede_resolver_conflictos_ausencia,
         resolve_conflict,
     )
+    from app.services.panel_scope_service import obra_in_planning_custody
 
-    if current_user.role == ROLE_JEFE and not jefe_puede_resolver_ausencias():
-        flash(translate('No tienes permiso para resolver conflictos de ausencias.'), 'danger')
-        return redirect(url_for('admin.ausencias_list'))
-    if is_laboral(current_user) and not user_can(current_user, 'ausencias', 'x'):
+    if not actor_puede_resolver_conflictos_ausencia(current_user):
         flash(translate('No tienes permiso para resolver conflictos de ausencias.'), 'danger')
         return redirect(url_for('admin.ausencias_list'))
 
@@ -5301,12 +5379,10 @@ def ausencias_resolver_conflicto(conflict_id):
         return redirect(url_for('admin.ausencias_list'))
 
     conflict = AusenciaConflicto.query.get_or_404(conflict_id)
-    if current_user.role == ROLE_JEFE:
-        obra = Obra.query.get(conflict.obra_id)
-        if not obra or obra.jefe_obra_id != current_user.id:
-            flash(translate('Solo puedes resolver conflictos de tus obras.'), 'danger')
-            return redirect(url_for('admin.ausencias_list'))
-    # laboral: like admin, no obra scope
+    obra = Obra.query.get(conflict.obra_id)
+    if not obra_in_planning_custody(current_user, obra):
+        flash(translate('Solo puedes resolver conflictos de obras de tu alcance.'), 'danger')
+        return redirect(url_for('admin.ausencias_list'))
 
     try:
         ok = resolve_conflict(conflict_id, decision, resolved_by_id=current_user.id)

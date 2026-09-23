@@ -253,7 +253,12 @@ def notificar_definir_pin_por_email(user, actor=None):
     if not _email_parece_real(getattr(user, 'email', None)):
         return False
     try:
-        from app.services.email_service import send_email
+        from app.services.notification_dispatch_service import (
+            dispatch_notification,
+            event_allows_send,
+        )
+        if not event_allows_send('acceso_pin'):
+            return False
 
         tenant = _resolver_tenant_para_email()
         if tenant is None:
@@ -306,7 +311,14 @@ def notificar_definir_pin_por_email(user, actor=None):
             dni=user.dni,
             url=url,
         )
-        return bool(send_email(asunto, [user.email], texto, html_body=html))
+        return bool(dispatch_notification(
+            'acceso_pin',
+            subject=asunto,
+            body=texto,
+            html=html,
+            target_user_id=user.id,
+            users=[user],
+        ))
     except Exception:
         return False
 
@@ -319,7 +331,12 @@ def notificar_informacion_acceso(user, actor=None):
     if not _email_parece_real(getattr(user, 'email', None)):
         return False
     try:
-        from app.services.email_service import send_email
+        from app.services.notification_dispatch_service import (
+            dispatch_notification,
+            event_allows_send,
+        )
+        if not event_allows_send('acceso_info'):
+            return False
 
         tenant = _resolver_tenant_para_email()
         if tenant is None:
@@ -398,7 +415,14 @@ def notificar_informacion_acceso(user, actor=None):
             pin_info=pin_info,
             pin_url=url_pin,
         )
-        return bool(send_email(asunto, [user.email], texto, html_body=html))
+        return bool(dispatch_notification(
+            'acceso_info',
+            subject=asunto,
+            body=texto,
+            html=html,
+            target_user_id=user.id,
+            users=[user],
+        ))
     except Exception:
         return False
 

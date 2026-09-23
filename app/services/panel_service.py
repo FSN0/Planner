@@ -363,12 +363,12 @@ def get_admin_panel_context():
 
     # —— Obras ——
     obras_en_curso = Obra.query.filter(
-        Obra.is_deleted.is_(False), Obra.estado == 'En Curso'
+        Obra.is_deleted.is_(False), Obra.estado.in_(['En Curso', 'En Garantía'])
     ).count()
     total_obras = Obra.query.filter(Obra.is_deleted.is_(False)).count()
     obras_sin_jefe = Obra.query.filter(
         Obra.is_deleted.is_(False),
-        Obra.estado == 'En Curso',
+        Obra.estado.in_(['En Curso', 'En Garantía']),
         Obra.jefe_obra_id.is_(None),
     ).count()
 
@@ -579,21 +579,51 @@ def get_laboral_panel_context(user, *, puede_ver_auditoria=True, horizon_days=14
 
 
 def get_jefe_panel_context(user):
-    """Panel de control filtrado a las obras del jefe de obra."""
+    """Panel de control filtrado al alcance de planificación del usuario."""
     today = today_local()
     chart_start = today - timedelta(days=13)
-    obra_ids = _obra_ids_del_jefe(user.id)
+    from app.services.panel_scope_service import (
+        PANEL_TABLERO,
+        apply_obra_scope_filter,
+        user_panel_mode,
+    )
 
-    mis_obras = (
-        Obra.query.filter(
-            Obra.jefe_obra_id == user.id,
-            Obra.is_deleted.is_(False),
+    mode = user_panel_mode(user, PANEL_TABLERO)
+    if mode == 'office':
+        mis_obras = (
+            Obra.query.filter(Obra.is_deleted.is_(False))
+            .options(joinedload(Obra.jefe_obra))
+            .all()
         )
-        .options(joinedload(Obra.jefe_obra))
-        .all()
-    ) if obra_ids else []
+        obra_ids = [o.id for o in mis_obras]
+    elif mode == 'none':
+        obra_ids = []
+        mis_obras = []
+    else:
+        mis_obras = (
+            apply_obra_scope_filter(
+                Obra.query.filter(Obra.is_deleted.is_(False)).options(
+                    joinedload(Obra.jefe_obra)
+                ),
+                user,
+                PANEL_TABLERO,
+            ).all()
+        )
+        obra_ids = [o.id for o in mis_obras]
+        if not obra_ids:
+            obra_ids = _obra_ids_del_jefe(user.id)
+            mis_obras = (
+                Obra.query.filter(
+                    Obra.jefe_obra_id == user.id,
+                    Obra.is_deleted.is_(False),
+                )
+                .options(joinedload(Obra.jefe_obra))
+                .all()
+            ) if obra_ids else []
 
-    obras_en_curso = sum(1 for o in mis_obras if o.estado == 'En Curso')
+    obras_en_curso = sum(
+        1 for o in mis_obras if o.estado in ('En Curso', 'En Garantía')
+    )
     total_obras = len(mis_obras)
 
     if obra_ids:
@@ -704,7 +734,7 @@ def get_jefe_panel_context(user):
         (chart_start + timedelta(days=i)).isoformat() for i in range(14)
     ]
 
-    recent_obras = [o for o in mis_obras if o.estado == 'En Curso'][:5]
+    recent_obras = [o for o in mis_obras if o.estado in ('En Curso', 'En Garantía')][:5]
 
     recent_logs = (
         SystemLog.query.options(joinedload(SystemLog.user))

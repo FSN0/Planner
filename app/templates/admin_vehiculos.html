@@ -57,12 +57,12 @@
         <a href="{{ url_for('admin.vehiculos_libres') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-car-side"></i> {{ _('Coches libres') }}
         </a>
-        {% if current_user.role == 'admin' and tenant_has_odoo and tenant_has_auditoria_vehiculos %}
+        {% if user_can(current_user, 'auditoria_vehiculos', 'r') and tenant_has_odoo and tenant_has_auditoria_vehiculos %}
         <a href="{{ url_for('sync.auditoria_vehiculos') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-clipboard-check"></i> {{ _('Auditoría') }}
         </a>
         {% endif %}
-        {% if current_user.role == 'admin' %}
+        {% if user_can(current_user, 'vehiculos', 'w') %}
         <a href="{{ url_for('admin.vehiculos_nuevo') }}" class="btn-admin btn-admin-primary" data-tour="veh-nuevo">
           <i class="fas fa-plus"></i> {{ _('Nuevo vehículo') }}
         </a>
@@ -131,8 +131,8 @@
               <td class="col-actions">
                 <div class="table-actions">
                   <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}" class="btn-table-action" title="{{ _('Ver ficha') }}"><i class="fas fa-eye"></i></a>
+                  {% if user_can(current_user, 'vehiculos', 'w') %}
                   <a href="{{ url_for('admin.vehiculos_editar', vehiculo_id=v.id) }}" class="btn-table-action" title="{{ _('Editar vehículo') }}"><i class="fas fa-pen"></i></a>
-                  {% if current_user.role == 'admin' %}
                   <form method="POST" action="{{ url_for('admin.vehiculos_toggle', vehiculo_id=v.id) }}" style="display:inline;" onclick="event.stopPropagation();">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-table-action" title="{{ _('Desactivar') if v.active else _('Activar') }}">
@@ -147,7 +147,7 @@
             <tr>
               <td colspan="{{ 8 if tenant_has_odoo else 6 }}" class="table-empty-state">
                 <i class="fas fa-car"></i>
-                {% if current_user.role == 'admin' %}
+                {% if user_can(current_user, 'vehiculos', 'w') %}
                 {{ _('Aún no hay vehículos. Usa el formulario de arriba para dar de alta el primero.') }}
                 {% else %}
                 {{ _('Aún no hay vehículos en la flota.') }}

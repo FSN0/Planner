@@ -6,7 +6,6 @@ import json
 
 from app import db
 from app.models import User, Obra, Asignacion, Solicitud, Festivo, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO
-from app.decorators import roles_required
 
 from app.services.assignment_service import process_assignment_action, process_unassign_action
 from app.services.solicitud_service import (
@@ -24,7 +23,7 @@ from app.services.email_service import (
     notificar_movimiento_admin_a_jo, 
     notificar_nueva_solicitud
 )
-from app.services.permission_service import is_laboral, can_write_assignments, user_can
+from app.services.permission_service import can_write_assignments, can_resolve_solicitudes_personal
 from app.services.i18n_service import translate
 
 asignaciones_api = Blueprint('asignaciones_api', __name__)
@@ -43,8 +42,30 @@ def _desasignar_obra_origen_traslado(actor, worker_id, old_obra_id, fechas):
     Traslado entre obras en planificador: quitar de la obra origen los días
     que se van a asignar en destino. Sin esto, el check de conflictos trata
     la propia obra origen como «otra obra» ocupada.
+
+    Modo directo / solicitud = flag por rol (no el tick global legacy).
     """
     if not fechas or old_obra_id is None:
+        return False, ''
+
+    from app.services.assign_mode_service import (
+        user_assigns_direct,
+        user_assigns_via_solicitud,
+    )
+    from app.services.panel_scope_service import (
+        obra_in_planning_custody,
+        planning_acts_as_office,
+    )
+    from app.services.permission_service import can_write_assignments
+
+    if not can_write_assignments(actor):
+        return False, ''
+
+    old_obra = Obra.query.get(old_obra_id)
+    if (
+        not planning_acts_as_office(actor)
+        and not obra_in_planning_custody(actor, old_obra)
+    ):
         return False, ''
 
     fechas_en_origen = [
@@ -54,11 +75,7 @@ def _desasignar_obra_origen_traslado(actor, worker_id, old_obra_id, fechas):
     if not fechas_en_origen:
         return False, ''
 
-    from app.services.tenant_modules import jefes_asignan_directo
-
-    jefe_directo = actor.role == ROLE_JEFE and jefes_asignan_directo()
-
-    if actor.role == ROLE_ADMIN or jefe_directo:
+    if user_assigns_direct(actor):
         for d_orig in fechas_en_origen:
             CoreAssignmentService.desasignar(
                 worker_id, old_obra_id, d_orig, actor.id,
@@ -92,7 +109,7 @@ def _desasignar_obra_origen_traslado(actor, worker_id, old_obra_id, fechas):
             )
         return True, ''
 
-    if actor.role == ROLE_JEFE:
+    if user_assigns_via_solicitud(actor):
         dates_str = [d.strftime('%Y-%m-%d') for d in fechas_en_origen]
         existing_baja = Solicitud.query.filter_by(
             tipo='CONCRETA', accion='DESASIGNAR', obra_id=old_obra_id, empleado_id=worker_id
@@ -189,6 +206,7 @@ def _process_batch_planificador_assignments(
     Conflictos de ausencia (y otros) se reportan por fila sin abortar el lote.
     """
     from app.services.vehicle_assignment_service import process_vehicle_assignment_action
+    from app.services.assign_mode_service import user_assigns_direct
 
     results = []
     ok_count = 0
@@ -232,7 +250,7 @@ def _process_batch_planificador_assignments(
             row['action'] = result.get('action')
             ok_count += 1
 
-            if actor_user.role == ROLE_ADMIN and fechas_a_procesar:
+            if user_assigns_direct(actor_user) and fechas_a_procesar:
                 fechas_str = (
                     f"Desde {fechas_a_procesar[0].strftime('%d/%m/%Y')} "
                     f"hasta {fechas_a_procesar[-1].strftime('%d/%m/%Y')}"
@@ -293,8 +311,6 @@ def _process_batch_planificador_assignments(
 @asignaciones_api.route("/v6/assign", methods=["POST"])
 @login_required
 def api_assign_worker():
-    if is_laboral(current_user):
-        return jsonify({"success": False, "message": translate("Modo solo lectura para perfil laboral.")}), 403
     if not can_write_assignments(current_user):
         return jsonify({
             "success": False,
@@ -336,8 +352,6 @@ def api_assign_worker():
 @login_required
 def api_free_workers():
     """Operarios libres en una fecha (picker móvil tablero/planificador)."""
-    if is_laboral(current_user):
-        return jsonify({"success": False, "message": translate("Modo solo lectura.")}), 403
     if not can_write_assignments(current_user):
         return jsonify({
             "success": False,
@@ -381,8 +395,6 @@ def api_free_workers():
 @asignaciones_api.route("/v6/unassign_worker", methods=["POST"])
 @login_required
 def api_unassign_worker():
-    if is_laboral(current_user):
-        return jsonify({'success': False, 'message': translate('Modo solo lectura para perfil laboral.')}), 403
     if not can_write_assignments(current_user):
         return jsonify({
             'success': False,
@@ -430,8 +442,13 @@ def api_unassign_worker():
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/asignar_parcial", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN)
 def api_solicitud_asignar_parcial(solicitud_id):
+    if not can_resolve_solicitudes_personal(current_user):
+        return jsonify({
+            'success': False,
+            'message': translate('Acceso no autorizado'),
+            'permission_denied': True,
+        }), 403
     solicitud = Solicitud.query.get_or_404(solicitud_id)
     data = request.get_json() or {}
     
@@ -597,8 +614,8 @@ def api_solicitud_asignar_parcial(solicitud_id):
 @asignaciones_api.route("/v6/planificador/action", methods=['POST'])
 @login_required
 def api_planificador_action():
-    if is_laboral(current_user):
-        return jsonify({"success": False, "error": translate("Perfil laboral sin permisos de edición.")}), 403
+    from app.services.assign_mode_service import user_assigns_direct
+
     if not can_write_assignments(current_user):
         return jsonify({
             "success": False,
@@ -686,7 +703,11 @@ def api_planificador_action():
                 curr_borrar += timedelta(days=1)
 
             if fechas_a_borrar:
-                if current_user.role == ROLE_ADMIN:
+                from app.services.assign_mode_service import (
+                    user_assigns_direct,
+                    user_assigns_via_solicitud,
+                )
+                if user_assigns_direct(current_user):
                     for d_borrar in fechas_a_borrar:
                         CoreAssignmentService.desasignar(
                             int(worker_id), old_obra_id, d_borrar, current_user.id,
@@ -713,7 +734,7 @@ def api_planificador_action():
                             fechas_str = f"{len(fechas_a_borrar)} días movidos a otra obra."
                             notificar_movimiento_admin_a_jo(old_obra_id, worker_name, "Desasignar (Traslado)", fechas_str, current_user.name)
                             
-                elif current_user.role == ROLE_JEFE:
+                elif user_assigns_via_solicitud(current_user):
                     dates_str = [d.strftime('%Y-%m-%d') for d in fechas_a_borrar]
                     existing_baja = Solicitud.query.filter_by(
                         tipo='CONCRETA', accion='DESASIGNAR', obra_id=old_obra_id, empleado_id=worker_id
@@ -818,7 +839,7 @@ def api_planificador_action():
             if result.get('action') == 'assigned':
                 result['action'] = 'partial_request'
         
-        if result.get('success') and str(worker_id) != 'GENERICO' and fechas_a_procesar and current_user.role == ROLE_ADMIN:
+        if result.get('success') and str(worker_id) != 'GENERICO' and fechas_a_procesar and user_assigns_direct(current_user):
             try:
                 worker = User.query.get(int(worker_id))
                 if worker:
@@ -839,8 +860,13 @@ def api_planificador_action():
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/asignar_candidatos", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN)
 def api_solicitud_asignar_candidatos(solicitud_id):
+    if not can_resolve_solicitudes_personal(current_user):
+        return jsonify({
+            'success': False,
+            'message': translate('Acceso no autorizado'),
+            'permission_denied': True,
+        }), 403
     solicitud = Solicitud.query.get_or_404(solicitud_id)
     data = request.get_json() or {}
     worker_ids = data.get('worker_ids', [])
@@ -1033,8 +1059,13 @@ def api_solicitud_asignar_candidatos(solicitud_id):
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/desasignar_candidato", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN)
 def api_solicitud_desasignar_candidato(solicitud_id):
+    if not can_resolve_solicitudes_personal(current_user):
+        return jsonify({
+            'success': False,
+            'message': translate('Acceso no autorizado'),
+            'permission_denied': True,
+        }), 403
     solicitud = Solicitud.query.get_or_404(solicitud_id)
     data = request.get_json() or {}
     worker_id = data.get('worker_id')
@@ -1082,7 +1113,6 @@ def api_solicitud_desasignar_candidato(solicitud_id):
 
 @asignaciones_api.route("/v6/solicitudes/<int:solicitud_id>/resolver", methods=["POST"])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def api_resolver_solicitud(solicitud_id):
     from app.services.solicitud_service import resolver_solicitud_admin
 
@@ -1093,8 +1123,13 @@ def api_resolver_solicitud(solicitud_id):
     if not accion:
         return jsonify({'success': False, 'message': translate('Falta la acción a realizar.')}), 400
 
-    # Cancelar: solo el autor (validado en servicio). Resto: solo admin.
-    if accion != 'cancelar' and current_user.role != ROLE_ADMIN:
+    # Cancelar: el autor (validado en servicio). Resto: resolver solicitudes personal.
+    if accion != 'cancelar' and not can_resolve_solicitudes_personal(current_user):
+        return jsonify({'success': False, 'message': translate('Acceso no autorizado')}), 403
+    if accion == 'cancelar' and not (
+        can_resolve_solicitudes_personal(current_user)
+        or solicitud.requested_by_id == current_user.id
+    ):
         return jsonify({'success': False, 'message': translate('Acceso no autorizado')}), 403
 
     try:

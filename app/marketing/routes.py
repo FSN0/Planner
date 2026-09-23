@@ -390,7 +390,10 @@ def contacto():
                 f"<strong>Empresa:</strong> {form['empresa'] or '—'}</p>"
                 f"<p>{form['mensaje'].replace(chr(10), '<br>')}</p>"
             )
-            ok = send_email(asunto, [destino], texto, html_body=html)
+            ok = False
+            from app.services.notification_dispatch_service import event_allows_send
+            if event_allows_send('marketing_contact'):
+                ok = send_email(asunto, [destino], texto, html_body=html)
             if ok:
                 flash(translate('Mensaje enviado. Te responderemos lo antes posible.'), 'success')
                 return _mkt_redirect('marketing.contacto')

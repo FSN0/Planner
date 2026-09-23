@@ -4,13 +4,62 @@ from app import db
 from datetime import datetime
 import json
 from sqlalchemy import or_, and_
-from app.models import Nota, Obra, User, nota_obra, nota_user, Asignacion, ROLE_ADMIN, ROLE_JEFE
+from app.models import Nota, Obra, User, nota_obra, nota_user, Asignacion
+from app.services.permission_service import user_can
+from app.services.panel_scope_service import (
+    PANEL_PLANIFICADOR,
+    apply_obra_scope_filter,
+    obra_in_planning_custody,
+    planning_acts_as_office,
+)
 
 notas_bp = Blueprint('notas', __name__, url_prefix='/notas')
 
 
-def _can_upload_audio():
-    return current_user.role in (ROLE_ADMIN, ROLE_JEFE)
+def _can_write_reuniones():
+    return user_can(current_user, 'reuniones', 'w')
+
+
+def _can_delete_reuniones():
+    return user_can(current_user, 'reuniones', 'w')
+
+
+def _puede_eliminar_nota(nota):
+    if _can_delete_reuniones() and planning_acts_as_office(current_user):
+        return True
+    return nota.autor_id == current_user.id and _can_write_reuniones()
+
+
+def _vision_oficina_notas():
+    """Oficina = alcance planificación «todos»."""
+    return planning_acts_as_office(current_user)
+
+
+def _obras_visibles_notas_query():
+    return apply_obra_scope_filter(
+        Obra.query.filter_by(is_deleted=False),
+        current_user,
+        PANEL_PLANIFICADOR,
+    )
+
+
+def _puede_ver_nota(nota):
+    if nota.autor_id == current_user.id:
+        return True
+    if nota.es_privada:
+        return False
+    if current_user in nota.usuarios_implicados:
+        return True
+    if not nota.obras:
+        return False
+    if _vision_oficina_notas():
+        return True
+    if any(obra_in_planning_custody(current_user, o) for o in nota.obras):
+        return True
+    return any(
+        Asignacion.query.filter_by(user_id=current_user.id, obra_id=o.id).first()
+        for o in nota.obras
+    )
 
 
 @notas_bp.before_request
@@ -30,40 +79,43 @@ def centro_mando():
         Nota.usuarios_implicados.any(User.id == current_user.id)
     )
     
-    # 3. Condición: La nota es pública y está vinculada a una obra a la que pertenezco
-    if current_user.role == ROLE_ADMIN:
-        # Los admins gestionan todo: ven las notas de todas las obras
-        # (Pero si la nota NO tiene obras ni implicados, .any() es False -> privada a efectos prácticos)
+    # 3. Condición: La nota es pública y está vinculada a una obra de mi alcance
+    if _vision_oficina_notas():
         cond_obra = and_(Nota.es_privada == False, Nota.obras.any())
-        
-    elif current_user.role == ROLE_JEFE:
-        # Los jefes solo ven las notas de las obras de las que son responsables
-        cond_obra = and_(
-            Nota.es_privada == False,
-            Nota.obras.any(or_(Obra.jefe_obra_id == current_user.id, Obra.encargado_id == current_user.id))
-        )
     else:
-        # Operarios y RRHH ven las notas de las obras donde han sido asignados alguna vez
-        obras_asignadas_subquery = db.session.query(Asignacion.obra_id).filter(Asignacion.user_id == current_user.id).subquery()
-        cond_obra = and_(
-            Nota.es_privada == False,
-            Nota.obras.any(Obra.id.in_(obras_asignadas_subquery))
-        )
+        obras_q = _obras_visibles_notas_query()
+        obra_ids = [o.id for o in obras_q.all()]
+        if obra_ids:
+            cond_obra = and_(
+                Nota.es_privada == False,
+                Nota.obras.any(Obra.id.in_(obra_ids)),
+            )
+        else:
+            # Sin obras en alcance: solo asignaciones propias (lectura)
+            obras_asignadas_subquery = (
+                db.session.query(Asignacion.obra_id)
+                .filter(Asignacion.user_id == current_user.id)
+                .subquery()
+            )
+            cond_obra = and_(
+                Nota.es_privada == False,
+                Nota.obras.any(Obra.id.in_(obras_asignadas_subquery)),
+            )
 
     # Aplicamos el filtro: Te la muestro si cumples AL MENOS UNA de las 3 condiciones
     notas = Nota.query.filter(
         or_(cond_autor, cond_implicado, cond_obra)
     ).order_by(Nota.fecha.desc()).all()
 
-    obras = Obra.query.filter_by(is_deleted=False).order_by(Obra.nombre).all()
+    obras = _obras_visibles_notas_query().order_by(Obra.nombre).all()
     usuarios = User.query.filter_by(is_deleted=False).order_by(User.name).all()
-
+    
     return render_template('notas/centro_mando.html', notas=notas, obras=obras, usuarios=usuarios)
 
 @notas_bp.route('/crear', methods=['POST'])
 @login_required
 def crear_nota():
-    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE]:
+    if not _can_write_reuniones():
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
 
     try:
@@ -111,30 +163,8 @@ def crear_nota():
 @login_required
 def obtener_nota(nota_id):
     nota = Nota.query.get_or_404(nota_id)
-    
-    # --- LÓGICA DE ACCESO RESTRINGIDO (Aplica las mismas reglas que el panel) ---
-    tiene_acceso = False
-    
-    if nota.autor_id == current_user.id:
-        tiene_acceso = True
-    elif not nota.es_privada:
-        if current_user in nota.usuarios_implicados:
-            tiene_acceso = True
-        elif nota.obras:
-            if current_user.role == ROLE_ADMIN:
-                tiene_acceso = True
-            elif current_user.role == ROLE_JEFE:
-                for obra in nota.obras:
-                    if obra.jefe_obra_id == current_user.id or obra.encargado_id == current_user.id:
-                        tiene_acceso = True
-                        break
-            else:
-                for obra in nota.obras:
-                    if Asignacion.query.filter_by(user_id=current_user.id, obra_id=obra.id).first():
-                        tiene_acceso = True
-                        break
-                        
-    if not tiene_acceso:
+
+    if not _puede_ver_nota(nota):
         return jsonify({'success': False, 'message': 'Acceso denegado'}), 403
 
     sugerencias = {'obras': [], 'personas': []}
@@ -175,26 +205,10 @@ def obtener_nota(nota_id):
 def editar_nota(nota_id):
     nota = Nota.query.get_or_404(nota_id)
     
-    if current_user.role not in [ROLE_ADMIN, ROLE_JEFE]:
+    if not _can_write_reuniones():
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
-        
-    # --- BLOQUEO DE EDICIÓN CON LAS MISMAS REGLAS DE PRIVACIDAD ---
-    tiene_acceso = False
-    if nota.autor_id == current_user.id:
-        tiene_acceso = True
-    elif not nota.es_privada:
-        if current_user in nota.usuarios_implicados:
-            tiene_acceso = True
-        elif nota.obras:
-            if current_user.role == ROLE_ADMIN:
-                tiene_acceso = True
-            elif current_user.role == ROLE_JEFE:
-                for obra in nota.obras:
-                    if obra.jefe_obra_id == current_user.id or obra.encargado_id == current_user.id:
-                        tiene_acceso = True
-                        break
-                        
-    if not tiene_acceso:
+
+    if not _puede_ver_nota(nota):
         return jsonify({'success': False, 'message': 'No autorizado para editar esta nota'}), 403
 
     try:
@@ -230,8 +244,7 @@ def eliminar_nota(nota_id):
 
     nota = Nota.query.get_or_404(nota_id)
 
-    # Seguridad: Solo puede borrar la nota quien la creó (o un admin supremo)
-    if nota.autor_id != current_user.id and current_user.role != ROLE_ADMIN:
+    if not _puede_eliminar_nota(nota):
         return jsonify({'success': False, 'message': 'No autorizado para eliminar esta nota'}), 403
 
     try:
@@ -250,7 +263,7 @@ def eliminar_nota(nota_id):
 @notas_bp.route('/audio/subir', methods=['POST'])
 @login_required
 def subir_audio_nota():
-    if not _can_upload_audio():
+    if not _can_write_reuniones():
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
 
     archivo = request.files.get('audio')
@@ -314,7 +327,7 @@ def estado_audio_nota(job_id):
     from app.services.nota_audio_service import job_to_status_dict
 
     job = NotaAudioJob.query.get_or_404(job_id)
-    if job.autor_id != current_user.id and current_user.role != ROLE_ADMIN:
+    if job.autor_id != current_user.id and not _can_write_reuniones():
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
 
     return jsonify({'success': True, **job_to_status_dict(job)})
@@ -327,7 +340,9 @@ def cancelar_audio_nota(job_id):
     from app.services.nota_audio_service import cancel_audio_job, job_to_status_dict
 
     job = NotaAudioJob.query.get_or_404(job_id)
-    if job.autor_id != current_user.id and current_user.role != ROLE_ADMIN:
+    if not _can_write_reuniones():
+        return jsonify({'success': False, 'message': 'No autorizado'}), 403
+    if job.autor_id != current_user.id and not _can_delete_reuniones():
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
 
     if job.estado in (NotaAudioJob.ESTADO_COMPLETADO,):
@@ -351,7 +366,7 @@ def cancelar_audio_nota(job_id):
 @notas_bp.route('/audio/prompt', methods=['GET', 'POST'])
 @login_required
 def audio_summary_prompt():
-    if not _can_upload_audio():
+    if not _can_write_reuniones():
         return jsonify({'success': False, 'message': 'No autorizado'}), 403
 
     from app.services.nota_audio_service import (
@@ -425,7 +440,7 @@ def audio_jobs_activos():
     from app.models import NotaAudioJob
     from app.services.nota_audio_service import job_to_status_dict, sweep_stale_audio_jobs
 
-    if not _can_upload_audio():
+    if not _can_write_reuniones():
         return jsonify({'success': True, 'jobs': []})
 
     # Limpia zombies (p.ej. worker caído ayer) para que no bloqueen la UI.

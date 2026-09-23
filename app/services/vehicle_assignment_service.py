@@ -4,7 +4,7 @@ from datetime import datetime, date
 
 from app import db
 from app.models import (
-    AsignacionVehiculo, Vehiculo, User, ROLE_ADMIN, ROLE_JEFE,
+    AsignacionVehiculo, Vehiculo, User,
 )
 from app.services.core_vehicle_assignment_service import CoreVehicleAssignmentService
 from app.services.leave_service import user_has_approved_leave
@@ -51,8 +51,8 @@ def process_vehicle_assignment_action(
     *, notas=None, overwrite_mode='check', accion='ASIGNAR',
 ):
     """
-    ADMIN (y jefe si jefes_asignan_directo): muta el cuadrante.
-    JEFE sin esa opción: crea SolicitudVehiculo.
+    Modo directo (flag por rol + W): muta el cuadrante.
+    Modo solicitud: crea SolicitudVehiculo.
 
     overwrite_mode: 'check' | 'overwrite' | 'only_free'
       - mismo usuario+vehículo ese día → skip
@@ -74,14 +74,15 @@ def process_vehicle_assignment_action(
     accion = (accion or 'ASIGNAR').upper()
     mode = overwrite_mode or 'check'
 
-    from app.services.tenant_modules import jefes_asignan_directo
-
-    puede_directo = actor_user.role == ROLE_ADMIN or (
-        actor_user.role == ROLE_JEFE and jefes_asignan_directo()
+    from app.services.assign_mode_service import (
+        user_assigns_vehicles_direct,
+        user_assigns_vehicles_via_solicitud,
     )
 
+    puede_directo = user_assigns_vehicles_direct(actor_user)
+
     # ==========================================
-    # ADMIN, O JEFE CON ASIGNACIÓN DIRECTA
+    # MODO DIRECTO (Flota W + modo vehículos)
     # ==========================================
     if puede_directo:
         if accion == 'DESASIGNAR':
@@ -219,9 +220,9 @@ def process_vehicle_assignment_action(
         }
 
     # ==========================================
-    # JEFE → solicitud (si no asigna en directo)
+    # MODO SOLICITUD (flag por rol)
     # ==========================================
-    if actor_user.role == ROLE_JEFE:
+    if user_assigns_vehicles_via_solicitud(actor_user):
         # Días ya cubiertos por el mismo par se omiten de la petición.
         # También se omiten días con ausencia aprobada (el coche no se usa).
         dates_for_request = []
@@ -267,4 +268,4 @@ def process_vehicle_assignment_action(
 
         return {'success': True, 'action': 'requested', 'message': msg, 'solicitud_id': sol.id}
 
-    return {'success': False, 'error': 'Rol no autorizado para asignar vehículos'}
+    return {'success': False, 'error': 'Sin permiso de escritura para asignar vehículos'}

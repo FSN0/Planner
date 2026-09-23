@@ -223,7 +223,7 @@ def obras_seleccionables(user_id, fecha=None):
         Obra.query
         .filter(
             Obra.is_deleted.is_(False),
-            Obra.estado.in_(['En Curso', 'PLANIFICADA']),
+            Obra.estado.in_(['En Curso', 'En Garantía', 'PLANIFICADA']),
         )
         .order_by(Obra.nombre.asc())
         .all()

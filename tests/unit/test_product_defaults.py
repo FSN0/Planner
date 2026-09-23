@@ -20,8 +20,11 @@ from app.services.tenant_modules import (
     has_portal_ausencias,
     hora_corte_activa,
     hora_corte_destinatario_ids,
-    jefes_asignan_directo,
-    jefe_sin_buzon_solicitudes,
+)
+from app.services.assign_mode_service import (
+    ASSIGN_MODE_DIRECT,
+    ASSIGN_MODE_SOLICITUD,
+    default_assign_mode_for_role,
 )
 from app.utils.timezone_utils import get_user_timezone
 
@@ -84,34 +87,37 @@ def test_portal_ausencias_off_for_soltec_by_default(app):
         assert has_portal_ausencias() is False
 
 
-def test_jefes_asignan_directo_defaults(app, monkeypatch):
-    _no_config(monkeypatch)
-    with app.app_context():
-        g.current_tenant = _tenant('acme')
-        assert jefes_asignan_directo() is True
-        g.current_tenant = _tenant('soltec')
-        assert jefes_asignan_directo() is False
+def test_assign_mode_defaults_soltec_vs_saas(monkeypatch):
+    monkeypatch.setattr(
+        'app.services.tenant_modules.is_soltec_tenant', lambda: False
+    )
+    assert default_assign_mode_for_role('jefe_obra') == ASSIGN_MODE_DIRECT
+    monkeypatch.setattr(
+        'app.services.tenant_modules.is_soltec_tenant', lambda: True
+    )
+    assert default_assign_mode_for_role('jefe_obra') == ASSIGN_MODE_SOLICITUD
 
 
-def test_jefe_sin_buzon_solicitudes(app, monkeypatch):
-    _no_config(monkeypatch)
-    jefe = SimpleNamespace(role='jefe_obra', is_authenticated=True)
-    admin = SimpleNamespace(role='admin', is_authenticated=True)
-    with app.app_context():
-        g.current_tenant = _tenant('acme')
-        assert jefe_sin_buzon_solicitudes(jefe) is True
-        assert jefe_sin_buzon_solicitudes(admin) is False
-        g.current_tenant = _tenant('soltec')
-        assert jefe_sin_buzon_solicitudes(jefe) is False
-
-
-def test_sidebar_hides_solicitudes_for_jefe_directo():
+def test_sidebar_hides_solicitudes_without_perm(monkeypatch):
     from app.services.sidebar_nav_service import ITEM_SOLICITUDES, item_is_available
 
-    jefe = SimpleNamespace(role='jefe_obra')
-    assert item_is_available(
-        ITEM_SOLICITUDES, jefe, {'jefes_asignan_directo': True},
-    ) is False
+    jefe = SimpleNamespace(role='jefe_obra', is_authenticated=True)
+    monkeypatch.setattr(
+        'app.services.sidebar_nav_service.user_can',
+        lambda u, m, a='r': False,
+    )
+    assert item_is_available(ITEM_SOLICITUDES, jefe, {}) is False
+
+
+def test_sidebar_shows_solicitudes_if_flota_r(monkeypatch):
+    from app.services.sidebar_nav_service import ITEM_SOLICITUDES, item_is_available
+
+    jefe = SimpleNamespace(role='jefe_obra', is_authenticated=True)
+    monkeypatch.setattr(
+        'app.services.sidebar_nav_service.user_can',
+        lambda u, m, a='r': m == 'solicitudes_vehiculos',
+    )
+    assert item_is_available(ITEM_SOLICITUDES, jefe, {}) is True
 
 
 def test_hora_corte_defaults(app, monkeypatch):

@@ -46,32 +46,29 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     from app.services.i18n_service import month_name as i18n_month_name
     month_name = i18n_month_name(month)
 
-    # 2. Query de Obras
+    # 2. Query de Obras (siempre vía alcance del tablero; sin atajo por rol)
     query = Obra.query.options(
         joinedload(Obra.jefe_obra),
         joinedload(Obra.encargado)
     ).filter(
         Obra.is_deleted.is_(False),
-        Obra.estado == 'En Curso'
+        Obra.estado.in_(['En Curso', 'En Garantía'])
     )
 
-    if user.role == ROLE_JEFE:
+    from app.services.panel_scope_service import (
+        PANEL_TABLERO,
+        apply_obra_scope_filter,
+        user_panel_mode,
+    )
+    mode = user_panel_mode(user, PANEL_TABLERO)
+    if mode == 'none':
+        query = query.filter(Obra.id.is_(None))
+    elif mode == 'custody':
+        query = apply_obra_scope_filter(query, user, PANEL_TABLERO)
+    elif view_param == 'mis':
+        # Alcance «todos» pero eligió vista «mis»: solo si es jefe de alguna.
         query = query.filter(Obra.jefe_obra_id == user.id)
-    else:
-        from app.services.panel_scope_service import (
-            PANEL_TABLERO,
-            apply_obra_scope_filter,
-            user_panel_mode,
-        )
-        mode = user_panel_mode(user, PANEL_TABLERO)
-        if mode == 'none':
-            query = query.filter(Obra.id.is_(None))
-        elif mode == 'custody':
-            query = apply_obra_scope_filter(query, user, PANEL_TABLERO)
-        elif view_param == 'mis':
-            # Alcance «todos» pero eligió vista «mis»: solo si es jefe de alguna.
-            query = query.filter(Obra.jefe_obra_id == user.id)
-        # mode office + view todas → sin filtro extra
+    # mode office + view todas → sin filtro extra
  
     # Obtenemos la lista inicial
     obras = query.order_by(Obra.fecha_inicio.desc()).all()

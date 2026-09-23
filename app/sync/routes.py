@@ -278,8 +278,6 @@ def odoo_save_config():
 @login_required
 @roles_required(ROLE_ADMIN)
 def odoo_test_connection():
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
     result = test_odoo_connection()
     return jsonify({
         'success': result['connected'],
@@ -483,19 +481,28 @@ def commit_obras():
     
     try:
         # 1. Procesar Nuevas
+        from app.services.obra_estado_service import (
+            ESTADO_EN_GARANTIA,
+            ESTADO_PENDIENTE,
+        )
         for obj in data.get('nuevas', []):
             fecha = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
-            
+            estado_in = obj.get('estado') or ESTADO_PENDIENTE
+            estado = (
+                ESTADO_EN_GARANTIA
+                if estado_in == ESTADO_EN_GARANTIA
+                else ESTADO_PENDIENTE
+            )
             nueva_obra = Obra(
                 external_ids={'odoo': str(obj['odoo_id'])},
                 codigo=obj['codigo'],
                 nombre=obj['nombre'],
                 descripcion=obj.get('cliente', ''),
                 fecha_inicio=fecha,
-                estado='Pendiente', 
+                estado=estado,
                 jefe_obra_id=obj.get('jefe_obra_id'),
                 encargado_id=obj.get('encargado_id'),
-                fecha_importacion=ahora  # <--- GUARDAMOS LA FECHA AQUÍ
+                fecha_importacion=ahora
             )
             db.session.add(nueva_obra)
             from app.utils import register_log
@@ -503,7 +510,7 @@ def commit_obras():
                 user_id=current_user.id,
                 category='obras',
                 action='Crear Obra (Sincronización)',
-                detail=f"Obra importada desde Odoo: '{obj['nombre']}' (Código: {obj['codigo']})"
+                detail=f"Obra importada desde Odoo: '{obj['nombre']}' (Código: {obj['codigo']}, estado: {estado})"
             )
             
         # 2. Procesar Actualizadas
@@ -524,6 +531,10 @@ def commit_obras():
                     obra.jefe_obra_id = obj['jefe_obra_id']
                 if obj.get('encargado_id'):
                     obra.encargado_id = obj['encargado_id']
+                if obj.get('estado'):
+                    obra.estado = obj['estado']
+                    if obj['estado'] != 'Finalizada':
+                        obra.fecha_fin = None
                     
         # 3. Procesar Finalizadas automáticamente
         for obj in data.get('finalizadas', []):
@@ -2286,15 +2297,17 @@ def commit_vehiculos():
 
 @sync_bp.route('/auditoria-vehiculos')
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def auditoria_vehiculos():
     """Auditoría informativa plan vs odómetro Odoo (sin acciones de resolución)."""
+    from app.services.permission_service import user_can
+    if not user_can(current_user, 'auditoria_vehiculos', 'r'):
+        flash(translate('Acceso denegado.'), 'danger')
+        return redirect(url_for('main.dashboard'))
     if not _require_auditoria_vehiculos():
         from app.services.user_home_service import home_url_for_user
         dest = home_url_for_user(current_user) or url_for('auth.login')
         return redirect(dest)
 
-    from app.services.permission_service import user_can
     from app.utils.timezone_utils import today_local
 
     hoy = today_local()
@@ -2543,9 +2556,11 @@ def auditoria_vehiculos():
 
 @sync_bp.route('/auditoria-vehiculos/visto', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_LABORAL)
 def auditoria_vehiculos_visto():
     """Marca una anomalía de flota como vista (informativo; no resuelve)."""
+    from app.services.permission_service import user_can
+    if not user_can(current_user, 'auditoria_vehiculos', 'r'):
+        return jsonify({'success': False, 'error': translate('Acceso denegado'), 'permission_denied': True}), 403
     if not _require_auditoria_vehiculos():
         return jsonify({'success': False, 'error': translate('Módulo Odoo no habilitado')}), 403
 

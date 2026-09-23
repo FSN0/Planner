@@ -17,7 +17,7 @@
     {% endif %}
   </div>
   <div class="entity-stats-grid">
-    {% for s in stats if not (s.key == 'solicitudes' and current_user.role == 'jefe_obra' and jefes_asignan_directo) %}
+    {% for s in stats if not (s.key == 'solicitudes' and current_user.role == 'jefe_obra' and user_assigns_direct) %}
     {% set card_tag = 'a' if s.href else 'div' %}
     <{{ card_tag }}
       class="entity-stat-card entity-stat-card--{{ s.tone or 'slate' }}"

@@ -288,6 +288,9 @@ def enviar_email_confirmacion(reserva):
         url=url,
     )
     from app.services.email_service import send_email
+    from app.services.notification_dispatch_service import event_allows_send
+    if not event_allows_send('signup_confirm'):
+        return False
     return bool(send_email(
         translate('Confirma tu correo — {tenant}', loc, tenant=nombre),
         [reserva.admin_email],

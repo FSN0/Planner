@@ -143,7 +143,7 @@
           <span class="entity-type-marker"><i class="fas fa-hard-hat"></i> {{ _('Empleado') }}</span>
         </div>
         <div class="entity-panel-actions">
-          {% if current_user.role == 'admin' %}
+          {% if user_can(current_user, 'trabajadores', 'w') %}
           <a href="{{ url_with_back('admin.edit_operario', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
           </a>
@@ -166,7 +166,7 @@
             <div class="entity-hero-icon-wrap">
               <div class="entity-hero-icon entity-hero-icon--avatar">
                 <i class="fas fa-user"></i>
-                {% if tenant_has_valoraciones and worker.role != 'jefe_obra' %}
+                {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and user_can(current_user, 'valoraciones', 'r') %}
                 <div class="entity-rep-badge {{ 'entity-rep-badge--pos' if score > 0 else 'entity-rep-badge--neg' if score < 0 else 'entity-rep-badge--neu' }}"
                      title="{{ _('Reputación actual') }}">{{ score }}</div>
                 {% endif %}
@@ -237,7 +237,7 @@
                 {% else %}{{ worker.role or '—' }}{% endif %}
               </span>
             </div>
-            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and can_read_valoraciones|default(false) %}
             <div class="entity-meta-item">
               <span class="entity-meta-item-label">{{ _('Reputación') }}</span>
               <span class="entity-meta-item-value">{% if score > 0 %}+{% endif %}{{ score }}</span>
@@ -246,20 +246,22 @@
           </div>
 
           <div class="entity-hero-actions">
-            {% if worker.role == 'jefe_obra' and current_user.role in ['admin', 'jefe_obra', 'laboral'] %}
+            {% if worker.role == 'jefe_obra' and user_can(current_user, 'planificador', 'r') %}
             <a href="{{ url_for('admin.planificador_jo', jefe_id=worker.id) }}" class="btn-admin btn-admin-ghost">
               <i class="fas fa-calendar-alt"></i> {{ _('Ver planificador') }}
             </a>
             {% endif %}
-            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and current_user.role in ['admin', 'jefe_obra'] %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and can_write_valoraciones|default(false) %}
             <button type="button" class="btn-admin btn-admin-ghost" onclick="openRatingModal()">
               <i class="far fa-star"></i> {{ _('Puntuar') }}
             </button>
+            {% endif %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and can_read_valoraciones|default(false) %}
             <a href="{{ url_for('admin.worker_ratings_history', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
               <i class="fas fa-history"></i> {{ _('Historial') }}
             </a>
             {% endif %}
-            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and current_user.role == 'admin' and score != 0 %}
+            {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and can_reset_valoraciones|default(false) and score != 0 %}
             <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline"
                   onsubmit="return confirm({{ _('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.')|tojson }});">
               <button type="submit" class="btn-admin btn-admin-ghost" title="{{ _('Resetear contador') }}">
@@ -345,7 +347,7 @@
   </main>
 </div>
 
-{% if tenant_has_valoraciones %}
+{% if tenant_has_valoraciones and can_write_valoraciones|default(false) %}
 <div class="modal fade entity-rating-modal" id="ratingModal" tabindex="-1" role="dialog">
   <div class="modal-dialog modal-dialog-centered" role="document">
     <div class="modal-content">
@@ -530,7 +532,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 });
 
-{% if tenant_has_valoraciones %}
+{% if tenant_has_valoraciones and can_write_valoraciones|default(false) %}
 var selectedScore = null;
 function openRatingModal() {
     $('#ratingModal').modal('show');

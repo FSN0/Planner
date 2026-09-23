@@ -4,12 +4,13 @@ from datetime import datetime, date, timedelta
 
 from app import db
 from app.utils.timezone_utils import utc_now
-from app.models import SolicitudVehiculo, Vehiculo, User, ROLE_ADMIN
+from app.models import SolicitudVehiculo, Vehiculo, User
 from app.services.core_vehicle_assignment_service import CoreVehicleAssignmentService
 from app.services.email_service import (
     notificar_nueva_solicitud_vehiculo,
     notificar_resolucion_solicitud_vehiculo,
 )
+from app.services.permission_service import can_resolve_solicitudes_flota
 from app.services.solicitud_service import merge_notas
 
 
@@ -141,8 +142,8 @@ class VehicleSolicitudService:
         Aceptar ASIGNAR → crea AsignacionVehiculo por cada día del rango.
         Aceptar DESASIGNAR → desasigna esos días.
         """
-        if actor.role != ROLE_ADMIN:
-            raise PermissionError("Solo administración puede resolver solicitudes de vehículo.")
+        if not can_resolve_solicitudes_flota(actor):
+            raise PermissionError("No tienes permiso para resolver solicitudes de vehículo.")
 
         decision = (decision or '').lower()
         if decision in ('denegar', 'deny', 'rechazar'):

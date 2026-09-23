@@ -529,7 +529,7 @@ def _integration_children(ctx: dict) -> list[dict]:
 
 def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_INICIO:
-        return not _is_operario(user)
+        return user_can(user, 'inicio', 'r')
     if item_id == ITEM_TABLERO:
         return user_can(user, 'tablero', 'r')
     if item_id == ITEM_DIRECTORIO:
@@ -543,11 +543,11 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_SUBCONTRATAS:
         return user_can(user, 'subcontratas', 'r')
     if item_id == ITEM_SOLICITUDES:
-        # Si el jefe asigna gente concreta en el cuadrante, no necesita el buzón
-        # (sigue pudiendo pedir CUALQUIERA desde el calendario). Oficina sí.
-        if ctx.get('jefes_asignan_directo') and _is_jefe(user):
-            return False
-        return user_can(user, 'solicitudes', 'r')
+        # Buzón: ver personal y/o flota. Crear va por planificar en modo solicitud.
+        return (
+            user_can(user, 'solicitudes', 'r')
+            or user_can(user, 'solicitudes_vehiculos', 'r')
+        )
     if item_id == ITEM_AUSENCIAS:
         return user_can(user, 'ausencias', 'r')
     if item_id == ITEM_FLOTA:

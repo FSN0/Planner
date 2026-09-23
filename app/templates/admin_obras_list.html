@@ -20,12 +20,14 @@
         <span class="page-toolbar-count">{{ obras|length }} {{ _('registros') }}</span>
       </div>
       <div class="page-toolbar-actions" data-tour="obra-actions">
+        {% if user_can(current_user, 'directorio', 'w') %}
         <a href="{{ url_for('admin.import_obras') }}" class="btn-admin btn-admin-ghost" data-tour="obra-import">
           <i class="fas fa-file-import"></i> {{ _('Importar') }}
         </a>
         <a href="{{ url_for('admin.create_obra') }}" class="btn-admin btn-admin-primary" data-tour="obra-nueva">
           <i class="fas fa-plus"></i> {{ _('Nueva') }}
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -39,6 +41,9 @@
         </button>
         <button type="button" class="btn-bulk btn-bulk-success" onclick="changeBulkStatus('En Curso')">
           <i class="fas fa-play"></i> {{ _('En curso') }}
+        </button>
+        <button type="button" class="btn-bulk btn-bulk-info" onclick="changeBulkStatus('En Garantía')">
+          <i class="fas fa-shield-alt"></i> {{ _('En Garantía') }}
         </button>
         <button type="button" class="btn-bulk btn-bulk-danger" onclick="changeBulkStatus('Finalizada')">
           <i class="fas fa-flag-checkered"></i> {{ _('Finalizar') }}
@@ -59,7 +64,7 @@
             <col style="width: 7%">
             <col style="width: 7%">
             <col style="width: 10%">
-            {% if not jefes_asignan_directo %}
+            {% if not jefe_obra_assigns_direct %}
             <col style="width: 5%">
             {% endif %}
             <col style="width: 4%">
@@ -93,7 +98,7 @@
               <th class="sortable-col col-mobile-hide" data-col-index="8" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Import.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
-              {% if not jefes_asignan_directo %}
+              {% if not jefe_obra_assigns_direct %}
               <th class="sortable-col col-mobile-hide" data-col-index="9" data-sort="none" onclick="sortAdminTable(this)" title="{{ _('Ordenar') }}">
                 <span class="sortable-label">{{ _('Sols.') }}</span><i class="fas fa-sort sort-icon"></i>
               </th>
@@ -110,7 +115,7 @@
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 6, this.value)" placeholder="…" title="{{ _('Filtrar inicio') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 7, this.value)" placeholder="…" title="{{ _('Filtrar fin') }}"></th>
               <th><input type="text" class="table-filter-input" onkeyup="filterTable('obrasTable', 8, this.value)" placeholder="…" title="{{ _('Filtrar importación') }}"></th>
-              {% if not jefes_asignan_directo %}
+              {% if not jefe_obra_assigns_direct %}
               <th></th>
               {% endif %}
               <th></th>
@@ -148,6 +153,10 @@
                     <span class="badge-soft badge-soft-green">
                       <span class="status-dot green"></span> {{ _('En curso') }}
                     </span>
+                  {% elif obra.estado == 'En Garantía' %}
+                    <span class="badge-soft badge-soft-blue">
+                      <span class="status-dot blue"></span> {{ _('En Garantía') }}
+                    </span>
                   {% elif obra.estado == 'Finalizada' %}
                     <span class="badge-soft badge-soft-slate">
                       <span class="status-dot gray"></span> {{ _('Finalizada') }}
@@ -174,7 +183,7 @@
                   {% endif %}
                 </td>
 
-                {% if not jefes_asignan_directo %}
+                {% if not jefe_obra_assigns_direct %}
                 {% set pends = obra.solicitudes|selectattr('estado', 'in', ['PENDIENTE','EN_PROCESO'])|list|length %}
                 <td class="text-center col-mobile-omit" data-sort-value="{{ '%04d'|format(pends) }}">
                   {% if pends > 0 %}
@@ -190,14 +199,16 @@
                 {% endif %}
 
                 <td class="text-center col-actions col-mobile-hide">
+                  {% if user_can(current_user, 'directorio', 'w') %}
                   <a href="{{ url_for('admin.edit_obra', obra_id=obra.id) }}" class="btn-icon-action" title="{{ _('Configurar obra') }}">
                     <i class="fas fa-cog"></i>
                   </a>
+                  {% endif %}
                 </td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="{{ 10 if jefes_asignan_directo else 11 }}" class="table-empty-state">
+                <td colspan="{{ 10 if jefe_obra_assigns_direct else 11 }}" class="table-empty-state">
                   <i class="fas fa-building"></i>
                   {{ _('No hay obras registradas todavía.') }}
                 </td>

@@ -4,7 +4,7 @@
 
 from datetime import date, timedelta
 
-from app.models import EVENTO_ENTRADA, FichajeEvento, Obra, ROLE_JEFE, User
+from app.models import EVENTO_ENTRADA, FichajeEvento, Obra, User
 from app.services.fichaje_ledger_service import vigentes
 from app.services.geocerca_service import (
     GEO_COINCIDE,
@@ -12,6 +12,7 @@ from app.services.geocerca_service import (
     obra_tiene_geolocalizacion,
     radio_default_metros,
 )
+from app.services.panel_scope_service import PANEL_MAPA, apply_obra_scope_filter
 from app.utils.timezone_utils import today_local
 
 
@@ -21,9 +22,7 @@ DEFAULT_RANGO_DIAS = 1
 
 def _obras_query(user):
     q = Obra.query.filter(Obra.is_deleted.is_(False))
-    if user and getattr(user, 'role', None) == ROLE_JEFE:
-        q = q.filter(Obra.jefe_obra_id == user.id)
-    return q
+    return apply_obra_scope_filter(q, user, PANEL_MAPA)
 
 
 def _obra_visible(obra_id, user):

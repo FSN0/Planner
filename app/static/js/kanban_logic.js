@@ -251,8 +251,8 @@ $(document).ready(function() {
         refreshLibresCount();
     }
 
-    const kanbanReadonly = window.KANBAN_READONLY === true
-        || window.CURRENT_USER_ROLE === 'laboral';
+    // Solo KANBAN_READONLY (matriz: sin «Planificar gente» W → view_mode readonly)
+    const kanbanReadonly = window.KANBAN_READONLY === true;
 
     if (!kanbanReadonly) {
     $(".worker-chip").draggable({

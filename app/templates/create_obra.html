@@ -116,6 +116,8 @@
                 <select name="estado" class="form-control custom-select">
                   <option value="Pendiente" {% if est == 'Pendiente' %}selected{% endif %}>{{ _('Pendiente') }}</option>
                   <option value="En Curso" {% if est == 'En Curso' %}selected{% endif %}>{{ _('En Curso') }}</option>
+                  <option value="En Garantía" {% if est == 'En Garantía' %}selected{% endif %}>{{ _('En Garantía') }}</option>
+                  <option value="Finalizada" {% if est == 'Finalizada' %}selected{% endif %}>{{ _('Finalizada') }}</option>
                 </select>
               </div>
               <div class="form-group col-md-4">

@@ -4,7 +4,7 @@
     <div class="col-header" style="background-color: {{ item.obra.color }}40;">
         <div class="d-flex justify-content-between align-items-start">
             <div class="d-flex align-items-center col-header-title-wrap">
-                {% if current_user.role == 'admin' %}
+                {% if user_can(current_user, 'tablero', 'r') %}
                 <i class="fas fa-thumbtack mr-2 cursor-pointer btn-pin-obra {{ 'text-primary' if item.obra.is_pinned else 'text-muted-light' }}"
                    style="font-size: 0.85rem; transition: transform 0.2s;"
                    data-obra-id="{{ item.obra.id }}"
@@ -49,9 +49,9 @@
         <div class="mt-2 pt-2 border-top border-white-50">
             <div class="d-flex align-items-center small mb-1 staff-row">
                 <i class="fas fa-user-tie mr-2 text-muted" title="{{ _('Jefe de Obra') }}" style="width: 14px; text-align: center;"></i>
-                <span class="text-truncate{% if current_user.role == 'admin' %} editable-staff{% endif %}"
-                      style="max-width: 200px; color: #334155;{% if current_user.role == 'admin' %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
-                      title="{% if current_user.role == 'admin' %}{{ _('Clic para cambiar Jefe') }}{% endif %}"
+                <span class="text-truncate{% if user_can(current_user, 'directorio', 'w') %} editable-staff{% endif %}"
+                      style="max-width: 200px; color: #334155;{% if user_can(current_user, 'directorio', 'w') %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
+                      title="{% if user_can(current_user, 'directorio', 'w') %}{{ _('Clic para cambiar Jefe') }}{% endif %}"
                       data-obra-id="{{ item.obra.id }}"
                       data-obra-name="{{ item.obra.nombre }}"
                       data-role="jefe"
@@ -62,9 +62,9 @@
 
             <div class="d-flex align-items-center small staff-row">
                 <i class="fas fa-hard-hat mr-2 text-warning" title="{{ _('Encargado') }}" style="width: 14px; text-align: center;"></i>
-                <span class="text-truncate{% if current_user.role == 'admin' %} editable-staff{% endif %}"
-                      style="max-width: 200px; color: #334155;{% if current_user.role == 'admin' %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
-                      title="{% if current_user.role == 'admin' %}{{ _('Clic para cambiar Encargado') }}{% endif %}"
+                <span class="text-truncate{% if user_can(current_user, 'directorio', 'w') %} editable-staff{% endif %}"
+                      style="max-width: 200px; color: #334155;{% if user_can(current_user, 'directorio', 'w') %} cursor: pointer; border-bottom: 1px dashed #cbd5e1;{% endif %}"
+                      title="{% if user_can(current_user, 'directorio', 'w') %}{{ _('Clic para cambiar Encargado') }}{% endif %}"
                       data-obra-id="{{ item.obra.id }}"
                       data-obra-name="{{ item.obra.nombre }}"
                       data-role="encargado"
@@ -103,7 +103,7 @@
                 </div>
 
                 {% set rep = worker.reputation_score %}
-                {% if tenant_has_valoraciones and rep != 0 %}
+                {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') and rep != 0 %}
                     <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}"
                           style="font-size: 0.65rem; padding: 1px 5px;">
                         {{ '+' if rep > 0 }}{{ rep }}

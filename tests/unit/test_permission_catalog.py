@@ -17,6 +17,16 @@ def test_admin_locked_modules():
     assert 'permisos' in ADMIN_LOCKED_MODULES
 
 
+def test_write_disabled_modules():
+    from app.services.permission_catalog import BINARY_TICK_MODULES, WRITE_DISABLED_MODULES
+    assert 'tablero' in WRITE_DISABLED_MODULES
+    assert 'planificador' in WRITE_DISABLED_MODULES
+    assert 'asignaciones' in BINARY_TICK_MODULES
+    assert 'planificar_flota' in BINARY_TICK_MODULES
+    assert 'vehiculos' not in WRITE_DISABLED_MODULES
+    assert 'vehiculos' not in BINARY_TICK_MODULES
+
+
 def test_admin_has_all_modules_rw():
     for module in module_keys():
         assert default_actions(ROLE_ADMIN, module) == frozenset('rw')
@@ -50,22 +60,26 @@ def test_laboral_and_rrhh_share_core_acl():
 
 
 def test_jefe_keeps_tablero_and_directorio():
-    assert 'w' in default_actions(ROLE_JEFE, 'tablero')
+    # Tablero solo lectura; mover gente = Planificar gente (asignaciones)
+    assert default_actions(ROLE_JEFE, 'tablero') == frozenset('r')
+    assert default_actions(ROLE_JEFE, 'planificador') == frozenset('r')
     assert 'r' in default_actions(ROLE_JEFE, 'directorio')
     assert not default_actions(ROLE_JEFE, 'permisos')
 
 
-def test_jefe_can_view_workers_and_assign_on_calendars():
-    assert 'r' in default_actions(ROLE_JEFE, 'trabajadores')
-    assert 'w' not in default_actions(ROLE_JEFE, 'trabajadores')
+def test_jefe_defaults_planificar_ticks_not_catalog_w():
     assert 'rw' == ''.join(sorted(default_actions(ROLE_JEFE, 'asignaciones')))
+    assert 'rw' == ''.join(sorted(default_actions(ROLE_JEFE, 'planificar_flota')))
+    assert default_actions(ROLE_JEFE, 'vehiculos') == frozenset('r')
+    assert default_actions(ROLE_JEFE, 'solicitudes') == frozenset('r')
+    assert default_actions(ROLE_JEFE, 'solicitudes_vehiculos') == frozenset('r')
 
 
 def test_laboral_sees_calendars_readonly_by_default():
-    assert 'r' in default_actions(ROLE_LABORAL, 'asignaciones')
-    assert 'w' not in default_actions(ROLE_LABORAL, 'asignaciones')
-    assert 'r' in default_actions(ROLE_RRHH, 'asignaciones')
-    assert 'w' not in default_actions(ROLE_RRHH, 'asignaciones')
+    assert not default_actions(ROLE_LABORAL, 'asignaciones')
+    assert not default_actions(ROLE_LABORAL, 'planificar_flota')
+    assert 'r' in default_actions(ROLE_LABORAL, 'tablero')
+    assert 'rw' == ''.join(sorted(default_actions(ROLE_LABORAL, 'solicitudes')))
 
 
 def test_jefe_soltec_shortcuts_without_integraciones_hub():
@@ -100,11 +114,7 @@ def test_default_matrix_rows_cover_all_roles_and_modules():
     assert len(rows) == len(module_keys()) * 5
 
 
-def _keys_for(monkeypatch, sub, mods, jefes_directo):
-    monkeypatch.setattr(
-        'app.services.tenant_modules.jefes_asignan_directo',
-        lambda: jefes_directo,
-    )
+def _keys_for(monkeypatch, sub, mods, jefes_directo=True):
     tenant = SimpleNamespace(subdominio=sub, modulos_activos=mods)
     return set(visible_permission_keys(tenant))
 

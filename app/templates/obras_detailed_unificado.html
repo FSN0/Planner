@@ -71,7 +71,7 @@
                 
                 </div>
             {% endfor %}
-            {% if current_user.role == 'admin' %}
+            {% if user_can(current_user, 'directorio', 'w') %}
             <div class="kanban-start-obra{% if not kanban_sin_obras %} kanban-start-obra--shortcut{% endif %}" aria-label="{{ _('Añadir obra') }}">
               <div class="obra-card obra-card--start{% if not kanban_sin_obras %} obra-card--shortcut{% endif %}">
                 <div class="col-header">
@@ -139,7 +139,7 @@
     </div>
   </div>
 
-{% if tenant_has_valoraciones %}
+{% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'w') %}
 <div class="modal fade entity-rating-modal" id="ratingModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -235,7 +235,7 @@
   ];
 
   // Funciones rápidas para el rating (el resto está en kanban_logic.js pero esto asegura funcionamiento en modal)
-  {% if tenant_has_valoraciones %}
+  {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'w') %}
   function openRatingModal(workerId, workerName) {
       $('#ratingWorkerId').val(workerId);
       $('#ratingWorkerName').text(workerName);
@@ -271,7 +271,7 @@
   <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260829a"></script>
   {% endif %}
   
-  {% if tenant_has_valoraciones %}
+  {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'w') %}
   <script>
     $(document).on('click', '.rating-btn', function() {
         $('.rating-btn').removeClass('active');

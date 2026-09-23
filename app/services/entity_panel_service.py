@@ -30,11 +30,13 @@ def _tf(msgid, **kwargs):
 
 
 def _stats_sin_buzon(stats):
-    """Si el jefe asigna en el cuadrante, no enseñamos el buzón de solicitudes."""
-    from app.services.tenant_modules import jefes_asignan_directo
-    if not jefes_asignan_directo():
-        return stats
-    return [s for s in stats if s.get('key') != 'solicitudes']
+    """Si el rol jefe_obra escribe en directo, el KPI de buzón no aplica."""
+    from app.models import ROLE_JEFE
+    from app.services.assign_mode_service import role_assigns_direct
+
+    if role_assigns_direct(ROLE_JEFE):
+        return [s for s in stats if s.get('key') != 'solicitudes']
+    return stats
 
 
 def _month_bounds(ref):
@@ -1089,7 +1091,9 @@ def get_worker_panel_stats(worker):
     ]
 
     from app.services.tenant_modules import has_valoraciones
-    if has_valoraciones():
+    from app.services.permission_service import user_can
+    from flask_login import current_user
+    if has_valoraciones() and user_can(current_user, 'valoraciones', 'r'):
         stats.append({
             'key': 'reputacion',
             'label': 'Reputación',
@@ -1171,7 +1175,9 @@ def get_company_panel_stats(company):
     avg_rating = None
     ratings_count = 0
     from app.services.tenant_modules import has_valoraciones
-    show_ratings = has_valoraciones()
+    from app.services.permission_service import user_can
+    from flask_login import current_user
+    show_ratings = has_valoraciones() and user_can(current_user, 'valoraciones', 'r')
     if show_ratings and worker_ids:
         row = (
             db.session.query(func.avg(Rating.score), func.count(Rating.id))

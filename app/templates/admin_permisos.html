@@ -6,203 +6,91 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260903e">
 <style>
   .perm-page .perm-top-card {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
-    gap: 1rem 1.25rem;
-    align-items: start;
-    margin-bottom: 1.1rem;
-    padding: 1rem 1.1rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.75rem;
-    background: #fff;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+    gap: 1rem 1.25rem; align-items: start; margin-bottom: 1.1rem;
+    padding: 1rem 1.1rem; border: 1px solid #e2e8f0; border-radius: 0.75rem; background: #fff;
   }
-  .perm-page .perm-top-title {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0 0 0.35rem;
-  }
-  .perm-page .perm-top-hints {
-    font-size: 0.78rem;
-    color: #64748b;
-    line-height: 1.45;
-    margin: 0 0 0.75rem;
-    max-width: 36rem;
-  }
+  .perm-page .perm-top-title { font-size: 1.05rem; font-weight: 700; color: #0f172a; margin: 0 0 0.35rem; }
+  .perm-page .perm-top-hints { font-size: 0.78rem; color: #64748b; line-height: 1.45; margin: 0 0 0.75rem; max-width: 42rem; }
   .perm-page .perm-top-hints strong { color: #475569; }
-  .perm-page .perm-role-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-  }
+  .perm-page .perm-role-tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .perm-page .perm-role-tabs a {
-    font-size: 0.78rem;
-    font-weight: 600;
-    padding: 0.35rem 0.75rem;
-    border-radius: 999px;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #475569;
-    text-decoration: none;
+    font-size: 0.78rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 999px;
+    border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; text-decoration: none;
   }
-  .perm-page .perm-role-tabs a.is-active {
-    background: #0f172a;
-    color: #fff;
-    border-color: #0f172a;
-  }
+  .perm-page .perm-role-tabs a.is-active { background: #0f172a; color: #fff; border-color: #0f172a; }
   .perm-page .perm-admin-panel {
-    border: 1px solid #e2e8f0;
-    border-radius: 0.55rem;
-    background: #f8fafc;
-    padding: 0.65rem 0.75rem;
+    border: 1px solid #e2e8f0; border-radius: 0.55rem; background: #f8fafc; padding: 0.65rem 0.75rem;
   }
   .perm-page .perm-admin-panel h2 {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #64748b;
-    margin: 0 0 0.5rem;
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #64748b; margin: 0 0 0.5rem;
   }
-  .perm-page .perm-admin-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    align-items: flex-end;
-    margin-bottom: 0.45rem;
-  }
-  .perm-page .perm-admin-row:last-child { margin-bottom: 0; }
+  .perm-page .perm-admin-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-end; margin-bottom: 0.45rem; }
   .perm-page .perm-admin-row .fg { margin: 0; flex: 1 1 6.5rem; min-width: 0; }
-  .perm-page .perm-admin-row label {
-    display: block;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: #64748b;
-    margin-bottom: 0.12rem;
+  .perm-page .perm-admin-row label { display: block; font-size: 0.65rem; font-weight: 600; color: #64748b; margin-bottom: 0.12rem; }
+  .perm-page .perm-admin-row input, .perm-page .perm-admin-row select {
+    width: 100%; font-size: 0.78rem; padding: 0.28rem 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.35rem; background: #fff;
   }
-  .perm-page .perm-admin-row input,
-  .perm-page .perm-admin-row select {
-    width: 100%;
-    font-size: 0.78rem;
-    padding: 0.28rem 0.4rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 0.35rem;
-    background: #fff;
+  .perm-page .perm-admin-note { font-size: 0.68rem; color: #94a3b8; margin: 0.2rem 0 0; }
+  .perm-page .perm-admin-danger { margin-top: 0.45rem; padding-top: 0.45rem; border-top: 1px solid #fecaca; }
+  .perm-page .perm-matrix-title { font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem; }
+
+  .perm-page .perm-policy {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem;
   }
-  .perm-page .perm-admin-note {
-    font-size: 0.68rem;
-    color: #94a3b8;
-    margin: 0.2rem 0 0;
+  .perm-page .perm-policy-card {
+    border: 1px solid #e2e8f0; border-radius: 0.65rem; background: #fff; padding: 0.75rem 0.85rem;
   }
-  .perm-page .perm-admin-danger {
-    margin-top: 0.45rem;
-    padding-top: 0.45rem;
-    border-top: 1px solid #fecaca;
+  .perm-page .perm-policy-card h3 {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #64748b; margin: 0 0 0.45rem;
   }
-  .perm-page .perm-scope-inline {
-    margin-top: 0.45rem;
-    padding: 0.45rem 0.55rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.45rem;
-    background: #f8fafc;
+  .perm-page .perm-policy-card select {
+    width: 100%; font-size: 0.8rem; padding: 0.35rem 0.45rem; border: 1px solid #cbd5e1; border-radius: 0.4rem;
   }
-  .perm-page .perm-scope-inline-label {
-    display: block;
-    font-size: 0.7rem;
-    font-weight: 650;
-    color: #475569;
-    margin-bottom: 0.25rem;
-  }
-  .perm-page .perm-scope-inline select {
-    width: 100%;
-    max-width: 22rem;
-    font-size: 0.78rem;
-    padding: 0.3rem 0.4rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 0.35rem;
-    background: #fff;
-  }
+  .perm-page .perm-policy-card .hint { font-size: 0.7rem; color: #94a3b8; margin: 0.4rem 0 0; line-height: 1.35; }
+  .perm-page .perm-policy-card .locked { font-size: 0.78rem; color: #64748b; margin: 0; }
   .perm-page .perm-scope-jefes {
-    margin-top: 0.4rem;
-    max-height: 8rem;
-    overflow: auto;
-    border: 1px solid #e2e8f0;
-    border-radius: 0.35rem;
-    padding: 0.3rem 0.45rem;
-    background: #fff;
+    display: flex; flex-direction: column; gap: 0.2rem; margin-top: 0.45rem; max-height: 8rem; overflow: auto;
+    padding: 0.35rem; border: 1px solid #e2e8f0; border-radius: 0.4rem; background: #f8fafc;
   }
-  .perm-page .perm-scope-jefes label {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.74rem;
-    color: #334155;
-    margin: 0.12rem 0;
-    font-weight: 500;
+  .perm-page .perm-scope-jefes label { font-size: 0.75rem; color: #334155; display: flex; gap: 0.35rem; align-items: center; margin: 0; }
+
+  .perm-page .perm-section {
+    border: 1px solid #e2e8f0; border-radius: 0.65rem; background: #fff; margin-bottom: 0.75rem; overflow: hidden;
   }
-  .perm-page .perm-scope-locked {
-    font-size: 0.72rem;
-    color: #94a3b8;
-    margin: 0;
+  .perm-page .perm-section-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem;
+    padding: 0.55rem 0.85rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
   }
-  .perm-page .perm-admin-danger p {
-    font-size: 0.68rem;
-    color: #9f1239;
-    margin: 0 0 0.35rem;
+  .perm-page .perm-section-head h3 { font-size: 0.82rem; font-weight: 700; color: #0f172a; margin: 0; flex: 1 1 auto; }
+  .perm-page .perm-section-toggles { display: flex; gap: 0.85rem; align-items: center; }
+  .perm-page .perm-section-toggles label {
+    display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; font-weight: 600; color: #475569; margin: 0; cursor: pointer;
   }
-  .perm-page .perm-matrix-title {
-    font-size: 0.88rem;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0 0 0.55rem;
-  }
-  .perm-page .perm-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: #fff;
-    border-radius: 0.75rem;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
-  }
-  .perm-page .perm-table th,
-  .perm-page .perm-table td {
-    padding: 0.55rem 0.75rem;
-    border-bottom: 1px solid #f1f5f9;
-    font-size: 0.84rem;
-  }
+  .perm-page .perm-table { width: 100%; border-collapse: collapse; }
   .perm-page .perm-table th {
-    background: #f8fafc;
-    text-align: left;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #64748b;
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    color: #94a3b8; text-align: left; padding: 0.4rem 0.85rem; border-bottom: 1px solid #f1f5f9;
   }
-  .perm-page .perm-table th.perm-col,
-  .perm-page .perm-table td.perm-col { text-align: center; width: 5.5rem; }
-  .perm-page .perm-group {
-    font-size: 0.68rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #94a3b8;
-    background: #f8fafc;
+  .perm-page .perm-table th.perm-col, .perm-page .perm-table td.perm-col { text-align: center; width: 5.5rem; }
+  .perm-page .perm-table td {
+    padding: 0.55rem 0.85rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 0.84rem; color: #0f172a;
   }
-  .perm-page .perm-locked { opacity: 0.65; }
-  .perm-page .perm-actions { margin-top: 0.85rem; display: flex; gap: 0.65rem; flex-wrap: wrap; }
-  .perm-page input[type=checkbox] { width: 1.05rem; height: 1.05rem; cursor: pointer; }
-  .perm-page .perm-empty {
-    padding: 1rem;
-    border: 1px dashed #cbd5e1;
-    border-radius: 0.75rem;
-    color: #64748b;
-    background: #f8fafc;
+  .perm-page .perm-table tr:last-child td { border-bottom: 0; }
+  .perm-page .perm-mod-hint { font-size: 0.7rem; color: #94a3b8; margin-top: 0.15rem; line-height: 1.3; }
+  .perm-page .perm-mod-extra {
+    margin-top: 0.4rem; padding: 0.45rem 0.55rem; border-radius: 0.4rem; background: #f8fafc; border: 1px solid #e2e8f0;
   }
-  @media (max-width: 960px) {
-    .perm-page .perm-top-card {
-      grid-template-columns: 1fr;
-    }
-  }
+  .perm-page .perm-mod-extra label { font-size: 0.7rem; font-weight: 600; color: #64748b; display: block; margin-bottom: 0.25rem; }
+  .perm-page .perm-mod-extra select { width: 100%; max-width: 18rem; font-size: 0.78rem; padding: 0.28rem 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.35rem; }
+  .perm-page .perm-tick-row td { background: #fafbfc; }
+  .perm-page .perm-na { color: #cbd5e1; font-size: 0.85rem; }
+  .perm-page .perm-locked { opacity: 0.72; }
+  .perm-page .perm-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .perm-page .perm-empty { padding: 1.5rem; text-align: center; color: #94a3b8; font-size: 0.85rem; }
+  @media (max-width: 960px) { .perm-page .perm-top-card { grid-template-columns: 1fr; } }
 </style>
 {% endblock %}
 
@@ -215,11 +103,11 @@
       <div class="perm-top-main">
         <h1 class="perm-top-title">{{ _('Permisos por rol') }}</h1>
         <p class="perm-top-hints">
-          <strong>{{ _('Lectura') }}</strong> — {{ _('ver menú, listados y paneles.') }}
-          · <strong>{{ _('Escritura') }}</strong> — {{ _('crear, editar, sincronizar…') }}<br>
-          {{ _('Misma lista de módulos para todos los roles (incluido el portal propio: calendario, ausencias y fichar).') }}
-          {{ _('Así puedes dar a un jefe su propio calendario sin tocar el resto.') }}
-          {{ _('El jefe de obra sigue limitado a sus obras en planificación.') }}
+          <strong>{{ _('Lectura') }}</strong> — {{ _('entrar al panel.') }}
+          · <strong>{{ _('Escritura') }}</strong> — {{ _('mutar (crear, editar, resolver…).') }}
+          · <strong>{{ _('Tick') }}</strong> — {{ _('capacidad (planificar gente/flota, editar pasado).') }}<br>
+          {{ _('Crear solicitudes = planificar en modo «por solicitudes». Resolver = escritura en Solicitudes.') }}
+          {{ _('Tres alcances de obras: planificación, auditoría/mapa y buzón.') }}
         </p>
         <nav class="perm-role-tabs" aria-label="{{ _('Roles') }}">
           {% for role_key, role_label_txt in roles %}
@@ -231,7 +119,6 @@
       {% if can_manage_roles|default(false) %}
       <aside class="perm-admin-panel" aria-label="{{ _('Administrar roles') }}">
         <h2>{{ _('Administrar roles') }}</h2>
-
         <form method="POST" action="{{ url_for('admin.permisos_rol_crear') }}" class="perm-admin-row">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="fg">
@@ -248,7 +135,6 @@
           </div>
           <button type="submit" class="btn-admin btn-admin-primary btn-sm">{{ _('Crear') }}</button>
         </form>
-
         {% if not active_role_locked %}
         <form method="POST" action="{{ url_for('admin.permisos_rol_renombrar') }}" class="perm-admin-row">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -262,7 +148,6 @@
         {% else %}
         <p class="perm-admin-note">{{ _('«{role}» es fijo: no se renombra ni borra.', role=active_role_label) }}</p>
         {% endif %}
-
         {% if not active_role_system %}
         <div class="perm-admin-danger">
           <p>{{ _('Eliminar «{role}» (sin usuarios asignados).', role=active_role_label) }}</p>
@@ -280,111 +165,258 @@
 
     <h2 class="perm-matrix-title">{{ _('Permisos de') }} {{ active_role_label }}</h2>
 
-    <form method="POST" action="{{ url_for('admin.permisos_roles_save') }}">
+    <form method="POST" action="{{ url_for('admin.permisos_roles_save') }}" id="permForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="role" value="{{ active_role }}">
 
-      {% if modules %}
-      <table class="perm-table">
-        <thead>
-          <tr>
-            <th>{{ _('Módulo') }}</th>
-            <th class="perm-col">{{ _('Lectura') }}</th>
-            <th class="perm-col">{{ _('Escritura') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% set ns = namespace(prev_group='') %}
-          {% for module, label, group in modules %}
-            {% if group != ns.prev_group %}
-            <tr><td colspan="3" class="perm-group">{{ _(group) }}</td></tr>
-            {% set ns.prev_group = group %}
-            {% endif %}
-            {% set locked = active_role == 'admin' and module in locked_modules %}
-            {% set sso_ro = sso_read_only_modules is defined and module in sso_read_only_modules %}
-            {% set flags = matrix.get(module, {}) %}
-            {% set r_hint = read_hints.get(module) if read_hints is defined else none %}
-            {% set w_hint = write_hints.get(module) if write_hints is defined else none %}
-            {% set panel_meta = panel_scopes.get(module) if panel_scopes is defined else none %}
-            <tr class="{% if locked or sso_ro %}perm-locked{% endif %}">
-              <td>
-                {{ _(label) }}
-                {% if r_hint or w_hint %}
-                <div class="text-muted" style="font-size:0.72rem;font-weight:500;margin-top:0.15rem;">
-                  {% if r_hint %}<span>{{ _('Lectura') }}: {{ _(r_hint) }}</span>{% endif %}
-                  {% if r_hint and w_hint %}<br>{% endif %}
-                  {% if w_hint %}<span>{{ _('Escritura') }}: {{ _(w_hint) }}</span>{% endif %}
-                </div>
-                {% endif %}
-                {% if panel_meta %}
-                <div class="perm-scope-inline" data-scope-panel="{{ module }}">
-                  <span class="perm-scope-inline-label">{{ _('Alcance de obras') }}</span>
-                  {% if panel_meta.locked %}
-                  <p class="perm-scope-locked">{{ panel_meta.locked_note }}</p>
-                  <input type="hidden" name="scope__{{ module }}__mode" value="{{ panel_meta.mode }}">
-                  {% else %}
-                  <label class="sr-only" for="scope-{{ module }}-mode">{{ _('Alcance de obras') }}</label>
-                  <select id="scope-{{ module }}-mode" name="scope__{{ module }}__mode" class="js-scope-mode">
-                    <option value="none" {% if panel_meta.mode == 'none' %}selected{% endif %}>{{ _('Ninguno (no ve obras)') }}</option>
-                    <option value="jefe" {% if panel_meta.mode == 'jefe' %}selected{% endif %}>{{ _('Como jefe (sus obras)') }}</option>
-                    <option value="jefes" {% if panel_meta.mode == 'jefes' %}selected{% endif %}>{{ _('Jefes concretos') }}</option>
-                    <option value="all" {% if panel_meta.mode == 'all' %}selected{% endif %}>{{ _('Todos (como administración)') }}</option>
-                  </select>
-                  <div class="perm-scope-jefes js-scope-jefes" {% if panel_meta.mode != 'jefes' %}hidden{% endif %}>
-                    {% for jefe in scope_jefes %}
-                    <label>
-                      <input type="checkbox" name="scope__{{ module }}__jefe_ids" value="{{ jefe.id }}"
-                             {% if jefe.id in panel_meta.jefe_ids %}checked{% endif %}>
-                      {{ jefe.name }} {{ jefe.lastname }}
-                    </label>
-                    {% else %}
-                    <span class="text-muted" style="font-size:0.72rem;">{{ _('No hay jefes de obra activos.') }}</span>
-                    {% endfor %}
-                  </div>
-                  {% endif %}
-                </div>
-                {% endif %}
-              </td>
-              <td class="perm-col">
-                <input type="checkbox" name="perm__{{ module }}__r" value="on" {% if flags.r %}checked{% endif %} {% if locked %}disabled{% endif %}>
-                {% if locked %}<input type="hidden" name="perm__{{ module }}__r" value="on">{% endif %}
-              </td>
-              <td class="perm-col">
-                {% if sso_ro %}
-                <input type="checkbox" disabled>
-                {% else %}
-                <input type="checkbox" name="perm__{{ module }}__w" value="on" {% if flags.w %}checked{% endif %} {% if locked %}disabled{% endif %}>
-                {% if locked %}<input type="hidden" name="perm__{{ module }}__w" value="on">{% endif %}
-                {% endif %}
-              </td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="perm-empty">{{ _('No hay módulos configurables en este espacio.') }}</div>
+      {% if scopes_meta is defined %}
+      <div class="perm-policy">
+        {% for kind, sm in scopes_meta.items() %}
+        <div class="perm-policy-card" data-scope-kind="{{ kind }}">
+          <h3>{{ sm.label }}</h3>
+          {% if sm.locked %}
+          <p class="locked">{{ sm.locked_note }}</p>
+          <input type="hidden" name="scope__{{ kind }}__mode" value="{{ sm.mode }}">
+          {% else %}
+          <select name="scope__{{ kind }}__mode" class="js-scope-mode" data-kind="{{ kind }}">
+            <option value="none" {% if sm.mode == 'none' %}selected{% endif %}>{{ _('Ninguno') }}</option>
+            <option value="jefe" {% if sm.mode == 'jefe' %}selected{% endif %}>{{ _('Sus obras (como jefe)') }}</option>
+            <option value="jefes" {% if sm.mode == 'jefes' %}selected{% endif %}>{{ _('Jefes concretos') }}</option>
+            <option value="all" {% if sm.mode == 'all' %}selected{% endif %}>{{ _('Todas (oficina)') }}</option>
+          </select>
+          <div class="perm-scope-jefes js-scope-jefes" data-kind="{{ kind }}" {% if sm.mode != 'jefes' %}hidden{% endif %}>
+            {% for jefe in scope_jefes %}
+            <label>
+              <input type="checkbox" name="scope__{{ kind }}__jefe_ids" value="{{ jefe.id }}"
+                     {% if jefe.id in sm.jefe_ids %}checked{% endif %}>
+              {{ jefe.name }} {{ jefe.lastname }}
+            </label>
+            {% else %}
+            <span class="text-muted" style="font-size:0.72rem;">{{ _('No hay jefes de obra activos.') }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
       {% endif %}
+
+      {% if modules %}
+        {% set ns = namespace(prev_group='', section_id=0) %}
+        {% set ticks = binary_tick_modules if binary_tick_modules is defined else [] %}
+        {% for module, label, group in modules %}
+          {% if group != ns.prev_group %}
+            {% if ns.prev_group %}
+        </tbody></table></div>
+            {% endif %}
+            {% set ns.section_id = ns.section_id + 1 %}
+            {% set ns.prev_group = group %}
+        <div class="perm-section" data-perm-section="{{ ns.section_id }}">
+          <div class="perm-section-head">
+            <h3>{{ _(group) }}</h3>
+            <div class="perm-section-toggles">
+              <label><input type="checkbox" class="js-section-r" data-section="{{ ns.section_id }}"> {{ _('Lectura') }}</label>
+              <label><input type="checkbox" class="js-section-w" data-section="{{ ns.section_id }}"> {{ _('Escritura') }}</label>
+            </div>
+          </div>
+          <table class="perm-table">
+            <thead>
+              <tr>
+                <th>{{ _('Módulo') }}</th>
+                <th class="perm-col">{{ _('L') }}</th>
+                <th class="perm-col">{{ _('E') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+          {% endif %}
+
+          {% set locked = active_role == 'admin' and module in locked_modules %}
+          {% set is_tick = module in ticks %}
+          {% set no_w = (not is_tick) and (
+                (write_disabled_modules is defined and module in write_disabled_modules)
+                or (sso_read_only_modules is defined and module in sso_read_only_modules)
+              ) %}
+          {% set flags = matrix.get(module, {}) %}
+          {% set r_hint = read_hints.get(module) if read_hints is defined else none %}
+          {% set w_hint = write_hints.get(module) if write_hints is defined else none %}
+          <tr class="{% if locked or no_w %}perm-locked{% endif %} {% if is_tick %}perm-tick-row{% endif %}"
+              data-section-row="{{ ns.section_id }}" data-module="{{ module }}">
+            <td>
+              {{ _(label) }}
+              {% if is_tick %}
+              <div class="perm-mod-hint">{{ _('Capacidad (tick)') }}{% if w_hint %} — {{ _(w_hint) }}{% endif %}</div>
+              {% elif r_hint or (w_hint and not no_w) %}
+              <div class="perm-mod-hint">
+                {% if r_hint %}{{ _(r_hint) }}{% endif %}
+                {% if r_hint and w_hint and not no_w %} · {% endif %}
+                {% if w_hint and not no_w %}{{ _(w_hint) }}{% endif %}
+              </div>
+              {% endif %}
+
+              {% if module == 'asignaciones' %}
+              <div class="perm-mod-extra js-mode-box" id="mode-people-box" {% if not flags.w %}hidden{% endif %}>
+                <label for="assign-mode-people">{{ _('Al planificar gente') }}</label>
+                {% if assign_mode_locked %}
+                <p class="locked" style="margin:0;font-size:0.78rem;">{{ _('Siempre directo') }}</p>
+                <input type="hidden" name="assign_mode_people" value="{{ ASSIGN_MODE_DIRECT }}">
+                {% else %}
+                <select id="assign-mode-people" name="assign_mode_people">
+                  <option value="{{ ASSIGN_MODE_DIRECT }}" {% if assign_mode_people == ASSIGN_MODE_DIRECT %}selected{% endif %}>{{ _('Directo') }}</option>
+                  <option value="{{ ASSIGN_MODE_SOLICITUD }}" {% if assign_mode_people == ASSIGN_MODE_SOLICITUD %}selected{% endif %}>{{ _('Por solicitudes') }}</option>
+                </select>
+                {% endif %}
+              </div>
+              {% endif %}
+              {% if module == 'planificar_flota' %}
+              <div class="perm-mod-extra js-mode-box" id="mode-vehicles-box" {% if not flags.w %}hidden{% endif %}>
+                <label for="assign-mode-vehicles">{{ _('Al planificar flota') }}</label>
+                {% if assign_mode_locked %}
+                <p class="locked" style="margin:0;font-size:0.78rem;">{{ _('Siempre directo') }}</p>
+                <input type="hidden" name="assign_mode_vehicles" value="{{ ASSIGN_MODE_DIRECT }}">
+                {% else %}
+                <select id="assign-mode-vehicles" name="assign_mode_vehicles">
+                  <option value="{{ ASSIGN_MODE_DIRECT }}" {% if assign_mode_vehicles == ASSIGN_MODE_DIRECT %}selected{% endif %}>{{ _('Directo') }}</option>
+                  <option value="{{ ASSIGN_MODE_SOLICITUD }}" {% if assign_mode_vehicles == ASSIGN_MODE_SOLICITUD %}selected{% endif %}>{{ _('Por solicitudes') }}</option>
+                </select>
+                {% endif %}
+              </div>
+              {% endif %}
+            </td>
+            {% if is_tick %}
+            <td class="perm-col" colspan="2">
+              <label style="display:inline-flex;align-items:center;gap:0.35rem;margin:0;cursor:pointer;">
+                <input type="checkbox" class="js-tick" data-module="{{ module }}" data-section="{{ ns.section_id }}"
+                       name="perm__{{ module }}__tick" value="on"
+                       {% if flags.w or flags.r %}checked{% endif %} {% if locked %}disabled{% endif %}>
+                {{ _('Activo') }}
+              </label>
+              {% if locked %}<input type="hidden" name="perm__{{ module }}__tick" value="on">{% endif %}
+            </td>
+            {% else %}
+            <td class="perm-col">
+              <input type="checkbox" class="js-row-r" data-section="{{ ns.section_id }}"
+                     name="perm__{{ module }}__r" value="on"
+                     {% if flags.r %}checked{% endif %} {% if locked %}disabled{% endif %}>
+              {% if locked %}<input type="hidden" name="perm__{{ module }}__r" value="on">{% endif %}
+            </td>
+            <td class="perm-col">
+              {% if no_w %}
+              <span class="perm-na" title="{{ _('No aplica') }}">—</span>
+              {% else %}
+              <input type="checkbox" class="js-row-w" data-section="{{ ns.section_id }}"
+                     name="perm__{{ module }}__w" value="on"
+                     {% if flags.w %}checked{% endif %} {% if locked %}disabled{% endif %}>
+              {% if locked %}<input type="hidden" name="perm__{{ module }}__w" value="on">{% endif %}
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        </tbody></table></div>
+
       <div class="perm-actions">
-        <button type="submit" class="btn-admin btn-admin-primary" {% if not modules %}disabled{% endif %}>{{ _('Guardar permisos') }}</button>
+        <button type="submit" class="btn-admin btn-admin-primary">{{ _('Guardar permisos') }}</button>
         <button type="submit" name="reset_defaults" value="1" class="btn-admin btn-admin-ghost"
                 onclick="return confirm('{{ _('¿Restaurar todos los roles a los permisos por defecto de SignaPlan?') }}')">
           {{ _('Restaurar defaults') }}
         </button>
       </div>
+      {% else %}
+      <div class="perm-empty">{{ _('No hay módulos configurables en este espacio.') }}</div>
+      {% endif %}
     </form>
   </main>
 </div>
 <script>
 (function () {
-  document.querySelectorAll('.perm-scope-inline').forEach(function (box) {
-    var sel = box.querySelector('.js-scope-mode');
-    var jefes = box.querySelector('.js-scope-jefes');
-    if (!sel || !jefes) return;
-    function sync() {
-      jefes.hidden = sel.value !== 'jefes';
-    }
+  document.querySelectorAll('.js-scope-mode').forEach(function (sel) {
+    var kind = sel.getAttribute('data-kind');
+    var box = document.querySelector('.js-scope-jefes[data-kind="' + kind + '"]');
+    function sync() { if (box) box.hidden = sel.value !== 'jefes'; }
     sel.addEventListener('change', sync);
     sync();
+  });
+
+  function syncModeBoxes() {
+    var peopleTick = document.querySelector('.js-tick[data-module="asignaciones"]');
+    var fleetTick = document.querySelector('.js-tick[data-module="planificar_flota"]');
+    var peopleBox = document.getElementById('mode-people-box');
+    var fleetBox = document.getElementById('mode-vehicles-box');
+    if (peopleBox && peopleTick) peopleBox.hidden = !peopleTick.checked;
+    if (fleetBox && fleetTick) fleetBox.hidden = !fleetTick.checked;
+  }
+  document.querySelectorAll('.js-tick').forEach(function (cb) {
+    cb.addEventListener('change', syncModeBoxes);
+  });
+  syncModeBoxes();
+
+  function rowsOf(sectionId) {
+    return document.querySelectorAll('[data-section-row="' + sectionId + '"]');
+  }
+  function syncSectionHeader(sectionId) {
+    var rows = rowsOf(sectionId);
+    var rBoxes = [], wBoxes = [];
+    rows.forEach(function (tr) {
+      var r = tr.querySelector('.js-row-r');
+      var w = tr.querySelector('.js-row-w');
+      if (r && !r.disabled) rBoxes.push(r);
+      if (w && !w.disabled) wBoxes.push(w);
+    });
+    var headR = document.querySelector('.js-section-r[data-section="' + sectionId + '"]');
+    var headW = document.querySelector('.js-section-w[data-section="' + sectionId + '"]');
+    if (headR) {
+      var allR = rBoxes.length && rBoxes.every(function (b) { return b.checked; });
+      var someR = rBoxes.some(function (b) { return b.checked; });
+      headR.checked = allR;
+      headR.indeterminate = someR && !allR;
+    }
+    if (headW) {
+      if (!wBoxes.length) {
+        headW.disabled = true;
+        headW.checked = false;
+        headW.indeterminate = false;
+      } else {
+        headW.disabled = false;
+        var allW = wBoxes.every(function (b) { return b.checked; });
+        var someW = wBoxes.some(function (b) { return b.checked; });
+        headW.checked = allW;
+        headW.indeterminate = someW && !allW;
+      }
+    }
+  }
+  document.querySelectorAll('.js-section-r').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      rowsOf(cb.getAttribute('data-section')).forEach(function (tr) {
+        var r = tr.querySelector('.js-row-r');
+        if (r && !r.disabled) r.checked = cb.checked;
+      });
+      syncSectionHeader(cb.getAttribute('data-section'));
+    });
+  });
+  document.querySelectorAll('.js-section-w').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      rowsOf(cb.getAttribute('data-section')).forEach(function (tr) {
+        var w = tr.querySelector('.js-row-w');
+        var r = tr.querySelector('.js-row-r');
+        if (w && !w.disabled) {
+          w.checked = cb.checked;
+          if (cb.checked && r && !r.disabled) r.checked = true;
+        }
+      });
+      syncSectionHeader(cb.getAttribute('data-section'));
+    });
+  });
+  document.querySelectorAll('.js-row-r, .js-row-w').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      if (cb.classList.contains('js-row-w') && cb.checked) {
+        var r = cb.closest('tr').querySelector('.js-row-r');
+        if (r && !r.disabled) r.checked = true;
+      }
+      syncSectionHeader(cb.getAttribute('data-section'));
+    });
+  });
+  document.querySelectorAll('[data-perm-section]').forEach(function (sec) {
+    syncSectionHeader(sec.getAttribute('data-perm-section'));
   });
 })();
 </script>

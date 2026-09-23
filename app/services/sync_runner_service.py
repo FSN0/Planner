@@ -44,10 +44,21 @@ def run_auto_sync_obras(modo='Automático'):
 
         for obj in nuevas_limpias:
             f_inicio = datetime.strptime(obj['fecha_inicio'], "%Y-%m-%d").date() if obj.get('fecha_inicio') else None
+            from app.services.obra_estado_service import (
+                ESTADO_EN_GARANTIA,
+                ESTADO_PENDIENTE,
+            )
+            # Ejecución nueva → Pendiente (oficina activa). Garantía → ya planificable.
+            estado_in = obj.get('estado') or ESTADO_PENDIENTE
+            estado = (
+                ESTADO_EN_GARANTIA
+                if estado_in == ESTADO_EN_GARANTIA
+                else ESTADO_PENDIENTE
+            )
             db.session.add(Obra(
                 external_ids={'odoo': str(obj['odoo_id'])},
                 codigo=obj['codigo'], nombre=obj['nombre'],
-                descripcion=obj.get('cliente', ''), fecha_inicio=f_inicio, estado='Pendiente',
+                descripcion=obj.get('cliente', ''), fecha_inicio=f_inicio, estado=estado,
                 jefe_obra_id=obj.get('jefe_obra_id'), encargado_id=obj.get('encargado_id'),
                 fecha_importacion=ahora,
             ))
@@ -66,6 +77,10 @@ def run_auto_sync_obras(modo='Automático'):
                     obra.jefe_obra_id = obj['jefe_obra_id']
                 if obj.get('encargado_id'):
                     obra.encargado_id = obj['encargado_id']
+                if obj.get('estado'):
+                    obra.estado = obj['estado']
+                    if obj['estado'] != 'Finalizada':
+                        obra.fecha_fin = None
 
         for obj in diff['finalizadas']:
             obra = Obra.query.get(obj['local_id'])

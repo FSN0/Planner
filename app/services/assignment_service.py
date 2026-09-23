@@ -59,13 +59,13 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
             'req_count': len(leave_dates),
         }
 
-    from app.services.tenant_modules import jefes_asignan_directo
+    from app.services.assign_mode_service import user_assigns_direct
     from app.services.panel_scope_service import (
         planning_acts_as_office,
         planning_custody_jefe_ids,
     )
 
-    acts_office = planning_acts_as_office(actor_user) or actor_user.role == ROLE_ADMIN
+    acts_office = planning_acts_as_office(actor_user)
     custody_ids = set(planning_custody_jefe_ids(actor_user))
 
     def _en_custodia(obra):
@@ -75,18 +75,14 @@ def process_assignment_action(actor_user, worker_id, target_obra_id, date_list, 
             return True
         return bool(obra.jefe_obra_id and obra.jefe_obra_id in custody_ids)
 
-    jefe_directo = (
-        (not acts_office)
-        and bool(custody_ids)
-        and jefes_asignan_directo()
-    )
+    escribe_directo = user_assigns_direct(actor_user)
     if not acts_office and not _en_custodia(target_obra):
         return {'success': False, 'error': 'No tienes permiso sobre la obra destino.'}
 
     # ==========================================
-    # OFICINA / ALCANCE «TODOS», O CUSTODIA CON ASIGNACIÓN DIRECTA
+    # MODO DIRECTO (oficina o custodia con flag por rol)
     # ==========================================
-    if acts_office or jefe_directo:
+    if escribe_directo:
         if mode in ['check', 'pure_check']:
             conflict_details = {}
             count_conflict = 0
@@ -573,12 +569,12 @@ def process_unassign_action(actor_user, worker_id, target_obra_id, date_list, mo
                 ),
             }
 
-    from app.services.tenant_modules import jefes_asignan_directo as _jefes_directo
+    from app.services.assign_mode_service import user_assigns_direct
     from app.services.panel_scope_service import planning_acts_as_office, planning_custody_jefe_ids
 
-    acts_office = planning_acts_as_office(actor_user) or actor_user.role == ROLE_ADMIN
+    acts_office = planning_acts_as_office(actor_user)
     custody_ids = set(planning_custody_jefe_ids(actor_user))
-    if (not acts_office) and custody_ids and not _jefes_directo():
+    if (not acts_office) and custody_ids and not user_assigns_direct(actor_user):
         fechas_sol = fechas_con_asignacion or fechas_inercia
         if not fechas_sol:
             return {'success': False, 'message': 'El trabajador no tiene asignaciones en este periodo.'}

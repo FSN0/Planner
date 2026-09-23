@@ -173,9 +173,12 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
     Ausencias en ventana [hoy, hoy+horizon].
     only_active: fecha_inicio <= hoy <= fecha_fin (en curso ahora).
     only_future: fecha_inicio > hoy (aún no han empezado).
-    Admin: todas. Jefe: personal con asignación en sus obras en el periodo.
+    Alcance = planificación (oficina = todas; custodia = personal de sus obras).
     """
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, Obra
+    from app.services.permission_service import user_can
+
+    if not user_can(actor_user, 'ausencias', 'r'):
+        return []
 
     today = today_local()
     horizon = today + timedelta(days=horizon_days)
@@ -192,27 +195,11 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
     elif only_future:
         q = q.filter(AusenciaPlanificada.fecha_inicio > today)
 
-    if actor_user.role == ROLE_JEFE:
-        obra_ids = [
-            o.id for o in Obra.query.filter_by(
-                jefe_obra_id=actor_user.id, is_deleted=False
-            ).all()
-        ]
-        if not obra_ids:
-            return []
-        user_ids = {
-            row[0]
-            for row in db.session.query(Asignacion.user_id).filter(
-                Asignacion.obra_id.in_(obra_ids),
-                Asignacion.fecha >= today,
-                Asignacion.fecha <= horizon,
-            ).distinct().all()
-        }
+    user_ids = _leave_scope_user_ids(actor_user, today, horizon)
+    if user_ids is not None:
         if not user_ids:
             return []
         q = q.filter(AusenciaPlanificada.user_id.in_(user_ids))
-    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        return []
 
     return (
         q.order_by(AusenciaPlanificada.fecha_inicio.asc(), AusenciaPlanificada.id.asc())
@@ -222,8 +209,11 @@ def get_upcoming_leaves(actor_user, horizon_days=45, limit=25, only_future=False
 
 
 def get_leaves_scoped(actor_user, estado=None, limit=200):
-    """Listado histórico / filtro, acotado al ámbito del rol. Default: solo aprobadas."""
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, Obra
+    """Listado histórico / filtro, acotado al alcance de planificación. Default: solo aprobadas."""
+    from app.services.permission_service import user_can
+
+    if not user_can(actor_user, 'ausencias', 'r'):
+        return []
 
     today = today_local()
     q = AusenciaPlanificada.query
@@ -232,30 +222,49 @@ def get_leaves_scoped(actor_user, estado=None, limit=200):
     else:
         q = q.filter_by(estado=LEAVE_STATUS_APROBADA)
 
-    if actor_user.role == ROLE_JEFE:
-        obra_ids = [
-            o.id for o in Obra.query.filter_by(
-                jefe_obra_id=actor_user.id, is_deleted=False
-            ).all()
-        ]
-        if not obra_ids:
-            return []
-        # Personal de sus obras en ventana amplia (pasado reciente + futuro)
-        user_ids = {
-            row[0]
-            for row in db.session.query(Asignacion.user_id).filter(
-                Asignacion.obra_id.in_(obra_ids),
-                Asignacion.fecha >= today - timedelta(days=120),
-                Asignacion.fecha <= today + timedelta(days=180),
-            ).distinct().all()
-        }
+    user_ids = _leave_scope_user_ids(
+        actor_user,
+        today - timedelta(days=120),
+        today + timedelta(days=180),
+    )
+    if user_ids is not None:
         if not user_ids:
             return []
         q = q.filter(AusenciaPlanificada.user_id.in_(user_ids))
-    elif actor_user.role not in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
-        return []
 
     return q.order_by(AusenciaPlanificada.fecha_inicio.desc()).limit(limit).all()
+
+
+def _leave_scope_user_ids(actor_user, date_from, date_to):
+    """None = sin filtro (oficina). set() / ids = custodia. Vacío = ninguna fila."""
+    from app.models import Obra
+    from app.services.panel_scope_service import (
+        PANEL_PLANIFICADOR,
+        apply_obra_scope_filter,
+        user_panel_mode,
+    )
+
+    mode = user_panel_mode(actor_user, PANEL_PLANIFICADOR)
+    if mode == 'none':
+        return set()
+    if mode == 'office':
+        return None
+    q = apply_obra_scope_filter(
+        Obra.query.filter_by(is_deleted=False),
+        actor_user,
+        PANEL_PLANIFICADOR,
+    )
+    obra_ids = [o.id for o in q.all()]
+    if not obra_ids:
+        return set()
+    return {
+        row[0]
+        for row in db.session.query(Asignacion.user_id).filter(
+            Asignacion.obra_id.in_(obra_ids),
+            Asignacion.fecha >= date_from,
+            Asignacion.fecha <= date_to,
+        ).distinct().all()
+    }
 
 
 def obras_for_leave(leave, max_obras=3):
@@ -885,32 +894,72 @@ def set_leave_estado(leave_id, nuevo_estado, resolved_by_id=None):
 
 
 def actor_puede_crear_ausencia(actor_user):
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
-    return getattr(actor_user, 'role', None) in (
-        ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLE_OPERARIO,
+    from app.services.permission_service import user_can
+    return bool(
+        user_can(actor_user, 'ausencias', 'w')
+        or user_can(actor_user, 'operario_ausencias', 'w')
     )
 
 
 def actor_puede_gestionar_ausencias(actor_user):
-    """Aprueba / edita / borra en firme sin pasar por pendiente."""
-    from app.models import ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH
-    return getattr(actor_user, 'role', None) in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
+    """Aprueba / edita / borra en firme (alcance oficina + escritura ausencias)."""
+    from app.services.permission_service import user_can
+    from app.services.panel_scope_service import PANEL_PLANIFICADOR, user_panel_mode
+    if not user_can(actor_user, 'ausencias', 'w'):
+        return False
+    return user_panel_mode(actor_user, PANEL_PLANIFICADOR) == 'office'
+
+
+def actor_puede_resolver_conflictos_ausencia(actor_user):
+    """Conflictos cuadrante↔ausencia: oficina siempre; custodia si el ajuste lo permite."""
+    from app.services.permission_service import user_can
+    from app.services.panel_scope_service import PANEL_PLANIFICADOR, user_panel_mode
+    if not user_can(actor_user, 'ausencias', 'w'):
+        return False
+    mode = user_panel_mode(actor_user, PANEL_PLANIFICADOR)
+    if mode == 'office':
+        return True
+    if mode == 'custody':
+        return jefe_puede_resolver_ausencias()
+    return False
 
 
 def estado_alta_por_rol(actor_user, solicitado=None):
-    """
-    Admin/laboral/rrhh pueden aprobar al crear.
-    Jefe y operario dejan pendiente.
-    """
-    from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
+    """Compat: alias de estado_alta_por_permiso."""
+    return estado_alta_por_permiso(actor_user, solicitado)
 
-    if actor_user.role in (ROLE_JEFE, ROLE_OPERARIO):
-        return LEAVE_STATUS_PENDIENTE
-    if solicitado in (LEAVE_STATUS_APROBADA, LEAVE_STATUS_PENDIENTE):
-        return solicitado
-    if actor_user.role in (ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH):
+
+def estado_alta_por_permiso(actor_user, solicitado=None):
+    """
+    Oficina (gestionar): puede aprobar al crear.
+    Custodia / portal: queda pendiente.
+    """
+    if actor_puede_gestionar_ausencias(actor_user):
+        if solicitado in (LEAVE_STATUS_APROBADA, LEAVE_STATUS_PENDIENTE):
+            return solicitado
         return LEAVE_STATUS_APROBADA
     return LEAVE_STATUS_PENDIENTE
+
+
+def obra_ids_for_leave_actor(actor_user):
+    """Obras del alcance de planificación (None = oficina / sin filtro)."""
+    from app.models import Obra
+    from app.services.panel_scope_service import (
+        PANEL_PLANIFICADOR,
+        apply_obra_scope_filter,
+        user_panel_mode,
+    )
+    mode = user_panel_mode(actor_user, PANEL_PLANIFICADOR)
+    if mode == 'office':
+        return None
+    if mode == 'none':
+        return []
+    q = apply_obra_scope_filter(
+        Obra.query.filter_by(is_deleted=False),
+        actor_user,
+        PANEL_PLANIFICADOR,
+    )
+    return [o.id for o in q.all()]
 
 
 def update_manual_leave(

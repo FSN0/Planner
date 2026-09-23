@@ -871,8 +871,9 @@ def repartir_secciones_auditoria(pendientes):
 
 
 def notificar_desvio_inmediato(registro, *, omitir_lado_real=False):
-    """Avisos inmediatos de desvío desactivados (no bombardear el buzón)."""
-    return
+    """Desvío plan≠real → matriz ``desvio_fichaje`` (debounce/digest/inmediato/off)."""
+    from app.services.email_service import notificar_desvio_fichaje
+    notificar_desvio_fichaje(registro, omitir_lado_real=omitir_lado_real)
 
 
 def limpiar_acks_desvio(registro):

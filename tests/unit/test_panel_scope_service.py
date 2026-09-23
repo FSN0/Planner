@@ -1,4 +1,4 @@
-"""Alcance de obras por rol (planificador / tablero / auditoría fichajes)."""
+"""Alcances de obras: tres kinds (planificación / auditoría / solicitudes)."""
 import json
 from types import SimpleNamespace
 
@@ -6,8 +6,13 @@ import pytest
 
 from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
 from app.services.panel_scope_service import (
+    KIND_AUDITORIA,
+    KIND_PLANIFICACION,
+    KIND_SOLICITUDES,
     PANEL_AUDITORIA_FICHAJES,
+    PANEL_MAPA,
     PANEL_PLANIFICADOR,
+    PANEL_SOLICITUDES,
     PANEL_TABLERO,
     SCOPE_ALL,
     SCOPE_JEFE,
@@ -16,12 +21,17 @@ from app.services.panel_scope_service import (
     clear_role_panel_scopes,
     copy_role_panel_scopes,
     default_scope_for_role,
+    get_role_obra_scope,
     get_role_panel_scope,
+    get_role_scope,
     get_user_panel_scope,
+    parse_all_scopes_from_form,
     parse_scope_from_form,
     planning_acts_as_office,
     planning_custody_jefe_ids,
+    set_role_obra_scope,
     set_role_panel_scope,
+    set_role_scope,
     user_custody_jefe_ids,
     user_panel_mode,
 )
@@ -29,7 +39,10 @@ from app.services.panel_scope_service import (
 
 @pytest.fixture
 def scope_store(monkeypatch):
-    store = {}
+    store = {
+        'obra_scope._unified_v1': '1',
+        'obra_scope._kinds_v1': '1',
+    }
 
     def fake_get(key, default=None):
         return store.get(key, default)
@@ -50,108 +63,77 @@ def test_defaults_builtin_roles():
     assert default_scope_for_role(ROLE_ADMIN)['mode'] == SCOPE_ALL
     assert default_scope_for_role(ROLE_JEFE)['mode'] == SCOPE_JEFE
     assert default_scope_for_role(ROLE_LABORAL)['mode'] == SCOPE_ALL
-    assert default_scope_for_role(ROLE_RRHH)['mode'] == SCOPE_ALL
     assert default_scope_for_role('director_rrhh')['mode'] == SCOPE_NONE
-    assert default_scope_for_role('director_rrhh', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
 
 
-def test_get_role_falls_back_to_default(scope_store):
-    assert get_role_panel_scope('director_rrhh', PANEL_PLANIFICADOR) == {
-        'mode': SCOPE_NONE,
-        'jefe_ids': [],
+def test_three_kinds_independent(scope_store):
+    set_role_scope('coord', KIND_PLANIFICACION, SCOPE_JEFES, [1, 2])
+    set_role_scope('coord', KIND_AUDITORIA, SCOPE_ALL, [])
+    set_role_scope('coord', KIND_SOLICITUDES, SCOPE_JEFE, [])
+    assert get_role_scope('coord', KIND_PLANIFICACION) == {
+        'mode': SCOPE_JEFES, 'jefe_ids': [1, 2],
     }
-    assert get_role_panel_scope(ROLE_LABORAL, PANEL_TABLERO)['mode'] == SCOPE_ALL
-
-
-def test_set_and_get_jefes_scope(scope_store):
-    set_role_panel_scope('director_rrhh', PANEL_PLANIFICADOR, SCOPE_JEFES, [3, 1, 3])
-    scope = get_role_panel_scope('director_rrhh', PANEL_PLANIFICADOR)
-    assert scope['mode'] == SCOPE_JEFES
-    assert scope['jefe_ids'] == [1, 3]
-    raw = scope_store['panel_scope.planificador.director_rrhh']
-    assert json.loads(raw)['jefe_ids'] == [1, 3]
-
-
-def test_non_jefes_mode_drops_ids(scope_store):
-    set_role_panel_scope('custom', PANEL_TABLERO, SCOPE_ALL, [9, 8])
-    assert get_role_panel_scope('custom', PANEL_TABLERO) == {
-        'mode': SCOPE_ALL,
-        'jefe_ids': [],
-    }
+    assert get_role_scope('coord', KIND_AUDITORIA)['mode'] == SCOPE_ALL
+    assert get_role_scope('coord', KIND_SOLICITUDES)['mode'] == SCOPE_JEFE
+    # Paneles mapean al kind
+    assert get_role_panel_scope('coord', PANEL_TABLERO)['jefe_ids'] == [1, 2]
+    assert get_role_panel_scope('coord', PANEL_MAPA)['mode'] == SCOPE_ALL
+    assert get_role_panel_scope('coord', PANEL_SOLICITUDES)['mode'] == SCOPE_JEFE
 
 
 def test_admin_user_always_office(scope_store):
-    set_role_panel_scope(ROLE_ADMIN, PANEL_PLANIFICADOR, SCOPE_NONE, [])
+    set_role_scope(ROLE_ADMIN, KIND_PLANIFICACION, SCOPE_NONE, [])
     user = SimpleNamespace(id=1, role=ROLE_ADMIN)
     assert get_user_panel_scope(user, PANEL_PLANIFICADOR)['mode'] == SCOPE_ALL
-    assert user_panel_mode(user, PANEL_PLANIFICADOR) == 'office'
     assert planning_acts_as_office(user) is True
 
 
-def test_jefe_user_forced_to_custody(scope_store):
-    set_role_panel_scope(ROLE_JEFE, PANEL_PLANIFICADOR, SCOPE_ALL, [])
+def test_jefe_planning_forced_custody(scope_store):
+    set_role_scope(ROLE_JEFE, KIND_PLANIFICACION, SCOPE_ALL, [])
     user = SimpleNamespace(id=42, role=ROLE_JEFE)
     assert get_user_panel_scope(user, PANEL_PLANIFICADOR)['mode'] == SCOPE_JEFE
-    assert user_panel_mode(user, PANEL_PLANIFICADOR) == 'custody'
     assert planning_custody_jefe_ids(user) == [42]
-    assert planning_acts_as_office(user) is False
 
 
-def test_custom_role_all_is_office(scope_store):
-    set_role_panel_scope('director_rrhh', PANEL_PLANIFICADOR, SCOPE_ALL, [])
-    user = SimpleNamespace(id=10, role='director_rrhh')
-    assert user_panel_mode(user, PANEL_PLANIFICADOR) == 'office'
-    assert planning_acts_as_office(user) is True
-    assert planning_custody_jefe_ids(user) == []
+def test_jefe_can_have_office_auditoria(scope_store):
+    set_role_scope(ROLE_JEFE, KIND_AUDITORIA, SCOPE_ALL, [])
+    user = SimpleNamespace(id=42, role=ROLE_JEFE)
+    assert user_panel_mode(user, PANEL_AUDITORIA_FICHAJES) == 'office'
+    assert user_panel_mode(user, PANEL_MAPA) == 'office'
 
 
-def test_custom_role_jefes_custody(scope_store):
-    set_role_panel_scope('coord', PANEL_PLANIFICADOR, SCOPE_JEFES, [5, 7])
-    user = SimpleNamespace(id=99, role='coord')
-    assert user_panel_mode(user, PANEL_PLANIFICADOR) == 'custody'
-    assert user_custody_jefe_ids(user, PANEL_PLANIFICADOR) == [5, 7]
+def test_copy_all_kinds(scope_store):
+    set_role_scope(ROLE_LABORAL, KIND_PLANIFICACION, SCOPE_JEFES, [4])
+    set_role_scope(ROLE_LABORAL, KIND_AUDITORIA, SCOPE_ALL, [])
+    set_role_scope(ROLE_LABORAL, KIND_SOLICITUDES, SCOPE_ALL, [])
+    copy_role_panel_scopes(ROLE_LABORAL, 'nuevo')
+    assert get_role_scope('nuevo', KIND_PLANIFICACION)['jefe_ids'] == [4]
+    assert get_role_scope('nuevo', KIND_AUDITORIA)['mode'] == SCOPE_ALL
 
 
-def test_custom_role_none(scope_store):
-    user = SimpleNamespace(id=1, role='sin_alcance')
-    assert user_panel_mode(user, PANEL_PLANIFICADOR) == 'none'
-    assert planning_acts_as_office(user) is False
+def test_parse_all_scopes_from_form():
+    class FakeForm(dict):
+        def getlist(self, key):
+            val = self.get(key, [])
+            if isinstance(val, list):
+                return val
+            return [val]
 
-
-def test_panels_are_independent(scope_store):
-    set_role_panel_scope('coord', PANEL_PLANIFICADOR, SCOPE_ALL, [])
-    set_role_panel_scope('coord', PANEL_TABLERO, SCOPE_JEFES, [2])
-    set_role_panel_scope('coord', PANEL_AUDITORIA_FICHAJES, SCOPE_JEFE, [])
-    user = SimpleNamespace(id=1, role='coord')
-    assert user_panel_mode(user, PANEL_PLANIFICADOR) == 'office'
-    assert user_panel_mode(user, PANEL_TABLERO) == 'custody'
-    assert user_custody_jefe_ids(user, PANEL_TABLERO) == [2]
-    assert user_panel_mode(user, PANEL_AUDITORIA_FICHAJES) == 'custody'
-    assert user_custody_jefe_ids(user, PANEL_AUDITORIA_FICHAJES) == [1]
-
-
-def test_rrhh_default_auditoria_is_all(scope_store):
-    assert default_scope_for_role(ROLE_RRHH, PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
-    assert get_role_panel_scope(ROLE_RRHH, PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
-
-
-def test_copy_role_panel_scopes(scope_store):
-    set_role_panel_scope(ROLE_LABORAL, PANEL_PLANIFICADOR, SCOPE_ALL, [])
-    set_role_panel_scope(ROLE_LABORAL, PANEL_TABLERO, SCOPE_JEFES, [4])
-    set_role_panel_scope(ROLE_LABORAL, PANEL_AUDITORIA_FICHAJES, SCOPE_ALL, [])
-    copy_role_panel_scopes(ROLE_LABORAL, 'nuevo_rol')
-    assert get_role_panel_scope('nuevo_rol', PANEL_PLANIFICADOR)['mode'] == SCOPE_ALL
-    assert get_role_panel_scope('nuevo_rol', PANEL_TABLERO) == {
-        'mode': SCOPE_JEFES,
-        'jefe_ids': [4],
-    }
-    assert get_role_panel_scope('nuevo_rol', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
+    form = FakeForm({
+        'scope__planificacion__mode': 'jefes',
+        'scope__planificacion__jefe_ids': ['3', '1'],
+        'scope__auditoria_fichajes__mode': 'all',
+        'scope__solicitudes__mode': 'none',
+    })
+    parsed = parse_all_scopes_from_form(form)
+    assert parsed[KIND_PLANIFICACION][0] == SCOPE_JEFES
+    assert parsed[KIND_PLANIFICACION][1] == [3, 1]
+    assert parsed[KIND_AUDITORIA][0] == SCOPE_ALL
+    assert parsed[KIND_SOLICITUDES][0] == SCOPE_NONE
 
 
 def test_clear_role_panel_scopes(scope_store, monkeypatch):
-    set_role_panel_scope('tmp_rol', PANEL_PLANIFICADOR, SCOPE_ALL, [])
-    set_role_panel_scope('tmp_rol', PANEL_TABLERO, SCOPE_JEFE, [])
-    set_role_panel_scope('tmp_rol', PANEL_AUDITORIA_FICHAJES, SCOPE_ALL, [])
+    set_role_obra_scope('tmp_rol', SCOPE_ALL, [])
 
     class FakeRow:
         def __init__(self, clave):
@@ -177,33 +159,9 @@ def test_clear_role_panel_scopes(scope_store, monkeypatch):
         def commit(self):
             pass
 
-    monkeypatch.setattr(
-        'app.models.ConfiguracionGlobal', FakeModel, raising=False
-    )
-    # clear_role_panel_scopes does: from app.models import ConfiguracionGlobal
     import app.models as models_mod
     monkeypatch.setattr(models_mod, 'ConfiguracionGlobal', FakeModel)
     monkeypatch.setattr('app.db.session', FakeSession())
 
     clear_role_panel_scopes('tmp_rol')
-    assert get_role_panel_scope('tmp_rol', PANEL_PLANIFICADOR)['mode'] == SCOPE_NONE
-    assert get_role_panel_scope('tmp_rol', PANEL_TABLERO)['mode'] == SCOPE_NONE
-    # Auditoría: custom roles default to all (oficina) even sin config guardada
-    assert get_role_panel_scope('tmp_rol', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
-
-
-def test_parse_scope_from_form():
-    class FakeForm(dict):
-        def getlist(self, key):
-            val = self.get(key, [])
-            if isinstance(val, list):
-                return val
-            return [val]
-
-    form = FakeForm({
-        'scope__planificador__mode': 'jefes',
-        'scope__planificador__jefe_ids': ['10', 'x', '12'],
-    })
-    mode, ids = parse_scope_from_form(form, PANEL_PLANIFICADOR)
-    assert mode == SCOPE_JEFES
-    assert ids == [10, 12]
+    assert get_role_obra_scope('tmp_rol')['mode'] == SCOPE_NONE

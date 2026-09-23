@@ -43,7 +43,7 @@
           </thead>
           <tbody>
             {% for rating in ratings %}
-            {% set can_manage = (current_user.role == 'admin') or (rating.created_by_id == current_user.id) %}
+            {% set can_manage = can_write_valoraciones|default(false) and ((rating.created_by_id == current_user.id) or valoraciones_office|default(false)) %}
             <tr class="{% if not rating.is_active %}is-archived{% endif %}" data-rating-id="{{ rating.id }}">
               <td class="text-muted small text-nowrap">
                 {{ rating.created_at|format_dt }}

@@ -26,7 +26,8 @@ def test_can_write_assignments_prefers_asignaciones_module(monkeypatch):
     assert can_edit_planning_calendar(user) is True
 
 
-def test_can_write_assignments_falls_back_to_planificador(monkeypatch):
+def test_can_write_assignments_ignores_planificador_w(monkeypatch):
+    """Tablero/planificador W ya no planifican gente: hace falta asignaciones."""
     user = SimpleNamespace(is_authenticated=True, role=ROLE_JEFE)
 
     def fake_can(u, module, action):
@@ -35,7 +36,7 @@ def test_can_write_assignments_falls_back_to_planificador(monkeypatch):
     monkeypatch.setattr(
         'app.services.permission_service.user_can', fake_can
     )
-    assert can_write_assignments(user) is True
+    assert can_write_assignments(user) is False
 
 
 def test_laboral_default_cannot_edit_planning_calendar():

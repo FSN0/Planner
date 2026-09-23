@@ -95,7 +95,8 @@ def test_check_mode_returns_conflict_when_extending_onto_other_obra(actor, worke
          patch('app.services.assignment_service.Obra') as ObraM, \
          patch('app.services.assignment_service.Asignacion') as Asig, \
          patch('app.services.leave_service.user_has_approved_leave', return_value=False), \
-         patch('app.services.tenant_modules.jefes_asignan_directo', return_value=False):
+         patch('app.services.assign_mode_service.user_assigns_direct', return_value=True), \
+         patch('app.services.panel_scope_service.planning_acts_as_office', return_value=True):
         UserM.query.get.return_value = worker
         ObraM.query.get.side_effect = lambda oid: obra_a if oid == obra_a.id else obra_b
         Asig.query.filter_by.return_value = filter_by

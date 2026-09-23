@@ -286,33 +286,63 @@ class Adapter(BaseSyncAdapter):
         text = self._odoo_text(value)
         return text[:10] if text else None
 
-    def _bim_ejecucion_domain(self):
-        """Proyectos en ejecución. El id 6 es el histórico de Soltec; se resuelve por nombre."""
-        state_id = 6
-        try:
-            rows = self.models.execute_kw(
-                self.db_name, self.uid, self.pwd,
-                'bim.project.state', 'search_read',
-                [[('name', 'ilike', 'Ejecuci')]],
-                {'fields': ['id', 'name'], 'limit': 5},
-            )
-            if isinstance(rows, list) and rows:
-                state_id = rows[0]['id']
-        except Exception as exc:
+    def _bim_state_ids_by_keyword(self, *keywords):
+        """Resuelve ids de bim.project.state cuyo name hace ilike a alguno de los keywords."""
+        found = {}
+        for kw in keywords:
+            try:
+                rows = self.models.execute_kw(
+                    self.db_name, self.uid, self.pwd,
+                    'bim.project.state', 'search_read',
+                    [[('name', 'ilike', kw)]],
+                    {'fields': ['id', 'name'], 'limit': 10},
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[Odoo Adapter - Tenant %s] bim.project.state (%s): %s",
+                    self.tenant_id, kw, exc,
+                )
+                continue
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                rid = row.get('id')
+                if rid is None:
+                    continue
+                found[int(rid)] = self._odoo_text(row.get('name'))
+        return found
+
+    def _bim_activos_domain(self):
+        """Proyectos en Ejecución o Garantía (activos en Odoo = planificables aquí)."""
+        # Histórico Soltec: state_id 6 ≈ Ejecución
+        states = self._bim_state_ids_by_keyword('Ejecuci', 'Garant')
+        if not states:
+            states = {6: 'Ejecución'}
             logger.warning(
-                "[Odoo Adapter - Tenant %s] No se pudo resolver bim.project.state: %s",
-                self.tenant_id, exc,
+                "[Odoo Adapter - Tenant %s] Usando state_id=6 (fallback Ejecución)",
+                self.tenant_id,
             )
-        return [['state_id', '=', state_id], ['active', '=', True]]
+        self._bim_state_name_by_id = states
+        ids = list(states.keys())
+        if len(ids) == 1:
+            return [['state_id', '=', ids[0]], ['active', '=', True]]
+        return [['state_id', 'in', ids], ['active', '=', True]]
+
+    def _bim_ejecucion_domain(self):
+        """Compat: dominio de obras activas Odoo (ejecución + garantía)."""
+        return self._bim_activos_domain()
 
     def get_diff_obras(self):
+        from app.services.obra_estado_service import map_odoo_bim_state_name
+
         wanted = [
-            'id', 'name', 'nombre', 'customer_id', 'date_ini',
+            'id', 'name', 'nombre', 'customer_id', 'date_ini', 'state_id',
             'nexecution_manager', 'encargado_obra', 'x_studio_encargado',
         ]
         available = self._odoo_fields_get('bim.project') or {}
         fields = [f for f in wanted if f == 'id' or f in available] or ['id', 'name']
-        domain = self._bim_ejecucion_domain()
+        domain = self._bim_activos_domain()
+        state_names = getattr(self, '_bim_state_name_by_id', {}) or {}
         try:
             odoo_obras = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd,
@@ -354,13 +384,33 @@ class Adapter(BaseSyncAdapter):
             _, jefe_raw = self._m2o_id_name(jefe_field)
             _, enc_raw = self._m2o_id_name(enc_field)
 
+            state_id_raw = obra.get('state_id')
+            state_id = None
+            state_name = ''
+            if isinstance(state_id_raw, (list, tuple)) and state_id_raw:
+                try:
+                    state_id = int(state_id_raw[0])
+                except (TypeError, ValueError):
+                    state_id = None
+                if len(state_id_raw) > 1:
+                    state_name = self._odoo_text(state_id_raw[1])
+            elif state_id_raw not in (None, False):
+                try:
+                    state_id = int(state_id_raw)
+                except (TypeError, ValueError):
+                    state_id = None
+            if not state_name and state_id is not None:
+                state_name = state_names.get(state_id, '')
+            estado_local = map_odoo_bim_state_name(state_name)
+
             parsed_data = {
                 'odoo_id': obra['id'],
                 'codigo': codigo_limpio,
                 'nombre': nombre_limpio,
                 'cliente': cliente_name,
                 'fecha_inicio': self._odoo_date(obra.get('date_ini')),
-                'estado': 'Pendiente',
+                'estado': estado_local,
+                'odoo_state_name': state_name,
                 'jefe_obra_id': jefe_id,
                 'warn_jefe': warn_jefe,
                 'encargado_id': enc_id,
@@ -402,6 +452,8 @@ class Adapter(BaseSyncAdapter):
                 if local_fecha != parsed_data['fecha_inicio']: parsed_data['cambios']['Fecha'] = f"{local_fecha} ➔ {parsed_data['fecha_inicio']}"
                 if local_obra.jefe_obra_id != jefe_id and not warn_jefe: parsed_data['cambios']['Jefe Obra'] = "Actualizado desde Odoo"
                 if local_obra.encargado_id != enc_id and not warn_enc: parsed_data['cambios']['Encargado'] = "Actualizado desde Odoo"
+                if (local_obra.estado or '') != estado_local:
+                    parsed_data['cambios']['Estado'] = f"{local_obra.estado} ➔ {estado_local}"
 
                 ext_ids = local_obra.external_ids or {}
                 if parsed_data['cambios'] or not ext_ids.get('odoo') or warn_jefe or warn_enc:

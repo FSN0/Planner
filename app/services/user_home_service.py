@@ -1,4 +1,4 @@
-"""Destino tras login y enlace «Inicio» según rol y matriz de permisos."""
+"""Destino tras login y enlace «Inicio» según rol, alcance y matriz de permisos."""
 from __future__ import annotations
 
 from datetime import date
@@ -14,6 +14,7 @@ from app.models import (
 )
 
 # Preferencia al elegir pantalla inicial para roles custom (solo oficina).
+# «inicio» se resuelve aparte (panel según alcance), no como admin.panel a ciegas.
 _OFFICE_HOME_MODULES = (
     'inicio',
     'tablero',
@@ -41,7 +42,6 @@ _OFFICE_HOME_MODULES = (
 )
 
 _MODULE_ENDPOINTS: dict[str, str] = {
-    'inicio': 'admin.panel',
     'tablero': 'admin.obras_detailed',
     'directorio': 'admin.obras_list',
     'planificador': 'admin.planificador_jo',
@@ -100,6 +100,52 @@ def _module_available_for_tenant(module: str) -> bool:
     return True
 
 
+def resolve_inicio_panel_url(user) -> str | None:
+    """Panel de control (Inicio) según rol y alcance de obras.
+
+    - Admin → panel admin (tenant)
+    - Jefe / custodía → panel jefe (sus obras)
+    - Laboral / RRHH → panel laboral
+    - Custom: custodía → jefe; oficina con visión de obras/solicitudes → admin;
+      resto → laboral
+    """
+    from app.services.permission_service import user_can
+    from app.services.panel_scope_service import (
+        PANEL_TABLERO,
+        planning_acts_as_office,
+        user_panel_mode,
+    )
+
+    if not user:
+        return None
+    role = getattr(user, 'role', None)
+    if role == ROLE_OPERARIO:
+        return None
+    if not user_can(user, 'inicio', 'r'):
+        return None
+
+    if role == ROLE_ADMIN:
+        return url_for('admin.panel')
+    if role == ROLE_JEFE:
+        return url_for('jefe.panel')
+    if role in (ROLE_LABORAL, ROLE_RRHH):
+        return url_for('admin.panel_laboral')
+
+    mode = user_panel_mode(user, PANEL_TABLERO)
+    if mode == 'custody':
+        return url_for('jefe.panel')
+    if planning_acts_as_office(user) or mode == 'office':
+        if (
+            user_can(user, 'tablero', 'r')
+            or user_can(user, 'directorio', 'r')
+            or user_can(user, 'planificador', 'r')
+            or user_can(user, 'solicitudes', 'r')
+        ):
+            return url_for('admin.panel')
+        return url_for('admin.panel_laboral')
+    return url_for('admin.panel_laboral')
+
+
 def _office_home_for_custom_role(user) -> str | None:
     from app.services.permission_service import user_can
 
@@ -109,6 +155,8 @@ def _office_home_for_custom_role(user) -> str | None:
             continue
         if not user_can(user, module, 'r'):
             continue
+        if module == 'inicio':
+            return resolve_inicio_panel_url(user)
         endpoint = _MODULE_ENDPOINTS.get(module)
         if not endpoint:
             continue
@@ -119,7 +167,7 @@ def _office_home_for_custom_role(user) -> str | None:
 
 
 def home_url_for_user(user) -> str | None:
-    """URL de entrada tras login. None si el perfil no tiene ningún módulo."""
+    """URL de entrada tras login / menú Inicio. None si el perfil no tiene módulo."""
     if not user:
         return None
 
@@ -139,9 +187,12 @@ def home_url_for_user(user) -> str | None:
             pass
         return url_for('admin.panel')
     if role == ROLE_JEFE:
-        return url_for('jefe.obras_detailed', selected_date=date.today())
+        # Panel acotado a sus obras (el tablero sigue en el menú)
+        return resolve_inicio_panel_url(user) or url_for(
+            'jefe.obras_detailed', selected_date=date.today()
+        )
     if role in (ROLE_LABORAL, ROLE_RRHH):
-        return url_for('admin.panel_laboral')
+        return resolve_inicio_panel_url(user) or url_for('admin.panel_laboral')
     if role == ROLE_OPERARIO:
         return destino_portal_operario(user)
 

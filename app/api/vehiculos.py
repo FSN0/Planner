@@ -5,11 +5,10 @@ from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 
 from app import db
-from app.models import AsignacionVehiculo, Vehiculo, Festivo, ROLE_ADMIN, ROLE_JEFE
-from app.decorators import roles_required
+from app.models import AsignacionVehiculo, Vehiculo, Festivo
 from app.services.i18n_service import translate
 from app.services.leave_service import user_has_approved_leave
-from app.services.permission_service import is_laboral, user_can
+from app.services.permission_service import can_write_vehicles, can_plan_fleet, user_can
 from app.services.vehicle_assignment_service import process_vehicle_assignment_action
 from app.utils.timezone_utils import today_local
 
@@ -20,6 +19,8 @@ vehiculos_api = Blueprint('vehiculos_api', __name__)
 @login_required
 def api_list_vehicles():
     """Listado select2: {id, text: 'matricula — nombre'}."""
+    if not user_can(current_user, 'vehiculos', 'r') and not can_plan_fleet(current_user):
+        return jsonify({'results': []}), 403
     q = (request.args.get('q') or '').strip().lower()
     start_str = (request.args.get('start') or '').strip()
     end_str = (request.args.get('end') or '').strip()
@@ -74,14 +75,11 @@ def api_list_vehicles():
 
 @vehiculos_api.route('/v6/planificador/vehicle-action', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN, ROLE_JEFE)
 def api_planificador_vehicle_action():
-    if is_laboral(current_user):
-        return jsonify({'success': False, 'error': translate('Perfil laboral sin permisos de edición.')}), 403
-    if not user_can(current_user, 'vehiculos', 'w') and not user_can(current_user, 'planificador', 'w'):
+    if not can_plan_fleet(current_user):
         return jsonify({
             'success': False,
-            'error': translate('No tienes permisos de escritura para asignar vehículos.'),
+            'error': translate('No tienes permisos para asignar vehículos.'),
             'permission_denied': True,
         }), 403
     data = request.get_json() or {}

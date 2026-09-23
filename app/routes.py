@@ -4,7 +4,6 @@ from datetime import date
 from flask import Blueprint, redirect, url_for, request, flash, g
 from flask_login import login_required, current_user, logout_user
 from app import db
-from app.models import ROLE_OPERARIO, ROLE_RRHH, ROLE_LABORAL
 from app.services.tenant_domain_service import is_marketing_host, normalize_host
 from app.services.i18n_service import translate
 from app.marketing.routes import render_landing
@@ -32,15 +31,6 @@ def dashboard():
     if not current_user.is_authenticated:
         return redirect(url_for('auth.login'))
 
-    if current_user.role == 'jefe_obra':
-        return redirect(url_for('jefe.panel'))
-    if current_user.role == 'admin':
-        return redirect(url_for('admin.panel'))
-    if current_user.role in (ROLE_LABORAL, ROLE_RRHH):
-        return redirect(url_for('admin.panel_laboral'))
-    if current_user.role == ROLE_OPERARIO:
-        from app.services.user_home_service import destino_portal_operario
-        return redirect(destino_portal_operario(current_user))
     from app.services.user_home_service import home_url_for_user
     dest = home_url_for_user(current_user)
     if dest:

@@ -22,7 +22,7 @@
         <a href="{{ url_for('admin.obras_detailed', selected_date=today.strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-primary">
           <i class="fas fa-th-large"></i> {{ _('Tablero') }}
         </a>
-        {% if not jefes_asignan_directo %}
+        {% if not jefe_obra_assigns_direct %}
         <a href="{{ url_for('admin.solicitudes_list') }}" class="btn-admin btn-admin-ghost">
           <i class="fas fa-user-plus"></i> {{ _('Solicitudes') }}
           {% if solicitudes_abiertas %}<span class="badge-soft badge-soft-amber ml-1">{{ solicitudes_abiertas }}</span>{% endif %}
@@ -77,7 +77,7 @@
           <span class="dashboard-kpi-meta">{{ total_obras }} {{ _('totales') }}{% if obras_sin_jefe %} · <span class="text-warning">{{ obras_sin_jefe }} {{ _('sin jefe') }}</span>{% endif %}</span>
         </div>
       </article>
-      {% if not jefes_asignan_directo %}
+      {% if not jefe_obra_assigns_direct %}
       <article class="dashboard-kpi">
         <div class="dashboard-kpi-icon dashboard-kpi-icon--amber"><i class="fas fa-clipboard-list"></i></div>
         <div>
@@ -138,7 +138,7 @@
         </div>
       </section>
 
-      {% if not jefes_asignan_directo %}
+      {% if not jefe_obra_assigns_direct %}
       <section class="admin-panel dashboard-panel">
         <div class="dashboard-panel-head">
           <h2 class="admin-panel-title">{{ _('Solicitudes por estado') }}</h2>
@@ -199,7 +199,7 @@
 
     {# —— Tablas accionables —— #}
     <div class="dashboard-tables-grid">
-      {% if not jefes_asignan_directo %}
+      {% if not jefe_obra_assigns_direct %}
       <section class="admin-panel admin-panel-flush dashboard-panel">
         <div class="dashboard-panel-head dashboard-panel-head--padded">
           <h2 class="admin-panel-title"><i class="fas fa-user-plus text-primary mr-1"></i> {{ _('Solicitudes recientes') }}</h2>

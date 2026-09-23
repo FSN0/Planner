@@ -257,7 +257,7 @@
       · {{ _('odómetro hacia atrás siempre') }}
       · {{ _('desvío') }} +≥ <strong>{{ umbrales_desvio.max_pct if umbrales_desvio else umbral_desvio }}</strong>%
       / −≥ <strong>{{ umbrales_desvio.min_pct if umbrales_desvio else umbral_desvio }}</strong>%
-      {% if current_user.role == 'admin' %}
+      {% if user_can(current_user, 'configuracion', 'r') %}
         · <a href="{{ url_for('admin.configuracion_global') }}">{{ _('Configurar') }}</a>
       {% endif %}
     </p>

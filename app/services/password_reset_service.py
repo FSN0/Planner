@@ -8,7 +8,6 @@ from werkzeug.security import generate_password_hash
 
 from app import db
 from app.models import User
-from app.services.email_service import send_email
 from app.services.i18n_service import translate, normalize_locale, get_locale, DEFAULT_LOCALE
 
 TOKEN_MAX_AGE = 3600  # 1 hora
@@ -81,11 +80,24 @@ def solicitar_reset(email, tenant, reset_url_builder):
         tenant=tenant.nombre,
         url=url,
     )
-    send_ok = send_email(
-        translate('Restablecer contraseña — {tenant}', loc, tenant=tenant.nombre),
-        [user.email],
-        texto,
-        html_body=html,
+    from app.services.notification_dispatch_service import (
+        dispatch_notification,
+        event_allows_send,
+    )
+    if not event_allows_send('password_reset'):
+        raise PasswordResetError(
+            translate(
+                'No se ha podido enviar el correo de recuperación. '
+                'Comprueba la configuración de correo del servidor o contacta con soporte.'
+            )
+        )
+    send_ok = dispatch_notification(
+        'password_reset',
+        subject=translate('Restablecer contraseña — {tenant}', loc, tenant=tenant.nombre),
+        body=texto,
+        html=html,
+        target_user_id=user.id,
+        users=[user],
     )
     if not send_ok:
         raise PasswordResetError(

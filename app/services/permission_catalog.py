@@ -1,7 +1,10 @@
 """Catálogo de módulos de la app (navegación + portales).
 
-Cada módulo se configura por rol en RolePermission (Lectura / Escritura).
-La antigua X (ejecutar) se unifica con Escritura.
+Capas:
+- L/E en paneles reales (entrar / mutar catálogo o cola)
+- Ticks binarios (capacidad: planificar gente/flota, editar pasado)
+- Alcances de obras (planificación / auditoría fichajes / solicitudes) → panel_scope_service
+- Modos directo|solicitud → assign_mode_service
 """
 from __future__ import annotations
 
@@ -13,24 +16,25 @@ PERMISSION_MODULES = (
     ('tablero', 'Tablero de obras', 'Planificación'),
     ('directorio', 'Obras', 'Planificación'),
     ('planificador', 'Planificador', 'Planificación'),
-    ('asignaciones', 'Asignar en calendarios', 'Planificación'),
+    ('asignaciones', 'Planificar gente', 'Planificación'),
+    ('planificar_flota', 'Planificar flota', 'Planificación'),
     ('cuadrante_pasado', 'Editar cuadrante en pasado', 'Planificación'),
     ('reuniones', 'Reuniones / notas', 'Planificación'),
     ('trabajadores', 'Trabajadores (fichas y calendarios)', 'Personal'),
+    ('valoraciones', 'Valoraciones', 'Personal'),
     ('subcontratas', 'Subcontratas', 'Personal'),
-    ('solicitudes', 'Solicitudes', 'Personal'),
+    ('solicitudes', 'Solicitudes de personal', 'Personal'),
+    ('solicitudes_vehiculos', 'Solicitudes de flota', 'Personal'),
     ('ausencias', 'Ausencias', 'Personal'),
-    ('vehiculos', 'Flota', 'Vehículos'),
+    ('vehiculos', 'Flota (catálogo)', 'Vehículos'),
     ('vehiculos_libres', 'Coches libres', 'Vehículos'),
     ('auditoria_vehiculos', 'Auditoría vehículos', 'Vehículos'),
     ('auditoria_fichajes', 'Auditoría fichajes', 'Jornada'),
     ('mapa_fichajes', 'Mapa de fichajes', 'Jornada'),
     ('registro_jornada', 'Registro de jornada', 'Jornada'),
-    # Portal propio (/fichaje): cualquier rol puede tenerlos (p. ej. jefe con su calendario)
     ('operario_fichaje', 'Fichar (portal propio)', 'Portal propio'),
     ('operario_calendario', 'Mi calendario (portal propio)', 'Portal propio'),
     ('operario_ausencias', 'Mis ausencias (portal propio)', 'Portal propio'),
-    # Integraciones: hub + cada integración (permisos independientes entre sí)
     ('integraciones', 'Integraciones (hub)', 'Integraciones'),
     ('sync_odoo', 'Sincronización Odoo', 'Integraciones'),
     ('soltec_alta_odoo', 'Alta Odoo', 'Integraciones'),
@@ -41,14 +45,12 @@ PERMISSION_MODULES = (
     ('logs', 'Logs', 'Sistema'),
 )
 
-# Módulos del portal /fichaje (autogestión). Solo se configuran en el rol Operario.
 PORTAL_JORNADA_MODULES = frozenset({
     'operario_fichaje',
     'operario_calendario',
     'operario_ausencias',
 })
 
-# Compat: paneles detalle usados en código legado
 LEGACY_MODULE_ALIASES = {
     'vehicle_panel': 'vehiculos',
     'worker_panel': 'trabajadores',
@@ -63,24 +65,48 @@ PERMISSION_ROLES = (
     (ROLE_OPERARIO, 'Operario'),
 )
 
-# Defaults = comportamiento histórico. Solo r/w (x ≡ w).
+# Ticks: un solo checkbox en UI (activado = r+w en BD)
+BINARY_TICK_MODULES = frozenset({
+    'asignaciones',
+    'planificar_flota',
+    'cuadrante_pasado',
+})
+
+# Solo lectura en UI (entrar a pantalla; la acción cuelga de otro módulo)
+WRITE_DISABLED_MODULES = frozenset({
+    'inicio',
+    'tablero',
+    'planificador',
+    'mapa_fichajes',
+    'vehiculos_libres',
+    'registro_jornada',
+})
+
+SSO_READ_ONLY_MODULES = frozenset({'soltec_alta_odoo', 'soltec_portal'})
+
+ADMIN_LOCKED_MODULES = frozenset({'configuracion', 'permisos'})
+
+# Defaults históricos adaptados al modelo nuevo
 _DEFAULTS = {
     ROLE_ADMIN: {m: frozenset('rw') for m, _, _ in PERMISSION_MODULES},
     ROLE_JEFE: {
         'inicio': frozenset('r'),
-        'tablero': frozenset('rw'),
+        'tablero': frozenset('r'),
         'directorio': frozenset('r'),
-        'planificador': frozenset('rw'),
-        # Ver fichas + calendarios de cualquiera; W en asignaciones = interactuar.
+        'planificador': frozenset('r'),
         'trabajadores': frozenset('r'),
-        'asignaciones': frozenset('rw'),
+        'asignaciones': frozenset('rw'),       # tick planificar gente
+        'planificar_flota': frozenset('rw'),  # tick planificar coches
         'reuniones': frozenset('rw'),
-        'solicitudes': frozenset('rw'),
+        # Crea vía planificar; no resuelve el buzón de oficina
+        'solicitudes': frozenset('r'),
+        'solicitudes_vehiculos': frozenset('r'),
         'ausencias': frozenset('rw'),
-        'vehiculos': frozenset('rw'),
+        'valoraciones': frozenset('rw'),
+        'vehiculos': frozenset('r'),          # ver catálogo; asignar = planificar_flota
         'vehiculos_libres': frozenset('r'),
+        'subcontratas': frozenset('r'),       # ficha empresa (company_panel)
         'auditoria_fichajes': frozenset('rw'),
-        # Atajos SSO (no requieren hub Integraciones)
         'soltec_alta_odoo': frozenset('r'),
         'soltec_portal': frozenset('r'),
     },
@@ -88,25 +114,37 @@ _DEFAULTS = {
         'inicio': frozenset('r'),
         'ausencias': frozenset('rw'),
         'auditoria_fichajes': frozenset('rw'),
+        'mapa_fichajes': frozenset('r'),
+        'registro_jornada': frozenset('r'),
         'logs': frozenset('rw'),
         'tablero': frozenset('r'),
-        'asignaciones': frozenset('r'),
+        'planificador': frozenset('r'),
+        'solicitudes': frozenset('rw'),
+        'solicitudes_vehiculos': frozenset('rw'),
         'auditoria_vehiculos': frozenset('r'),
         'vehiculos': frozenset('r'),
         'vehiculos_libres': frozenset('r'),
         'trabajadores': frozenset('r'),
+        'valoraciones': frozenset('r'),
+        'directorio': frozenset('r'),
     },
     ROLE_RRHH: {
         'inicio': frozenset('r'),
         'ausencias': frozenset('rw'),
         'auditoria_fichajes': frozenset('rw'),
+        'mapa_fichajes': frozenset('r'),
+        'registro_jornada': frozenset('r'),
         'logs': frozenset('rw'),
         'tablero': frozenset('r'),
-        'asignaciones': frozenset('r'),
+        'planificador': frozenset('r'),
+        'solicitudes': frozenset('rw'),
+        'solicitudes_vehiculos': frozenset('rw'),
         'auditoria_vehiculos': frozenset('r'),
         'vehiculos': frozenset('r'),
         'vehiculos_libres': frozenset('r'),
         'trabajadores': frozenset('r'),
+        'valoraciones': frozenset('r'),
+        'directorio': frozenset('r'),
     },
     ROLE_OPERARIO: {
         'operario_fichaje': frozenset('rw'),
@@ -127,15 +165,10 @@ def _tenant_modulos(tenant=None):
 
 
 def _permission_row_enabled(module: str, tenant=None) -> bool:
-    """
-    False si el extra no está en este espacio: no se enseña ni se pisa al guardar.
-
-    Lo genérico (tablero, gente, flota…) va siempre. Lo a medida (Odoo, Portal
-    Soltec, notas, auditoría de km…) solo si el módulo está activo.
-    """
     from app.services.tenant_modules import (
         has_auditoria_vehiculos,
         has_notas,
+        has_valoraciones,
         is_soltec_tenant,
     )
 
@@ -148,6 +181,8 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
 
     if module == 'reuniones':
         return has_notas(tenant)
+    if module == 'valoraciones':
+        return has_valoraciones(tenant)
     if module == 'auditoria_vehiculos':
         return has_auditoria_vehiculos(tenant)
     if module == 'sync_odoo':
@@ -161,7 +196,6 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
     if module == 'primeros_pasos':
         return has_onboarding
     if module == 'operario_fichaje':
-        # Reloj de fichaje: solo si el espacio tiene el módulo.
         return has_fichaje
     if module == 'operario_calendario':
         return True
@@ -178,7 +212,6 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
 
 
 def visible_permission_modules(tenant=None):
-    """Filas de la matriz que este tenant puede ver y editar."""
     return tuple(
         row for row in PERMISSION_MODULES
         if _permission_row_enabled(row[0], tenant)
@@ -186,11 +219,6 @@ def visible_permission_modules(tenant=None):
 
 
 def modules_for_role(role: str, tenant=None):
-    """
-    Misma lista de módulos para todos los roles: el admin decide qué marcar.
-    Incluye el portal propio (calendario / ausencias / fichar) para poder
-    dárselo también a un jefe u otro perfil de oficina.
-    """
     return visible_permission_modules(tenant)
 
 
@@ -207,13 +235,11 @@ def default_actions(role: str, module: str) -> frozenset:
     module = normalize_module(module)
     role_map = _DEFAULTS.get(role)
     if role_map is None:
-        # Roles custom: plantilla laboral (oficina)
         role_map = _DEFAULTS.get(ROLE_LABORAL) or {}
     return frozenset(role_map.get(module, frozenset()))
 
 
 def default_matrix_rows():
-    """Lista de dicts listos para insertar en RolePermission."""
     rows = []
     try:
         from app.services.role_registry_service import list_roles
@@ -223,42 +249,46 @@ def default_matrix_rows():
     for role, _label in roles:
         for module, _mlabel, _group in PERMISSION_MODULES:
             actions = default_actions(role, module)
+            can_r = 'r' in actions
             can_w = 'w' in actions
+            if module in WRITE_DISABLED_MODULES or module in SSO_READ_ONLY_MODULES:
+                can_w = False
+            if module in BINARY_TICK_MODULES:
+                # Tick on → r+w; off → neither
+                on = can_w or can_r
+                can_r = can_w = on
             rows.append({
                 'role': role,
                 'module': module,
-                'can_read': 'r' in actions,
+                'can_read': can_r,
                 'can_write': can_w,
-                # Columna legada: se mantiene alineada con escritura
                 'can_execute': can_w,
             })
     return rows
 
 
-ADMIN_LOCKED_MODULES = frozenset({'configuracion', 'permisos'})
-
-# Módulos SSO: la escritura no aporta (abrir el enlace = lectura)
-SSO_READ_ONLY_MODULES = frozenset({'soltec_alta_odoo', 'soltec_portal'})
-
 MODULE_WRITE_HINTS = {
-    'planificador': 'Abrir el Gantt con edición (preferible: Asignar en calendarios)',
-    'tablero': 'Arrastrar en kanban (calendarios: Asignar en calendarios)',
-    'asignaciones': 'Crear / mover / quitar bloques en calendario de persona, obra y planificador',
-    'cuadrante_pasado': 'Forzar editar/desasignar plan en días pasados o validados (calendario y auditoría); el libro de fichajes no se borra',
+    'planificador': 'Solo ver el Gantt. Mover gente: tick «Planificar gente»',
+    'tablero': 'Solo ver el kanban. Mover gente: tick «Planificar gente»',
+    'asignaciones': 'Mover gente en Gantt, kanban y calendarios',
+    'planificar_flota': 'Asignar / desasignar coches en el cuadrante',
+    'cuadrante_pasado': 'Forzar cambios en días pasados o validados',
     'reuniones': 'Crear, editar y eliminar notas',
     'trabajadores': 'Alta / editar fichas; reset contraseña y PIN',
-    'vehiculos': 'Asignar y editar flota',
+    'valoraciones': 'Puntuar operarios; editar o resetear valoraciones',
+    'vehiculos': 'Crear / editar vehículos del catálogo',
     'directorio': 'Crear / editar obras',
     'subcontratas': 'Crear / editar empresas',
-    'solicitudes': 'Crear y resolver solicitudes',
+    'solicitudes': 'Resolver solicitudes de personal (crear = planificar en modo solicitud)',
+    'solicitudes_vehiculos': 'Resolver solicitudes de flota',
     'ausencias': 'Crear / aprobar ausencias y conflictos',
-    'auditoria_fichajes': 'Resolver incidencias y sincronizar (el alcance decide qué obras)',
-    'mapa_fichajes': 'Solo consulta: no requiere escritura',
+    'auditoria_fichajes': 'Resolver incidencias y sincronizar',
+    'mapa_fichajes': 'Solo consulta',
     'auditoria_vehiculos': 'Resolver auditoría de flota',
-    'integraciones': 'Acciones del hub (si las hay)',
+    'integraciones': 'Acciones del hub',
     'sync_odoo': 'Preview, sincronizar, guardar configuración',
-    'soltec_alta_odoo': 'No necesario: con Lectura basta para abrir',
-    'soltec_portal': 'No necesario: con Lectura basta para abrir',
+    'soltec_alta_odoo': 'Con Lectura basta para abrir',
+    'soltec_portal': 'Con Lectura basta para abrir',
     'logs': 'Marcar / gestionar avisos',
     'configuracion': 'Guardar ajustes del espacio',
     'permisos': 'Cambiar la matriz de permisos',
@@ -268,16 +298,24 @@ MODULE_WRITE_HINTS = {
 }
 
 MODULE_READ_HINTS = {
-    'asignaciones': 'Ver calendarios de planificación (persona / obra); sin escritura no se puede asignar',
-    'cuadrante_pasado': 'Ver la opción «modificar/borrar aún así» en bloques históricos del calendario y en auditoría',
-    'auditoria_fichajes': 'Ver todas las secciones; el alcance de obras filtra qué fichajes aparecen',
+    'asignaciones': 'Capacidad de planificar gente (tick)',
+    'planificar_flota': 'Capacidad de asignar coches (tick)',
+    'tablero': 'Ver el kanban de obras',
+    'planificador': 'Ver el Gantt',
+    'cuadrante_pasado': 'Permitir tocar el plan en pasado',
+    'trabajadores': 'Ver fichas y calendarios de personal',
+    'valoraciones': 'Ver puntuaciones e historial de valoraciones',
+    'vehiculos': 'Ver el catálogo y calendarios de flota',
+    'solicitudes': 'Ver el buzón de personal (resolver = escritura)',
+    'solicitudes_vehiculos': 'Ver el buzón de flota (resolver = escritura)',
+    'auditoria_fichajes': 'Ver secciones; el alcance filtra filas',
     'integraciones': 'Ver el listado de integraciones',
     'sync_odoo': 'Entrar al centro de sincronización Odoo',
     'soltec_alta_odoo': 'Abrir el panel de altas Odoo',
     'soltec_portal': 'Abrir el portal Soltec',
-    'operario_fichaje': 'Acceso a /fichaje para fichar (requiere módulo de fichaje)',
-    'operario_calendario': 'Ver el calendario propio (asignaciones) en /fichaje',
-    'operario_ausencias': 'Ver y pedir ausencias propias en /fichaje (si el espacio no las gestiona en el ERP)',
+    'operario_fichaje': 'Acceso a /fichaje para fichar',
+    'operario_calendario': 'Ver el calendario propio en /fichaje',
+    'operario_ausencias': 'Ver y pedir ausencias propias en /fichaje',
 }
 
 
@@ -289,7 +327,6 @@ def module_read_hint(module: str) -> str | None:
     return MODULE_READ_HINTS.get(normalize_module(module))
 
 
-# Compat imports antiguos
 MODULE_EXECUTE_HINTS = {}
 
 

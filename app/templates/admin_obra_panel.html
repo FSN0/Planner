@@ -68,7 +68,7 @@
               <span class="entity-meta-item-label">{{ _('Estado') }}</span>
               <span class="entity-meta-item-value">
                 {% set estado_lower = (obra.estado or '')|lower %}
-                {% if 'activ' in estado_lower %}
+                {% if 'activ' in estado_lower or 'curso' in estado_lower or 'garant' in estado_lower %}
                   <span class="entity-status-badge entity-status-badge--obra-activa">{{ _(obra.estado) if obra.estado else '—' }}</span>
                 {% elif 'paus' in estado_lower %}
                   <span class="entity-status-badge entity-status-badge--obra-pausada">{{ _(obra.estado) }}</span>

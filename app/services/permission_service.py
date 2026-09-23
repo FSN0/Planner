@@ -8,7 +8,9 @@ from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH, ROLES_LAB
 from app.services.log_notification_service import LABORAL_LOG_CATEGORIES
 from app.services.permission_catalog import (
     ADMIN_LOCKED_MODULES,
+    BINARY_TICK_MODULES,
     SSO_READ_ONLY_MODULES,
+    WRITE_DISABLED_MODULES,
     default_actions,
     default_matrix_rows,
     module_keys,
@@ -198,7 +200,7 @@ def _ensure_table() -> bool:
 
 
 def ensure_role_permissions(force: bool = False) -> int:
-    """Siembra defaults si vacío; siempre añade módulos nuevos del catálogo."""
+    """Siembra defaults si vacío; añade módulos nuevos; repara suelos históricos."""
     if not _ensure_table():
         return 0
     try:
@@ -229,10 +231,108 @@ def ensure_role_permissions(force: bool = False) -> int:
             continue
         db.session.add(RolePermission(**row))
         created += 1
-    if created:
+
+    upgraded = _apply_historical_permission_floors_once()
+
+    if created or upgraded:
         db.session.commit()
         _clear_perm_cache()
-    return created
+    return created + upgraded
+
+
+# Una sola pasada por tenant: reparar accesos históricos sin pelear
+# con denegaciones posteriores del admin en la matriz.
+_PERMISSION_FLOOR_VERSION = '2'
+_PERMISSION_FLOOR_KEY = 'permission_floor_v'
+
+_HISTORICAL_PERMISSION_FLOORS = {
+    ROLE_JEFE: {
+        'subcontratas': frozenset('r'),  # company_panel
+    },
+    ROLE_LABORAL: {
+        'registro_jornada': frozenset('r'),
+        'valoraciones': frozenset('r'),
+        'directorio': frozenset('r'),
+        'planificador': frozenset('r'),
+        'trabajadores': frozenset('r'),
+        'mapa_fichajes': frozenset('r'),
+        'solicitudes': frozenset('rw'),
+        'solicitudes_vehiculos': frozenset('rw'),
+        'inicio': frozenset('r'),
+        'tablero': frozenset('r'),
+        'logs': frozenset('rw'),
+        'ausencias': frozenset('rw'),
+        'auditoria_fichajes': frozenset('rw'),
+        'auditoria_vehiculos': frozenset('r'),
+        'vehiculos': frozenset('r'),
+        'vehiculos_libres': frozenset('r'),
+    },
+    ROLE_RRHH: {
+        'registro_jornada': frozenset('r'),
+        'valoraciones': frozenset('r'),
+        'directorio': frozenset('r'),
+        'planificador': frozenset('r'),
+        'trabajadores': frozenset('r'),
+        'mapa_fichajes': frozenset('r'),
+        'solicitudes': frozenset('rw'),
+        'solicitudes_vehiculos': frozenset('rw'),
+        'inicio': frozenset('r'),
+        'tablero': frozenset('r'),
+        'logs': frozenset('rw'),
+        'ausencias': frozenset('rw'),
+        'auditoria_fichajes': frozenset('rw'),
+        'auditoria_vehiculos': frozenset('r'),
+        'vehiculos': frozenset('r'),
+        'vehiculos_libres': frozenset('r'),
+    },
+}
+
+
+def _apply_historical_permission_floors_once() -> int:
+    from app.models import ConfiguracionGlobal
+
+    marker = ConfiguracionGlobal.query.filter_by(clave=_PERMISSION_FLOOR_KEY).first()
+    if marker and (marker.valor or '') >= _PERMISSION_FLOOR_VERSION:
+        return 0
+
+    upgraded = 0
+    for role, modules in _HISTORICAL_PERMISSION_FLOORS.items():
+        for module, want in modules.items():
+            row = RolePermission.query.filter_by(role=role, module=module).first()
+            if not row:
+                actions = default_actions(role, module)
+                if not actions and not want:
+                    continue
+                # Fila ausente: crear con el suelo (y el default si aporta más)
+                merge = set(want) | set(actions or ())
+                row = RolePermission(
+                    role=role,
+                    module=module,
+                    can_read='r' in merge,
+                    can_write='w' in merge,
+                    can_execute='w' in merge,
+                )
+                db.session.add(row)
+                upgraded += 1
+                continue
+            changed = False
+            if 'r' in want and not row.can_read:
+                row.can_read = True
+                changed = True
+            if 'w' in want and not row.can_write:
+                row.can_write = True
+                changed = True
+            if changed:
+                if row.can_write:
+                    row.can_execute = True
+                upgraded += 1
+
+    if marker is None:
+        marker = ConfiguracionGlobal(clave=_PERMISSION_FLOOR_KEY, valor=_PERMISSION_FLOOR_VERSION)
+        db.session.add(marker)
+    else:
+        marker.valor = _PERMISSION_FLOOR_VERSION
+    return upgraded
 
 
 def _clear_perm_cache():
@@ -275,22 +375,44 @@ def _actions_for(role: str, module: str) -> frozenset:
 
 
 def can_write_assignments(user) -> bool:
-    """Asignar/mover gente en calendarios (persona, obra, planificador) y flota.
+    """Tick «Planificar gente»: mover personas en cuadrante."""
+    return user_can(user, 'asignaciones', 'w')
 
-    Preferente: escritura en ``asignaciones``. Compat con matrices antiguas:
-    planificador / tablero / trabajadores / vehiculos.
-    """
-    if user_can(user, 'asignaciones', 'w'):
-        return True
-    return any(
-        user_can(user, mod, 'w')
-        for mod in ('planificador', 'tablero', 'trabajadores', 'vehiculos')
-    )
+
+def can_plan_fleet(user) -> bool:
+    """Tick «Planificar flota»: asignar/desasignar coches en cuadrante."""
+    return user_can(user, 'planificar_flota', 'w')
+
+
+def can_write_vehicles(user) -> bool:
+    """Catálogo de flota: crear / editar vehículos."""
+    return user_can(user, 'vehiculos', 'w')
+
+
+def can_resolve_solicitudes_personal(user) -> bool:
+    return user_can(user, 'solicitudes', 'w')
+
+
+def can_resolve_solicitudes_flota(user) -> bool:
+    return user_can(user, 'solicitudes_vehiculos', 'w')
+
+
+def can_view_solicitudes_personal(user) -> bool:
+    return user_can(user, 'solicitudes', 'r')
+
+
+def can_view_solicitudes_flota(user) -> bool:
+    return user_can(user, 'solicitudes_vehiculos', 'r')
 
 
 def can_edit_planning_calendar(user) -> bool:
-    """UI de calendarios de planificación (persona / obra / planificador)."""
+    """UI de calendarios de planificación de gente."""
     return can_write_assignments(user)
+
+
+def can_edit_vehicle_calendar(user) -> bool:
+    """UI de calendarios de flota (asignar coches)."""
+    return can_plan_fleet(user)
 
 
 def can_view_worker_calendar(user, worker_id: int | None = None) -> bool:
@@ -327,7 +449,7 @@ def can_list_recursos_activos(user) -> bool:
         user_can(user, mod, 'r')
         for mod in (
             'trabajadores', 'planificador', 'tablero', 'directorio',
-            'asignaciones', 'vehiculos',
+            'asignaciones', 'vehiculos', 'planificar_flota',
         )
     )
 
@@ -359,6 +481,15 @@ def user_can(user, module: str, action: str) -> bool:
     # Filas antiguas: can_execute sin can_write → contar como escritura
     if action == 'w' and 'w' not in allowed and 'x' in allowed:
         allowed = frozenset(set(allowed) | {'w'})
+    # Tablero / planificador: la escritura efectiva es «Planificar gente»
+    if (
+        action == 'w'
+        and module in ('tablero', 'planificador')
+        and 'w' not in allowed
+    ):
+        asg = _actions_for(role, 'asignaciones')
+        if 'w' in asg or 'x' in asg:
+            return True
     if action not in allowed:
         return False
 
@@ -419,12 +550,20 @@ def save_role_matrix(role: str, form_data, modules=None) -> int:
     updated = 0
     keys = list(modules) if modules is not None else visible_permission_keys()
     for module in keys:
-        can_r = _checkbox_on(form_data, f'perm__{module}__r')
-        can_w = _checkbox_on(form_data, f'perm__{module}__w')
-        if module in SSO_READ_ONLY_MODULES:
-            can_w = False
-        if can_w:
-            can_r = True
+        if module in BINARY_TICK_MODULES:
+            on = (
+                _checkbox_on(form_data, f'perm__{module}__tick')
+                or _checkbox_on(form_data, f'perm__{module}__w')
+                or _checkbox_on(form_data, f'perm__{module}__r')
+            )
+            can_r = can_w = on
+        else:
+            can_r = _checkbox_on(form_data, f'perm__{module}__r')
+            can_w = _checkbox_on(form_data, f'perm__{module}__w')
+            if module in SSO_READ_ONLY_MODULES or module in WRITE_DISABLED_MODULES:
+                can_w = False
+            if can_w:
+                can_r = True
         if role == ROLE_ADMIN and module in ADMIN_LOCKED_MODULES:
             can_r = can_w = True
         row = RolePermission.query.filter_by(role=role, module=module).first()
@@ -433,7 +572,7 @@ def save_role_matrix(role: str, form_data, modules=None) -> int:
             db.session.add(row)
         row.can_read = bool(can_r)
         row.can_write = bool(can_w)
-        row.can_execute = bool(can_w)  # legado alineado con escritura
+        row.can_execute = bool(can_w)
         updated += 1
     db.session.commit()
     _clear_perm_cache()

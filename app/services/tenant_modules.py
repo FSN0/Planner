@@ -95,7 +95,6 @@ def has_portal_ausencias(tenant=None):
 
 # --- Ajustes de tenant (ConfiguracionGlobal), no módulos superadmin ---
 
-CONFIG_JEFES_ASIGNAN_DIRECTO = 'jefes_asignan_directo'
 CONFIG_HORA_CORTE_ACTIVA = 'hora_corte_activa'
 CONFIG_HORA_CORTE_DESTINATARIOS = 'hora_corte_destinatarios'
 CONFIG_CONFORME_JORNADA = 'conforme_jornada_activo'
@@ -110,37 +109,22 @@ def _config_flag(clave, *, default_generic, default_soltec):
     return str(raw).strip().lower() in ('true', '1', 'yes', 'on')
 
 
-def jefes_asignan_directo():
-    """
-    True: el jefe mueve gente/coches en el cuadrante (SaaS genérico).
-    False: el jefe pide y oficina confirma (flujo Soltec).
-    """
-    return _config_flag(
-        CONFIG_JEFES_ASIGNAN_DIRECTO,
-        default_generic=True,
-        default_soltec=False,
-    )
-
-
-def jefe_sin_buzon_solicitudes(user=None):
-    """True si este usuario es jefe y el tenant asigna en el cuadrante (sin buzón)."""
-    from app.models import ROLE_JEFE
-
-    u = user
-    if u is None and has_request_context():
-        try:
-            from flask_login import current_user
-            if getattr(current_user, 'is_authenticated', False):
-                u = current_user
-        except Exception:
-            u = None
-    if not u or getattr(u, 'role', None) != ROLE_JEFE:
-        return False
-    return jefes_asignan_directo()
-
-
 def hora_corte_activa():
-    """Marca ausencias de fichaje y manda el resumen diario al llegar la hora."""
+    """Marca ausencias de fichaje y manda el resumen diario al llegar la hora.
+
+    Fuente de verdad: matriz de correos (evento ``hora_corte_reporte``).
+    Si aún no hay matriz, cae al flag legado / default Soltec.
+    """
+    try:
+        from app.services.notification_catalog import MODE_OFF
+        from app.services.notification_dispatch_service import get_event_settings
+        from app.services.config_service import get_tenant_config
+        from app.services.notification_catalog import CONFIG_MIGRATED
+
+        if get_tenant_config(CONFIG_MIGRATED, default=None):
+            return get_event_settings('hora_corte_reporte')['mode'] != MODE_OFF
+    except Exception:
+        pass
     return _config_flag(
         CONFIG_HORA_CORTE_ACTIVA,
         default_generic=False,

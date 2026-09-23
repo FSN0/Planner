@@ -69,7 +69,7 @@
                     </div>
                     
                     {% set rep = worker.reputation_score %}
-                    {% if tenant_has_valoraciones and rep != 0 %}
+                    {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') and rep != 0 %}
                         <span class="badge {{ 'badge-soft-green' if rep > 0 else 'badge-soft-red' }}" 
                               style="font-size: 0.6rem; padding: 1px 4px;">
                             {{ '+' if rep > 0 }}{{ rep }}
@@ -140,7 +140,7 @@
             {% endfor %}
         {% endif %}
 
-        {% if current_user.role == 'admin' %}
+        {% if user_can(current_user, 'trabajadores', 'w') %}
             <div class="kanban-libres-start{% if free_workers or busy_workers %} kanban-libres-start--shortcut{% endif %}">
                 {% if not free_workers and not busy_workers %}
                 <p class="kanban-libres-start-title">{{ _('Añade personal') }}</p>

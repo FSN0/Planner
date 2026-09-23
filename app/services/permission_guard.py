@@ -19,27 +19,60 @@ _ADMIN_RULES = (
     ('/admin/planificador', 'planificador', 'r', {'POST': 'w'}),
     ('/admin/api/planificador/', 'planificador', 'r', {'POST': 'w'}),
     ('/admin/api/planificador/fichajes-estado', 'planificador', 'r', {}),
+    ('/admin/solicitudes-vehiculo', 'solicitudes_vehiculos', 'r', {'POST': 'w'}),
     ('/admin/solicitudes', 'solicitudes', 'r', {'POST': 'w'}),
     ('/admin/ausencias', 'ausencias', 'r', {'POST': 'w'}),
+    ('/admin/api/rate_worker', 'valoraciones', 'w', {'POST': 'w'}),
+    ('/admin/api/rating/', 'valoraciones', 'w', {'PUT': 'w', 'DELETE': 'w', 'POST': 'w'}),
+    ('/admin/vehiculos/libres', 'vehiculos_libres', 'r', {}),
     ('/admin/vehiculos_libres', 'vehiculos_libres', 'r', {}),
     ('/admin/vehiculos', 'vehiculos', 'r', {'POST': 'w'}),
+    ('/admin/vehicle_panel', 'vehiculos', 'r', {}),
     ('/admin/registro_jornada', 'registro_jornada', 'r', {}),
     ('/admin/registro-jornada', 'registro_jornada', 'r', {}),
     ('/admin/system_logs', 'logs', 'r', {'POST': 'w'}),
     ('/admin/logs', 'logs', 'r', {'POST': 'w'}),
+    # Trabajadores: listado + CRUD / import / accesos
     ('/admin/personal', 'trabajadores', 'r', {'POST': 'w'}),
+    ('/admin/worker_panel', 'trabajadores', 'r', {'POST': 'w'}),
+    ('/admin/worker', 'trabajadores', 'r', {'POST': 'w'}),
+    ('/admin/create_user', 'trabajadores', 'w', {'GET': 'w', 'POST': 'w'}),
+    ('/admin/edit_operario', 'trabajadores', 'w', {'GET': 'w', 'POST': 'w'}),
+    ('/admin/delete_user', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/deactivate_operario', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/approve_operario', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/schedule_status', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/import_users', 'trabajadores', 'w', {'GET': 'w', 'POST': 'w'}),
     ('/admin/reset_password', 'trabajadores', 'w', {'POST': 'w'}),
     ('/admin/reset_pin', 'trabajadores', 'w', {'POST': 'w'}),
     ('/admin/enviar_acceso_fichaje', 'trabajadores', 'w', {'POST': 'w'}),
     ('/admin/enviar_informacion_acceso', 'trabajadores', 'w', {'POST': 'w'}),
+    # Subcontratas
     ('/admin/companies', 'subcontratas', 'r', {'POST': 'w'}),
+    ('/admin/company_panel', 'subcontratas', 'r', {}),
     ('/admin/company', 'subcontratas', 'r', {'POST': 'w'}),
+    ('/admin/create_company', 'subcontratas', 'w', {'GET': 'w', 'POST': 'w'}),
+    ('/admin/import_companies', 'subcontratas', 'w', {'GET': 'w', 'POST': 'w'}),
+    # Directorio obras: listado + CRUD / import / staff / batch
     ('/admin/obras', 'directorio', 'r', {'POST': 'w'}),
+    ('/admin/create_obra', 'directorio', 'w', {'GET': 'w', 'POST': 'w'}),
+    ('/admin/edit_obra', 'directorio', 'w', {'GET': 'w', 'POST': 'w'}),
+    ('/admin/delete_obra', 'directorio', 'w', {'POST': 'w'}),
+    ('/admin/import_obras', 'directorio', 'w', {'GET': 'w', 'POST': 'w'}),
+    ('/admin/buscar_obras', 'directorio', 'r', {}),
+    ('/admin/active_obras', 'directorio', 'r', {}),
+    ('/admin/api/update_obra_staff', 'directorio', 'w', {'POST': 'w'}),
+    ('/admin/api/update_obra_jefe', 'directorio', 'w', {'POST': 'w'}),
+    ('/admin/api/obra/', 'directorio', 'w', {'POST': 'w'}),
+    ('/admin/api/obras/batch_status', 'directorio', 'w', {'POST': 'w'}),
+    ('/admin/api/check_obra_status_impact', 'directorio', 'r', {'POST': 'r'}),
+    ('/admin/api/companies/batch_delete', 'subcontratas', 'w', {'POST': 'w'}),
+    ('/admin/api/users/batch_delete', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/api/users/batch_deactivate', 'trabajadores', 'w', {'POST': 'w'}),
     ('/admin/mapa-fichajes', 'mapa_fichajes', 'r', {}),
     ('/admin/api/mapa-fichajes', 'mapa_fichajes', 'r', {}),
     ('/admin/panel-laboral', 'inicio', 'r', {}),
     ('/admin/panel', 'inicio', 'r', {}),
-    ('/admin/worker', 'trabajadores', 'r', {'POST': 'w'}),
     ('/admin/obra', 'tablero', 'r', {'POST': 'w'}),
     ('/admin/sso/odoo_contactos', 'soltec_alta_odoo', 'r', {}),
 )
@@ -64,6 +97,8 @@ _SYNC_RULES = (
     ('/sync/timeline_dia', 'auditoria_fichajes', 'r', {}),
     # Previews y commits = escritura del centro Odoo
     ('/sync/api/sync-log', 'sync_odoo', 'r', {'POST': 'w'}),
+    ('/sync/api/test-connection', 'sync_odoo', 'w', {'POST': 'w'}),
+    ('/sync/api/config', 'sync_odoo', 'w', {'POST': 'w'}),
     ('/sync/preview', 'sync_odoo', 'w', {'POST': 'w'}),
     ('/sync/commit', 'sync_odoo', 'w', {'POST': 'w'}),
     ('/sync/resolve_conflict', 'sync_odoo', 'w', {'POST': 'w'}),
@@ -144,6 +179,11 @@ def match_request_permission():
     """Si la ruta está en el mapa, (module, action); si no, None."""
     path = request.path or ''
     method = request.method or 'GET'
+    # Valoraciones anidadas bajo /admin/worker/…
+    if path.startswith('/admin/worker/') and path.rstrip('/').endswith('/ratings_history'):
+        return 'valoraciones', 'r'
+    if path.startswith('/admin/worker/') and path.rstrip('/').endswith('/reset_ratings'):
+        return 'valoraciones', 'w'
     # /sync/api/run/<task> → permiso del módulo de ese task (no el hub Odoo entero)
     if path.startswith('/sync/api/run/'):
         task = path[len('/sync/api/run/'):].split('/', 1)[0]
@@ -166,8 +206,20 @@ def path_allows_user(user) -> bool:
     module, action = matched
     if user_can(user, module, action):
         return True
-    # Quien tiene sync_odoo w puede lanzar cualquier sync de módulo
+    # Buzón unificado: personal o flota
+    if module == 'solicitudes' and (
+        user_can(user, 'solicitudes_vehiculos', action)
+    ):
+        return True
+    # Coches libres: módulo propio o lectura de flota
+    if module == 'vehiculos_libres' and user_can(user, 'vehiculos', 'r'):
+        return True
+    # Ficha empresa: listado subcontratas o personal (jefe entra desde chip)
     path = request.path or ''
+    if module == 'subcontratas' and path.startswith('/admin/company_panel'):
+        if user_can(user, 'trabajadores', 'r'):
+            return True
+    # Quien tiene sync_odoo w puede lanzar cualquier sync de módulo
     if action == 'w' and path.startswith('/sync/api/run/') and user_can(user, 'sync_odoo', 'w'):
         return True
     return False
@@ -251,9 +303,18 @@ def enforce_rules(rules, *, redirect_to='main.dashboard', require_auth=True):
     if not matched:
         return None
     module, action = matched
-    if not user_can(current_user, module, action):
-        return _deny(redirect_to, action=action)
-    return None
+    if user_can(current_user, module, action):
+        return None
+    # Misma lógica OR que path_allows_user (buzón / coches libres / ficha empresa)
+    if module == 'solicitudes' and user_can(current_user, 'solicitudes_vehiculos', action):
+        return None
+    if module == 'vehiculos_libres' and user_can(current_user, 'vehiculos', 'r'):
+        return None
+    path = request.path or ''
+    if module == 'subcontratas' and path.startswith('/admin/company_panel'):
+        if user_can(current_user, 'trabajadores', 'r'):
+            return None
+    return _deny(redirect_to, action=action)
 
 
 def enforce_admin_permissions():
