@@ -143,7 +143,7 @@ tr.audit-row-highlight {
         {% with tour_id='fichajes', tour_label=_('Tutorial fichajes'), tour_href=url_for('admin.personal', tour='fichajes', mode='solo') %}
           {% include "components/_tour_cta.html" %}
         {% endwith %}
-        {% if can_resolve_fichajes and current_user.role in ['admin', 'laboral', 'rrhh'] %}
+        {% if can_resolve_fichajes and es_oficina_auditoria %}
         <button type="button" class="btn-admin btn-admin-secondary mr-2" data-tour="audit-corregir-marca" onclick="abrirModalMarcaManual()">
           <i class="fas fa-clock"></i> {{ _('Registrar / corregir marca') }}
         </button>
@@ -417,7 +417,7 @@ tr.audit-row-highlight {
                                             </div>
                                         </div>
                                     </div>
-                                    {% if desvio and desvio.disputa and current_user.role in ['admin', 'laboral', 'rrhh'] %}
+                                    {% if desvio and desvio.disputa and es_oficina_auditoria %}
                                     <div class="mt-2"><span class="badge-soft badge-soft-amber">{{ _('Disputa entre jefes — solo oficina') }}</span></div>
                                     {% endif %}
                                 </td>
@@ -866,7 +866,7 @@ tr.audit-row-highlight {
   {% include 'components/_person_day_timeline_modal.html' %}
 {% endwith %}
 
-{% if can_resolve_fichajes and current_user.role in ['admin', 'laboral', 'rrhh'] %}
+{% if can_resolve_fichajes and es_oficina_auditoria %}
 <div class="modal fade" id="modalMarcaManual" tabindex="-1" role="dialog" aria-hidden="true"
      data-url-list="{{ url_for('sync.listar_marcas_dia') }}"
      data-url-create="{{ url_for('sync.registrar_marca_auditoria') }}"

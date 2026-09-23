@@ -21,6 +21,7 @@ from app.services.panel_scope_service import (
     PANEL_AUDITORIA_FICHAJES,
     registro_fichaje_in_scope,
     registro_fichaje_scope_clause,
+    user_panel_mode,
 )
 from app.services.i18n_service import translate
 
@@ -1045,9 +1046,10 @@ def auditoria_fichajes():
 
         trabajadores_marca = []
         obras_marca = []
-        if can_resolve_fichajes(current_user) and current_user.role in (
-            'admin', ROLE_LABORAL, ROLE_RRHH,
-        ):
+        es_oficina_auditoria = (
+            user_panel_mode(current_user, PANEL_AUDITORIA_FICHAJES) == 'office'
+        )
+        if can_resolve_fichajes(current_user) and es_oficina_auditoria:
             trabajadores_marca = (
                 User.query
                 .filter(
@@ -1082,6 +1084,7 @@ def auditoria_fichajes():
             visible_sections=visible_sections,
             can_resolve=can_resolve_fichajes(current_user),
             can_resolve_fichajes=can_resolve_fichajes(current_user),
+            es_oficina_auditoria=es_oficina_auditoria,
             can_unassign_cuadrante_pasado=can_unassign_cuadrante_pasado(current_user),
             can_sync_fichajes=user_can(current_user, 'auditoria_fichajes', 'w') or user_can(current_user, 'sync_odoo', 'w'),
             trabajadores_marca=trabajadores_marca,
@@ -1445,13 +1448,11 @@ def resolver_fichaje():
     from app.models import RegistroFichaje, Asignacion, Obra
     from datetime import datetime
     
-    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
-        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    if not can_resolve_fichajes(current_user):
+        return jsonify({'success': False, 'error': translate('Resolución deshabilitada para este perfil.')}), 403
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     if not tenant_muestra_auditoria_fichajes():
         return jsonify({'success': False, 'error': translate('Acceso denegado.')}), 403
-    if not can_resolve_fichajes(current_user):
-        return jsonify({'success': False, 'error': translate('Resolución deshabilitada para este perfil.')}), 403
         
     data = request.json
     registro_id = data.get('registro_id')
@@ -1938,13 +1939,11 @@ def reabrir_fichaje():
     from app.utils import register_log
     from app.utils.timezone_utils import utc_now
 
-    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
-        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+    if not can_resolve_fichajes(current_user):
+        return jsonify({'success': False, 'error': translate('Resolución deshabilitada para este perfil.')}), 403
     from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
     if not tenant_muestra_auditoria_fichajes():
         return jsonify({'success': False, 'error': translate('Acceso denegado.')}), 403
-    if not can_resolve_fichajes(current_user):
-        return jsonify({'success': False, 'error': translate('Resolución deshabilitada para este perfil.')}), 403
 
     data = request.get_json(silent=True) or {}
     registro_id = data.get('registro_id')
@@ -2012,8 +2011,8 @@ def reabrir_fichaje():
 
 def _puede_editar_marcas():
     return (
-        current_user.role in ('admin', ROLE_LABORAL, ROLE_RRHH)
-        and can_resolve_fichajes(current_user)
+        can_resolve_fichajes(current_user)
+        and user_panel_mode(current_user, PANEL_AUDITORIA_FICHAJES) == 'office'
     )
 
 
@@ -2807,8 +2806,13 @@ def get_timeline_dia(user_id, fecha_str):
     """Compatibilidad con auditoría de fichajes. Delega en el servicio compartido."""
     from flask import current_app
     from app.services.person_day_timeline_service import build_person_day_timeline
+    from app.services.permission_service import user_can
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
 
-    if current_user.role not in ['admin', 'jefe_obra', ROLE_LABORAL, ROLE_RRHH]:
+    if (
+        not user_can(current_user, 'auditoria_fichajes', 'r')
+        or not tenant_muestra_auditoria_fichajes()
+    ):
         return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
 
     try:

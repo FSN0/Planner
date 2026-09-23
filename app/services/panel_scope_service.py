@@ -32,18 +32,21 @@ def _config_key(panel: str, role: str) -> str:
 
 def default_scope_for_role(role: str, panel: str | None = None) -> dict:
     """Defaults compatibles con el comportamiento histórico por rol built-in."""
-    del panel  # mismos defaults en ambos paneles
     if role == ROLE_ADMIN:
         return {'mode': SCOPE_ALL, 'jefe_ids': []}
     if role == ROLE_JEFE:
         return {'mode': SCOPE_JEFE, 'jefe_ids': []}
     if role in (ROLE_LABORAL, ROLE_RRHH):
         return {'mode': SCOPE_ALL, 'jefe_ids': []}
+    # Roles custom: auditoría por defecto como oficina (todo);
+    # planificador/tablero en none hasta configurar alcance.
+    if panel == PANEL_AUDITORIA_FICHAJES:
+        return {'mode': SCOPE_ALL, 'jefe_ids': []}
     return {'mode': SCOPE_NONE, 'jefe_ids': []}
 
 
-def _normalize_scope(data: dict | None, role: str) -> dict:
-    base = default_scope_for_role(role)
+def _normalize_scope(data: dict | None, role: str, panel: str | None = None) -> dict:
+    base = default_scope_for_role(role, panel)
     if not isinstance(data, dict):
         return base
     mode = (data.get('mode') or base['mode'] or SCOPE_NONE).strip().lower()
@@ -73,7 +76,7 @@ def get_role_panel_scope(role: str, panel: str) -> dict:
         data = json.loads(raw) if isinstance(raw, str) else raw
     except Exception:
         return default_scope_for_role(role, panel)
-    return _normalize_scope(data, role)
+    return _normalize_scope(data, role, panel)
 
 
 def set_role_panel_scope(role: str, panel: str, mode: str, jefe_ids: Iterable[int] | None = None):

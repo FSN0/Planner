@@ -308,6 +308,43 @@ class TestFirmasIndependientes:
         assert r['resolved'] is False
         assert reg.desvio_decision_plan == 'liberar'
 
+    def test_rol_custom_con_alcance_all_ve_como_oficina(
+        self, session, tenant_soltec, desvio_ctx, monkeypatch,
+    ):
+        """Director RRHH custom + alcance todos = mismos desvíos que admin."""
+        from app.services.panel_scope_service import (
+            PANEL_AUDITORIA_FICHAJES,
+            SCOPE_ALL,
+            set_role_panel_scope,
+        )
+
+        store = {}
+
+        def fake_get(key, default=None):
+            return store.get(key, default)
+
+        def fake_set(key, value, **_kwargs):
+            store[key] = value
+
+        monkeypatch.setattr(
+            'app.services.panel_scope_service.get_tenant_config', fake_get
+        )
+        monkeypatch.setattr(
+            'app.services.panel_scope_service.set_tenant_config', fake_set
+        )
+        set_role_panel_scope('director_rrhh', PANEL_AUDITORIA_FICHAJES, SCOPE_ALL, [])
+
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+        director = SimpleNamespace(id=999, role='director_rrhh', name='Dir', lastname='RRHH')
+        reg = _registro_desvio(
+            session, desvio_ctx.operario, desvio_ctx.obra_x, desvio_ctx.obra_y,
+        )
+        assert debe_mostrar_pendiente_a(reg, director) is True
+        assert lados_pendientes_para(reg, director) == {'plan', 'real'}
+        botones = botones_desvio_para(reg, director)
+        assert ACCION_CONFIRMAR_DESVIO in [b['accion'] for b in botones]
+        assert debe_mostrar_pendiente_a(reg, desvio_ctx.admin) is True
+
 
 def test_repartir_secciones_proyecta_espejos():
     from app.services.desvio_fichaje_service import (

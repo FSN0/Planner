@@ -52,6 +52,7 @@ def test_defaults_builtin_roles():
     assert default_scope_for_role(ROLE_LABORAL)['mode'] == SCOPE_ALL
     assert default_scope_for_role(ROLE_RRHH)['mode'] == SCOPE_ALL
     assert default_scope_for_role('director_rrhh')['mode'] == SCOPE_NONE
+    assert default_scope_for_role('director_rrhh', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
 
 
 def test_get_role_falls_back_to_default(scope_store):
@@ -187,7 +188,8 @@ def test_clear_role_panel_scopes(scope_store, monkeypatch):
     clear_role_panel_scopes('tmp_rol')
     assert get_role_panel_scope('tmp_rol', PANEL_PLANIFICADOR)['mode'] == SCOPE_NONE
     assert get_role_panel_scope('tmp_rol', PANEL_TABLERO)['mode'] == SCOPE_NONE
-    assert get_role_panel_scope('tmp_rol', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_NONE
+    # Auditoría: custom roles default to all (oficina) even sin config guardada
+    assert get_role_panel_scope('tmp_rol', PANEL_AUDITORIA_FICHAJES)['mode'] == SCOPE_ALL
 
 
 def test_parse_scope_from_form():

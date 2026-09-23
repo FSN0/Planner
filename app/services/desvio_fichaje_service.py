@@ -52,7 +52,7 @@ _ACCIONES_DESVIO = frozenset({
     ACCION_RECHAZAR_DESVIO,
 })
 
-_ROLES_OFICINA = frozenset({ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH})
+_ROLES_OFICINA_LEGACY = frozenset({ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH})
 
 
 class DesvioFichajeError(Exception):
@@ -132,7 +132,42 @@ def obras_del_jefe(user):
 
 
 def _es_oficina(user):
-    return getattr(user, 'role', None) in _ROLES_OFICINA
+    """
+    Oficina = ve/actúa en ambos lados del desvío (como admin).
+
+    Se decide por alcance de auditoría «todos», no por rol hardcodeado.
+    Así un Director RRHH custom con alcance all ve lo mismo que admin.
+    """
+    if not user:
+        return False
+    if getattr(user, 'role', None) == ROLE_ADMIN:
+        return True
+    try:
+        from app.services.panel_scope_service import (
+            PANEL_AUDITORIA_FICHAJES,
+            user_panel_mode,
+        )
+        return user_panel_mode(user, PANEL_AUDITORIA_FICHAJES) == 'office'
+    except Exception:
+        return getattr(user, 'role', None) in _ROLES_OFICINA_LEGACY
+
+
+def _obras_ids_custodia_auditoria(user):
+    """Obras del alcance de custodia (jefe propio o jefes concretos)."""
+    from app.services.panel_scope_service import (
+        PANEL_AUDITORIA_FICHAJES,
+        user_custody_jefe_ids,
+        user_panel_mode,
+    )
+    if user_panel_mode(user, PANEL_AUDITORIA_FICHAJES) != 'custody':
+        return set()
+    jefe_ids = user_custody_jefe_ids(user, PANEL_AUDITORIA_FICHAJES)
+    if not jefe_ids:
+        return set()
+    return {
+        o.id
+        for o in Obra.query.filter(Obra.jefe_obra_id.in_(jefe_ids)).all()
+    }
 
 
 def lados_visibles_para(registro, user):
@@ -140,9 +175,9 @@ def lados_visibles_para(registro, user):
         return set()
     if _es_oficina(user):
         return {'plan', 'real'}
-    if getattr(user, 'role', None) != ROLE_JEFE:
-        return set()
-    mias = set(obras_del_jefe(user))
+    mias = _obras_ids_custodia_auditoria(user)
+    if not mias and getattr(user, 'role', None) == ROLE_JEFE:
+        mias = set(obras_del_jefe(user))
     lados = set()
     if registro.obra_planificada_id in mias:
         lados.add('plan')
