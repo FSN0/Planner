@@ -98,6 +98,9 @@ def procesar_fichajes_diarios(fecha_str=None):
     """
     Motor central de validación de fichajes.
     Independiente del ERP que use el cliente (Odoo, SAP, etc).
+
+    Devuelve True si procesó; False si otra instancia ya tenía el candado
+    (no marcar sync como hecha en ese caso).
     """
     from app.models import Festivo
 
@@ -106,24 +109,33 @@ def procesar_fichajes_diarios(fecha_str=None):
     fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d').date()
 
     if Festivo.query.filter_by(fecha=fecha_obj).first():
-        return
+        return True
 
-    lock_id = 424242
-    if not db.session.execute(text("SELECT pg_try_advisory_lock(:id)"), {'id': lock_id}).scalar():
-        logger.warning("Sync fichajes omitido: otra instancia ya está en ejecución.")
-        return
+    # Candado por tenant (schema) y transacción: se libera solo con commit/rollback.
+    # Antes era pg_advisory_lock(424242) global → un tenant bloqueaba a todos y,
+    # si la sesión moría sin unlock, el tick verde mentía (sync omitida).
+    got_lock = db.session.execute(
+        text(
+            "SELECT pg_try_advisory_xact_lock("
+            "hashtext(current_schema()::text), :k)"
+        ),
+        {'k': 424242},
+    ).scalar()
+    if not got_lock:
+        schema = db.session.execute(text('SELECT current_schema()')).scalar()
+        logger.warning(
+            "Sync fichajes omitido (%s): otra instancia ya está en ejecución.",
+            schema or '?',
+        )
+        return False
 
     try:
         _procesar_fichajes_diarios_impl(fecha_obj, fecha_str)
         db.session.commit()
+        return True
     except Exception:
         db.session.rollback()
         raise
-    finally:
-        try:
-            db.session.execute(text("SELECT pg_advisory_unlock(:id)"), {'id': lock_id})
-        except Exception:
-            pass
 
 
 def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):

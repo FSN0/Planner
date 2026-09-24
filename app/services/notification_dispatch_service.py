@@ -63,13 +63,24 @@ def _config_to_key(event: str) -> str:
 
 
 def ensure_notif_queue_table():
+    """Crea email_notif_queue en el schema actual del tenant si falta.
+
+    Importante: usar la conexión de la sesión (con search_path del tenant).
+    create() vía db.engine abre otra conexión en public y la cola nunca
+    aparece donde se consulta → UndefinedTable en celery.
+    """
     if has_request_context() and getattr(g, _TABLE_READY, False):
         return True
     try:
         from sqlalchemy import inspect, text
-        insp = inspect(db.engine)
-        if not insp.has_table('email_notif_queue'):
-            EmailNotifQueue.__table__.create(db.engine, checkfirst=True)
+
+        bind = db.session.connection()
+        schema = db.session.execute(text('SELECT current_schema()')).scalar()
+        insp = inspect(bind)
+        if schema and not insp.has_table('email_notif_queue', schema=schema):
+            EmailNotifQueue.__table__.create(bind, checkfirst=True)
+        elif not schema and not insp.has_table('email_notif_queue'):
+            EmailNotifQueue.__table__.create(bind, checkfirst=True)
         if has_request_context():
             setattr(g, _TABLE_READY, True)
         return True

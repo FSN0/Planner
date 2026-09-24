@@ -356,7 +356,21 @@ def run_hook_resource(resource, meta=None):
             run_auto_sync_ausencias(modo=HOOK_MODO)
         elif resource == 'fichajes':
             from app.services.sync_service import procesar_fichajes_diarios
-            procesar_fichajes_diarios()
+            ran = procesar_fichajes_diarios()
+            if ran is False:
+                from app import db
+                from app.utils.timezone_utils import utc_now
+                db.session.add(SyncLog(
+                    fecha=utc_now(),
+                    tipo='Fichajes',
+                    modo=HOOK_MODO,
+                    nuevos=0, actualizados=0, finalizados=0, errores=0,
+                    detalles=f'{detalle} (omitido: candado ocupado)',
+                    estado='parcial',
+                    duracion_ms=int((datetime.now(timezone.utc) - t0).total_seconds() * 1000),
+                    mensaje_error=None,
+                ))
+                return
             SyncConfigService.mark_fichajes_sync_done()
             from app import db
             from app.utils.timezone_utils import utc_now

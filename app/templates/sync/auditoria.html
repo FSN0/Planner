@@ -708,7 +708,7 @@ tr.audit-row-highlight {
                                aria-label="{{ _('Buscar en histórico') }}">
                     </div>
                     <span class="text-muted small" id="historialSearchHint">
-                        {{ _('Las resoluciones recientes salen primero. Busca en servidor si no aparece.') }}
+                        {{ _('Hoy primero; dentro del día, las resoluciones salen antes. Busca en servidor si no aparece.') }}
                     </span>
                 </div>
                 <div class="audit-table-wrap">
@@ -1253,7 +1253,7 @@ $(document).ready(function() {
             if (hint && seccion === 'historial') {
                 hint.textContent = q
                     ? ({{ _('Resultados')|tojson }} + ': ' + count)
-                    : {{ _('Las resoluciones recientes salen primero. Busca en servidor si no aparece.')|tojson }};
+                    : {{ _('Hoy primero; dentro del día, las resoluciones salen antes. Busca en servidor si no aparece.')|tojson }};
             }
             if (onDone) onDone({ empty: count === 0, count: count });
         })

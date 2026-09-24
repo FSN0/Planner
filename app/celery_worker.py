@@ -272,25 +272,39 @@ def fichajes_en_vivo():
         def _run_for_tenant(tenant_data):
             t0 = time.time()
             had_error = False
+            skipped = False
             err_msg = None
             app.logger.info(f">>> INICIANDO SYNC DE FICHAJES EN VIVO ({tenant_data['subdominio']})")
             try:
-                procesar_fichajes_diarios()
-                SyncConfigService.mark_fichajes_sync_done()
-                app.logger.info(">>> Sincronización en vivo cruzada correctamente.")
+                ran = procesar_fichajes_diarios()
+                if ran is False:
+                    skipped = True
+                    app.logger.warning(
+                        ">>> Sync fichajes omitida (candado ocupado) en %s — no se marca como hecha.",
+                        tenant_data['subdominio'],
+                    )
+                else:
+                    SyncConfigService.mark_fichajes_sync_done()
+                    app.logger.info(">>> Sincronización en vivo cruzada correctamente.")
             except Exception as e:
                 had_error = True
                 err_msg = str(e)
                 app.logger.error(f"!!! Error cruzando fichajes en vivo: {e}")
             finally:
                 duracion = int((time.time() - t0) * 1000)
+                estado = 'error' if had_error else ('parcial' if skipped else 'ok')
+                detalle = (
+                    'Sincronización omitida: otra instancia en curso.'
+                    if skipped
+                    else 'Sincronización automática de fichajes del día.'
+                )
                 db.session.add(SyncLog(
                     fecha=utc_now(),
                     tipo='Fichajes',
                     modo='Automático',
                     nuevos=0, actualizados=0, finalizados=0, errores=1 if had_error else 0,
-                    detalles='Sincronización automática de fichajes del día.',
-                    estado='error' if had_error else 'ok',
+                    detalles=detalle,
+                    estado=estado,
                     duracion_ms=duracion,
                     mensaje_error=err_msg,
                 ))

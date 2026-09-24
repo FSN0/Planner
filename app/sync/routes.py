@@ -1132,7 +1132,7 @@ def _auditoria_visible_para_jefe(registro):
 
 
 def _historial_order_by():
-    """Decisiones de auditoría primero; luego por hora de resolución (no por día laboral)."""
+    """Día laboral reciente primero; dentro del día, decisiones antes que Correcto."""
     from sqlalchemy import case
 
     prio = case(
@@ -1144,10 +1144,10 @@ def _historial_order_by():
         else_=1,
     )
     return (
+        RegistroFichaje.fecha.desc(),
         prio.asc(),
         has_aud.asc(),
         RegistroFichaje.fecha_auditoria.desc(),
-        RegistroFichaje.fecha.desc(),
         RegistroFichaje.id.desc(),
     )
 
