@@ -237,40 +237,8 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             ))
             db.session.flush()
 
-    from app.services.inercia_service import usuarios_esperados_sin_hecho
-    for uid, oid in usuarios_esperados_sin_hecho(fecha_obj).items():
-        registro = RegistroFichaje.query.filter_by(
-            user_id=uid,
-            fecha=fecha_obj,
-            obra_planificada_id=oid,
-        ).first()
-        if registro:
-            continue
-        ya_en_obra = RegistroFichaje.query.filter(
-            RegistroFichaje.user_id == uid,
-            RegistroFichaje.fecha == fecha_obj,
-            RegistroFichaje.obra_real_id == oid,
-        ).first()
-        if ya_en_obra:
-            if not ya_en_obra.obra_planificada_id:
-                ya_en_obra.obra_planificada_id = oid
-            continue
-        estado_ini = (
-            'Exento_Ausencia'
-            if user_has_approved_leave(uid, fecha_obj)
-            else 'Sin_Registro'
-        )
-        db.session.add(RegistroFichaje(
-            user_id=uid,
-            fecha=fecha_obj,
-            obra_planificada_id=oid,
-            estado=estado_ini,
-            notas_resolucion=(
-                'Exento: ausencia planificada aprobada (Odoo/manual).'
-                if estado_ini == 'Exento_Ausencia' else None
-            ),
-        ))
-        db.session.flush()
+    # Inercia (casa) NO siembra Sin_Registro/Ausencia: solo clasifica fichajes
+    # reales. Sin asignación firme ese día → no se espera a nadie ahí.
 
     obras_por_usuario_odoo = {}
     for f in fichajes_unicos.values():

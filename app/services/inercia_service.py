@@ -5,6 +5,8 @@
 # Hecho = fila en asignaciones (alguien lo pintó o el fichaje de hoy).
 # Inercia = si el último día laborable estuvo en un tajo y hoy no hay
 # decisión nueva, sigue ahí (hacia adelante, como mucho un mes: se recalcula).
+# Sirve para pintar fantasmas y para aceptar un fichaje en la casa.
+# NO genera ausencias: sin hecho ese día, no se espera a nadie.
 # No se arrastra una asignación de hace semanas. El pasado es solo hecho.
 # No se materializan filas fantasma. Soltar a Libres persiste un corte.
 
@@ -587,20 +589,6 @@ def _hueco_solo_no_laborable(prev, nxt, festivos):
             return False
         d += timedelta(days=1)
     return True
-
-
-def usuarios_esperados_sin_hecho(fecha):
-    """Casa vigente, sin fila de asignación: semilla de hora de corte."""
-    if not es_dia_laborable(fecha):
-        return {}
-    ids = _operario_ids()
-    hechos = set(hechos_en_fecha(ids, fecha).keys())
-    leaves_by_user = _ausencias_aprobadas_por_user(ids, fecha, fecha)
-    return {
-        uid: casa
-        for uid, casa in casas_en_fecha(ids, fecha).items()
-        if uid not in hechos and not _cubre_ausencia_aprobada(leaves_by_user, uid, fecha)
-    }
 
 
 def log_corte_inercia(user_id, fechas, autor_id, obra_id=None):

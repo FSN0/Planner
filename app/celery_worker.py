@@ -255,8 +255,8 @@ def verificar_hora_corte():
 
         try:
             # Todos los tenants activos: con o sin Odoo. Sin ERP el adaptador
-            # local no trae fichajes externos, pero sí siembra Sin_Registro y
-            # consolida ausencias del día anterior.
+            # local no trae fichajes externos, pero sí siembra Sin_Registro
+            # desde asignaciones reales y consolida ausencias del día anterior.
             _for_each_tenant(_run_for_tenant, solo_odoo=False)
         finally:
             _cleanup_db_session()
