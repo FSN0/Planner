@@ -360,7 +360,12 @@ def label_resolucion_real(decision: str | None) -> str:
 
 def _marcar_falta_plan(registro, actor, nota=None):
     """Confirma falta real en la obra del plan (sigue planificado, estado Falta)."""
+    from app.services.inercia_service import cortar_casa
+
     _asegurar_asignacion_plan(registro, actor)
+    # Trazabilidad en cuadrante sí; fantasma al día siguiente no (no estuvo).
+    if registro.user_id and registro.fecha:
+        cortar_casa(registro.user_id, registro.fecha, actor.id if actor else None)
     plan_lbl, real_lbl = _labels_obras(registro)
     registro.estado_antes_resolucion = (
         registro.estado_antes_resolucion
@@ -516,8 +521,11 @@ def aplicar_accion_desvio(registro, accion, user):
     elif accion == ACCION_MANTENER_FALTA:
         # Confirmar falta en el plan: solo cierra el lado plan.
         # El fichaje en Y sigue pendiente (igual que Desasignar).
+        from app.services.inercia_service import cortar_casa
         _marcar_decision_plan(registro, user, DECISION_MANTENER_FALTA)
         _asegurar_asignacion_plan(registro, user)
+        if registro.user_id and registro.fecha:
+            cortar_casa(registro.user_id, registro.fecha, user.id if user else None)
         if desvio_ack_real_hecho(registro):
             _aceptar_entrada_real(registro, user)
             cierre = _marcar_falta_plan(

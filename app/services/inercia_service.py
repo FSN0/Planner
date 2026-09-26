@@ -24,6 +24,14 @@ ESTADO_CONFLICTO = 'Conflicto'
 ESTADO_PARACAIDISTA = 'Paracaidista'
 ESTADO_CAMBIO_TAJO = 'Cambio_Tajo'
 
+# Falta confirmada queda en plan (trazabilidad) pero NO ancla fantasma:
+# ese día no estuvo en la obra.
+_ESTADOS_NO_ANCLA_INERCIA = frozenset({
+    'Falta',
+    'Resuelto_Falta',
+    'Resuelto_Ausencia',
+})
+
 _ESTADOS_OBRA_MUERTA = frozenset({
     'pendiente', 'finalizada', 'cerrada', 'cancelada',
 })
@@ -188,13 +196,38 @@ def _cargar_contexto(user_ids, fecha_inicio, fecha_fin):
     for uid, fecha, oid in asigs:
         asigs_por_dia[(uid, fecha)].append(oid)
 
+    from app.models import RegistroFichaje
+
+    faltas_ancla = {
+        (uid, fecha, oid)
+        for uid, fecha, oid in (
+            db.session.query(
+                RegistroFichaje.user_id,
+                RegistroFichaje.fecha,
+                RegistroFichaje.obra_planificada_id,
+            )
+            .filter(
+                RegistroFichaje.user_id.in_(user_ids),
+                RegistroFichaje.fecha >= lookback_start,
+                RegistroFichaje.fecha <= fecha_fin,
+                RegistroFichaje.estado.in_(_ESTADOS_NO_ANCLA_INERCIA),
+                RegistroFichaje.obra_planificada_id.isnot(None),
+            )
+            .all()
+        )
+        if oid
+    }
+
     anclas_desc = defaultdict(list)
     by_user_dates = defaultdict(set)
     for (uid, fecha) in asigs_por_dia:
         by_user_dates[uid].add(fecha)
     for uid, fechas in by_user_dates.items():
         for dia in sorted(fechas, reverse=True):
-            oids = list(dict.fromkeys(asigs_por_dia[(uid, dia)]))
+            oids = [
+                oid for oid in dict.fromkeys(asigs_por_dia[(uid, dia)])
+                if (uid, dia, oid) not in faltas_ancla
+            ]
             if len(oids) == 1:
                 anclas_desc[uid].append((dia, oids[0]))
 
@@ -265,8 +298,10 @@ def _casa_desde_contexto(user_id, fecha, anclas_desc, cortes_por_user, obras, fe
     previo = _dia_laborable_previo(suelo, festivos)
     if previo is None or ancla_fecha < previo:
         return None
+    # Corte desde `fecha` inclusive: anula anclas de ese día y anteriores
+    # para cualquier jornada >= corte.
     ultimo_corte = _ultimo_corte_hasta(cortes_por_user.get(user_id, []), fecha)
-    if ultimo_corte is not None and ultimo_corte > ancla_fecha:
+    if ultimo_corte is not None and ultimo_corte >= ancla_fecha:
         return None
     obra = obras.get(ancla_obra)
     if not obra_viva_en(obra, fecha):

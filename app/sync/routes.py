@@ -1847,7 +1847,9 @@ def resolver_fichaje():
 
         elif accion == 'confirmar_ausencia':
             # Falta real: sigue planificado con estado visual Falta.
+            # No alimenta fantasma: ese día no estuvo en la obra.
             from app.services.desvio_fichaje_service import ESTADO_FALTA
+            from app.services.inercia_service import cortar_casa
             if registro.obra_planificada_id:
                 existe = Asignacion.query.filter_by(
                     user_id=registro.user_id,
@@ -1862,6 +1864,8 @@ def resolver_fichaje():
                         current_user.id,
                         "Confirmar falta: se mantiene la planificación",
                     )
+            if registro.user_id and registro.fecha:
+                cortar_casa(registro.user_id, registro.fecha, current_user.id)
             registro.estado = ESTADO_FALTA
 
         else:

@@ -403,3 +403,33 @@ def test_inercia_no_pinta_dias_de_vacaciones(
     assert (user_operario.id, manana) not in celdas
     assert user_operario.id not in ids_ocupados_en_fecha(dia, [user_operario.id])
 
+
+def test_falta_confirmada_no_ancla_fantasma(
+    session, tenant_soltec, user_operario, obra_activa,
+):
+    """Asignación por falta confirmada: trazabilidad sí, fantasma al día siguiente no."""
+    from app.models import RegistroFichaje
+
+    _path(session, tenant_soltec)
+    hoy = today_local()
+    dia_falta = _laborable(hoy, -1)
+    dia = _laborable(hoy, 0)
+    manana = _laborable(dia, 1)
+    session.add(Asignacion(
+        user_id=user_operario.id, obra_id=obra_activa.id, fecha=dia_falta,
+        company_id=user_operario.company_id,
+    ))
+    session.add(RegistroFichaje(
+        user_id=user_operario.id,
+        fecha=dia_falta,
+        obra_planificada_id=obra_activa.id,
+        estado='Falta',
+    ))
+    session.commit()
+
+    assert casa_en_fecha(user_operario.id, dia) is None
+    assert casa_en_fecha(user_operario.id, manana) is None
+    celdas = celdas_inercia([user_operario.id], dia, manana)
+    assert (user_operario.id, dia) not in celdas
+    assert (user_operario.id, manana) not in celdas
+
