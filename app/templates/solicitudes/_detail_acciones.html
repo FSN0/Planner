@@ -12,6 +12,9 @@
           {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
           {% else %}<span class="badge-soft badge-soft-gray">{{ est }}</span>
           {% endif %}
+          {% if solicitud.auto_fulfilled and solicitud.estado in ['CUMPLIDA', 'CERRADA_PARCIAL'] %}
+            <span class="badge-soft badge-soft-blue" title="{{ _('Cerrada automáticamente') }}">{{ _('Autocerrada') }}</span>
+          {% endif %}
           {% if cobertura_texto %}
             <span class="text-muted">·</span>
             <span>{{ _('Cobertura') }}: <strong class="text-dark">{{ cobertura_texto }}</strong></span>

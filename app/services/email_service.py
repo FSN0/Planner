@@ -579,10 +579,8 @@ def enviar_super_reporte_diario():
     from app.services.desvio_fichaje_service import consolidar_pendientes_a_ausencia
     from app.services.notification_catalog import (
         MODE_OFF,
-        RECIPIENT_ADMIN,
         RECIPIENT_JEFE,
-        RECIPIENT_LABORAL,
-        RECIPIENT_RRHH,
+        include_role_keys,
     )
     from app.services.notification_dispatch_service import (
         get_event_settings,
@@ -644,7 +642,8 @@ def enviar_super_reporte_diario():
 
     ausencias_hoy = ausencias_ayer
     roles = set(st['recipients'])
-    send_roles_global = roles & {RECIPIENT_ADMIN, RECIPIENT_LABORAL, RECIPIENT_RRHH}
+    office_keys = set(include_role_keys()) - {RECIPIENT_JEFE}
+    send_roles_global = bool(roles & office_keys)
     send_jefes = RECIPIENT_JEFE in roles
 
     admin_users = []

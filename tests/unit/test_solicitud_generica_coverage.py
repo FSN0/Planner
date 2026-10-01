@@ -104,3 +104,104 @@ def test_pct_no_usa_span_calendario_con_finde(monkeypatch):
     wrong = int((10 / 14) * 100)
     assert wrong == 71
     assert cov['pct'] != wrong
+
+
+def test_baseline_no_cuenta_gente_ya_en_obra(monkeypatch):
+    """Con baseline, quien ya estaba al pedir no infla el progreso."""
+    days = [
+        date(2026, 9, 14),
+        date(2026, 9, 15),
+        date(2026, 9, 16),
+        date(2026, 9, 17),
+        date(2026, 9, 18),
+    ]
+    baseline = {d.strftime('%Y-%m-%d'): [101, 102] for d in days}
+    sol = _sol(comentarios=build_comentarios_config(days, baseline_users_by_day=baseline))
+
+    class _A:
+        def __init__(self, user_id, fecha, solicitud_id=None):
+            self.user_id = user_id
+            self.fecha = fecha
+            self.solicitud_id = solicitud_id
+
+    rows = [_A(101, d) for d in days] + [_A(102, d) for d in days]
+
+    class _Q:
+        def filter(self, *a, **k):
+            return self
+
+        def all(self):
+            return rows
+
+    class _Col:
+        def __eq__(self, other):
+            return self
+
+        def in_(self, other):
+            return self
+
+    class _Asig:
+        obra_id = _Col()
+        user_id = _Col()
+        fecha = _Col()
+        solicitud_id = _Col()
+        query = _Q()
+
+    import app.services.solicitud_service as svc
+    monkeypatch.setattr(svc, 'Asignacion', _Asig)
+    cov = compute_generica_coverage(sol)
+    assert cov['has_baseline'] is True
+    assert cov['min_coverage'] == 0
+    assert cov['pct'] == 0
+
+
+def test_baseline_cuenta_nuevos_y_cierra_mental(monkeypatch):
+    days = [
+        date(2026, 9, 14),
+        date(2026, 9, 15),
+        date(2026, 9, 16),
+        date(2026, 9, 17),
+        date(2026, 9, 18),
+    ]
+    baseline = {d.strftime('%Y-%m-%d'): [101] for d in days}
+    sol = _sol(
+        cantidad_solicitada=2,
+        comentarios=build_comentarios_config(days, baseline_users_by_day=baseline),
+    )
+
+    class _A:
+        def __init__(self, user_id, fecha, solicitud_id=None):
+            self.user_id = user_id
+            self.fecha = fecha
+            self.solicitud_id = solicitud_id
+
+    rows = []
+    for d in days:
+        rows.extend([_A(101, d), _A(201, d), _A(202, d)])
+
+    class _Q:
+        def filter(self, *a, **k):
+            return self
+
+        def all(self):
+            return rows
+
+    class _Col:
+        def __eq__(self, other):
+            return self
+
+        def in_(self, other):
+            return self
+
+    class _Asig:
+        obra_id = _Col()
+        user_id = _Col()
+        fecha = _Col()
+        solicitud_id = _Col()
+        query = _Q()
+
+    import app.services.solicitud_service as svc
+    monkeypatch.setattr(svc, 'Asignacion', _Asig)
+    cov = compute_generica_coverage(sol)
+    assert cov['min_coverage'] == 2
+    assert cov['pct'] == 100

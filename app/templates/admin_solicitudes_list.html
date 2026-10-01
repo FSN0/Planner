@@ -346,6 +346,9 @@
                   {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
                   {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
                   {% endif %}
+                  {% if s.auto_fulfilled and est in ['CUMPLIDA', 'CERRADA_PARCIAL'] %}
+                    <span class="badge-soft badge-soft-blue" title="{{ _('Autocerrada') }}">{{ _('Auto') }}</span>
+                  {% endif %}
                 </td>
               </tr>
             {% endfor %}

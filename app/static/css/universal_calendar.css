@@ -510,3 +510,26 @@ body > .select2-container--open {
   left: 0;
   right: 0;
 }
+
+/* Solicitudes detrás de asignaciones reales (no tapan operarios/obras). */
+.univ-calendar-root .fc-event.fc-event-request,
+.layout-admin .fc-event.fc-event-request {
+  z-index: 1 !important;
+  opacity: 0.92;
+}
+.univ-calendar-root .fc-daygrid-event-harness:has(.fc-event-request),
+.layout-admin .fc-daygrid-event-harness:has(.fc-event-request) {
+  z-index: 1 !important;
+}
+.univ-calendar-root .fc-daygrid-event-harness:has(.fc-event-obra),
+.univ-calendar-root .fc-daygrid-event-harness:has(.fc-event-falta),
+.univ-calendar-root .fc-daygrid-event-harness:has(.fc-event-vehiculo),
+.layout-admin .fc-daygrid-event-harness:has(.fc-event-obra),
+.layout-admin .fc-daygrid-event-harness:has(.fc-event-falta),
+.layout-admin .fc-daygrid-event-harness:has(.fc-event-vehiculo) {
+  z-index: 4 !important;
+}
+.univ-calendar-root .fc-daygrid-event-harness:has(.fc-ghost-event),
+.layout-admin .fc-daygrid-event-harness:has(.fc-ghost-event) {
+  z-index: 6 !important;
+}

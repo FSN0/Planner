@@ -13,7 +13,11 @@ from app.services.permission_service import (
     can_list_recursos_activos,
 )
 from app.services.i18n_service import translate
-from app.services.solicitud_service import solicitud_calendar_title, get_solicitud_valid_dates
+from app.services.solicitud_service import (
+    solicitud_calendar_title,
+    get_solicitud_valid_dates,
+    iter_solicitud_calendar_spans,
+)
 from datetime import datetime, timedelta
 import json
 from collections import defaultdict # AÑADIDO PARA LA LÓGICA DE AGRUPACIÓN
@@ -30,6 +34,36 @@ def _obra_label(obra, fallback='Obra desconocida'):
     if getattr(obra, 'codigo', None):
         return f"{obra.codigo} - {obra.nombre}"
     return obra.nombre or fallback
+
+
+def _append_solicitud_pending_events(
+    events, solicitud, *, title, color, start_date, end_date, url=None, extra_props=None,
+):
+    """Pinta solo los tramos pendientes de una solicitud (no el rango original entero)."""
+    if not title:
+        return
+    range_end_inclusive = end_date - timedelta(days=1) if end_date > start_date else end_date
+    props = {"type": "request", "solicitud_id": solicitud.id}
+    if extra_props:
+        props.update(extra_props)
+    for span_start, span_end in iter_solicitud_calendar_spans(solicitud):
+        if span_end < start_date or span_start > range_end_inclusive:
+            continue
+        draw_start = max(span_start, start_date)
+        draw_end = min(span_end, range_end_inclusive)
+        if draw_end < draw_start:
+            continue
+        event = {
+            "title": title,
+            "start": draw_start.strftime("%Y-%m-%d"),
+            "end": (draw_end + timedelta(days=1)).strftime("%Y-%m-%d"),
+            "color": color,
+            "order": 99999,
+            "extendedProps": dict(props),
+        }
+        if url:
+            event["url"] = url
+        events.append(event)
 
 
 def _deny_cal():
@@ -697,29 +731,22 @@ def get_universal_calendar_events():
             accion = getattr(s, 'accion', 'ASIGNAR')
             nom_obra = _obra_label(s.obra, fallback='?')
             title = solicitud_calendar_title(s, nom_obra, view='worker')
-            if not title:
-                continue
-
             color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
-            visual_end = s.fecha_fin
-            if accion == 'DESASIGNAR' and s.comentarios and 'all_obra' in s.comentarios:
-                visual_end = s.obra.fecha_fin if (s.obra and s.obra.fecha_fin) else s.fecha_inicio + timedelta(days=365)
-
-            end_to_draw = min(visual_end, end_date)
-            event = {
-                "title": title,
-                "start": s.fecha_inicio.strftime("%Y-%m-%d"),
-                "end": (end_to_draw + timedelta(days=1)).strftime("%Y-%m-%d"),
-                "color": color,
-                "extendedProps": {
-                    "type": "request",
+            url = None
+            if current_user.role != ROLE_OPERARIO:
+                url = url_for('admin.solicitud_detail', solicitud_id=s.id)
+            _append_solicitud_pending_events(
+                events, s,
+                title=title,
+                color=color,
+                start_date=start_date,
+                end_date=end_date,
+                url=url,
+                extra_props={
                     "solicitud_accion": accion,
                     "solicitud_estado": s.estado,
                 },
-            }
-            if current_user.role != ROLE_OPERARIO:
-                event["url"] = url_for('admin.solicitud_detail', solicitud_id=s.id)
-            events.append(event)
+            )
 
     # =====================================================================
     # 2. CONTEXTO: FICHA DE OBRA
@@ -872,23 +899,15 @@ def get_universal_calendar_events():
             accion = getattr(s, 'accion', 'ASIGNAR')
             url_sol = url_for('admin.solicitud_detail', solicitud_id=s.id)
             title = solicitud_calendar_title(s, _obra_label(s.obra, fallback='?'), view='obra')
-            if not title:
-                continue
-
             color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
-            visual_end = s.fecha_fin
-            if accion == 'DESASIGNAR' and s.comentarios and 'all_obra' in s.comentarios:
-                visual_end = s.obra.fecha_fin if (s.obra and s.obra.fecha_fin) else s.fecha_inicio + timedelta(days=365)
-
-            end_to_draw = min(visual_end, end_date)
-            events.append({
-                "title": title,
-                "start": s.fecha_inicio.strftime("%Y-%m-%d"),
-                "end": (end_to_draw + timedelta(days=1)).strftime("%Y-%m-%d"),
-                "color": color,
-                "url": url_sol, # URL PARA REDIRIGIR AL CLICAR
-                "extendedProps": {"type": "request"}
-            })
+            _append_solicitud_pending_events(
+                events, s,
+                title=title,
+                color=color,
+                start_date=start_date,
+                end_date=end_date,
+                url=url_sol,
+            )
 
     # =====================================================================
     # 3. CONTEXTO: FICHA DE EMPRESA
@@ -989,23 +1008,15 @@ def get_universal_calendar_events():
             url_sol = url_for('admin.solicitud_detail', solicitud_id=s.id)
             obra_txt = _obra_label(s.obra, fallback='?')
             title = solicitud_calendar_title(s, obra_txt, view='empresa')
-            if not title:
-                continue
-
             color = "#dc3545" if accion == 'DESASIGNAR' else "#F59E0B"
-            visual_end = s.fecha_fin
-            if accion == 'DESASIGNAR' and s.comentarios and 'all_obra' in s.comentarios:
-                visual_end = s.obra.fecha_fin if (s.obra and s.obra.fecha_fin) else s.fecha_inicio + timedelta(days=365)
-
-            end_to_draw = min(visual_end, end_date)
-            events.append({
-                "title": title,
-                "start": s.fecha_inicio.strftime("%Y-%m-%d"),
-                "end": (end_to_draw + timedelta(days=1)).strftime("%Y-%m-%d"),
-                "color": color,
-                "url": url_sol, # URL PARA REDIRIGIR AL CLICAR
-                "extendedProps": {"type": "request"}
-            })
+            _append_solicitud_pending_events(
+                events, s,
+                title=title,
+                color=color,
+                start_date=start_date,
+                end_date=end_date,
+                url=url_sol,
+            )
     # =====================================================================
     # 4. CONTEXTO: DETALLE DE SOLICITUD
     # =====================================================================

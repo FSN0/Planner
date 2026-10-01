@@ -281,8 +281,11 @@
 <script src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
 <script>window.PLANIFICADOR_CAN_EDIT = {{ can_edit_planificador|default(false)|tojson }};</script>
 <script>window.PLANIFICADOR_SHOW_FICHAJES = {{ puede_ver_estado_fichaje|default(false)|tojson }};</script>
+<script>
+window.PLANIFICADOR_FESTIVOS = {{ (planificador_festivos|default([]))|tojson }};
+</script>
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260910a"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260929a"></script>
 {% if can_edit_planificador|default(false) %}
 <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260830b"></script>
 {% endif %}

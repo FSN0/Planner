@@ -55,6 +55,20 @@ class CoreAssignmentService:
             )
 
         db.session.flush()
+        try:
+            from app.services.solicitud_service import (
+                reconcile_solicitudes_after_cuadrante_change,
+            )
+            reconcile_solicitudes_after_cuadrante_change(
+                obra_id, user_id, fecha, resolved_by_id=autor_id,
+            )
+        except Exception:
+            # El cuadrante manda: un fallo de solicitudes no debe tumbar la asignación.
+            import logging
+            logging.getLogger(__name__).exception(
+                'Post-asignar reconcile solicitudes user=%s obra=%s fecha=%s',
+                user_id, obra_id, fecha,
+            )
         return nueva
 
     @staticmethod
@@ -85,6 +99,19 @@ class CoreAssignmentService:
             db.session.expunge(asig)
         except Exception:
             pass
+        try:
+            from app.services.solicitud_service import (
+                reconcile_solicitudes_after_cuadrante_change,
+            )
+            reconcile_solicitudes_after_cuadrante_change(
+                obra_id, user_id, fecha, resolved_by_id=autor_id,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'Post-desasignar reconcile solicitudes user=%s obra=%s fecha=%s',
+                user_id, obra_id, fecha,
+            )
         return True
 
     @staticmethod

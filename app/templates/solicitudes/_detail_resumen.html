@@ -98,6 +98,23 @@
             <div class="solicitud-meta-notes">{{ solicitud_notas }}</div>
           </div>
           {% endif %}
+
+          {% if solicitud.auto_fulfilled and solicitud.estado in ['CUMPLIDA', 'CERRADA_PARCIAL'] %}
+          <div class="solicitud-meta-item solicitud-meta-item--full">
+            <label>{{ _('Cierre') }}</label>
+            <div class="solicitud-meta-notes">
+              <span class="badge-soft badge-soft-blue">{{ _('Autocerrada') }}</span>
+              {% if solicitud.estado == 'CERRADA_PARCIAL' %}
+                {{ _('Cerrada parcialmente: ya no quedan días accionables o solo se pudo cubrir el presente/futuro.') }}
+              {% else %}
+                {{ _('Se cumplió sola al cubrirse con asignaciones del cuadrante.') }}
+              {% endif %}
+              {% if auto_cierre_texto %}
+                <span class="text-muted">{{ auto_cierre_texto }}</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
         </div>
 
         {% if solicitud.empleado_id %}

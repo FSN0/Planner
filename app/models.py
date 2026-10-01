@@ -603,11 +603,16 @@ class SyncLog(db.Model):
     finalizados = db.Column(db.Integer, default=0)
     errores = db.Column(db.Integer, default=0) # Registros omitidos o con conflicto
     detalles = db.Column(db.Text, nullable=True)
+    # Resumen estructurado (items, ventana Odoo, create/write_date, etc.)
+    detalle_json = db.Column(JSONB, nullable=True)
+    lanzado_por_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    lanzado_por_label = db.Column(db.String(120), nullable=True)
     estado = db.Column(db.String(20), default='ok')  # ok | parcial | error
     duracion_ms = db.Column(db.Integer, nullable=True)
     mensaje_error = db.Column(db.Text, nullable=True)
     visto = db.Column(db.Boolean, default=False, nullable=False)
     visto_en = db.Column(db.DateTime, nullable=True)
+    lanzado_por = db.relationship('User', foreign_keys=[lanzado_por_id])
     
     
 class RegistroFichaje(db.Model):

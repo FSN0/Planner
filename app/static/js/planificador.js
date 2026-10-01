@@ -253,7 +253,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 map[w.key] = idx;
             });
             orderByGroupWorker[gid] = map;
-            requestLaneByGroup[gid] = list.length;
+            // Carril de solicitudes encima de los operarios (visible, sin taparlos).
+            requestLaneByGroup[gid] = -1;
         });
 
         var updates = [];
@@ -1039,6 +1040,36 @@ document.addEventListener('DOMContentLoaded', function() {
         return bar;
     }
 
+    function planifFestivoSet() {
+        if (planifPointer._festivosSet) return planifPointer._festivosSet;
+        var raw = window.PLANIFICADOR_FESTIVOS || [];
+        var set = {};
+        (raw || []).forEach(function (d) {
+            if (d) set[String(d)] = true;
+        });
+        planifPointer._festivosSet = set;
+        return set;
+    }
+
+    function planifIsNonLaborable(dayMoment) {
+        if (!dayMoment || !dayMoment.isValid()) return true;
+        var wd = dayMoment.day(); // 0=domingo … 6=sábado
+        if (wd === 0 || wd === 6) return true;
+        return !!planifFestivoSet()[dayMoment.format('YYYY-MM-DD')];
+    }
+
+    /** Avanza al siguiente día laborable (lun–vie no festivo). */
+    function planifSnapToLaborable(dayMoment, maxDays) {
+        var m = moment(dayMoment).startOf('day');
+        var limit = typeof maxDays === 'number' ? maxDays : 14;
+        var i = 0;
+        while (i < limit && planifIsNonLaborable(m)) {
+            m.add(1, 'days');
+            i += 1;
+        }
+        return m;
+    }
+
     function planifUpdateGhostBar() {
         var ghosts = collectPlanifGhosts();
         var bar = planifEnsureGhostBar();
@@ -1147,6 +1178,7 @@ document.addEventListener('DOMContentLoaded', function() {
         var anchorStart = moment((props && props.time) || window.AppTimeline.getWindow().start).startOf('day');
         var hoy = moment().startOf('day');
         if (anchorStart.isBefore(hoy)) anchorStart = hoy.clone();
+        anchorStart = planifSnapToLaborable(anchorStart);
         var anchorIdx = planifGroupIndex(anchorGroup);
 
         var ghostIds = [];
@@ -1157,6 +1189,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (gIdx >= groupIds.length) gIdx = groupIds.length - 1;
             var start = anchorStart.clone().add(piece.relStartDays, 'days');
             if (start.isBefore(hoy)) start = hoy.clone();
+            start = planifSnapToLaborable(start);
             var end = start.clone().add(piece.durationDays, 'days');
             var gid = 'ghost_' + stamp + '_' + i;
             window.AppItems.add({
@@ -1195,6 +1228,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         var hoy = moment().startOf('day');
         var queue = [];
+        var skippedWeekend = 0;
         (items || []).forEach(function (g) {
             if (!g || g.group == null) return;
             var w = String(g.worker_id == null ? '' : g.worker_id);
@@ -1203,6 +1237,24 @@ document.addEventListener('DOMContentLoaded', function() {
             var end = moment(g.end).subtract(1, 'days').startOf('day');
             if (!start.isValid() || !end.isValid()) return;
             if (start.isBefore(hoy)) start = hoy.clone();
+            // Sin fines de semana: no mandar rangos que solo caen en sáb/dom/festivo
+            // (pegado con el cursor en finde → «El rango no contiene días laborables»).
+            var spanDays = Math.max(0, end.diff(start, 'days'));
+            start = planifSnapToLaborable(start);
+            end = start.clone().add(spanDays, 'days');
+            // Si el tramo sigue sin laborables (p.ej. solo festivos), saltar
+            var probe = start.clone();
+            var hasLab = false;
+            var guard = 0;
+            while (!probe.isAfter(end) && guard < 40) {
+                if (!planifIsNonLaborable(probe)) { hasLab = true; break; }
+                probe.add(1, 'days');
+                guard += 1;
+            }
+            if (!hasLab) {
+                skippedWeekend += 1;
+                return;
+            }
             if (end.isBefore(start)) return;
             queue.push({
                 worker_id: g.worker_id,
@@ -1215,7 +1267,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 _removeId: opts.removeOnSuccess ? g.id : null,
             });
         });
-        if (!queue.length) return;
+        if (!queue.length) {
+            if (typeof Swal !== 'undefined') {
+                Swal.fire(
+                    t('Error'),
+                    skippedWeekend
+                        ? t('El rango no contiene días laborables válidos.')
+                        : t('No hay asignaciones que confirmar.'),
+                    'error'
+                );
+            }
+            return;
+        }
 
         planifPointer.confirming = true;
         planifUpdateGhostBar();
@@ -1273,8 +1336,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     window.confirmarInerciaDesdePop = function () {
-        if (window.currentSelectedItem && isPlanificadorInercia(window.currentSelectedItem)) {
-            planifConfirmInercia([window.currentSelectedItem]);
+        var item = window.currentSelectedItem;
+        hidePlanificadorOverlays();
+        window.currentSelectedItem = null;
+        if (item && isPlanificadorInercia(item)) {
+            planifConfirmInercia([item]);
         } else {
             planifConfirmInercia();
         }
@@ -1740,6 +1806,11 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         order: function(a, b) {
+            // Solicitudes en su carril arriba; no mezclar con operarios.
+            var aReq = planifIsRequestItem(a);
+            var bReq = planifIsRequestItem(b);
+            if (aReq !== bReq) return aReq ? -1 : 1;
+
             let empA = a.empresa_nombre || "ZZ_Sin_Empresa";
             let empB = b.empresa_nombre || "ZZ_Sin_Empresa";
             
@@ -2349,7 +2420,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.solicitud_id || e.worker_id === 'REQUEST') {
                 base.className = (base.className ? base.className + ' ' : '') + 'solicitud-item';
                 base.subgroup = 'R';
-                base.subgroupOrder = 9999;
+                base.subgroupOrder = -1;
             } else if (planifIsPackableWorker(e.worker_id)) {
                 // Misma altura desde el primer pintado (hecho + fantasma).
                 base.subgroup = 'W' + String(e.worker_id);
@@ -3068,7 +3139,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 current.add(1, 'days');
             }
             if (dates.length === 0) return;
-            
+
+            // Igual que baja definitiva: quitar el panel antes del confirm (si no, se queda colgado).
+            hidePlanificadorOverlays();
+
             // 3. Avisamos visualmente de que le estamos salvando el histórico
             let msjExtra = startDate.isBefore(hoy) 
                 ? `<br><br><small class="text-info"><i class="fas fa-info-circle"></i> ${t('Se conservará el histórico de trabajo desde el')} ${startDate.format('DD/MM')} ${t('hasta ayer.')}</small>` 
@@ -3090,7 +3164,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            document.getElementById('worker-popover').classList.add('d-none');
+            hidePlanificadorOverlays();
 
             let hoyStr = hoy.format('YYYY-MM-DD');
             
@@ -3153,9 +3227,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función auxiliar para no repetir código de borrado
     function lanzarConfirmacionBaja(workerId, obraId, dates, mensajeTexto, notas) {
+        hidePlanificadorOverlays();
         Swal.fire({
             title: t('¿Confirmar Desasignación?'),
-            text: mensajeTexto + ' ' + t('Esta acción es inmediata.'),
+            html: mensajeTexto + ' ' + t('Esta acción es inmediata.'),
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
@@ -3164,8 +3239,9 @@ document.addEventListener('DOMContentLoaded', function() {
             cancelButtonText: t('Cancelar')
         }).then((result) => {
             if (result.isConfirmed) {
-                document.getElementById('worker-popover').classList.add('d-none');
-                
+                hidePlanificadorOverlays();
+                window.currentSelectedItem = null;
+
                 fetch('/api/v6/unassign_worker', { // URL NUEVA UNIFICADA
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrf_token') },
@@ -3179,6 +3255,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(response => response.json())
                 .then(data => {
+                    hidePlanificadorOverlays();
+                    window.currentSelectedItem = null;
                     if (data.success) {
                         Swal.fire(t('Completado'), data.message, 'success');
                         window.loadTimelineData(); 
@@ -3188,6 +3266,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .catch(error => {
                     console.error('Error:', error);
+                    hidePlanificadorOverlays();
                     Swal.fire(t('Error'), t('Fallo de conexión.'), 'error');
                 });
             }

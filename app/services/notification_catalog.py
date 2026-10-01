@@ -65,16 +65,113 @@ CONFIG_MIGRATED = 'notif._matrix_v1'
 CONFIG_HORA_CORTE_FOLDED = 'notif._hora_corte_folded'
 CONFIG_INCLUDE_ALL = '*'
 CONFIG_INCLUDE_NONE = 'none'  # nadie ('' lo traga get_tenant_config como «sin config»)
-# Roles con lista de personas en ajustes (el resto son contextuales)
-INCLUDE_ROLE_KEYS = (
+
+# Destinatarios contextuales (no son un rol de User.role para listar personas)
+CONTEXTUAL_RECIPIENTS = frozenset({
+    RECIPIENT_TRABAJADOR,
+    RECIPIENT_TARGET,
+    RECIPIENT_REQUESTER,
+})
+
+# Roles builtin de oficina (siempre en la matriz; los custom se añaden dinámicamente)
+_OFFICE_BUILTIN_ROLE_KEYS = (
     RECIPIENT_ADMIN,
     RECIPIENT_LABORAL,
     RECIPIENT_RRHH,
     RECIPIENT_JEFE,
 )
+
+# Compat: imports antiguos; preferir include_role_keys()
+INCLUDE_ROLE_KEYS = _OFFICE_BUILTIN_ROLE_KEYS
+
 DEFAULT_DEBOUNCE_MINUTES = 15
 DEFAULT_DIGEST_HOUR = '08:00'
 DEFAULT_HORA_LIMITE_ENTRADA = '08:30'
+
+# Texto de ayuda (tooltip) por evento: qué correo es y cuándo salta.
+EVENT_HELP = {
+    'asignacion': (
+        'Avisa cuando se asigna personal a una obra. '
+        'Si el modo es «Agrupar», junta varios cambios de la misma sesión en un solo correo.'
+    ),
+    'desasignacion': (
+        'Avisa cuando se quita personal de una obra (baja del cuadrante). '
+        'También puede agruparse en sesión.'
+    ),
+    'traslado': (
+        'Avisa cuando se mueve a alguien de una obra a otra en el planificador.'
+    ),
+    'sol_generica': (
+        'Correo al crear una solicitud genérica de personal (sin personas concretas aún).'
+    ),
+    'sol_concreta': (
+        'Correo al crear una solicitud concreta (con trabajadores concretos pedidos).'
+    ),
+    'sol_vehiculo': (
+        'Correo al crear una solicitud de vehículo.'
+    ),
+    'sol_resuelta': (
+        'Avisa cuando una solicitud se aprueba, deniega o cumple. '
+        'Puede ir al jefe, al trabajador afectado y/o a quien la pidió.'
+    ),
+    'desvio_fichaje': (
+        'Alerta cuando alguien ficha en una obra distinta de la planificada ese día '
+        '(desvío plan ≠ real). Suele ir al jefe de la obra del plan y/o de la real.'
+    ),
+    'hora_corte_reporte': (
+        'Informe del día ya cerrado: ausencias sin fichar y desvíos/paracaidistas pendientes. '
+        'Se dispara a la hora límite de entrada. «No enviar» lo apaga por completo.'
+    ),
+    'acceso_pin': (
+        'Correo al propio usuario con el enlace para definir o cambiar el PIN de fichaje en móvil.'
+    ),
+    'acceso_info': (
+        'Correo al usuario con datos de acceso a la aplicación (alta / bienvenida).'
+    ),
+    'password_reset': (
+        'Correo al usuario con el enlace para restablecer la contraseña. Solo off o inmediato.'
+    ),
+    'signup_confirm': (
+        'Correo de confirmación al reservar o confirmar un alta de espacio / cuenta.'
+    ),
+    'tenant_access_link': (
+        'Enlace de acceso al espacio (tenant) para el destinatario indicado.'
+    ),
+    'marketing_contact': (
+        'Aviso interno cuando alguien envía el formulario de contacto de la web pública.'
+    ),
+}
+
+
+def include_role_keys() -> tuple[str, ...]:
+    """Roles con lista de personas en ajustes: builtin de oficina + custom del tenant.
+
+    No incluye operario (el destinatario «trabajador» es contextual al evento).
+    """
+    from app.models import ROLE_OPERARIO
+    from app.services.role_registry_service import list_roles
+
+    seen = set()
+    out = []
+    for key in _OFFICE_BUILTIN_ROLE_KEYS:
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    try:
+        for key, _label in list_roles():
+            if not key or key in seen:
+                continue
+            if key == ROLE_OPERARIO or key in CONTEXTUAL_RECIPIENTS:
+                continue
+            seen.add(key)
+            out.append(key)
+    except Exception:
+        pass
+    return tuple(out)
+
+
+def event_help(key: str) -> str:
+    return EVENT_HELP.get(key or '', '')
 
 
 def include_config_key(role_key: str) -> str:

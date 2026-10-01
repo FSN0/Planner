@@ -208,6 +208,26 @@ def odoo_panel():
     return render_template('sync/odoo_dashboard.html', **ctx)
 
 
+@sync_bp.route('/historial/<int:log_id>')
+@login_required
+def sync_log_detail(log_id):
+    """Vista de trazabilidad de una ejecución del historial de sync."""
+    from app.services.permission_service import user_can
+    from app.services.sync_log_detail_service import detail_view_context
+
+    if not (
+        user_can(current_user, 'sync_odoo', 'r')
+        or user_can(current_user, 'ausencias', 'r')
+    ):
+        flash(translate('No autorizado'), 'danger')
+        return redirect(url_for('sync.odoo_panel'))
+    log = SyncLog.query.get_or_404(log_id)
+    return render_template(
+        'sync/sync_log_detail.html',
+        **detail_view_context(log),
+    )
+
+
 @sync_bp.route('/odoo/hook-key', methods=['POST'])
 @login_required
 @roles_required(ROLE_ADMIN)

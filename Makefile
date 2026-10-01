@@ -3,6 +3,7 @@
 # =============================================================================
 # Uso:
 #   make dev          → Levanta entorno de desarrollo
+#   make ship         → Commit + push (listo para prod-update)
 #   make prod-deploy  → Despliega en producción
 #   make logs         → Ver logs en tiempo real
 #   make help         → Ver todos los comandos disponibles
@@ -12,7 +13,7 @@
         migrate migrate-new backup restore test test-db test-unit test-integration \
         test-ledger test-pwa test-erp test-informe test-pin test-plan test-comercial \
         test-oficina test-onboarding lan-tunnel logs shell db-shell clean init-saas \
-        odoo-creds odoo-creds-prod
+        odoo-creds odoo-creds-prod ship
 
 # Detectar compose file según entorno
 DEV_COMPOSE  = docker-compose.yml
@@ -63,6 +64,48 @@ dev-down: ## Detener entorno de desarrollo
 
 dev-restart: ## Reiniciar solo el contenedor web (rápido)
 	docker compose -f $(DEV_COMPOSE) restart web
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GIT (dev → producción)
+# ─────────────────────────────────────────────────────────────────────────────
+# Un solo comando: stage + commit + push.
+# Mensaje opcional: make ship MSG="arregla X"
+# -c safe.directory=* evita el "dubious ownership" si lanzas make como root
+# en un repo cuyo dueño es otro usuario (típico en WSL).
+GIT = git -c safe.directory=*
+
+ship: ## Commit de TODO lo pendiente y push al remoto (para luego prod-update)
+	@if ! $(GIT) rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		echo "✗ No es un repositorio git"; \
+		exit 1; \
+	fi
+	@status="$$($(GIT) status --porcelain 2>&1)"; \
+	rc=$$?; \
+	if [ $$rc -ne 0 ]; then \
+		echo "✗ git status falló:"; \
+		echo "$$status"; \
+		exit $$rc; \
+	fi; \
+	if [ -n "$$status" ]; then \
+		$(GIT) add -A; \
+		if ! $(GIT) diff --cached --quiet; then \
+			msg="$(MSG)"; \
+			if [ -z "$$msg" ]; then \
+				msg="chore: snapshot desarrollo $$(date +%Y-%m-%d\ %H:%M)"; \
+			fi; \
+			$(GIT) commit -m "$$msg"; \
+			echo "✓ Commit creado"; \
+		else \
+			echo "✓ Nada nuevo que commitear (¿todo ignorado?)"; \
+		fi; \
+	else \
+		echo "✓ Working tree limpio (sin cambios locales)"; \
+	fi
+	@echo "→ Push…"
+	@$(GIT) push -u origin HEAD
+	@echo ""
+	@echo "✓ En internet. En el servidor: make prod-update"
+	@echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PRODUCCIÓN

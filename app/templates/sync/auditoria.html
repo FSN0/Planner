@@ -247,7 +247,7 @@ tr.audit-row-highlight {
                             {% set btns_real = btns | selectattr('lado', 'equalto', 'real') | list %}
                             {% set btns_ambos = btns | selectattr('lado', 'equalto', 'ambos') | list %}
                             <tr id="row-{{ reg.id }}"
-                                class="audit-data-row audit-desvio-main{% if desvio and desvio.mia_plan %} audit-desvio-main--mia-plan{% endif %}{% if desvio and desvio.mia_real %} audit-desvio-main--mia-real{% endif %}"
+                                class="fila-fichaje-auditoria audit-data-row audit-desvio-main{% if desvio and desvio.mia_plan %} audit-desvio-main--mia-plan{% endif %}{% if desvio and desvio.mia_real %} audit-desvio-main--mia-real{% endif %}"
                                 data-desvio-toggle="{{ reg.id }}"
                                 data-user-id="{{ reg.user_id }}"
                                 data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
@@ -255,8 +255,9 @@ tr.audit-row-highlight {
                                 {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %}
                                 data-tour-audit-row
                                 aria-expanded="false"
-                                style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">
+                                style="cursor: pointer;"
+                                title="{{ _('Clic: historial del día. Chevron: expandir resolución.') }}">
+                                <td class="font-weight-bold text-dark audit-desvio-expand" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">
                                     <i class="fas fa-chevron-right audit-desvio-chevron text-muted mr-1" aria-hidden="true"></i>{{ reg.fecha.strftime('%d/%m/%Y') }}
                                 </td>
                                 {{ celda_operario(reg) }}
@@ -271,7 +272,7 @@ tr.audit-row-highlight {
                                 {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
                                 {{ celda_metricas_odoo(reg) }}
                                 {{ celda_notas(reg) }}
-                                <td class="text-right no-row-nav audit-resolve-cell" data-sort-value="" onclick="event.stopPropagation();">
+                                <td class="text-right no-row-nav audit-resolve-cell audit-desvio-expand" data-sort-value="">
                                     <span class="audit-desvio-status" aria-label="{{ _('Estado del desvío') }}">
                                       {% if desvio %}
                                         <span class="audit-desvio-dot {% if desvio.ack_plan %}is-ok{% else %}is-pending{% endif %}"
@@ -280,7 +281,7 @@ tr.audit-row-highlight {
                                               title="{% if desvio.ack_real %}{{ _('Fichaje OK') }}{% else %}{{ _('Fichaje pendiente') }}{% endif %}">F</span>
                                       {% endif %}
                                     </span>
-                                    <span class="text-muted small d-none d-md-inline">{{ _('Clic para expandir') }}</span>
+                                    <span class="text-muted small d-none d-md-inline">{{ _('Expandir') }}</span>
                                 </td>
                             </tr>
                             <tr id="desvio-detail-{{ reg.id }}" class="audit-desvio-detail" hidden>
@@ -995,7 +996,7 @@ tr.audit-row-highlight {
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
-<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260907e"></script>
+<script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260929b"></script>
 <script src="{{ url_for('static', filename='js/auditoria_marcas.js') }}"></script>
 
 <script>
@@ -1934,7 +1935,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.addEventListener('click', function (e) {
         if (e.target.closest('.js-audit-resolve') || e.target.closest('a') || e.target.closest('.no-row-nav')) return;
-        var main = e.target.closest('[data-desvio-toggle]');
+        // Solo chevron / «expandir»: el clic en la fila abre el historial del día.
+        var expandHit = e.target.closest('.audit-desvio-expand');
+        if (!expandHit) return;
+        var main = expandHit.closest('[data-desvio-toggle]');
         if (!main) return;
         e.preventDefault();
         e.stopPropagation();

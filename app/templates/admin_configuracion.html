@@ -521,17 +521,10 @@
               </details>
             </div>
 
-            {% set recipient_opts = [
-              ('admin', _('Admin')),
-              ('laboral', _('Laboral')),
-              ('rrhh', _('RRHH')),
-              ('jefe', _('Jefe obra')),
-              ('trabajador', _('Trabajador')),
-              ('requester', _('Solicitante')),
-              ('target', _('Destinatario')),
-            ] %}
+            {% set recipient_opts = notif_matrix.recipient_opts %}
             {% set target_events = ['acceso_pin','acceso_info','password_reset','signup_confirm','tenant_access_link'] %}
             {% set requester_events = ['sol_resuelta','sol_generica','sol_concreta','sol_vehiculo'] %}
+            {% set office_role_keys = notif_matrix.role_users|map(attribute='key')|list %}
 
             <div class="config-email-groups">
               {% for grp in notif_matrix.groups %}
@@ -544,7 +537,7 @@
                         <th style="width:26%;">{{ _('Evento') }}</th>
                         <th style="width:16%;">{{ _('Modo') }}</th>
                         {% for rk, rl in recipient_opts %}
-                        <th>{{ rl }}</th>
+                        <th>{{ _(rl) }}</th>
                         {% endfor %}
                       </tr>
                     </thead>
@@ -552,12 +545,15 @@
                       {% for ev in grp.events %}
                       <tr {% if ev.key == 'hora_corte_reporte' %}class="table-info"{% endif %}>
                         <td class="font-weight-bold">
-                          {{ _(ev.label) }}
-                          {% if ev.key == 'hora_corte_reporte' %}
-                          <div class="text-muted small font-weight-normal mt-1">
-                            {{ _('Se envía a la hora límite de entrada. Modo «No enviar» lo apaga.') }}
-                          </div>
-                          {% endif %}
+                          <span class="notif-event-label">
+                            {{ _(ev.label) }}
+                            {% if ev.help %}
+                            <span class="notif-event-tip" tabindex="0">
+                              <i class="fas fa-info-circle text-muted" aria-hidden="true"></i>
+                              <span class="notif-event-tip__bubble" role="tooltip">{{ _(ev.help) }}</span>
+                            </span>
+                            {% endif %}
+                          </span>
                         </td>
                         <td>
                           <select name="notif__{{ ev.key }}__mode" class="admin-form-control">
@@ -577,6 +573,8 @@
                           {% elif rk == 'trabajador' and ev.key in ['sol_generica','hora_corte_reporte','marketing_contact'] %}
                             <span class="text-muted">—</span>
                           {% elif rk == 'jefe' and ev.key in target_events + ['marketing_contact'] %}
+                            <span class="text-muted">—</span>
+                          {% elif rk in office_role_keys and rk not in ['admin','laboral','rrhh','jefe'] and ev.key in target_events %}
                             <span class="text-muted">—</span>
                           {% else %}
                             <input type="checkbox" name="notif__{{ ev.key }}__to" value="{{ rk }}"

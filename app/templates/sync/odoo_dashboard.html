@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_features.css') }}?v=20260930a">
 <style>
   .sync-module-result-pre {
     white-space: pre-wrap;
@@ -590,6 +591,7 @@ Content-Type: application/json
 
       <section class="sync-card sync-card--wide">
         <h2 class="sync-section-title mb-3"><i class="fas fa-history"></i> {{ _('Historial de sincronizaciones') }}</h2>
+        <p class="small text-muted mb-2">{{ _('Pulsa una fila para ver el resumen de lo importado, quién la lanzó y las fechas de Odoo.') }}</p>
         <div class="sync-log-table-wrap">
           <table class="sync-log-table">
             <thead>
@@ -609,7 +611,12 @@ Content-Type: application/json
             </thead>
             <tbody>
               {% for log in logs %}
-              <tr data-sync-log-id="{{ log.id }}" class="{% if log.estado == 'error' or (log.errores or 0) > 0 %}sync-log-row--alert{% endif %}">
+              <tr data-sync-log-id="{{ log.id }}"
+                  class="sync-log-row--clickable {% if log.estado == 'error' or (log.errores or 0) > 0 %}sync-log-row--alert{% endif %}"
+                  data-href="{{ url_for('sync.sync_log_detail', log_id=log.id) }}"
+                  tabindex="0"
+                  role="link"
+                  title="{{ _('Ver detalle de esta sincronización') }}">
                 <td class="text-nowrap small">{{ log.fecha|format_dt }}</td>
                 <td><span class="badge-soft">{{ _(log.tipo) }}</span></td>
                 <td class="small">{{ _(log.modo) }}</td>
@@ -630,14 +637,16 @@ Content-Type: application/json
                   {{ det or '—' }}
                   {% endif %}
                 </td>
-                <td class="text-center">
+                <td class="text-center" onclick="event.stopPropagation();">
                   {% if log.estado == 'error' or (log.errores or 0) > 0 %}
                   <button type="button" class="btn-admin btn-admin-ghost btn-admin-sm sync-log-visto-btn"
                           data-log-id="{{ log.id }}" title="{{ _('Marcar como visto') }}">
                     <i class="fas fa-check"></i>
                   </button>
                   {% else %}
-                  —
+                  <a class="sync-log-open-link" href="{{ url_for('sync.sync_log_detail', log_id=log.id) }}" title="{{ _('Abrir detalle') }}">
+                    <i class="fas fa-chevron-right text-muted"></i>
+                  </a>
                   {% endif %}
                 </td>
               </tr>
@@ -1074,6 +1083,25 @@ function dismissSyncLogRow(el) {
 }
 
 document.addEventListener('click', function(e) {
+  if (e.target.closest('.sync-log-visto-btn') || e.target.closest('details') || e.target.closest('a')) {
+    return;
+  }
+  var row = e.target.closest('tr.sync-log-row--clickable[data-href]');
+  if (!row) return;
+  var href = row.getAttribute('data-href');
+  if (href) window.location.href = href;
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  var row = e.target.closest && e.target.closest('tr.sync-log-row--clickable[data-href]');
+  if (!row || e.target !== row) return;
+  e.preventDefault();
+  var href = row.getAttribute('data-href');
+  if (href) window.location.href = href;
+});
+
+document.addEventListener('click', function(e) {
   var btn = e.target.closest('.sync-log-visto-btn');
   if (!btn) return;
   e.preventDefault();
@@ -1091,7 +1119,15 @@ document.addEventListener('click', function(e) {
   .then(function(r) { return r.json(); })
   .then(function(res) {
     if (res.success) {
-      dismissSyncLogRow(btn.closest('[data-sync-log-id]'));
+      var host = btn.closest('.sync-error-item') || btn.closest('tr.sync-log-row--alert');
+      if (host && host.classList.contains('sync-error-item')) {
+        dismissSyncLogRow(host);
+      } else if (host) {
+        host.classList.remove('sync-log-row--alert');
+        btn.remove();
+      } else {
+        dismissSyncLogRow(btn.closest('[data-sync-log-id]'));
+      }
     } else {
       btn.disabled = false;
       Swal.fire({{ _('Error')|tojson }}, res.error || {{ _('No se pudo marcar como visto')|tojson }}, 'error');

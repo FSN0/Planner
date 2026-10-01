@@ -394,6 +394,14 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
                 if existing_row and existing_row.solicitud_id is None:
                     existing_row.solicitud_id = solicitud_id
                     db.session.add(existing_row)
+            else:
+                # Sin pasar por asignar(): igual hay que acreditar genéricas abiertas.
+                from app.services.solicitud_service import (
+                    reconcile_solicitudes_after_cuadrante_change,
+                )
+                reconcile_solicitudes_after_cuadrante_change(
+                    obra_id, worker_id, d, resolved_by_id=actor_id,
+                )
             continue
 
         creada = CoreAssignmentService.asignar(
@@ -455,8 +463,12 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
     for o_id, w_id, d_del in deleted_info:
         update_solicitudes_for_assignment(o_id, w_id, d_del, resolved_by_id=actor_id)
 
+    # Core.asignar ya reconcilia; esto cubre días already_on_target y refuerza el cierre.
+    from app.services.solicitud_service import reconcile_solicitudes_after_cuadrante_change
     for d in dates:
-        update_solicitudes_for_assignment(obra_id, worker_id, d, resolved_by_id=actor_id)
+        reconcile_solicitudes_after_cuadrante_change(
+            obra_id, worker_id, d, resolved_by_id=actor_id,
+        )
 
     db.session.commit()
 

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Detalle sync') }} · {{ _(log.tipo or 'Sync') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_features.css') }}?v=20260930a">
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main sync-log-detail-page">
+    <div class="page-toolbar mb-3">
+      <div>
+        <a href="{{ url_for('sync.odoo_panel') }}" class="small text-muted d-inline-block mb-1">
+          <i class="fas fa-arrow-left"></i> {{ _('Volver al historial') }}
+        </a>
+        <h1 class="page-title mb-0">
+          {{ _('Sincronización') }}: {{ _(log.tipo or '—') }}
+        </h1>
+        <p class="text-muted small mb-0 mt-1">
+          {{ log.fecha|format_dt }} · {{ _(log.modo or '—') }} ·
+          <span class="sync-log-estado sync-log-estado--{{ log.estado or 'ok' }}">{{ log.estado or 'ok' }}</span>
+        </p>
+      </div>
+    </div>
+
+    <section class="sync-card mb-3">
+      <h2 class="sync-section-title mb-3">{{ _('Resumen') }}</h2>
+      <dl class="sync-log-meta-grid">
+        <div><dt>{{ _('Módulo') }}</dt><dd>{{ _(log.tipo or '—') }}</dd></div>
+        <div><dt>{{ _('Modo') }}</dt><dd>{{ _(log.modo or '—') }}</dd></div>
+        <div><dt>{{ _('Lanzada por') }}</dt><dd>{{ launcher_name }}</dd></div>
+        <div><dt>{{ _('Estado') }}</dt><dd>{{ log.estado or 'ok' }}</dd></div>
+        <div><dt>{{ _('Duración') }}</dt>
+          <dd>{% if log.duracion_ms %}{{ (log.duracion_ms / 1000)|round(1) }}s{% else %}—{% endif %}</dd>
+        </div>
+        <div><dt>+</dt><dd class="text-success font-weight-bold">{{ log.nuevos or 0 }}</dd></div>
+        <div><dt>~ {{ _('con cambios') }}</dt><dd class="text-warning font-weight-bold">{{ log.actualizados or 0 }}</dd></div>
+        <div><dt>−</dt><dd>{{ log.finalizados or 0 }}</dd></div>
+        <div><dt>{{ _('Errores') }}</dt><dd>{{ log.errores or 0 }}</dd></div>
+        {% if detalle and detalle.resumen %}
+        <div><dt>{{ _('Leídos en Odoo') }}</dt><dd>{{ detalle.resumen.odoo_leidos or 0 }}</dd></div>
+        <div><dt>{{ _('Sin cambio') }}</dt><dd>{{ detalle.resumen.sin_cambio or 0 }}</dd></div>
+        <div><dt>{{ _('Omitidos') }}</dt><dd>{{ detalle.resumen.omitidos or 0 }}</dd></div>
+        {% endif %}
+      </dl>
+
+      {% if detalle and detalle.ventana %}
+      <p class="small text-muted mb-2">
+        {{ _('Ventana consultada') }}:
+        <strong>{{ detalle.ventana.desde or '—' }}</strong>
+        →
+        <strong>{{ detalle.ventana.hasta or '—' }}</strong>
+        {% if detalle.ventana.fuente %}
+        <span class="text-muted">({{ detalle.ventana.fuente }})</span>
+        {% endif %}
+      </p>
+      {% endif %}
+
+      {% if detalle and detalle.explicacion %}
+      <ul class="sync-log-explain small text-muted mb-0">
+        {% for line in detalle.explicacion %}
+        <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    {% if not has_structured %}
+    <section class="sync-card mb-3">
+      <h2 class="sync-section-title mb-2">{{ _('Detalle (texto)') }}</h2>
+      <p class="small text-muted">
+        {{ _('Este registro es anterior al detalle ampliado. Solo hay el resumen en texto.') }}
+      </p>
+      {% if legacy_text %}
+      <pre class="sync-module-result-pre">{{ legacy_text }}</pre>
+      {% else %}
+      <p class="text-muted mb-0">—</p>
+      {% endif %}
+    </section>
+    {% else %}
+      {% set items = detalle.items or {} %}
+      {% set trunc = items.truncados or {} %}
+
+      {% macro leave_table(rows, show_cambios=false, show_omit=false) %}
+      <div class="sync-log-items-wrap">
+        <table class="sync-log-items-table">
+          <thead>
+            <tr>
+              <th>{{ _('Odoo #') }}</th>
+              <th>{{ _('Empleado') }}</th>
+              <th>{{ _('Tipo') }}</th>
+              <th>{{ _('Inicio') }}</th>
+              <th>{{ _('Fin') }}</th>
+              <th>{{ _('Creada en Odoo') }}</th>
+              <th>{{ _('Modificada en Odoo') }}</th>
+              {% if show_cambios %}<th>{{ _('Campos') }}</th>{% endif %}
+              {% if show_omit %}<th>{{ _('Motivo') }}</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in rows %}
+            <tr>
+              <td class="text-nowrap">{{ it.external_id or '—' }}</td>
+              <td>
+                {{ it.empleado or ('Odoo #' ~ (it.empleado_odoo_id or '?')) }}
+                {% if it.empleado_odoo_id %}
+                <span class="text-muted small">(#{{ it.empleado_odoo_id }})</span>
+                {% endif %}
+              </td>
+              <td>{{ it.tipo or '—' }}</td>
+              <td class="text-nowrap">{{ it.fecha_inicio or '—' }}</td>
+              <td class="text-nowrap">{{ it.fecha_fin or '—' }}</td>
+              <td class="text-nowrap small">{{ it.odoo_create_date or '—' }}</td>
+              <td class="text-nowrap small">{{ it.odoo_write_date or '—' }}</td>
+              {% if show_cambios %}
+              <td class="small">{{ (it.campos_cambiados or [])|join(', ') or '—' }}</td>
+              {% endif %}
+              {% if show_omit %}
+              <td class="small">{{ _(it.motivo_omit or '—') }}</td>
+              {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="text-muted text-center py-3">{{ _('Ninguna') }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endmacro %}
+
+      <section class="sync-card mb-3">
+        <h2 class="sync-section-title mb-2">
+          {{ _('Nuevas') }}
+          <span class="badge-soft">{{ (detalle.resumen.nuevos if detalle.resumen else 0) }}</span>
+        </h2>
+        {% if trunc.nuevos %}
+        <p class="small text-muted">{{ _('Mostrando primeras filas; hay {n} más.', n=trunc.nuevos) }}</p>
+        {% endif %}
+        {{ leave_table(items.nuevos or []) }}
+      </section>
+
+      <section class="sync-card mb-3">
+        <h2 class="sync-section-title mb-2">
+          {{ _('Con cambios') }}
+          <span class="badge-soft">{{ (detalle.resumen.cambiados if detalle.resumen else 0) }}</span>
+        </h2>
+        {% if trunc.cambiados %}
+        <p class="small text-muted">{{ _('Mostrando primeras filas; hay {n} más.', n=trunc.cambiados) }}</p>
+        {% endif %}
+        {{ leave_table(items.cambiados or [], show_cambios=true) }}
+      </section>
+
+      <section class="sync-card mb-3">
+        <h2 class="sync-section-title mb-2">
+          {{ _('Omitidas') }}
+          <span class="badge-soft">{{ (detalle.resumen.omitidos if detalle.resumen else 0) }}</span>
+        </h2>
+        {% if trunc.omitidos %}
+        <p class="small text-muted">{{ _('Mostrando primeras filas; hay {n} más.', n=trunc.omitidos) }}</p>
+        {% endif %}
+        {{ leave_table(items.omitidos or [], show_omit=true) }}
+      </section>
+
+      {% if legacy_text %}
+      <section class="sync-card mb-3">
+        <h2 class="sync-section-title mb-2">{{ _('Resumen en texto') }}</h2>
+        <pre class="sync-module-result-pre">{{ legacy_text }}</pre>
+      </section>
+      {% endif %}
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

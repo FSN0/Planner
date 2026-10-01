@@ -479,21 +479,27 @@ window.PersonDayTimeline = (function () {
 
     function bindRowClick(selector, options) {
         const opts = options || {};
-        document.querySelectorAll(selector).forEach(row => {
-            row.addEventListener('click', function (e) {
-                if (opts.ignoreButtonClick !== false) {
-                    if (e.target.closest('.no-row-nav, .audit-desvio-actions, .audit-resolve-cell')) return;
+        // Delegación: filas lazy (histórico / Odoo) también abren el historial.
+        if (!document.body.dataset.pdtRowClickBound) {
+            document.body.dataset.pdtRowClickBound = '1';
+            document.addEventListener('click', function (e) {
+                const cfg = window.__pdtRowClickCfg;
+                if (!cfg || !cfg.selector) return;
+                if (cfg.opts.ignoreButtonClick !== false) {
+                    if (e.target.closest('.no-row-nav, .audit-desvio-actions, .audit-resolve-cell, .audit-desvio-expand')) return;
                     if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
                     if (e.target.tagName === 'A' || e.target.closest('a')) return;
+                    if (e.target.closest('.audit-desvio-detail')) return;
                 }
-
-                const userId = this.getAttribute('data-user-id') || this.dataset.userId;
-                const fechaStr = this.getAttribute('data-fecha') || this.dataset.fecha;
+                const row = e.target.closest(cfg.selector);
+                if (!row || !document.body.contains(row)) return;
+                const userId = row.getAttribute('data-user-id') || row.dataset.userId;
+                const fechaStr = row.getAttribute('data-fecha') || row.dataset.fecha;
                 if (!userId || !fechaStr) return;
-
-                openModal(userId, fechaStr, opts);
+                openModal(userId, fechaStr, cfg.opts);
             });
-        });
+        }
+        window.__pdtRowClickCfg = { selector: selector, opts: opts };
     }
 
     return {

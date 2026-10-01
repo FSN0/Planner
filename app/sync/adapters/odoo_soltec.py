@@ -223,7 +223,7 @@ class Adapter(BaseSyncAdapter):
         fields = [
             'id', 'name', 'state', 'employee_id', 'holiday_status_id',
             'request_date_from', 'request_date_to', 'date_from', 'date_to',
-            'number_of_days',
+            'number_of_days', 'create_date', 'write_date',
         ]
         state_map = {
             'validate': 'aprobada',
@@ -273,6 +273,8 @@ class Adapter(BaseSyncAdapter):
                 'fecha_fin': fecha_fin,
                 'dias': row.get('number_of_days'),
                 'descripcion': row.get('name') or None,
+                'odoo_create_date': self._odoo_text(row.get('create_date')) or None,
+                'odoo_write_date': self._odoo_text(row.get('write_date')) or None,
             })
         return leaves
 

@@ -2979,6 +2979,48 @@ html.sidebar-collapsed .admin-main {
   accent-color: var(--color-primary);
   cursor: pointer;
 }
+.config-page .notif-event-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.config-page .notif-event-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  color: var(--color-text-muted);
+}
+.config-page .notif-event-tip > i {
+  font-size: 0.78rem;
+}
+.config-page .notif-event-tip__bubble {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 20;
+  width: min(22rem, 70vw);
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  color: var(--color-text, #334155);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+}
+.config-page .notif-event-tip:hover .notif-event-tip__bubble,
+.config-page .notif-event-tip:focus .notif-event-tip__bubble,
+.config-page .notif-event-tip:focus-within .notif-event-tip__bubble {
+  display: block;
+}
 @media (max-width: 991.98px) {
   .config-page .config-fields-grid { grid-template-columns: 1fr; }
   .config-page .config-festivo-form { grid-template-columns: 1fr; }

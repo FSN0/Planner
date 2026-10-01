@@ -163,7 +163,7 @@ def get_sync_panel_context():
     critical_errors, partial_summaries = get_recent_sync_alerts()
 
     logs = (
-        SyncLog.query.filter(db.or_(SyncLog.visto.is_(False), SyncLog.visto.is_(None)))
+        SyncLog.query
         .order_by(SyncLog.fecha.desc())
         .limit(50)
         .all()

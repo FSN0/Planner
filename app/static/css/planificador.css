@@ -662,7 +662,8 @@
 .phantom-item .vis-item-content { font-size: 11px !important; font-weight: bold !important; justify-content: center !important; }
 
 .vis-timeline .vis-item.solicitud-item {
-    z-index: 6 !important;
+    /* Bajo las asignaciones reales: no tapar operarios al solapar. */
+    z-index: 2 !important;
     box-sizing: border-box !important;
 }
 

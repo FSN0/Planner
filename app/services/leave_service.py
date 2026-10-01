@@ -420,20 +420,77 @@ def _cortar_inercia_por_ausencias(*, date_from, date_to, user_id=None, autor_id=
     return cortes
 
 
-def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO, modo='Manual'):
+def _leave_values_equal(key, old, new):
+    if key == 'dias':
+        try:
+            if old is None and new is None:
+                return True
+            if old is None or new is None:
+                return False
+            return abs(float(old) - float(new)) < 1e-6
+        except (TypeError, ValueError):
+            return old == new
+    if key in ('descripcion', 'tipo', 'tipo_external_id', 'estado'):
+        return (old or None) == (new or None) or (str(old or '').strip() == str(new or '').strip())
+    return old == new
+
+
+def _leave_trace_item(item, *, user_id=None, empleado_nombre=None, campos_cambiados=None, motivo_omit=None):
+    return {
+        'external_id': str(item.get('external_id') or ''),
+        'empleado_odoo_id': str(item.get('empleado_external_id') or '') or None,
+        'empleado': empleado_nombre,
+        'user_id': user_id,
+        'tipo': item.get('tipo'),
+        'fecha_inicio': str(item.get('fecha_inicio') or '')[:10] or None,
+        'fecha_fin': str(item.get('fecha_fin') or '')[:10] or None,
+        'odoo_create_date': item.get('odoo_create_date'),
+        'odoo_write_date': item.get('odoo_write_date'),
+        'campos_cambiados': campos_cambiados or None,
+        'motivo_omit': motivo_omit,
+    }
+
+
+def sync_leaves_from_erp(
+    date_from=None,
+    date_to=None,
+    origen=LEAVE_SOURCE_ODOO,
+    modo='Manual',
+    actor=None,
+    origen_label=None,
+):
     """
     Importa ausencias del adaptador ERP activo del tenant.
     Crea/actualiza por (origen, external_id). No borra altas manuales.
     Omite leaves cuyo empleado Odoo no esté vinculado en SignaPlan.
+    «Actualizados» solo cuenta cambios reales de campos (no relecturas).
     """
     from flask import g
+    from app.models import User
+    from app.services.sync_log_detail_service import (
+        actor_from_request,
+        build_ausencias_detalle,
+        resolve_launcher,
+        user_display_name,
+    )
 
     tenant = getattr(g, 'current_tenant', None)
     if not tenant:
         raise RuntimeError('Sin tenant en contexto para sync de ausencias')
 
+    if actor is None:
+        actor = actor_from_request()
+    launcher = resolve_launcher(modo, actor=actor, origen_label=origen_label)
+
+    # Misma ventana que el adaptador Odoo (hoy−30 → hoy+400) si no se pasa rango.
+    win_from = _parse_date(date_from) if date_from else today_local() - timedelta(days=30)
+    win_to = _parse_date(date_to) if date_to else today_local() + timedelta(days=400)
+
     adapter = get_sync_adapter()
-    raw = adapter.get_leaves(date_from=date_from, date_to=date_to) or []
+    raw = adapter.get_leaves(
+        date_from=win_from.isoformat(),
+        date_to=win_to.isoformat(),
+    ) or []
 
     stats = {
         'nuevos': 0,
@@ -444,10 +501,29 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
         'omit_sin_id': 0,
         'omit_sin_fecha': 0,
         'omit_no_aprobada': 0,
+        'sin_cambio': 0,
     }
     omit_samples = []
+    nuevos_items = []
+    cambiados_items = []
+    omitidos_items = []
+    name_cache = {}
+
+    def _nombre_user(uid):
+        if uid in name_cache:
+            return name_cache[uid]
+        u = User.query.get(uid) if uid else None
+        name_cache[uid] = user_display_name(u)
+        return name_cache[uid]
+
+    # Conflictos: ventana operativa más corta (sigue igual que antes).
     range_from = _parse_date(date_from) if date_from else today_local() - timedelta(days=7)
     range_to = _parse_date(date_to) if date_to else today_local() + timedelta(days=400)
+
+    compare_keys = (
+        'user_id', 'fecha_inicio', 'fecha_fin', 'dias', 'tipo',
+        'tipo_external_id', 'estado', 'descripcion',
+    )
 
     for item in raw:
         nested = db.session.begin_nested()
@@ -457,6 +533,7 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                 if not ext_id:
                     stats['omitidos'] += 1
                     stats['omit_sin_id'] += 1
+                    omitidos_items.append(_leave_trace_item(item, motivo_omit='sin_id'))
                     nested.commit()
                     continue
 
@@ -465,6 +542,9 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                 if not user_id:
                     stats['omitidos'] += 1
                     stats['omit_sin_usuario'] += 1
+                    omitidos_items.append(_leave_trace_item(
+                        item, motivo_omit='sin_ficha_vinculada',
+                    ))
                     if len(omit_samples) < 12:
                         omit_samples.append(
                             f"Odoo empleado #{emp_ext or '?'} (leave {ext_id}): sin ficha vinculada"
@@ -477,6 +557,10 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                 if not fecha_inicio or not fecha_fin:
                     stats['omitidos'] += 1
                     stats['omit_sin_fecha'] += 1
+                    omitidos_items.append(_leave_trace_item(
+                        item, user_id=user_id, empleado_nombre=_nombre_user(user_id),
+                        motivo_omit='sin_fecha',
+                    ))
                     nested.commit()
                     continue
                 if fecha_fin < fecha_inicio:
@@ -496,7 +580,6 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                     tipo_external_id=item.get('tipo_external_id'),
                     estado=item.get('estado') or LEAVE_STATUS_APROBADA,
                     descripcion=item.get('descripcion'),
-                    updated_at=utc_now(),
                 )
                 # De Odoo solo importamos aprobadas; forzamos estado por si el
                 # adaptador devolviera otra cosa o hubiera filas huérfanas.
@@ -504,24 +587,51 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
                     if payload['estado'] != LEAVE_STATUS_APROBADA:
                         stats['omitidos'] += 1
                         stats['omit_no_aprobada'] += 1
+                        omitidos_items.append(_leave_trace_item(
+                            item, user_id=user_id, empleado_nombre=_nombre_user(user_id),
+                            motivo_omit='no_aprobada',
+                        ))
                         nested.commit()
                         continue
                     payload['estado'] = LEAVE_STATUS_APROBADA
-                is_update = row is not None
+
+                emp_nombre = _nombre_user(user_id)
+                action = 'nuevo'
+                campos_cambiados = []
                 if row:
-                    for k, v in payload.items():
-                        setattr(row, k, v)
+                    for k in compare_keys:
+                        if not _leave_values_equal(k, getattr(row, k), payload.get(k)):
+                            campos_cambiados.append(k)
+                    if campos_cambiados:
+                        for k, v in payload.items():
+                            setattr(row, k, v)
+                        row.updated_at = utc_now()
+                        action = 'cambiado'
+                    else:
+                        action = 'sin_cambio'
                 else:
                     db.session.add(AusenciaPlanificada(
                         origen=origen,
                         external_id=ext_id,
+                        updated_at=utc_now(),
                         **payload,
                     ))
+                    action = 'nuevo'
             nested.commit()
-            if is_update:
-                stats['actualizados'] += 1
-            else:
+            trace = _leave_trace_item(
+                item,
+                user_id=user_id,
+                empleado_nombre=emp_nombre,
+                campos_cambiados=campos_cambiados or None,
+            )
+            if action == 'nuevo':
                 stats['nuevos'] += 1
+                nuevos_items.append(trace)
+            elif action == 'cambiado':
+                stats['actualizados'] += 1
+                cambiados_items.append(trace)
+            else:
+                stats['sin_cambio'] += 1
         except Exception as exc:
             nested.rollback()
             logger.exception('Error syncing leave %s: %s', item, exc)
@@ -540,8 +650,10 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
         detect_and_upsert_conflicts(date_from=range_from, date_to=range_to)
         partes = [
             f"+{stats['nuevos']} nuevas",
-            f"~{stats['actualizados']} actualizadas",
+            f"~{stats['actualizados']} con cambios",
         ]
+        if stats['sin_cambio']:
+            partes.append(f"{stats['sin_cambio']} sin cambio (ya estaban al día)")
         if stats['omit_sin_usuario']:
             partes.append(
                 f"{stats['omit_sin_usuario']} omitidas (empleado Odoo sin ficha vinculada en SignaPlan)"
@@ -562,6 +674,19 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
             rest = stats['omit_sin_usuario'] - len(omit_samples)
             if rest > 0:
                 detalle_lines.append(f'… y {rest} más.')
+
+        detalle_json = build_ausencias_detalle(
+            ventana_desde=win_from,
+            ventana_hasta=win_to,
+            odoo_leidos=len(raw),
+            nuevos_items=nuevos_items,
+            cambiados_items=cambiados_items,
+            sin_cambio_count=stats['sin_cambio'],
+            omitidos_items=omitidos_items,
+            errores=stats['errores'],
+            sanados=healed or 0,
+            launcher=launcher,
+        )
         # errores = solo fallos reales; omitidos van explicados en detalles (no alarmar KPI)
         db.session.add(SyncLog(
             tipo='Ausencias',
@@ -571,6 +696,9 @@ def sync_leaves_from_erp(date_from=None, date_to=None, origen=LEAVE_SOURCE_ODOO,
             finalizados=0,
             errores=stats['errores'],
             detalles='\n'.join(detalle_lines),
+            detalle_json=detalle_json,
+            lanzado_por_id=launcher.get('lanzado_por_id'),
+            lanzado_por_label=launcher.get('lanzado_por_label'),
             estado='ok' if stats['errores'] == 0 else 'parcial',
         ))
         db.session.commit()

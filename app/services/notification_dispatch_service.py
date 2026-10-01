@@ -28,11 +28,11 @@ from app.services.notification_catalog import (
     CONFIG_INCLUDE_ALL,
     CONFIG_INCLUDE_NONE,
     CONFIG_MIGRATED,
+    CONTEXTUAL_RECIPIENTS,
     DEFAULT_DEBOUNCE_MINUTES,
     DEFAULT_DIGEST_HOUR,
     DEFAULT_HORA_LIMITE_ENTRADA,
     DELIVERY_MODES,
-    INCLUDE_ROLE_KEYS,
     MODE_DEBOUNCE,
     MODE_DIGEST,
     MODE_IMMEDIATE,
@@ -45,8 +45,10 @@ from app.services.notification_catalog import (
     RECIPIENT_RRHH,
     RECIPIENT_TARGET,
     RECIPIENT_TRABAJADOR,
+    event_help,
     get_event,
     include_config_key,
+    include_role_keys,
     mode_label,
     normalize_event_key,
 )
@@ -169,12 +171,17 @@ def ensure_hora_corte_folded_into_matrix():
             ROLE_RRHH: RECIPIENT_RRHH,
             ROLE_JEFE: RECIPIENT_JEFE,
         }
-        by_role = {rk: [] for rk in INCLUDE_ROLE_KEYS}
+        by_role = {rk: [] for rk in include_role_keys()}
         found_roles = []
         for u in users:
             rk = role_map.get(getattr(u, 'role', None))
             if not rk:
-                continue
+                # Roles custom: la propia clave de User.role
+                ur = (getattr(u, 'role', None) or '').strip()
+                if ur and ur in by_role:
+                    rk = ur
+                else:
+                    continue
             by_role[rk].append(u.id)
             if rk not in found_roles:
                 found_roles.append(rk)
@@ -219,7 +226,7 @@ def get_role_include_ids(role_key: str):
 
 
 def set_role_include_ids(role_key: str, user_ids):
-    if role_key not in INCLUDE_ROLE_KEYS:
+    if role_key not in include_role_keys():
         return
     if user_ids is None:
         set_tenant_config(include_config_key(role_key), CONFIG_INCLUDE_ALL)
@@ -238,7 +245,7 @@ def set_role_include_ids(role_key: str, user_ids):
         RECIPIENT_LABORAL: ROLE_LABORAL,
         RECIPIENT_RRHH: ROLE_RRHH,
         RECIPIENT_JEFE: ROLE_JEFE,
-    }.get(role_key)
+    }.get(role_key, role_key)
     if role_db:
         all_ids = {
             u.id for u in User.query.filter_by(
@@ -273,17 +280,19 @@ def _filter_by_include(users, role_key: str) -> list:
 
 
 def office_users_by_role() -> dict:
-    """Usuarios de oficina agrupados para el selector de la matriz."""
-    role_map = (
-        (RECIPIENT_ADMIN, ROLE_ADMIN, 'Admin'),
-        (RECIPIENT_LABORAL, ROLE_LABORAL, 'Laboral'),
-        (RECIPIENT_RRHH, ROLE_RRHH, 'RRHH'),
-        (RECIPIENT_JEFE, ROLE_JEFE, 'Jefe obra'),
-    )
+    """Usuarios por rol (builtin + custom) para el selector de la matriz."""
+    from app.services.role_registry_service import role_display_label
+
     out = []
-    for key, role_db, label in role_map:
+    for key in include_role_keys():
+        label = role_display_label(key) or key
+        # Etiquetas cortas históricas en UI de correos
+        if key == RECIPIENT_ADMIN:
+            label = 'Admin'
+        elif key == RECIPIENT_JEFE:
+            label = 'Jefe obra'
         users = (
-            User.query.filter_by(role=role_db, active=True, is_deleted=False)
+            User.query.filter_by(role=key, active=True, is_deleted=False)
             .order_by(User.name, User.lastname)
             .all()
         )
@@ -375,6 +384,8 @@ def matrix_for_ui() -> dict:
         ensure_notification_matrix_migrated()
     except Exception:
         pass
+    from app.services.role_registry_service import role_display_label
+
     groups = []
     by_group = {}
     for key, label, group, *_rest in NOTIFICATION_EVENTS:
@@ -382,6 +393,7 @@ def matrix_for_ui() -> dict:
         ev = {
             'key': key,
             'label': label,
+            'help': event_help(key),
             'group': group,
             'mode': st['mode'],
             'recipients': st['recipients'],
@@ -395,6 +407,21 @@ def matrix_for_ui() -> dict:
         get_tenant_config('hora_limite_entrada', default=DEFAULT_HORA_LIMITE_ENTRADA)
         or DEFAULT_HORA_LIMITE_ENTRADA
     )
+
+    recipient_opts = []
+    for rk in include_role_keys():
+        lbl = role_display_label(rk) or rk
+        if rk == RECIPIENT_ADMIN:
+            lbl = 'Admin'
+        elif rk == RECIPIENT_JEFE:
+            lbl = 'Jefe obra'
+        recipient_opts.append((rk, lbl))
+    recipient_opts.extend([
+        (RECIPIENT_TRABAJADOR, 'Trabajador'),
+        (RECIPIENT_REQUESTER, 'Solicitante'),
+        (RECIPIENT_TARGET, 'Destinatario'),
+    ])
+
     return {
         'groups': groups,
         'events': [e for g in groups for e in g['events']],
@@ -403,6 +430,7 @@ def matrix_for_ui() -> dict:
         'hora_limite_entrada': hora_limite,
         'mode_labels': {m: mode_label(m) for m in DELIVERY_MODES},
         'role_users': office_users_by_role(),
+        'recipient_opts': recipient_opts,
     }
 
 
@@ -428,7 +456,7 @@ def save_matrix_from_form(form) -> None:
 
     # Personas por rol (si el formulario trae el panel)
     if form.get('notif_users_panel') == '1':
-        for rk in INCLUDE_ROLE_KEYS:
+        for rk in include_role_keys():
             # Solo actualizar roles presentes en el POST (marca oculta).
             if form.get(f'notif_user_role__{rk}') != '1':
                 continue
@@ -458,27 +486,23 @@ def resolve_recipients(
     roles = set(st['recipients'])
     users = []
 
-    if RECIPIENT_ADMIN in roles:
-        users.extend(_filter_by_include(
-            User.query.filter_by(role=ROLE_ADMIN, active=True, is_deleted=False).all(),
-            RECIPIENT_ADMIN,
-        ))
-    if RECIPIENT_LABORAL in roles:
-        users.extend(_filter_by_include(
-            User.query.filter_by(role=ROLE_LABORAL, active=True, is_deleted=False).all(),
-            RECIPIENT_LABORAL,
-        ))
-    if RECIPIENT_RRHH in roles:
-        users.extend(_filter_by_include(
-            User.query.filter_by(role=ROLE_RRHH, active=True, is_deleted=False).all(),
-            RECIPIENT_RRHH,
-        ))
+    # Jefe: destinatario contextual de la obra (no todos los del rol).
     if RECIPIENT_JEFE in roles and obra_id:
         obra = Obra.query.get(obra_id)
         if obra and obra.jefe_obra_id:
             jefe = User.query.get(obra.jefe_obra_id)
             if jefe and jefe.active and not jefe.is_deleted and user_allowed_for_role(jefe, RECIPIENT_JEFE):
                 users.append(jefe)
+
+    # Resto de roles de oficina / custom: todas las personas del rol (con include).
+    for rk in roles:
+        if rk in CONTEXTUAL_RECIPIENTS or rk == RECIPIENT_JEFE:
+            continue
+        users.extend(_filter_by_include(
+            User.query.filter_by(role=rk, active=True, is_deleted=False).all(),
+            rk,
+        ))
+
     if RECIPIENT_TRABAJADOR in roles and worker_id:
         w = User.query.get(worker_id)
         if w and w.active and not getattr(w, 'is_deleted', False):

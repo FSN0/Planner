@@ -412,9 +412,16 @@ def run_fichajes_retro_sync(days=None, modo='Automático'):
     db.session.commit()
     return {'dias': dias, 'ok': not had_error, 'error': err_msg}
 
-def run_auto_sync_ausencias(modo='Automático'):
+def run_auto_sync_ausencias(modo='Automático', actor=None, origen_label=None):
     from app.services.leave_service import sync_leaves_from_erp
-    return sync_leaves_from_erp(modo=modo)
+    if origen_label is None:
+        if (modo or '').lower().startswith('hook'):
+            origen_label = 'Hook Odoo'
+        elif (modo or '').lower().startswith('manual'):
+            origen_label = 'Manual (cola sync)'
+        else:
+            origen_label = 'Programación automática'
+    return sync_leaves_from_erp(modo=modo, actor=actor, origen_label=origen_label)
 
 
 def run_auto_sync_vehiculos(modo='Automático'):

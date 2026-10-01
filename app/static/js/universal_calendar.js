@@ -277,6 +277,16 @@ class UniversalCalendarManager {
                 if ((evType === 'asignacion' || evType === 'obra' || evType === 'obra_group') && !eventData.classNames.includes('fc-event-obra')) {
                     eventData.classNames.push('fc-event-obra');
                 }
+                if (evType === 'request') {
+                    if (!eventData.classNames.includes('fc-event-request')) {
+                        eventData.classNames.push('fc-event-request');
+                    }
+                    // Al final del stack del día → no tapa asignaciones reales.
+                    if (eventData.order == null) eventData.order = 99999;
+                    eventData.editable = false;
+                    eventData.startEditable = false;
+                    eventData.durationEditable = false;
+                }
                 if (eventData.extendedProps && eventData.extendedProps.inercia) {
                     if (!_this.selfService) eventData.classNames.push('fc-event-inercia');
                     eventData.editable = false;
@@ -430,6 +440,10 @@ class UniversalCalendarManager {
                     if (laneKey) info.el.setAttribute('data-group-lane', laneKey);
                     _this._scheduleAlignGroupedLanes();
                 }
+                if (evTypeMount === 'request') {
+                    info.el.setAttribute('data-group-lane', '__solicitud__');
+                    _this._scheduleAlignGroupedLanes();
+                }
                 if (evTypeMount === 'vehiculo' || evTypeMount === 'vehiculo_odoo') {
                     // Más compacto y con borde discontinuo para no confundir con obras
                     info.el.style.fontSize = '0.72rem';
@@ -510,6 +524,9 @@ class UniversalCalendarManager {
                 if (_this.readonly) return;
                 // Un clic con selectable también dispara `select`; no duplicar el bloque.
                 if (_this._fromSelect) return;
+                // Tras soltar/redimensionar el ghost, FC a veces dispara dateClick
+                // y recrearía el borrador vaciando trabajador/opciones.
+                if (_this._fromEventDrop) return;
 
                 let today = moment().startOf('day');
                 let clickedDate = moment(info.dateStr).startOf('day');
@@ -739,7 +756,16 @@ class UniversalCalendarManager {
                     info.event.setExtendedProp('real_original_start', info.oldEvent.startStr);
                     info.event.setExtendedProp('real_original_end', info.oldEvent.endStr || moment(info.oldEvent.startStr).add(1, 'days').format('YYYY-MM-DD'));
                 }
-                _this.showBottomPanel(info.event, info.event.id === _this.ghostEventId);
+                const isGhost = info.event.id === _this.ghostEventId;
+                // Ghost ya abierto: solo fechas. Rebuild vaciaba trabajador/vehículo/notas.
+                if (isGhost && _this._isActiveGhostPanel()) {
+                    _this._markEventDrop();
+                    _this.activeEvent = info.event;
+                    _this.updatePanelDatesFromEvent(info.event);
+                    return;
+                }
+                _this._markEventDrop();
+                _this.showBottomPanel(info.event, isGhost);
             },
             
             eventResize: function(info) {
@@ -756,7 +782,15 @@ class UniversalCalendarManager {
                     info.event.setExtendedProp('real_original_start', info.oldEvent.startStr);
                     info.event.setExtendedProp('real_original_end', info.oldEvent.endStr || moment(info.oldEvent.startStr).add(1, 'days').format('YYYY-MM-DD'));
                 }
-                _this.showBottomPanel(info.event, info.event.id === _this.ghostEventId);
+                const isGhost = info.event.id === _this.ghostEventId;
+                if (isGhost && _this._isActiveGhostPanel()) {
+                    _this._markEventDrop();
+                    _this.activeEvent = info.event;
+                    _this.updatePanelDatesFromEvent(info.event);
+                    return;
+                }
+                _this._markEventDrop();
+                _this.showBottomPanel(info.event, isGhost);
             },
 
             eventAllow: function(dropInfo, draggedEvent) {
@@ -811,7 +845,8 @@ class UniversalCalendarManager {
     showBottomPanel(event, isNew) {
         if (this.readonly) return; 
         
-        let isSameEvent = (this.activeEvent === event);
+        let isSameEvent = !!(this.activeEvent && event
+            && String(this.activeEvent.id) === String(event.id));
         this.activeEvent = event;
         
         let panel = document.getElementById(this.panelId);
@@ -1531,7 +1566,9 @@ class UniversalCalendarManager {
     }
 
     updatePanelDatesFromEvent(event) {
-        if (!this.activeEvent || this.activeEvent !== event) return;
+        if (!event) return;
+        if (this.activeEvent && String(this.activeEvent.id) !== String(event.id)) return;
+        this.activeEvent = event;
         let startInput = document.getElementById(`${this.panelId}-start`);
         let endInput = document.getElementById(`${this.panelId}-end`);
 
@@ -1545,6 +1582,16 @@ class UniversalCalendarManager {
 
         if (startInput) startInput.value = startStr;
         if (endInput) endInput.value = endInclusive;
+    }
+
+    _isActiveGhostPanel() {
+        return !!(this.activeEvent && String(this.activeEvent.id) === String(this.ghostEventId));
+    }
+
+    _markEventDrop() {
+        this._fromEventDrop = true;
+        const self = this;
+        setTimeout(function () { self._fromEventDrop = false; }, 350);
     }
 
     bindPanelIsolation() {
@@ -2555,6 +2602,8 @@ class UniversalCalendarManager {
             }
         });
         keys.sort((a, b) => {
+            if (a === '__solicitud__') return 1;
+            if (b === '__solicitud__') return -1;
             const na = Number(a);
             const nb = Number(b);
             if (!isNaN(na) && !isNaN(nb)) return na - nb;

@@ -25,9 +25,12 @@ from datetime import datetime, timedelta, date
 from app.services.solicitud_service import (
     update_solicitudes_for_assignment,
     get_solicitud_notas,
+    get_solicitud_auto_cierre_texto,
     compute_generica_coverage,
     get_solicitud_valid_dates,
     _recalculate_solicitud_coverage,
+    sweep_open_solicitudes_actionable,
+    iter_solicitud_calendar_spans,
 )
 from app.services.assignment_service import process_assignment_action
 from app.services.core_assignment_service import CoreAssignmentService
@@ -757,6 +760,12 @@ def solicitudes_list():
             Solicitud.fecha_inicio <= target_date,
             Solicitud.fecha_fin >= target_date
         )
+
+    # Cierra vencidas / cubiertas en accionable antes de pintar el inbox.
+    try:
+        sweep_open_solicitudes_actionable(limit=200)
+    except Exception:
+        current_app.logger.exception('sweep_open_solicitudes_actionable falló')
             
     solicitudes = query.order_by(Solicitud.created_at.desc()).all()
 
@@ -1249,6 +1258,7 @@ def solicitud_detail(solicitud_id):
         solicitud=solicitud,
         back_url=back_url,
         solicitud_notas=get_solicitud_notas(solicitud),
+        auto_cierre_texto=get_solicitud_auto_cierre_texto(solicitud),
         cobertura_texto=cobertura_texto,
         es_admin=es_admin,
         puede_cancelar=puede_cancelar,
@@ -3688,6 +3698,18 @@ def planificador_jo():
         User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).count() == 0
     )
 
+    from app.utils.timezone_utils import today_local
+    from app.models import Festivo
+    hoy_planif = today_local()
+    festivos_planif = [
+        f.fecha.isoformat()
+        for f in Festivo.query.filter(
+            Festivo.fecha >= hoy_planif - timedelta(days=7),
+            Festivo.fecha <= hoy_planif + timedelta(days=400),
+        ).all()
+        if f.fecha
+    ]
+
     return render_template(
         "planificador.html",
         todas_obras=todas_obras,
@@ -3700,6 +3722,7 @@ def planificador_jo():
         planif_sin_obras=planif_sin_obras,
         planif_sin_personal=planif_sin_personal,
         planif_scope_mode=user_panel_mode(current_user, PANEL_PLANIFICADOR),
+        planificador_festivos=festivos_planif,
     )
 
 
@@ -4200,17 +4223,29 @@ def api_planificador_events():
         # 3. Crear el estilo CSS directo para vis.js
         estilo_solicitud = f"background-color: {color_suave} !important; border: 2px dashed {color_fuerte} !important; color: {color_fuerte} !important;"
 
-        events.append({
-            "id": f"solicitud_{sol.id}",
-            "resourceId": str(sol.obra_id),
-            "title": title,
-            "start": sol.fecha_inicio.strftime("%Y-%m-%d"),
-            "end": (sol.fecha_fin + timedelta(days=1)).strftime("%Y-%m-%d"),
-            "style": estilo_solicitud,
-            "worker_id": "REQUEST",
-            "editable": False,
-            "solicitud_id": sol.id
-        })
+        # Solo tramos pendientes (si el día 13 ya está cubierto, no se pinta ahí).
+        spans = iter_solicitud_calendar_spans(sol)
+        if not spans:
+            continue
+        range_end_inclusive = end_date - timedelta(days=1) if end_date > start_date else end_date
+        for idx, (span_start, span_end) in enumerate(spans):
+            if span_end < start_date or span_start > range_end_inclusive:
+                continue
+            draw_start = max(span_start, start_date)
+            draw_end = min(span_end, range_end_inclusive)
+            if draw_end < draw_start:
+                continue
+            events.append({
+                "id": f"solicitud_{sol.id}_{idx}_{draw_start.isoformat()}",
+                "resourceId": str(sol.obra_id),
+                "title": title,
+                "start": draw_start.strftime("%Y-%m-%d"),
+                "end": (draw_end + timedelta(days=1)).strftime("%Y-%m-%d"),
+                "style": estilo_solicitud,
+                "worker_id": "REQUEST",
+                "editable": False,
+                "solicitud_id": sol.id
+            })
 
     # =====================================================================
     # --- INYECTAR FESTIVOS COMO FONDO GLOBAL ---
@@ -5305,13 +5340,18 @@ def ausencias_sync():
         return redirect(url_for('admin.ausencias_list'))
     from app.services.leave_service import sync_leaves_from_erp
     try:
-        stats = sync_leaves_from_erp()
+        stats = sync_leaves_from_erp(
+            modo='Manual',
+            actor=current_user,
+            origen_label='Manual · pantalla Ausencias',
+        )
         flash(
             translate(
-                "Sync ausencias: {nuevos} nuevas, {actualizados} actualizadas, "
-                "{omitidos} omitidas, {errores} errores.",
+                "Sync ausencias: {nuevos} nuevas, {actualizados} con cambios, "
+                "{sin_cambio} sin cambio, {omitidos} omitidas, {errores} errores.",
                 nuevos=stats['nuevos'],
                 actualizados=stats['actualizados'],
+                sin_cambio=stats.get('sin_cambio', 0),
                 omitidos=stats['omitidos'],
                 errores=stats['errores'],
             ),
