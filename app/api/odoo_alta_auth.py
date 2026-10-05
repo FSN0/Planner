@@ -4,7 +4,7 @@ from sqlalchemy import text
 from werkzeug.security import check_password_hash
 
 from app import db, csrf, limiter
-from app.models import User, Tenant, ROLE_ADMIN, ROLE_JEFE
+from app.models import User, Tenant, ROLE_ADMIN
 from app.services.i18n_service import translate
 from app import is_safe_schema_name
 
@@ -48,7 +48,9 @@ def register_odoo_alta_auth_routes(api_bp):
         if not user or not check_password_hash(user.password_hash, password):
             return jsonify({'success': False, 'error': translate('Credenciales inválidas')}), 401
 
-        if user.role not in (ROLE_ADMIN, ROLE_JEFE):
+        from app.services.permission_service import user_can
+
+        if not user_can(user, 'soltec_alta_odoo', 'r'):
             return jsonify({'success': False, 'error': translate('Tu perfil no tiene acceso a Alta Odoo')}), 403
 
         if not user.is_active:
@@ -58,6 +60,10 @@ def register_odoo_alta_auth_routes(api_bp):
         u_last = user.lastname if user.lastname and str(user.lastname).lower() != 'none' else ''
         full_name = f'{u_name} {u_last}'.strip() or user.email
         external_ids = user.external_ids if isinstance(user.external_ids, dict) else {}
+        alta_as_admin = (
+            user.role == ROLE_ADMIN
+            or user_can(user, 'soltec_alta_odoo_admin', 'r')
+        )
 
         return jsonify({
             'success': True,
@@ -67,6 +73,7 @@ def register_odoo_alta_auth_routes(api_bp):
                 'email': user.email,
                 'role': user.role,
                 'odoo_id': external_ids.get('odoo'),
+                'is_admin': bool(alta_as_admin),
             },
         })
 

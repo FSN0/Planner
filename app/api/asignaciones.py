@@ -494,7 +494,11 @@ def api_solicitud_asignar_parcial(solicitud_id):
         for d_str in selected_dates:
             try:
                 d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-                update_solicitudes_for_assignment(solicitud.obra_id, int(worker_id), d_obj, resolved_by_id=current_user.id)
+                update_solicitudes_for_assignment(
+                    solicitud.obra_id, int(worker_id), d_obj,
+                    resolved_by_id=current_user.id,
+                    origen_cierre='solicitud',
+                )
             except ValueError:
                 pass
                 
@@ -578,8 +582,10 @@ def api_solicitud_asignar_parcial(solicitud_id):
         if len(remaining_dates) == 0:
             solicitud.estado = 'CUMPLIDA'
             from app.utils.timezone_utils import utc_now
+            from app.services.solicitud_service import mark_solicitud_cierre_desde_ficha
             solicitud.resolved_at = utc_now()
             solicitud.resolved_by_id = current_user.id
+            mark_solicitud_cierre_desde_ficha(solicitud, resolved_by_id=current_user.id)
             msg = translate(
                 'Acción completada ({count} días). Solicitud cerrada.',
                 count=count_processed,
@@ -594,6 +600,9 @@ def api_solicitud_asignar_parcial(solicitud_id):
             )
     else:
         db.session.refresh(solicitud)
+        if solicitud.estado in ('CUMPLIDA', 'CERRADA_PARCIAL'):
+            from app.services.solicitud_service import mark_solicitud_cierre_desde_ficha
+            mark_solicitud_cierre_desde_ficha(solicitud, resolved_by_id=current_user.id)
         if solicitud.estado == 'CUMPLIDA':
             msg = translate(
                 'Asignación completada ({count} días). Cupo de la solicitud lleno.',
@@ -826,6 +835,7 @@ def api_planificador_action():
                 fecha_inicio=fechas_a_procesar[0], fecha_fin=fechas_a_procesar[-1],
                 cantidad=cantidad_pedida,
                 perfil=detalles, notas=notas, fechas_explicitas=fechas_a_procesar,
+                etiqueta_ids=data.get('etiqueta_ids') or data.get('etiquetas') or [],
             )
             return jsonify({"success": True, "action": "requested_generic", "message": translate("Solicitud genérica enviada.")})
 
@@ -1013,11 +1023,19 @@ def api_solicitud_asignar_candidatos(solicitud_id):
                     continue
                 for d_obj in dias_base:
                     update_solicitudes_for_assignment(
-                        solicitud.obra_id, w_id, d_obj, resolved_by_id=current_user.id,
+                        solicitud.obra_id, w_id, d_obj,
+                        resolved_by_id=current_user.id,
+                        origen_cierre='solicitud',
                     )
 
             db.session.commit()
             db.session.refresh(solicitud)
+
+            if solicitud.estado in ('CUMPLIDA', 'CERRADA_PARCIAL'):
+                from app.services.solicitud_service import mark_solicitud_cierre_desde_ficha
+                mark_solicitud_cierre_desde_ficha(solicitud, resolved_by_id=current_user.id)
+                db.session.commit()
+                db.session.refresh(solicitud)
 
             if solicitud.estado == 'CUMPLIDA':
                 try:
@@ -1104,7 +1122,16 @@ def api_solicitud_desasignar_candidato(solicitud_id):
         )
     
     for d_obj in fechas_eliminadas:
-        update_solicitudes_for_assignment(solicitud.obra_id, worker_id, d_obj, resolved_by_id=current_user.id)
+        update_solicitudes_for_assignment(
+            solicitud.obra_id, worker_id, d_obj,
+            resolved_by_id=current_user.id,
+            origen_cierre='solicitud',
+        )
+
+    db.session.refresh(solicitud)
+    if solicitud.estado in ('CUMPLIDA', 'CERRADA_PARCIAL'):
+        from app.services.solicitud_service import mark_solicitud_cierre_desde_ficha
+        mark_solicitud_cierre_desde_ficha(solicitud, resolved_by_id=current_user.id)
 
     db.session.commit()
     

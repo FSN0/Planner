@@ -74,20 +74,28 @@ def ensure_notif_queue_table():
     if has_request_context() and getattr(g, _TABLE_READY, False):
         return True
     try:
-        from sqlalchemy import inspect, text
+        from sqlalchemy import text
 
-        bind = db.session.connection()
-        schema = db.session.execute(text('SELECT current_schema()')).scalar()
-        insp = inspect(bind)
-        if schema and not insp.has_table('email_notif_queue', schema=schema):
-            EmailNotifQueue.__table__.create(bind, checkfirst=True)
-        elif not schema and not insp.has_table('email_notif_queue'):
+        # Consulta simple: inspect() sobre una sesión a medias (Celery / multi-tenant)
+        # puede dejar el cursor en PGRES_TUPLES_OK y romper el siguiente SELECT.
+        exists = db.session.execute(text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'email_notif_queue' "
+            "LIMIT 1"
+        )).scalar()
+        if not exists:
+            bind = db.session.connection()
             EmailNotifQueue.__table__.create(bind, checkfirst=True)
         if has_request_context():
             setattr(g, _TABLE_READY, True)
         return True
     except Exception as exc:
         current_app.logger.warning('email_notif_queue no disponible: %s', exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return False
 
 

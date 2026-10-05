@@ -152,6 +152,12 @@ def crear_nota():
         db.session.add(nueva_nota)
         db.session.commit()
 
+        try:
+            from app.services.nota_informe_dispatch import enqueue_informe_reunion_autor
+            enqueue_informe_reunion_autor(nueva_nota.id)
+        except Exception:
+            pass
+
         return jsonify({'success': True, 'message': 'Nota guardada correctamente.'})
     
     except Exception as e:

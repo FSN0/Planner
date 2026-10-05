@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005etq">
 {% if puede_ver_estado_fichaje %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
 {% endif %}
@@ -217,6 +217,13 @@
               </span>
             </div>
             <div class="entity-meta-item">
+              <span class="entity-meta-item-label">{{ _('Etiquetas') }}</span>
+              <span class="entity-meta-item-value">
+                {% from "macros/etiquetas.html" import etiqueta_chips %}
+                {{ etiqueta_chips(worker.etiquetas|list) }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
               <span class="entity-meta-item-label">{{ _('Estado') }}</span>
               <span class="entity-meta-item-value">
                 {% if worker.active %}
@@ -390,7 +397,7 @@
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260921past"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261002vehUnassign"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var workerId = {{ worker.id }};

@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005pick">
 {% endblock %}
 
 {% block wrapper %}
@@ -69,6 +69,19 @@
           </div>
         </div>
 
+        {% if etiquetas_subcontrata is defined %}
+        <div class="form-group">
+          <label class="admin-form-label">{{ _('Etiquetas') }}</label>
+          {% from "macros/etiquetas.html" import etiqueta_multiselect with context %}
+          {% if can_assign_etiquetas %}
+          {{ etiqueta_multiselect('etiqueta_ids[]', etiquetas_subcontrata, selected_etiqueta_ids or []) }}
+          <small class="form-text text-muted" style="font-size:0.72rem;">{{ _('Pulsa una etiqueta del catálogo para aplicarla. Las aplicadas salen arriba con una X para quitarlas.') }}</small>
+          {% else %}
+          <p class="text-muted small mb-0">{{ _('Sin permiso para asignar etiquetas.') }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
         <div class="admin-form-options">
           <div class="admin-form-switch-row">
             <label class="admin-form-switch">
@@ -94,4 +107,8 @@
     </section>
   </main>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/etiquetas_select2.js') }}?v=20261005pick"></script>
 {% endblock %}

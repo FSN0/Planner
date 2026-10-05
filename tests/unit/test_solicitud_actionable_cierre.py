@@ -100,6 +100,68 @@ def test_desasignar_vencida_sin_accionables(mock_hoy, mock_asig, mock_db):
 
 @patch('app.services.solicitud_service.db')
 @patch('app.services.solicitud_service.Asignacion')
+@patch('app.services.solicitud_service.today_local', return_value=date(2026, 10, 5))
+def test_asignar_concreta_cubre_dia_es_cumplida(mock_hoy, mock_asig, mock_db):
+    """Asignar en cuadrante el día pedido cierra la concreta."""
+    day = date(2026, 10, 19)
+    sol = _concreta_desasignar(
+        accion='ASIGNAR',
+        estado='PENDIENTE',
+        days=[day],
+        fecha_inicio=day,
+        fecha_fin=day,
+        comentarios=build_comentarios_config([day]),
+    )
+    mock_asig.query.filter.return_value.all.return_value = [
+        SimpleNamespace(fecha=day),
+    ]
+    _recalculate_solicitud_coverage(sol, resolved_by_id=1)
+    assert sol.estado == 'CUMPLIDA'
+    assert sol.auto_fulfilled is True
+
+
+@patch('app.services.solicitud_service.notificar_resolucion_solicitud', create=True)
+@patch('app.services.solicitud_service.get_solicitud_pending_dates')
+@patch('app.services.solicitud_service._recalculate_solicitud_coverage')
+@patch('app.services.solicitud_service._link_concreta_assignment')
+@patch('app.services.solicitud_service.User')
+@patch('app.services.solicitud_service.Solicitud')
+@patch('app.services.solicitud_service.today_local', return_value=date(2026, 10, 5))
+def test_update_cierra_si_pending_vacio(
+    mock_hoy, mock_sol_model, mock_user, mock_link, mock_recalc, mock_pending, mock_notif,
+):
+    """Red de seguridad: sin días pendientes → CUMPLIDA aunque recalc no lo marque."""
+    from app.services.solicitud_service import (
+        update_solicitudes_for_assignment,
+    )
+
+    day = date(2026, 10, 19)
+    sol = _concreta_desasignar(
+        accion='ASIGNAR',
+        estado='PENDIENTE',
+        days=[day],
+        fecha_inicio=day,
+        fecha_fin=day,
+        comentarios=build_comentarios_config([day]),
+    )
+    mock_user.query.get.return_value = SimpleNamespace(id=55, name='A', lastname='B')
+    mock_sol_model.query.filter.return_value.all.return_value = [sol]
+    mock_pending.return_value = []
+
+    def _noop_recalc(s, *a, **k):
+        # Simula un recalc que se deja la solicitud abierta por bug.
+        s.estado = 'PENDIENTE'
+
+    mock_recalc.side_effect = _noop_recalc
+
+    with patch('app.services.solicitud_service._mark_auto_cumplida') as mock_mark:
+        update_solicitudes_for_assignment(10, 55, day, resolved_by_id=1)
+        mock_mark.assert_called_once()
+        assert mock_mark.call_args.kwargs.get('automatico') is True
+
+
+@patch('app.services.solicitud_service.db')
+@patch('app.services.solicitud_service.Asignacion')
 @patch('app.services.solicitud_service.today_local', return_value=date(2026, 10, 3))
 def test_asignar_vencida_sin_atender(mock_hoy, mock_asig, mock_db):
     days = [date(2026, 9, 28), date(2026, 9, 29)]

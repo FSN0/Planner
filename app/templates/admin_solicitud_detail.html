@@ -4,7 +4,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005pick">
 <style>
     .evento-actual-destacado {
         border: 2px solid #333 !important;
@@ -72,7 +72,8 @@
 <script src="https://unpkg.com/@popperjs/core@2"></script>
 <script src="https://unpkg.com/tippy.js@6"></script>
 <script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260908h"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261005pick"></script>
+<script src="{{ url_for('static', filename='js/etiquetas_select2.js') }}?v=20261005pick"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('candidateSearch');
@@ -85,11 +86,16 @@ document.addEventListener('DOMContentLoaded', function() {
         return (link ? link.textContent : fila.querySelector('td')?.textContent || '').toLowerCase().trim();
     }
 
+    function textoFilaCandidato(fila) {
+        return (fila.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
     function aplicarFiltrosCandidatos() {
         const q = (searchInput?.value || '').toLowerCase().trim();
         const filtroTrabajador = document.querySelector('#candidatesTable input[data-col="1"]')?.value.toLowerCase().trim() || '';
         const filtroEspecialidad = document.querySelector('#candidatesTable input[data-col="2"]')?.value.toLowerCase().trim() || '';
-        const filtroEmpresa = document.querySelector('#candidatesTable input[data-col="3"]')?.value.toLowerCase().trim() || '';
+        const filtroEtiquetas = document.querySelector('#candidatesTable input[data-col="3"]')?.value.toLowerCase().trim() || '';
+        const filtroEmpresa = document.querySelector('#candidatesTable input[data-col="4"]')?.value.toLowerCase().trim() || '';
         const btnBusy = document.getElementById('btnToggleBusy');
         const btnPartial = document.getElementById('btnTogglePartial');
         const showBusy = btnBusy ? (btnBusy.getAttribute('data-state') === 'visible') : true;
@@ -98,12 +104,14 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.candidate-row').forEach(fila => {
             const celdas = fila.querySelectorAll('td');
             const nombre = nombreCandidatoFila(fila);
-            const okBusqueda = !q || nombre.includes(q);
+            const haystack = textoFilaCandidato(fila);
+            const okBusqueda = !q || haystack.includes(q) || nombre.includes(q);
             let okColumnas = true;
-            if (celdas.length >= 4 && fila.closest('#candidatesTable')) {
+            if (celdas.length >= 5 && fila.closest('#candidatesTable')) {
                 okColumnas = celdas[1].textContent.toLowerCase().includes(filtroTrabajador)
                     && celdas[2].textContent.toLowerCase().includes(filtroEspecialidad)
-                    && celdas[3].textContent.toLowerCase().includes(filtroEmpresa);
+                    && celdas[3].textContent.toLowerCase().includes(filtroEtiquetas)
+                    && celdas[4].textContent.toLowerCase().includes(filtroEmpresa);
             }
             const okTipo = (!fila.classList.contains('row-busy') || showBusy)
                 && (!fila.classList.contains('row-partial') || showPartial);

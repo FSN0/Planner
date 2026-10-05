@@ -6,9 +6,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pil_util import require_pil  # noqa: E402
+from _pil_util import open_image_or_none, require_pil, save_image_or_warn, warn_bad_image  # noqa: E402
 
-Image = require_pil("generate_favicons.py")
+SCRIPT = "generate_favicons.py"
+Image = require_pil(SCRIPT)
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "app" / "static" / "img" / "brand" / "logo-mark.png"
@@ -31,17 +32,30 @@ def fit_square_transparent(im: Image.Image, size: int) -> Image.Image:
 def main() -> int:
     if not SRC.exists():
         print(f"missing {SRC}", file=sys.stderr)
-        return 1
-    im = Image.open(SRC)
+        return 0
+    im = open_image_or_none(SCRIPT, SRC)
+    if im is None:
+        return 0
     for name, size in (
         ("favicon-48.png", 48),
         ("favicon-192.png", 192),
         ("apple-touch-icon.png", 180),
     ):
-        fit_square_transparent(im, size).save(DEST / name, format="PNG", optimize=True)
-        print(f"wrote {name} ({size}x{size}, transparent)")
+        try:
+            out = fit_square_transparent(im, size)
+        except Exception as e:
+            warn_bad_image(SCRIPT, SRC, e)
+            continue
+        if save_image_or_warn(SCRIPT, out, DEST / name, format="PNG", optimize=True):
+            print(f"wrote {name} ({size}x{size}, transparent)")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"AVISO: {SCRIPT}: {e}", file=sys.stderr)
+        raise SystemExit(0)

@@ -18,10 +18,14 @@
               <tbody>
               {% for item in asignaciones_resumen %}
                 <tr class="assigned-row data-row">
-                  <td data-sort-value="{{ item.worker.lastname|lower }}" title="{{ item.empresa.nombre if item.empresa else '' }}">
+                  <td data-sort-value="{{ item.worker.lastname|lower }} {{ user_search_tag_text(item.worker)|lower }}" title="{{ item.empresa.nombre if item.empresa else '' }}">
                     <a href="{{ url_for('admin.worker_panel', user_id=item.worker.id) }}" class="table-link-primary">
                       {{ item.worker.name }} {{ item.worker.lastname }}
                     </a>
+                    {% if item.worker.etiquetas %}
+                    {% from "macros/etiquetas.html" import etiqueta_chips %}
+                    <div class="mt-1">{{ etiqueta_chips(item.worker.etiquetas) }}</div>
+                    {% endif %}
                   </td>
                   <td class="text-center" data-sort-value="{{ item.num_dias }}">{{ item.num_dias }}</td>
                   <td class="text-center">
@@ -54,7 +58,7 @@
             <label class="solicitud-candidate-search mb-0" for="candidateSearch">
               <i class="fas fa-search" aria-hidden="true"></i>
               <input type="search" id="candidateSearch" class="solicitud-candidate-search-input no-row-nav"
-                     placeholder="{{ _('Buscar trabajador…') }}" autocomplete="off" aria-label="{{ _('Buscar trabajador') }}">
+                     placeholder="{{ _('Buscar nombre, etiqueta…') }}" autocomplete="off" aria-label="{{ _('Buscar trabajador') }}">
             </label>
             {% endif %}
             <div class="solicitud-candidate-tools-actions">
@@ -91,14 +95,16 @@
                       <th style="width:22px;" class="text-center"><input type="checkbox" id="selectAll" class="no-row-nav"></th>
                       <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajador') }}</span><i class="fas fa-sort sort-icon"></i></th>
                       <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Especialidad') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                      <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                      <th class="sortable-col text-center" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)" style="width:4.5rem;"><span class="sortable-label">{{ _('Disp.') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                      <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Etiquetas') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                      <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                      <th class="sortable-col text-center" data-col-index="5" data-sort="none" onclick="sortAdminTable(this)" style="width:4.5rem;"><span class="sortable-label">{{ _('Disp.') }}</span><i class="fas fa-sort sort-icon"></i></th>
                     </tr>
                     <tr class="filter-row">
                       <th></th>
                       <th><input class="table-filter-input no-row-nav" data-col="1" placeholder="…"></th>
                       <th><input class="table-filter-input no-row-nav" data-col="2" placeholder="…"></th>
-                      <th><input class="table-filter-input no-row-nav" data-col="3" placeholder="…"></th>
+                      <th><input class="table-filter-input no-row-nav" data-col="3" placeholder="…" title="{{ _('Filtrar etiquetas') }}"></th>
+                      <th><input class="table-filter-input no-row-nav" data-col="4" placeholder="…"></th>
                       <th></th>
                     </tr>
                   </thead>
@@ -119,6 +125,10 @@
                       <td data-sort-value="{{ (worker.especialidad or worker.categoria_profesional or '')|lower }}" title="{{ worker.categoria_profesional or '' }}">
                         {{ worker.especialidad or worker.categoria_profesional or '—' }}
                       </td>
+                      <td data-sort-value="{{ user_search_tag_text(worker)|lower }}">
+                        {% from "macros/etiquetas.html" import etiqueta_chips %}
+                        {{ etiqueta_chips(worker.etiquetas|list) }}
+                      </td>
                       <td data-sort-value="{{ (worker.company_rel.nombre if worker.company_rel else '')|lower }}">
                         {{ worker.company_rel.nombre if worker.company_rel else '—' }}
                       </td>
@@ -137,17 +147,19 @@
             <div class="candidates-scroll-box">
               <table class="filterable-table admin-data-table mb-0" id="candidatesReadTable">
                 <colgroup>
-                  <col style="width: 24%">
-                  <col style="width: 16%">
-                  <col style="width: 26%">
+                  <col style="width: 22%">
+                  <col style="width: 14%">
+                  <col style="width: 20%">
+                  <col style="width: 22%">
                   <col style="width: 4rem">
                 </colgroup>
                 <thead>
                   <tr class="header-row">
                     <th class="sortable-col" data-col-index="0" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Trabajador') }}</span><i class="fas fa-sort sort-icon"></i></th>
                     <th class="sortable-col" data-col-index="1" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Especialidad') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                    <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
-                    <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-col" data-col-index="2" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Etiquetas') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-col" data-col-index="3" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Empresa') }}</span><i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-col" data-col-index="4" data-sort="none" onclick="sortAdminTable(this)"><span class="sortable-label">{{ _('Estado') }}</span><i class="fas fa-sort sort-icon"></i></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -160,6 +172,10 @@
                       <a href="{{ url_for('admin.worker_panel', user_id=worker.id) }}" class="table-link-primary">{{ worker.name }} {{ worker.lastname }}</a>
                     </td>
                     <td data-sort-value="{{ (worker.especialidad or '')|lower }}">{{ worker.especialidad or '—' }}</td>
+                    <td data-sort-value="{{ user_search_tag_text(worker)|lower }}">
+                      {% from "macros/etiquetas.html" import etiqueta_chips %}
+                      {{ etiqueta_chips(worker.etiquetas|list) }}
+                    </td>
                     <td data-sort-value="{{ (worker.company_rel.nombre if worker.company_rel else '')|lower }}">{{ worker.company_rel.nombre if worker.company_rel else '—' }}</td>
                     <td data-sort-value="{{ status }}">
                       {% if status == 'BUSY' %}<span class="badge-soft badge-soft-red">{{ _('Ocup.') }}</span>

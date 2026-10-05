@@ -19,6 +19,18 @@
 {% endif %}
 {% endmacro %}
 
+{% macro link_vehiculo_cal(vehiculo, fallback='—') %}
+{% if vehiculo %}
+  <button type="button" class="btn btn-link link-user p-0 align-baseline text-left btn-audit-veh-cal"
+          data-vehiculo-id="{{ vehiculo.id }}"
+          data-vehiculo-label="{{ vehiculo.label()|e }}"
+          title="{{ _('Abrir calendario') }}">
+    <strong class="d-block" style="font-size:0.82rem; line-height:1.2; font-weight:600;">{{ vehiculo.matricula or '—' }}</strong>
+    <span class="d-block text-muted" style="font-size:0.72rem; line-height:1.2;">{{ vehiculo.nombre }}</span>
+  </button>
+{% else %}{{ fallback }}{% endif %}
+{% endmacro %}
+
 {% macro historico_toggle(section_id, visto_count) %}
 {% if visto_count %}
 <div class="border-top px-3 py-2">
@@ -34,10 +46,7 @@
 <tr class="audit-data-row {% if es_visto %}audit-row--visto{% endif %}">
   <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
   <td data-sort-value="{{ (reg.vehiculo.matricula or reg.vehiculo.nombre)|lower }}">
-    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=reg.vehiculo.id) }}" class="link-user">
-      <strong>{{ reg.vehiculo.matricula or '—' }}</strong>
-      <span class="d-block text-muted small">{{ reg.vehiculo.nombre }}</span>
-    </a>
+    {{ link_vehiculo_cal(reg.vehiculo) }}
   </td>
   <td data-sort-value="{{ (reg.planned_user.lastname if reg.planned_user else '')|lower }}">
     {% if reg.planned_user %}
@@ -299,12 +308,7 @@
                     <span class="d-block text-muted small">{{ _('desde') }} {{ j.fecha_anterior.strftime('%d/%m/%Y') }} ({{ j.delta_dias }}d)</span>
                   </td>
                   <td data-sort-value="{{ (j.vehiculo.matricula or j.vehiculo.nombre if j.vehiculo else '')|lower }}">
-                    {% if j.vehiculo %}
-                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=j.vehiculo.id) }}" class="link-user">
-                      <strong>{{ j.vehiculo.matricula or '—' }}</strong>
-                      <span class="d-block text-muted small">{{ j.vehiculo.nombre }}</span>
-                    </a>
-                    {% else %}—{% endif %}
+                    {{ link_vehiculo_cal(j.vehiculo) }}
                   </td>
                   <td data-sort-value="{{ j.km_anterior }}">
                     {{ '%.0f'|format(j.km_anterior) }} → {{ '%.0f'|format(j.km_actual) }}
@@ -401,12 +405,7 @@
                 <tr class="audit-data-row">
                   <td class="font-weight-bold" data-sort-value="{{ a.fecha.strftime('%Y%m%d') }}">{{ a.fecha.strftime('%d/%m/%Y') }}</td>
                   <td>
-                    {% if a.vehiculo %}
-                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_id) }}" class="link-user">
-                      <strong>{{ a.vehiculo.matricula or '—' }}</strong>
-                      <span class="d-block text-muted small">{{ a.vehiculo.nombre }}</span>
-                    </a>
-                    {% else %}—{% endif %}
+                    {{ link_vehiculo_cal(a.vehiculo) }}
                   </td>
                   <td data-sort-value="{{ (a.viaje_code or '')|lower }}">{{ a.viaje_code or '—' }}</td>
                   <td class="text-right" data-sort-value="{{ a.qty_km if a.qty_km is not none else '' }}">
@@ -509,11 +508,7 @@
                     </a>
                   </td>
                   <td>
-                    {% if a.vehiculo %}
-                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_id) }}" class="link-user">
-                      {{ a.vehiculo.label() }}
-                    </a>
-                    {% else %}—{% endif %}
+                    {{ link_vehiculo_cal(a.vehiculo) }}
                   </td>
                   <td data-sort-value="{{ (a.ausencia_tipo or '')|lower }}">
                     <strong>{{ a.ausencia_tipo }}</strong>
@@ -611,24 +606,18 @@
                     </a>
                   </td>
                   <td>
-                    {% if a.vehiculo_planificado %}
-                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_planificado_id) }}" class="link-user">
-                      {{ a.vehiculo_planificado.label() }}
-                    </a>
-                    {% else %}—{% endif %}
+                    {{ link_vehiculo_cal(a.vehiculo_planificado) }}
                   </td>
                   <td>
-                    {% if a.vehiculo_reportado %}
-                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=a.vehiculo_reportado_id) }}" class="link-user">
-                      {{ a.vehiculo_reportado.label() }}
-                    </a>
-                    {% else %}—{% endif %}
+                    {{ link_vehiculo_cal(a.vehiculo_reportado) }}
                   </td>
                   <td class="text-right" data-sort-value="{{ a.km if a.km is not none else '' }}">
                     {% if a.km is not none %}{{ '%.0f'|format(a.km) }}{% else %}—{% endif %}
                   </td>
                   <td>{{ a.conductor_odoo or '—' }}</td>
-                  <td class="text-center">{{ btn_visto(a.anomalia_kind, a.anomalia_clave) }}</td>
+                  <td class="text-center">
+                    {{ btn_visto(a.anomalia_kind, a.anomalia_clave) }}
+                  </td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -702,10 +691,7 @@
                 <tr class="audit-data-row">
                   <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                   <td>
-                    <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=reg.vehiculo.id) }}" class="link-user">
-                      <strong>{{ reg.vehiculo.matricula or '—' }}</strong>
-                      <span class="d-block text-muted small">{{ reg.vehiculo.nombre }}</span>
-                    </a>
+                    {{ link_vehiculo_cal(reg.vehiculo) }}
                   </td>
                   <td>
                     {% if reg.planned_user %}
@@ -736,10 +722,35 @@
 
   </main>
 </div>
+
+<div class="modal fade" id="auditVehiculoCalModal" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered" role="document" style="max-width:1100px;">
+    <div class="modal-content">
+      <div class="modal-header align-items-center">
+        <h5 class="modal-title mb-0" id="auditVehiculoCalTitle">{{ _('Calendario del vehículo') }}</h5>
+        <div class="d-flex align-items-center" style="gap:0.5rem;">
+          <a href="#" id="auditVehiculoCalPanelLink" class="btn-admin btn-admin-ghost btn-sm" target="_blank" rel="noopener">
+            <i class="fas fa-external-link-alt"></i> {{ _('Ir al panel') }}
+          </a>
+          <button type="button" class="close" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="audit-vehiculo-calendar" style="min-height:520px;"></div>
+        <p class="text-muted small mb-0 mt-2">
+          {{ _('Tras corregir asignaciones, vuelve a sincronizar o recarga: las alertas que ya no apliquen desaparecerán solas.') }}
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261002veh"></script>
 <script>
 document.querySelectorAll('.auditoria-section-header[data-target]').forEach(function(header) {
   header.addEventListener('click', function() {
@@ -826,6 +837,54 @@ document.addEventListener('click', function(e) {
     btn.disabled = false;
     Swal.fire({{ _('Error')|tojson }}, String(err), 'error');
   });
+});
+
+var auditVehCalInstance = null;
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.btn-audit-veh-cal');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  var vid = parseInt(btn.getAttribute('data-vehiculo-id'), 10);
+  var label = btn.getAttribute('data-vehiculo-label') || {{ _('Vehículo')|tojson }};
+  if (!vid || typeof UniversalCalendarManager === 'undefined') {
+    Swal.fire({{ _('Error')|tojson }}, {{ _('No se pudo abrir el calendario.')|tojson }}, 'error');
+    return;
+  }
+  var titleEl = document.getElementById('auditVehiculoCalTitle');
+  var linkEl = document.getElementById('auditVehiculoCalPanelLink');
+  var host = document.getElementById('audit-vehiculo-calendar');
+  if (titleEl) titleEl.textContent = label;
+  if (linkEl) {
+    linkEl.href = '/admin/vehiculos/' + vid;
+    linkEl.style.display = '';
+  }
+  if (host) host.innerHTML = '';
+  if (auditVehCalInstance && typeof auditVehCalInstance.destroy === 'function') {
+    try { auditVehCalInstance.destroy(); } catch (err) {}
+    auditVehCalInstance = null;
+  }
+  $('#auditVehiculoCalModal').modal('show');
+  setTimeout(function() {
+    auditVehCalInstance = new UniversalCalendarManager('audit-vehiculo-calendar', {
+      context: 'vehiculo',
+      id: vid,
+      mode: 'empleados',
+      entityName: label,
+      hideTitle: true,
+      hideInercia: true,
+      readonly: {{ (not can_edit_calendar|default(false))|tojson }},
+      canEditPast: {{ (can_unassign_cuadrante_pasado|default(false))|tojson }}
+    });
+  }, 250);
+});
+$('#auditVehiculoCalModal').on('hidden.bs.modal', function() {
+  if (auditVehCalInstance && typeof auditVehCalInstance.destroy === 'function') {
+    try { auditVehCalInstance.destroy(); } catch (err) {}
+  }
+  auditVehCalInstance = null;
+  var host = document.getElementById('audit-vehiculo-calendar');
+  if (host) host.innerHTML = '';
 });
 
 function forzarSyncVehiculos(limpiarTodo) {

@@ -24,23 +24,49 @@ def _parse_dates(date_list):
     return sorted(set(valid))
 
 
+def last_vehicle_assignment_end(vehiculo_id, user_id, from_date):
+    """
+    Última fecha planificada de ese usuario en ese vehículo desde ``from_date``
+    (inclusive). Sirve de defecto al desasignar «hasta el final del tramo».
+    """
+    if not vehiculo_id or not user_id or not from_date:
+        return None
+    row = (
+        AsignacionVehiculo.query
+        .filter(
+            AsignacionVehiculo.vehiculo_id == int(vehiculo_id),
+            AsignacionVehiculo.user_id == int(user_id),
+            AsignacionVehiculo.fecha >= from_date,
+        )
+        .order_by(AsignacionVehiculo.fecha.desc())
+        .first()
+    )
+    return row.fecha if row else None
+
+
 def _ocupa_de_verdad(av):
     """
     True si la asignación bloquea el coche/persona ese día.
     Si el conductor planificado tiene ausencia aprobada, el coche cuenta como
-    libre (misma regla que «Coches libres»).
+    libre (misma regla que «Coches libres»). Fantasmas no_usada no ocupan.
     """
     if not av:
+        return False
+    if getattr(av, 'estado', 'efectiva') == 'no_usada':
         return False
     return not user_has_approved_leave(av.user_id, av.fecha)
 
 
 def _needs_leave_overwrite(vehicle_id, worker_id, day):
     """Hay stub de ausencia que hay que sustituir al asignar."""
-    conf_v = AsignacionVehiculo.query.filter_by(vehiculo_id=vehicle_id, fecha=day).first()
+    conf_v = AsignacionVehiculo.query.filter_by(
+        vehiculo_id=vehicle_id, fecha=day, estado='efectiva',
+    ).first()
     if conf_v and conf_v.user_id != worker_id and not _ocupa_de_verdad(conf_v):
         return True
-    conf_u = AsignacionVehiculo.query.filter_by(user_id=worker_id, fecha=day).first()
+    conf_u = AsignacionVehiculo.query.filter_by(
+        user_id=worker_id, fecha=day, estado='efectiva',
+    ).first()
     if conf_u and conf_u.vehiculo_id != vehicle_id and not _ocupa_de_verdad(conf_u):
         return True
     return False
@@ -120,14 +146,18 @@ def process_vehicle_assignment_action(
                 continue
 
             same = AsignacionVehiculo.query.filter_by(
-                vehiculo_id=vehicle.id, user_id=worker.id, fecha=d,
+                vehiculo_id=vehicle.id, user_id=worker.id, fecha=d, estado='efectiva',
             ).first()
             if same:
                 skip_same += 1
                 continue
 
-            conf_v = AsignacionVehiculo.query.filter_by(vehiculo_id=vehicle.id, fecha=d).first()
-            conf_u = AsignacionVehiculo.query.filter_by(user_id=worker.id, fecha=d).first()
+            conf_v = AsignacionVehiculo.query.filter_by(
+                vehiculo_id=vehicle.id, fecha=d, estado='efectiva',
+            ).first()
+            conf_u = AsignacionVehiculo.query.filter_by(
+                user_id=worker.id, fecha=d, estado='efectiva',
+            ).first()
 
             blocks_v = _ocupa_de_verdad(conf_v)
             blocks_u = _ocupa_de_verdad(conf_u)

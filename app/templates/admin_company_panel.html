@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005etq">
 {% endblock %}
 
 {% block wrapper %}
@@ -80,6 +80,13 @@
               <span class="entity-meta-item-value">
                 <span class="entity-color-swatch" style="background:{{ company.color or '#6366f1' }};"></span>
                 {{ company.color or '—' }}
+              </span>
+            </div>
+            <div class="entity-meta-item">
+              <span class="entity-meta-item-label">{{ _('Etiquetas') }}</span>
+              <span class="entity-meta-item-value">
+                {% from "macros/etiquetas.html" import etiqueta_chips %}
+                {{ etiqueta_chips(company.etiquetas|list) }}
               </span>
             </div>
           </div>

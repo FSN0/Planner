@@ -6,9 +6,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pil_util import require_pil  # noqa: E402
+from _pil_util import (  # noqa: E402
+    open_image_or_none,
+    require_pil,
+    save_image_or_warn,
+    warn_bad_image,
+)
 
-Image = require_pil("trim_brand_margins.py")
+SCRIPT = "trim_brand_margins.py"
+Image = require_pil(SCRIPT)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "app" / "static" / "img" / "brand"
@@ -78,15 +84,21 @@ def trim_file(path: Path) -> None:
     if not path.exists():
         print(f"skip missing {path.name}")
         return
-    im = Image.open(path)
-    box = content_bbox(im)
-    if not box:
-        print(f"no content {path.name}")
+    im = open_image_or_none(SCRIPT, path)
+    if im is None:
         return
-    before = im.size
-    cropped = im.convert("RGBA").crop(box)
-    cropped.save(path, format="PNG", optimize=True)
-    print(f"trimmed {path.name}: {before} -> {cropped.size}")
+    try:
+        box = content_bbox(im)
+        if not box:
+            print(f"no content {path.name}")
+            return
+        before = im.size
+        cropped = im.convert("RGBA").crop(box)
+    except Exception as e:
+        warn_bad_image(SCRIPT, path, e)
+        return
+    if save_image_or_warn(SCRIPT, cropped, path, format="PNG", optimize=True):
+        print(f"trimmed {path.name}: {before} -> {cropped.size}")
 
 
 def main() -> int:
@@ -96,4 +108,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"AVISO: {SCRIPT}: {e}", file=sys.stderr)
+        raise SystemExit(0)

@@ -269,6 +269,8 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': 'solicitud' in _ep(),
             'data_tour': None,
             'badge': int(ctx.get('pending_notifications') or 0),
+            'badge_personal': int(ctx.get('pending_solicitudes_personal') or 0),
+            'badge_vehiculos': int(ctx.get('pending_solicitudes_vehiculos') or 0),
         },
         ITEM_AUSENCIAS: {
             'id': ITEM_AUSENCIAS,

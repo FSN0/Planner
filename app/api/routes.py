@@ -547,6 +547,8 @@ def get_universal_calendar_events():
                 color = VEHICLE_COLOR_PLAN
                 ev_type = 'vehiculo'
                 tip = '<b>Azul · Planificado</b><br>Asignado a este vehículo (aún sin km de Odoo).'
+            if v_meta.get('notas'):
+                tip = f"{tip}<br><i>{v_meta['notas']}</i>"
             raw_veh.append({
                 'title': title,
                 'start_date': d,
@@ -561,8 +563,9 @@ def get_universal_calendar_events():
                     'km': v_meta.get('km'),
                     'en_ausencia': bool(v_meta.get('en_ausencia')),
                     'mismatch': bool(v_meta.get('mismatch')),
+                    'notas': v_meta.get('notas'),
                     'tooltipContent': tip,
-                    'tooltipText': tip.replace('<br>', ' · ').replace('<b>', '').replace('</b>', ''),
+                    'tooltipText': tip.replace('<br>', ' · ').replace('<b>', '').replace('</b>', '').replace('<i>', '').replace('</i>', ''),
                 }
             })
         if raw_veh:
@@ -1112,7 +1115,13 @@ def get_universal_calendar_events():
             AsignacionVehiculo.fecha >= start_date,
             AsignacionVehiculo.fecha < end_date,
         ).order_by(AsignacionVehiculo.fecha).all()
-        planned_by_date = {av.fecha: av for av in asig_veh}
+        planned_by_date = {}
+        for av in asig_veh:
+            prev = planned_by_date.get(av.fecha)
+            if prev is None:
+                planned_by_date[av.fecha] = av
+            elif getattr(av, 'es_efectiva', True) and not getattr(prev, 'es_efectiva', True):
+                planned_by_date[av.fecha] = av
 
         odo_regs = RegistroOdometro.query.filter(
             RegistroOdometro.vehiculo_id == entity_id,
@@ -1185,14 +1194,17 @@ def get_universal_calendar_events():
                 )
             )
 
-        def _veh_tip(estado_label, motivo, extra=None):
+        def _veh_tip(estado_label, motivo, extra=None, notas=None):
             """Tooltip HTML + texto plano para el hover del evento."""
             lines = [f'<b>{estado_label}</b>', motivo]
             if extra:
                 lines.append(extra)
+            if notas:
+                lines.append(f'<i>{notas}</i>')
             html = '<br>'.join(lines)
             plain = ' · '.join(
-                p.replace('<b>', '').replace('</b>', '') for p in lines
+                p.replace('<b>', '').replace('</b>', '').replace('<i>', '').replace('</i>', '')
+                for p in lines
             )
             return html, plain
 
@@ -1241,6 +1253,8 @@ def get_universal_calendar_events():
             if av and not has_odoo:
                 obra = _obra_for_user_day(av.user_id, fecha)
                 title = planned_name
+                av_notas = (getattr(av, 'notas', None) or '').strip() or None
+                is_ghost = getattr(av, 'estado', 'efectiva') == 'no_usada'
                 if on_leave:
                     tipo = (leave.tipo or 'Ausencia').strip() or 'Ausencia'
                     title = f"{planned_name} · {tipo}"
@@ -1248,20 +1262,26 @@ def get_universal_calendar_events():
                         'Turquesa · Libre (ausencia)',
                         f'{planned_name} está de {tipo.lower()} y sigue asignado a este coche.',
                         'El coche cuenta como libre a efectos prácticos (misma regla que Coches libres).',
+                        notas=av_notas,
                     )
                     color = VEHICLE_COLOR_AUSENCIA
                     status = 'ausencia'
-                elif fecha < hoy:
+                elif is_ghost or fecha < hoy:
                     from flask import g as _g
                     _tenant = getattr(_g, 'current_tenant', None)
                     _mods = getattr(_tenant, 'modulos_activos', None) or {} if _tenant else {}
-                    if _mods.get('odoo'):
+                    if is_ghost or _mods.get('odoo'):
                         if obra:
                             title = f"{planned_name} · {_obra_label(obra)}"
                         title = f"{title} · sin km"
                         tip_h, tip_p = _veh_tip(
-                            'Naranja · Conflicto',
-                            f'{planned_name} estaba planificado pero no hay kilómetros reportados en Odoo.',
+                            'Naranja · Plan no usado' if is_ghost else 'Naranja · Conflicto',
+                            (
+                                f'{planned_name} estaba planificado aquí y no reportó km en este coche.'
+                                if is_ghost else
+                                f'{planned_name} estaba planificado pero no hay kilómetros reportados en Odoo.'
+                            ),
+                            notas=av_notas,
                         )
                         color = VEHICLE_COLOR_CONFLICTO
                         status = 'conflicto'
@@ -1272,6 +1292,7 @@ def get_universal_calendar_events():
                             'Azul · Planificado',
                             f'{planned_name} estaba asignado a este coche.',
                             'Sin integración ERP no hay contraste con km reales.',
+                            notas=av_notas,
                         )
                         color = VEHICLE_COLOR_PLAN
                         status = 'plan'
@@ -1282,6 +1303,7 @@ def get_universal_calendar_events():
                         'Azul · Planificado',
                         f'{planned_name} está asignado a este coche.',
                         'Aún no hay km de Odoo (día futuro o pendiente de sync).',
+                        notas=av_notas,
                     )
                     color = VEHICLE_COLOR_PLAN
                     status = 'plan'
@@ -1294,6 +1316,8 @@ def get_universal_calendar_events():
                     'obra_id': obra.id if obra else None,
                     'en_ausencia': on_leave,
                     'ausencia_tipo': leave.tipo if leave else None,
+                    'notas': av_notas,
+                    'asig_estado': getattr(av, 'estado', 'efectiva'),
                 }, tip_h, tip_p)
                 continue
 

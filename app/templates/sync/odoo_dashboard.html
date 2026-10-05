@@ -374,6 +374,32 @@ Content-Type: application/json
         <span class="sync-kpi-value {{ 'sync-kpi-value--danger' if incidencias_pendientes else '' }}">{{ incidencias_pendientes }}</span>
         <span class="sync-kpi-sub">{{ fichajes_hoy }} {{ _('fichajes procesados hoy') }}</span>
       </div>
+      {% set emp_pend = preview_pending.get('empleados', 0) %}
+      <div class="sync-kpi-card">
+        <span class="sync-kpi-label">{{ _('Personal interno por revisar') }}</span>
+        <span class="sync-kpi-value {{ 'sync-kpi-value--danger' if emp_pend else '' }}">{{ emp_pend }}</span>
+        <span class="sync-kpi-sub">
+          {% if emp_pend %}
+          <a href="{{ url_for('sync.preview_empleados', cached=1) }}">{{ _('Ver pendientes') }}</a>
+          · {{ _('conflictos / dpto / bajas') }}
+          {% else %}
+          {{ _('Sin avisos guardados') }}
+          {% endif %}
+        </span>
+      </div>
+      {% set sub_pend = preview_pending.get('subcontratas', 0) %}
+      <div class="sync-kpi-card">
+        <span class="sync-kpi-label">{{ _('Subcontratas por revisar') }}</span>
+        <span class="sync-kpi-value {{ 'sync-kpi-value--danger' if sub_pend else '' }}">{{ sub_pend }}</span>
+        <span class="sync-kpi-sub">
+          {% if sub_pend %}
+          <a href="{{ url_for('sync.preview_subcontratas', cached=1) }}">{{ _('Ver pendientes') }}</a>
+          · {{ _('avisos / vínculos / bajas') }}
+          {% else %}
+          {{ _('Sin avisos guardados') }}
+          {% endif %}
+        </span>
+      </div>
     </div>
 
     <div class="sync-entity-row">

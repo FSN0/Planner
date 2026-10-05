@@ -9,6 +9,10 @@ from app import db
 from app.models import Obra, User, Company, SyncLog
 from app.sync.dispatcher import get_sync_adapter
 from app.utils.timezone_utils import utc_now
+from app.services.odoo_employee_metadata import (
+    apply_odoo_employee_external_ids,
+    build_external_ids_for_new_employee,
+)
 
 
 def _log_estado(errores, had_exception=False):
@@ -138,7 +142,12 @@ def run_auto_sync_empleados(modo='Automático'):
     for obj in emp_nuevos:
         from app.services.auth_login_service import default_auth_mode_for_role
         db.session.add(User(
-            external_ids={'odoo': str(obj['odoo_id'])},
+            external_ids=build_external_ids_for_new_employee(
+                obj['odoo_id'],
+                department=obj.get('departamento'),
+                barcode=obj.get('barcode'),
+                import_source='sync_empleados_auto',
+            ),
             name=obj['name'], lastname=obj['lastname'],
             dni=obj['dni'], email=obj['email'], role=obj['role'],
             categoria_profesional=obj.get('categoria_profesional', 'Sin definir'),
@@ -150,7 +159,13 @@ def run_auto_sync_empleados(modo='Automático'):
     for obj in emp_act:
         user = User.query.get(obj['local_id'])
         if user:
-            _set_odoo_external_id(user, obj['odoo_id'])
+            apply_odoo_employee_external_ids(
+                user,
+                obj['odoo_id'],
+                department=obj.get('departamento'),
+                barcode=obj.get('barcode'),
+                import_source='sync_empleados_auto',
+            )
             user.name = obj['name']
             user.lastname = obj['lastname']
             from app.services.user_role_sync_service import apply_odoo_role_if_allowed
@@ -160,6 +175,16 @@ def run_auto_sync_empleados(modo='Automático'):
                 reactivar(user, commit=False)
             else:
                 user.active = True
+
+    for obj in diff.get('sin_cambios') or []:
+        user = User.query.get(obj.get('local_id'))
+        if user:
+            apply_odoo_employee_external_ids(
+                user,
+                obj['odoo_id'],
+                department=obj.get('departamento'),
+                barcode=obj.get('barcode'),
+            )
 
     emp_baja_aplicables = desactivados_aplicables(diff, emp_baja)
     for obj in emp_baja_aplicables:
@@ -230,6 +255,9 @@ def run_auto_sync_subcontratas(modo='Automático'):
         mapa_empresas[obj['odoo_id']] = nueva.id
 
     for obj in diff['empleados']['actualizados']:
+        # No reescribir identidad si el Id Odoo saltó a otro partner no ligado.
+        if (obj.get('cambios') or {}).get('Id Odoo'):
+            continue
         user = User.query.get(obj['local_id'])
         if user:
             _set_odoo_external_id(user, obj['odoo_id'])
@@ -275,15 +303,17 @@ def run_auto_sync_subcontratas(modo='Automático'):
 
         with db.session.no_autoflush:
             existente = User.query.filter(
-                (User.dni == dni) | (User.email == email)
+                (User.dni == dni)
+                | (User.external_ids['odoo'].astext == str(obj['odoo_id']))
             ).order_by(User.is_deleted.asc(), User.id.asc()).first()
             if not existente:
-                # Por si el DNI local quedó con sufijo -EXT / -del-
+                existente = User.query.filter(
+                    User.dni == f"{dni}-EXT{obj['odoo_id']}"
+                ).first()
+            if not existente:
                 existente = User.query.filter(
                     User.external_ids['odoo'].astext == str(obj['odoo_id'])
                 ).first()
-            if not existente and email:
-                existente = User.query.filter(User.email == email).first()
 
         if existente:
             _set_odoo_external_id(existente, obj['odoo_id'])

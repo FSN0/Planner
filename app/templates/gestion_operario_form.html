@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005pick">
 <style>
   .user-form-advanced {
     margin-top: 1rem;
@@ -129,6 +129,19 @@
           <label class="admin-form-label">{{ _('DNI / NIE') }}</label>
           <input type="text" name="dni" class="form-control" value="{% if edit_mode %}{{ user.dni }}{% endif %}" required>
         </div>
+
+        {% if etiquetas_empleado is defined %}
+        <div class="form-group" id="userEtiquetasBlock">
+          <label class="admin-form-label">{{ _('Etiquetas') }}</label>
+          {% from "macros/etiquetas.html" import etiqueta_multiselect, etiqueta_chips with context %}
+          {% if can_assign_etiquetas %}
+          {{ etiqueta_multiselect('etiqueta_ids[]', etiquetas_empleado, selected_etiqueta_ids or []) }}
+          <small class="form-text text-muted" style="font-size:0.72rem;">{{ _('Pulsa una etiqueta del catálogo para aplicarla. Las aplicadas salen arriba con una X para quitarlas.') }}</small>
+          {% else %}
+          {{ etiqueta_chips(user.etiquetas if edit_mode else []) }}
+          {% endif %}
+        </div>
+        {% endif %}
 
         {# —— Operario: PIN —— #}
         {% if tenant_usa_acceso_pin %}
@@ -505,4 +518,5 @@
   syncRole();
 })();
 </script>
+<script src="{{ url_for('static', filename='js/etiquetas_select2.js') }}?v=20261005pick"></script>
 {% endblock %}

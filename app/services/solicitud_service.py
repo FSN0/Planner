@@ -166,16 +166,38 @@ def log_nueva_solicitud(solicitud):
     )
 
 
-def get_solicitud_auto_cierre_texto(solicitud):
-    """Texto corto de trazabilidad si se autocerró por cuadrante."""
-    if not getattr(solicitud, 'auto_fulfilled', False):
-        return None
+def _solicitud_cierre_marker(solicitud):
+    """Rastro de cierre: auto (cuadrante) o manual (desde la solicitud)."""
     config = _parse_solicitud_config(solicitud)
-    ac = config.get('auto_cierre') if isinstance(config, dict) else None
-    if not isinstance(ac, dict):
+    if not isinstance(config, dict):
+        return None, None
+    if isinstance(config.get('auto_cierre'), dict):
+        return 'auto_cierre', config['auto_cierre']
+    if isinstance(config.get('cierre'), dict):
+        return 'cierre', config['cierre']
+    return None, None
+
+
+def solicitud_cerrada_desde_solicitud(solicitud):
+    """True si se cerró asignando desde la ficha de solicitud (no autocierre)."""
+    if getattr(solicitud, 'auto_fulfilled', False):
+        return False
+    kind, _ = _solicitud_cierre_marker(solicitud)
+    return kind == 'cierre'
+
+
+def get_solicitud_auto_cierre_texto(solicitud):
+    """Texto corto de trazabilidad del cierre (auto o desde solicitud)."""
+    kind, ac = _solicitud_cierre_marker(solicitud)
+    if not ac:
+        if not getattr(solicitud, 'auto_fulfilled', False):
+            return None
+        return None
+    if kind == 'auto_cierre' and not getattr(solicitud, 'auto_fulfilled', False):
         return None
     motivo_labels = {
         'asignaciones_cuadrante': 'cubierta en cuadrante',
+        'asignacion_desde_solicitud': 'asignada desde la solicitud',
         'cubierto_accionable_resto_pasado': 'cubierto lo operable; resto en pasado',
         'cubierto_antes_de_vencer': 'cubierta antes de vencer',
         'vencida_sin_dias_accionables': 'vencida (sin días accionables)',
@@ -401,7 +423,9 @@ def reconcile_solicitudes_after_cuadrante_change(
         )
 
 
-def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=None):
+def update_solicitudes_for_assignment(
+    obra_id, worker_id, fecha, resolved_by_id=None, *, origen_cierre='cuadrante',
+):
     worker_id = int(worker_id)
     if obra_id:
         obra_id = int(obra_id)
@@ -418,11 +442,31 @@ def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=
     ).all()
 
     for sol in qs:
-        if (sol.tipo or '').upper() == "CONCRETA" and sol.empleado_id != worker_id:
-            continue
+        tipo = (sol.tipo or '').upper()
+        if tipo == "CONCRETA":
+            emp_id = sol.empleado_id
+            try:
+                emp_id = int(emp_id) if emp_id is not None else None
+            except (TypeError, ValueError):
+                emp_id = None
+            if emp_id != worker_id:
+                continue
+            # Vincular la asignación a esta concreta (trazabilidad).
+            _link_concreta_assignment(sol, worker_id, fecha)
 
         estado_previo = sol.estado
-        _recalculate_solicitud_coverage(sol, resolved_by_id)
+        _recalculate_solicitud_coverage(
+            sol, resolved_by_id, origen_cierre=origen_cierre,
+        )
+
+        # Red de seguridad: si ya no queda ningún día pendiente, cerrar sí o sí.
+        if sol.estado in ('PENDIENTE', 'EN_PROCESO'):
+            pending = get_solicitud_pending_dates(sol)
+            if not pending:
+                automatico = origen_cierre != 'solicitud'
+                _mark_auto_cumplida(
+                    sol, resolved_by_id=resolved_by_id, automatico=automatico,
+                )
 
         if estado_previo != 'CUMPLIDA' and sol.estado == 'CUMPLIDA':
             from app.services.email_service import notificar_resolucion_solicitud
@@ -434,20 +478,41 @@ def update_solicitudes_for_assignment(obra_id, worker_id, fecha, resolved_by_id=
                 pass
 
 
-def _mark_auto_cumplida(solicitud, resolved_by_id=None):
-    """Cierre automático total por cuadrante."""
+def _link_concreta_assignment(solicitud, worker_id, fecha):
+    """Si la asignación del día no tiene solicitud_id, la enlaza a esta concreta."""
+    if not getattr(solicitud, 'id', None):
+        return
+    asig = Asignacion.query.filter_by(
+        obra_id=int(solicitud.obra_id),
+        user_id=int(worker_id),
+        fecha=fecha,
+    ).first()
+    if not asig:
+        return
+    if asig.solicitud_id is None:
+        asig.solicitud_id = solicitud.id
+        db.session.add(asig)
+        db.session.flush()
+
+
+def _mark_auto_cumplida(solicitud, resolved_by_id=None, *, automatico=True):
+    """Cierre total por cobertura (cuadrante = auto, ficha solicitud = manual)."""
+    motivo = (
+        'asignaciones_cuadrante' if automatico else 'asignacion_desde_solicitud'
+    )
     _mark_auto_cierre(
         solicitud,
         estado='CUMPLIDA',
-        motivo='asignaciones_cuadrante',
+        motivo=motivo,
         resolved_by_id=resolved_by_id,
+        automatico=automatico,
     )
 
 
-def _mark_auto_cierre(solicitud, *, estado, motivo, resolved_by_id=None):
-    """Cierre automático (CUMPLIDA o CERRADA_PARCIAL) con rastro."""
+def _mark_auto_cierre(solicitud, *, estado, motivo, resolved_by_id=None, automatico=True):
+    """Cierre por cobertura (CUMPLIDA o CERRADA_PARCIAL) con rastro."""
     solicitud.estado = estado
-    solicitud.auto_fulfilled = True
+    solicitud.auto_fulfilled = bool(automatico)
     solicitud.resolved_at = utc_now()
     if resolved_by_id:
         solicitud.resolved_by_id = resolved_by_id
@@ -461,22 +526,60 @@ def _mark_auto_cierre(solicitud, *, estado, motivo, resolved_by_id=None):
         actor = User.query.get(resolved_by_id)
         if actor:
             actor_name = f'{(actor.name or "").strip()} {(actor.lastname or "").strip()}'.strip()
-    config['auto_cierre'] = {
+    payload = {
         'at': utc_now().isoformat(timespec='seconds'),
         'motivo': motivo,
         'estado': estado,
         'actor_id': resolved_by_id,
         'actor_nombre': actor_name,
     }
+    if automatico:
+        config.pop('cierre', None)
+        config['auto_cierre'] = payload
+    else:
+        config.pop('auto_cierre', None)
+        config['cierre'] = payload
     _write_solicitud_config(solicitud, config)
 
 
 def _clear_auto_cierre_marker(solicitud):
     solicitud.auto_fulfilled = False
     config = _parse_solicitud_config(solicitud)
+    changed = False
     if 'auto_cierre' in config:
         config.pop('auto_cierre', None)
+        changed = True
+    if 'cierre' in config:
+        config.pop('cierre', None)
+        changed = True
+    if changed:
         _write_solicitud_config(solicitud, config)
+
+
+def mark_solicitud_cierre_desde_ficha(solicitud, resolved_by_id=None):
+    """
+    Si la solicitud ya quedó CUMPLIDA/CERRADA_PARCIAL por asignar desde su ficha,
+    anota cierre manual (no «Autocerrada»).
+    """
+    if solicitud.estado not in ('CUMPLIDA', 'CERRADA_PARCIAL'):
+        return False
+    kind, ac = _solicitud_cierre_marker(solicitud)
+    motivo = 'asignacion_desde_solicitud'
+    if (
+        solicitud.estado == 'CERRADA_PARCIAL'
+        and isinstance(ac, dict)
+        and ac.get('motivo')
+        and ac.get('motivo') not in ('asignaciones_cuadrante', 'asignacion_desde_solicitud')
+    ):
+        motivo = ac['motivo']
+    _mark_auto_cierre(
+        solicitud,
+        estado=solicitud.estado,
+        motivo=motivo,
+        resolved_by_id=resolved_by_id or getattr(solicitud, 'resolved_by_id', None),
+        automatico=False,
+    )
+    return True
 
 
 def get_solicitud_actionable_dates(solicitud, hoy=None):
@@ -550,13 +653,15 @@ def iter_solicitud_calendar_spans(solicitud):
     return collapse_dates_to_ranges(get_solicitud_pending_dates(solicitud))
 
 
-def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
+def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None, *, origen_cierre='cuadrante'):
     hoy = today_local()
     valid_dates = get_solicitud_valid_dates(solicitud)
     actionable = [d for d in valid_dates if d >= hoy]
     past_dates = [d for d in valid_dates if d < hoy]
     total_validos = len(valid_dates)
     prev_estado = solicitud.estado
+    # Desde la ficha de solicitud = cierre manual; desde cuadrante = autocierre.
+    automatico = origen_cierre != 'solicitud'
     tipo = (solicitud.tipo or '').upper()
 
     if tipo == "GENERICA":
@@ -599,18 +704,21 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
                     solicitud, estado='CUMPLIDA',
                     motivo='cubierto_antes_de_vencer',
                     resolved_by_id=resolved_by_id,
+                    automatico=automatico,
                 )
             elif total_assignments_count > 0:
                 _mark_auto_cierre(
                     solicitud, estado='CERRADA_PARCIAL',
                     motivo='vencida_cobertura_parcial',
                     resolved_by_id=resolved_by_id,
+                    automatico=automatico,
                 )
             else:
                 _mark_auto_cierre(
                     solicitud, estado='CERRADA_PARCIAL',
                     motivo='vencida_sin_atender',
                     resolved_by_id=resolved_by_id,
+                    automatico=automatico,
                 )
         else:
             actionable_counts = [counts_by_day.get(d, 0) for d in actionable]
@@ -624,9 +732,12 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
                         solicitud, estado='CERRADA_PARCIAL',
                         motivo='cubierto_accionable_resto_pasado',
                         resolved_by_id=resolved_by_id,
+                        automatico=automatico,
                     )
                 else:
-                    _mark_auto_cumplida(solicitud, resolved_by_id=resolved_by_id)
+                    _mark_auto_cumplida(
+                        solicitud, resolved_by_id=resolved_by_id, automatico=automatico,
+                    )
             elif sum(actionable_counts) > 0 or total_assignments_count > 0:
                 solicitud.estado = "EN_PROCESO"
                 solicitud.resolved_at = None
@@ -664,12 +775,14 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
                         solicitud, estado='CUMPLIDA',
                         motivo='desasignacion_completa',
                         resolved_by_id=resolved_by_id,
+                        automatico=automatico,
                     )
                 else:
                     _mark_auto_cierre(
                         solicitud, estado='CERRADA_PARCIAL',
                         motivo='vencida_sin_dias_accionables',
                         resolved_by_id=resolved_by_id,
+                        automatico=automatico,
                     )
             elif not asignados_actionable:
                 # Hoy/futuro ya limpios: la baja operativa está hecha.
@@ -679,9 +792,12 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
                         solicitud, estado='CERRADA_PARCIAL',
                         motivo='cubierto_accionable_resto_pasado',
                         resolved_by_id=resolved_by_id,
+                        automatico=automatico,
                     )
                 else:
-                    _mark_auto_cumplida(solicitud, resolved_by_id=resolved_by_id)
+                    _mark_auto_cumplida(
+                        solicitud, resolved_by_id=resolved_by_id, automatico=automatico,
+                    )
             elif len(asignados_actionable) < len(actionable):
                 solicitud.estado = "EN_PROCESO"
                 if prev_estado in ('CUMPLIDA', 'CERRADA_PARCIAL'):
@@ -698,18 +814,22 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
                 pass
             elif not actionable:
                 if len(asignados) == total_validos and total_validos > 0:
-                    _mark_auto_cumplida(solicitud, resolved_by_id=resolved_by_id)
+                    _mark_auto_cumplida(
+                        solicitud, resolved_by_id=resolved_by_id, automatico=automatico,
+                    )
                 elif asignados:
                     _mark_auto_cierre(
                         solicitud, estado='CERRADA_PARCIAL',
                         motivo='vencida_cobertura_parcial',
                         resolved_by_id=resolved_by_id,
+                        automatico=automatico,
                     )
                 else:
                     _mark_auto_cierre(
                         solicitud, estado='CERRADA_PARCIAL',
                         motivo='vencida_sin_atender',
                         resolved_by_id=resolved_by_id,
+                        automatico=automatico,
                     )
             elif actionable and asignados_actionable.issuperset(set(actionable)):
                 solicitud.cantidad_cubierta = solicitud.cantidad_solicitada
@@ -719,9 +839,12 @@ def _recalculate_solicitud_coverage(solicitud, resolved_by_id=None):
                         solicitud, estado='CERRADA_PARCIAL',
                         motivo='cubierto_accionable_resto_pasado',
                         resolved_by_id=resolved_by_id,
+                        automatico=automatico,
                     )
                 else:
-                    _mark_auto_cumplida(solicitud, resolved_by_id=resolved_by_id)
+                    _mark_auto_cumplida(
+                        solicitud, resolved_by_id=resolved_by_id, automatico=automatico,
+                    )
             elif asignados_actionable:
                 solicitud.estado = "EN_PROCESO"
                 if prev_estado in ('CUMPLIDA', 'CERRADA_PARCIAL'):
@@ -753,6 +876,8 @@ def sweep_open_solicitudes_actionable(limit=300):
     for sol in sols:
         prev = sol.estado
         _recalculate_solicitud_coverage(sol, resolved_by_id=None)
+        if sol.estado in ('PENDIENTE', 'EN_PROCESO') and not get_solicitud_pending_dates(sol):
+            _mark_auto_cumplida(sol, resolved_by_id=None, automatico=True)
         if sol.estado != prev:
             changed += 1
     if changed:
@@ -761,7 +886,7 @@ def sweep_open_solicitudes_actionable(limit=300):
 
 class SolicitudService:
     @staticmethod
-    def create_solicitud_generica(solicitante_id, obra_id, fecha_inicio, fecha_fin, cantidad, perfil, notas=None, fechas_explicitas=None):
+    def create_solicitud_generica(solicitante_id, obra_id, fecha_inicio, fecha_fin, cantidad, perfil, notas=None, fechas_explicitas=None, etiqueta_ids=None):
         solicitante = User.query.get(solicitante_id)
         fechas = fechas_explicitas or [fecha_inicio + timedelta(days=i) for i in range((fecha_fin - fecha_inicio).days + 1)]
         baseline = snapshot_generica_baseline(obra_id, fechas)
@@ -780,6 +905,10 @@ class SolicitudService:
             estado="PENDIENTE"
         )
         db.session.add(nueva_solicitud)
+        db.session.flush()
+        if etiqueta_ids:
+            from app.services.etiqueta_service import set_solicitud_etiquetas
+            set_solicitud_etiquetas(nueva_solicitud, etiqueta_ids)
         db.session.commit()
         log_nueva_solicitud(nueva_solicitud)
         notificar_nueva_solicitud(nueva_solicitud, solicitante.name)

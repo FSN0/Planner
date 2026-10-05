@@ -38,8 +38,11 @@ PERMISSION_MODULES = (
     ('integraciones', 'Integraciones (hub)', 'Integraciones'),
     ('sync_odoo', 'Sincronización Odoo', 'Integraciones'),
     ('soltec_alta_odoo', 'Alta Odoo', 'Integraciones'),
+    ('soltec_alta_odoo_admin', 'Alta Odoo · entrar como admin', 'Integraciones'),
     ('soltec_portal', 'Portal Soltec', 'Integraciones'),
     ('primeros_pasos', 'Primeros pasos', 'Sistema'),
+    ('etiquetas', 'Etiquetas (ver / asignar)', 'Sistema'),
+    ('etiquetas_catalogo', 'Etiquetas · catálogo', 'Sistema'),
     ('configuracion', 'Configuración', 'Sistema'),
     ('permisos', 'Permisos por rol', 'Sistema'),
     ('logs', 'Logs', 'Sistema'),
@@ -70,6 +73,7 @@ BINARY_TICK_MODULES = frozenset({
     'asignaciones',
     'planificar_flota',
     'cuadrante_pasado',
+    'soltec_alta_odoo_admin',
 })
 
 # Solo lectura en UI (entrar a pantalla; la acción cuelga de otro módulo)
@@ -109,6 +113,7 @@ _DEFAULTS = {
         'auditoria_fichajes': frozenset('rw'),
         'soltec_alta_odoo': frozenset('r'),
         'soltec_portal': frozenset('r'),
+        'etiquetas': frozenset('r'),
     },
     ROLE_LABORAL: {
         'inicio': frozenset('r'),
@@ -127,6 +132,7 @@ _DEFAULTS = {
         'trabajadores': frozenset('r'),
         'valoraciones': frozenset('r'),
         'directorio': frozenset('r'),
+        'etiquetas': frozenset('r'),
     },
     ROLE_RRHH: {
         'inicio': frozenset('r'),
@@ -145,11 +151,13 @@ _DEFAULTS = {
         'trabajadores': frozenset('r'),
         'valoraciones': frozenset('r'),
         'directorio': frozenset('r'),
+        'etiquetas': frozenset('r'),
     },
     ROLE_OPERARIO: {
         'operario_fichaje': frozenset('rw'),
         'operario_calendario': frozenset('r'),
         'operario_ausencias': frozenset('rw'),
+        'etiquetas': frozenset('r'),
     },
 }
 
@@ -188,6 +196,8 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
     if module == 'sync_odoo':
         return has_odoo
     if module == 'soltec_alta_odoo':
+        return has_odoo_alta
+    if module == 'soltec_alta_odoo_admin':
         return has_odoo_alta
     if module == 'soltec_portal':
         return is_soltec_tenant(tenant) and has_odoo
@@ -288,7 +298,10 @@ MODULE_WRITE_HINTS = {
     'integraciones': 'Acciones del hub',
     'sync_odoo': 'Preview, sincronizar, guardar configuración',
     'soltec_alta_odoo': 'Con Lectura basta para abrir',
+    'soltec_alta_odoo_admin': 'Ver todos los contratos (como admin de Altas)',
     'soltec_portal': 'Con Lectura basta para abrir',
+    'etiquetas': 'Asignar etiquetas en fichas de personal y subcontratas',
+    'etiquetas_catalogo': 'Crear, renombrar, absorber y borrar etiquetas',
     'logs': 'Marcar / gestionar avisos',
     'configuracion': 'Guardar ajustes del espacio',
     'permisos': 'Cambiar la matriz de permisos',
@@ -312,7 +325,10 @@ MODULE_READ_HINTS = {
     'integraciones': 'Ver el listado de integraciones',
     'sync_odoo': 'Entrar al centro de sincronización Odoo',
     'soltec_alta_odoo': 'Abrir el panel de altas Odoo',
+    'soltec_alta_odoo_admin': 'Entrar a Altas con visión completa (todos los contratos)',
     'soltec_portal': 'Abrir el portal Soltec',
+    'etiquetas': 'Ver y filtrar por etiquetas',
+    'etiquetas_catalogo': 'Gestionar el catálogo en Ajustes',
     'operario_fichaje': 'Acceso a /fichaje para fichar',
     'operario_calendario': 'Ver el calendario propio en /fichaje',
     'operario_ausencias': 'Ver y pedir ausencias propias en /fichaje',

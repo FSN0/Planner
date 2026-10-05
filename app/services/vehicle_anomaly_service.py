@@ -151,6 +151,9 @@ def detect_cross_vehicle_reports(fecha_desde, fecha_hasta):
 
     planned_by_user_date = {}
     for a in asignaciones:
+        # Solo la efectiva cuenta como «plan vigente» del operario.
+        if getattr(a, 'estado', 'efectiva') != 'efectiva':
+            continue
         planned_by_user_date[(a.user_id, a.fecha)] = a
 
     odo_regs = RegistroOdometro.query.filter(

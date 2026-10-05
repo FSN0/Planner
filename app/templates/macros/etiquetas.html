@@ -1,0 +1,59 @@
+{# Chip visual de etiqueta. #}
+{% macro etiqueta_chip(e, size='sm') -%}
+{% set has_color = e.color and e.color|lower not in ['#ffffff', '#fff', ''] %}
+<span class="sp-etiqueta-chip sp-etiqueta-chip--{{ size }}{% if not has_color %} sp-etiqueta-chip--plain{% endif %}"
+      {% if has_color %}style="background:{{ e.color }};border-color:{{ e.color }};color:#fff;"{% endif %}
+      title="{{ e.nombre }}">{{ e.nombre }}</span>
+{%- endmacro %}
+
+{% macro etiqueta_chips(items, empty='—') -%}
+{% if items %}
+<span class="sp-etiqueta-chips">{% for e in items %}{{ etiqueta_chip(e) }}{% endfor %}</span>
+{% else %}{{ empty }}{% endif %}
+{%- endmacro %}
+
+{# Selector: catálogo clicable + seleccionadas con X (sin Select2). #}
+{% macro etiqueta_picker(name, catalog, selected_ids, disabled=False) -%}
+{% set selected_set = selected_ids or [] %}
+<div class="sp-etiqueta-picker{% if disabled %} sp-etiqueta-picker--disabled{% endif %}"
+     data-input-name="{{ name }}">
+  <div class="sp-etiqueta-picker-selected" data-role="selected" aria-live="polite">
+    {% for e in catalog if e.id in selected_set %}
+    <span class="sp-etiqueta-chip sp-etiqueta-chip--pick{% if not e.color or e.color|lower in ['#ffffff', '#fff', ''] %} sp-etiqueta-chip--plain{% endif %}"
+          data-id="{{ e.id }}"
+          {% if e.color and e.color|lower not in ['#ffffff', '#fff', ''] %}style="background:{{ e.color }};border-color:{{ e.color }};color:#fff;"{% endif %}>
+      <span class="sp-etiqueta-chip-label">{{ e.nombre }}</span>
+      {% if not disabled %}
+      <button type="button" class="sp-etiqueta-chip-remove" data-role="remove" aria-label="{{ _('Quitar') }}">&times;</button>
+      {% endif %}
+      <input type="hidden" name="{{ name }}" value="{{ e.id }}">
+    </span>
+    {% else %}
+    <span class="sp-etiqueta-picker-empty" data-role="empty">{{ _('Ninguna seleccionada') }}</span>
+    {% endfor %}
+  </div>
+  {% if not disabled %}
+  <p class="sp-etiqueta-picker-hint">{{ _('Pulsa una etiqueta para aplicarla:') }}</p>
+  <div class="sp-etiqueta-picker-catalog" data-role="catalog">
+    {% for e in catalog %}
+    <button type="button"
+            class="sp-etiqueta-chip sp-etiqueta-chip--catalog{% if e.id in selected_set %} is-selected{% endif %}{% if not e.color or e.color|lower in ['#ffffff', '#fff', ''] %} sp-etiqueta-chip--plain{% endif %}"
+            data-id="{{ e.id }}"
+            data-nombre="{{ e.nombre }}"
+            data-color="{{ e.color or '' }}"
+            {% if e.color and e.color|lower not in ['#ffffff', '#fff', ''] %}style="--etq-color:{{ e.color }};"{% endif %}
+            {% if e.id in selected_set %}aria-pressed="true"{% else %}aria-pressed="false"{% endif %}>
+      {{ e.nombre }}
+    </button>
+    {% else %}
+    <span class="text-muted small">{{ _('No hay etiquetas en el catálogo. Créalas en Ajustes → Etiquetas.') }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{# Compat: alias del picker (sustituye al multiselect Select2). #}
+{% macro etiqueta_multiselect(name, catalog, selected_ids, disabled=False) -%}
+{{ etiqueta_picker(name, catalog, selected_ids, disabled=disabled) }}
+{%- endmacro %}

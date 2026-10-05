@@ -223,8 +223,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!window.AppItems) return;
         var items = window.AppItems.get() || [];
         var byGroup = {};
+        var requestLaneByGroup = {};
         items.forEach(function (it) {
             if (!it || it.type === 'background') return;
+            if (it.group != null && planifIsRequestItem(it)) {
+                // Carril de solicitudes siempre arriba (aunque aún no haya operarios).
+                requestLaneByGroup[String(it.group)] = -1;
+            }
             if (!planifIsPackableWorker(it.worker_id) || it.group == null) return;
             var gid = String(it.group);
             var key = String(it.worker_id);
@@ -240,7 +245,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Un subgrupo estable por operario (W{id}): hecho + fantasma comparten
         // siempre la misma altura. No empaquetar por huecos temporales.
         var orderByGroupWorker = {};
-        var requestLaneByGroup = {};
         Object.keys(byGroup).forEach(function (gid) {
             var list = Object.keys(byGroup[gid]).map(function (k) {
                 return byGroup[gid][k];
@@ -253,8 +257,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 map[w.key] = idx;
             });
             orderByGroupWorker[gid] = map;
-            // Carril de solicitudes encima de los operarios (visible, sin taparlos).
-            requestLaneByGroup[gid] = -1;
         });
 
         var updates = [];
@@ -262,9 +264,25 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!it || it.type === 'background' || it.id == null) return;
             if (planifIsRequestItem(it)) {
                 var reqLane = requestLaneByGroup[String(it.group)];
-                if (reqLane == null) reqLane = 0;
+                if (reqLane == null) reqLane = -1;
                 if (it.subgroup !== 'R' || it.subgroupOrder !== reqLane) {
                     updates.push({ id: it.id, subgroup: 'R', subgroupOrder: reqLane });
+                }
+                return;
+            }
+            // Borrador «Nueva asignación» / phantom: debajo de solicitud y operarios.
+            // Si no, Vis lo mete en el carril de arriba y tapa la solicitud naranja.
+            var isDraftNew = String(it.worker_id) === 'NEW' || (
+                isPlanificadorGhost(it) && !planifIsPackableWorker(it.worker_id)
+            );
+            if (isDraftNew) {
+                var workerMap = orderByGroupWorker[String(it.group)] || {};
+                var draftOrd = 0;
+                Object.keys(workerMap).forEach(function (k) {
+                    if (workerMap[k] >= draftOrd) draftOrd = workerMap[k] + 1;
+                });
+                if (it.subgroup !== 'N' || it.subgroupOrder !== draftOrd) {
+                    updates.push({ id: it.id, subgroup: 'N', subgroupOrder: draftOrd });
                 }
                 return;
             }
@@ -329,9 +347,51 @@ document.addEventListener('DOMContentLoaded', function() {
         if (planifLaneTimer) clearTimeout(planifLaneTimer);
         planifLaneTimer = setTimeout(function () {
             planifRelayoutLanes();
+            // Tras cambiar subgroups, Vis tiene que recalcular alturas de fila
+            // (si no, la asignación queda recortada debajo de la FALTA).
+            if (window.AppTimeline && typeof window.AppTimeline.redraw === 'function') {
+                try { window.AppTimeline.redraw(); } catch (errR) { /* ignore */ }
+            }
+            planifEnsureRequestLaneSpace();
             fitPlanificadorTimelineToGroups();
             if (planifViewPin) planifRestoreViewPin();
         }, 200);
+    }
+
+    function planifEnsureRequestLaneSpace() {
+        // Cada obra con solicitud + operarios necesita al menos 2 carriles visibles.
+        if (!window.AppItems || !window.AppTimeline) return;
+        var items = window.AppItems.get() || [];
+        var byGroup = {};
+        items.forEach(function (it) {
+            if (!it || it.type === 'background' || it.group == null) return;
+            var g = String(it.group);
+            if (!byGroup[g]) byGroup[g] = { req: false, workers: 0 };
+            if (planifIsRequestItem(it)) byGroup[g].req = true;
+            else if (planifIsPackableWorker(it.worker_id)) byGroup[g].workers += 1;
+        });
+        var itemSet = window.AppTimeline.itemSet;
+        if (!itemSet || !itemSet.groups) return;
+        Object.keys(byGroup).forEach(function (gid) {
+            var info = byGroup[gid];
+            if (!info.req) return;
+            // 1 carril solicitud (≈22) + N operarios (≈20 c/u) + margen
+            var need = 26 + Math.max(1, info.workers || 1) * 22;
+            var g = itemSet.groups[gid];
+            if (!g) return;
+            if (typeof g.setHeight === 'function') {
+                try {
+                    var cur = (typeof g.height === 'number') ? g.height : 0;
+                    if (cur < need) g.setHeight(need);
+                } catch (errH) { /* ignore */ }
+            }
+            if (g.dom && g.dom.foreground) {
+                g.dom.foreground.style.minHeight = need + 'px';
+            }
+            if (g.dom && g.dom.label) {
+                g.dom.label.style.minHeight = need + 'px';
+            }
+        });
     }
 
     window.renderItems = function() {
@@ -1783,7 +1843,7 @@ document.addEventListener('DOMContentLoaded', function() {
         selectable: true,
         groupEditable: true,
         groupOrder: 'orden',
-        margin: { item: 2, axis: 5 },
+        margin: { item: { horizontal: 2, vertical: 4 }, axis: 5 },
         throttleRedraw: 120,
         preferZoom: true,
         zoomable: false,
@@ -1806,10 +1866,14 @@ document.addEventListener('DOMContentLoaded', function() {
         },
 
         order: function(a, b) {
-            // Solicitudes en su carril arriba; no mezclar con operarios.
+            // Solicitudes en su carril arriba; borrador NEW al final.
             var aReq = planifIsRequestItem(a);
             var bReq = planifIsRequestItem(b);
             if (aReq !== bReq) return aReq ? -1 : 1;
+
+            var aDraft = String(a.worker_id) === 'NEW';
+            var bDraft = String(b.worker_id) === 'NEW';
+            if (aDraft !== bDraft) return aDraft ? 1 : -1;
 
             let empA = a.empresa_nombre || "ZZ_Sin_Empresa";
             let empB = b.empresa_nombre || "ZZ_Sin_Empresa";
@@ -2370,13 +2434,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     start: clickedDate.toDate(),
                     end: clickedDate.clone().add(1, 'days').toDate(),
                     worker_id: 'NEW',
+                    // Debajo del carril de solicitudes (R) y de operarios.
+                    subgroup: 'N',
+                    subgroupOrder: 1000,
                     className: 'phantom-item',
                     editable: (window.PLANIFICADOR_CAN_EDIT === false)
                         ? false
                         : { updateTime: true, updateGroup: true, remove: true }
                 };
                 window.AppItems.add(newItem);
-                window.AppTimeline.setSelection('phantom_new'); 
+                window.AppTimeline.setSelection('phantom_new');
+                planifScheduleLaneLayout();
             }
         }
     });
@@ -2477,11 +2545,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 fecha_inicio: g.fecha_inicio || '',
                 fecha_fin_iso: g.fecha_fin_iso || '',
                 orden: index,
-                // Objeto (no boolean false): hace doInnerStack=true en vis, pero
-                // los W{id} quedan con stack:false → hecho+fantasma misma altura.
-                // boolean false se ignora (falsy) y cae al stack clásico de todos.
-                // boolean true apila dentro del subgrupo si hecho/fantasma se tocan.
-                subgroupStack: { R: true, __force: true },
+                // R: solicitudes arriba; N: borrador nueva asignación abajo;
+                // W{id}: operarios (hecho+fantasma a la misma altura).
+                subgroupStack: { R: true, N: true },
                 subgroupOrder: 'subgroupOrder',
             };
         }));
@@ -2495,6 +2561,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof window.reordenarPorVentanaVisible === 'function') {
                 window.reordenarPorVentanaVisible({ silent: true });
             }
+            planifScheduleLaneLayout();
         }, 0);
     }
 
@@ -2541,7 +2608,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 fecha_inicio: g.fecha_inicio || '',
                 fecha_fin_iso: g.fecha_fin_iso || '',
                 orden: orden0 + index,
-                subgroupStack: { R: true, __force: true },
+                subgroupStack: { R: true, N: true },
                 subgroupOrder: 'subgroupOrder',
             });
         });
@@ -2707,6 +2774,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     return { results: data.results || [] };
                 },
             },
+            templateResult: function (item) {
+                if (!item || item.loading) return item && item.text;
+                if (item.children) return item.text;
+                var tags = item.etiquetas || [];
+                if (!tags.length) return item.text;
+                var chipFn = window.spEtiquetaChipHtml || function (n) { return n; };
+                var $wrap = $('<div class="univ-worker-option"></div>');
+                $wrap.append($('<div class="univ-worker-option-name"></div>').text(item.text || ''));
+                var $tags = $('<div class="univ-worker-option-tags"></div>');
+                tags.forEach(function (e) {
+                    $tags.append($(chipFn(e.nombre || '', e.color || '')));
+                });
+                $wrap.append($tags);
+                return $wrap;
+            },
+            templateSelection: function (item) {
+                if (!item || !item.id) return item && item.text;
+                var tags = item.etiquetas || [];
+                if (!tags.length) return item.text;
+                var names = tags.map(function (e) { return e.nombre || ''; }).filter(Boolean).join(', ');
+                return names ? (item.text + ' · ' + names) : item.text;
+            },
+            escapeMarkup: function (m) { return m; },
         });
         setupSelect2ChipRemoveAnimation($workersSelect);
         if (window.SignaPlanSelect2) {

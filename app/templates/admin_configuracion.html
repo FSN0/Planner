@@ -79,6 +79,8 @@
       {% endif %}
       <a href="#cfg-festivos">{{ _('Festivos') }}</a>
       <a href="#cfg-emails">{{ _('Correos') }}</a>
+      <a href="#cfg-marca">{{ _('Marca e informes') }}</a>
+      <a href="#cfg-etiquetas">{{ _('Etiquetas') }}</a>
       {% if tenant_has_onboarding %}
       <a href="#cfg-guia">{{ _('Academia') }}</a>
       {% endif %}
@@ -594,6 +596,124 @@
               <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar correos') }}</button>
             </div>
           </form>
+        </div>
+      </section>
+
+      <section class="config-block" id="cfg-marca">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--slate"><i class="fas fa-building"></i></div>
+          <div>
+            <h2>{{ _('Marca e informes') }}</h2>
+            <p>{{ _('Imágenes y color de la franja lateral para los informes PDF de reuniones. El informe es un documento externo: solo título, resumen y transcripción.') }}</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_branding') }}" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="brand_action" value="save">
+            <div class="config-fields-grid">
+              <div class="config-field">
+                <label for="brand_report_title">{{ _('Nombre de la organización (opcional)') }}</label>
+                <input type="text" class="form-control form-control-sm" id="brand_report_title"
+                       name="brand_report_title" maxlength="120"
+                       value="{{ brand_report_title or '' }}"
+                       placeholder="{{ g.current_tenant.nombre if g.current_tenant else '' }}">
+                <p class="config-field-hint">{{ _('Solo se usa si falta la imagen de cabecera.') }}</p>
+              </div>
+              <div class="config-field">
+                <label for="brand_stripe_color">{{ _('Color de la franja derecha') }}</label>
+                <div class="d-flex align-items-center" style="gap:10px;">
+                  <input type="color" id="brand_stripe_color" name="brand_stripe_color"
+                         value="{{ brand_stripe_color or '#1e3a5f' }}"
+                         style="width:48px;height:34px;padding:2px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;"
+                         oninput="var c=this.nextElementSibling; if(c) c.textContent=this.value;">
+                  <code class="small text-muted">{{ brand_stripe_color or '#1e3a5f' }}</code>
+                </div>
+                <p class="config-field-hint">{{ _('Franja vertical a la derecha del PDF, con el logo arriba y abajo.') }}</p>
+              </div>
+              <div class="config-field">
+                <label for="brand_logo">{{ _('Logo (franja lateral)') }}</label>
+                {% if brand_has_logo %}
+                <div class="mb-2">
+                  <img src="{{ url_for('admin.branding_logo_file') }}" alt="" style="max-height:48px;max-width:200px;border:1px solid #e2e8f0;padding:6px;border-radius:8px;background:#fff;">
+                </div>
+                {% endif %}
+                <input type="file" class="form-control-file" id="brand_logo" name="brand_logo" accept=".png,.jpg,.jpeg,.webp,.svg,image/*">
+                <p class="config-field-hint">{{ _('PNG, JPG, WEBP o SVG, máx. 2 MB. Aparece arriba y abajo en la franja de color.') }}</p>
+              </div>
+              <div class="config-field">
+                <label for="brand_header">{{ _('Cabecera del documento') }}</label>
+                {% if brand_has_header %}
+                <div class="mb-2">
+                  <img src="{{ url_for('admin.branding_header_file') }}" alt="" style="max-height:56px;max-width:100%;border:1px solid #e2e8f0;padding:6px;border-radius:8px;background:#fff;">
+                </div>
+                {% endif %}
+                <input type="file" class="form-control-file" id="brand_header" name="brand_header" accept=".png,.jpg,.jpeg,.webp,.svg,image/*">
+                <p class="config-field-hint">{{ _('Imagen ancha arriba del todo del informe (incluye el logo si lo lleva).') }}</p>
+              </div>
+              <div class="config-field">
+                <label for="brand_mark">{{ _('Marca de agua (logo sin letras)') }}</label>
+                {% if brand_has_mark %}
+                <div class="mb-2">
+                  <img src="{{ url_for('admin.branding_mark_file') }}" alt="" style="max-height:48px;max-width:160px;border:1px solid #e2e8f0;padding:6px;border-radius:8px;background:#fff;">
+                </div>
+                {% endif %}
+                <input type="file" class="form-control-file" id="brand_mark" name="brand_mark" accept=".png,.jpg,.jpeg,.webp,.svg,image/*">
+                <p class="config-field-hint">{{ _('Logo difuminado centrado en cada hoja. Si no subes uno, se usa el logo de la franja.') }}</p>
+              </div>
+            </div>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar') }}</button>
+            </div>
+          </form>
+          <div class="d-flex flex-wrap mt-2" style="gap:8px;">
+            {% if brand_has_logo %}
+            <form action="{{ url_for('admin.update_branding') }}" method="POST">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="brand_action" value="remove_logo">
+              <button type="submit" class="btn-admin btn-admin-ghost btn-sm">
+                <i class="fas fa-trash-alt"></i> {{ _('Quitar logo') }}
+              </button>
+            </form>
+            {% endif %}
+            {% if brand_has_header %}
+            <form action="{{ url_for('admin.update_branding') }}" method="POST">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="brand_action" value="remove_header">
+              <button type="submit" class="btn-admin btn-admin-ghost btn-sm">
+                <i class="fas fa-trash-alt"></i> {{ _('Quitar cabecera') }}
+              </button>
+            </form>
+            {% endif %}
+            {% if brand_has_mark %}
+            <form action="{{ url_for('admin.update_branding') }}" method="POST">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="brand_action" value="remove_mark">
+              <button type="submit" class="btn-admin btn-admin-ghost btn-sm">
+                <i class="fas fa-trash-alt"></i> {{ _('Quitar marca de agua') }}
+              </button>
+            </form>
+            {% endif %}
+          </div>
+          <p class="config-field-hint mt-2 mb-0">
+            {{ _('Al crear una reunión (voz o escrita), el autor recibe un PDF con este diseño; el correo no se envía a nadie más.') }}
+          </p>
+        </div>
+      </section>
+
+      <section class="config-block" id="cfg-etiquetas">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--slate"><i class="fas fa-tags"></i></div>
+          <div>
+            <h2>{{ _('Etiquetas') }}</h2>
+            <p>{{ _('Catálogos predefinidos para personal y subcontratas. Se usan para filtrar en listados y como perfil opcional en solicitudes.') }}</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          {% from "macros/etiquetas_catalogo.html" import catalogo_etiquetas_bloque with context %}
+          {{ catalogo_etiquetas_bloque('empleado', _('Etiquetas de empleado'), etiquetas_empleado or [], etiquetas_empleado or [], can_manage_etiquetas) }}
+          <hr class="my-3">
+          {{ catalogo_etiquetas_bloque('subcontrata', _('Etiquetas de subcontrata'), etiquetas_subcontrata or [], etiquetas_subcontrata or [], can_manage_etiquetas) }}
         </div>
       </section>
 

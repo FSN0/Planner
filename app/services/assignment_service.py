@@ -394,14 +394,14 @@ def _handle_direct_assignment(actor, worker, obra, dates, overwrite, solicitud_i
                 if existing_row and existing_row.solicitud_id is None:
                     existing_row.solicitud_id = solicitud_id
                     db.session.add(existing_row)
-            else:
-                # Sin pasar por asignar(): igual hay que acreditar genéricas abiertas.
-                from app.services.solicitud_service import (
-                    reconcile_solicitudes_after_cuadrante_change,
-                )
-                reconcile_solicitudes_after_cuadrante_change(
-                    obra_id, worker_id, d, resolved_by_id=actor_id,
-                )
+            # Siempre recalcular coberturas (concretas/genéricas), esté o no
+            # vinculada a una solicitud concreta del flujo de ficha.
+            from app.services.solicitud_service import (
+                reconcile_solicitudes_after_cuadrante_change,
+            )
+            reconcile_solicitudes_after_cuadrante_change(
+                obra_id, worker_id, d, resolved_by_id=actor_id,
+            )
             continue
 
         creada = CoreAssignmentService.asignar(

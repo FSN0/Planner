@@ -39,7 +39,8 @@
       {{ stat_chip('Externos nuevos', preview.stats.externos_nuevos, 'ok') }}
       {{ stat_chip('Externos act.', preview.stats.externos_act, 'ok') }}
       {{ stat_chip('Bajas', preview.stats.desactivados, 'warn') }}
-      {{ stat_chip('Avisos DNI', preview.incidencias_empleados|length, 'warn') }}
+      {{ stat_chip('Revisar vínculo', preview.stats.omitidos_decision|default(0), 'danger') }}
+      {{ stat_chip('Avisos', preview.incidencias_empleados|length, 'warn') }}
     </div>
 
     {% if preview.stats.empresas_odoo == 0 %}
@@ -112,6 +113,25 @@
         </div>
         {% endfor %}
       </div>
+    </section>
+    {% endif %}
+
+    {% if preview.omitidos_decision %}
+    <section class="sync-preview-section sync-preview-section--danger">
+      <h2 class="sync-preview-section-title"><i class="fas fa-user-check"></i> {{ _('Externos en la app — revisar vínculo Odoo') }} ({{ preview.omitidos_decision|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Externos ya importados que ahora no entran en el sync (archivados fuera del pull, empresa sin etiqueta, etc.). Siguen activos aquí.') }}</p>
+      {% for o in preview.omitidos_decision %}
+      <article class="sync-preview-card sync-preview-card--incident">
+        <div class="sync-preview-card-head">
+          <strong>{{ o.name }} {{ o.lastname }}</strong>
+          <span class="sync-preview-badge sync-preview-badge--actualizar">{{ _('REVISAR') }}</span>
+        </div>
+        <div class="small text-muted mb-1">
+          {{ _('Odoo') }} #{{ o.odoo_id }} · {{ o.dni or '—' }} · {{ o.motivo }}
+        </div>
+        {{ razon_list(o.razones) }}
+      </article>
+      {% endfor %}
     </section>
     {% endif %}
 

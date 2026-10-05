@@ -6,8 +6,26 @@ from app import db
 from app.models import Obra, User, Company, Vehiculo
 from app.sync.adapters.base import BaseSyncAdapter
 from app.services.config_service import get_tenant_config
+from app.services.odoo_employee_metadata import (
+    department_label_from_odoo_m2o,
+    import_fields_for_user,
+    is_odoo_partner_link,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _omitido_import_context(local_user):
+    ctx = import_fields_for_user(local_user)
+    return {
+        'departamento_importacion': ctx['departamento_importacion'],
+        'departamento_registrado': ctx['departamento_registrado'],
+        'import_source': ctx['import_source'],
+        'import_source_label': ctx['import_source_label'],
+        'odoo_model': ctx['odoo_model'],
+        'odoo_vinculo': ctx['odoo_vinculo'],
+    }
+
 
 class Adapter(BaseSyncAdapter):
     def __init__(self, tenant_id: int):
@@ -515,14 +533,24 @@ class Adapter(BaseSyncAdapter):
             rid = row.get('id')
             if rid is None:
                 continue
-            out[int(rid)] = {
+            entry = {
                 'active': bool(row.get('active', True)),
                 'name': row.get('name') or '',
             }
+            if 'department_id' in wanted:
+                entry['department'] = department_label_from_odoo_m2o(
+                    row.get('department_id'),
+                )
+            out[int(rid)] = entry
         return out
 
     def _users_with_odoo_link(self, *, externos=False):
-        """Usuarios locales con external_ids.odoo (no soft-deleted)."""
+        """Usuarios locales con external_ids.odoo (no soft-deleted).
+
+        Internos: solo empresa propia (is_internal). Sin empresa no cuentan aquí
+        (antes caían en internos por error y ensuciaban el preview).
+        Externos: empresa no interna.
+        """
         q = User.query.filter(
             User.is_deleted.is_(False),
             User.external_ids['odoo'].astext.isnot(None),
@@ -531,49 +559,101 @@ class Adapter(BaseSyncAdapter):
         users = q.all()
         result = []
         for u in users:
-            is_ext = bool(u.company_rel and not u.company_rel.is_internal)
-            if externos and is_ext:
-                result.append(u)
-            elif not externos and not is_ext:
+            is_interno = bool(u.company_rel and u.company_rel.is_internal)
+            if externos:
+                if u.company_rel and not u.company_rel.is_internal:
+                    result.append(u)
+            elif is_interno:
                 result.append(u)
         return result
 
     def _append_desactivados_empleados(self, diff, seen_odoo_ids, seen_local_ids=None):
         """
         Baja solo si el vínculo Odoo apunta a un hr.employee archivado.
-        No usa «ausente del pull» (departamento, DNI vacío, id antiguo) ni
-        «no encontrado» — eso daba falsos positivos (p.ej. ficha duplicada).
+        Si no aparece en Odoo o sigue activo pero fuera del pull (p.ej. dpto),
+        va a omitidos_decision para avisar — no baja silenciosa.
+
+        Los vínculos por conciliación a contacto (res.partner) no entran aquí:
+        no son empleados Odoo y no deben avisarse como «no encontrado».
         """
         seen_local_ids = seen_local_ids or set()
         desactivados = []
-        candidatos = [
-            u for u in self._users_with_odoo_link(externos=False)
-            if u.active
-            and u.id not in seen_local_ids
-            and str(u.external_ids.get('odoo')) not in seen_odoo_ids
-        ]
+        omitidos_decision = list(diff.get('omitidos_decision') or [])
+        candidatos = []
+        for u in self._users_with_odoo_link(externos=False):
+            if not u.active or u.id in seen_local_ids:
+                continue
+            if str(u.external_ids.get('odoo')) in seen_odoo_ids:
+                continue
+            # Conciliación a contacto Odoo: se trata como interno en la app,
+            # pero el sync de hr.employee no le aplica.
+            if is_odoo_partner_link(u):
+                continue
+            candidatos.append(u)
         odoo_ids = []
         for u in candidatos:
             try:
                 odoo_ids.append(int(u.external_ids.get('odoo')))
             except (TypeError, ValueError):
                 continue
-        active_map = self._odoo_read_active_map('hr.employee', odoo_ids)
+        active_map = self._odoo_read_active_map(
+            'hr.employee',
+            odoo_ids,
+            fields=['id', 'active', 'name', 'department_id'],
+        )
+        # IDs no hallados en hr.employee: pueden ser vínculos de conciliación a contacto.
+        missing_ids = [oid for oid in odoo_ids if oid not in active_map]
+        partner_map = self._odoo_read_active_map(
+            'res.partner',
+            missing_ids,
+            fields=['id', 'active', 'name'],
+        ) if missing_ids else {}
         for u in candidatos:
             try:
                 oid = int(u.external_ids.get('odoo'))
             except (TypeError, ValueError):
                 continue
+            imp_ctx = _omitido_import_context(u)
             info = active_map.get(oid)
             if info is None:
-                logger.warning(
-                    "[Odoo Adapter - Tenant %s] Empleado local %s (odoo_id=%s) "
-                    "no aparece en hr.employee; no se da de baja.",
-                    self.tenant_id, u.id, oid,
-                )
+                # Conciliación a contacto (aunque falte odoo_model en la ficha).
+                if oid in partner_map:
+                    continue
+                omitidos_decision.append({
+                    'odoo_id': oid,
+                    'nombre': f'{u.name} {u.lastname or ""}'.strip(),
+                    'departamento': imp_ctx['departamento_registrado'],
+                    'motivo': 'No aparece en Odoo (hr.employee)',
+                    'local_id': u.id,
+                    'local_name': u.name,
+                    'local_lastname': u.lastname or '',
+                    'local_role': u.role,
+                    'dni': u.dni,
+                    'role_sugerido': None,
+                    'tipo_aviso': 'no_encontrado',
+                    **imp_ctx,
+                })
                 continue
+            dep_odoo = info.get('department') or ''
             if info.get('active'):
-                # Activo en Odoo pero fuera del filtro de departamentos → no baja.
+                # Activo en Odoo pero fuera del filtro de departamentos → aviso, no baja.
+                omitidos_decision.append({
+                    'odoo_id': oid,
+                    'nombre': f'{u.name} {u.lastname or ""}'.strip(),
+                    'departamento': dep_odoo,
+                    'motivo': (
+                        f'Activo en Odoo (dpto «{dep_odoo or "sin departamento"}») '
+                        'fuera del mapa de sync'
+                    ),
+                    'local_id': u.id,
+                    'local_name': u.name,
+                    'local_lastname': u.lastname or '',
+                    'local_role': u.role,
+                    'dni': u.dni,
+                    'role_sugerido': None,
+                    'tipo_aviso': 'fuera_filtro',
+                    **imp_ctx,
+                })
                 continue
             desactivados.append({
                 'odoo_id': oid,
@@ -589,24 +669,49 @@ class Adapter(BaseSyncAdapter):
                 },
             })
         diff['desactivados'] = desactivados
+        diff['omitidos_decision'] = omitidos_decision
 
     def get_diff_empleados(self):
-        domain = [['active', '=', True]]
-        fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id', 'barcode']
+        fields = [
+            'id', 'name', 'identification_id', 'work_email', 'job_title',
+            'department_id', 'job_id', 'barcode', 'active',
+        ]
+        # Incluye archivados: «No importados» debe listar a todos los que
+        # no se meten en SignaPlan, no solo el caso raro de sin DNI.
         try:
-            odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
+            odoo_emps = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'hr.employee', 'search_read',
+                [[]],
+                {'fields': fields, 'context': {'active_test': False}},
+            )
         except Exception:
-            # Instancias sin barcode en hr.employee
-            fields = ['id', 'name', 'identification_id', 'work_email', 'job_title', 'department_id', 'job_id']
-            odoo_emps = self.models.execute_kw(self.db_name, self.uid, self.pwd, 'hr.employee', 'search_read', [domain], {'fields': fields})
-        
-        diff = {'nuevos': [], 'actualizados': [], 'sin_cambios': [], 'desactivados': [], 'omitidos': []}
+            fields = [
+                'id', 'name', 'identification_id', 'work_email', 'job_title',
+                'department_id', 'job_id', 'active',
+            ]
+            odoo_emps = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'hr.employee', 'search_read',
+                [[]],
+                {'fields': fields, 'context': {'active_test': False}},
+            )
+
+        diff = {
+            'nuevos': [],
+            'actualizados': [],
+            'sin_cambios': [],
+            'desactivados': [],
+            'omitidos': [],
+            'omitidos_decision': [],
+        }
         seen_odoo_ids = set()
         seen_local_ids = set()
 
         from app.services.sync_config_service import (
             SyncConfigService,
             default_empleados_departamento_map,
+            infer_odoo_department_role,
             resolve_departamento_role,
         )
         try:
@@ -614,54 +719,138 @@ class Adapter(BaseSyncAdapter):
         except Exception:
             departamentos_map = default_empleados_departamento_map()
 
+        from app.services.personal_conciliation_service import (
+            find_user_by_any_odoo,
+            odoo_ids_for_user,
+        )
+
+        def _local_for_emp(emp_id, dni_val):
+            local_hit = find_user_by_any_odoo(emp_id, include_deleted=True)
+            if local_hit and local_hit.is_deleted:
+                local_hit = None
+            if local_hit and is_odoo_partner_link(local_hit):
+                local_hit = None
+            if not local_hit and dni_val:
+                local_hit = User.query.filter(
+                    User.dni == dni_val, User.is_deleted.is_(False),
+                ).first()
+                if local_hit and is_odoo_partner_link(local_hit):
+                    local_hit = None
+            return local_hit
+
+        def _append_omitido(emp, department, motivo, dni_val=''):
+            diff['omitidos'].append({
+                'odoo_id': emp['id'],
+                'nombre': emp.get('name') or '',
+                'departamento': department or 'sin departamento',
+                'dni': dni_val or '',
+                'motivo': motivo,
+                'activo_odoo': bool(emp.get('active', True)),
+            })
+
         for emp in odoo_emps:
             dni = emp.get('identification_id') or ''
+            if dni in (False, None):
+                dni = ''
+            department = department_label_from_odoo_m2o(emp.get('department_id'))
+            odoo_active = bool(emp.get('active', True))
 
-            dep_raw = emp.get('department_id')
-            department = dep_raw[1] if isinstance(dep_raw, (list, tuple)) and len(dep_raw) > 1 else ''
+            # Archivados: no se importan. Si no están en la app → «No importados».
+            if not odoo_active:
+                local_hit = _local_for_emp(emp['id'], dni)
+                if local_hit and local_hit.active:
+                    # Baja: la resuelve _append_desactivados_empleados
+                    continue
+                if local_hit:
+                    continue
+                _append_omitido(
+                    emp, department,
+                    'Inactivo/archivado en Odoo',
+                    dni_val=dni,
+                )
+                continue
 
             if not dni:
-                diff['omitidos'].append({
-                    'odoo_id': emp['id'],
-                    'nombre': emp.get('name') or '',
-                    'departamento': department,
-                    'motivo': 'Sin DNI en Odoo',
-                })
+                local_hit = _local_for_emp(emp['id'], '')
+                if local_hit and local_hit.active:
+                    seen_odoo_ids.add(str(emp['id']))
+                    seen_local_ids.add(local_hit.id)
+                    diff['omitidos_decision'].append({
+                        'odoo_id': emp['id'],
+                        'nombre': emp.get('name') or '',
+                        'departamento': department or 'sin departamento',
+                        'motivo': 'Sin DNI en Odoo',
+                        'local_id': local_hit.id,
+                        'local_name': local_hit.name,
+                        'local_lastname': local_hit.lastname or '',
+                        'local_role': local_hit.role,
+                        'dni': local_hit.dni,
+                        'role_sugerido': None,
+                        'tipo_aviso': 'sin_dni',
+                        **_omitido_import_context(local_hit),
+                    })
+                elif not local_hit:
+                    _append_omitido(emp, department, 'Sin DNI en Odoo')
                 continue
 
             role = resolve_departamento_role(department, departamentos_map)
             if not role:
-                diff['omitidos'].append({
-                    'odoo_id': emp['id'],
-                    'nombre': emp.get('name') or '',
-                    'departamento': department or 'sin departamento',
-                    'motivo': (
-                        f'Departamento no autorizado: «{department or "sin departamento"}»'
-                    ),
-                })
+                local_hit = _local_for_emp(emp['id'], dni)
+                if local_hit and local_hit.active:
+                    seen_odoo_ids.add(str(emp['id']))
+                    seen_local_ids.add(local_hit.id)
+                    diff['omitidos_decision'].append({
+                        'odoo_id': emp['id'],
+                        'nombre': emp.get('name') or '',
+                        'departamento': department or 'sin departamento',
+                        'motivo': (
+                            f'Departamento Odoo actual no autorizado: '
+                            f'«{department or "sin departamento"}»'
+                        ),
+                        'local_id': local_hit.id,
+                        'local_name': local_hit.name,
+                        'local_lastname': local_hit.lastname or '',
+                        'local_role': local_hit.role,
+                        'dni': dni,
+                        'role_sugerido': infer_odoo_department_role(
+                            department or 'sin departamento'
+                        ),
+                        'tipo_aviso': 'departamento',
+                        **_omitido_import_context(local_hit),
+                    })
+                elif not local_hit:
+                    _append_omitido(
+                        emp, department,
+                        f'Departamento no autorizado: «{department or "sin departamento"}»',
+                        dni_val=dni,
+                    )
                 continue
 
             job_raw = emp.get('job_id')
             categoria = emp.get('job_title') or (job_raw[1] if job_raw else 'Sin definir')
 
             email = emp.get('work_email') or f"sin_email_{emp['id']}@local.tuappsaas.com"
-            
-            from app.services.personal_conciliation_service import (
-                find_user_by_any_odoo,
-                odoo_ids_for_user,
-            )
+
             local_user = find_user_by_any_odoo(emp['id'], include_deleted=True)
             if local_user and local_user.is_deleted:
                 local_user = None
+            # Mismo ID numérico pero vínculo de conciliación a contacto: no es hr.employee.
+            if local_user and is_odoo_partner_link(local_user):
+                local_user = None
             if not local_user and dni:
                 local_user = User.query.filter(User.dni == dni).first()
+                if local_user and is_odoo_partner_link(local_user):
+                    # Ficha interna conciliada a partner: no mezclar con sync de empleados.
+                    local_user = None
             if not local_user and email:
                 local_user = User.query.filter(User.email == email).first()
-            
+                if local_user and is_odoo_partner_link(local_user):
+                    local_user = None
+
             parts = emp.get('name', '').split(' ', 1)
             name = parts[0]
             lastname = parts[1] if len(parts) > 1 else ''
-            
+
             data = {
                 'odoo_id': emp['id'],
                 'name': name,
@@ -669,14 +858,16 @@ class Adapter(BaseSyncAdapter):
                 'dni': dni,
                 'email': email,
                 'role': role,
+                'departamento': department,
                 'categoria_profesional': categoria,
                 'barcode': (emp.get('barcode') or '') if emp.get('barcode') not in (False, None) else '',
                 'cambios': {},
                 'bloqueos': []
             }
             seen_odoo_ids.add(str(emp['id']))
-            
+
             if local_user:
+                data.update(_omitido_import_context(local_user))
                 data['local_id'] = local_user.id
                 seen_local_ids.add(local_user.id)
                 linked_oids = set(odoo_ids_for_user(local_user))
@@ -685,7 +876,7 @@ class Adapter(BaseSyncAdapter):
                 stored_oid = str((local_user.external_ids or {}).get('odoo') or '')
                 if stored_oid and stored_oid != str(emp['id']) and str(emp['id']) not in linked_oids:
                     data['cambios']['Id Odoo'] = f"{stored_oid} ➔ {emp['id']}"
-                
+
                 choque = User.query.filter(((User.dni == dni) | (User.email == email)), User.id != local_user.id).first()
                 if choque:
                     motivo = "DNI" if choque.dni == dni else "Email"
@@ -717,11 +908,11 @@ class Adapter(BaseSyncAdapter):
                 elif local_user.role != role:
                     data['cambios']['Rol'] = f"{local_user.role} ➔ {role}"
                 data['role'] = role_sync_role
-                if (local_user.categoria_profesional or '') != categoria: 
+                if (local_user.categoria_profesional or '') != categoria:
                     data['cambios']['Categoría'] = f"{local_user.categoria_profesional or 'Ninguna'} ➔ {categoria}"
                 if not local_user.active:
                     data['cambios']['Estado'] = 'Inactivo ➔ Activo (reincorporación)'
-                
+
                 # Búsqueda correcta en JSONB
                 if data['cambios'] or not local_user.external_ids.get('odoo'):
                     diff['actualizados'].append(data)
@@ -729,6 +920,14 @@ class Adapter(BaseSyncAdapter):
                     diff['sin_cambios'].append(data)
             else:
                 diff['nuevos'].append(data)
+
+        # Activos fuera de mapa primero; archivados al final. Dentro, por dpto y nombre.
+        diff['omitidos'].sort(key=lambda o: (
+            0 if o.get('activo_odoo', True) else 1,
+            (o.get('departamento') or '').lower(),
+            (o.get('nombre') or '').lower(),
+            o.get('odoo_id') or 0,
+        ))
 
         self._append_desactivados_empleados(diff, seen_odoo_ids, seen_local_ids)
         return diff
@@ -830,6 +1029,7 @@ class Adapter(BaseSyncAdapter):
     def _append_desactivados_subcontratas(self, diff, seen_odoo_ids, seen_local_ids=None):
         seen_local_ids = seen_local_ids or set()
         desactivados = []
+        omitidos_decision = list((diff.get('empleados') or {}).get('omitidos_decision') or [])
         candidatos = [
             u for u in self._users_with_odoo_link(externos=True)
             if u.active
@@ -850,13 +1050,33 @@ class Adapter(BaseSyncAdapter):
                 continue
             info = active_map.get(oid)
             if info is None:
-                logger.warning(
-                    "[Odoo Adapter - Tenant %s] Externo local %s (odoo_id=%s) "
-                    "no aparece en res.partner; no se da de baja.",
-                    self.tenant_id, u.id, oid,
-                )
+                omitidos_decision.append({
+                    'odoo_id': oid,
+                    'name': u.name,
+                    'lastname': u.lastname or '',
+                    'dni': u.dni,
+                    'email': u.email,
+                    'local_id': u.id,
+                    'motivo': 'No aparece en Odoo (res.partner)',
+                    'tipo_aviso': 'no_encontrado',
+                    'cambios': {},
+                })
                 continue
             if info.get('active'):
+                omitidos_decision.append({
+                    'odoo_id': oid,
+                    'name': u.name,
+                    'lastname': u.lastname or '',
+                    'dni': u.dni,
+                    'email': u.email,
+                    'local_id': u.id,
+                    'motivo': (
+                        'Activo en Odoo pero fuera del sync de subcontratas '
+                        '(empresa / etiqueta / contacto)'
+                    ),
+                    'tipo_aviso': 'fuera_filtro',
+                    'cambios': {},
+                })
                 continue
             desactivados.append({
                 'odoo_id': oid,
@@ -871,7 +1091,8 @@ class Adapter(BaseSyncAdapter):
                     'Estado': 'Activo ➔ Baja (Odoo)',
                 },
             })
-        diff['empleados']['desactivados'] = desactivados
+        diff.setdefault('empleados', {})['desactivados'] = desactivados
+        diff.setdefault('empleados', {})['omitidos_decision'] = omitidos_decision
 
     def _subcontrata_category_ids(self):
         """IDs de etiquetas res.partner.category de subcontrata (ES/EN/PT/FR)."""
@@ -923,10 +1144,13 @@ class Adapter(BaseSyncAdapter):
             )
             return []
 
-    def _find_local_externo(self, odoo_id, dni_seguro, email):
-        """Resuelve externo local por Odoo / DNI (con sufijo) / email, incl. archivados.
+    def _find_local_externo(self, odoo_id, dni_seguro, email=None):
+        """Resuelve externo local por Odoo ID o DNI (con sufijo), incl. archivados.
 
-        Si la ficha encontrada está unificada por conciliación (merged_into_user_id),
+        No se usa el email: en Odoo los hijos de subcontrata suelen heredar el
+        correo de la empresa y unificaría personas distintas.
+
+        Si la ficha está unificada por conciliación (merged_into_user_id),
         devolvemos la ficha viva, no el fantasma archivado.
         """
         from app.services.personal_conciliation_service import find_user_by_any_odoo
@@ -956,23 +1180,28 @@ class Adapter(BaseSyncAdapter):
             ).first()
             if local_user:
                 return _resolve(local_user)
-        if email:
-            # Preferir ficha viva si hay varias (no debería; email es unique).
-            local_user = (
-                User.query
-                .filter(User.email == email)
-                .order_by(User.is_deleted.asc(), User.id.asc())
-                .first()
-            )
-            if local_user:
-                return _resolve(local_user)
-            # Tras merge el email del fantasma queda merged_*_…; buscar el original.
-            local_user = User.query.filter(
-                User.external_ids['merged_from_email'].astext == email
-            ).first()
-            if local_user:
-                return _resolve(local_user)
         return None
+
+    @staticmethod
+    def _synthetic_externo_email(odoo_id) -> str:
+        return f"ext_{odoo_id}@subcontrata.local"
+
+    @classmethod
+    def _resolve_externo_email(cls, odoo_id, raw_email, parent_email=None) -> str:
+        """Email local para el externo.
+
+        Vacío o igual al de la empresa padre → sintético único por partner.
+        Así no se choca ni se unifica por el correo compartido de la subcontrata.
+        """
+        email = ''
+        if raw_email not in (False, None, ''):
+            email = str(raw_email).strip()
+        parent = ''
+        if parent_email not in (False, None, ''):
+            parent = str(parent_email).strip()
+        if not email or (parent and email.lower() == parent.lower()):
+            return cls._synthetic_externo_email(odoo_id)
+        return email
 
     def _normalize_vat(self, raw):
         """Compara CIF/NIF sin ruido (espacios, guiones, prefijo ES, 'None')."""
@@ -1016,7 +1245,7 @@ class Adapter(BaseSyncAdapter):
                 'res.partner', 'search_read',
                 [domain_empresas],
                 {
-                    'fields': ['id', 'name', 'vat', 'category_id', 'is_company', 'parent_id'],
+                    'fields': ['id', 'name', 'vat', 'email', 'category_id', 'is_company', 'parent_id'],
                     'limit': 10000,
                 },
             )
@@ -1043,7 +1272,12 @@ class Adapter(BaseSyncAdapter):
                 'sin_cambios': [],
                 'rellenar_cif': [],
             },
-            'empleados': {'nuevos': [], 'actualizados': [], 'desactivados': []},
+            'empleados': {
+                'nuevos': [],
+                'actualizados': [],
+                'desactivados': [],
+                'omitidos_decision': [],
+            },
             'meta': {
                 'category_ids': list(cat_ids),
                 'empresas_odoo': len(odoo_empresas),
@@ -1074,6 +1308,11 @@ class Adapter(BaseSyncAdapter):
 
         seen_odoo_ids = set()
         seen_local_ids = set()
+        parent_email_by_id = {}
+        for o_emp in odoo_empresas:
+            raw_pe = o_emp.get('email')
+            if raw_pe not in (False, None, ''):
+                parent_email_by_id[o_emp['id']] = str(raw_pe).strip()
 
         for o_emp in odoo_empresas:
             local_comp = Company.query.filter(Company.external_ids['odoo'].astext == str(o_emp['id'])).first()
@@ -1134,14 +1373,11 @@ class Adapter(BaseSyncAdapter):
                 dni_seguro = raw_vat
 
             raw_email = o_cont.get('email')
-            if raw_email in (False, None, ''):
-                email = f"ext_{o_cont['id']}@subcontrata.local"
-            else:
-                email = str(raw_email).strip()
+            parent_email = parent_email_by_id.get(odoo_company_id) if odoo_company_id else None
+            email = self._resolve_externo_email(o_cont['id'], raw_email, parent_email)
 
             from app.services.personal_conciliation_service import odoo_ids_for_user
-            # No descartar is_deleted: si no, se intenta INSERT con el mismo
-            # ext_*@subcontrata.local y peta users_email_key.
+            # Solo Odoo ID / DNI: el email de empresa no identifica al operario.
             local_user = self._find_local_externo(o_cont['id'], dni_seguro, email)
 
             parts = (o_cont.get('name') or '').split(' ', 1)

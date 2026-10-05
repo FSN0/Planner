@@ -5,7 +5,7 @@ from app import mail
 from app.models import User, Obra, RegistroFichaje
 from datetime import datetime, date, timedelta
 
-def send_email(subject, recipients, text_body, html_body=None):
+def send_email(subject, recipients, text_body, html_body=None, attachments=None):
     """Envía correo. Devuelve True si salió; False si no hay destino o falla SMTP."""
     if not recipients:
         return False
@@ -19,6 +19,12 @@ def send_email(subject, recipients, text_body, html_body=None):
     msg.body = text_body
     if html_body:
         msg.html = html_body
+    for att in attachments or []:
+        filename = att.get('filename') or 'attachment'
+        content_type = att.get('content_type') or 'application/octet-stream'
+        data = att.get('data')
+        if data is not None:
+            msg.attach(filename, content_type, data)
     try:
         mail.send(msg)
         return True

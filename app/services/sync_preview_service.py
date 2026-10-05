@@ -2,6 +2,20 @@
 from app.models import User
 
 
+def _empleado_import_razon(o):
+    imp = (o.get('departamento_importacion') or '').strip()
+    src = (o.get('import_source_label') or '').strip()
+    if imp:
+        txt = f"Departamento registrado al importar: «{imp}»."
+        if src:
+            txt += f" Origen: {src}."
+        return txt
+    return (
+        'No consta el departamento al importar (ficha anterior a este registro). '
+        'No podemos reconstruir el dpto Odoo del momento del alta sin datos guardados.'
+    )
+
+
 def _obra_razones(obra):
     razones = []
     if obra.get('warn_jefe'):
@@ -111,6 +125,41 @@ def analyze_empleados_preview(diff):
     } for d in diff.get('desactivados', [])]
 
     omitidos_odoo = [{**o, 'accion': 'omitido_odoo'} for o in diff.get('omitidos', [])]
+    omitidos_decision = []
+    for o in diff.get('omitidos_decision', []):
+        tipo = o.get('tipo_aviso') or 'departamento'
+        import_line = _empleado_import_razon(o)
+        if tipo == 'departamento':
+            razones = [
+                f"Ya está en la app como {o.get('local_name', '')} {o.get('local_lastname', '')}. "
+                f"En Odoo figura ahora en «{o.get('departamento') or 'sin departamento'}», "
+                "departamento que no está en el mapa de sync. Decide si lo autorizas.",
+                import_line,
+            ]
+        elif tipo == 'no_encontrado':
+            razones = [
+                f"Ya está en la app como {o.get('local_name', '')} {o.get('local_lastname', '')}, "
+                "pero su Id Odoo ya no aparece en hr.employee. Revisa el vínculo o da de baja manualmente.",
+                import_line,
+            ]
+        elif tipo == 'sin_dni':
+            razones = [
+                f"Ya está en la app como {o.get('local_name', '')} {o.get('local_lastname', '')}, "
+                "pero en Odoo no tiene DNI y el sync no puede actualizarlo.",
+                import_line,
+            ]
+        else:
+            razones = [
+                f"Ya está en la app como {o.get('local_name', '')} {o.get('local_lastname', '')}, "
+                "activo en Odoo pero fuera del filtro de sync. "
+                f"Motivo: {o.get('motivo') or 'filtro'}.",
+                import_line,
+            ]
+        omitidos_decision.append({
+            **o,
+            'accion': 'omitido_decision',
+            'razones': razones,
+        })
 
     sin_cambios = [{**e, 'accion': 'sin_cambios', 'razones': [
         'Empleado ya sincronizado; sin cambios detectados.'
@@ -121,9 +170,12 @@ def analyze_empleados_preview(diff):
         'incidencias': len(incidencias),
         'omitidos_auto': len(omitidos_auto),
         'omitidos_odoo': len(omitidos_odoo),
+        'omitidos_decision': len(omitidos_decision),
         'desactivados': len(desactivados),
         'sin_cambios': len(sin_cambios),
-        'total_accion': len(listos) + len(incidencias) + len(desactivados),
+        'total_accion': (
+            len(listos) + len(incidencias) + len(desactivados) + len(omitidos_decision)
+        ),
     }
 
     return {
@@ -135,6 +187,7 @@ def analyze_empleados_preview(diff):
         'incidencias': incidencias,
         'omitidos_auto': omitidos_auto,
         'omitidos_odoo': omitidos_odoo,
+        'omitidos_decision': omitidos_decision,
         'desactivados': desactivados,
         'sin_cambios': sin_cambios,
     }
@@ -178,7 +231,20 @@ def analyze_subcontratas_preview(diff):
             listos_empleados.append(entry)
 
     for emp in diff.get('empleados', {}).get('actualizados', []):
-        listos_empleados.append({**emp, 'accion': 'actualizar_externo', 'razones': []})
+        cambios = emp.get('cambios') or {}
+        # Cambio de Id Odoo a otro no ligado = posible identidad distinta (p.ej. email empresa).
+        if cambios.get('Id Odoo'):
+            incidencias_empleados.append({
+                **emp,
+                'accion': 'actualizar_externo',
+                'razones': [
+                    'Cambio de Id Odoo en una ficha ya existente. Revisa antes de aplicar: '
+                    'puede ser otra persona (p. ej. varios contactos con el mismo email de empresa). '
+                    'Usa Conciliación personal si hay que unificar a mano.'
+                ],
+            })
+        else:
+            listos_empleados.append({**emp, 'accion': 'actualizar_externo', 'razones': []})
 
     desactivados = [{
         **d,
@@ -189,6 +255,16 @@ def analyze_subcontratas_preview(diff):
         ],
     } for d in diff.get('empleados', {}).get('desactivados', [])]
 
+    omitidos_decision = [{
+        **o,
+        'accion': 'omitido_decision',
+        'razones': [
+            f"Externo ya en la app ({o.get('name', '')} {o.get('lastname', '')}). "
+            f"{o.get('motivo') or 'Fuera del sync de subcontratas'}. "
+            "Sigue activo aquí; revisa o da de baja si corresponde."
+        ],
+    } for o in diff.get('empleados', {}).get('omitidos_decision', [])]
+
     sin_cambios = []
     meta = diff.get('meta') or {}
 
@@ -196,6 +272,7 @@ def analyze_subcontratas_preview(diff):
         'listos': len(listos_empresas) + len(listos_empleados),
         'incidencias': len(incidencias_empresas) + len(incidencias_empleados),
         'omitidos_auto': len(omitidos_auto),
+        'omitidos_decision': len(omitidos_decision),
         'empresas_nuevas': len(diff.get('empresas', {}).get('nuevas', [])),
         'empresas_act': len(diff.get('empresas', {}).get('actualizadas', [])),
         'empresas_rellenar_cif': len(rellenar_cif),
@@ -218,6 +295,7 @@ def analyze_subcontratas_preview(diff):
         'incidencias_empresas': incidencias_empresas,
         'listos_empleados': listos_empleados,
         'incidencias_empleados': incidencias_empleados,
+        'omitidos_decision': omitidos_decision,
         'desactivados': desactivados,
         'omitidos_auto': omitidos_auto,
         'sin_cambios': sin_cambios,

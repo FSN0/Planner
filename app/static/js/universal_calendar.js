@@ -38,7 +38,9 @@ class UniversalCalendarManager {
         this.showFichajes = config.showFichajes || false;
         this.readonly = config.readonly || false;
         this.selfService = config.selfService || false;
-        this.hideInercia = config.hideInercia || false;
+        this.hideInercia = (config.hideInercia != null)
+            ? !!config.hideInercia
+            : (this.context === 'vehiculo');
         this.partialSelectionMode = config.partialSelectionMode || false;
         this.compact = config.compact || false;
         this.embedded = config.embedded || false;
@@ -202,6 +204,10 @@ class UniversalCalendarManager {
                             <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-hard-hat mr-1"></i> ${t('Oficio / perfil')} <span class="text-muted font-weight-normal">(${t('opcional')})</span></label>
                             <input type="text" id="${this.panelId}-perfil" class="form-control form-control-sm" maxlength="120" placeholder="${t('Ej: Oficial 1ª, peón, electricista...')}">
                         </div>
+                        <div class="col-md-12 mt-2">
+                            <label class="small font-weight-bold mb-1 text-secondary"><i class="fas fa-tags mr-1"></i> ${t('Etiquetas de perfil')} <span class="text-muted font-weight-normal">(${t('opcional')})</span></label>
+                            <select id="${this.panelId}-etiquetas" class="form-control form-control-sm" multiple style="width:100%;"></select>
+                        </div>
                     </div>
 
                     <div class="row mt-2" id="${this.panelId}-notas-row" style="display: none;">
@@ -246,7 +252,8 @@ class UniversalCalendarManager {
             selectable: !this.readonly, 
             height: 'auto',
             dayMaxEventRows: _this.compact ? 2 : (_this._isGroupedMode() ? false : true),
-            eventOrder: '-isGhost,order,start,title',
+            // Ghost al final del stack del día → debajo de solicitudes/asignaciones.
+            eventOrder: 'isGhost,order,start,title',
             eventOrderStrict: this._isGroupedMode(),
             events: this._eventsSourceUrl(),
             
@@ -977,19 +984,143 @@ class UniversalCalendarManager {
         return { wId, vId };
     }
 
-    _vehicleUnassignPayload(wId, vId, delCtx, today) {
+    _vehicleUnassignPayload(wId, vId, delCtx, today, endOverride) {
         const rangeStart = delCtx.originalStart.isBefore(today)
             ? today.format('YYYY-MM-DD')
             : delCtx.originalStart.format('YYYY-MM-DD');
+        let endStr = endOverride
+            || (delCtx.rangeEnd && delCtx.rangeEnd.format
+                ? delCtx.rangeEnd.format('YYYY-MM-DD')
+                : null);
+        if (!endStr) endStr = rangeStart;
+        if (moment(endStr).isBefore(moment(rangeStart))) {
+            endStr = rangeStart;
+        }
         return {
             worker_id: wId,
             vehicle_id: vId,
             start: rangeStart,
-            end: delCtx.rangeEnd.format('YYYY-MM-DD'),
+            end: endStr,
             include_weekends: true,
             overwrite_mode: 'overwrite',
             accion: 'DESASIGNAR',
         };
+    }
+
+    _fetchVehicleAssignmentSpan(wId, vId, fromStr) {
+        return fetch(
+            `/api/v6/planificador/vehicle-assignment-span?worker_id=${wId}&vehicle_id=${vId}&from=${encodeURIComponent(fromStr)}`,
+            { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } }
+        ).then((r) => r.json()).catch(() => null);
+    }
+
+    /**
+     * Modal: solo el bloque visible vs desde este día hasta una fecha
+     * (por defecto la última asignación de ese usuario en esa furgoneta).
+     */
+    _promptVehicleUnassign(wId, vId, delCtx, today, onConfirm) {
+        const blockStart = delCtx.originalStart.isBefore(today)
+            ? today.clone()
+            : delCtx.originalStart.clone();
+        const blockEnd = delCtx.rangeEnd && delCtx.rangeEnd.isValid()
+            ? delCtx.rangeEnd.clone()
+            : blockStart.clone();
+        const startStr = blockStart.format('YYYY-MM-DD');
+        const blockEndStr = blockEnd.format('YYYY-MM-DD');
+
+        const runWithEnd = (endStr) => {
+            if (typeof onConfirm === 'function') {
+                onConfirm(this._vehicleUnassignPayload(wId, vId, delCtx, today, endStr));
+            }
+        };
+
+        const openSwal = (defaultEndStr) => {
+            const endDefault = defaultEndStr || blockEndStr;
+            if (typeof Swal === 'undefined') {
+                const untilEnd = window.confirm(
+                    t('¿Desasignar hasta el final del tramo? (Cancelar = solo este bloque)')
+                );
+                runWithEnd(untilEnd ? endDefault : blockEndStr);
+                return;
+            }
+
+            const swalBase = typeof window.adminSwalDefaults === 'function'
+                ? window.adminSwalDefaults
+                : (o) => o;
+            const dateId = `${this.panelId}-veh-unassign-end`;
+            calendarSwal(swalBase({
+                title: t('¿Desasignar vehículo?'),
+                html:
+                    `<p class="text-muted small mb-3 text-left">${t('Elige el alcance de la baja. Puedes acortar la fecha final si no quieres vaciar todo el tramo.')}</p>` +
+                    `<div class="text-left mb-2">` +
+                    `<label class="d-block mb-2"><input type="radio" name="veh-unassign-scope" value="block" checked> ` +
+                    `${t('Solo este bloque')} <span class="text-muted small">(${blockStart.format('DD/MM/YYYY')} – ${blockEnd.format('DD/MM/YYYY')})</span></label>` +
+                    `<label class="d-block mb-2"><input type="radio" name="veh-unassign-scope" value="forward"> ` +
+                    `${t('Desde este día hasta la fecha indicada')}</label>` +
+                    `</div>` +
+                    `<div id="${dateId}-wrap" class="text-left" style="opacity:0.45;pointer-events:none;">` +
+                    `<label class="small font-weight-bold mb-1" for="${dateId}">${t('Hasta el día')}</label>` +
+                    `<input type="date" id="${dateId}" class="form-control form-control-sm" ` +
+                    `value="${endDefault}" min="${startStr}">` +
+                    `<p class="text-muted small mt-1 mb-0">${t('Por defecto: última asignación de esta persona en esta furgoneta.')}</p>` +
+                    `</div>`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: t('Sí, desasignar'),
+                cancelButtonText: t('Cancelar'),
+                focusConfirm: false,
+                customClass: {
+                    popup: 'admin-swal-popup',
+                    title: 'admin-swal-title',
+                    htmlContainer: 'admin-swal-html',
+                    confirmButton: 'admin-swal-btn admin-swal-btn-danger',
+                    cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+                    actions: 'admin-swal-actions',
+                },
+                didOpen: () => {
+                    const wrap = document.getElementById(`${dateId}-wrap`);
+                    const radios = document.querySelectorAll('input[name="veh-unassign-scope"]');
+                    const sync = () => {
+                        const scope = (document.querySelector('input[name="veh-unassign-scope"]:checked') || {}).value;
+                        if (!wrap) return;
+                        if (scope === 'forward') {
+                            wrap.style.opacity = '1';
+                            wrap.style.pointerEvents = 'auto';
+                        } else {
+                            wrap.style.opacity = '0.45';
+                            wrap.style.pointerEvents = 'none';
+                        }
+                    };
+                    radios.forEach((r) => r.addEventListener('change', sync));
+                    sync();
+                },
+                preConfirm: () => {
+                    const scope = (document.querySelector('input[name="veh-unassign-scope"]:checked') || {}).value;
+                    if (scope !== 'forward') {
+                        return { scope: 'block', end: blockEndStr };
+                    }
+                    const input = document.getElementById(dateId);
+                    let endVal = input && input.value ? input.value : endDefault;
+                    if (!endVal || moment(endVal).isBefore(moment(startStr))) {
+                        if (typeof Swal !== 'undefined' && Swal.showValidationMessage) {
+                            Swal.showValidationMessage(t('La fecha final no puede ser anterior al inicio.'));
+                        }
+                        return false;
+                    }
+                    return { scope: 'forward', end: endVal };
+                },
+            })).then((res) => {
+                if (!res.isConfirmed || !res.value) return;
+                runWithEnd(res.value.end);
+            });
+        };
+
+        this._fetchVehicleAssignmentSpan(wId, vId, startStr).then((data) => {
+            const spanEnd = (data && data.success && data.end) ? data.end : blockEndStr;
+            // Si el tramo es más corto que el bloque visible, no bajar del bloque.
+            const defaultEnd = moment(spanEnd).isAfter(blockEnd) ? spanEnd : blockEndStr;
+            openSwal(defaultEnd);
+        });
     }
 
     _finishVehicleUnassign(vres) {
@@ -1289,8 +1420,50 @@ class UniversalCalendarManager {
             $(gRow).stop(true, true).slideDown(150);
             const qty = document.getElementById(`${this.panelId}-quantity`);
             if (qty && (!qty.value || parseInt(qty.value, 10) < 1)) qty.value = 1;
+            this._ensureEtiquetasSelect();
         } else {
             $(gRow).stop(true, true).slideUp(150);
+        }
+    }
+
+    _ensureEtiquetasSelect() {
+        const sel = document.getElementById(`${this.panelId}-etiquetas`);
+        if (!sel || typeof $ === 'undefined' || !$.fn.select2) return;
+        if ($(sel).data('select2')) return;
+        const fill = (rows) => {
+            $(sel).empty();
+            (rows || []).forEach((r) => {
+                const opt = new Option(r.text || r.nombre, r.id, false, false);
+                if (r.color) opt.setAttribute('data-color', r.color);
+                sel.appendChild(opt);
+            });
+            $(sel).trigger('change');
+        };
+        const bootSelect = () => {
+            this.initPanelSelect2($(sel), {
+                placeholder: t('Etiquetas opcionales…'),
+                allowClear: true,
+                closeOnSelect: false,
+                multiple: true,
+            });
+        };
+        if (window.__spEtiquetasEmpleadoCache) {
+            fill(window.__spEtiquetasEmpleadoCache);
+            bootSelect();
+        } else {
+            fetch('/admin/api/etiquetas?tipo=empleado', {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            })
+                .then((r) => r.json())
+                .then((data) => {
+                    window.__spEtiquetasEmpleadoCache = (data && data.results) || [];
+                    fill(window.__spEtiquetasEmpleadoCache);
+                    bootSelect();
+                })
+                .catch(() => {
+                    window.__spEtiquetasEmpleadoCache = [];
+                    bootSelect();
+                });
         }
     }
 
@@ -1609,12 +1782,50 @@ class UniversalCalendarManager {
         }
         const panel = document.getElementById(this.panelId);
         const modal = panel ? panel.closest('.modal') : null;
+        const chipFn = (typeof window.spEtiquetaChipHtml === 'function')
+            ? window.spEtiquetaChipHtml
+            : function (n) { return $('<span>').text(n); };
+        const workerResultHtml = (item) => {
+            if (!item || item.children) return item && item.text;
+            const tags = item.etiquetas || [];
+            if (!tags.length) return item.text;
+            const $wrap = $('<div class="univ-worker-option"></div>');
+            $wrap.append($('<div class="univ-worker-option-name"></div>').text(item.text || ''));
+            const $tags = $('<div class="univ-worker-option-tags"></div>');
+            tags.forEach((e) => {
+                $tags.append($(chipFn(e.nombre || e.text || '', e.color || '')));
+            });
+            $wrap.append($tags);
+            return $wrap;
+        };
+        const workerSelectionText = (item) => {
+            if (!item || !item.id) return item && item.text;
+            const tags = item.etiquetas || [];
+            if (!tags.length) return item.text;
+            const names = tags.map((e) => e.nombre || '').filter(Boolean).join(', ');
+            return names ? `${item.text} · ${names}` : item.text;
+        };
         // Siempre body: fixed escapea transform del modal (si no, el listado queda bajo el FC).
         const opts = Object.assign({
             dropdownParent: $(document.body),
             dropdownCssClass: 'admin-select2-dropdown univ-calendar-select2-dropdown',
             width: '100%',
         }, extraOpts);
+        // Plantillas de etiquetas en selects de trabajador (ajax o estático).
+        if ($select.hasClass('univ-worker-select') || (opts.ajax && String(opts.ajax.url || '').indexOf('search_workers') !== -1)) {
+            if (!opts.templateResult) {
+                opts.templateResult = function (data) {
+                    if (data.loading) return data.text;
+                    return workerResultHtml(data) || data.text;
+                };
+            }
+            if (!opts.templateSelection) {
+                opts.templateSelection = function (data) {
+                    return workerSelectionText(data) || data.text;
+                };
+            }
+            opts.escapeMarkup = function (m) { return m; };
+        }
         $select.select2(opts);
         if (window.SignaPlanSelect2 && typeof window.SignaPlanSelect2.bindFixedDropdown === 'function') {
             const roots = [
@@ -1843,6 +2054,12 @@ class UniversalCalendarManager {
                 if (qty > 50) qty = 50;
                 const perfilEl = document.getElementById(`${this.panelId}-perfil`);
                 const perfilVal = perfilEl ? (perfilEl.value || '').trim() : '';
+                const etiquetasEl = document.getElementById(`${this.panelId}-etiquetas`);
+                let etiquetaIds = [];
+                if (etiquetasEl && typeof $ !== 'undefined') {
+                    const raw = $(etiquetasEl).val() || [];
+                    etiquetaIds = (Array.isArray(raw) ? raw : [raw]).map((v) => parseInt(v, 10)).filter((n) => !Number.isNaN(n));
+                }
 
                 const afterSave = (opts) => this._finishPanelSave(opts || {});
 
@@ -1875,6 +2092,7 @@ class UniversalCalendarManager {
                     if (notasVal) payload.notas = notasVal;
                     if (String(selVal) === 'GENERICO') {
                         payload.detalles = perfilVal || t('Personal Genérico');
+                        if (etiquetaIds.length) payload.etiqueta_ids = etiquetaIds;
                     }
 
                     if (this.context === 'obra') {
@@ -2274,15 +2492,25 @@ class UniversalCalendarManager {
             }
 
             const { dates, filteredRefs, originalStart, today, daysCount } = delCtx;
-            const deleteTitle = isVehicleBlock ? t('¿Desasignar vehículo?') : t('¿Desasignar bloque?');
-            const deleteMsg = isVehicleBlock
-                ? `${t('Se quitará la asignación del vehículo en')} <b class="text-danger">${daysCount} ${t('día(s)')}</b>.`
-                : (originalStart.isBefore(today) && !this.forceEditPast
-                    ? `${t('Se conservará el histórico pasado, pero se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('desde hoy en adelante.')}`
-                    : `${t('Se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('del bloque seleccionado.')}`);
+            const deleteTitle = t('¿Desasignar bloque?');
+            const deleteMsg = originalStart.isBefore(today) && !this.forceEditPast
+                ? `${t('Se conservará el histórico pasado, pero se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('desde hoy en adelante.')}`
+                : `${t('Se vaciarán')} <b class="text-danger">${daysCount} ${t('día(s)')}</b> ${t('del bloque seleccionado.')}`;
             const deleteMsgForce = this.forceEditPast
                 ? `<p class="text-danger small">${t('Modo forzado: incluye días del pasado. El libro de fichajes no se borra.')}</p>${deleteMsg}`
                 : deleteMsg;
+
+            if (isVehicleBlock || this.context === 'vehiculo') {
+                const ids = this._resolveVehicleDeleteIds(props);
+                if (!ids) {
+                    calendarSwal(t('Error'), t('No se pudo identificar vehículo u operario.'), 'error');
+                    return;
+                }
+                this._promptVehicleUnassign(ids.wId, ids.vId, delCtx, today, (payload) => {
+                    this.executeVehicleSave(payload, (vres) => this._finishVehicleUnassign(vres));
+                });
+                return;
+            }
 
             if (typeof Swal !== 'undefined') {
                 const swalBase = typeof window.adminSwalDefaults === 'function' ? window.adminSwalDefaults : (o) => o;
@@ -2307,19 +2535,6 @@ class UniversalCalendarManager {
                     if (this.callbacks.onDeleteAssignment) {
                         this.callbacks.onDeleteAssignment(this.activeEvent, dates, originalStart.isBefore(today) && !this.forceEditPast);
                         this.hidePanel();
-                        return;
-                    }
-
-                    if (isVehicleBlock || this.context === 'vehiculo') {
-                        const ids = this._resolveVehicleDeleteIds(props);
-                        if (!ids) {
-                            calendarSwal(t('Error'), t('No se pudo identificar vehículo u operario.'), 'error');
-                            return;
-                        }
-                        this.executeVehicleSave(
-                            this._vehicleUnassignPayload(ids.wId, ids.vId, delCtx, today),
-                            (vres) => this._finishVehicleUnassign(vres)
-                        );
                         return;
                     }
 
@@ -2548,6 +2763,8 @@ class UniversalCalendarManager {
 
         let ghost = this.calendar.addEvent({
             id: this.ghostEventId, title: t('NUEVA ASIGNACIÓN'), start: dateStr, end: endStr,
+            // order alto: debajo de solicitudes (99999) y asignaciones reales
+            order: 100000,
             className: 'fc-ghost-event', editable: true, extendedProps: { isGhost: 1 }
         });
 
@@ -2562,6 +2779,7 @@ class UniversalCalendarManager {
         
         let ghost = this.calendar.addEvent({
             id: this.ghostEventId, title: t('NUEVA ASIGNACIÓN'), start: startStr, end: endObj,
+            order: 100000,
             className: 'fc-ghost-event', editable: true, extendedProps: { isGhost: 1 }
         });
         this.showBottomPanel(ghost, true);

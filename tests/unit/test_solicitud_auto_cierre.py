@@ -53,6 +53,54 @@ def test_mark_auto_cumplida_deja_rastro(monkeypatch):
     assert txt and 'Ana' in txt
     assert 'cubierta en cuadrante' in txt
 
+
+def test_mark_cumplida_desde_solicitud_no_es_auto(monkeypatch):
+    class _Now:
+        def isoformat(self, timespec='seconds'):
+            return '2026-10-04T10:36:05'
+
+    monkeypatch.setattr(
+        'app.services.solicitud_service.utc_now',
+        lambda: _Now(),
+    )
+
+    class _Q:
+        @staticmethod
+        def get(_id):
+            return SimpleNamespace(id=7, name='paco', lastname='navarrp')
+
+    class _User:
+        query = _Q()
+
+    monkeypatch.setattr('app.services.solicitud_service.User', _User)
+
+    from app.services.solicitud_service import (
+        _mark_auto_cumplida,
+        solicitud_cerrada_desde_solicitud,
+    )
+
+    sol = SimpleNamespace(
+        estado='EN_PROCESO',
+        tipo='GENERICA',
+        auto_fulfilled=False,
+        resolved_at=None,
+        resolved_by_id=None,
+        comentarios=build_comentarios_config([date(2026, 10, 4)]),
+        cantidad_solicitada=2,
+        cantidad_cubierta=0,
+    )
+    _mark_auto_cumplida(sol, resolved_by_id=7, automatico=False)
+    assert sol.estado == 'CUMPLIDA'
+    assert sol.auto_fulfilled is False
+    cfg = json.loads(sol.comentarios)
+    assert 'auto_cierre' not in cfg
+    assert cfg['cierre']['motivo'] == 'asignacion_desde_solicitud'
+    assert solicitud_cerrada_desde_solicitud(sol) is True
+    txt = get_solicitud_auto_cierre_texto(sol)
+    assert txt and 'asignada desde la solicitud' in txt
+    assert 'paco' in txt
+
+
 def test_clear_auto_cierre_marker():
     sol = SimpleNamespace(
         auto_fulfilled=True,

@@ -16,7 +16,13 @@ from app.services.sync_config_service import SyncConfigService
 from app.services.config_service import set_tenant_config, get_tenant_config
 from app.sync.dispatcher import get_sync_adapter
 from app.decorators import roles_required
-from app.services.permission_service import can_resolve_fichajes, can_unassign_cuadrante_pasado, is_laboral, laboral_auditoria_sections
+from app.services.permission_service import (
+    can_resolve_fichajes,
+    can_unassign_cuadrante_pasado,
+    can_edit_planning_calendar,
+    is_laboral,
+    laboral_auditoria_sections,
+)
 from app.services.panel_scope_service import (
     PANEL_AUDITORIA_FICHAJES,
     registro_fichaje_in_scope,
@@ -608,6 +614,29 @@ def preview_empleados():
         flash(f"Error Odoo: {str(e)}", "danger")
         return redirect(url_for('sync.odoo_panel'))
 
+
+@sync_bp.route('/empleados/authorize-department', methods=['POST'])
+@login_required
+@roles_required(ROLE_ADMIN)
+def authorize_empleados_department():
+    """Autoriza un departamento Odoo en el mapa de sync de personal interno."""
+    if not _require_odoo_module():
+        return jsonify({'success': False, 'error': translate('Módulo Odoo no activo')}), 403
+    data = request.get_json(silent=True) or {}
+    department = (data.get('department') or '').strip()
+    role = (data.get('role') or '').strip() or None
+    if not department:
+        return jsonify({'success': False, 'error': translate('Departamento obligatorio')}), 400
+    try:
+        result = SyncConfigService.authorize_empleados_departamento(department, role)
+        _clear_preview_cache('empleados')
+        return jsonify({'success': True, **result})
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
 @sync_bp.route('/preview_subcontratas', methods=['GET'])
 @login_required
 @roles_required(ROLE_ADMIN)
@@ -674,6 +703,9 @@ def commit_subcontratas():
             reactivar,
         )
         for obj in data.get('empleados', {}).get('actualizados', []):
+            # No sobrescribir ficha si el Id Odoo apunta a otro partner (identidad dudosa).
+            if (obj.get('cambios') or {}).get('Id Odoo'):
+                continue
             user = User.query.get(obj['local_id'])
             if user:
                 ext_ids = dict(user.external_ids or {})
@@ -751,9 +783,13 @@ def commit_subcontratas():
 
             with db.session.no_autoflush:
                 existente = User.query.filter(
-                    (User.dni == dni_limpio) | (User.email == email_limpio)
+                    (User.dni == dni_limpio)
                     | (User.external_ids['odoo'].astext == str(obj['odoo_id']))
                 ).order_by(User.is_deleted.asc(), User.id.asc()).first()
+                if not existente:
+                    existente = User.query.filter(
+                        User.dni == f"{dni_limpio}-EXT{obj['odoo_id']}"
+                    ).first()
 
             if existente:
                 ext_ids = dict(existente.external_ids or {})
@@ -902,13 +938,14 @@ def commit_empleados():
                 choque_dni = User.query.filter(User.dni == obj['dni'], User.id != user.id).first()
                 choque_email = User.query.filter(User.email == obj['email'], User.id != user.id).first()
 
-                user.external_ids = user.external_ids or {}
-                user.external_ids['odoo'] = str(obj['odoo_id'])
-                user.external_ids['odoo_model'] = 'hr.employee'
-                if obj.get('barcode'):
-                    user.external_ids['barcode'] = str(obj['barcode']).strip()
-                from sqlalchemy.orm.attributes import flag_modified
-                flag_modified(user, 'external_ids')
+                from app.services.odoo_employee_metadata import apply_odoo_employee_external_ids
+                apply_odoo_employee_external_ids(
+                    user,
+                    obj['odoo_id'],
+                    department=obj.get('departamento'),
+                    barcode=obj.get('barcode'),
+                    import_source='sync_empleados_manual',
+                )
                 user.name = obj['name']
                 user.lastname = obj['lastname']
                 from app.services.user_role_sync_service import apply_odoo_role_if_allowed
@@ -950,9 +987,13 @@ def commit_empleados():
             dnis_en_transaccion.add(dni_limpio)
             emails_en_transaccion.add(email_limpio)
 
-            ext_new = {'odoo': str(obj['odoo_id']), 'odoo_model': 'hr.employee'}
-            if obj.get('barcode'):
-                ext_new['barcode'] = str(obj['barcode']).strip()
+            from app.services.odoo_employee_metadata import build_external_ids_for_new_employee
+            ext_new = build_external_ids_for_new_employee(
+                obj['odoo_id'],
+                department=obj.get('departamento'),
+                barcode=obj.get('barcode'),
+                import_source='sync_empleados_manual',
+            )
             db.session.add(User(
                 external_ids=ext_new,
                 name=obj['name'],
@@ -2575,6 +2616,8 @@ def auditoria_vehiculos():
             user_can(current_user, 'auditoria_vehiculos', 'w')
             or user_can(current_user, 'sync_odoo', 'w')
         ),
+        can_edit_calendar=can_edit_planning_calendar(current_user),
+        can_unassign_cuadrante_pasado=can_unassign_cuadrante_pasado(current_user),
     )
 
 

@@ -963,12 +963,18 @@ class Vehiculo(db.Model):
 
 
 class AsignacionVehiculo(db.Model):
-    """Empleado con vehículo en una fecha (1 vehículo/día y 1 persona/día)."""
+    """
+    Empleado con vehículo en una fecha.
+
+    estado:
+      - efectiva: cuenta para unicidad (1 vehículo/día y 1 persona/día)
+      - no_usada: rastro de plan abandonado (p.ej. se usó otro coche ese día)
+    Unicidad efectiva vía índices parciales (migración).
+    """
     __tablename__ = 'asignaciones_vehiculo'
-    __table_args__ = (
-        db.UniqueConstraint('vehiculo_id', 'fecha', name='uq_vehiculo_fecha'),
-        db.UniqueConstraint('user_id', 'fecha', name='uq_user_vehiculo_fecha'),
-    )
+
+    ESTADO_EFECTIVA = 'efectiva'
+    ESTADO_NO_USADA = 'no_usada'
 
     id = db.Column(db.Integer, primary_key=True)
     vehiculo_id = db.Column(db.Integer, db.ForeignKey('vehiculos.id'), nullable=False)
@@ -977,6 +983,8 @@ class AsignacionVehiculo(db.Model):
     solicitud_id = db.Column(
         db.Integer, db.ForeignKey('solicitudes_vehiculo.id', ondelete='SET NULL'), nullable=True
     )
+    estado = db.Column(db.String(20), nullable=False, default=ESTADO_EFECTIVA, server_default=ESTADO_EFECTIVA)
+    notas = db.Column(db.Text, nullable=True)
 
     created_at = db.Column(db.DateTime, default=_utc_now)
 
@@ -985,8 +993,16 @@ class AsignacionVehiculo(db.Model):
         'SolicitudVehiculo', backref='asignaciones_vinculadas', foreign_keys=[solicitud_id]
     )
 
+    @property
+    def es_efectiva(self):
+        return (self.estado or self.ESTADO_EFECTIVA) == self.ESTADO_EFECTIVA
+
+    @property
+    def es_no_usada(self):
+        return (self.estado or '') == self.ESTADO_NO_USADA
+
     def __repr__(self):
-        return f'<AsignacionVehiculo V:{self.vehiculo_id} U:{self.user_id} {self.fecha}>'
+        return f'<AsignacionVehiculo V:{self.vehiculo_id} U:{self.user_id} {self.fecha} {self.estado}>'
 
 
 class RegistroOdometro(db.Model):
@@ -1366,3 +1382,63 @@ class NotaAudioJob(db.Model):
 
     def __repr__(self):
         return f'<NotaAudioJob {self.id} {self.estado}>'
+
+
+# ==========================================
+# ETIQUETAS (catálogo predefinido empleado / subcontrata)
+# ==========================================
+# Sync Odoo (futuro, solo salida SignaPlan → Odoo): ver
+# app/services/etiqueta_odoo_hooks.py — hoy no escribe nada.
+
+etiqueta_user = db.Table(
+    'etiqueta_user',
+    db.Column('etiqueta_id', db.Integer, db.ForeignKey('etiquetas.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+)
+
+etiqueta_company = db.Table(
+    'etiqueta_company',
+    db.Column('etiqueta_id', db.Integer, db.ForeignKey('etiquetas.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('company_id', db.Integer, db.ForeignKey('companies.id', ondelete='CASCADE'), primary_key=True),
+)
+
+solicitud_etiqueta = db.Table(
+    'solicitud_etiqueta',
+    db.Column('solicitud_id', db.Integer, db.ForeignKey('solicitudes.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('etiqueta_id', db.Integer, db.ForeignKey('etiquetas.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+class Etiqueta(db.Model):
+    """Catálogo de etiquetas predefinidas (empleado o subcontrata)."""
+    __tablename__ = 'etiquetas'
+
+    TIPO_EMPLEADO = 'empleado'
+    TIPO_SUBCONTRATA = 'subcontrata'
+    TIPOS = (TIPO_EMPLEADO, TIPO_SUBCONTRATA)
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(80), nullable=False)
+    color = db.Column(db.String(7), nullable=True)  # #rrggbb o None/blanco
+    tipo = db.Column(db.String(20), nullable=False)
+    active = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
+    created_at = db.Column(db.DateTime, default=_utc_now)
+
+    users = db.relationship(
+        'User', secondary=etiqueta_user,
+        backref=db.backref('etiquetas', lazy='selectin'),
+        lazy='dynamic',
+    )
+    companies = db.relationship(
+        'Company', secondary=etiqueta_company,
+        backref=db.backref('etiquetas', lazy='selectin'),
+        lazy='dynamic',
+    )
+    solicitudes = db.relationship(
+        'Solicitud', secondary=solicitud_etiqueta,
+        backref=db.backref('etiquetas', lazy='selectin'),
+        lazy='dynamic',
+    )
+
+    def __repr__(self):
+        return f'<Etiqueta {self.tipo}:{self.nombre}>'

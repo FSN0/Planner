@@ -1456,6 +1456,13 @@ def process_nota_audio_job(job_id: int) -> None:
         current_app.logger.info(
             'NotaAudioJob %s: COMPLETADO → nota_id=%s', job_id, nota.id,
         )
+        try:
+            from app.services.nota_informe_dispatch import enqueue_informe_reunion_autor
+            enqueue_informe_reunion_autor(nota.id)
+        except Exception as mail_exc:
+            current_app.logger.warning(
+                'NotaAudioJob %s: informe PDF no encolado: %s', job_id, mail_exc,
+            )
 
     except NotaAudioCancelled:
         current_app.logger.info('NotaAudioJob %s: cancelado durante el proceso', job_id)

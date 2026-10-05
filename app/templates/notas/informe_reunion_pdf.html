@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>{{ titulo }}</title>
+  <style type="text/css">
+    /*
+      wkhtmltopdf (Qt WebKit):
+      - Sin transform() en position:fixed (rompe repetición por página).
+      - Marca de agua y franja: capas absolute (una por hoja A4).
+    */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 210mm;
+      font-family: Georgia, "Times New Roman", Times, serif;
+      font-size: 11pt;
+      color: #000;
+      line-height: 1.55;
+      background: #fff;
+      position: relative;
+    }
+
+    .page-wm {
+      position: absolute;
+      left: 0;
+      width: 200mm;
+      height: 297mm;
+      z-index: 1000;
+      pointer-events: none;
+      {% if mark_data_uri %}
+      background-image: url('{{ mark_data_uri }}');
+      background-repeat: no-repeat;
+      background-position: center center;
+      background-size: 105mm auto;
+      {% endif %}
+    }
+
+    /* Franja derecha: una por hoja (transcripción incluida) */
+    .page-stripe {
+      position: absolute;
+      right: 0;
+      width: 10mm;
+      height: 297mm;
+      background: {{ stripe_color }};
+      z-index: 1100;
+      overflow: hidden;
+    }
+    .stripe-logo {
+      position: absolute;
+      left: 1.2mm;
+      width: 7.6mm;
+    }
+    .stripe-logo--top { top: 5mm; }
+    .stripe-logo--bottom { bottom: 5mm; }
+    .stripe-logo img {
+      display: block;
+      width: 7.6mm;
+      height: auto;
+      max-height: 32mm;
+      background: transparent;
+      padding: 0;
+      border: 0;
+    }
+    .stripe-title {
+      position: absolute;
+      top: 42mm;
+      bottom: 42mm;
+      left: 0;
+      width: 10mm;
+      color: #fff;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 12pt;
+      font-weight: bold;
+      letter-spacing: 0.08em;
+      text-align: center;
+      /* Letras hacia el borde exterior (no hacia el texto) */
+      -webkit-writing-mode: vertical-rl;
+      writing-mode: vertical-rl;
+      -webkit-text-orientation: mixed;
+      text-orientation: mixed;
+      overflow: hidden;
+    }
+    .stripe-title span {
+      display: inline-block;
+      max-height: 200mm;
+      overflow: hidden;
+      white-space: nowrap;
+      -webkit-transform: rotate(180deg);
+      transform: rotate(180deg);
+    }
+
+    .sheet {
+      position: relative;
+      z-index: 1;
+      width: 200mm;
+      margin: 0;
+      padding: 0;
+    }
+    .banner {
+      display: block;
+      width: 200mm;
+      height: 14mm;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background-repeat: no-repeat;
+      background-position: left center;
+      background-size: auto 14mm;
+    }
+    .banner-fallback {
+      width: 200mm;
+      box-sizing: border-box;
+      padding: 5mm 8mm 3mm 10mm;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 12pt;
+      font-weight: bold;
+      border-bottom: 0.6pt solid #000;
+    }
+    .body {
+      padding: 6mm 8mm 14mm 12mm;
+      box-sizing: border-box;
+    }
+    .doc-title {
+      margin: 0 0 6mm 0;
+      padding: 0;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 16pt;
+      font-weight: bold;
+      color: #000;
+      line-height: 1.25;
+    }
+    .section-label {
+      margin: 0 0 4mm 0;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 9pt;
+      font-weight: bold;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border-bottom: 0.5pt solid #000;
+      padding-bottom: 2mm;
+    }
+    .body-text {
+      font-size: 10.5pt;
+      color: #000;
+      text-align: justify;
+    }
+    .transcript {
+      page-break-before: always;
+      padding-top: 10mm;
+    }
+  </style>
+</head>
+<body>
+  {% for i in range(overlay_page_count) %}
+  {% if mark_data_uri %}
+  <div class="page-wm" style="top: {{ i * 297 }}mm;" aria-hidden="true"></div>
+  {% endif %}
+  <div class="page-stripe" style="top: {{ i * 297 }}mm;" aria-hidden="true">
+    {% if logo_data_uri %}
+    <div class="stripe-logo stripe-logo--top"><img src="{{ logo_data_uri }}" alt=""></div>
+    {% endif %}
+    <div class="stripe-title"><span>{{ titulo }}</span></div>
+    {% if logo_data_uri %}
+    <div class="stripe-logo stripe-logo--bottom"><img src="{{ logo_data_uri }}" alt=""></div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="sheet">
+    {% if header_data_uri %}
+    <div class="banner" style="background-image: url('{{ header_data_uri }}');"></div>
+    {% else %}
+    <div class="banner-fallback">{{ organizacion }}</div>
+    {% endif %}
+
+    <div class="body">
+      <h1 class="doc-title">{{ titulo }}</h1>
+
+      {% if resumen_html %}
+      <div class="body-text">{{ resumen_html | safe }}</div>
+      {% endif %}
+
+      {% if tiene_transcripcion %}
+      <div class="transcript">
+        <h2 class="section-label">{{ _('Transcripción') }}</h2>
+        <div class="body-text">{{ transcripcion_html | safe }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

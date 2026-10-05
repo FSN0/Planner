@@ -460,11 +460,25 @@ def sync_odometros(fecha_desde=None, fecha_hasta=None, modo='Automático', limpi
             .delete(synchronize_session=False)
         )
 
+    # Plan ↔ uso Odoo: reasignación autónoma antes de pintar registros.
+    from app.services.vehicle_reconcile_service import reconcile_vehicle_assignments_from_usage
+    reconcile_stats = reconcile_vehicle_assignments_from_usage(
+        covered_days, users_by_odoo, users_by_name, autor_id=None,
+    )
+
     asignaciones = AsignacionVehiculo.query.filter(
         AsignacionVehiculo.fecha >= look_asign_desde,
         AsignacionVehiculo.fecha <= look_asign_hasta,
     ).all()
-    asig_map = {(a.vehiculo_id, a.fecha.isoformat()): a for a in asignaciones}
+    # Preferir efectiva si hay fantasma + efectiva el mismo día/vehículo.
+    asig_map = {}
+    for a in asignaciones:
+        key = (a.vehiculo_id, a.fecha.isoformat())
+        prev = asig_map.get(key)
+        if prev is None:
+            asig_map[key] = a
+        elif getattr(a, 'es_efectiva', True) and not getattr(prev, 'es_efectiva', True):
+            asig_map[key] = a
 
     keys = set(covered_days.keys()) | set(day_readings.keys())
     for a in asignaciones:
@@ -538,7 +552,10 @@ def sync_odometros(fecha_desde=None, fecha_hasta=None, modo='Automático', limpi
         f"sin_equipo={skipped_sin_equipo} "
         f"ok={estados_count.get('ok', 0)} mismatch={estados_count.get('mismatch_driver', 0)} "
         f"sin_km={estados_count.get('sin_km', 0)} sin_plan={estados_count.get('sin_planificar', 0)} "
-        f"desvio_alto={desvio_alerts}"
+        f"desvio_alto={desvio_alerts} "
+        f"auto_cross={reconcile_stats.get('cross_swaps', 0)} "
+        f"auto_claim={reconcile_stats.get('claimed_free', 0)} "
+        f"auto_clear={reconcile_stats.get('ghosts_cleared', 0)}"
     )
     logger.info('[sync_odometros] %s', detalle)
     db.session.add(SyncLog(
@@ -565,6 +582,7 @@ def sync_odometros(fecha_desde=None, fecha_hasta=None, modo='Automático', limpi
         'desvio_alto': desvio_alerts,
         'desde': fecha_desde.isoformat(),
         'hasta': fecha_hasta.isoformat(),
+        'reconcile': reconcile_stats,
     }
 
 

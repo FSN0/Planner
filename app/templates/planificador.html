@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260901a">
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <link href="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20260908b">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planificador.css') }}?v=20261005stack">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}?v=20260901e">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_assign_sheet.css') }}?v=20260830b">
 <style id="dynamic-sidebar-style"></style>
@@ -284,8 +284,9 @@
 <script>
 window.PLANIFICADOR_FESTIVOS = {{ (planificador_festivos|default([]))|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260904s"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20260929a"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261005pick"></script>
+<script src="{{ url_for('static', filename='js/etiquetas_select2.js') }}?v=20261005pick"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20261005pick"></script>
 {% if can_edit_planificador|default(false) %}
 <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260830b"></script>
 {% endif %}

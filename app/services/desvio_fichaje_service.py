@@ -850,8 +850,12 @@ class DesvioEspejoView:
 def repartir_secciones_auditoria(pendientes):
     """
     Conflicto/Disputa → desviaciones.
-    Ausencia + espejo plan de desvíos pendientes → ausencias.
-    Paracaidista + espejo real de desvíos pendientes → sin planificar.
+    Ausencia + espejo plan de desvíos aún sin ack_plan → ausencias.
+    Paracaidista + espejo real de desvíos aún sin ack_real → sin planificar.
+
+    Si un lado del desvío ya está resuelto (ack), no se proyecta en Ausencias /
+    Sin planificar: esa decisión ya está tomada; el desvío sigue arriba hasta
+    cerrar el otro lado (el panel resuelto se ve en verde ahí).
     """
     conflictos = []
     ausencias = []
@@ -861,11 +865,9 @@ def repartir_secciones_auditoria(pendientes):
             conflictos.append(r)
             ui = getattr(r, 'desvio_ui', None) or {}
             if ui.get('es_desvio'):
-                # Mantener espejo aunque el lado ya esté ack (para «Ver ausencia /
-                # Ver fichaje» y reabrir contexto). Solo desaparece al cerrar el desvío.
-                if r.obra_planificada_id:
+                if r.obra_planificada_id and not ui.get('ack_plan'):
                     ausencias.append(DesvioEspejoView(r, 'plan'))
-                if r.obra_real_id:
+                if r.obra_real_id and not ui.get('ack_real'):
                     paracaidistas.append(DesvioEspejoView(r, 'real'))
         elif r.estado == 'Ausencia':
             ausencias.append(r)

@@ -90,7 +90,81 @@ def test_diff_reactivates_deleted_externo_instead_of_nuevo(
         assert 'Estado' in row['cambios']
 
 
-def test_diff_empresas_usa_category_ids(sub_adapter, session, app, tenant_soltec):
+def test_diff_no_une_externos_por_email_empresa(
+    sub_adapter, session, app, tenant_soltec, company_subcontrata,
+):
+    """Varios contactos con el email de la empresa no deben actualizarse entre sí."""
+    with app.app_context():
+        g.current_tenant = tenant_soltec
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+        company_subcontrata.external_ids = {'odoo': '50'}
+        session.add(company_subcontrata)
+
+        natalia = User(
+            name='NATALIA',
+            lastname='X',
+            dni='EXT-10007',
+            email='oficina@subcontrata.test',
+            role='operario',
+            company_id=company_subcontrata.id,
+            active=True,
+            is_deleted=False,
+            email_verified=True,
+            password_hash=generate_password_hash('x'),
+            external_ids={'odoo': '10007'},
+        )
+        session.add(natalia)
+        session.commit()
+
+        def execute_kw(*args, **kwargs):
+            model, method = args[3], args[4]
+            if model == 'res.partner.category' and method == 'search':
+                return [9]
+            if model == 'res.partner' and method == 'search_read':
+                domain = args[5][0]
+                if any(
+                    isinstance(d, (list, tuple)) and d[0] == 'is_company' and d[2] is True
+                    for d in domain
+                ):
+                    return [{
+                        'id': 50,
+                        'name': company_subcontrata.nombre,
+                        'vat': '',
+                        'email': 'oficina@subcontrata.test',
+                        'category_id': [9],
+                        'is_company': True,
+                        'parent_id': False,
+                    }]
+                return [{
+                    'id': 8879,
+                    'name': 'ABDELILAH TAZOUTI',
+                    'email': 'oficina@subcontrata.test',
+                    'vat': False,
+                    'function': 'Externo',
+                    'parent_id': [50, company_subcontrata.nombre],
+                }]
+            return []
+
+        sub_adapter.models.execute_kw.side_effect = execute_kw
+        diff = sub_adapter.get_diff_subcontratas()
+
+        assert diff['empleados']['actualizados'] == []
+        assert len(diff['empleados']['nuevos']) == 1
+        row = diff['empleados']['nuevos'][0]
+        assert row['odoo_id'] == 8879
+        assert row['name'] == 'ABDELILAH'
+        assert row['email'] == 'ext_8879@subcontrata.local'
+
+
+def test_resolve_externo_email_empresa_vs_personal():
+    from app.sync.adapters.odoo_soltec import Adapter
+
+    assert Adapter._resolve_externo_email(1, False, 'a@b.com') == 'ext_1@subcontrata.local'
+    assert Adapter._resolve_externo_email(2, 'a@b.com', 'a@b.com') == 'ext_2@subcontrata.local'
+    assert Adapter._resolve_externo_email(3, 'A@B.COM', 'a@b.com') == 'ext_3@subcontrata.local'
+    assert Adapter._resolve_externo_email(4, 'yo@personal.com', 'a@b.com') == 'yo@personal.com'
+
     with app.app_context():
         g.current_tenant = tenant_soltec
         session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))

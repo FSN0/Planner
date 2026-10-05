@@ -4,11 +4,12 @@ set -euo pipefail
 # =============================================================================
 # SignaPlan - Restaurar backup
 # =============================================================================
-# Uso: ./scripts/restore.sh YYYYMMDD_HHMMSS
+# Uso: COMPOSE_FILE=docker-compose.yml ./scripts/restore.sh YYYYMMDD_HHMMSS
 # =============================================================================
 
 BACKUP_DIR="./backups"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+DB_NAME="${DB_NAME:-gestion_obra_saas}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -38,6 +39,7 @@ fi
 echo -e "${RED}════════════════════════════════════════════════════════════${NC}"
 echo -e "${RED}  ATENCIÓN: Vas a restaurar el backup del $TIMESTAMP${NC}"
 echo -e "${RED}  Esto SOBREESCRIBIRÁ todos los datos actuales.${NC}"
+echo -e "${RED}  Compose: $COMPOSE_FILE${NC}"
 echo -e "${RED}════════════════════════════════════════════════════════════${NC}"
 echo ""
 read -p "¿Continuar? (escribe 'si' para confirmar): " CONFIRM
@@ -51,21 +53,40 @@ fi
 echo -e "${YELLOW}[1/4] Deteniendo aplicación...${NC}"
 docker compose -f "$COMPOSE_FILE" stop web celery_worker celery_beat
 
-# --- Restaurar DB ---
+# --- Wipe completa (public + todos los tenant_*) ---
+# pg_dump --clean no usa CASCADE: si hay tablas nuevas (p.ej. etiquetas) que
+# no estaban en el backup, los DROP fallan y el restore queda a medias.
 echo -e "${YELLOW}[2/4] Restaurando base de datos...${NC}"
 docker compose -f "$COMPOSE_FILE" exec -T db \
-    psql -U postgres -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" gestion_obra_saas
+    psql -U postgres -v ON_ERROR_STOP=1 -d postgres <<EOF
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();
 
-gunzip -c "$DB_FILE" | docker compose -f "$COMPOSE_FILE" exec -T db \
-    psql -U postgres gestion_obra_saas > /dev/null 2>&1
+DROP DATABASE IF EXISTS ${DB_NAME};
+CREATE DATABASE ${DB_NAME} OWNER postgres;
+EOF
 
+RESTORE_LOG=$(mktemp)
+if ! gunzip -c "$DB_FILE" | docker compose -f "$COMPOSE_FILE" exec -T db \
+    psql -U postgres -v ON_ERROR_STOP=1 "$DB_NAME" >"$RESTORE_LOG" 2>&1; then
+    echo -e "${RED}ERROR: falló la restauración SQL. Últimas líneas:${NC}"
+    tail -n 40 "$RESTORE_LOG"
+    rm -f "$RESTORE_LOG"
+    exit 1
+fi
+rm -f "$RESTORE_LOG"
 echo "      → Base de datos restaurada"
 
 # --- Restaurar uploads ---
 if [ -f "$UPLOADS_FILE" ]; then
     echo -e "${YELLOW}[3/4] Restaurando uploads...${NC}"
+    # web está parado: arrancar solo para tar, o usar un contenedor efímero
+    docker compose -f "$COMPOSE_FILE" start web
+    sleep 2
     docker compose -f "$COMPOSE_FILE" exec -T web rm -rf /app/uploads/*
     cat "$UPLOADS_FILE" | docker compose -f "$COMPOSE_FILE" exec -T web tar -xzf - -C /app
+    docker compose -f "$COMPOSE_FILE" stop web
     echo "      → Uploads restaurados"
 else
     echo -e "${YELLOW}[3/4] Sin archivo de uploads (saltando)${NC}"
@@ -77,4 +98,5 @@ docker compose -f "$COMPOSE_FILE" start web celery_worker celery_beat
 
 echo ""
 echo -e "${GREEN}✓ Restauración completada exitosamente${NC}"
+echo "  Si el backup es anterior a migraciones recientes: make migrate"
 echo "  Verificar: docker compose -f $COMPOSE_FILE ps"

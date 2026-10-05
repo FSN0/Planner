@@ -10,9 +10,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _pil_util import require_pil  # noqa: E402
+from _pil_util import open_image_or_none, require_pil, save_image_or_warn  # noqa: E402
 
-Image = require_pil("knockout_brand_white.py")
+SCRIPT = "knockout_brand_white.py"
+Image = require_pil(SCRIPT)
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "logos_signaplan"
@@ -28,7 +29,7 @@ CANONICAL = [
 ]
 
 
-def knock_out_white(im: Image.Image) -> Image.Image:
+def knock_out_white(im):
     rgba = im.convert("RGBA")
     px = rgba.load()
     w, h = rgba.size
@@ -58,19 +59,32 @@ def knock_out_white(im: Image.Image) -> Image.Image:
 def main() -> int:
     if not SRC.is_dir():
         print(f"Missing {SRC}", file=sys.stderr)
-        return 1
+        return 0
     for name in CANONICAL:
         path = SRC / name
         if not path.exists():
             print(f"skip missing {name}")
             continue
-        im = Image.open(path)
-        out, changed = knock_out_white(im)
-        # Always rewrite as PNG with alpha
-        out.save(path, format="PNG", optimize=True)
-        print(f"{name}: knocked {changed} near-white pixels -> {path}")
+        im = open_image_or_none(SCRIPT, path)
+        if im is None:
+            continue
+        try:
+            out, changed = knock_out_white(im)
+        except Exception as e:
+            from _pil_util import warn_bad_image
+
+            warn_bad_image(SCRIPT, path, e)
+            continue
+        if save_image_or_warn(SCRIPT, out, path, format="PNG", optimize=True):
+            print(f"{name}: knocked {changed} near-white pixels -> {path}")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"AVISO: {SCRIPT}: {e}", file=sys.stderr)
+        raise SystemExit(0)

@@ -3,7 +3,8 @@ import os
 import time
 from celery import Celery
 from celery.schedules import crontab
-from app import create_app, mail, db
+from celery.signals import worker_process_init
+from app import create_app, is_safe_schema_name, mail, db
 from app.models import SyncLog
 import logging
 from flask_mail import Message
@@ -21,19 +22,45 @@ with app.app_context():
     celery.conf.timezone = get_app_timezone()
 
 
-def _cleanup_db_session():
-    """Devuelve la conexión al pool limpia tras cada tarea Celery."""
+@worker_process_init.connect
+def _dispose_db_pool_after_fork(**_kwargs):
+    """Prefork hereda conexiones del padre; hay que tirar el pool o Postgres se desincroniza."""
+    with app.app_context():
+        try:
+            db.session.remove()
+        except Exception:
+            pass
+        try:
+            db.engine.dispose()
+        except Exception:
+            pass
+
+
+def _cleanup_db_session(*, dispose_on_error=False):
+    """Devuelve la conexión al pool limpia tras cada tarea / tenant Celery."""
     try:
         db.session.rollback()
     except Exception:
-        pass
-    db.session.remove()
+        dispose_on_error = True
+    try:
+        db.session.remove()
+    except Exception:
+        dispose_on_error = True
+    if dispose_on_error:
+        try:
+            db.engine.dispose()
+        except Exception:
+            pass
 
 
 def _set_search_path(schema='public'):
-    """Cambia el search_path de la sesión actual del worker."""
+    """Cambia el search_path de la sesión actual del worker (tenant + public)."""
     from sqlalchemy import text
-    db.session.execute(text(f'SET search_path TO {schema}'))
+
+    if schema != 'public' and not is_safe_schema_name(schema):
+        raise ValueError(f'schema inseguro: {schema!r}')
+    target = 'public' if schema == 'public' else f'{schema}, public'
+    db.session.execute(text(f'SET search_path TO {target}'))
 
 
 def _load_active_tenants():
@@ -99,8 +126,8 @@ def _for_each_tenant(callback, *, solo_odoo=True):
             callback(tenant_data)
             db.session.commit()
         except Exception as e:
-            db.session.rollback()
             app.logger.error(f"!!! Error en tarea para inquilino {subdominio}: {e}")
+            _cleanup_db_session(dispose_on_error=True)
         finally:
             _cleanup_db_session()
 
@@ -591,6 +618,43 @@ def process_nota_audio_task(self, schema_name: str, job_id: int):
         except Exception as e:
             app.logger.exception(
                 'Error procesando nota de voz job=%s schema=%s: %s', job_id, schema_name, e,
+            )
+        finally:
+            _cleanup_db_session()
+
+
+@celery.task
+def send_nota_reunion_informe_task(schema_name: str, nota_id: int):
+    """PDF de reunión → correo solo al autor."""
+    with app.app_context():
+        try:
+            from sqlalchemy import text
+
+            tenant_row = None
+            with db.engine.connect() as conn:
+                tenant_row = conn.execute(
+                    text(
+                        'SELECT id, schema_name, subdominio, nombre, modulos_activos '
+                        'FROM public.tenants WHERE schema_name = :schema LIMIT 1'
+                    ),
+                    {'schema': schema_name},
+                ).fetchone()
+
+            _set_search_path(schema_name)
+            if tenant_row:
+                _bind_tenant_context({
+                    'id': tenant_row[0],
+                    'schema_name': tenant_row[1],
+                    'subdominio': tenant_row[2],
+                    'nombre': tenant_row[3],
+                    'modulos_activos': tenant_row[4] if isinstance(tenant_row[4], dict) else {},
+                })
+
+            from app.services.nota_informe_service import send_informe_to_author
+            send_informe_to_author(nota_id, schema_name=schema_name)
+        except Exception as e:
+            app.logger.warning(
+                'Informe reunión nota_id=%s schema=%s: %s', nota_id, schema_name, e,
             )
         finally:
             _cleanup_db_session()

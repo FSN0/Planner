@@ -150,8 +150,11 @@ backup: ## Crear backup (DB + uploads) - usa COMPOSE_FILE de prod por defecto
 backup-dev: ## Backup del entorno de desarrollo
 	@COMPOSE_FILE=$(DEV_COMPOSE) bash scripts/backup.sh
 
-restore: ## Restaurar backup. Uso: make restore TS=20260607_120000
+restore: ## Restaurar backup (prod). Uso: make restore TS=20260607_120000
 	@COMPOSE_FILE=$(PROD_COMPOSE) bash scripts/restore.sh $(TS)
+
+restore-dev: ## Restaurar backup en desarrollo. Uso: make restore-dev TS=20260607_120000
+	@COMPOSE_FILE=$(DEV_COMPOSE) bash scripts/restore.sh $(TS)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TESTS

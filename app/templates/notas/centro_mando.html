@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ _('Cuaderno de Bitácora') }}{% endblock %}
+{% block title %}{{ _('Reuniones') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
@@ -41,6 +41,35 @@
   font-size: 0.82rem;
   color: #475569;
 }
+.nota-nuevo-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+@media (max-width: 576px) {
+  .nota-nuevo-choice { grid-template-columns: 1fr; }
+}
+.nota-nuevo-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.1rem 1rem;
+  text-align: left;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+.nota-nuevo-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+}
+.nota-nuevo-card strong { display: block; color: #0f172a; margin-bottom: 0.35rem; }
+.nota-nuevo-card span { font-size: 0.85rem; color: #64748b; }
+.nota-nuevo-card i.icon {
+  font-size: 1.35rem;
+  color: #2563eb;
+  margin-bottom: 0.5rem;
+}
 </style>
 {% endblock %}
 
@@ -67,17 +96,14 @@
     <div class="bitacora-toolbar">
       <div>
         <h1 class="bitacora-toolbar-title">
-          <i class="fas fa-book"></i>{{ _('Cuaderno de Bitácora') }}
+          <i class="fas fa-users"></i>{{ _('Reuniones') }}
         </h1>
-        <p class="bitacora-toolbar-sub">{{ _('Registro de reuniones, notas operativas e incidencias.') }}</p>
+        <p class="bitacora-toolbar-sub">{{ _('Actas por voz o por escrito. Al crear una reunión recibes el informe PDF en tu correo.') }}</p>
       </div>
       {% if user_can(current_user, 'reuniones', 'w') %}
       <div class="d-flex flex-wrap gap-2" style="gap: 0.5rem;">
-        <button class="btn-admin btn-admin-primary" onclick="$('#modalNuevaNota').modal('show')">
-          <i class="fas fa-plus mr-1"></i> {{ _('Nueva nota / reunión') }}
-        </button>
-        <button class="btn-admin btn-admin-ghost" onclick="$('#modalNotaAudio').modal('show')">
-          <i class="fas fa-microphone mr-1"></i> {{ _('Nota por voz') }}
+        <button type="button" class="btn-admin btn-admin-primary" id="btnNotaNuevo">
+          <i class="fas fa-plus mr-1"></i> {{ _('Nuevo') }}
         </button>
       </div>
       {% endif %}
@@ -228,6 +254,34 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade admin-note-modal" id="modalNotaNuevo" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-md" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title mb-0"><i class="fas fa-plus mr-2"></i>{{ _('Nueva reunión') }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="{{ _('Cerrar') }}">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">{{ _('Elige cómo quieres registrar la reunión. En ambos casos se guarda una acta y te llega el informe PDF.') }}</p>
+        <div class="nota-nuevo-choice">
+          <button type="button" class="nota-nuevo-card" id="notaNuevoVoz">
+            <i class="fas fa-microphone icon d-block"></i>
+            <strong>{{ _('Por voz') }}</strong>
+            <span>{{ _('Graba o sube un audio; la IA redacta el acta.') }}</span>
+          </button>
+          <button type="button" class="nota-nuevo-card" id="notaNuevoEscrito">
+            <i class="fas fa-pen-alt icon d-block"></i>
+            <strong>{{ _('Por escrito') }}</strong>
+            <span>{{ _('Redacta tú el contenido de la reunión.') }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -394,6 +448,18 @@ $(document).ready(function() {
     if (typeof initNotaAudioUI === 'function') {
         initNotaAudioUI();
     }
+
+    $('#btnNotaNuevo').on('click', function () {
+        $('#modalNotaNuevo').modal('show');
+    });
+    $('#notaNuevoVoz').on('click', function () {
+        $('#modalNotaNuevo').modal('hide');
+        $('#modalNotaAudio').modal('show');
+    });
+    $('#notaNuevoEscrito').on('click', function () {
+        $('#modalNotaNuevo').modal('hide');
+        $('#modalNuevaNota').modal('show');
+    });
 
     $('.select2-modal').select2({
         theme: 'bootstrap4',

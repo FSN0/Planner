@@ -1360,36 +1360,41 @@ $(document).ready(function() {
             return;
         }
 
-        // Lado ya ack pero el desvío sigue abierto → ampliar la fila de Desviaciones
+        // Lado ya ack pero el desvío sigue abierto → si ese lado está resuelto,
+        // ir al histórico; si no, ampliar la fila de Desviaciones.
         var main = document.getElementById('row-' + idStr);
         if (main && main.hasAttribute('data-desvio-toggle')) {
-            openAuditoriaSection('#collapseConflictos');
             var detail = document.getElementById('desvio-detail-' + idStr);
-            if (detail) {
-                detail.hidden = false;
-                detail.style.display = '';
-                main.classList.add('is-expanded');
-                main.setAttribute('aria-expanded', 'true');
-            }
-            setTimeout(function () {
-                highlightAuditoriaRow(main);
-                var panel = detail && detail.querySelector(
-                    lado === 'plan' ? '.audit-desvio-panel--plan' : '.audit-desvio-panel--real'
-                );
-                if (panel) {
-                    panel.classList.add('audit-desvio-panel-highlight');
-                    try {
-                        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    } catch (e) { /* ignore */ }
-                    setTimeout(function () {
-                        panel.classList.remove('audit-desvio-panel-highlight');
-                    }, 4500);
+            var ladoPanel = detail && detail.querySelector(
+                lado === 'plan' ? '.audit-desvio-panel--plan' : '.audit-desvio-panel--real'
+            );
+            var ladoResuelto = !!(ladoPanel && ladoPanel.classList.contains('is-resolved'));
+            if (!ladoResuelto) {
+                openAuditoriaSection('#collapseConflictos');
+                if (detail) {
+                    detail.hidden = false;
+                    detail.style.display = '';
+                    main.classList.add('is-expanded');
+                    main.setAttribute('aria-expanded', 'true');
                 }
-            }, 420);
-            return;
+                setTimeout(function () {
+                    highlightAuditoriaRow(main);
+                    if (ladoPanel) {
+                        ladoPanel.classList.add('audit-desvio-panel-highlight');
+                        try {
+                            ladoPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        } catch (e) { /* ignore */ }
+                        setTimeout(function () {
+                            ladoPanel.classList.remove('audit-desvio-panel-highlight');
+                        }, 4500);
+                    }
+                }, 420);
+                return;
+            }
+            // Lado resuelto → caer al histórico
         }
 
-        // Cerrado del todo → histórico global (búsqueda por id de registro)
+        // Cerrado del todo (o lado ya ack) → histórico global (búsqueda por id)
         var $hist = $('#collapseHistorial');
         var histOpen = $hist.hasClass('show');
         var input = document.getElementById('historialSearchInput');

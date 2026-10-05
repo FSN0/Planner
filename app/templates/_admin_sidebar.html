@@ -112,7 +112,9 @@
                     <i class="fas {{ item['icon'] }} fa-fw"></i>
                     <span>{{ item['label'] }}</span>
                     {% if item['id'] == 'solicitudes' and item['badge'] and item['badge'] > 0 %}
-                      <span class="sidebar-badge">{{ item['badge'] }}</span>
+                      <span class="sidebar-badges" title="{{ _('Personal') }}: {{ item.get('badge_personal') or 0 }} · {{ _('Vehículos') }}: {{ item.get('badge_vehiculos') or 0 }}">
+                        <span class="sidebar-badge">{{ item['badge'] }}</span>
+                      </span>
                     {% endif %}
                     {% if item['id'] == 'logs' %}
                       {% set show_classic_badge = item['badge_logs'] and item['badge_logs'] > 0 %}

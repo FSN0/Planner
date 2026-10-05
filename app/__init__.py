@@ -360,6 +360,8 @@ def create_app():
         if (request.endpoint or '') == 'auth.verificar_email':
             return dict(
                 pending_notifications=0,
+                pending_solicitudes_personal=0,
+                pending_solicitudes_vehiculos=0,
                 unread_logs_count=0,
                 unread_laboral_count=0,
                 modulos_activos={},
@@ -390,6 +392,8 @@ def create_app():
             )
 
         pending_count = 0
+        pending_personal = 0
+        pending_vehiculos = 0
         unread_logs_count = 0
         unread_laboral_count = 0
 
@@ -403,84 +407,56 @@ def create_app():
 
         if current_user.is_authenticated:
             try:
-                # Cache corta en sesión: la guía dispara muchas navegaciones seguidas
-                # y los COUNT sobre system_logs pueden congelar workers.
+                # Solicitudes: COUNT barato y debe ir al día (no cachear).
+                # Logs: sí se cachean (más pesados).
                 _badge_ttl = 45
                 _badge_key = f'_nav_badges_{current_user.id}'
                 _cached = session.get(_badge_key)
                 _now = _time.time()
-                if (
+                logs_from_cache = (
                     not skip_heavy_badges
                     and isinstance(_cached, dict)
                     and (_now - float(_cached.get('t') or 0)) < _badge_ttl
-                ):
-                    pending_count = int(_cached.get('pending') or 0)
-                    unread_logs_count = int(_cached.get('logs') or 0)
-                    unread_laboral_count = int(_cached.get('laboral') or 0)
-                elif not skip_heavy_badges:
+                )
+
+                if not skip_heavy_badges:
+                    from app.services.solicitud_badge_service import count_open_solicitud_badges
                     from app.services.permission_service import user_can as _user_can
-                    from app.services.panel_scope_service import (
-                        PANEL_SOLICITUDES,
-                        planning_acts_as_office,
-                        user_panel_mode,
-                    )
-                    from app.services.assign_mode_service import (
-                        user_assigns_via_solicitud as _ua_sol,
-                        user_assigns_vehicles_via_solicitud as _ua_veh_sol,
-                    )
+                    from app.services.panel_scope_service import planning_acts_as_office
 
-                    if _user_can(current_user, 'solicitudes', 'w') or _user_can(
-                        current_user, 'solicitudes_vehiculos', 'w'
-                    ):
-                        if user_panel_mode(current_user, PANEL_SOLICITUDES) == 'office':
-                            if _user_can(current_user, 'solicitudes', 'w'):
-                                pending_count += Solicitud.query.filter(
-                                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                                ).count()
-                            if _user_can(current_user, 'solicitudes_vehiculos', 'w'):
-                                pending_count += SolicitudVehiculo.query.filter(
-                                    SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO'])
-                                ).count()
-                        elif _ua_sol(current_user) or _ua_veh_sol(current_user):
-                            from sqlalchemy import or_
-                            from app.models import Obra
-                            if _ua_sol(current_user):
-                                pending_count += Solicitud.query.join(Obra).filter(
-                                    or_(
-                                        Solicitud.requested_by_id == current_user.id,
-                                        Obra.jefe_obra_id == current_user.id,
-                                    ),
-                                    Solicitud.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                                ).count()
-                            if _ua_veh_sol(current_user):
-                                pending_count += SolicitudVehiculo.query.filter(
-                                    SolicitudVehiculo.requested_by_id == current_user.id,
-                                    SolicitudVehiculo.estado.in_(['PENDIENTE', 'EN_PROCESO']),
-                                ).count()
+                    badges = count_open_solicitud_badges(current_user)
+                    pending_personal = badges['personal']
+                    pending_vehiculos = badges['vehiculos']
+                    pending_count = badges['total']
 
-                    if _user_can(current_user, 'logs', 'r'):
-                        from app.services.log_notification_service import get_total_unread_logs
-                        unread_logs_count = get_total_unread_logs(current_user.id)
-                        from app.services.tenant_modules import has_avisos_laborales
-                        if has_avisos_laborales() and (
-                            _user_can(current_user, 'logs', 'w')
-                            or planning_acts_as_office(current_user)
-                        ):
-                            from app.services.log_notification_service import get_unread_laboral_logs
-                            unread_laboral_count = get_unread_laboral_logs(current_user.id)
+                    if logs_from_cache:
+                        unread_logs_count = int(_cached.get('logs') or 0)
+                        unread_laboral_count = int(_cached.get('laboral') or 0)
+                    else:
+                        if _user_can(current_user, 'logs', 'r'):
+                            from app.services.log_notification_service import get_total_unread_logs
+                            unread_logs_count = get_total_unread_logs(current_user.id)
+                            from app.services.tenant_modules import has_avisos_laborales
+                            if has_avisos_laborales() and (
+                                _user_can(current_user, 'logs', 'w')
+                                or planning_acts_as_office(current_user)
+                            ):
+                                from app.services.log_notification_service import get_unread_laboral_logs
+                                unread_laboral_count = get_unread_laboral_logs(current_user.id)
 
-                    session[_badge_key] = {
-                        't': _now,
-                        'pending': pending_count,
-                        'logs': unread_logs_count,
-                        'laboral': unread_laboral_count,
-                    }
+                        session[_badge_key] = {
+                            't': _now,
+                            'logs': unread_logs_count,
+                            'laboral': unread_laboral_count,
+                        }
             except Exception:
                 try:
                     db.session.rollback()
                 except Exception:
                     pass
                 pending_count = 0
+                pending_personal = 0
+                pending_vehiculos = 0
                 unread_logs_count = 0
                 unread_laboral_count = 0
 
@@ -641,6 +617,8 @@ def create_app():
                 from app.services.sidebar_nav_service import build_sidebar_nav
                 sidebar_nav = build_sidebar_nav(current_user, {
                     'pending_notifications': pending_count,
+                    'pending_solicitudes_personal': pending_personal,
+                    'pending_solicitudes_vehiculos': pending_vehiculos,
                     'unread_logs_count': unread_logs_count,
                     'unread_laboral_count': unread_laboral_count,
                     'tenant_has_odoo': tenant_has_odoo,
@@ -670,6 +648,8 @@ def create_app():
 
         return dict(
             pending_notifications=pending_count,
+            pending_solicitudes_personal=pending_personal,
+            pending_solicitudes_vehiculos=pending_vehiculos,
             unread_logs_count=unread_logs_count,
             unread_laboral_count=unread_laboral_count,
             modulos_activos=modulos_activos,
@@ -731,6 +711,17 @@ def create_app():
             return count
 
         return dict(valoracion_media=valoracion_media, valoracion_count=valoracion_count)
+
+    @app.context_processor
+    def inject_etiqueta_helpers():
+        from app.services.etiqueta_service import (
+            company_search_tag_text,
+            user_search_tag_text,
+        )
+        return dict(
+            user_search_tag_text=user_search_tag_text,
+            company_search_tag_text=company_search_tag_text,
+        )
 
     # ---------------------------------------------------------
     # Redirecciones y Seguridad

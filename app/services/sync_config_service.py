@@ -1,6 +1,7 @@
 """Configuración y planificación de sincronización Odoo."""
 import json
 from datetime import datetime, timedelta
+from typing import Optional
 
 from app import db
 from app.models import ConfiguracionGlobal
@@ -377,6 +378,29 @@ class SyncConfigService:
         return parse_empleados_departamento_map(
             cls._get_raw('sync_empleados_departamentos')
         )
+
+    @classmethod
+    def authorize_empleados_departamento(cls, department: str, role: Optional[str] = None) -> dict:
+        """Añade o actualiza un departamento en el mapa de sync de empleados."""
+        dept = (department or '').strip()
+        if not dept or dept == WILDCARD_TODOS_DEPARTAMENTOS:
+            raise ValueError('Departamento no válido.')
+        role_norm = _normalize_import_role(role or infer_odoo_department_role(dept))
+        rows = list(cls.get_empleados_departamento_map())
+        updated = False
+        for row in rows:
+            if (row.get('department') or '').strip().lower() == dept.lower():
+                row['role'] = role_norm
+                updated = True
+                break
+        if not updated:
+            rows.append({'department': dept, 'role': role_norm})
+        cls._set_raw(
+            'sync_empleados_departamentos',
+            serialize_empleados_departamento_map(rows),
+        )
+        db.session.commit()
+        return {'department': dept, 'role': role_norm, 'updated': updated}
 
     @classmethod
     def mark_master_sync_done(cls):

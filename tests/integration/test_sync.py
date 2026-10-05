@@ -868,7 +868,36 @@ class TestOdooEmpleadosDepartamentos:
             diff = adapter.get_diff_empleados()
             assert diff['nuevos'] == []
             assert len(diff['omitidos']) == 1
+            assert diff.get('omitidos_decision') == []
             assert 'Recursos Humanos' in diff['omitidos'][0]['motivo']
+
+    def test_omitido_con_ficha_local_requiere_decision(
+        self, session, tenant_soltec, company_internal, app, user_operario,
+    ):
+        from flask import g
+
+        with app.app_context():
+            g.current_tenant = tenant_soltec
+            session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+            user_operario.external_ids = {'odoo': '355'}
+            user_operario.dni = '44444444D'
+            user_operario.active = True
+            user_operario.is_deleted = False
+            session.add(user_operario)
+            session.commit()
+
+            adapter = self._adapter(
+                tenant_soltec,
+                self._execute_active([self._odoo_emp()]),
+            )
+            diff = adapter.get_diff_empleados()
+            assert diff['omitidos'] == []
+            assert len(diff['omitidos_decision']) == 1
+            row = diff['omitidos_decision'][0]
+            assert row['local_id'] == user_operario.id
+            assert row['departamento'] == 'Recursos Humanos'
+            assert row['role_sugerido'] == 'operario'
+            assert diff['desactivados'] == []
 
     def test_incluye_si_se_anade_departamento(
         self, session, tenant_soltec, company_internal, app

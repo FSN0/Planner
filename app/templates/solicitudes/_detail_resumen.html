@@ -28,6 +28,10 @@
             {{ _('Solicitud para desasignar a {emp} de la obra {obra} {rango}.', emp=emp_nom, obra=obra_nom, rango=rango_txt) }}
           {% elif solicitud.tipo|lower == 'generica' %}
             {{ _('Solicitud de {n} {perfil} para la obra {obra} {rango}.', n=solicitud.cantidad_solicitada, perfil=(solicitud.perfil_categoria or _('persona(s)')), obra=obra_nom, rango=rango_txt) }}
+            {% if solicitud.etiquetas %}
+            {% from "macros/etiquetas.html" import etiqueta_chips %}
+            <div class="mt-2">{{ etiqueta_chips(solicitud.etiquetas) }}</div>
+            {% endif %}
           {% else %}
             {{ _('Solicitud para asignar a {emp} a la obra {obra} {rango}.', emp=emp_nom, obra=obra_nom, rango=rango_txt) }}
           {% endif %}
@@ -89,6 +93,10 @@
             <span class="text-muted" style="font-size:0.72rem;">
               — {{ solicitud.empleado.company_rel.nombre if solicitud.empleado.company_rel else _('Sin empresa') }}
             </span>
+            {% if solicitud.empleado.etiquetas %}
+            {% from "macros/etiquetas.html" import etiqueta_chips %}
+            <div class="mt-1">{{ etiqueta_chips(solicitud.empleado.etiquetas) }}</div>
+            {% endif %}
           </div>
           {% endif %}
 
@@ -108,6 +116,21 @@
                 {{ _('Cerrada parcialmente: ya no quedan días accionables o solo se pudo cubrir el presente/futuro.') }}
               {% else %}
                 {{ _('Se cumplió sola al cubrirse con asignaciones del cuadrante.') }}
+              {% endif %}
+              {% if auto_cierre_texto %}
+                <span class="text-muted">{{ auto_cierre_texto }}</span>
+              {% endif %}
+            </div>
+          </div>
+          {% elif cierre_desde_solicitud and solicitud.estado in ['CUMPLIDA', 'CERRADA_PARCIAL'] %}
+          <div class="solicitud-meta-item solicitud-meta-item--full">
+            <label>{{ _('Cierre') }}</label>
+            <div class="solicitud-meta-notes">
+              <span class="badge-soft badge-soft-green">{{ _('Cerrada') }}</span>
+              {% if solicitud.estado == 'CERRADA_PARCIAL' %}
+                {{ _('Cerrada parcialmente al asignar desde esta solicitud.') }}
+              {% else %}
+                {{ _('Se cumplió al asignar desde esta solicitud.') }}
               {% endif %}
               {% if auto_cierre_texto %}
                 <span class="text-muted">{{ auto_cierre_texto }}</span>

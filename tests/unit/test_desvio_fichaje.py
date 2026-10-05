@@ -363,11 +363,22 @@ def test_repartir_secciones_proyecta_espejos():
             'ack_real': False,
         },
     )
-    desvio_ack_real = SimpleNamespace(
+    desvio_ack_plan = SimpleNamespace(
         id=2,
         estado='Conflicto',
         obra_planificada_id=11,
         obra_real_id=21,
+        desvio_ui={
+            'es_desvio': True,
+            'ack_plan': True,
+            'ack_real': False,
+        },
+    )
+    desvio_ack_real = SimpleNamespace(
+        id=5,
+        estado='Conflicto',
+        obra_planificada_id=12,
+        obra_real_id=22,
         desvio_ui={
             'es_desvio': True,
             'ack_plan': False,
@@ -378,16 +389,16 @@ def test_repartir_secciones_proyecta_espejos():
     para = SimpleNamespace(id=4, estado='Paracaidista', desvio_ui=None)
 
     out = repartir_secciones_auditoria(
-        [desvio, desvio_ack_real, ausencia, para]
+        [desvio, desvio_ack_plan, desvio_ack_real, ausencia, para]
     )
-    assert len(out['conflictos']) == 2
+    assert len(out['conflictos']) == 3
     assert ausencia in out['ausencias']
     assert para in out['paracaidistas']
     espejos_aus = [x for x in out['ausencias'] if isinstance(x, DesvioEspejoView)]
     espejos_para = [x for x in out['paracaidistas'] if isinstance(x, DesvioEspejoView)]
-    assert len(espejos_aus) == 2  # espejo plan aunque un lado real ya esté ack
-    assert len(espejos_para) == 2  # espejo real se mantiene tras ack (salto «Ver…»)
-    assert {e.id for e in espejos_para} == {1, 2}
+    # Lado ack no se proyecta: ausencia resuelta sale del listado de Ausencias.
+    assert {e.id for e in espejos_aus} == {1, 5}  # sin id=2 (ack_plan)
+    assert {e.id for e in espejos_para} == {1, 2}  # sin id=5 (ack_real)
 
 
 def test_labels_resolucion_desvio():

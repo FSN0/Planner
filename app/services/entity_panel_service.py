@@ -151,6 +151,11 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
     else:
         planned = planned.filter(AsignacionVehiculo.fecha <= end_date)
     planned = planned.all()
+    # Efectivas primero; fantasmas no_usada solo si no hay efectiva ese día.
+    planned_sorted = sorted(
+        planned,
+        key=lambda a: 0 if getattr(a, 'estado', 'efectiva') == 'efectiva' else 1,
+    )
 
     veh_ids = {a.vehiculo_id for a in planned}
     odo_regs = []
@@ -196,7 +201,13 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
             )
         )
 
-    for a in planned:
+    for a in planned_sorted:
+        is_ghost = getattr(a, 'estado', 'efectiva') == 'no_usada'
+        # Si ya hay efectiva ese día, el fantasma no pisa el mapa del operario
+        # (vive en el panel del vehículo planificado).
+        if is_ghost and a.fecha in day_map:
+            continue
+
         v = vehiculos.get(a.vehiculo_id)
         label = v.label() if v else _tf('Vehículo #{n}', n=a.vehiculo_id)
         odo = odo_on_planned.get((a.vehiculo_id, a.fecha))
@@ -226,7 +237,10 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
                 mismatch = True
                 effective_other = (odo.odoo_driver_name or '').strip()
 
-        if on_leave:
+        if is_ghost:
+            plan_status = 'conflicto'
+            source = 'planificado'
+        elif on_leave:
             plan_status = 'ausencia'
             source = 'planificado'
         elif mismatch:
@@ -261,12 +275,26 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
             'mismatch': mismatch,
             'effective_other': effective_other,
             'conductor': (odo.odoo_driver_name if odo else None) or (v.odoo_driver_name if v else None),
+            'notas': (a.notas or '').strip() or None,
+            'asig_estado': getattr(a, 'estado', 'efectiva') or 'efectiva',
         }
 
     for r in odo_regs:
         if r.fecha in day_map and day_map[r.fecha]['vehiculo_id'] == r.vehiculo_id:
+            # Completar km/notas si faltan
+            if day_map[r.fecha].get('km') is None:
+                day_map[r.fecha]['km'] = r.qty_km if r.qty_km is not None else r.valor
             continue
         if r.fecha in day_map:
+            # Día ya tiene efectiva distinta: enriquecer tooltip con el uso Odoo
+            meta = day_map[r.fecha]
+            if not meta.get('notas'):
+                v_odo = vehiculos.get(r.vehiculo_id)
+                lab = v_odo.label() if v_odo else _tf('Vehículo #{n}', n=r.vehiculo_id)
+                meta['notas'] = _tf(
+                    'También hay uso Odoo en {veh} este día.',
+                    veh=lab,
+                )
             continue
         v = vehiculos.get(r.vehiculo_id)
         label = v.label() if v else _tf('Vehículo #{n}', n=r.vehiculo_id)
@@ -282,6 +310,8 @@ def get_worker_vehicle_day_map(worker, start_date, end_date, end_exclusive=True)
             'mismatch': False,
             'effective_other': None,
             'conductor': r.odoo_driver_name or (v.odoo_driver_name if v else None),
+            'notas': None,
+            'asig_estado': None,
         }
 
     return day_map

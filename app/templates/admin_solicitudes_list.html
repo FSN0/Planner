@@ -30,6 +30,24 @@
     gap: 0.5rem;
     margin-top: 0.35rem;
   }
+  .solicitudes-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    margin-left: 0.35rem;
+    padding: 0.12rem 0.38rem;
+    border-radius: 9999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    background: #fef3c7;
+    color: #b45309;
+  }
+  .btn-admin-primary .solicitudes-tab-badge {
+    background: rgba(255, 255, 255, 0.22);
+    color: inherit;
+  }
 </style>
 {% endblock %}
 
@@ -55,11 +73,17 @@
          class="btn-admin {% if seccion != 'vehiculos' %}btn-admin-primary{% else %}btn-admin-ghost{% endif %}"
          style="font-size: 0.78rem;">
         <i class="fas fa-users mr-1"></i> {{ _('Personal') }}
+        {% if pending_solicitudes_personal and pending_solicitudes_personal > 0 %}
+          <span class="solicitudes-tab-badge" title="{{ _('Abiertas') }}">{{ pending_solicitudes_personal }}</span>
+        {% endif %}
       </a>
       <a href="{{ url_for('admin.solicitudes_list', seccion='vehiculos') }}"
          class="btn-admin {% if seccion == 'vehiculos' %}btn-admin-primary{% else %}btn-admin-ghost{% endif %}"
          style="font-size: 0.78rem;">
         <i class="fas fa-car mr-1"></i> {{ _('Vehículos') }}
+        {% if pending_solicitudes_vehiculos and pending_solicitudes_vehiculos > 0 %}
+          <span class="solicitudes-tab-badge" title="{{ _('Abiertas') }}">{{ pending_solicitudes_vehiculos }}</span>
+        {% endif %}
       </a>
     </div>
 
@@ -298,9 +322,13 @@
                     <span class="text-nowrap">{{ s.fecha_inicio.strftime('%d/%m') }}</span>–<span class="text-nowrap">{{ s.fecha_fin.strftime('%d/%m') }}</span>
                   {% else %}—{% endif %}
                 </td>
-                <td data-sort-value="{% if s.tipo == 'GENERICA' %}{{ (s.perfil_categoria or 'varios')|lower }}{% elif s.empleado %}{{ s.empleado.lastname|lower }}{% endif %}">
+                <td data-sort-value="{% if s.tipo == 'GENERICA' %}{{ (s.perfil_categoria or 'varios')|lower }} {% for e in s.etiquetas %}{{ e.nombre|lower }} {% endfor %}{% elif s.empleado %}{{ s.empleado.lastname|lower }}{% endif %}">
                   {% if s.tipo == 'GENERICA' %}
                     <span class="font-weight-bold">{{ s.perfil_categoria or _('Varios') }}</span>
+                    {% from "macros/etiquetas.html" import etiqueta_chips %}
+                    {% if s.etiquetas %}
+                    <div class="mt-1">{{ etiqueta_chips(s.etiquetas) }}</div>
+                    {% endif %}
                   {% elif s.empleado %}
                     <a href="{{ url_for('admin.worker_panel', user_id=s.empleado.id) }}" class="table-link-primary">
                       {{ s.empleado.name }} {{ s.empleado.lastname }}

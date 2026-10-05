@@ -9,10 +9,42 @@ from app.models import AsignacionVehiculo, Vehiculo, Festivo
 from app.services.i18n_service import translate
 from app.services.leave_service import user_has_approved_leave
 from app.services.permission_service import can_write_vehicles, can_plan_fleet, user_can
-from app.services.vehicle_assignment_service import process_vehicle_assignment_action
+from app.services.vehicle_assignment_service import (
+    last_vehicle_assignment_end,
+    process_vehicle_assignment_action,
+)
 from app.utils.timezone_utils import today_local
 
 vehiculos_api = Blueprint('vehiculos_api', __name__)
+
+
+@vehiculos_api.route('/v6/planificador/vehicle-assignment-span', methods=['GET'])
+@login_required
+def api_vehicle_assignment_span():
+    """Fin del tramo planificado usuario+vehículo desde una fecha (para el modal de baja)."""
+    if not can_plan_fleet(current_user):
+        return jsonify({'success': False, 'error': translate('No autorizado')}), 403
+
+    try:
+        worker_id = int(request.args.get('worker_id'))
+        vehicle_id = int(request.args.get('vehicle_id'))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': translate('Parámetros inválidos')}), 400
+
+    from_str = (request.args.get('from') or request.args.get('start') or '').strip()
+    if not from_str:
+        return jsonify({'success': False, 'error': translate('Falta la fecha de inicio')}), 400
+    try:
+        from_date = datetime.strptime(from_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'success': False, 'error': translate('Formato de fecha inválido')}), 400
+
+    end = last_vehicle_assignment_end(vehicle_id, worker_id, from_date)
+    return jsonify({
+        'success': True,
+        'start': from_date.isoformat(),
+        'end': end.isoformat() if end else from_date.isoformat(),
+    })
 
 
 @vehiculos_api.route('/v6/vehicles', methods=['GET'])
@@ -57,7 +89,9 @@ def api_list_vehicles():
         if fechas:
             bloqueado = False
             for fecha in fechas:
-                av = AsignacionVehiculo.query.filter_by(vehiculo_id=v.id, fecha=fecha).first()
+                av = AsignacionVehiculo.query.filter_by(
+                    vehiculo_id=v.id, fecha=fecha, estado='efectiva',
+                ).first()
                 if not av:
                     continue
                 if worker_id is not None and av.user_id == worker_id:

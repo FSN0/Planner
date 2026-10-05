@@ -26,6 +26,7 @@ from app.services.solicitud_service import (
     update_solicitudes_for_assignment,
     get_solicitud_notas,
     get_solicitud_auto_cierre_texto,
+    solicitud_cerrada_desde_solicitud,
     compute_generica_coverage,
     get_solicitud_valid_dates,
     _recalculate_solicitud_coverage,
@@ -1129,6 +1130,19 @@ def solicitud_detail(solicitud_id):
     # Sincroniza progreso/cobertura al abrir (corrige estados atascados tras asignar).
     if solicitud.estado in ('PENDIENTE', 'EN_PROCESO'):
         _recalculate_solicitud_coverage(solicitud)
+        from app.services.solicitud_service import (
+            get_solicitud_pending_dates,
+            _mark_auto_cumplida,
+        )
+        if (
+            solicitud.estado in ('PENDIENTE', 'EN_PROCESO')
+            and not get_solicitud_pending_dates(solicitud)
+        ):
+            _mark_auto_cumplida(
+                solicitud,
+                resolved_by_id=current_user.id,
+                automatico=True,
+            )
         db.session.commit()
         db.session.refresh(solicitud)
 
@@ -1259,6 +1273,7 @@ def solicitud_detail(solicitud_id):
         back_url=back_url,
         solicitud_notas=get_solicitud_notas(solicitud),
         auto_cierre_texto=get_solicitud_auto_cierre_texto(solicitud),
+        cierre_desde_solicitud=solicitud_cerrada_desde_solicitud(solicitud),
         cobertura_texto=cobertura_texto,
         es_admin=es_admin,
         puede_cancelar=puede_cancelar,
@@ -1783,6 +1798,13 @@ def create_company():
         # --- FIX: Envolvemos en try/except para evitar bloqueos del servidor ---
         try:
             db.session.add(new_company)
+            db.session.flush()
+            if user_can(current_user, 'etiquetas', 'w'):
+                from app.services.etiqueta_service import set_company_etiquetas
+                set_company_etiquetas(
+                    new_company,
+                    request.form.getlist('etiqueta_ids[]') or request.form.getlist('etiqueta_ids'),
+                )
             db.session.commit()
             flash(translate("Empresa creada exitosamente."), "success")
             return redirect(url_for("admin.companies"))
@@ -1791,10 +1813,14 @@ def create_company():
             flash(translate("Error en la base de datos: {error}", error=str(e)), "danger")
             return redirect(url_for("admin.create_company"))
 
-    from app.models import generate_random_color
+    from app.models import Etiqueta, generate_random_color
+    from app.services.etiqueta_service import list_etiquetas
     return render_template(
         "admin_create_company.html",
         color_sugerido=generate_random_color(),
+        etiquetas_subcontrata=list_etiquetas(Etiqueta.TIPO_SUBCONTRATA),
+        selected_etiqueta_ids=[],
+        can_assign_etiquetas=user_can(current_user, 'etiquetas', 'w'),
     )
 
 
@@ -1820,7 +1846,15 @@ def edit_company(company_id):
             existing = Company.query.filter_by(code=new_code).first()
             if existing:
                 flash(translate("El código de empresa '{code}' ya está usado por otra subcontrata.", code=new_code), "danger")
-                return render_template("admin_edit_company.html", company=company)
+                from app.models import Etiqueta
+                from app.services.etiqueta_service import list_etiquetas
+                return render_template(
+                    "admin_edit_company.html",
+                    company=company,
+                    etiquetas_subcontrata=list_etiquetas(Etiqueta.TIPO_SUBCONTRATA),
+                    selected_etiqueta_ids=[e.id for e in (company.etiquetas or [])],
+                    can_assign_etiquetas=user_can(current_user, 'etiquetas', 'w'),
+                )
         # --------------------------------------------------------
 
         company.code = new_code
@@ -1834,6 +1868,13 @@ def edit_company(company_id):
         # LEER Y ACTUALIZAR CHECKBOX
         company.is_internal = True if request.form.get("is_internal") == "on" else False
 
+        if user_can(current_user, 'etiquetas', 'w'):
+            from app.services.etiqueta_service import set_company_etiquetas
+            set_company_etiquetas(
+                company,
+                request.form.getlist('etiqueta_ids[]') or request.form.getlist('etiqueta_ids'),
+            )
+
         # --- FIX: Try/Except protector ---
         try:
             db.session.commit()
@@ -1842,9 +1883,25 @@ def edit_company(company_id):
         except Exception as e:
             db.session.rollback()
             flash(translate("Error al guardar los cambios: {error}", error=str(e)), "danger")
-            return render_template("admin_edit_company.html", company=company)
+            from app.models import Etiqueta
+            from app.services.etiqueta_service import list_etiquetas
+            return render_template(
+                "admin_edit_company.html",
+                company=company,
+                etiquetas_subcontrata=list_etiquetas(Etiqueta.TIPO_SUBCONTRATA),
+                selected_etiqueta_ids=[e.id for e in (company.etiquetas or [])],
+                can_assign_etiquetas=user_can(current_user, 'etiquetas', 'w'),
+            )
     
-    return render_template("admin_edit_company.html", company=company)
+    from app.models import Etiqueta
+    from app.services.etiqueta_service import list_etiquetas
+    return render_template(
+        "admin_edit_company.html",
+        company=company,
+        etiquetas_subcontrata=list_etiquetas(Etiqueta.TIPO_SUBCONTRATA),
+        selected_etiqueta_ids=[e.id for e in (company.etiquetas or [])],
+        can_assign_etiquetas=user_can(current_user, 'etiquetas', 'w'),
+    )
 
 
 @admin_bp.route("/api/rate_worker", methods=["POST"])
@@ -2357,6 +2414,10 @@ def edit_operario(user_id):
             user.especialidad = (
                 request.form.get("especialidad") or ""
             ).strip() or None
+
+            if user_can(current_user, 'etiquetas', 'w'):
+                from app.services.etiqueta_service import set_user_etiquetas
+                set_user_etiquetas(user, request.form.getlist('etiqueta_ids[]') or request.form.getlist('etiqueta_ids'))
 
             # Acceso web gobernado por auth_mode + permisos.
             from app.services.auth_login_service import normalize_auth_mode
@@ -3319,6 +3380,9 @@ def _default_internal_company_id():
 def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to='', cancel_url=None, default_role=''):
     from app.utils.nav_back import resolve_back_url
     from app.services.role_registry_service import list_roles
+    from app.models import Etiqueta
+    from app.services.etiqueta_service import list_etiquetas
+    from app.services.permission_service import user_can as _user_can
     if companies is None:
         keep_id = getattr(user, 'company_id', None) if user else None
         companies = Company.query.filter(
@@ -3327,6 +3391,9 @@ def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to=
         ).order_by(
             Company.is_internal.desc(), Company.nombre.asc()
         ).all()
+    selected_etiqueta_ids = []
+    if edit_mode and user is not None:
+        selected_etiqueta_ids = [e.id for e in (user.etiquetas or [])]
     return render_template(
         "gestion_operario_form.html",
         edit_mode=edit_mode,
@@ -3338,6 +3405,9 @@ def _render_user_form(*, edit_mode, user, action_url, companies=None, return_to=
         companies=companies,
         default_company_id=_default_internal_company_id(),
         assignable_roles=list_roles(),
+        etiquetas_empleado=list_etiquetas(Etiqueta.TIPO_EMPLEADO),
+        selected_etiqueta_ids=selected_etiqueta_ids,
+        can_assign_etiquetas=_user_can(current_user, 'etiquetas', 'w'),
     )
 
 
@@ -3491,6 +3561,13 @@ def create_user():
             db.session.rollback()
             flash(translate(str(exc)), "danger")
             return redirect(_url_with_return_to("admin.create_user"))
+
+        if user_can(current_user, 'etiquetas', 'w'):
+            from app.services.etiqueta_service import set_user_etiquetas
+            set_user_etiquetas(
+                new_user,
+                request.form.getlist('etiqueta_ids[]') or request.form.getlist('etiqueta_ids'),
+            )
 
         db.session.commit()
         flash(translate("Usuario creado exitosamente.{pin_msg}", pin_msg=pin_msg), "success")
@@ -4212,7 +4289,7 @@ def api_planificador_events():
             color_suave = "rgba(245, 158, 11, 0.10)"
 
         # 2. Definir Título
-        if sol.tipo == 'CONCRETA':
+        if sol.tipo == 'CONCRETA' or (sol.tipo or '').upper() == 'CONCRETA':
             emp_name = sol.empleado.name if sol.empleado else '?'
             title = f"{'Solicitud de Baja' if is_baja else 'FALTA'}: {emp_name}"
         else:
@@ -4298,8 +4375,10 @@ def api_planificador_fichajes_estado():
 @admin_bp.route("/api/planificador/search_workers", methods=['GET'])
 @login_required
 def search_workers():
-    """Select2: plantilla activa completa; busca por nombre o por empresa."""
-    from sqlalchemy.orm import joinedload
+    """Select2: plantilla activa; busca por nombre, empresa o etiqueta."""
+    from sqlalchemy.orm import joinedload, selectinload
+    from app.models import Etiqueta
+    from app.services.etiqueta_service import user_own_etiquetas, user_search_tag_text
 
     q = (request.args.get('q') or '').strip().lower()
     plain = request.args.get('plain') in ('1', 'true', 'yes')
@@ -4313,7 +4392,10 @@ def search_workers():
     # 2. Plantilla activa (sin tope: al abrir el desplegable deben salir todos)
     query = (
         User.query
-        .options(joinedload(User.company_rel))
+        .options(
+            joinedload(User.company_rel),
+            selectinload(User.etiquetas),
+        )
         .filter(User.active.is_(True), User.is_deleted.is_(False))
     )
     if not plain:
@@ -4322,6 +4404,7 @@ def search_workers():
         query = (
             query
             .outerjoin(Company, User.company_id == Company.id)
+            .outerjoin(User.etiquetas)
             .filter(or_(
                 func.lower(User.name).contains(q),
                 func.lower(User.lastname).contains(q),
@@ -4329,6 +4412,7 @@ def search_workers():
                     func.concat(func.coalesce(User.name, ''), ' ', func.coalesce(User.lastname, ''))
                 ).contains(q),
                 func.lower(func.coalesce(Company.nombre, '')).contains(q),
+                func.lower(func.coalesce(Etiqueta.nombre, '')).contains(q),
             ))
             .distinct()
         )
@@ -4341,9 +4425,15 @@ def search_workers():
         comp_name = w.company_rel.nombre if w.company_rel else "Sin Empresa"
         if comp_name not in grouped:
             grouped[comp_name] = []
+        tags = [
+            {'id': e.id, 'nombre': e.nombre, 'color': e.color}
+            for e in user_own_etiquetas(w)
+        ]
         grouped[comp_name].append({
             "id": w.id,
             "text": f"{w.name} {w.lastname}".strip(),
+            "etiquetas": tags,
+            "etiquetas_text": user_search_tag_text(w),
         })
 
     for comp_name in sorted(grouped.keys(), key=lambda s: s.casefold()):
@@ -4390,6 +4480,17 @@ def configuracion_global():
     from app.services.notification_dispatch_service import matrix_for_ui
     notif_matrix = matrix_for_ui()
 
+    from app.services.tenant_branding_service import (
+        CONFIG_BRAND_REPORT_TITLE,
+        get_brand_stripe_color,
+        resolve_tenant_header_path,
+        resolve_tenant_logo_path,
+        resolve_tenant_mark_only_path,
+    )
+    from app.models import Etiqueta
+    from app.services.etiqueta_service import list_etiquetas
+    from app.services.permission_service import user_can as _uc
+
     return render_template(
         'admin_configuracion.html',
         festivos=festivos,
@@ -4403,7 +4504,202 @@ def configuracion_global():
         hora_corte_activa=hora_corte_activa(),
         conforme_jornada_activo=conforme_jornada_activo(),
         notif_matrix=notif_matrix,
+        brand_has_logo=bool(resolve_tenant_logo_path()),
+        brand_has_header=bool(resolve_tenant_header_path()),
+        brand_has_mark=bool(resolve_tenant_mark_only_path()),
+        brand_report_title=configs_dict.get(CONFIG_BRAND_REPORT_TITLE, ''),
+        brand_stripe_color=get_brand_stripe_color(),
+        etiquetas_empleado=list_etiquetas(Etiqueta.TIPO_EMPLEADO, active_only=False),
+        etiquetas_subcontrata=list_etiquetas(Etiqueta.TIPO_SUBCONTRATA, active_only=False),
+        can_manage_etiquetas=_uc(current_user, 'etiquetas_catalogo', 'w'),
     )
+
+
+@admin_bp.route('/configuracion/branding/logo')
+@login_required
+def branding_logo_file():
+    from app.services.permission_service import user_can
+    from flask import send_file, abort
+
+    if not user_can(current_user, 'configuracion', 'r'):
+        abort(403)
+    from app.services.tenant_branding_service import resolve_tenant_logo_path
+
+    path = resolve_tenant_logo_path()
+    if not path:
+        abort(404)
+    return send_file(path, max_age=3600)
+
+
+@admin_bp.route('/configuracion/branding/header')
+@login_required
+def branding_header_file():
+    from app.services.permission_service import user_can
+    from flask import send_file, abort
+
+    if not user_can(current_user, 'configuracion', 'r'):
+        abort(403)
+    from app.services.tenant_branding_service import resolve_tenant_header_path
+
+    path = resolve_tenant_header_path()
+    if not path:
+        abort(404)
+    return send_file(path, max_age=3600)
+
+
+@admin_bp.route('/configuracion/branding/mark')
+@login_required
+def branding_mark_file():
+    from app.services.permission_service import user_can
+    from flask import send_file, abort
+
+    if not user_can(current_user, 'configuracion', 'r'):
+        abort(403)
+    from app.services.tenant_branding_service import resolve_tenant_mark_only_path
+
+    path = resolve_tenant_mark_only_path()
+    if not path:
+        abort(404)
+    return send_file(path, max_age=3600)
+
+
+@admin_bp.route('/configuracion/branding', methods=['POST'])
+@login_required
+def update_branding():
+    from app.services.permission_service import user_can
+
+    if not user_can(current_user, 'configuracion', 'w'):
+        flash(translate('Acceso denegado.'), 'danger')
+        return redirect(url_for('admin.configuracion_global'))
+
+    from app.services.tenant_branding_service import (
+        CONFIG_BRAND_REPORT_TITLE,
+        clear_tenant_header,
+        clear_tenant_logo,
+        clear_tenant_mark,
+        save_tenant_header,
+        save_tenant_logo,
+        save_tenant_mark,
+        set_brand_stripe_color,
+    )
+    from app.services.config_service import set_tenant_config
+
+    action = (request.form.get('brand_action') or 'save').strip()
+    if action == 'remove_logo':
+        clear_tenant_logo()
+        flash(translate('Logo eliminado.'), 'success')
+        return redirect(url_for('admin.configuracion_global') + '#cfg-marca')
+    if action == 'remove_header':
+        clear_tenant_header()
+        flash(translate('Cabecera del documento eliminada.'), 'success')
+        return redirect(url_for('admin.configuracion_global') + '#cfg-marca')
+    if action == 'remove_mark':
+        clear_tenant_mark()
+        flash(translate('Marca de agua eliminada.'), 'success')
+        return redirect(url_for('admin.configuracion_global') + '#cfg-marca')
+
+    title = (request.form.get('brand_report_title') or '').strip()[:120]
+    set_tenant_config(CONFIG_BRAND_REPORT_TITLE, title)
+    set_brand_stripe_color(request.form.get('brand_stripe_color'))
+
+    saved_any = False
+    errors = []
+    for field_name, saver in (
+        ('brand_logo', save_tenant_logo),
+        ('brand_header', save_tenant_header),
+        ('brand_mark', save_tenant_mark),
+    ):
+        uploaded = request.files.get(field_name)
+        if uploaded and uploaded.filename:
+            try:
+                saver(uploaded)
+                saved_any = True
+            except ValueError as exc:
+                errors.append(str(exc))
+            except Exception as exc:
+                errors.append(
+                    translate('Error al guardar el archivo: {error}', error=str(exc))
+                )
+
+    for msg in errors:
+        flash(msg, 'warning')
+    if saved_any and not errors:
+        flash(translate('Identidad visual guardada.'), 'success')
+    elif not saved_any and not errors:
+        flash(translate('Ajustes de marca guardados.'), 'success')
+
+    return redirect(url_for('admin.configuracion_global') + '#cfg-marca')
+
+
+@admin_bp.route('/configuracion/etiquetas', methods=['POST'])
+@login_required
+def update_etiquetas_catalogo():
+    from app.services.permission_service import user_can
+    from app.models import Etiqueta
+    from app.services import etiqueta_service as es
+
+    if not user_can(current_user, 'etiquetas_catalogo', 'w'):
+        flash(translate('No tienes permiso para gestionar el catálogo de etiquetas.'), 'danger')
+        return redirect(url_for('admin.configuracion_global') + '#cfg-etiquetas')
+
+    action = (request.form.get('etiqueta_action') or 'create').strip()
+    tipo = (request.form.get('tipo') or '').strip()
+    anchor = '#cfg-etiquetas-empleado' if tipo == Etiqueta.TIPO_EMPLEADO else '#cfg-etiquetas-subcontrata'
+    if tipo not in Etiqueta.TIPOS:
+        anchor = '#cfg-etiquetas'
+
+    try:
+        if action == 'create':
+            es.create_etiqueta(tipo, request.form.get('nombre'), request.form.get('color'))
+            db.session.commit()
+            flash(translate('Etiqueta creada.'), 'success')
+        elif action == 'rename':
+            eid = int(request.form.get('etiqueta_id'))
+            es.rename_etiqueta(eid, request.form.get('nombre'))
+            color = request.form.get('color')
+            if color is not None:
+                es.update_etiqueta_color(eid, color)
+            db.session.commit()
+            flash(translate('Etiqueta actualizada.'), 'success')
+        elif action == 'absorb':
+            es.absorb_etiqueta(
+                int(request.form.get('etiqueta_id')),
+                int(request.form.get('absorb_into_id')),
+            )
+            db.session.commit()
+            flash(translate('Etiqueta absorbida en otra. Las asignaciones se han movido.'), 'success')
+        elif action == 'delete':
+            es.delete_etiqueta(int(request.form.get('etiqueta_id')))
+            db.session.commit()
+            flash(translate('Etiqueta eliminada de todas las fichas.'), 'success')
+        else:
+            flash(translate('Acción no reconocida.'), 'warning')
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), 'warning')
+    except Exception as exc:
+        db.session.rollback()
+        flash(translate('Error: {error}', error=str(exc)), 'danger')
+
+    return redirect(url_for('admin.configuracion_global') + anchor)
+
+
+@admin_bp.route('/api/etiquetas', methods=['GET'])
+@login_required
+def api_list_etiquetas():
+    from app.services.permission_service import user_can
+    from app.models import Etiqueta
+    from app.services.etiqueta_service import list_etiquetas, etiqueta_to_dict
+
+    if not user_can(current_user, 'etiquetas', 'r'):
+        return jsonify({'results': []}), 403
+    tipo = (request.args.get('tipo') or Etiqueta.TIPO_EMPLEADO).strip()
+    if tipo not in Etiqueta.TIPOS:
+        return jsonify({'results': []}), 400
+    rows = list_etiquetas(tipo)
+    return jsonify({
+        'results': [{'id': e.id, 'text': e.nombre, **etiqueta_to_dict(e)} for e in rows],
+    })
 
 
 @admin_bp.route('/configuracion/reiniciar-guia', methods=['POST'])
@@ -5101,12 +5397,19 @@ def sso_odoo_contactos():
     odoo_id = external_ids.get('odoo') if isinstance(external_ids, dict) else None
 
     serializer = URLSafeTimedSerializer(sso_secret)
+    # Admin de SignaPlan siempre entra como admin de Altas; el resto solo si
+    # tienen el tick «Alta Odoo · entrar como admin» en permisos del rol.
+    alta_as_admin = (
+        getattr(current_user, 'role', None) == ROLE_ADMIN
+        or user_can(current_user, 'soltec_alta_odoo_admin', 'r')
+    )
     token = serializer.dumps({
         'user_id': current_user.id,
         'odoo_id': odoo_id,
         'name': full_name,
         'email': current_user.email,
         'role': current_user.role,
+        'is_admin': bool(alta_as_admin),
         'iat': utc_now().timestamp(),
     })
     return redirect(f'{alta_url}/sso_login?token={token}')

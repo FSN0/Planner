@@ -120,6 +120,7 @@ def list_free_vehicle_stretches(fecha_desde=None, fecha_hasta=None, solo_activos
         AsignacionVehiculo.vehiculo_id.in_(veh_ids),
         AsignacionVehiculo.fecha >= start,
         AsignacionVehiculo.fecha <= end,
+        AsignacionVehiculo.estado == 'efectiva',
     ).all()
     planned = {(a.vehiculo_id, a.fecha): a for a in asignaciones}
 

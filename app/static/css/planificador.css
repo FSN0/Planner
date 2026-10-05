@@ -641,7 +641,19 @@
     box-sizing: content-box !important; padding-bottom: 2px !important; 
 }
 
-/* RESALTO VISUAL Y TIRADORES */
+/* Con FALTA + asignación en la misma obra, no recortar el segundo carril. */
+#planificador-calendar .vis-foreground .vis-group {
+    min-height: 44px;
+}
+#planificador-calendar .vis-labelset .vis-label {
+    min-height: 44px;
+}
+
+.vis-timeline .vis-item.solicitud-item {
+    /* Encima del borrador amarillo: no dejar que la nueva asignación la tape. */
+    z-index: 5 !important;
+    box-sizing: border-box !important;
+}
 .vis-timeline .vis-item.vis-selected {
     border: 2px solid #ef4444 !important; box-shadow: 0 0 10px rgba(239, 68, 68, 0.6) !important;
     z-index: 10 !important; transform: scale(1.05) translateY(-1px); 
@@ -657,15 +669,9 @@
 /* BLOQUE TEMPORAL (PHANTOM) */
 .phantom-item {
     background-color: #fcd34d !important; border: 2px dashed #d97706 !important;
-    color: #92400e !important; z-index: 20 !important; animation: pulse-phantom 1.5s infinite;
+    color: #92400e !important; z-index: 3 !important; animation: pulse-phantom 1.5s infinite;
 }
 .phantom-item .vis-item-content { font-size: 11px !important; font-weight: bold !important; justify-content: center !important; }
-
-.vis-timeline .vis-item.solicitud-item {
-    /* Bajo las asignaciones reales: no tapar operarios al solapar. */
-    z-index: 2 !important;
-    box-sizing: border-box !important;
-}
 
 .vis-timeline .vis-item.inercia-item {
     opacity: 0.28 !important;
@@ -741,7 +747,7 @@
     outline: 2px dashed #d97706 !important;
     outline-offset: -1px;
     opacity: 0.82;
-    z-index: 12 !important;
+    z-index: 4 !important;
     background-image: repeating-linear-gradient(
         -45deg,
         transparent,

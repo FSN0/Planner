@@ -529,7 +529,8 @@ body > .select2-container--open {
 .layout-admin .fc-daygrid-event-harness:has(.fc-event-vehiculo) {
   z-index: 4 !important;
 }
+/* Borrador nueva asignación: debajo en el stack, z-index bajo para no tapar. */
 .univ-calendar-root .fc-daygrid-event-harness:has(.fc-ghost-event),
 .layout-admin .fc-daygrid-event-harness:has(.fc-ghost-event) {
-  z-index: 6 !important;
+  z-index: 2 !important;
 }

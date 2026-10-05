@@ -35,6 +35,7 @@
       {{ stat_chip('Listos', preview.stats.listos, 'ok') }}
       {{ stat_chip('Bajas', preview.stats.desactivados, 'warn') }}
       {{ stat_chip('Conflictos', preview.stats.incidencias, 'danger') }}
+      {{ stat_chip('Decidir dpto', preview.stats.omitidos_decision|default(0), 'danger') }}
       {{ stat_chip('Omitidos Odoo', preview.stats.omitidos_odoo, 'warn') }}
       {{ stat_chip('Sin cambios', preview.stats.sin_cambios, 'muted') }}
     </div>
@@ -73,19 +74,69 @@
     </section>
     {% endif %}
 
+    {% if preview.omitidos_decision %}
+    <section class="sync-preview-section sync-preview-section--danger">
+      <h2 class="sync-preview-section-title"><i class="fas fa-user-check"></i> {{ _('En la app — revisar vínculo Odoo') }} ({{ preview.omitidos_decision|length }})</h2>
+      <p class="sync-preview-section-desc">{{ _('Personas internas ya importadas cuyo vínculo hr.employee queda fuera del sync (dpto, sin DNI, no encontradas). No incluye contactos conciliados (res.partner) ni personal de subcontratas. Siguen activas aquí hasta que decidas.') }}</p>
+      {% for o in preview.omitidos_decision %}
+      <article class="sync-preview-card sync-preview-card--incident" data-odoo-id="{{ o.odoo_id }}">
+        <div class="sync-preview-card-head">
+          <strong>{{ o.local_name }} {{ o.local_lastname }}</strong>
+          <span class="sync-preview-badge sync-preview-badge--actualizar">{{ _('REVISAR') }}</span>
+        </div>
+        <div class="small text-muted mb-1">
+          {{ _('Odoo') }} #{{ o.odoo_id }} · {{ o.nombre }} · {{ o.dni or '—' }}
+          · {{ _('Rol local:') }} {{ o.local_role }}
+          {% if o.odoo_vinculo %}· {{ o.odoo_vinculo }}{% endif %}
+        </div>
+        <div class="small mb-1">
+          <span class="text-muted">{{ _('Dpto Odoo (ahora)') }}:</span>
+          <strong>{{ o.departamento or '—' }}</strong>
+          · <span class="text-muted">{{ _('Dpto al importar') }}:</span>
+          <strong>{% if o.departamento_importacion %}{{ o.departamento_importacion }}{% else %}{{ _('Sin registro') }}{% endif %}</strong>
+          {% if o.import_source_label %}
+          · <span class="text-muted">{{ _('Origen alta') }}:</span> {{ o.import_source_label }}
+          {% endif %}
+        </div>
+        <div class="small text-muted mb-1">{{ _('Motivo sync') }}: {{ o.motivo }}</div>
+        {{ razon_list(o.razones) }}
+        {% if (o.tipo_aviso or 'departamento') == 'departamento' and o.departamento %}
+        <div class="mt-2 d-flex flex-wrap align-items-center" style="gap:0.5rem;">
+          <label class="small mb-0">{{ _('Rol al autorizar') }}</label>
+          <select class="form-control form-control-sm" style="width:auto;" id="role_dept_{{ o.odoo_id }}">
+            <option value="jefe_obra" {% if o.role_sugerido == 'jefe_obra' %}selected{% endif %}>{{ _('jefe_obra') }}</option>
+            <option value="operario" {% if o.role_sugerido == 'operario' %}selected{% endif %}>{{ _('operario') }}</option>
+            <option value="laboral" {% if o.role_sugerido == 'laboral' %}selected{% endif %}>{{ _('laboral') }}</option>
+            <option value="admin" {% if o.role_sugerido == 'admin' %}selected{% endif %}>{{ _('admin') }}</option>
+          </select>
+          <button type="button" class="btn-admin btn-admin-primary btn-sm"
+                  onclick="authorizeDepartment({{ o.departamento|tojson }}, {{ o.odoo_id }})">
+            <i class="fas fa-check"></i> {{ _('Autorizar departamento') }}
+          </button>
+          <span class="small text-muted">{{ _('Dejar pendiente: no hagas nada; seguirá en esta lista y en la burbuja del panel.') }}</span>
+        </div>
+        {% else %}
+        <p class="small text-muted mb-0 mt-2">{{ _('Deja pendiente o gestiona la ficha en personal / conciliación.') }}</p>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
+
     {% if preview.omitidos_odoo %}
     <section class="sync-preview-section sync-preview-section--warn">
       <h2 class="sync-preview-section-title"><i class="fas fa-filter"></i> {{ _('No importados desde Odoo') }} ({{ preview.omitidos_odoo|length }})</h2>
-      <p class="sync-preview-section-desc">{{ _('Registros en Odoo que <strong>nunca entran</strong> al diff por reglas de filtrado.')|safe }}</p>
+      <p class="sync-preview-section-desc">{{ _('Todos los hr.employee de Odoo que <strong>este sync no mete</strong> en SignaPlan y que <strong>aún no tienes</strong> en la app: dpto fuera del mapa, sin DNI, archivados, etc. Ordenados por departamento. Quienes ya están en la app van arriba en «revisar vínculo».')|safe }}</p>
       <div class="sync-preview-table-wrap">
         <table class="sync-preview-table">
-          <thead><tr><th>{{ _('Odoo ID') }}</th><th>{{ _('Nombre') }}</th><th>{{ _('Departamento') }}</th><th>{{ _('Motivo') }}</th></tr></thead>
+          <thead><tr><th>{{ _('Odoo ID') }}</th><th>{{ _('Nombre') }}</th><th>{{ _('DNI') }}</th><th>{{ _('Departamento') }}</th><th>{{ _('Motivo') }}</th></tr></thead>
           <tbody>
             {% for o in preview.omitidos_odoo %}
             <tr>
               <td>#{{ o.odoo_id }}</td>
               <td>{{ o.nombre }}</td>
-              <td>{{ o.departamento }}</td>
+              <td>{{ o.dni or '—' }}</td>
+              <td>{{ o.departamento or 'sin departamento' }}</td>
               <td class="sync-preview-reasons">{{ _(o.motivo) }}</td>
             </tr>
             {% endfor %}
@@ -157,6 +208,25 @@ function resolveConflict(empData) {
     }).then(r => r.json()).then(data => {
         if (data.success) location.reload();
         else alert({{ _('Error:')|tojson }} + ' ' + data.error);
+    });
+}
+
+function authorizeDepartment(department, odooId) {
+    var sel = document.getElementById('role_dept_' + odooId);
+    var role = sel ? sel.value : 'operario';
+    if (!confirm({{ _('¿Autorizar el departamento «{d}» para el sync de personal interno?')|tojson }}.replace('{d}', department))) {
+        return;
+    }
+    fetch("{{ url_for('sync.authorize_empleados_department') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: department, role: role })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.success) {
+            window.location.href = "{{ url_for('sync.preview_empleados') }}";
+        } else {
+            alert({{ _('Error:')|tojson }} + ' ' + (data.error || ''));
+        }
     });
 }
 

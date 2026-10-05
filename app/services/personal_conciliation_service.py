@@ -684,6 +684,8 @@ def link_local_to_odoo(
     ext = dict(user.external_ids or {})
     ext['odoo'] = primary['odoo_id']
     ext['odoo_model'] = primary['odoo_model']
+    if not (ext.get('odoo_import_source') or '').strip():
+        ext['odoo_import_source'] = 'conciliacion'
     if primary['barcode']:
         ext['barcode'] = primary['barcode']
     elif not ext.get('barcode'):

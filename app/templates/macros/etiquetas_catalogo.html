@@ -1,0 +1,90 @@
+{% from "macros/etiquetas.html" import etiqueta_chip with context %}
+{% macro catalogo_etiquetas_bloque(tipo, titulo, filas, otras, can_manage) %}
+<div class="mb-4" id="cfg-etiquetas-{{ tipo }}">
+  <h3 class="h6 font-weight-bold mb-2">{{ titulo }}</h3>
+  {% if can_manage %}
+  <form action="{{ url_for('admin.update_etiquetas_catalogo') }}" method="POST" class="mb-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="etiqueta_action" value="create">
+    <input type="hidden" name="tipo" value="{{ tipo }}">
+    <div class="form-row align-items-end">
+      <div class="form-group col-md-5 mb-2">
+        <label class="small mb-1">{{ _('Nombre') }}</label>
+        <input type="text" name="nombre" class="form-control form-control-sm" maxlength="80" required placeholder="{{ _('Ej. Frigorista') }}">
+      </div>
+      <div class="form-group col-md-3 mb-2">
+        <label class="small mb-1">{{ _('Color (opcional)') }}</label>
+        <input type="color" name="color" class="form-control form-control-sm" value="#ffffff" title="{{ _('Blanco = sin color') }}">
+      </div>
+      <div class="form-group col-md-4 mb-2">
+        <button type="submit" class="btn-admin btn-admin-primary btn-sm"><i class="fas fa-plus"></i> {{ _('Crear') }}</button>
+      </div>
+    </div>
+  </form>
+  {% else %}
+  <p class="text-muted small">{{ _('Solo lectura: no tienes permiso para crear o borrar etiquetas.') }}</p>
+  {% endif %}
+
+  {% if filas %}
+  {% for e in filas %}
+  <div class="config-etiqueta-row">
+    {{ etiqueta_chip(e, 'md') }}
+    {% if can_manage %}
+    <div class="config-etiqueta-actions">
+      <details>
+        <summary class="btn-admin btn-admin-ghost btn-sm" style="cursor:pointer;list-style:none;">{{ _('Editar') }}</summary>
+        <form action="{{ url_for('admin.update_etiquetas_catalogo') }}" method="POST" class="mt-2 p-2 border rounded bg-white">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="etiqueta_action" value="rename">
+          <input type="hidden" name="tipo" value="{{ tipo }}">
+          <input type="hidden" name="etiqueta_id" value="{{ e.id }}">
+          <div class="form-row">
+            <div class="form-group col-md-6 mb-1">
+              <input type="text" name="nombre" class="form-control form-control-sm" value="{{ e.nombre }}" maxlength="80" required>
+            </div>
+            <div class="form-group col-md-3 mb-1">
+              <input type="color" name="color" class="form-control form-control-sm" value="{{ e.color or '#ffffff' }}">
+            </div>
+            <div class="form-group col-md-3 mb-1">
+              <button type="submit" class="btn-admin btn-admin-primary btn-sm">{{ _('Guardar') }}</button>
+            </div>
+          </div>
+        </form>
+      </details>
+      {% if otras|length > 1 %}
+      <details>
+        <summary class="btn-admin btn-admin-ghost btn-sm" style="cursor:pointer;list-style:none;">{{ _('Absorber en…') }}</summary>
+        <form action="{{ url_for('admin.update_etiquetas_catalogo') }}" method="POST" class="mt-2 p-2 border rounded bg-white"
+              onsubmit="return confirm({{ _('Se moverán todas las asignaciones a la etiqueta destino y se borrará esta. ¿Continuar?')|tojson }});">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="etiqueta_action" value="absorb">
+          <input type="hidden" name="tipo" value="{{ tipo }}">
+          <input type="hidden" name="etiqueta_id" value="{{ e.id }}">
+          <select name="absorb_into_id" class="form-control form-control-sm mb-1" required>
+            {% for o in otras %}
+            {% if o.id != e.id %}
+            <option value="{{ o.id }}">{{ o.nombre }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn-admin btn-admin-ghost btn-sm">{{ _('Absorber') }}</button>
+        </form>
+      </details>
+      {% endif %}
+      <form action="{{ url_for('admin.update_etiquetas_catalogo') }}" method="POST" class="d-inline"
+            onsubmit="return confirm({{ _('Se eliminará del catálogo y de todas las fichas. ¿Continuar?')|tojson }});">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="etiqueta_action" value="delete">
+        <input type="hidden" name="tipo" value="{{ tipo }}">
+        <input type="hidden" name="etiqueta_id" value="{{ e.id }}">
+        <button type="submit" class="btn-admin btn-admin-ghost btn-sm text-danger"><i class="fas fa-trash-alt"></i></button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="text-muted small mb-0">{{ _('Todavía no hay etiquetas en este catálogo.') }}</p>
+  {% endif %}
+</div>
+{% endmacro %}

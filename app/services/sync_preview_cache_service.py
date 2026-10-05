@@ -28,9 +28,17 @@ def count_pending_actions(preview: dict) -> int:
     if mod == 'obras':
         return int(stats.get('incidencias') or 0)
     if mod == 'empleados':
-        return int(stats.get('incidencias') or 0)
+        return (
+            int(stats.get('incidencias') or 0)
+            + int(stats.get('omitidos_decision') or 0)
+            + int(stats.get('desactivados') or 0)
+        )
     if mod == 'subcontratas':
-        return int(stats.get('incidencias') or 0)
+        return (
+            int(stats.get('incidencias') or 0)
+            + int(stats.get('omitidos_decision') or 0)
+            + int(stats.get('desactivados') or 0)
+        )
     return 0
 
 

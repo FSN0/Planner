@@ -1,11 +1,14 @@
 # app/services/core_vehicle_assignment_service.py
 #
 # ÚNICA FUENTE DE LA VERDAD para mutaciones de AsignacionVehiculo.
-# Usar exclusivamente asignar() / desasignar().
+# Usar exclusivamente asignar() / desasignar() / marcar_no_usada().
 
 from app import db
 from app.utils.timezone_utils import utc_now
 from app.models import AsignacionVehiculo, SystemLog, Vehiculo, User
+
+EFECTIVA = AsignacionVehiculo.ESTADO_EFECTIVA
+NO_USADA = AsignacionVehiculo.ESTADO_NO_USADA
 
 
 class CoreVehicleAssignmentService:
@@ -17,24 +20,49 @@ class CoreVehicleAssignmentService:
         return vehiculo.label()
 
     @staticmethod
+    def get_efectiva_user(user_id, fecha):
+        return AsignacionVehiculo.query.filter_by(
+            user_id=user_id, fecha=fecha, estado=EFECTIVA,
+        ).first()
+
+    @staticmethod
+    def get_efectiva_vehiculo(vehiculo_id, fecha):
+        return AsignacionVehiculo.query.filter_by(
+            vehiculo_id=vehiculo_id, fecha=fecha, estado=EFECTIVA,
+        ).first()
+
+    @staticmethod
     def asignar(vehiculo_id, user_id, fecha, autor_id, contexto_origen,
                 detalle_extra=None, *, solicitud_id=None, overwrite=False,
-                registrar_log=True):
+                registrar_log=True, notas=None, estado=None):
         """
-        Crea AsignacionVehiculo. En lotes: registrar_log=False + registrar_log_rango.
+        Crea o reutiliza AsignacionVehiculo efectiva (por defecto).
+        En lotes: registrar_log=False + registrar_log_rango.
         """
+        estado = estado or EFECTIVA
         existing_same = AsignacionVehiculo.query.filter_by(
             vehiculo_id=vehiculo_id, user_id=user_id, fecha=fecha,
         ).first()
         if existing_same:
+            changed = False
+            if existing_same.estado != estado:
+                existing_same.estado = estado
+                changed = True
+            if notas is not None and (existing_same.notas or '') != notas:
+                existing_same.notas = notas
+                changed = True
+            if solicitud_id is not None and existing_same.solicitud_id != solicitud_id:
+                existing_same.solicitud_id = solicitud_id
+                changed = True
+            if changed:
+                db.session.flush()
             return existing_same
 
-        conflict_vehicle = AsignacionVehiculo.query.filter_by(
-            vehiculo_id=vehiculo_id, fecha=fecha,
-        ).first()
-        conflict_user = AsignacionVehiculo.query.filter_by(
-            user_id=user_id, fecha=fecha,
-        ).first()
+        conflict_vehicle = None
+        conflict_user = None
+        if estado == EFECTIVA:
+            conflict_vehicle = CoreVehicleAssignmentService.get_efectiva_vehiculo(vehiculo_id, fecha)
+            conflict_user = CoreVehicleAssignmentService.get_efectiva_user(user_id, fecha)
 
         if conflict_vehicle or conflict_user:
             if not overwrite:
@@ -58,7 +86,7 @@ class CoreVehicleAssignmentService:
                     registrar_log=registrar_log,
                 )
             if conflict_user and conflict_user.vehiculo_id != vehiculo_id:
-                still = AsignacionVehiculo.query.filter_by(user_id=user_id, fecha=fecha).first()
+                still = CoreVehicleAssignmentService.get_efectiva_user(user_id, fecha)
                 if still:
                     CoreVehicleAssignmentService.desasignar(
                         still.vehiculo_id, still.user_id, fecha,
@@ -72,6 +100,8 @@ class CoreVehicleAssignmentService:
             user_id=user_id,
             fecha=fecha,
             solicitud_id=solicitud_id,
+            estado=estado,
+            notas=notas,
         )
         db.session.add(nueva)
 
@@ -83,6 +113,33 @@ class CoreVehicleAssignmentService:
 
         db.session.flush()
         return nueva
+
+    @staticmethod
+    def marcar_no_usada(vehiculo_id, user_id, fecha, autor_id, contexto_origen,
+                        notas=None, *, registrar_log=True):
+        """Pasa una asignación (normalmente efectiva) a rastro no_usada."""
+        asig = AsignacionVehiculo.query.filter_by(
+            vehiculo_id=vehiculo_id, user_id=user_id, fecha=fecha,
+        ).first()
+        if not asig:
+            return CoreVehicleAssignmentService.asignar(
+                vehiculo_id, user_id, fecha, autor_id, contexto_origen,
+                detalle_extra="Rastro plan no usado.",
+                registrar_log=registrar_log,
+                notas=notas,
+                estado=NO_USADA,
+            )
+        asig.estado = NO_USADA
+        if notas is not None:
+            asig.notas = notas
+        if registrar_log:
+            CoreVehicleAssignmentService._registrar_log(
+                user_id, vehiculo_id, fecha, autor_id, contexto_origen,
+                es_alta=False,
+                detalle_extra='Marcado como planificado no usado.',
+            )
+        db.session.flush()
+        return asig
 
     @staticmethod
     def desasignar(vehiculo_id, user_id, fecha, autor_id, contexto_origen,

@@ -11,6 +11,8 @@ from app.services.permission_service import user_can
 # Orden: prefijos más específicos primero.
 _ADMIN_RULES = (
     ('/admin/permisos', 'permisos', 'r', {'POST': 'w'}),
+    ('/admin/configuracion/etiquetas', 'etiquetas_catalogo', 'w', {'POST': 'w'}),
+    ('/admin/api/etiquetas', 'etiquetas', 'r', {}),
     ('/admin/configuracion', 'configuracion', 'r', {'POST': 'w'}),
     ('/admin/api/tour', 'primeros_pasos', 'r', {'POST': 'w'}),
     ('/admin/tour', 'primeros_pasos', 'r', {}),
@@ -102,6 +104,7 @@ _SYNC_RULES = (
     ('/sync/preview', 'sync_odoo', 'w', {'POST': 'w'}),
     ('/sync/commit', 'sync_odoo', 'w', {'POST': 'w'}),
     ('/sync/resolve_conflict', 'sync_odoo', 'w', {'POST': 'w'}),
+    ('/sync/empleados', 'sync_odoo', 'w', {'POST': 'w'}),
     # api/run/<task> se resuelve en match_request_permission (módulo del task)
     ('/sync/odoo', 'sync_odoo', 'r', {'POST': 'w'}),
     ('/sync/fichajes_manual', 'auditoria_fichajes', 'w', {'POST': 'w'}),
