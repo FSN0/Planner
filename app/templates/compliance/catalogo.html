@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Catálogo de documentación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+{% set subcontratas = namespace(items=[]) %}
+{% set interno_emp = namespace(items=[]) %}
+{% set interno_hire = namespace(items=[]) %}
+{% set externo = namespace(items=[]) %}
+{% for t in tipos %}
+  {% if t.ambito == 'empresa' and t.audiencia in ('subcontrata', 'ambos') %}
+    {% set _ = subcontratas.items.append(t) %}
+  {% elif t.ambito == 'empleado' %}
+    {% if t.audiencia in ('interno', 'ambos') %}
+      {% if (t.fase_contratacion or 0) > 0 %}
+        {# Solo en contratación: no se duplican en Empleado #}
+        {% set _ = interno_hire.items.append(t) %}
+      {% else %}
+        {% set _ = interno_emp.items.append(t) %}
+      {% endif %}
+    {% endif %}
+    {% if t.audiencia in ('subcontrata', 'ambos') %}
+      {% set _ = externo.items.append(t) %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% set n_interno = namespace(ids=[]) %}
+{% for t in tipos if t.ambito == 'empleado' and t.audiencia in ('interno', 'ambos') %}
+  {% if t.id not in n_interno.ids %}{% set _ = n_interno.ids.append(t.id) %}{% endif %}
+{% endfor %}
+{% set aud_txt = {
+  'interno': _('Solo internos'),
+  'subcontrata': _('Solo externos'),
+  'ambos': _('Interno y externo')
+} %}
+{# Índice JSON para sugerencias al crear #}
+{% set catalog_index = [] %}
+{% for t in tipos if t.activo %}
+  {% set _ = catalog_index.append({
+    'id': t.id,
+    'nombre': t.nombre,
+    'ambito': t.ambito,
+    'audiencia': t.audiencia,
+    'fase': t.fase_contratacion or 0,
+    'categoria': t.categoria or ''
+  }) %}
+{% endfor %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Cumplimiento') }}</p>
+      <h1>{{ _('Catálogo') }}</h1>
+      <p>{{ _('Arrastra plantillas entre secciones. En internos: Contratación es el alta; Empleado son solo las plantillas extra de quien ya está contratado (las del alta también les siguen saliendo).') }}</p>
+      <div class="office-docs-hero-stats office-docs-hero-stats--wrap">
+        <div>
+          <strong>{{ tipos|length }}</strong>
+          <span>{{ _('Total') }}</span>
+        </div>
+        <div>
+          <strong>{{ subcontratas.items|length }}</strong>
+          <span>{{ _('Subcontratas') }}</span>
+        </div>
+        <div>
+          <strong>{{ n_interno.ids|length }}</strong>
+          <span>{{ _('Empleado interno') }}</span>
+        </div>
+        <div>
+          <strong>{{ externo.items|length }}</strong>
+          <span>{{ _('Empleado externo') }}</span>
+        </div>
+      </div>
+      <div class="office-hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.documentacion') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.ajustes') }}">{{ _('Ajustes') }}</a>
+      </div>
+    </section>
+
+    <form method="post" id="catalog-mover-form" hidden>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="accion" value="mover">
+      <input type="hidden" name="tipo_id" id="mover-tipo-id" value="">
+      <input type="hidden" name="destino" id="mover-destino" value="">
+    </form>
+
+    {% macro catalog_item(tipo) %}
+    <details class="catalog-item {% if not tipo.activo %}is-off{% endif %}" draggable="true" data-tipo-id="{{ tipo.id }}">
+      <summary class="catalog-item-sum">
+        <span class="catalog-drag" title="{{ _('Arrastrar') }}" aria-hidden="true"><i class="fas fa-grip-vertical"></i></span>
+        <span class="docs-block-ico {% if tipo.ambito == 'empresa' %}docs-block-ico--firm{% elif tipo.fase_contratacion %}docs-block-ico--hire{% endif %}">
+          {% if tipo.ambito == 'empresa' %}<i class="fas fa-industry"></i>
+          {% elif tipo.fase_contratacion %}<i class="fas fa-user-check"></i>
+          {% else %}<i class="fas fa-id-card"></i>{% endif %}
+        </span>
+        <span class="catalog-item-title">
+          <strong>{{ tipo.nombre }}</strong>
+          <small>
+            {{ tipo.categoria or _('Sin categoría') }}
+            · {{ aud_txt.get(tipo.audiencia, tipo.audiencia) }}
+            {% if tipo.fase_contratacion %} · {{ _('Fase') }} {{ tipo.fase_contratacion }}{% endif %}
+          </small>
+        </span>
+        <span class="docs-block-pills">
+          {% if tipo.audiencia == 'ambos' %}<span class="docs-pill docs-pill--ok">{{ _('Reutilizable') }}</span>{% endif %}
+          {% if tipo.por_defecto %}<span class="docs-pill docs-pill--ok">{{ _('Por defecto') }}</span>{% endif %}
+          {% if tipo.obligatorio %}<span class="docs-pill docs-pill--danger">{{ _('Necesario') }}</span>{% endif %}
+          {% if not tipo.activo %}<span class="docs-pill">{{ _('Inactiva') }}</span>
+          {% else %}<span class="docs-pill">{{ _('Activa') }}</span>{% endif %}
+        </span>
+      </summary>
+      <form method="post" class="catalog-item-body">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="tipo_id" value="{{ tipo.id }}">
+        <div class="catalog-form-grid">
+          <label class="hire-field">
+            <span>{{ _('Nombre') }}</span>
+            <input name="nombre" value="{{ tipo.nombre }}" required>
+          </label>
+          <label class="hire-field">
+            <span>{{ _('Categoría') }}</span>
+            <input name="categoria" value="{{ tipo.categoria or '' }}">
+          </label>
+          <label class="hire-field">
+            <span>{{ _('Aplica a') }}</span>
+            {% if tipo.ambito == 'empresa' %}
+            <select disabled>
+              <option selected>{{ _('Subcontratas') }}</option>
+            </select>
+            <input type="hidden" name="audiencia" value="subcontrata">
+            {% else %}
+            <select name="audiencia">
+              {% for val, etiqueta in (('interno', _('Solo empleados internos')), ('subcontrata', _('Solo empleados externos')), ('ambos', _('Interno y externo (reutilizable)'))) %}
+              <option value="{{ val }}" {% if tipo.audiencia == val %}selected{% endif %}>{{ etiqueta }}</option>
+              {% endfor %}
+            </select>
+            {% endif %}
+          </label>
+          <label class="hire-field">
+            <span>{{ _('Caducidad') }}</span>
+            <select name="regla_renovacion">
+              {% for regla, etiqueta in (('ninguna', _('Sin caducidad')), ('mensual', _('Mensual')), ('anual', _('Anual'))) %}
+              <option value="{{ regla }}" {% if tipo.regla_renovacion == regla %}selected{% endif %}>{{ etiqueta }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="hire-field">
+            <span>{{ _('Día') }}</span>
+            <input name="dia_renovacion" type="number" min="1" max="31" value="{{ tipo.dia_renovacion or 1 }}">
+          </label>
+          <label class="hire-field">
+            <span>{{ _('Mes') }}</span>
+            <input name="mes_renovacion" type="number" min="1" max="12" value="{{ tipo.mes_renovacion or '' }}">
+          </label>
+          {% if tipo.ambito == 'empleado' %}
+          <label class="hire-field">
+            <span>{{ _('Contratación') }}</span>
+            <select name="fase_contratacion">
+              {% for fase, etiqueta in ((0, _('No (empleado)')), (1, _('Fase 1')), (2, _('Fase 2'))) %}
+              <option value="{{ fase }}" {% if tipo.fase_contratacion == fase %}selected{% endif %}>{{ etiqueta }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% else %}
+          <input type="hidden" name="fase_contratacion" value="0">
+          {% endif %}
+        </div>
+        <div class="catalog-checks">
+          <label><input type="checkbox" name="por_defecto" {% if tipo.por_defecto %}checked{% endif %}> {{ _('Por defecto (se pide sola)') }}</label>
+          <label><input type="checkbox" name="activo" {% if tipo.activo %}checked{% endif %}> {{ _('Activa (se lista y puede avisar)') }}</label>
+          <label><input type="checkbox" name="obligatorio" {% if tipo.obligatorio %}checked{% endif %}> {{ _('Necesario (avisos si falta)') }}</label>
+          {% if tipo.ambito == 'empleado' %}
+          <label><input type="checkbox" name="bloquea_fase" {% if tipo.bloquea_fase %}checked{% endif %}> {{ _('Bloquea la fase') }}</label>
+          {% endif %}
+        </div>
+        <div class="catalog-item-actions">
+          <button class="office-hire-btn" type="submit" name="accion" value="editar">{{ _('Guardar') }}</button>
+          <button class="office-hire-btn ghost office-hire-btn--danger js-confirm-borrar" type="submit" name="accion" value="eliminar"
+                  data-title="{{ _('¿Eliminar esta plantilla?') }}"
+                  data-text="{{ _('Se borrará del catálogo y dejará de pedirse. Esta acción no se puede deshacer.') }}"
+                  data-confirm="{{ _('Sí, eliminar') }}">
+            {{ _('Eliminar') }}
+          </button>
+        </div>
+      </form>
+    </details>
+    {% endmacro %}
+
+    {% macro catalog_nueva(destino, ambito, audiencia, fase, placeholder) %}
+    <div class="catalog-nueva-wrap" data-destino="{{ destino }}">
+      <form method="post" class="catalog-nueva">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="accion" value="crear">
+        <input type="hidden" name="ambito" value="{{ ambito }}">
+        <input type="hidden" name="audiencia" value="{{ audiencia }}">
+        <input type="hidden" name="fase_contratacion" value="{{ fase }}">
+        <input type="hidden" name="regla_renovacion" value="ninguna">
+        <input type="hidden" name="por_defecto" value="on">
+        <input type="hidden" name="activo" value="on">
+        <input type="hidden" name="obligatorio" value="on">
+        <input type="text" name="nombre" class="js-catalog-suggest" required maxlength="200" placeholder="{{ placeholder }}" autocomplete="off">
+        <button class="office-hire-btn" type="submit">{{ _('Crear') }}</button>
+      </form>
+      <div class="catalog-suggest" hidden></div>
+    </div>
+    {% endmacro %}
+
+    {% macro drop_list(destino, items) %}
+    <div class="catalog-list catalog-drop" data-destino="{{ destino }}">
+      {% set activos = namespace(rows=[]) %}
+      {% set inactivos = namespace(rows=[]) %}
+      {% for tipo in items %}
+        {% if tipo.activo %}{% set _ = activos.rows.append(tipo) %}
+        {% else %}{% set _ = inactivos.rows.append(tipo) %}{% endif %}
+      {% endfor %}
+      {% for tipo in activos.rows %}{{ catalog_item(tipo) }}{% else %}
+        {% if not inactivos.rows %}
+        <p class="docs-req-hint catalog-drop-empty">{{ _('Arrastra aquí o crea una plantilla.') }}</p>
+        {% endif %}
+      {% endfor %}
+      {% for tipo in inactivos.rows %}{{ catalog_item(tipo) }}{% endfor %}
+    </div>
+    {% endmacro %}
+
+    {# ——— Subcontratas ——— #}
+    <details class="catalog-group"{% if request.args.get('g') in (none, 'subcontratas', 'empresa') or not request.args.get('g') %} open{% endif %}>
+      <summary class="catalog-group-sum">
+        <span class="docs-block-ico"><i class="fas fa-industry"></i></span>
+        <span class="catalog-group-title">
+          <strong>{{ _('Subcontratas') }}</strong>
+          <span class="catalog-group-count">{{ subcontratas.items|length }} {{ _('plantillas') }}</span>
+        </span>
+      </summary>
+      <div class="catalog-group-body">
+        {{ catalog_nueva('subcontratas', 'empresa', 'subcontrata', 0, _('Nombre de la plantilla de subcontrata…')) }}
+        {{ drop_list('subcontratas', subcontratas.items) }}
+      </div>
+    </details>
+
+    {# ——— Empleado interno (con subsecciones expandibles) ——— #}
+    <details class="catalog-group"{% if request.args.get('g') in ('empleado_interno', 'empleado', 'contratacion', 'interno_hire', 'interno_emp') %} open{% endif %}>
+      <summary class="catalog-group-sum">
+        <span class="docs-block-ico"><i class="fas fa-user-tie"></i></span>
+        <span class="catalog-group-title">
+          <strong>{{ _('Empleado interno') }}</strong>
+          <span class="catalog-group-count">{{ n_interno.ids|length }} {{ _('plantillas') }}</span>
+        </span>
+      </summary>
+      <div class="catalog-group-body catalog-group-body--nested">
+
+        <details class="catalog-subgroup"{% if request.args.get('g') in ('contratacion', 'interno_hire') %} open{% endif %}>
+          <summary class="catalog-subgroup-sum">
+            <span class="docs-block-ico docs-block-ico--hire"><i class="fas fa-user-check"></i></span>
+            <span class="catalog-group-title">
+              <strong>{{ _('Contratación') }}</strong>
+              <span class="catalog-group-count">{{ interno_hire.items|length }} · {{ _('fase 1 y fase 2') }}</span>
+            </span>
+          </summary>
+          <div class="catalog-subgroup-body">
+            {{ catalog_nueva('interno_hire', 'empleado', 'interno', 1, _('Plantilla de contratación…')) }}
+            {{ drop_list('interno_hire', interno_hire.items) }}
+          </div>
+        </details>
+
+        <details class="catalog-subgroup"{% if request.args.get('g') in ('empleado', 'interno_emp') %} open{% endif %}>
+          <summary class="catalog-subgroup-sum">
+            <span class="docs-block-ico"><i class="fas fa-id-card"></i></span>
+            <span class="catalog-group-title">
+              <strong>{{ _('Empleado') }}</strong>
+              <span class="catalog-group-count">{{ interno_emp.items|length }} · {{ _('solo tras el alta (no duplican contratación)') }}</span>
+            </span>
+          </summary>
+          <div class="catalog-subgroup-body">
+            {{ catalog_nueva('interno_emp', 'empleado', 'interno', 0, _('Plantilla de empleado interno…')) }}
+            {{ drop_list('interno_emp', interno_emp.items) }}
+          </div>
+        </details>
+
+      </div>
+    </details>
+
+    {# ——— Empleado externo ——— #}
+    <details class="catalog-group"{% if request.args.get('g') == 'empleado_externo' or request.args.get('g') == 'externo' %} open{% endif %}>
+      <summary class="catalog-group-sum">
+        <span class="docs-block-ico"><i class="fas fa-hard-hat"></i></span>
+        <span class="catalog-group-title">
+          <strong>{{ _('Empleado externo') }}</strong>
+          <span class="catalog-group-count">{{ externo.items|length }} {{ _('plantillas') }}</span>
+        </span>
+      </summary>
+      <div class="catalog-group-body">
+        {{ catalog_nueva('externo', 'empleado', 'subcontrata', 0, _('Plantilla de empleado externo…')) }}
+        {{ drop_list('externo', externo.items) }}
+      </div>
+    </details>
+  </main>
+</div>
+<script>
+(function () {
+  var INDEX = {{ catalog_index|tojson }};
+  var AUD = {
+    interno: {{ _('Solo internos')|tojson }},
+    subcontrata: {{ _('Solo externos')|tojson }},
+    ambos: {{ _('Interno y externo')|tojson }}
+  };
+  var DEST_LABEL = {
+    subcontratas: {{ _('Subcontratas')|tojson }},
+    interno_hire: {{ _('Contratación')|tojson }},
+    interno_emp: {{ _('Empleado interno')|tojson }},
+    externo: {{ _('Empleado externo')|tojson }}
+  };
+
+  document.querySelectorAll('.catalog-item-sum').forEach(function (sum) {
+    sum.addEventListener('click', function (ev) { ev.stopPropagation(); });
+  });
+  document.querySelectorAll('.catalog-nueva, .catalog-nueva-wrap').forEach(function (el) {
+    el.addEventListener('click', function (ev) { ev.stopPropagation(); });
+  });
+
+  /* —— Sugerencias al escribir —— */
+  function matchesFor(q, destino) {
+    q = (q || '').trim().toLowerCase();
+    if (q.length < 2) return [];
+    return INDEX.filter(function (t) {
+      if ((t.nombre || '').toLowerCase().indexOf(q) === -1 &&
+          (t.categoria || '').toLowerCase().indexOf(q) === -1) return false;
+      // Ya está en ese destino: no sugerir
+      if (destino === 'subcontratas' && t.ambito === 'empresa') return false;
+      if (destino === 'interno_hire' && t.ambito === 'empleado' && t.fase > 0 &&
+          (t.audiencia === 'interno' || t.audiencia === 'ambos')) return false;
+      if (destino === 'interno_emp' && t.ambito === 'empleado' && t.fase === 0 &&
+          (t.audiencia === 'interno' || t.audiencia === 'ambos')) return false;
+      if (destino === 'externo' && t.ambito === 'empleado' && t.fase === 0 &&
+          (t.audiencia === 'subcontrata' || t.audiencia === 'ambos')) return false;
+      return true;
+    }).slice(0, 6);
+  }
+
+  function paintSuggest(wrap, items) {
+    var box = wrap.querySelector('.catalog-suggest');
+    if (!box) return;
+    if (!items.length) { box.hidden = true; box.innerHTML = ''; return; }
+    var destino = wrap.getAttribute('data-destino');
+    box.innerHTML = items.map(function (t) {
+      var where = t.ambito === 'empresa'
+        ? {{ _('Subcontratas')|tojson }}
+        : (t.fase > 0 ? {{ _('Contratación')|tojson }} : (
+            t.audiencia === 'subcontrata' ? {{ _('Externo')|tojson }} : {{ _('Interno')|tojson }}
+          ));
+      return '<button type="button" class="catalog-suggest-item" data-id="' + t.id + '">'
+        + '<strong>' + t.nombre + '</strong>'
+        + '<small>' + where + ' · ' + (AUD[t.audiencia] || t.audiencia) + '</small>'
+        + '<span>' + {{ _('Usar aquí')|tojson }} + '</span>'
+        + '</button>';
+    }).join('');
+    box.hidden = false;
+    box.querySelectorAll('.catalog-suggest-item').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var form = document.getElementById('catalog-mover-form');
+        document.getElementById('mover-tipo-id').value = btn.getAttribute('data-id');
+        document.getElementById('mover-destino').value = destino;
+        form.submit();
+      });
+    });
+  }
+
+  document.querySelectorAll('.catalog-nueva-wrap').forEach(function (wrap) {
+    var input = wrap.querySelector('.js-catalog-suggest');
+    if (!input) return;
+    input.addEventListener('input', function () {
+      paintSuggest(wrap, matchesFor(input.value, wrap.getAttribute('data-destino')));
+    });
+    input.addEventListener('blur', function () {
+      setTimeout(function () {
+        var box = wrap.querySelector('.catalog-suggest');
+        if (box) box.hidden = true;
+      }, 180);
+    });
+    input.addEventListener('focus', function () {
+      paintSuggest(wrap, matchesFor(input.value, wrap.getAttribute('data-destino')));
+    });
+  });
+
+  /* —— Drag & drop —— */
+  var draggingId = null;
+  document.querySelectorAll('.catalog-item[draggable]').forEach(function (item) {
+    item.addEventListener('dragstart', function (ev) {
+      draggingId = item.getAttribute('data-tipo-id');
+      item.classList.add('is-dragging');
+      ev.dataTransfer.setData('text/plain', draggingId);
+      ev.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', function () {
+      item.classList.remove('is-dragging');
+      draggingId = null;
+      document.querySelectorAll('.catalog-drop').forEach(function (d) {
+        d.classList.remove('is-over');
+      });
+    });
+  });
+  document.querySelectorAll('.catalog-drop').forEach(function (zone) {
+    zone.addEventListener('dragover', function (ev) {
+      ev.preventDefault();
+      zone.classList.add('is-over');
+    });
+    zone.addEventListener('dragleave', function () {
+      zone.classList.remove('is-over');
+    });
+    zone.addEventListener('drop', function (ev) {
+      ev.preventDefault();
+      zone.classList.remove('is-over');
+      var id = ev.dataTransfer.getData('text/plain') || draggingId;
+      var destino = zone.getAttribute('data-destino');
+      if (!id || !destino) return;
+      document.getElementById('mover-tipo-id').value = id;
+      document.getElementById('mover-destino').value = destino;
+      document.getElementById('catalog-mover-form').submit();
+    });
+  });
+
+  document.querySelectorAll('.js-confirm-borrar').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var form = btn.closest('form');
+      if (!form || typeof Swal === 'undefined') {
+        if (form && window.confirm(btn.getAttribute('data-text') || '')) form.submit();
+        return;
+      }
+      if (!form.querySelector('input[name="accion"][value="eliminar"]')) {
+        var h = document.createElement('input');
+        h.type = 'hidden';
+        h.name = 'accion';
+        h.value = 'eliminar';
+        form.appendChild(h);
+      }
+      Swal.fire({
+        title: btn.getAttribute('data-title') || {{ _('¿Eliminar?')|tojson }},
+        html: '<p style="margin:0;color:#475569;line-height:1.45;">'
+          + (btn.getAttribute('data-text') || '')
+          + '</p>',
+        icon: 'warning',
+        showCancelButton: true,
+        focusCancel: true,
+        confirmButtonText: btn.getAttribute('data-confirm') || {{ _('Sí, eliminar')|tojson }},
+        cancelButtonText: {{ _('Cancelar')|tojson }},
+        customClass: {
+          popup: 'admin-swal-popup',
+          title: 'admin-swal-title',
+          htmlContainer: 'admin-swal-html',
+          actions: 'admin-swal-actions',
+          confirmButton: 'admin-swal-btn admin-swal-btn-danger',
+          cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+        },
+        buttonsStyling: false,
+      }).then(function (result) {
+        if (result && result.isConfirmed) form.submit();
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

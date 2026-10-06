@@ -439,8 +439,21 @@ def can_view_vehicle_calendar(user) -> bool:
     return user_can(user, 'vehiculos', 'r')
 
 
-def can_view_empresa_calendar(user) -> bool:
-    return user_can(user, 'subcontratas', 'r')
+def can_view_empresa_calendar(user, company_id: int | None = None) -> bool:
+    """Lectura de calendario de empresa: subcontratas r, o admin de esa subcontrata."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if user_can(user, 'subcontratas', 'r'):
+        return True
+    from app.models import ROLE_ADMIN_SUBCONTRATA
+    if getattr(user, 'role', None) != ROLE_ADMIN_SUBCONTRATA:
+        return False
+    uid_company = getattr(user, 'company_id', None)
+    if not uid_company:
+        return False
+    if company_id is None:
+        return True
+    return int(company_id) == int(uid_company)
 
 
 def can_list_recursos_activos(user) -> bool:

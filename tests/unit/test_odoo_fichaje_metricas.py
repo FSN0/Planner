@@ -63,11 +63,13 @@ def test_append_attendance_fichaje_includes_metrics():
             'x_studio_mod': 0.5,
             'total_hh': 8,
             'x_studio_moe': 0.25,
+            'x_studio_state': 'validated',
         },
         actor_field='employee_id',
         origen_modelo='hr.attendance',
         fecha_str='2026-09-02',
         metric_map=metric_map,
+        estado_field='x_studio_state',
     )
     assert len(dest) == 1
     item = dest[0]
@@ -75,3 +77,39 @@ def test_append_attendance_fichaje_includes_metrics():
     assert item['odoo_mod'] == 0.5
     assert item['odoo_total_hh'] == 8.0
     assert item['odoo_moe'] == 0.25
+    assert item['estado_odoo'] == 'validado'
+
+
+def test_estado_fichaje_field_prefers_studio_state():
+    class _EstadoAdapter(_FakeAdapter):
+        def _odoo_fields_get(self, model_name):
+            return {
+                'employee_id': {'string': 'Employee', 'type': 'many2one'},
+                'x_studio_state': {
+                    'string': 'Estado',
+                    'type': 'selection',
+                    'selection': [
+                        ('draft', 'Borrador'),
+                        ('validated', 'Validado'),
+                        ('invoiced', 'Facturado'),
+                    ],
+                },
+            }
+
+    adapter = _EstadoAdapter()
+    assert adapter._estado_fichaje_field('hr.attendance') == 'x_studio_state'
+
+
+def test_estado_fichaje_field_por_etiqueta_sin_selection():
+    class _EstadoAdapter(_FakeAdapter):
+        def _odoo_fields_get(self, model_name):
+            return {
+                'x_studio_selection_field_abc': {
+                    'string': 'Estado',
+                    'type': 'selection',
+                    'selection': [],
+                },
+            }
+
+    adapter = _EstadoAdapter()
+    assert adapter._estado_fichaje_field('hr.attendance') == 'x_studio_selection_field_abc'

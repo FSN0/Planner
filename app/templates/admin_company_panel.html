@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005etq">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/entity_panel.css') }}?v=20261005docs">
 {% endblock %}
 
 {% block wrapper %}
@@ -21,6 +22,19 @@
           <span class="entity-type-marker"><i class="fas fa-briefcase"></i> {{ _('Empresa') }}</span>
         </div>
         <div class="entity-panel-actions">
+          {% if user_can(current_user, 'documentacion', 'r') %}
+          <a href="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-folder-open"></i> {{ _('Documentación') }}
+            {% if docs_pendientes %}
+            <span class="entity-docs-badge" title="{{ _('Pendientes de documentación') }}">{{ docs_pendientes }}</span>
+            {% endif %}
+          </a>
+          {% endif %}
+          {% if user_can(current_user, 'certificacion', 'r') and not company.is_internal %}
+          <a href="{{ url_for('compliance.certificacion_empresa', company_id=company.id) }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-file-invoice"></i> {{ _('Certificación de horario') }}
+          </a>
+          {% endif %}
           <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
           </a>

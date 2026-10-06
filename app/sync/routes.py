@@ -112,6 +112,11 @@ def _require_odoo_module():
     return True
 
 
+def _empleados_import_roles():
+    from app.services.sync_config_service import list_empleados_import_roles
+    return list_empleados_import_roles()
+
+
 def _render_preview(modulo, template, diff, preview, *, extra=None):
     """Renderiza preview y persiste pendientes si los hay."""
     extra = extra or {}
@@ -125,6 +130,7 @@ def _render_preview(modulo, template, diff, preview, *, extra=None):
         diff=diff,
         preview=preview,
         from_cache=False,
+        empleados_import_roles=_empleados_import_roles(),
         **extra,
     )
 
@@ -143,6 +149,7 @@ def _render_cached_preview(modulo, template, *, extra=None):
         from_cache=True,
         cache_saved_at=format_saved_at(cached.get('saved_at')),
         cache_source=cached.get('source') or 'manual',
+        empleados_import_roles=_empleados_import_roles(),
         **extra,
     )
 
@@ -211,6 +218,7 @@ def odoo_panel():
     }
     from app.services.odoo_hook_service import hook_dashboard_context
     ctx['odoo_hook'] = hook_dashboard_context()
+    ctx['empleados_import_roles'] = _empleados_import_roles()
     return render_template('sync/odoo_dashboard.html', **ctx)
 
 

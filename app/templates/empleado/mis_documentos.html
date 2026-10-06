@@ -1,0 +1,16 @@
+{% extends "empleado/_shell.html" %}
+{% block empleado_title %}{{ _('Mi documentación') }}{% endblock %}
+{% block empleado_extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261005g">
+{% endblock %}
+{% block empleado_content %}
+<section class="hire">
+  <header class="hire-hero">
+    <p class="hire-kicker">{{ _('Documentación') }}</p>
+    <h2>{{ _('Tus archivos') }}</h2>
+    <p>{{ _('Sube cada documento en su tarjeta. Si la oficina te pide repetir uno, verás el motivo en rojo.') }}</p>
+  </header>
+  <h3 class="hire-block-title">{{ _('Archivos') }}</h3>
+  {% include "empleado/_doc_cards.html" %}
+</section>
+{% endblock %}

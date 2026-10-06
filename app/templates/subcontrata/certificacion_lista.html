@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Certificación') }} · {{ company.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006stack">
+{% endblock %}
+{% block wrapper %}
+{% set meses = {
+  1: _('Enero'), 2: _('Febrero'), 3: _('Marzo'), 4: _('Abril'),
+  5: _('Mayo'), 6: _('Junio'), 7: _('Julio'), 8: _('Agosto'),
+  9: _('Septiembre'), 10: _('Octubre'), 11: _('Noviembre'), 12: _('Diciembre')
+} %}
+{% set estado_cls = {
+  'aceptada': 'is-ok',
+  'recibida': 'is-wait',
+  'enviada': 'is-wait',
+  'rechazada': 'is-bad',
+  'borrador': 'is-muted',
+  'sin_movimiento': 'is-muted'
+} %}
+{% set estado_txt = {
+  'aceptada': _('Aceptada'),
+  'recibida': _('Por revisar'),
+  'enviada': _('Enviada'),
+  'rechazada': _('Rechazada'),
+  'borrador': _('Borrador'),
+  'sin_movimiento': _('Sin movimiento')
+} %}
+{% set entrantes = filas|selectattr('requiere_accion')|list|length %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact cert-page">
+    <header class="cert-hero">
+      <div class="cert-hero-copy">
+        <p class="cert-kicker">{{ company.nombre }}</p>
+        <h1>{{ _('Certificación de horario') }}</h1>
+        <p class="cert-hero-sub">{{ _('Entra en una obra para revisar horas, enviar tu propuesta o aceptar la de la oficina.') }}</p>
+      </div>
+      {% set cert_period_prev_url = url_for('subcontrata.certificacion', anio=prev.anio, mes=prev.mes) %}
+      {% set cert_period_next_url = url_for('subcontrata.certificacion', anio=next.anio, mes=next.mes) %}
+      {% set cert_period_clear_url = url_for('subcontrata.certificacion', anio=anio, mes=mes) %}
+      {% if entrantes %}
+      {% set cert_period_status = entrantes ~ ' ' ~ _('por revisar') %}
+      {% set cert_period_status_cls = 'is-wait' %}
+      {% else %}
+      {% set cert_period_status = filas|length ~ ' ' ~ _('obras') %}
+      {% set cert_period_status_cls = 'is-muted' %}
+      {% endif %}
+      {% set cert_period_hidden = {} %}
+      {% set desde = none %}
+      {% set hasta = none %}
+      {% include "compliance/_cert_periodo.html" %}
+      <div class="cert-hero-tools">
+        <div class="cert-hero-nav">
+          <a class="btn-admin btn-admin-ghost" href="{{ url_for('subcontrata.inicio') }}">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i> {{ _('Volver') }}
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <div class="cert-hub">
+      <label class="cert-hub-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="search" id="cert-filtro" placeholder="{{ _('Buscar obra…') }}" autocomplete="off">
+      </label>
+      <span class="cert-hub-count" id="cert-filtro-count">{{ filas|length }}</span>
+    </div>
+
+    {% if filas %}
+    <div class="cert-hub-list" id="cert-lista">
+      {% for row in filas %}
+      {% set o = row.obra %}
+      {% set busca = (o.nombre or '')|lower %}
+      <a class="cert-hub-row {% if row.estado == 'recibida' %}is-action{% elif row.estado == 'rechazada' %}is-alert{% endif %}"
+         href="{{ url_for('subcontrata.certificacion_obra', obra_id=o.id, anio=anio, mes=mes) }}"
+         data-search="{{ busca }}">
+        <span class="cert-hub-ico" aria-hidden="true"><i class="fas fa-hard-hat"></i></span>
+        <span class="cert-hub-main">
+          <strong>
+            {% if row.estado == 'rechazada' %}<i class="fas fa-exclamation-circle cert-hub-alert" title="{{ _('Propuesta rechazada') }}" aria-hidden="true"></i> {% endif %}
+            {% if row.estado == 'recibida' %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" title="{{ _('Propuesta por revisar') }}" aria-hidden="true"></i> {% endif %}
+            {{ o.nombre }}
+          </strong>
+          <small>{{ estado_txt.get(row.estado, row.estado) }}</small>
+        </span>
+        <span class="cert-hub-vol">{{ row.horas }} h</span>
+        <span class="cert-pill {{ estado_cls.get(row.estado, 'is-muted') }}">{{ estado_txt.get(row.estado, row.estado) }}</span>
+        <span class="cert-hub-go" aria-hidden="true"><i class="fas fa-chevron-right"></i></span>
+      </a>
+      {% endfor %}
+    </div>
+    <p class="cert-hub-empty" id="cert-vacio" hidden>{{ _('Ningún resultado coincide con la búsqueda.') }}</p>
+    {% else %}
+    <div class="cert-empty">{{ _('No hay obras con fichaje tuyo en este periodo.') }}</div>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var input = document.getElementById('cert-filtro');
+  var list = document.getElementById('cert-lista');
+  var count = document.getElementById('cert-filtro-count');
+  var empty = document.getElementById('cert-vacio');
+  if (!input || !list) return;
+  var rows = Array.prototype.slice.call(list.querySelectorAll('.cert-hub-row'));
+  function paint() {
+    var q = (input.value || '').trim().toLowerCase();
+    var shown = 0;
+    rows.forEach(function (row) {
+      var ok = !q || (row.getAttribute('data-search') || '').indexOf(q) !== -1;
+      row.hidden = !ok;
+      if (ok) shown += 1;
+    });
+    if (count) count.textContent = String(shown);
+    if (empty) empty.hidden = shown > 0;
+  }
+  input.addEventListener('input', paint);
+})();
+</script>
+{% endblock %}

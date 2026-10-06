@@ -29,6 +29,17 @@ def _company_by_odoo_id(odoo_c_id):
     return Company.query.filter(Company.external_ids['odoo'].astext == str(odoo_c_id)).first()
 
 
+def _email_sync_seguro(user, email_nuevo: str) -> bool:
+    """No pisa un correo real del planner con el sintético de Odoo."""
+    from app.services.compliance_rules import email_es_real
+    email_nuevo = (email_nuevo or '').strip()
+    if not email_nuevo or email_nuevo == (user.email or ''):
+        return False
+    if email_es_real(user.email) and not email_es_real(email_nuevo):
+        return False
+    return not User.query.filter(User.email == email_nuevo, User.id != user.id).first()
+
+
 def _set_odoo_external_id(entity, odoo_id):
     ext_ids = dict(entity.external_ids or {})
     ext_ids['odoo'] = str(odoo_id)
@@ -268,10 +279,12 @@ def run_auto_sync_subcontratas(modo='Automático'):
                 choque = User.query.filter(User.dni == obj['dni'], User.id != user.id).first()
                 user.dni = f"{obj['dni']}-EXT{obj['odoo_id']}" if choque else obj['dni']
             email_nuevo = (obj.get('email') or '').strip()
-            if email_nuevo and email_nuevo != (user.email or ''):
-                if not User.query.filter(User.email == email_nuevo, User.id != user.id).first():
-                    user.email = email_nuevo
+            if _email_sync_seguro(user, email_nuevo):
+                user.email = email_nuevo
             user.categoria_profesional = obj.get('categoria_profesional')
+            if obj.get('role'):
+                from app.services.user_role_sync_service import apply_subcontrata_portal_role
+                apply_subcontrata_portal_role(user, obj['role'])
             odoo_c_id = obj.get('odoo_company_id')
             if odoo_c_id:
                 if odoo_c_id not in mapa_empresas:
@@ -326,6 +339,12 @@ def run_auto_sync_subcontratas(modo='Automático'):
                 reactivar(existente, commit=False)
             else:
                 existente.active = True
+            email_nuevo = (obj.get('email') or '').strip()
+            if _email_sync_seguro(existente, email_nuevo):
+                existente.email = email_nuevo
+            if obj.get('role'):
+                from app.services.user_role_sync_service import apply_subcontrata_portal_role
+                apply_subcontrata_portal_role(existente, obj['role'])
             dnis_en_tx.add(existente.dni)
             emails_en_tx.add(existente.email)
             continue
@@ -371,6 +390,9 @@ def run_auto_sync_subcontratas(modo='Automático'):
                 reactivar(existente, commit=False)
             else:
                 existente.active = True
+            if obj.get('role'):
+                from app.services.user_role_sync_service import apply_subcontrata_portal_role
+                apply_subcontrata_portal_role(existente, obj['role'])
             dnis_en_tx.add(existente.dni)
             emails_en_tx.add(existente.email)
 

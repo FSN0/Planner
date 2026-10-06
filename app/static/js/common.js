@@ -1057,7 +1057,7 @@ function initClickableTableRows(tableId) {
             if (href) window.location.href = href;
         }
         row.addEventListener('click', function(e) {
-            if (e.target.closest('a, button, input, select, textarea, label, .btn-table-action, .col-check, .table-actions, .jefe-trigger, .no-row-nav')) {
+            if (e.target.closest('a, button, input, select, textarea, label, .btn-table-action, .col-check, .table-actions, .row-actions, .jefe-trigger, .no-row-nav')) {
                 return;
             }
             go();

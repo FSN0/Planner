@@ -1,0 +1,549 @@
+=== CONTAINERS ===
+NAME                      IMAGE                   COMMAND                  SERVICE         CREATED        STATUS                    PORTS
+planner-caddy-1           caddy:2-alpine          "caddy run --config …"   caddy           3 days ago     Up 25 minutes             0.0.0.0:80->80/tcp, :::80->80/tcp, 0.0.0.0:443->443/tcp, :::443->443/tcp, 443/udp, 2019/tcp, 0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
+planner-celery_beat-1     planner-celery_beat     "celery -A app.celer…"   celery_beat     13 hours ago   Up 25 minutes             5000/tcp
+planner-celery_worker-1   planner-celery_worker   "celery -A app.celer…"   celery_worker   13 hours ago   Up 25 minutes             5000/tcp
+planner-db-1              postgres:13             "docker-entrypoint.s…"   db              3 days ago     Up 25 minutes (healthy)   0.0.0.0:5432->5432/tcp, :::5432->5432/tcp
+planner-redis-1           redis:6-alpine          "docker-entrypoint.s…"   redis           3 days ago     Up 25 minutes (healthy)   6379/tcp
+planner-web-1             planner-web             "python run.py"          web             13 hours ago   Up 25 minutes             5000/tcp
+=== SCHEMAS ===
+               schema_name               
+-----------------------------------------
+ public
+ tenant_bufalo_chape_fluide
+ tenant_elorn_plomberie_chauffage
+ tenant_elorn_plomberie_chauffage_29470
+ tenant_four_baruck
+ tenant_fresneda
+ tenant_gaboni_proyectos_y_servicios_inm
+ tenant_le_bras_amenagement
+ tenant_s2gp
+ tenant_soltec
+(10 rows)
+
+=== ALEMBIC + estado_odoo COLUMN per schema ===
+                 schema                  | has_estado_odoo | has_alembic 
+-----------------------------------------+-----------------+-------------
+ public                                  | f               | t
+ tenant_bufalo_chape_fluide              | t               | t
+ tenant_elorn_plomberie_chauffage        | t               | t
+ tenant_elorn_plomberie_chauffage_29470  | t               | t
+ tenant_four_baruck                      | t               | t
+ tenant_fresneda                         | t               | t
+ tenant_gaboni_proyectos_y_servicios_inm | t               | t
+ tenant_le_bras_amenagement              | t               | t
+ tenant_s2gp                             | t               | t
+ tenant_soltec                           | t               | t
+(10 rows)
+
+=== SCHEMA public: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA public: registros_fichajes estado_odoo counts ===
+(no registros_fichajes or no estado_odoo)
+=== SCHEMA public: DISTINCT estado_odoo ===
+=== SCHEMA public: certificacion_lineas estado_fichaje ===
+(no certificacion_lineas)
+=== SCHEMA tenant_bufalo_chape_fluide: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_bufalo_chape_fluide: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+     0 |           0 |               0
+(1 row)
+
+=== SCHEMA tenant_bufalo_chape_fluide: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+(0 rows)
+
+=== SCHEMA tenant_bufalo_chape_fluide: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+     1 |           1 |               0
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+             |     1
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage_29470: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage_29470: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+   152 |         152 |               0
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage_29470: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+             |   152
+(1 row)
+
+=== SCHEMA tenant_elorn_plomberie_chauffage_29470: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_four_baruck: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_four_baruck: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+     0 |           0 |               0
+(1 row)
+
+=== SCHEMA tenant_four_baruck: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+(0 rows)
+
+=== SCHEMA tenant_four_baruck: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_fresneda: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_fresneda: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+   173 |         173 |               0
+(1 row)
+
+=== SCHEMA tenant_fresneda: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+             |   173
+(1 row)
+
+=== SCHEMA tenant_fresneda: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_gaboni_proyectos_y_servicios_inm: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_gaboni_proyectos_y_servicios_inm: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+   200 |         200 |               0
+(1 row)
+
+=== SCHEMA tenant_gaboni_proyectos_y_servicios_inm: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+             |   200
+(1 row)
+
+=== SCHEMA tenant_gaboni_proyectos_y_servicios_inm: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_le_bras_amenagement: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_le_bras_amenagement: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+   190 |         190 |               0
+(1 row)
+
+=== SCHEMA tenant_le_bras_amenagement: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+             |   190
+(1 row)
+
+=== SCHEMA tenant_le_bras_amenagement: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_s2gp: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_s2gp: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+   199 |         199 |               0
+(1 row)
+
+=== SCHEMA tenant_s2gp: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+             |   199
+(1 row)
+
+=== SCHEMA tenant_s2gp: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+     0 |       0 |           0
+(1 row)
+
+=== SCHEMA tenant_soltec: alembic_version ===
+ version_num  
+--------------
+ c7d8e9f0a1b2
+(1 row)
+
+=== SCHEMA tenant_soltec: registros_fichajes estado_odoo counts ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+ 16158 |       16158 |               0
+(1 row)
+
+=== SCHEMA tenant_soltec: DISTINCT estado_odoo ===
+ estado_odoo | count 
+-------------+-------
+             | 16158
+(1 row)
+
+=== SCHEMA tenant_soltec: certificacion_lineas estado_fichaje ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+  3788 |    3788 |           0
+(1 row)
+
+=== SYNC LOG WARNINGS (campo estado fichaje) ===
+=== ODOO FIELD PROBE (web container) ===
+Traceback (most recent call last):
+  File "<stdin>", line 8, in <module>
+ImportError: cannot import name 'OdooSoltecAdapter' from 'app.sync.adapters.odoo_soltec' (/app/app/sync/adapters/odoo_soltec.py)
+=== ODOO FIELD PROBE (fixed Adapter API) ===
+WARNING:app.sync.adapters.odoo_soltec:Odoo hr.attendance: no se encontró campo estado draft/validated/invoiced. selections=['in_mode', 'out_mode', 'tipo_desplazamiento_e', 'tipo_desplazamiento_s']
+INFO:app.sync.adapters.odoo_soltec:Odoo partner.attendance: campo estado fichaje = state
+tenants: [(1, 'soltec', 'tenant_soltec', True), (16, 'fresneda', 'tenant_fresneda', False), (19, 'le-bras-amenagement', 'tenant_le_bras_amenagement', False), (21, 'bufalo-chape-fluide', 'tenant_bufalo_chape_fluide', False), (22, 'four-baruck', 'tenant_four_baruck', False), (23, 'gaboni-proyectos-y-servicios-inm', 'tenant_gaboni_proyectos_y_servicios_inm', False), (24, 'elorn-plomberie-chauffage', 'tenant_elorn_plomberie_chauffage', False), (25, 'elorn-plomberie-chauffage-29470', 'tenant_elorn_plomberie_chauffage_29470', False), (26, 's2gp', 'tenant_s2gp', False)]
+USING_TENANT: 1 soltec tenant_soltec
+ADAPTER_OK url= https://odoo.soltecgrupo.es db= db17-spain uid= 2
+
+==== hr.attendance ====
+MODEL_EXISTS: True
+FOUND_FIELD: None
+SELECTION_FIELDS_COUNT: 4
+[
+  {
+    "name": "in_mode",
+    "string": "Mode",
+    "selection_sample": [
+      [
+        "kiosk",
+        "Kiosk"
+      ],
+      [
+        "systray",
+        "Systray"
+      ],
+      [
+        "manual",
+        "Manual"
+      ]
+    ]
+  },
+  {
+    "name": "out_mode",
+    "string": "Out Mode",
+    "selection_sample": [
+      [
+        "kiosk",
+        "Kiosk"
+      ],
+      [
+        "systray",
+        "Systray"
+      ],
+      [
+        "manual",
+        "Manual"
+      ]
+    ]
+  },
+  {
+    "name": "tipo_desplazamiento_e",
+    "string": "DE",
+    "selection_sample": [
+      [
+        "dt",
+        "Directo"
+      ],
+      [
+        "dz",
+        "Desplazamiento"
+      ],
+      [
+        "gp",
+        "Voy a otra Obra"
+      ]
+    ]
+  },
+  {
+    "name": "tipo_desplazamiento_s",
+    "string": "DS",
+    "selection_sample": [
+      [
+        "dt",
+        "Directo"
+      ],
+      [
+        "dz",
+        "Desplazamiento"
+      ],
+      [
+        "gp",
+        "Voy a otra Obra"
+      ]
+    ]
+  }
+]
+ESTADO_LIKE_FIELDS_COUNT: 0
+[]
+
+==== partner.attendance ====
+MODEL_EXISTS: True
+FOUND_FIELD: state
+SELECTION_FIELDS_COUNT: 3
+[
+  {
+    "name": "activity_exception_decoration",
+    "string": "Activity Exception Decoration",
+    "selection_sample": [
+      [
+        "warning",
+        "Alert"
+      ],
+      [
+        "danger",
+        "Error"
+      ]
+    ]
+  },
+  {
+    "name": "activity_state",
+    "string": "Activity State",
+    "selection_sample": [
+      [
+        "overdue",
+        "Overdue"
+      ],
+      [
+        "today",
+        "Today"
+      ],
+      [
+        "planned",
+        "Planned"
+      ]
+    ]
+  },
+  {
+    "name": "state",
+    "string": "Estado",
+    "selection_sample": [
+      [
+        "draft",
+        "Borrador"
+      ],
+      [
+        "validated",
+        "Validado"
+      ],
+      [
+        "invoiced",
+        "Facturado"
+      ]
+    ]
+  }
+]
+ESTADO_LIKE_FIELDS_COUNT: 2
+[
+  {
+    "name": "activity_state",
+    "string": "Activity State",
+    "type": "selection",
+    "selection_sample": [
+      [
+        "overdue",
+        "Overdue"
+      ],
+      [
+        "today",
+        "Today"
+      ],
+      [
+        "planned",
+        "Planned"
+      ]
+    ]
+  },
+  {
+    "name": "state",
+    "string": "Estado",
+    "type": "selection",
+    "selection_sample": [
+      [
+        "draft",
+        "Borrador"
+      ],
+      [
+        "validated",
+        "Validado"
+      ],
+      [
+        "invoiced",
+        "Facturado"
+      ]
+    ]
+  }
+]
+=== LOG GREP EXTENDED ===
+=== DONE ===
+=== EXTRA SQL ===
+=== tenant_soltec.registros_fichajes columns related ===
+       column_name       |     data_type     
+-------------------------+-------------------
+ estado                  | character varying
+ estado_antes_resolucion | character varying
+ estado_odoo             | character varying
+ nota_odoo               | text
+ odoo_mod                | numeric
+ odoo_moe                | numeric
+ odoo_total_hh           | numeric
+ odoo_ud                 | numeric
+(8 rows)
+
+=== tenant_soltec totals null estado_odoo ===
+ total | null_estado | not_null_estado 
+-------+-------------+-----------------
+ 16158 |       16158 |               0
+(1 row)
+
+=== alembic all schemas ===
+    schema     | version_num  
+---------------+--------------
+ public        | c7d8e9f0a1b2
+ tenant_soltec | c7d8e9f0a1b2
+(2 rows)
+
+=== certificacion_lineas soltec ===
+ total | null_ef | not_null_ef 
+-------+---------+-------------
+  3788 |    3788 |           0
+(1 row)
+
+=== ODOO SAMPLE STATE ===
+hr.attendance fields containing state/estado: []
+partner.attendance fields containing state/estado: ['activity_state', 'state']
+partner.attendance sample state values:
+  {'id': 5494, 'state': 'draft', 'check_in': '2026-10-06 06:47:35', 'check_out': False}
+  {'id': 5493, 'state': 'draft', 'check_in': '2026-10-06 06:13:40', 'check_out': False}
+  {'id': 5492, 'state': 'draft', 'check_in': '2026-10-06 06:13:16', 'check_out': False}
+  {'id': 5491, 'state': 'draft', 'check_in': '2026-10-06 06:08:17', 'check_out': False}
+  {'id': 5490, 'state': 'draft', 'check_in': '2026-10-06 06:07:20', 'check_out': False}
+  {'id': 5489, 'state': 'draft', 'check_in': '2026-10-06 06:02:36', 'check_out': False}
+  {'id': 5488, 'state': 'draft', 'check_in': '2026-10-06 05:52:12', 'check_out': False}
+  {'id': 5487, 'state': 'draft', 'check_in': '2026-10-06 05:51:48', 'check_out': False}
+  {'id': 5486, 'state': 'draft', 'check_in': '2026-10-06 05:45:24', 'check_out': False}
+  {'id': 5485, 'state': 'draft', 'check_in': '2026-10-06 05:32:01', 'check_out': False}
+partner.attendance state counts: [{'state': 'draft', '__count': 310, '__domain': [['state', '=', 'draft']]}, {'state': 'invoiced', '__count': 469, '__domain': [['state', '=', 'invoiced']]}, {'state': 'validated', '__count': 111, '__domain': [['state', '=', 'validated']]}]
+hr.attendance count check_in>=2026-10-06: 82
+partner.attendance count check_in>=2026-10-06: 15
+=== ADAPTER get_fichajes_diarios PROBE ===
+WARNING:app.sync.adapters.odoo_soltec:Odoo hr.attendance: no se encontró campo estado draft/validated/invoiced. selections=['in_mode', 'out_mode', 'tipo_desplazamiento_e', 'tipo_desplazamiento_s']
+INFO:app.sync.adapters.odoo_soltec:Odoo partner.attendance: campo estado fichaje = state
+HAS_estado_odoo_in__append_attendance_fichaje: True
+hr field: None
+partner field: state
+get_fichajes_diarios count: 97
+estado_odoo distribution in adapter output: {'NULL': 82, 'borrador': 15}
+sample keys: ['autor', 'check_in', 'check_out', 'empleado_external_id', 'fecha', 'note', 'obra_external_id', 'odoo_mod', 'odoo_moe', 'odoo_total_hh', 'odoo_ud', 'origen_modelo', 'registro_external_id']
+ sample: {'odoo_id': None, 'estado_odoo': None, 'empleado_id': None, 'partner_id': None, 'nombre': None, 'check_in': '2026-10-06 07:31:21', 'tipo': None}
+ sample: {'odoo_id': None, 'estado_odoo': None, 'empleado_id': None, 'partner_id': None, 'nombre': None, 'check_in': '2026-10-06 07:22:20', 'tipo': None}
+ sample: {'odoo_id': None, 'estado_odoo': None, 'empleado_id': None, 'partner_id': None, 'nombre': None, 'check_in': '2026-10-06 06:47:58', 'tipo': None}
+ sample: {'odoo_id': None, 'estado_odoo': None, 'empleado_id': None, 'partner_id': None, 'nombre': None, 'check_in': '2026-10-06 06:41:25', 'tipo': None}
+ sample: {'odoo_id': None, 'estado_odoo': None, 'empleado_id': None, 'partner_id': None, 'nombre': None, 'check_in': '2026-10-06 06:30:05', 'tipo': None}
+rows with employee-ish id fields: 0
+non-null estado_odoo samples:
+  {'odoo_id': None, 'estado_odoo': 'borrador', 'nombre': None, 'check_in': '2026-10-06 06:47:35'}
+  {'odoo_id': None, 'estado_odoo': 'borrador', 'nombre': None, 'check_in': '2026-10-06 06:13:40'}
+  {'odoo_id': None, 'estado_odoo': 'borrador', 'nombre': None, 'check_in': '2026-10-06 06:13:16'}
+  {'odoo_id': None, 'estado_odoo': 'borrador', 'nombre': None, 'check_in': '2026-10-06 06:08:17'}
+  {'odoo_id': None, 'estado_odoo': 'borrador', 'nombre': None, 'check_in': '2026-10-06 06:07:20'}
+
+=== SUMMARY (generated) ===
+Containers: all up (web/celery/db/redis/caddy)
+Schemas: public + 9 tenants (NO tenant_paco)
+Column registros_fichajes.estado_odoo: EXISTS on all tenant_* schemas; NOT on public
+Alembic: c7d8e9f0a1b2 on public + all tenants (b6c7d8e9f0a1 applied; d8e9f0a1b2c3 NOT applied)
+registros_fichajes.estado_odoo: 100% NULL across all tenants with data
+  tenant_soltec: 16158 total / 16158 null / 0 not-null
+  tenant_s2gp: 199/199/0
+  tenant_le_bras_amenagement: 190/190/0
+  tenant_gaboni...: 200/200/0
+  tenant_fresneda: 173/173/0
+  tenant_elorn..._29470: 152/152/0
+  tenant_elorn...: 1/1/0
+certificacion_lineas.estado_fichaje: only tenant_soltec has rows: 3788/3788 null
+Odoo probe (tenant soltec, Adapter(tenant_id)):
+  hr.attendance: FOUND_FIELD=None (no state/estado field; selections: in_mode,out_mode,tipo_desplazamiento_*)
+  partner.attendance: FOUND_FIELD=state selection=[draft/Borrador, validated/Validado, invoiced/Facturado]
+  get_fichajes_diarios today: 97 rows -> estado_odoo NULL=82 (hr), borrador=15 (partner)
+Logs: warning "Odoo hr.attendance: no se encontró campo estado draft/validated/invoiced"
+Root cause hypothesis: Odoo hr.attendance (majority of fichajes) has no draft/validated/invoiced field,
+so adapter cannot populate estado_odoo; certificacion_lineas.estado_fichaje stays null.
+partner.attendance.state works, but is minority of volume and DB still all-null historically.

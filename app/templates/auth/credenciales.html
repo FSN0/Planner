@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="{{ current_locale|default('es') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ _('Crea tu acceso') }} — {{ g.current_tenant.nombre if g.current_tenant else 'SignaPlan' }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/brand/favicon-48.png') }}?v=20260807f" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261005aa">
+</head>
+<body class="gate">
+  <div class="gate-sky" aria-hidden="true"></div>
+  <main class="gate-wrap">
+    <div class="gate-brand">
+      {% if brand_logo_src %}
+      <img src="{{ brand_logo_src }}" alt="{{ g.current_tenant.nombre if g.current_tenant else 'SignaPlan' }}">
+      {% else %}
+      <img src="{{ url_for('static', filename='img/brand/logo-horizontal.svg') }}" alt="SignaPlan">
+      {% endif %}
+      {% if g.current_tenant %}<span>{{ g.current_tenant.nombre }}</span>{% endif %}
+    </div>
+    <section class="gate-card">
+      <p class="gate-kicker">{{ _('Alta nueva') }}</p>
+      <h1>{{ _('Crea tu acceso') }}</h1>
+      <p class="gate-lead">
+        {{ _('Hola') }} <span class="gate-name">{{ nombre }}</span>.
+        {{ _('Elige cómo vas a entrar. Con una de las dos basta; si quieres, puedes activar las dos.') }}
+      </p>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="gate-alert {% if category == 'success' %}ok{% endif %}">{{ _(message) }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="post" id="gate-form" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="gate-choices">
+          <div class="gate-choice" id="opt-pin">
+            <button type="button" class="gate-choice-hit" aria-pressed="false">
+              <i class="fas fa-th" aria-hidden="true"></i>
+              <strong>{{ _('PIN') }}</strong>
+              <small>{{ _('4 a 6 dígitos. Entras con tu DNI.') }}</small>
+            </button>
+            <div class="gate-field">
+              <label for="pin">{{ _('Tu PIN') }}</label>
+              <input id="pin" name="pin" inputmode="numeric" autocomplete="off" maxlength="6" pattern="[0-9]*" placeholder="····">
+            </div>
+          </div>
+          <div class="gate-choice" id="opt-pass">
+            <button type="button" class="gate-choice-hit" aria-pressed="false">
+              <i class="fas fa-key" aria-hidden="true"></i>
+              <strong>{{ _('Contraseña') }}</strong>
+              <small>{{ _('Mínimo 8 caracteres. Entras con tu correo.') }}</small>
+            </button>
+            <div class="gate-field">
+              <label for="password">{{ _('Tu contraseña') }}</label>
+              <input id="password" name="password" type="password" autocomplete="new-password" placeholder="········">
+            </div>
+          </div>
+        </div>
+        <p class="gate-error" id="gate-error" role="alert"></p>
+        <button class="gate-submit" type="submit" id="gate-submit">{{ _('Guardar y entrar') }}</button>
+        <p class="gate-note">{{ _('No hace falta rellenar las dos. Marca la que te resulte más fácil.') }}</p>
+      </form>
+    </section>
+  </main>
+  <script>
+    (function () {
+      var pinCard = document.getElementById('opt-pin');
+      var passCard = document.getElementById('opt-pass');
+      var pin = document.getElementById('pin');
+      var pass = document.getElementById('password');
+      var form = document.getElementById('gate-form');
+      var error = document.getElementById('gate-error');
+      var submit = document.getElementById('gate-submit');
+      form.classList.add('gate-ready');
+      var msgChoose = {{ _('Elige un PIN, una contraseña, o las dos.')|tojson }};
+      var msgPin = {{ _('El PIN tiene que tener entre 4 y 6 dígitos.')|tojson }};
+      var msgPass = {{ _('La contraseña debe tener al menos 8 caracteres.')|tojson }};
+
+      function on(card) { return card.classList.contains('is-on'); }
+      function paint() {
+        var ready = on(pinCard) || on(passCard);
+        submit.disabled = !ready;
+        pin.disabled = !on(pinCard);
+        pass.disabled = !on(passCard);
+      }
+      function toggle(card) {
+        card.classList.toggle('is-on');
+        var hit = card.querySelector('.gate-choice-hit');
+        if (hit) hit.setAttribute('aria-pressed', on(card) ? 'true' : 'false');
+        error.classList.remove('is-on');
+        paint();
+        if (on(card)) {
+          var field = card.querySelector('input');
+          if (field) field.focus();
+        }
+      }
+      pinCard.querySelector('.gate-choice-hit').addEventListener('click', function () { toggle(pinCard); });
+      passCard.querySelector('.gate-choice-hit').addEventListener('click', function () { toggle(passCard); });
+      paint();
+
+      form.addEventListener('submit', function (event) {
+        error.classList.remove('is-on');
+        if (!on(pinCard) && !on(passCard)) {
+          event.preventDefault();
+          error.textContent = msgChoose;
+          error.classList.add('is-on');
+          return;
+        }
+        if (on(pinCard) && !/^[0-9]{4,6}$/.test(pin.value.trim())) {
+          event.preventDefault();
+          error.textContent = msgPin;
+          error.classList.add('is-on');
+          pin.focus();
+          return;
+        }
+        if (on(passCard) && pass.value.trim().length < 8) {
+          event.preventDefault();
+          error.textContent = msgPass;
+          error.classList.add('is-on');
+          pass.focus();
+          return;
+        }
+        if (!on(pinCard)) pin.disabled = true;
+        if (!on(passCard)) pass.disabled = true;
+      });
+    })();
+  </script>
+</body>
+</html>

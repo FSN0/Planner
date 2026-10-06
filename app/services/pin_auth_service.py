@@ -19,6 +19,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app import db
 from app.models import (
     ROLE_ADMIN,
+    ROLE_ADMIN_SUBCONTRATA,
     ROLE_JEFE,
     ROLE_LABORAL,
     ROLE_OPERARIO,
@@ -27,7 +28,9 @@ from app.models import (
 )
 from app.services.i18n_service import translate, normalize_locale, get_locale, DEFAULT_LOCALE
 
-ROLES_CON_PIN = (ROLE_OPERARIO, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH)
+ROLES_CON_PIN = (
+    ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA, ROLE_JEFE, ROLE_ADMIN, ROLE_LABORAL, ROLE_RRHH,
+)
 
 PIN_MIN = 4
 PIN_MAX = 6
@@ -77,13 +80,8 @@ def generar_pin_aleatorio(longitud=4):
 
 
 def _email_parece_real(email):
-    email = (email or '').strip().lower()
-    if not email or '@' not in email:
-        return False
-    # Placeholders internos del alta rápida / demos
-    if email.endswith('@local.signaplan') or email.endswith('@demo.signaplan'):
-        return False
-    return True
+    from app.services.compliance_rules import email_es_real
+    return email_es_real(email)
 
 
 def asegurar_rol_con_pin(user):

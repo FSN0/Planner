@@ -173,11 +173,8 @@ def cortar_casa_de_obra(obra_id, fecha, autor_id=None, user_ids=None):
 def _operario_ids(user_ids=None):
     if user_ids is not None:
         return [int(uid) for uid in user_ids if uid]
-    return [
-        uid for (uid,) in User.query.filter_by(
-            role=ROLE_OPERARIO, active=True, is_deleted=False,
-        ).with_entities(User.id).all()
-    ]
+    from app.services.cuadrante_visibility import ids_cuadrante
+    return ids_cuadrante()
 
 
 def _cargar_contexto(user_ids, fecha_inicio, fecha_fin):

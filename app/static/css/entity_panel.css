@@ -103,6 +103,22 @@
   flex-wrap: wrap;
 }
 
+.entity-docs-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  margin-left: 0.35rem;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .entity-hero-accent {
   display: block;
   height: 6px;
@@ -545,6 +561,18 @@ a.entity-stat-card:hover {
 .entity-status-badge--active {
   background: rgba(34, 197, 94, 0.12);
   color: #166534;
+}
+.entity-status-badge--hidden {
+  background: rgba(59, 130, 246, 0.14);
+  color: #1d4ed8;
+}
+.entity-status-badge--hidden[title],
+.entity-status-badge--hiring {
+  cursor: help;
+}
+.entity-status-badge--hiring {
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
 }
 .entity-status-badge--inactive {
   background: rgba(239, 68, 68, 0.12);

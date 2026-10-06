@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Ajustes de documentación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Cumplimiento') }}</p>
+      <h1>{{ _('Ajustes de documentación') }}</h1>
+      <p>{{ _('Opciones de caducidad y avisos de documentación.') }}</p>
+      <div class="office-hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('admin.configuracion_global') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.catalogo') }}">{{ _('Catálogo') }}</a>
+      </div>
+    </section>
+
+    <div class="office-panel docs-settings-card">
+      <h3 class="hire-block-title" style="margin-top:0;">{{ _('Avisos de caducidad') }}</h3>
+      <p class="office-hire-meta">{{ _('Cuántos días antes de que caduque un documento lo cuentas como aviso (no como error).') }}</p>
+      <form method="post" class="docs-edit-row" style="margin-top:14px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="hire-field" style="flex:1;min-width:180px;margin:0;">
+          <span style="display:block;margin-bottom:6px;font-size:12px;font-weight:700;color:#475569;">{{ _('Días de aviso') }}</span>
+          <input type="number" min="0" max="365" name="aviso_dias" value="{{ aviso_dias }}" required>
+        </label>
+        <button class="office-hire-btn" type="submit" style="align-self:flex-end;">{{ _('Guardar') }}</button>
+      </form>
+    </div>
+  </main>
+</div>
+{% endblock %}

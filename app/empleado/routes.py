@@ -97,6 +97,8 @@ def _portal_jornada_guard():
         return None
     if not current_user.is_authenticated:
         return None
+    if request.endpoint in ('empleado.contratacion', 'empleado.mis_documentos'):
+        return None
     if not _puede_portal_jornada():
         flash(translate('No tienes acceso a esta sección.'), 'warning')
         return redirect(url_for('main.dashboard'))
@@ -441,3 +443,101 @@ def definir_pin():
         pin_user=pin_user,
         login_url=login_url,
     )
+
+
+@empleado_bp.route('/contratacion', methods=['GET', 'POST'])
+@login_required
+def contratacion():
+    """Alta abierta: solo sus datos y los documentos de su fase."""
+    from app.services.compliance_rules import email_es_real
+    from app.services.contratacion_service import actualizar_perfil
+    from app.services.documentacion_service import filas_persona
+    from app.services.tenant_branding_service import logo_data_uri
+    from app.models import DocumentoTipo
+
+    if not current_user.hiring_state:
+        return redirect(url_for('empleado.mis_documentos'))
+    if request.method == 'POST':
+        accion = request.form.get('accion') or 'perfil'
+        try:
+            if accion == 'perfil':
+                actualizar_perfil(current_user, request.form)
+            elif accion == 'subir':
+                from app.services.documentacion_service import subir_desde_request
+                tipo = DocumentoTipo.query.get_or_404(int(request.form['tipo_id']))
+                if int(tipo.fase_contratacion or 0) == 2 and current_user.hiring_state != 'fase2':
+                    raise ValueError(translate('Ese documento se pide en la fase 2, cuando la oficina valide la fase 1.'))
+                subir_desde_request(
+                    tipo,
+                    request,
+                    user_id=current_user.id,
+                    actor_id=current_user.id,
+                )
+            db.session.commit()
+            flash(translate('Guardado.'), 'success')
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+        return redirect(url_for('empleado.contratacion'))
+    from app.services.contratacion_service import refrescar_fase
+    from app.services.documentacion_service import filas_contratacion_activas
+    refrescar_fase(current_user)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return render_template(
+        'empleado/contratacion.html',
+        filas=filas_contratacion_activas(current_user),
+        email_real=email_es_real(current_user.email),
+        brand_logo_src=logo_data_uri(),
+    )
+
+
+@empleado_bp.route('/documentacion', methods=['GET', 'POST'])
+@login_required
+def mis_documentos():
+    from app.models import DocumentoTipo
+    from app.services.documentacion_service import filas_persona, subir
+    from app.services.permission_service import user_can
+    from app.services.tenant_modules import has_documentacion
+
+    if current_user.hiring_state:
+        return redirect(url_for('empleado.contratacion'))
+    if not has_documentacion() or not user_can(current_user, 'documentacion', 'r'):
+        abort(403)
+    if request.method == 'POST':
+        if not user_can(current_user, 'documentacion', 'w'):
+            abort(403)
+        try:
+            from app.services.documentacion_service import subir_desde_request
+            tipo = DocumentoTipo.query.get_or_404(int(request.form['tipo_id']))
+            subir_desde_request(
+                tipo,
+                request,
+                user_id=current_user.id,
+                actor_id=current_user.id,
+            )
+            db.session.commit()
+            flash(translate('Documento subido.'), 'success')
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+        return redirect(url_for('empleado.mis_documentos'))
+    return render_template('empleado/mis_documentos.html', filas=filas_persona(current_user))
+
+
+@empleado_bp.route('/documentacion/archivo/<int:aporte_id>')
+@login_required
+def archivo_propio(aporte_id):
+    from app.models import DocumentoAporte
+    from app.services.documentacion_service import ruta_aporte
+    from flask import send_file
+
+    aporte = DocumentoAporte.query.get_or_404(aporte_id)
+    if aporte.user_id != current_user.id:
+        abort(403)
+    path = ruta_aporte(aporte)
+    if not path:
+        abort(404)
+    return send_file(path, as_attachment=False, download_name=aporte.nombre_original or 'documento')

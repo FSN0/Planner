@@ -3,11 +3,83 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005pick">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261006acts2">
 {% endblock %}
 
 {% block wrapper %}
 {% set show_valoraciones = tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'r') %}
+{% macro personal_actions_menu(user, variante='interno') %}
+{# variante: interno | externo | eliminado #}
+<div class="row-actions table-actions" data-row-actions>
+  <button type="button" class="row-actions-toggle" aria-expanded="false" aria-haspopup="true"
+          title="{{ _('Acciones') }}" aria-label="{{ _('Acciones') }}">
+    <i class="fas fa-chevron-down" aria-hidden="true"></i>
+  </button>
+  <div class="row-actions-menu" hidden role="menu">
+    {% if variante == 'eliminado' %}
+    <a class="row-actions-item" role="menuitem" href="{{ url_for('admin.worker_panel', user_id=user.id) }}">
+      {{ _('Ver ficha') }}
+    </a>
+    {% if show_valoraciones %}
+    <a class="row-actions-item" role="menuitem" href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}">
+      {{ _('Valoraciones') }}
+    </a>
+    {% endif %}
+    {% else %}
+      {% if user_can(current_user, 'trabajadores', 'x') %}
+      <button type="button" class="row-actions-item reset-pwd-btn" role="menuitem"
+              data-userid="{{ user.id }}" data-username="{{ user.name }}">{{ _('Contraseña') }}</button>
+      {% if tenant_usa_acceso_pin %}
+      <button type="button" class="row-actions-item reset-pin-btn" role="menuitem"
+              data-userid="{{ user.id }}" data-username="{{ user.name }}">{{ _('PIN de fichaje') }}</button>
+      {% endif %}
+      {% endif %}
+      {% if user_can(current_user, 'trabajadores', 'w') %}
+      <a class="row-actions-item" role="menuitem" href="{{ url_with_back('admin.edit_operario', user_id=user.id) }}">{{ _('Editar') }}</a>
+      <button type="button" class="row-actions-item js-enviar-acceso" role="menuitem"
+              data-url="{{ url_for('admin.enviar_credenciales', user_id=user.id) }}"
+              data-csrf="{{ csrf_token() }}"
+              data-needs-email="{{ '1' if not email_es_real(user.email) else '0' }}">
+        {{ _('Enviar acceso') }}
+      </button>
+      {% if user.role in ('operario', 'admin_subcontrata') and not user.hiring_state %}
+      <form action="{{ url_for('admin.visible_cuadrante', user_id=user.id) }}" method="post" class="row-actions-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="visible" value="{{ '0' if user.visible_en_cuadrante else '1' }}">
+        <button type="submit" class="row-actions-item" role="menuitem">
+          {{ _('Ocultar del cuadrante') if user.visible_en_cuadrante else _('Mostrar en el cuadrante') }}
+        </button>
+      </form>
+      {% endif %}
+      {% endif %}
+      {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
+      <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" class="row-actions-form"
+            onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="row-actions-item" role="menuitem">{{ _('Entrar como') }}</button>
+      </form>
+      {% endif %}
+      {% if variante == 'externo' and view_mode == 'admin' %}
+      <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" class="row-actions-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="row-actions-item" role="menuitem">{{ _('Desactivar') }}</button>
+      </form>
+      {% endif %}
+      {% if variante == 'externo' and user_can(current_user, 'trabajadores', 'w') %}
+      <button type="button" class="row-actions-item schedule-btn" role="menuitem"
+              data-user-id="{{ user.id }}" data-action="deactivate">{{ _('Programar baja') }}</button>
+      {% endif %}
+      {% if user_can(current_user, 'trabajadores', 'w') %}
+      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" class="row-actions-form"
+            onsubmit="return confirm({{ (_('¿Eliminar definitivamente?') if variante == 'externo' else _('¿Eliminar usuario?'))|tojson }});">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="row-actions-item is-danger" role="menuitem">{{ _('Eliminar') }}</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
 
@@ -44,6 +116,11 @@
            class="btn-admin btn-admin-primary"
            data-tour="personal-nuevo">
           <i class="fas fa-plus"></i> {{ _('Nuevo') }}
+        </a>
+        {% endif %}
+        {% if user_can(current_user, 'contratacion', 'w') %}
+        <a href="{{ url_for('compliance.contratacion_nueva') }}" class="btn-admin btn-admin-ghost">
+          <i class="fas fa-user-plus"></i> {{ _('Nueva contratación') }}
         </a>
         {% endif %}
       </div>
@@ -174,34 +251,14 @@
                     </a>
                   </td>
                   {% endif %}
-                  <td class="col-status" data-sort-value="{{ 'activo' if user.active else 'inactivo' }}">
-                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
+                  <td class="col-status" data-sort-value="{% if user.hiring_state %}contratacion{% elif user.active and not user.visible_en_cuadrante and user.role in ('operario', 'admin_subcontrata') %}oculto{% elif user.active %}activo{% else %}inactivo{% endif %}">
+                    {% if user.hiring_state %}<span class="badge-soft badge-soft-amber">{{ _('Contratación') }}</span>
+                    {% elif user.active and not user.visible_en_cuadrante and user.role in ('operario', 'admin_subcontrata') %}<span class="badge-soft badge-soft-blue" title="{{ _('No aparece en el planificador ni en el tablero') }}"><span class="status-dot" style="background:#3b82f6;"></span> {{ _('Oculto') }}</span>
+                    {% elif user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
                     {% else %}<span class="badge-soft badge-soft-slate" title="{{ user.inactive_reason_label }}"><span class="status-dot gray"></span> {{ _('Inactivo') }}</span>{% endif %}
                   </td>
                   <td class="col-actions">
-                    <div class="table-actions">
-                      {% if user_can(current_user, 'trabajadores', 'x') %}
-                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
-                      {% if tenant_usa_acceso_pin %}
-                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
-                      {% endif %}
-                      {% endif %}
-                      {% if user_can(current_user, 'trabajadores', 'w') %}
-                      <a href="{{ url_with_back('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
-                      {% endif %}
-                      {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
-                      <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn-table-action" title="{{ _('Entrar como') }}"><i class="fas fa-user-secret"></i></button>
-                      </form>
-                      {% endif %}
-                      {% if user_can(current_user, 'trabajadores', 'w') %}
-                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar usuario?')|tojson }});">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>
-                      </form>
-                      {% endif %}
-                    </div>
+                    {{ personal_actions_menu(user, variante='interno') }}
                   </td>
                 </tr>
                 {% else %}
@@ -291,43 +348,14 @@
                     </a>
                   </td>
                   {% endif %}
-                  <td class="col-status" data-sort-value="{{ 'activo' if user.active else 'pendiente' }}">
-                    {% if user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
+                  <td class="col-status" data-sort-value="{% if user.hiring_state %}contratacion{% elif user.active and not user.visible_en_cuadrante and user.role in ('operario', 'admin_subcontrata') %}oculto{% elif user.active %}activo{% else %}pendiente{% endif %}">
+                    {% if user.hiring_state %}<span class="badge-soft badge-soft-amber">{{ _('Contratación') }}</span>
+                    {% elif user.active and not user.visible_en_cuadrante and user.role in ('operario', 'admin_subcontrata') %}<span class="badge-soft badge-soft-blue" title="{{ _('No aparece en el planificador ni en el tablero') }}"><span class="status-dot" style="background:#3b82f6;"></span> {{ _('Oculto') }}</span>
+                    {% elif user.active %}<span class="badge-soft badge-soft-green"><span class="status-dot green"></span> {{ _('Activo') }}</span>
                     {% else %}<span class="badge-soft badge-soft-amber"><span class="status-dot" style="background:#f59e0b;"></span> {{ _('Pendiente') }}</span>{% endif %}
                   </td>
                   <td class="col-actions">
-                    <div class="table-actions">
-                      {% if user_can(current_user, 'trabajadores', 'x') %}
-                      <button type="button" class="btn-table-action reset-pwd-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('Contraseña') }}"><i class="fas fa-key"></i></button>
-                      {% if tenant_usa_acceso_pin %}
-                      <button type="button" class="btn-table-action reset-pin-btn" data-userid="{{ user.id }}" data-username="{{ user.name }}" title="{{ _('PIN de fichaje') }}"><i class="fas fa-mobile-alt"></i></button>
-                      {% endif %}
-                      {% endif %}
-                      {% if user_can(current_user, 'trabajadores', 'w') %}
-                      <a href="{{ url_with_back('admin.edit_operario', user_id=user.id) }}" class="btn-table-action" title="{{ _('Editar') }}"><i class="fas fa-pencil-alt"></i></a>
-                      {% endif %}
-                      {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
-                      <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn-table-action" title="{{ _('Entrar como') }}"><i class="fas fa-user-secret"></i></button>
-                      </form>
-                      {% endif %}
-                      {% if view_mode == 'admin' %}
-                      <form action="{{ url_for('admin.deactivate_operario', user_id=user.id) }}" method="post" style="display:inline;">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn-table-action btn-table-action--warn" title="{{ _('Desactivar') }}"><i class="fas fa-ban"></i></button>
-                      </form>
-                      {% endif %}
-                      {% if user_can(current_user, 'trabajadores', 'w') %}
-                      <button type="button" class="btn-table-action btn-table-action--info schedule-btn" data-user-id="{{ user.id }}" data-action="deactivate" title="{{ _('Programar baja') }}"><i class="far fa-clock"></i></button>
-                      {% endif %}
-                      {% if user_can(current_user, 'trabajadores', 'w') %}
-                      <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="post" style="display:inline;" onsubmit="return confirm({{ _('¿Eliminar definitivamente?')|tojson }});">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="btn-table-action btn-table-action--danger" title="{{ _('Eliminar') }}"><i class="fas fa-trash"></i></button>
-                      </form>
-                      {% endif %}
-                    </div>
+                    {{ personal_actions_menu(user, variante='externo') }}
                   </td>
                 </tr>
                 {% else %}
@@ -401,12 +429,7 @@
                     {% if autor_nombre %}{{ autor_nombre }}{% else %}—{% endif %}
                   </td>
                   <td class="col-actions">
-                    <div class="table-actions">
-                      <a href="{{ url_for('admin.worker_panel', user_id=user.id) }}" class="btn-table-action" title="{{ _('Ver ficha') }}"><i class="fas fa-id-card"></i></a>
-                      {% if show_valoraciones %}
-                      <a href="{{ url_for('admin.worker_ratings_history', user_id=user.id) }}" class="btn-table-action" title="{{ _('Valoraciones') }}"><i class="fas fa-star"></i></a>
-                      {% endif %}
-                    </div>
+                    {{ personal_actions_menu(user, variante='eliminado') }}
                   </td>
                 </tr>
                 {% else %}
@@ -570,6 +593,115 @@ document.addEventListener("DOMContentLoaded", function() {
         $('#resetPinForm').attr('action', '/admin/reset_pin/' + $(this).data('userid'));
         $('#nuevoPinInput').val('').prop('required', true);
         $('#resetPinModal').modal('show');
+    });
+
+    function placeRowActionsMenu(wrap) {
+        var toggle = wrap.querySelector('.row-actions-toggle');
+        var menu = wrap._openMenu || wrap.querySelector('.row-actions-menu');
+        if (!toggle || !menu) return;
+        if (!menu._homeParent) menu._homeParent = wrap;
+        wrap._openMenu = menu;
+        document.body.appendChild(menu);
+        menu.hidden = false;
+        menu.classList.add('is-fixed-open');
+        var rect = toggle.getBoundingClientRect();
+        var mw = menu.offsetWidth || 200;
+        var mh = menu.offsetHeight || 180;
+        var top = rect.bottom + 4;
+        var left = rect.right - mw;
+        if (left < 8) left = 8;
+        if (left + mw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - mw - 8);
+        if (top + mh > window.innerHeight - 8) {
+            top = Math.max(8, rect.top - mh - 4);
+        }
+        menu.style.top = top + 'px';
+        menu.style.left = left + 'px';
+    }
+
+    function closeRowActions(except) {
+        document.querySelectorAll('[data-row-actions].is-open').forEach(function (wrap) {
+            if (except && wrap === except) return;
+            wrap.classList.remove('is-open');
+            var btn = wrap.querySelector('.row-actions-toggle');
+            var menu = wrap._openMenu || wrap.querySelector('.row-actions-menu');
+            if (btn) btn.setAttribute('aria-expanded', 'false');
+            if (menu) {
+                menu.hidden = true;
+                menu.classList.remove('is-fixed-open');
+                menu.style.top = '';
+                menu.style.left = '';
+                if (menu._homeParent) menu._homeParent.appendChild(menu);
+                wrap._openMenu = null;
+            }
+        });
+    }
+    document.addEventListener('click', function (ev) {
+        var toggle = ev.target.closest('.row-actions-toggle');
+        if (toggle) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            var wrap = toggle.closest('[data-row-actions]');
+            var willOpen = !wrap.classList.contains('is-open');
+            closeRowActions(willOpen ? wrap : null);
+            if (willOpen) {
+                wrap.classList.add('is-open');
+                toggle.setAttribute('aria-expanded', 'true');
+                placeRowActionsMenu(wrap);
+            }
+            return;
+        }
+        if (ev.target.closest('.row-actions-item')) {
+            closeRowActions();
+            return;
+        }
+        if (!ev.target.closest('[data-row-actions]') && !ev.target.closest('.row-actions-menu')) {
+            closeRowActions();
+        }
+    });
+    window.addEventListener('scroll', function () { closeRowActions(); }, true);
+    window.addEventListener('resize', function () { closeRowActions(); });
+
+    $(document).on('click', '.js-enviar-acceso', function () {
+        var btn = this;
+        var needsEmail = btn.getAttribute('data-needs-email') === '1';
+        function submitAccess(email) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = btn.getAttribute('data-url');
+            form.style.display = 'none';
+            var csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = 'csrf_token';
+            csrf.value = btn.getAttribute('data-csrf') || '';
+            form.appendChild(csrf);
+            if (email) {
+                var em = document.createElement('input');
+                em.type = 'hidden';
+                em.name = 'email';
+                em.value = email;
+                form.appendChild(em);
+            }
+            document.body.appendChild(form);
+            form.submit();
+        }
+        if (!needsEmail) {
+            submitAccess();
+            return;
+        }
+        Swal.fire({
+            title: {{ _('Correo para el acceso')|tojson }},
+            text: {{ _('Esta persona no tiene un correo real (p. ej. está pendiente). Escribe uno para enviarle el enlace de acceso.')|tojson }},
+            input: 'email',
+            inputPlaceholder: 'nombre@empresa.com',
+            showCancelButton: true,
+            confirmButtonText: {{ _('Enviar')|tojson }},
+            cancelButtonText: {{ _('Cancelar')|tojson }},
+            inputValidator: function (value) {
+                if (!value) return {{ _('Indica un correo.')|tojson }};
+            }
+        }).then(function (r) {
+            if (r.isConfirmed && r.value) submitAccess(r.value);
+        });
     });
 
     var hash = window.location.hash;

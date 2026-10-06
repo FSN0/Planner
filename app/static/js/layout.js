@@ -67,8 +67,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
     document.querySelectorAll("[data-sidebar-subtoggle]").forEach(function(btn) {
         btn.addEventListener("click", function(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
             if (document.documentElement.classList.contains("sidebar-config-mode")) {
-                ev.preventDefault();
                 return;
             }
             var group = btn.closest(".sidebar-nav-group");
@@ -76,6 +77,8 @@ document.addEventListener("DOMContentLoaded", function() {
             var willOpen = !group.classList.contains("is-open");
             group.classList.toggle("is-open", willOpen);
             btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+            // Evita el marco de foco del botón (raya blanca entre nombre y flecha).
+            if (typeof btn.blur === "function") btn.blur();
         });
     });
 
@@ -357,7 +360,7 @@ function initSidebarConfig() {
         }
         // En modo config, no navegar
         if (document.documentElement.classList.contains("sidebar-config-mode")) {
-            var link = ev.target.closest("a.sidebar-link");
+            var link = ev.target.closest("a.sidebar-link, a.sidebar-parent-main");
             if (link) {
                 ev.preventDefault();
             }

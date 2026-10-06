@@ -366,9 +366,10 @@ def api_free_workers():
         return jsonify({"success": False, "message": translate("Fecha inválida.")}), 400
 
     from app.services.inercia_service import ids_ocupados_en_fecha
+    from app.services.cuadrante_visibility import query_cuadrante
     busy_ids = ids_ocupados_en_fecha(selected)
     operarios = (
-        User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False)
+        query_cuadrante()
         .order_by(User.name, User.lastname)
         .all()
     )

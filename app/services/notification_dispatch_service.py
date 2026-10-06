@@ -13,6 +13,7 @@ from flask import current_app, g, has_request_context
 from app import db
 from app.models import (
     ROLE_ADMIN,
+    ROLE_ADMIN_SUBCONTRATA,
     ROLE_JEFE,
     ROLE_LABORAL,
     ROLE_RRHH,
@@ -39,6 +40,7 @@ from app.services.notification_catalog import (
     MODE_OFF,
     NOTIFICATION_EVENTS,
     RECIPIENT_ADMIN,
+    RECIPIENT_ADMIN_SUBCONTRATA,
     RECIPIENT_JEFE,
     RECIPIENT_LABORAL,
     RECIPIENT_REQUESTER,
@@ -425,6 +427,7 @@ def matrix_for_ui() -> dict:
             lbl = 'Jefe obra'
         recipient_opts.append((rk, lbl))
     recipient_opts.extend([
+        (RECIPIENT_ADMIN_SUBCONTRATA, 'Admin subcontrata'),
         (RECIPIENT_TRABAJADOR, 'Trabajador'),
         (RECIPIENT_REQUESTER, 'Solicitante'),
         (RECIPIENT_TARGET, 'Destinatario'),
@@ -487,6 +490,9 @@ def resolve_recipients(
     worker_id=None,
     target_user_id=None,
     requester_user_id=None,
+    company_id=None,
+    include_office: bool = True,
+    include_subcontrata: bool = True,
 ) -> list[User]:
     st = get_event_settings(event_key)
     if st['mode'] == MODE_OFF:
@@ -495,7 +501,7 @@ def resolve_recipients(
     users = []
 
     # Jefe: destinatario contextual de la obra (no todos los del rol).
-    if RECIPIENT_JEFE in roles and obra_id:
+    if include_office and RECIPIENT_JEFE in roles and obra_id:
         obra = Obra.query.get(obra_id)
         if obra and obra.jefe_obra_id:
             jefe = User.query.get(obra.jefe_obra_id)
@@ -503,13 +509,24 @@ def resolve_recipients(
                 users.append(jefe)
 
     # Resto de roles de oficina / custom: todas las personas del rol (con include).
-    for rk in roles:
-        if rk in CONTEXTUAL_RECIPIENTS or rk == RECIPIENT_JEFE:
-            continue
-        users.extend(_filter_by_include(
-            User.query.filter_by(role=rk, active=True, is_deleted=False).all(),
-            rk,
-        ))
+    if include_office:
+        for rk in roles:
+            if rk in CONTEXTUAL_RECIPIENTS or rk == RECIPIENT_JEFE:
+                continue
+            users.extend(_filter_by_include(
+                User.query.filter_by(role=rk, active=True, is_deleted=False).all(),
+                rk,
+            ))
+
+    if include_subcontrata and RECIPIENT_ADMIN_SUBCONTRATA in roles and company_id:
+        users.extend(
+            User.query.filter_by(
+                role=ROLE_ADMIN_SUBCONTRATA,
+                company_id=company_id,
+                active=True,
+                is_deleted=False,
+            ).all()
+        )
 
     if RECIPIENT_TRABAJADOR in roles and worker_id:
         w = User.query.get(worker_id)
@@ -618,6 +635,9 @@ def dispatch_notification(
     worker_id=None,
     target_user_id=None,
     requester_user_id=None,
+    company_id=None,
+    include_office: bool = True,
+    include_subcontrata: bool = True,
     batch_key: str | None = None,
     users: list[User] | None = None,
 ):
@@ -632,6 +652,9 @@ def dispatch_notification(
         worker_id=worker_id,
         target_user_id=target_user_id,
         requester_user_id=requester_user_id,
+        company_id=company_id,
+        include_office=include_office,
+        include_subcontrata=include_subcontrata,
         batch_key=batch_key,
         users=users,
     )
@@ -648,6 +671,9 @@ def dispatch_localized(
     worker_id=None,
     target_user_id=None,
     requester_user_id=None,
+    company_id=None,
+    include_office: bool = True,
+    include_subcontrata: bool = True,
     batch_key: str | None = None,
     users: list[User] | None = None,
 ):
@@ -668,6 +694,9 @@ def dispatch_localized(
             worker_id=worker_id,
             target_user_id=target_user_id,
             requester_user_id=requester_user_id,
+            company_id=company_id,
+            include_office=include_office,
+            include_subcontrata=include_subcontrata,
         )
     else:
         # Deduplicar por email

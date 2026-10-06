@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ company.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006hero">
+{% endblock %}
+{% block wrapper %}
+{% set cert_txt = {
+  'aceptada': _('Aceptada'),
+  'recibida': _('Por revisar'),
+  'enviada': _('Enviada'),
+  'rechazada': _('Rechazada'),
+  'borrador': _('Borrador'),
+  'sin_movimiento': _('Sin movimiento')
+} %}
+{% set cert_cls = {
+  'aceptada': 'is-ok',
+  'recibida': 'is-wait',
+  'enviada': 'is-wait',
+  'rechazada': 'is-bad',
+  'borrador': 'is-muted',
+  'sin_movimiento': 'is-muted'
+} %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact cert-page">
+    <header class="cert-hero">
+      <div class="cert-hero-main">
+        <div class="cert-hero-copy">
+          <p class="cert-kicker">{{ _('Portal subcontrata') }}</p>
+          <h1>{{ company.nombre }}</h1>
+          <p class="cert-hero-sub">{{ _('Resumen de hoy y del mes. Sin horas ni importes hasta que haya certificaciones enviadas.') }}</p>
+        </div>
+        <div class="cert-hero-side">
+          <div class="cert-meta-item">
+            <span>{{ _('Hoy') }}</span>
+            <strong>{{ datos.hoy.strftime('%d/%m/%Y') }}</strong>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="admin-card-grid sub-home-kpis">
+      <div class="admin-stat-card">
+        <span class="admin-stat-label">{{ _('En obra hoy') }}</span>
+        <span class="admin-stat-value">{{ datos.en_obra_hoy }}</span>
+        <span class="admin-stat-caption">{{ _('personas con fichaje') }}</span>
+      </div>
+      <div class="admin-stat-card">
+        <span class="admin-stat-label">{{ _('Obras hoy') }}</span>
+        <span class="admin-stat-value">{{ datos.obras_hoy_count }}</span>
+        <span class="admin-stat-caption">{{ _('con personal tuyo') }}</span>
+      </div>
+      <a class="admin-stat-card" href="{{ url_for('subcontrata.certificacion') }}" style="text-decoration:none;color:inherit;">
+        <span class="admin-stat-label">{{ _('Certificación') }}</span>
+        <span class="admin-stat-value" style="font-size:1.1rem;">
+          <span class="cert-status {{ cert_cls.get(datos.certificacion, 'is-muted') }}">{{ cert_txt.get(datos.certificacion, datos.certificacion) }}</span>
+        </span>
+        <span class="admin-stat-caption">{{ _('mes en curso') }}</span>
+      </a>
+      <a class="admin-stat-card" href="{{ url_for('subcontrata.documentacion') }}" style="text-decoration:none;color:inherit;">
+        <span class="admin-stat-label">{{ _('Documentación') }}</span>
+        <span class="admin-stat-value">{{ datos.documentacion.errores }}</span>
+        <span class="admin-stat-caption">
+          {{ _('pendientes') }}
+          {% if datos.documentacion.avisos %} · {{ datos.documentacion.avisos }} {{ _('avisos') }}{% endif %}
+        </span>
+      </a>
+    </div>
+
+    <div class="admin-panels-grid sub-home-panels">
+      <section class="admin-panel">
+        <div class="admin-panel-header">
+          <h2 class="admin-panel-title">{{ _('Dónde están hoy') }}</h2>
+          <span class="admin-panel-subtitle">{{ datos.hoy.strftime('%d/%m/%Y') }}</span>
+        </div>
+        {% if datos.obras_hoy %}
+        <div class="sub-home-obras">
+          {% for obra in datos.obras_hoy %}
+          <div class="sub-home-obra">
+            <strong>{{ obra.obra }}</strong>
+            <ul>
+              {% for persona in obra.personas %}
+              <li>
+                <span>{{ persona.nombre }}</span>
+                {% if persona.verificado %}
+                <span class="badge-soft badge-soft-green">{{ _('Verificado') }}</span>
+                {% else %}
+                <span class="badge-soft badge-soft-slate">{{ _('Sin verificar') }}</span>
+                {% endif %}
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="sub-home-empty">{{ _('Hoy no hay fichajes de tu personal.') }}</p>
+        {% endif %}
+      </section>
+
+      <section class="admin-panel">
+        <div class="admin-panel-header">
+          <h2 class="admin-panel-title">{{ _('Este mes') }}</h2>
+        </div>
+        <div class="sub-home-mes-stats">
+          <div><strong>{{ datos.personas_mes }}</strong><span>{{ _('personas') }}</span></div>
+          <div><strong>{{ datos.obras_mes|length }}</strong><span>{{ _('obras') }}</span></div>
+          <div><strong>{{ datos.jornadas_mes }}</strong><span>{{ _('jornadas') }}</span></div>
+        </div>
+        {% if datos.obras_mes %}
+        <ul class="sub-home-mes-list">
+          {% for nombre in datos.obras_mes %}
+          <li>{{ nombre }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="sub-home-empty">{{ _('Aún no hay jornadas este mes.') }}</p>
+        {% endif %}
+        <div class="sub-home-actions">
+          <a class="btn-admin" href="{{ url_for('subcontrata.certificacion') }}">{{ _('Certificación') }}</a>
+          <a class="btn-admin btn-admin-ghost" href="{{ url_for('subcontrata.documentacion') }}">{{ _('Documentación') }}</a>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+{% endblock %}

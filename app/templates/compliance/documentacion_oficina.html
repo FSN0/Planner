@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Documentación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+{% set interna = panel.interna %}
+{% set subs = panel.subcontratas %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Cumplimiento') }}</p>
+      <h1>{{ _('Documentación') }}</h1>
+      <p>{{ _('Pulsa una tarjeta para abrir la ficha. La pelota cuenta subcontratas y casos a revisar, no a quien aún no ha subido nada.') }}</p>
+      <div class="office-docs-hero-stats">
+        <div>
+          <strong>{{ panel.errores }}</strong>
+          <span>{{ _('Con error') }}</span>
+        </div>
+        <div>
+          <strong>{{ panel.avisos }}</strong>
+          <span>{{ _('Aviso') }}</span>
+        </div>
+        <div>
+          <strong>{{ interna.total if interna else 0 }}</strong>
+          <span>{{ _('Internos') }}</span>
+        </div>
+        <div>
+          <strong>{{ subs|length }}</strong>
+          <span>{{ _('Subcontratas') }}</span>
+        </div>
+      </div>
+      <div class="office-hire-actions">
+        {% if user_can(current_user, 'documentacion', 'w') %}
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.catalogo') }}">{{ _('Catálogo') }}</a>
+        {% endif %}
+        {% if user_can(current_user, 'configuracion', 'w') %}
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.ajustes') }}">{{ _('Ajustes') }}</a>
+        {% endif %}
+      </div>
+    </section>
+
+    {# —— PERSONAL INTERNO —— #}
+    <h2 class="docs-section-title">{{ _('Personal interno') }}</h2>
+    {% if not interna or not interna.company %}
+    <div class="docs-empty docs-empty--card">{{ _('No hay empresa interna configurada.') }}</div>
+    {% else %}
+    <a class="docs-jump-card {% if interna.con_error %}is-alert{% elif interna.con_aviso %}is-warn{% endif %}"
+       href="{{ url_for('compliance.documentacion_empresa', company_id=interna.company.id) }}">
+      <span class="docs-block-ico"><i class="fas fa-user-tie"></i></span>
+      <span class="docs-jump-main">
+        <strong>{{ interna.company.nombre }}</strong>
+        <small>{{ interna.total }} {{ _('personas') }}</small>
+      </span>
+      <span class="docs-block-pills">
+        <span class="docs-pill docs-pill--danger">{{ interna.con_error }} {{ _('revisar') }}</span>
+        <span class="docs-pill">{{ interna.sin_expediente }} {{ _('sin expediente') }}</span>
+        <span class="docs-pill">{{ interna.en_contratacion }} {{ _('alta') }}</span>
+        <span class="docs-pill docs-pill--ok">{{ interna.al_dia }} {{ _('al día') }}</span>
+      </span>
+    </a>
+
+    {% if interna.personas_contratacion %}
+    <h3 class="docs-subhead">{{ _('En contratación') }}</h3>
+    <div class="docs-people">
+      {% for row in interna.personas_contratacion %}
+        {% include "compliance/_docs_persona_row.html" %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if interna.personas_plantilla_problema %}
+    <h3 class="docs-subhead">{{ _('Requieren revisión') }}</h3>
+    <div class="docs-people">
+      {% for row in interna.personas_plantilla_problema %}
+        {% include "compliance/_docs_persona_row.html" %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% endif %}
+
+    {# —— SUBCONTRATAS —— #}
+    <h2 class="docs-section-title">{{ _('Subcontratas con pendientes') }}</h2>
+    {% if not subs %}
+    <div class="docs-empty docs-empty--card">{{ _('Todas las subcontratas están al día.') }}</div>
+    {% else %}
+    <div class="docs-jump-grid">
+      {% for sub in subs %}
+      <a class="docs-jump-card {% if sub.empresa_errores or sub.empleados_con_error %}is-alert{% else %}is-warn{% endif %}"
+         href="{{ url_for('compliance.documentacion_empresa', company_id=sub.company.id) }}">
+        <span class="docs-block-ico docs-block-ico--firm"><i class="fas fa-industry"></i></span>
+        <span class="docs-jump-main">
+          <strong>{{ sub.company.nombre }}</strong>
+          <small>
+            {% if sub.empresa_errores %}{{ _('Falta documentación de la empresa') }}{% endif %}
+            {% if sub.empresa_errores and sub.empleados_con_error %} · {% endif %}
+            {% if sub.empleados_con_error %}{{ sub.empleados_con_error }} {{ _('empleados con error') }}{% endif %}
+            {% if not sub.empresa_errores and not sub.empleados_con_error %}{{ _('Caducidades próximas') }}{% endif %}
+          </small>
+        </span>
+        <span class="docs-block-pills">
+          {% if sub.empresa_errores %}
+          <span class="docs-pill docs-pill--danger">{{ _('Empresa') }} · {{ sub.empresa_errores }}</span>
+          {% endif %}
+          {% if sub.empleados_con_error %}
+          <span class="docs-pill docs-pill--danger">{{ sub.empleados_con_error }}/{{ sub.empleados_total }}</span>
+          {% endif %}
+          {% if sub.empresa_avisos or sub.empleados_con_aviso %}
+          <span class="docs-pill docs-pill--warn">!</span>
+          {% endif %}
+        </span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

@@ -144,6 +144,16 @@
           <span class="entity-type-marker"><i class="fas fa-hard-hat"></i> {{ _('Empleado') }}</span>
         </div>
         <div class="entity-panel-actions">
+          {% if user_can(current_user, 'documentacion', 'r') %}
+          <a href="{{ url_for('compliance.documentacion_empleado', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-folder-open"></i> {{ _('Documentación') }}
+          </a>
+          {% endif %}
+          {% if worker.hiring_state and user_can(current_user, 'contratacion', 'r') %}
+          <a href="{{ url_for('compliance.contratacion_ficha', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
+            {{ _('Contratación') }}
+          </a>
+          {% endif %}
           {% if user_can(current_user, 'trabajadores', 'w') %}
           <a href="{{ url_with_back('admin.edit_operario', user_id=worker.id) }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
@@ -226,7 +236,11 @@
             <div class="entity-meta-item">
               <span class="entity-meta-item-label">{{ _('Estado') }}</span>
               <span class="entity-meta-item-value">
-                {% if worker.active %}
+                {% if worker.hiring_state %}
+                  <span class="entity-status-badge entity-status-badge--hiring">{{ _('Contratación') }}</span>
+                {% elif worker.active and not worker.visible_en_cuadrante and worker.role in ('operario', 'admin_subcontrata') %}
+                  <span class="entity-status-badge entity-status-badge--hidden" title="{{ _('No aparece en el planificador ni en el tablero') }}">{{ _('Oculto del cuadrante') }}</span>
+                {% elif worker.active %}
                   <span class="entity-status-badge entity-status-badge--active">{{ _('Activo') }}</span>
                 {% else %}
                   <span class="entity-status-badge entity-status-badge--inactive"
@@ -272,8 +286,20 @@
             {% if tenant_has_valoraciones and worker.role != 'jefe_obra' and can_reset_valoraciones|default(false) and rcount > 0 %}
             <form action="{{ url_for('admin.reset_worker_ratings', user_id=worker.id) }}" method="POST" class="d-inline"
                   onsubmit="return confirm({{ _('¿Resetear contador a 0? Las valoraciones antiguas se guardarán en el historial.')|tojson }});">
-              <button type="submit" class="btn-admin btn-admin-ghost" title="{{ _('Resetear contador') }}">
-                <i class="fas fa-sync-alt"></i>
+              <button type="submit" class="btn-admin btn-admin-ghost"
+                      title="{{ _('Pone la reputación a 0; las notas antiguas siguen en el historial') }}">
+                <i class="fas fa-undo-alt"></i> {{ _('Resetear puntuación') }}
+              </button>
+            </form>
+            {% endif %}
+            {% if user_can(current_user, 'trabajadores', 'w') and not worker.hiring_state and worker.role in ('operario', 'admin_subcontrata') %}
+            <form action="{{ url_for('admin.visible_cuadrante', user_id=worker.id) }}" method="post" class="d-inline mb-0">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="visible" value="{{ '0' if worker.visible_en_cuadrante else '1' }}">
+              <button type="submit" class="btn-admin btn-admin-ghost"
+                      title="{{ _('Si está oculto, no sale en el planificador ni en el tablero') }}">
+                <i class="fas {{ 'fa-eye-slash' if worker.visible_en_cuadrante else 'fa-eye' }}"></i>
+                {{ _('Ocultar del cuadrante') if worker.visible_en_cuadrante else _('Mostrar en el cuadrante') }}
               </button>
             </form>
             {% endif %}

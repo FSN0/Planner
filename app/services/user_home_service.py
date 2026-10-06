@@ -7,6 +7,7 @@ from flask import url_for
 
 from app.models import (
     ROLE_ADMIN,
+    ROLE_ADMIN_SUBCONTRATA,
     ROLE_JEFE,
     ROLE_LABORAL,
     ROLE_OPERARIO,
@@ -36,6 +37,8 @@ _OFFICE_HOME_MODULES = (
     'soltec_alta_odoo',
     'soltec_portal',
     'primeros_pasos',
+    'documentacion',
+    'contratacion',
     'configuracion',
     'permisos',
     'logs',
@@ -64,6 +67,8 @@ _MODULE_ENDPOINTS: dict[str, str] = {
     'configuracion': 'admin.configuracion_global',
     'permisos': 'admin.permisos_roles',
     'logs': 'admin.system_logs',
+    'documentacion': 'compliance.documentacion',
+    'contratacion': 'compliance.contratacion_lista',
 }
 
 
@@ -119,7 +124,9 @@ def resolve_inicio_panel_url(user) -> str | None:
     if not user:
         return None
     role = getattr(user, 'role', None)
-    if role == ROLE_OPERARIO:
+    if role in (ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA):
+        return None
+    if getattr(user, 'hiring_state', None):
         return None
     if not user_can(user, 'inicio', 'r'):
         return None
@@ -172,6 +179,10 @@ def home_url_for_user(user) -> str | None:
         return None
 
     role = getattr(user, 'role', None)
+    if getattr(user, 'hiring_state', None):
+        return url_for('empleado.contratacion')
+    if role == ROLE_ADMIN_SUBCONTRATA:
+        return url_for('subcontrata.inicio')
     if role == ROLE_ADMIN:
         try:
             from app.services.onboarding_service import (

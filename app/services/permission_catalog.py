@@ -8,7 +8,14 @@ Capas:
 """
 from __future__ import annotations
 
-from app.models import ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_OPERARIO, ROLE_RRHH
+from app.models import (
+    ROLE_ADMIN,
+    ROLE_ADMIN_SUBCONTRATA,
+    ROLE_JEFE,
+    ROLE_LABORAL,
+    ROLE_OPERARIO,
+    ROLE_RRHH,
+)
 
 # (module_key, label, group)
 PERMISSION_MODULES = (
@@ -46,6 +53,9 @@ PERMISSION_MODULES = (
     ('configuracion', 'Configuración', 'Sistema'),
     ('permisos', 'Permisos por rol', 'Sistema'),
     ('logs', 'Logs', 'Sistema'),
+    ('documentacion', 'Documentación', 'Personal'),
+    ('certificacion', 'Certificación de horario', 'Personal'),
+    ('contratacion', 'Contratación', 'Personal'),
 )
 
 PORTAL_JORNADA_MODULES = frozenset({
@@ -66,6 +76,7 @@ PERMISSION_ROLES = (
     (ROLE_LABORAL, 'Laboral'),
     (ROLE_RRHH, 'RRHH'),
     (ROLE_OPERARIO, 'Operario'),
+    (ROLE_ADMIN_SUBCONTRATA, 'Admin subcontrata'),
 )
 
 # Ticks: un solo checkbox en UI (activado = r+w en BD)
@@ -91,8 +102,13 @@ SSO_READ_ONLY_MODULES = frozenset({'soltec_alta_odoo', 'soltec_portal'})
 ADMIN_LOCKED_MODULES = frozenset({'configuracion', 'permisos'})
 
 # Defaults históricos adaptados al modelo nuevo
+# Admin: casi todo, excepto portal propio (fichaje/calendario/ausencias del operario).
 _DEFAULTS = {
-    ROLE_ADMIN: {m: frozenset('rw') for m, _, _ in PERMISSION_MODULES},
+    ROLE_ADMIN: {
+        m: frozenset('rw')
+        for m, _, _ in PERMISSION_MODULES
+        if m not in PORTAL_JORNADA_MODULES
+    },
     ROLE_JEFE: {
         'inicio': frozenset('r'),
         'tablero': frozenset('r'),
@@ -114,6 +130,8 @@ _DEFAULTS = {
         'soltec_alta_odoo': frozenset('r'),
         'soltec_portal': frozenset('r'),
         'etiquetas': frozenset('r'),
+        'documentacion': frozenset('r'),
+        'certificacion': frozenset('rw'),
     },
     ROLE_LABORAL: {
         'inicio': frozenset('r'),
@@ -133,6 +151,9 @@ _DEFAULTS = {
         'valoraciones': frozenset('r'),
         'directorio': frozenset('r'),
         'etiquetas': frozenset('r'),
+        'documentacion': frozenset('rw'),
+        'certificacion': frozenset('rw'),
+        'contratacion': frozenset('rw'),
     },
     ROLE_RRHH: {
         'inicio': frozenset('r'),
@@ -152,12 +173,22 @@ _DEFAULTS = {
         'valoraciones': frozenset('r'),
         'directorio': frozenset('r'),
         'etiquetas': frozenset('r'),
+        'documentacion': frozenset('rw'),
+        'certificacion': frozenset('rw'),
+        'contratacion': frozenset('rw'),
     },
     ROLE_OPERARIO: {
         'operario_fichaje': frozenset('rw'),
         'operario_calendario': frozenset('r'),
         'operario_ausencias': frozenset('rw'),
         'etiquetas': frozenset('r'),
+        'documentacion': frozenset('rw'),
+    },
+    ROLE_ADMIN_SUBCONTRATA: {
+        'documentacion': frozenset('rw'),
+        'certificacion': frozenset('rw'),
+        'operario_fichaje': frozenset('rw'),
+        'operario_calendario': frozenset('r'),
     },
 }
 
@@ -218,6 +249,15 @@ def _permission_row_enabled(module: str, tenant=None) -> bool:
         return has_fichaje
     if module == 'registro_jornada':
         return has_registro
+    if module == 'documentacion':
+        from app.services.tenant_modules import has_documentacion
+        return has_documentacion(tenant)
+    if module == 'certificacion':
+        from app.services.tenant_modules import has_certificacion
+        return has_certificacion(tenant)
+    if module == 'contratacion':
+        from app.services.tenant_modules import has_contratacion
+        return has_contratacion(tenant)
     return True
 
 
@@ -308,6 +348,9 @@ MODULE_WRITE_HINTS = {
     'operario_fichaje': 'Fichar entrada, pausas y salida',
     'operario_calendario': 'Ver asignaciones propias en /fichaje',
     'operario_ausencias': 'Solicitar y consultar ausencias propias',
+    'documentacion': 'Validar, rechazar y definir qué documentos se piden',
+    'certificacion': 'Editar horas/precios y enviar, aceptar o rechazar la certificación',
+    'contratacion': 'Crear altas y validar la documentación de contratación',
 }
 
 MODULE_READ_HINTS = {
@@ -332,6 +375,9 @@ MODULE_READ_HINTS = {
     'operario_fichaje': 'Acceso a /fichaje para fichar',
     'operario_calendario': 'Ver el calendario propio en /fichaje',
     'operario_ausencias': 'Ver y pedir ausencias propias en /fichaje',
+    'documentacion': 'Ver el estado de la documentación',
+    'certificacion': 'Entrar al panel; el alcance filtra obras y empresas',
+    'contratacion': 'Seguir las altas que aún no están activas',
 }
 
 

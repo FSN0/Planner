@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Calendario') }} · {{ company.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/universal_calendar.css') }}?v=20260921past">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006a">
+<style>
+  .sub-cal-switch {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 0 0 14px;
+  }
+  .sub-cal-switch a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #475569;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+  .sub-cal-switch a:hover { border-color: #cbd5e1; color: #0f172a; }
+  .sub-cal-switch a.is-active {
+    background: #0f172a;
+    border-color: #0f172a;
+    color: #fff;
+  }
+  .sub-cal-wrap {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 12px;
+    min-height: 520px;
+  }
+</style>
+{% endblock %}
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Portal subcontrata') }}</p>
+      <h1>{{ _('Calendario') }}</h1>
+      <p>
+        {% if modo == 'personal' %}
+          {{ _('Tus asignaciones. Solo lectura.') }}
+        {% else %}
+          {{ _('Todo el personal de tu empresa y a qué obra va cada día. Solo lectura.') }}
+        {% endif %}
+      </p>
+      <div class="office-hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('subcontrata.inicio') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+      </div>
+    </section>
+
+    <nav class="sub-cal-switch" aria-label="{{ _('Vista del calendario') }}">
+      <a class="{% if modo == 'personal' %}is-active{% endif %}"
+         href="{{ url_for('subcontrata.calendario', modo='personal') }}">
+        <i class="fas fa-user" aria-hidden="true"></i> {{ _('Personal') }}
+      </a>
+      <a class="{% if modo == 'empresa' %}is-active{% endif %}"
+         href="{{ url_for('subcontrata.calendario', modo='empresa') }}">
+        <i class="fas fa-industry" aria-hidden="true"></i> {{ _('Empresa') }}
+      </a>
+    </nav>
+
+    <div class="sub-cal-wrap">
+      <div id="subcontrata-calendar" class="univ-calendar-root"></div>
+    </div>
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/locales-all.global.min.js"></script>
+<script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260921past"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var modo = {{ modo|tojson }};
+  if (modo === 'empresa') {
+    window.subcontrataCalendar = new UniversalCalendarManager('subcontrata-calendar', {
+      context: 'empresa',
+      id: {{ company.id }},
+      entityName: {{ company.nombre|tojson }},
+      mode: 'empleados',
+      hideTitle: true,
+      readonly: true,
+      selfService: true
+    });
+  } else {
+    window.subcontrataCalendar = new UniversalCalendarManager('subcontrata-calendar', {
+      context: 'worker',
+      id: {{ worker.id }},
+      entityName: {{ ((worker.name or '') ~ ' ' ~ (worker.lastname or ''))|tojson }},
+      mode: 'obras',
+      hideTitle: true,
+      readonly: true,
+      selfService: true
+    });
+  }
+});
+</script>
+{% endblock %}

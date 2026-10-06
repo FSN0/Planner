@@ -18,10 +18,12 @@ ROLE_JEFE = 'jefe_obra'
 ROLE_RRHH = 'rrhh'
 ROLE_ADMIN = 'admin'
 ROLE_LABORAL = 'laboral'
+# Admin de una subcontrata: portal de su empresa y, si se quiere, también operario.
+ROLE_ADMIN_SUBCONTRATA = 'admin_subcontrata'
 # RRHH = mismos permisos que laboral (hasta definir un ACL propio).
 ROLES_LABORAL_LIKE = (ROLE_LABORAL, ROLE_RRHH)
 # No se pueden renombrar ni borrar (comportamiento de la app).
-ROLES_SYSTEM_LOCKED = frozenset({ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO})
+ROLES_SYSTEM_LOCKED = frozenset({ROLE_ADMIN, ROLE_JEFE, ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA})
 # Roles de fábrica (siempre sembrados); laboral/rrhh sí se pueden renombrar.
 ROLES_BUILTIN = (
     ROLE_ADMIN,
@@ -29,7 +31,10 @@ ROLES_BUILTIN = (
     ROLE_LABORAL,
     ROLE_RRHH,
     ROLE_OPERARIO,
+    ROLE_ADMIN_SUBCONTRATA,
 )
+# Oficina: ocultos del cuadrante salvo que alguien les encienda el interruptor.
+ROLES_OCULTOS_CUADRANTE = frozenset({ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH})
 from sqlalchemy import event
 
 # Esta función se dispara cada vez que SQLAlchemy hace una consulta
@@ -154,6 +159,8 @@ class Company(db.Model):
     is_internal = db.Column(db.Boolean, nullable=False, default=False)
     # Archivo sin borrado: baja de subcontrata / sin personal activo.
     active = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
+    # Precio hora de certificación. Vacío = el de la plataforma.
+    precio_hora = db.Column(db.Numeric(10, 2), nullable=True)
     
     def __repr__(self):
         return f'<Company {self.nombre} ({self.code})>'
@@ -231,6 +238,20 @@ class User(UserMixin, db.Model):
     # pin | password | both — operario por defecto pin; oficina password.
     auth_mode = db.Column(
         db.String(16), nullable=False, default='password', server_default='password'
+    )
+    # Interruptor de cuadrante, independiente del rol.
+    visible_en_cuadrante = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='false'
+    )
+    # contratacion | fase2. Vacío = persona ya operativa (o nunca pasó por alta).
+    hiring_state = db.Column(db.String(20), nullable=True)
+    fecha_inicio = db.Column(db.Date, nullable=True)
+    telefono = db.Column(db.String(40), nullable=True)
+    talla_ropa = db.Column(db.String(40), nullable=True)
+    numero_cuenta = db.Column(db.String(64), nullable=True)
+    # Hueco para la firma del contrato. Sin pantalla todavía.
+    firma_contrato_estado = db.Column(
+        db.String(20), nullable=False, default='pendiente', server_default='pendiente'
     )
     
     # Configuración
@@ -363,7 +384,7 @@ class User(UserMixin, db.Model):
         self.scheduled_activation_date = None
         self.scheduled_deactivation_date = None
 
-        if self.role == ROLE_OPERARIO:
+        if self.role in (ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA):
             from app.models import Asignacion
             from app.services.core_assignment_service import CoreAssignmentService
             future_assignments = Asignacion.query.filter(
@@ -388,6 +409,16 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.email} - {self.role}>'
+
+
+@event.listens_for(User, 'init')
+def _user_visible_cuadrante_por_rol(target, args, kwargs):
+    """Oficina oculta; operario y admin de subcontrata visibles, salvo que se diga."""
+    if 'visible_en_cuadrante' in kwargs:
+        return
+    role = kwargs.get('role')
+    kwargs['visible_en_cuadrante'] = role in (ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA)
+
 
 from flask import g, session
 
@@ -630,6 +661,8 @@ class RegistroFichaje(db.Model):
     odoo_mod = db.Column(db.Numeric(12, 4), nullable=True)
     odoo_total_hh = db.Column(db.Numeric(12, 4), nullable=True)
     odoo_moe = db.Column(db.Numeric(12, 4), nullable=True)
+    # borrador | validado | facturado. Lo trae el sync si Odoo lo expone.
+    estado_odoo = db.Column(db.String(20), nullable=True)
     
     # Lo que decía tu aplicación
     obra_planificada_id = db.Column(db.Integer, db.ForeignKey('obras.id'), nullable=True)
@@ -1442,3 +1475,154 @@ class Etiqueta(db.Model):
 
     def __repr__(self):
         return f'<Etiqueta {self.tipo}:{self.nombre}>'
+
+
+class DocumentoTipo(db.Model):
+    """Plantilla de documento reutilizable en el tenant."""
+    __tablename__ = 'documento_tipos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(60), unique=True, nullable=True)
+    nombre = db.Column(db.String(200), nullable=False)
+    categoria = db.Column(db.String(80), nullable=False, default='General')
+    # empresa | empleado
+    ambito = db.Column(db.String(20), nullable=False)
+    # subcontrata | interno | ambos
+    audiencia = db.Column(db.String(20), nullable=False, default='ambos')
+    # ninguna | mensual | anual
+    regla_renovacion = db.Column(db.String(20), nullable=False, default='ninguna')
+    dia_renovacion = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+    mes_renovacion = db.Column(db.Integer, nullable=True)
+    es_sistema = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    # 0 = no es de contratación; 1 = primera tanda; 2 = art. 19 y reconocimiento.
+    fase_contratacion = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    bloquea_fase = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    obligatorio = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
+    # Se cumple con la certificación aceptada, no con un fichero.
+    es_certificacion = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    orden = db.Column(db.Integer, nullable=False, default=100, server_default='100')
+    # Activa: se puede usar, listar y notificar. Si está off, se conserva pero no se exige.
+    activo = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
+    # Por defecto: entra sola en la plantilla de empresa/empleados (si además está activa).
+    por_defecto = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
+    # JSON: [{"codigo":"anverso","nombre":"Por delante"}, ...] — vacío = un solo fichero.
+    slots_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+
+    def __repr__(self):
+        return f'<DocumentoTipo {self.codigo or self.nombre}>'
+
+
+class DocumentoExigencia(db.Model):
+    """Añadir o quitar una plantilla para una empresa, sus empleados o una persona."""
+    __tablename__ = 'documento_exigencias'
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo_id = db.Column(db.Integer, db.ForeignKey('documento_tipos.id', ondelete='CASCADE'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id', ondelete='CASCADE'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    # empresa | empleados | persona
+    destino = db.Column(db.String(20), nullable=False)
+    # anadir | excluir
+    modo = db.Column(db.String(20), nullable=False)
+    tipo = db.relationship('DocumentoTipo')
+    company = db.relationship('Company')
+    user = db.relationship('User')
+
+
+class DocumentoAporte(db.Model):
+    """Fichero subido. Solo uno vigente por tipo y sujeto."""
+    __tablename__ = 'documento_aportes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo_id = db.Column(db.Integer, db.ForeignKey('documento_tipos.id', ondelete='CASCADE'), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id', ondelete='CASCADE'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    archivo_path = db.Column(db.String(300), nullable=True)
+    nombre_original = db.Column(db.String(255), nullable=True)
+    nota = db.Column(db.Text, nullable=True)
+    # subido | validado | rechazado
+    estado = db.Column(db.String(20), nullable=False, default='subido')
+    nota_oficina = db.Column(db.Text, nullable=True)
+    caduca_el = db.Column(db.Date, nullable=True)
+    aceptado_caducado = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    validado_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    validado_at = db.Column(db.DateTime, nullable=True)
+    subido_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    version = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+    vigente = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
+    # Hueco de la plantilla (anverso, reverso…). Vacío si el tipo pide un solo fichero.
+    slot = db.Column(db.String(40), nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+
+    tipo = db.relationship('DocumentoTipo')
+    company = db.relationship('Company')
+    user = db.relationship('User', foreign_keys=[user_id])
+    validado_por = db.relationship('User', foreign_keys=[validado_por_id])
+
+
+class CertificacionPropuesta(db.Model):
+    """Propuesta de horas: una por empresa + obra + mes + dirección."""
+    __tablename__ = 'certificacion_propuestas'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'company_id', 'obra_id', 'anio', 'mes', 'direccion',
+            name='uq_cert_propuesta_obra_periodo',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id', ondelete='CASCADE'), nullable=False, index=True)
+    anio = db.Column(db.Integer, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    # subcontrata_a_empresa | empresa_a_subcontrata
+    direccion = db.Column(db.String(32), nullable=False)
+    # borrador | enviada | aceptada | cerrada
+    estado = db.Column(db.String(20), nullable=False, default='borrador')
+    comentario_rechazo = db.Column(db.Text, nullable=True)
+    enviada_at = db.Column(db.DateTime, nullable=True)
+    aceptada_at = db.Column(db.DateTime, nullable=True)
+    enviada_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    respondida_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now)
+
+    company = db.relationship('Company')
+    obra = db.relationship('Obra')
+    lineas = db.relationship(
+        'CertificacionLinea',
+        backref='propuesta',
+        cascade='all, delete-orphan',
+        order_by='CertificacionLinea.fecha',
+    )
+
+
+class CertificacionLinea(db.Model):
+    __tablename__ = 'certificacion_lineas'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'propuesta_id', 'user_id', 'obra_id', 'fecha',
+            name='uq_cert_linea',
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    propuesta_id = db.Column(
+        db.Integer, db.ForeignKey('certificacion_propuestas.id', ondelete='CASCADE'), nullable=False
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id', ondelete='CASCADE'), nullable=False)
+    fecha = db.Column(db.Date, nullable=False)
+    hora_inicio = db.Column(db.Time, nullable=True)
+    hora_fin = db.Column(db.Time, nullable=True)
+    horas = db.Column(db.Numeric(8, 2), nullable=True)
+    precio_hora = db.Column(db.Numeric(10, 2), nullable=True)
+    # vacio | fichaje | manual_tramo | manual_total
+    origen_horas = db.Column(db.String(20), nullable=False, default='vacio')
+    estado_fichaje = db.Column(db.String(20), nullable=True)
+    solape = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    discrepancia = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    nota_discrepancia = db.Column(db.Text, nullable=True)
+
+    user = db.relationship('User')
+    obra = db.relationship('Obra')

@@ -13,8 +13,13 @@ def test_catalog_has_business_and_access_events():
     assert 'desvio_fichaje' in keys
     assert 'acceso_pin' in keys
     assert 'hora_corte_reporte' in keys
+    assert 'cert_pendiente' in keys
+    assert 'cert_aceptada' in keys
+    assert 'cert_rechazada' in keys
+    assert 'cert_retirada' in keys
     assert get_event('asignacion')[3] == MODE_DEBOUNCE
     assert get_event('acceso_pin')[3] == MODE_IMMEDIATE
+    assert get_event('cert_pendiente')[3] == MODE_IMMEDIATE
 
 
 def test_legacy_key_normalizes():

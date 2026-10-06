@@ -27,9 +27,14 @@ def test_write_disabled_modules():
     assert 'vehiculos' not in BINARY_TICK_MODULES
 
 
-def test_admin_has_all_modules_rw():
+def test_admin_has_all_modules_rw_except_portal():
+    from app.services.permission_catalog import PORTAL_JORNADA_MODULES
+
     for module in module_keys():
-        assert default_actions(ROLE_ADMIN, module) == frozenset('rw')
+        if module in PORTAL_JORNADA_MODULES:
+            assert default_actions(ROLE_ADMIN, module) == frozenset()
+        else:
+            assert default_actions(ROLE_ADMIN, module) == frozenset('rw')
 
 
 def test_operario_portal_defaults():
@@ -111,7 +116,9 @@ def test_normalize_legacy_aliases():
 
 def test_default_matrix_rows_cover_all_roles_and_modules():
     rows = default_matrix_rows()
-    assert len(rows) == len(module_keys()) * 5
+    roles = {row['role'] for row in rows}
+    assert 'admin_subcontrata' in roles
+    assert len(rows) == len(module_keys()) * len(roles)
 
 
 def _keys_for(monkeypatch, sub, mods, jefes_directo=True):

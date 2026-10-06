@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Certificación') }} · {{ detalle.obra.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006stack">
+{% endblock %}
+{% block wrapper %}
+{% set meses = {
+  1: _('Enero'), 2: _('Febrero'), 3: _('Marzo'), 4: _('Abril'),
+  5: _('Mayo'), 6: _('Junio'), 7: _('Julio'), 8: _('Agosto'),
+  9: _('Septiembre'), 10: _('Octubre'), 11: _('Noviembre'), 12: _('Diciembre')
+} %}
+{% set estado_cls = {
+  'aceptada': 'is-ok',
+  'recibida': 'is-wait',
+  'enviada': 'is-wait',
+  'rechazada': 'is-bad',
+  'borrador': 'is-muted',
+  'sin_movimiento': 'is-muted'
+} %}
+{% set estado_txt = {
+  'aceptada': _('Aceptada'),
+  'recibida': _('Por revisar'),
+  'enviada': _('Enviada'),
+  'rechazada': _('Rechazada'),
+  'borrador': _('Borrador'),
+  'sin_movimiento': _('Sin movimiento')
+} %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact cert-page">
+    <header class="cert-hero">
+      <div class="cert-hero-copy">
+        <p class="cert-kicker">{{ _('Certificación por obra') }}</p>
+        <h1>{{ detalle.obra.nombre }}</h1>
+        <p class="cert-hero-sub">{{ _('Cada empresa tiene su propuesta independiente. Abre una para enviar, aceptar o rechazar.') }}</p>
+      </div>
+      {% set cert_period_prev_url = url_for('compliance.certificacion_obra', obra_id=detalle.obra.id, anio=prev.anio, mes=prev.mes, agrupacion=agrupacion) %}
+      {% set cert_period_next_url = url_for('compliance.certificacion_obra', obra_id=detalle.obra.id, anio=next.anio, mes=next.mes, agrupacion=agrupacion) %}
+      {% set cert_period_clear_url = url_for('compliance.certificacion_obra', obra_id=detalle.obra.id, anio=anio, mes=mes, agrupacion=agrupacion) %}
+      {% set cert_period_status = none %}
+      {% set cert_period_hidden = {} %}
+      {% include "compliance/_cert_periodo.html" %}
+      <div class="cert-hero-tools">
+        <div class="cert-hero-nav">
+          <a class="btn-admin btn-admin-ghost" href="{{ url_for('compliance.certificacion_lista', vista='obras', anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i> {{ _('Volver') }}
+          </a>
+        </div>
+        <div class="cert-view-tabs" role="tablist">
+          <a class="cert-view-tab {% if agrupacion == 'empresa' %}is-active{% endif %}"
+             href="{{ url_for('compliance.certificacion_obra', obra_id=detalle.obra.id, anio=anio, mes=mes, agrupacion='empresa', desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por empresa') }}</a>
+          <a class="cert-view-tab {% if agrupacion == 'fecha' %}is-active{% endif %}"
+             href="{{ url_for('compliance.certificacion_obra', obra_id=detalle.obra.id, anio=anio, mes=mes, agrupacion='fecha', desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por fecha') }}</a>
+        </div>
+        <div class="cert-hero-precio is-readonly">
+          <div class="cert-precio is-readonly">
+            <span class="cert-precio-label">{{ _('Total') }}</span>
+            <strong>{{ detalle.horas }} h · {{ detalle.importe }} €</strong>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    {% if agrupacion == 'empresa' %}
+      {% if detalle.empresas %}
+      <div class="cert-works">
+        {% for emp in detalle.empresas %}
+        {% set emp_open = emp.requiere_accion if emp.requiere_accion is defined else emp.estado in ('recibida', 'rechazada') %}
+        <details class="cert-work" {% if emp_open %}open{% endif %}>
+          <summary>
+            <span class="cert-work-name">
+              {% if emp.estado == 'rechazada' %}<i class="fas fa-exclamation-circle cert-hub-alert" aria-hidden="true"></i> {% endif %}
+              {% if emp.estado == 'recibida' %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" aria-hidden="true"></i> {% endif %}
+              {{ emp.company.nombre }}
+              <span class="cert-pill {{ estado_cls.get(emp.estado, 'is-muted') }}">{{ estado_txt.get(emp.estado, emp.estado) }}</span>
+              <a class="cert-obra-link"
+                 href="{{ url_for('compliance.certificacion_empresa_obra', company_id=emp.company.id, obra_id=detalle.obra.id, anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}"
+                 onclick="event.stopPropagation()">{{ _('Gestionar') }}</a>
+            </span>
+            <span class="cert-work-stats">{{ emp.horas }} h · {{ emp.importe }} €</span>
+          </summary>
+          <div class="cert-days">
+            {% for dia in emp.fechas %}
+            <details class="cert-day">
+              <summary>
+                <span>{{ dia.fecha.strftime('%d/%m/%Y') }}</span>
+                <span>{{ dia.horas }} h · {{ dia.importe }} €</span>
+              </summary>
+              <div class="cert-obra-people">
+                {% for p in dia.personas %}
+                <div class="cert-obra-person">
+                  <strong>{{ p.user.name }} {{ p.user.lastname }}</strong>
+                  <span>{{ p.horas }} h × {{ p.precio }} € = {{ p.importe }} €</span>
+                </div>
+                {% endfor %}
+              </div>
+            </details>
+            {% else %}
+            <div class="cert-empty">{{ _('Sin fichajes en el filtro; abre la propuesta para ver el mes completo.') }}</div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="cert-empty">{{ _('No hay fichajes de subcontratas en esta obra en el periodo.') }}</div>
+      {% endif %}
+    {% else %}
+      {% if detalle.fechas %}
+      <div class="cert-works">
+        {% for dia in detalle.fechas %}
+        <details class="cert-work">
+          <summary>
+            <span class="cert-work-name">{{ dia.fecha.strftime('%d/%m/%Y') }}</span>
+            <span class="cert-work-stats">{{ dia.horas }} h · {{ dia.importe }} €</span>
+          </summary>
+          <div class="cert-days">
+            {% for emp in dia.empresas %}
+            <details class="cert-day">
+              <summary>
+                <span>
+                  {{ emp.company.nombre }}
+                  <span class="cert-pill {{ estado_cls.get(emp.estado, 'is-muted') }}">{{ estado_txt.get(emp.estado, emp.estado) }}</span>
+                  <a class="cert-obra-link"
+                     href="{{ url_for('compliance.certificacion_empresa_obra', company_id=emp.company.id, obra_id=detalle.obra.id, anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}"
+                     onclick="event.stopPropagation()">{{ _('Gestionar') }}</a>
+                </span>
+                <span>{{ emp.horas }} h · {{ emp.importe }} €</span>
+              </summary>
+              <div class="cert-obra-people">
+                {% for p in emp.personas %}
+                <div class="cert-obra-person">
+                  <strong>{{ p.user.name }} {{ p.user.lastname }}</strong>
+                  <span>{{ p.horas }} h × {{ p.precio }} € = {{ p.importe }} €</span>
+                </div>
+                {% endfor %}
+              </div>
+            </details>
+            {% endfor %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="cert-empty">{{ _('No hay fichajes de subcontratas en esta obra en el periodo.') }}</div>
+      {% endif %}
+    {% endif %}
+  </main>
+</div>
+{% endblock %}

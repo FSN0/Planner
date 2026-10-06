@@ -18,6 +18,7 @@ RECIPIENT_JEFE = 'jefe'
 RECIPIENT_TRABAJADOR = 'trabajador'
 RECIPIENT_TARGET = 'target'       # usuario concreto (transaccional)
 RECIPIENT_REQUESTER = 'requester' # quien abrió la solicitud
+RECIPIENT_ADMIN_SUBCONTRATA = 'admin_subcontrata'  # contextual: admins de la empresa del aviso
 
 # (key, label, group, default_mode, default_recipients, allowed_modes, legacy_config_key)
 NOTIFICATION_EVENTS = (
@@ -57,6 +58,19 @@ NOTIFICATION_EVENTS = (
      MODE_IMMEDIATE, (RECIPIENT_TARGET,), (MODE_OFF, MODE_IMMEDIATE), None),
     ('marketing_contact', 'Formulario de contacto web', 'Acceso',
      MODE_IMMEDIATE, (RECIPIENT_ADMIN,), (MODE_OFF, MODE_IMMEDIATE), None),
+    # Certificación de horario (por obra)
+    ('cert_pendiente', 'Certificación: propuesta por revisar', 'Certificación',
+     MODE_IMMEDIATE, (RECIPIENT_ADMIN, RECIPIENT_JEFE, RECIPIENT_ADMIN_SUBCONTRATA),
+     (MODE_OFF, MODE_IMMEDIATE, MODE_DIGEST), None),
+    ('cert_aceptada', 'Certificación: propuesta aceptada', 'Certificación',
+     MODE_IMMEDIATE, (RECIPIENT_ADMIN, RECIPIENT_JEFE, RECIPIENT_ADMIN_SUBCONTRATA),
+     (MODE_OFF, MODE_IMMEDIATE, MODE_DIGEST), None),
+    ('cert_rechazada', 'Certificación: propuesta rechazada / devuelta', 'Certificación',
+     MODE_IMMEDIATE, (RECIPIENT_ADMIN, RECIPIENT_JEFE, RECIPIENT_ADMIN_SUBCONTRATA),
+     (MODE_OFF, MODE_IMMEDIATE, MODE_DIGEST), None),
+    ('cert_retirada', 'Certificación: propuesta retirada', 'Certificación',
+     MODE_IMMEDIATE, (RECIPIENT_ADMIN, RECIPIENT_JEFE, RECIPIENT_ADMIN_SUBCONTRATA),
+     (MODE_OFF, MODE_IMMEDIATE, MODE_DIGEST), None),
 )
 
 CONFIG_DEBOUNCE_MINUTES = 'notif.debounce_minutes'
@@ -71,6 +85,7 @@ CONTEXTUAL_RECIPIENTS = frozenset({
     RECIPIENT_TRABAJADOR,
     RECIPIENT_TARGET,
     RECIPIENT_REQUESTER,
+    RECIPIENT_ADMIN_SUBCONTRATA,
 })
 
 # Roles builtin de oficina (siempre en la matriz; los custom se añaden dinámicamente)
@@ -139,6 +154,21 @@ EVENT_HELP = {
     ),
     'marketing_contact': (
         'Aviso interno cuando alguien envía el formulario de contacto de la web pública.'
+    ),
+    'cert_pendiente': (
+        'Cuando una parte envía la propuesta de horas de una obra, avisa a la otra '
+        '(oficina / jefe de esa obra, o admin de la subcontrata).'
+    ),
+    'cert_aceptada': (
+        'Cuando se acepta (o autoacepta) la certificación de una obra, avisa a quien '
+        'había enviado esa propuesta.'
+    ),
+    'cert_rechazada': (
+        'Cuando se rechaza / devuelve una propuesta, avisa a quien la había enviado '
+        'para que la corrija y la vuelva a mandar.'
+    ),
+    'cert_retirada': (
+        'Cuando se cancela un envío (desenviar), avisa a quien estaba a punto de revisarla.'
     ),
 }
 

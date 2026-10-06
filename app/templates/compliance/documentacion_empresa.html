@@ -1,0 +1,541 @@
+{% extends "base.html" %}
+{% from "compliance/macros_doc.html" import fila_doc with context %}
+{% block title %}{{ company.nombre }} · {{ _('Documentación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+{% set puede_w = user_can(current_user, 'documentacion', 'w') %}
+{% set puede_contratacion = user_can(current_user, 'contratacion', 'r') %}
+{% set resumen_contratacion = resumen_contratacion|default([]) %}
+{% set err_emp = namespace(n=0) %}
+{% set pend_total = namespace(n=0) %}
+{% for item in resumen_empleados %}
+  {% if item.errores %}{% set err_emp.n = err_emp.n + 1 %}{% endif %}
+  {% set pend_total.n = pend_total.n + (item.errores or 0) %}
+{% endfor %}
+{% for item in resumen_contratacion %}
+  {% if item.errores %}{% set err_emp.n = err_emp.n + 1 %}{% endif %}
+  {% set pend_total.n = pend_total.n + (item.errores or 0) %}
+{% endfor %}
+{% set err_docs = namespace(n=0) %}
+{% for fila in filas %}
+  {% if fila.estado in ('falta','rechazado','caducado','pendiente_validar','cert_pendiente') %}{% set err_docs.n = err_docs.n + 1 %}{% endif %}
+{% endfor %}
+{% set pend_total.n = pend_total.n + err_docs.n %}
+{% set total_personas = (resumen_empleados|length) + (resumen_contratacion|length) %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs office-company-docs">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{% if company.is_internal %}{{ _('Empresa interna') }}{% else %}{{ _('Subcontrata') }}{% endif %}</p>
+      <h1>{{ company.nombre }}</h1>
+      <p>{{ _('Documentos de la empresa y estado de cada persona. Pulsa un cuadrado para validar o la persona para abrir su ficha.') }}</p>
+      {% if pend_total.n %}
+      <p class="docs-pending-banner">
+        <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+        {{ pend_total.n }} {{ _('documentos pendientes') }}
+        · {{ err_docs.n }} {{ _('de empresa') }}
+        · {{ pend_total.n - err_docs.n }} {{ _('de personas') }}
+      </p>
+      {% endif %}
+      <div class="office-docs-hero-stats">
+        <div>
+          <strong>{{ err_docs.n }}</strong>
+          <span>{{ _('Pendientes empresa') }}</span>
+        </div>
+        <div>
+          <strong>{{ err_emp.n }}</strong>
+          <span>{{ _('Personas con error') }}</span>
+        </div>
+        <div>
+          <strong>{{ total_personas }}</strong>
+          <span>{{ _('Personas') }}</span>
+        </div>
+        <div>
+          <strong>{{ resumen_contratacion|length }}</strong>
+          <span>{{ _('En contratación') }}</span>
+        </div>
+      </div>
+      <div class="office-hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.documentacion') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+        <a class="office-hire-btn ghost" href="{{ url_for('admin.company_panel', company_id=company.id) }}">{{ _('Ficha empresa') }}</a>
+        {% if puede_w %}
+        <button type="button" class="office-hire-btn" id="btn-exigencias">{{ _('Editar qué se pide') }}</button>
+        {% endif %}
+      </div>
+    </section>
+
+    <h2 class="docs-section-title">{{ _('Documentación de la empresa') }}</h2>
+    {% if not filas %}
+    <div class="docs-empty docs-empty--card">{{ _('No hay documentos exigidos a esta empresa.') }}</div>
+    {% else %}
+    <div class="hire-grid office-hire-docs">
+      {% for fila in filas if not fila.tipo.es_certificacion %}
+        {{ fila_doc(fila, puede_w, puede_w) }}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if resumen_contratacion %}
+    <h2 class="docs-section-title">{{ _('En contratación') }}</h2>
+    <div class="docs-people docs-people--rich" id="lista-contratacion">
+      {% for item in resumen_contratacion %}
+      {% set u = item.user %}
+      {% set iniciales = ((u.name or '?')[:1] ~ (u.lastname or '')[:1])|upper %}
+      {% set href_persona = url_for('compliance.contratacion_ficha', user_id=u.id) if puede_contratacion else url_for('compliance.documentacion_empleado', user_id=u.id) %}
+      <article class="docs-person-block {% if item.errores %}is-error{% elif item.avisos %}is-warn{% else %}is-ok{% endif %}"
+               data-persona="{{ u.id }}"
+               {% if persona_abierta and persona_abierta|string == u.id|string %}data-open="1"{% endif %}>
+        <div class="docs-person-row">
+          <a class="docs-person-link" href="{{ href_persona }}">
+            <span class="docs-person-avatar">{{ iniciales }}</span>
+            <span class="docs-person-main">
+              <strong>{{ u.name }} {{ u.lastname }}</strong>
+              <small>
+                {% if item.hiring_state == 'fase2' %}{{ _('Alta · fase 2') }}{% else %}{{ _('Alta · fase 1') }}{% endif %}
+                {% if item.errores %} · {{ item.errores }} {{ _('pendientes') }}{% endif %}
+              </small>
+            </span>
+          </a>
+          <div class="docs-doc-chips" role="list">
+            {% for fila in item.filas %}
+            {% set st = fila.estado %}
+            {% set label = fila.tipo.nombre ~ ' · ' ~ (
+              _('Validado') if st in ('ok','cert_ok') else
+              _('Por validar') if st == 'pendiente_validar' else
+              _('Caduca pronto') if st == 'por_caducar' else
+              _('Rechazado') if st == 'rechazado' else
+              _('Caducado') if st == 'caducado' else
+              _('Opcional') if st == 'opcional_vacio' else
+              _('Sin enviar')
+            ) %}
+            <button type="button"
+                    class="docs-doc-chip {% if st in ('ok','cert_ok','por_caducar') %}is-ok{% elif st == 'pendiente_validar' %}is-wait{% elif st == 'opcional_vacio' %}is-optional{% else %}is-bad{% endif %}"
+                    title="{{ label }}"
+                    aria-label="{{ label }}"
+                    data-chip
+                    data-target="panel-alta-{{ u.id }}-{{ fila.tipo.id }}"
+                    role="listitem">
+              {% if st in ('ok','cert_ok','por_caducar') %}
+                <i class="fas fa-check" aria-hidden="true"></i>
+              {% elif st == 'pendiente_validar' %}
+                <i class="fas fa-clock" aria-hidden="true"></i>
+              {% elif st == 'opcional_vacio' %}
+                <i class="fas fa-minus" aria-hidden="true"></i>
+              {% else %}
+                <i class="fas fa-times" aria-hidden="true"></i>
+              {% endif %}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% for fila in item.filas %}
+        <div class="docs-chip-panel" id="panel-alta-{{ u.id }}-{{ fila.tipo.id }}" hidden>
+          <div class="docs-chip-panel-head">
+            <strong>{{ fila.tipo.nombre }}</strong>
+            <button type="button" class="docs-chip-close" data-close>&times;</button>
+          </div>
+          <div class="hire-grid office-hire-docs docs-chip-panel-body">
+            {{ fila_doc(fila, puede_w, puede_w) }}
+          </div>
+          <input type="hidden" class="js-return-persona" value="{{ u.id }}">
+        </div>
+        {% endfor %}
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <h2 class="docs-section-title">{{ _('Personas') }}</h2>
+    {% if not resumen_empleados %}
+    <div class="docs-empty docs-empty--card">{{ _('No hay personas en plantilla en esta empresa.') }}</div>
+    {% else %}
+    <div class="docs-people-toolbar">
+      <label class="docs-people-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="search" id="filtro-personas" placeholder="{{ _('Buscar por nombre, apellidos o rol…') }}" autocomplete="off">
+      </label>
+      <span class="docs-people-count" id="filtro-personas-count">{{ resumen_empleados|length }}</span>
+    </div>
+    <div class="docs-people docs-people--rich" id="lista-personas">
+      {% for item in resumen_empleados %}
+      {% set u = item.user %}
+      {% set iniciales = ((u.name or '?')[:1] ~ (u.lastname or '')[:1])|upper %}
+      {% set busca = ((u.name or '') ~ ' ' ~ (u.lastname or '') ~ ' ' ~ (u.role or '') ~ ' ' ~ (u.dni or ''))|lower %}
+      <article class="docs-person-block {% if item.errores %}is-error{% elif item.avisos %}is-warn{% else %}is-ok{% endif %}"
+               data-search="{{ busca }}"
+               data-persona="{{ u.id }}"
+               {% if persona_abierta and persona_abierta|string == u.id|string %}data-open="1"{% endif %}>
+        <div class="docs-person-row">
+          <a class="docs-person-link" href="{{ url_for('compliance.documentacion_empleado', user_id=u.id) }}">
+            <span class="docs-person-avatar">{{ iniciales }}</span>
+            <span class="docs-person-main">
+              <strong>{{ u.name }} {{ u.lastname }}</strong>
+              <small>{{ role_label(u.role) if role_label is defined else u.role }}{% if item.errores %} · {{ item.errores }} {{ _('pendientes') }}{% endif %}</small>
+            </span>
+          </a>
+          <div class="docs-doc-chips" role="list">
+            {% for fila in item.filas %}
+            {% set st = fila.estado %}
+            {% set label = fila.tipo.nombre ~ ' · ' ~ (
+              _('Validado') if st in ('ok','cert_ok') else
+              _('Por validar') if st == 'pendiente_validar' else
+              _('Caduca pronto') if st == 'por_caducar' else
+              _('Rechazado') if st == 'rechazado' else
+              _('Caducado') if st == 'caducado' else
+              _('Opcional') if st == 'opcional_vacio' else
+              _('Sin enviar')
+            ) %}
+            <button type="button"
+                    class="docs-doc-chip {% if st in ('ok','cert_ok','por_caducar') %}is-ok{% elif st == 'pendiente_validar' %}is-wait{% elif st == 'opcional_vacio' %}is-optional{% else %}is-bad{% endif %}"
+                    title="{{ label }}"
+                    aria-label="{{ label }}"
+                    data-chip
+                    data-target="panel-{{ u.id }}-{{ fila.tipo.id }}"
+                    role="listitem">
+              {% if st in ('ok','cert_ok','por_caducar') %}
+                <i class="fas fa-check" aria-hidden="true"></i>
+              {% elif st == 'pendiente_validar' %}
+                <i class="fas fa-clock" aria-hidden="true"></i>
+              {% elif st == 'opcional_vacio' %}
+                <i class="fas fa-minus" aria-hidden="true"></i>
+              {% else %}
+                <i class="fas fa-times" aria-hidden="true"></i>
+              {% endif %}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% for fila in item.filas %}
+        <div class="docs-chip-panel" id="panel-{{ u.id }}-{{ fila.tipo.id }}" hidden>
+          <div class="docs-chip-panel-head">
+            <strong>{{ fila.tipo.nombre }}</strong>
+            <button type="button" class="docs-chip-close" data-close>&times;</button>
+          </div>
+          <div class="hire-grid office-hire-docs docs-chip-panel-body">
+            {{ fila_doc(fila, puede_w, puede_w) }}
+          </div>
+          {# return_persona hidden in forms via JS below #}
+          <input type="hidden" class="js-return-persona" value="{{ u.id }}">
+        </div>
+        {% endfor %}
+      </article>
+      {% endfor %}
+    </div>
+    <p class="docs-empty docs-empty--card" id="filtro-vacio" hidden>{{ _('Ninguna persona coincide con la búsqueda.') }}</p>
+    {% endif %}
+  </main>
+</div>
+
+{% if puede_w %}
+<dialog class="docs-modal" id="modal-exigencias" {% if abrir_exigencias %}data-autoopen="1"{% endif %}>
+  <div class="docs-modal-card">
+    <header class="docs-modal-head docs-modal-head--soft">
+      <div>
+        <p class="docs-modal-kicker">{{ _('Exigencias') }}</p>
+        <h2>{{ _('Qué se pide a') }} {{ company.nombre }}</h2>
+        <p class="docs-modal-lead">{{ _('Marca «Necesario» solo si quieres aviso cuando falte. Se puede guardar igual sin él.') }}</p>
+      </div>
+      <button type="button" class="docs-modal-x" id="cerrar-exigencias" aria-label="{{ _('Cerrar') }}">&times;</button>
+    </header>
+    <div class="docs-modal-body">
+      <section class="docs-modal-section docs-modal-section--empresa">
+        <h3 class="docs-modal-h">
+          <span class="docs-modal-h-ico" aria-hidden="true"><i class="fas fa-building"></i></span>
+          {% if company.is_internal %}{{ _('Empresa') }}{% else %}{{ _('Subcontrata') }}{% endif %}
+        </h3>
+        <ul class="docs-req-list">
+          {% for fila in filas if not fila.tipo.es_certificacion %}
+          <li class="docs-req-item">
+            <span class="docs-edit-name">
+              <strong>{{ fila.tipo.nombre }}</strong>
+              <small>{{ fila.tipo.categoria }}{% if fila.origen != 'generica' %} · {{ _('Extra') }}{% endif %}</small>
+            </span>
+            <form method="post" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}" class="docs-edit-flags">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="obligatorio">
+              <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
+              <label class="docs-switch" title="{{ _('Si falta, cuenta en avisos y pelota') }}">
+                <input type="checkbox" name="obligatorio" {% if fila.tipo.obligatorio %}checked{% endif %} onchange="this.form.submit()">
+                <span>{{ _('Necesario') }}</span>
+              </label>
+            </form>
+            {% if tipo_recien_creado(fila.tipo) %}
+            <form method="post" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="borrar_tipo">
+              <input type="hidden" name="destino" value="empresa">
+              <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
+              <button type="submit" class="docs-req-remove js-confirm-borrar"
+                      data-title="{{ _('¿Borrar esta plantilla?') }}"
+                      data-text="{{ _('Se eliminará del catálogo por completo. Solo es posible los primeros minutos tras crearla.') }}"
+                      data-confirm="{{ _('Sí, borrar') }}"
+                      title="{{ _('Borrar del catálogo (recién creada)') }}">
+                {{ _('Borrar') }}
+              </button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="excluir">
+              <input type="hidden" name="destino" value="empresa">
+              <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
+              <button type="submit" class="docs-req-remove">{{ _('Quitar') }}</button>
+            </form>
+            {% endif %}
+          </li>
+          {% else %}
+          <li class="docs-req-empty">{{ _('Ninguno todavía.') }}</li>
+          {% endfor %}
+        </ul>
+        {% if catalogo_empresa_add %}
+        <form method="post" class="docs-req-add" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="anadir">
+          <input type="hidden" name="destino" value="empresa">
+          <select name="tipo_id" required>
+            <option value="" disabled selected>{{ _('Elegir plantilla…') }}</option>
+            {% for tipo in catalogo_empresa_add %}
+            <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
+            {% endfor %}
+          </select>
+          <button class="office-hire-btn" type="submit">{{ _('Añadir') }}</button>
+        </form>
+        {% endif %}
+        <form method="post" class="docs-req-create" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="crear_y_anadir">
+          <input type="hidden" name="destino" value="empresa">
+          <input type="text" name="nombre" required maxlength="200" placeholder="{{ _('Nueva plantilla de empresa…') }}">
+          <button class="office-hire-btn" type="submit">{{ _('Guardar') }}</button>
+        </form>
+      </section>
+
+      <section class="docs-modal-section docs-modal-section--empleados">
+        <h3 class="docs-modal-h">
+          <span class="docs-modal-h-ico" aria-hidden="true"><i class="fas fa-id-card"></i></span>
+          {{ _('Empleados') }}
+        </h3>
+        <ul class="docs-req-list">
+          {% for tipo in plantilla_empleados %}
+          <li class="docs-req-item">
+            <span class="docs-edit-name">
+              <strong>{{ tipo.nombre }}</strong>
+              <small>{{ tipo.categoria }}</small>
+            </span>
+            <form method="post" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}" class="docs-edit-flags">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="obligatorio">
+              <input type="hidden" name="tipo_id" value="{{ tipo.id }}">
+              <label class="docs-switch" title="{{ _('Si falta, cuenta en avisos y pelota') }}">
+                <input type="checkbox" name="obligatorio" {% if tipo.obligatorio %}checked{% endif %} onchange="this.form.submit()">
+                <span>{{ _('Necesario') }}</span>
+              </label>
+            </form>
+            {% if tipo_recien_creado(tipo) %}
+            <form method="post" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="borrar_tipo">
+              <input type="hidden" name="destino" value="empleados">
+              <input type="hidden" name="tipo_id" value="{{ tipo.id }}">
+              <button type="submit" class="docs-req-remove js-confirm-borrar"
+                      data-title="{{ _('¿Borrar esta plantilla?') }}"
+                      data-text="{{ _('Se eliminará del catálogo por completo. Solo es posible los primeros minutos tras crearla.') }}"
+                      data-confirm="{{ _('Sí, borrar') }}"
+                      title="{{ _('Borrar del catálogo (recién creada)') }}">
+                {{ _('Borrar') }}
+              </button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="excluir">
+              <input type="hidden" name="destino" value="empleados">
+              <input type="hidden" name="tipo_id" value="{{ tipo.id }}">
+              <button type="submit" class="docs-req-remove">{{ _('Quitar') }}</button>
+            </form>
+            {% endif %}
+          </li>
+          {% else %}
+          <li class="docs-req-empty">{{ _('Ninguno todavía.') }}</li>
+          {% endfor %}
+        </ul>
+        {% if catalogo_empleado_add %}
+        <form method="post" class="docs-req-add" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="anadir">
+          <input type="hidden" name="destino" value="empleados">
+          <select name="tipo_id" required>
+            <option value="" disabled selected>{{ _('Elegir plantilla…') }}</option>
+            {% for tipo in catalogo_empleado_add %}
+            <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
+            {% endfor %}
+          </select>
+          <button class="office-hire-btn" type="submit">{{ _('Añadir') }}</button>
+        </form>
+        {% endif %}
+        <form method="post" class="docs-req-create" action="{{ url_for('compliance.documentacion_empresa', company_id=company.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="crear_y_anadir">
+          <input type="hidden" name="destino" value="empleados">
+          <input type="text" name="nombre" required maxlength="200" placeholder="{{ _('Nueva plantilla de empleado…') }}">
+          <button class="office-hire-btn" type="submit">{{ _('Guardar') }}</button>
+        </form>
+      </section>
+    </div>
+  </div>
+</dialog>
+{% endif %}
+
+<script>
+(function () {
+  var filtro = document.getElementById('filtro-personas');
+  var lista = document.getElementById('lista-personas');
+  var countEl = document.getElementById('filtro-personas-count');
+  var vacio = document.getElementById('filtro-vacio');
+  function aplicarFiltro() {
+    if (!lista) return;
+    var q = (filtro && filtro.value || '').trim().toLowerCase();
+    var visibles = 0;
+    lista.querySelectorAll('.docs-person-block').forEach(function (row) {
+      var ok = !q || (row.getAttribute('data-search') || '').indexOf(q) !== -1;
+      row.hidden = !ok;
+      if (ok) visibles += 1;
+    });
+    if (countEl) countEl.textContent = String(visibles);
+    if (vacio) vacio.hidden = visibles > 0;
+  }
+  if (filtro) filtro.addEventListener('input', aplicarFiltro);
+
+  function cerrarPaneles(exceptId) {
+    document.querySelectorAll('.docs-chip-panel').forEach(function (p) {
+      if (p.id !== exceptId) p.hidden = true;
+    });
+    document.querySelectorAll('.docs-doc-chip.is-open').forEach(function (c) {
+      if (c.getAttribute('data-target') !== exceptId) c.classList.remove('is-open');
+    });
+  }
+  document.querySelectorAll('[data-chip]').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var id = btn.getAttribute('data-target');
+      var panel = document.getElementById(id);
+      if (!panel) return;
+      var abrir = panel.hidden;
+      cerrarPaneles(abrir ? id : null);
+      panel.hidden = !abrir;
+      btn.classList.toggle('is-open', abrir);
+      if (abrir) {
+        var ret = panel.querySelector('.js-return-persona');
+        if (ret) {
+          panel.querySelectorAll('form').forEach(function (form) {
+            var existing = form.querySelector('input[name="return_persona"]');
+            if (!existing) {
+              var h = document.createElement('input');
+              h.type = 'hidden';
+              h.name = 'return_persona';
+              h.value = ret.value;
+              form.appendChild(h);
+            } else {
+              existing.value = ret.value;
+            }
+            if (!form.querySelector('input[name="user_id"]') && ret.value) {
+              var uid = document.createElement('input');
+              uid.type = 'hidden';
+              uid.name = 'user_id';
+              uid.value = ret.value;
+              form.appendChild(uid);
+            }
+          });
+        }
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  });
+  document.querySelectorAll('[data-close]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var panel = btn.closest('.docs-chip-panel');
+      if (!panel) return;
+      panel.hidden = true;
+      var chip = document.querySelector('[data-target="' + panel.id + '"]');
+      if (chip) chip.classList.remove('is-open');
+    });
+  });
+
+  var modal = document.getElementById('modal-exigencias');
+  var btnEx = document.getElementById('btn-exigencias');
+  var btnClose = document.getElementById('cerrar-exigencias');
+  function abrirModal() {
+    if (!modal) return;
+    if (typeof modal.showModal === 'function') modal.showModal();
+    else modal.setAttribute('open', '');
+  }
+  function cerrarModal() {
+    if (!modal) return;
+    if (typeof modal.close === 'function') modal.close();
+    else modal.removeAttribute('open');
+  }
+  if (btnEx) btnEx.addEventListener('click', abrirModal);
+  if (btnClose) btnClose.addEventListener('click', cerrarModal);
+  if (modal) {
+    modal.addEventListener('click', function (ev) {
+      if (ev.target === modal) cerrarModal();
+    });
+    if (modal.getAttribute('data-autoopen') === '1') abrirModal();
+  }
+
+  document.querySelectorAll('.docs-person-block[data-open="1"]').forEach(function (block) {
+    var first = block.querySelector('[data-chip]');
+    if (first) first.click();
+  });
+
+  document.querySelectorAll('.doc-pick input[type="file"]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      var label = input.parentElement.querySelector('.doc-pick-text');
+      if (!label) return;
+      var file = input.files && input.files[0];
+      label.textContent = file ? file.name : {{ _('Elegir')|tojson }};
+    });
+  });
+
+  document.querySelectorAll('.js-confirm-borrar').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var form = btn.closest('form');
+      if (!form || typeof Swal === 'undefined') {
+        if (form && window.confirm(btn.getAttribute('data-text') || '')) form.submit();
+        return;
+      }
+      var target = (modal && modal.open) ? modal : document.body;
+      Swal.fire({
+        target: target,
+        title: btn.getAttribute('data-title') || {{ _('¿Borrar?')|tojson }},
+        html: '<p style="margin:0;color:#475569;line-height:1.45;">'
+          + (btn.getAttribute('data-text') || '')
+          + '</p>',
+        icon: 'warning',
+        showCancelButton: true,
+        focusCancel: true,
+        confirmButtonText: btn.getAttribute('data-confirm') || {{ _('Sí, borrar')|tojson }},
+        cancelButtonText: {{ _('Cancelar')|tojson }},
+        customClass: {
+          popup: 'admin-swal-popup',
+          title: 'admin-swal-title',
+          htmlContainer: 'admin-swal-html',
+          actions: 'admin-swal-actions',
+          confirmButton: 'admin-swal-btn admin-swal-btn-danger',
+          cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+        },
+        buttonsStyling: false,
+      }).then(function (result) {
+        if (result && result.isConfirmed) form.submit();
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

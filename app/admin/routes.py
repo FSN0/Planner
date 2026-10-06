@@ -8,6 +8,7 @@ from app.models import (
     Obra,
     Asignacion,
     ROLE_ADMIN,
+    ROLE_ADMIN_SUBCONTRATA,
     ROLE_JEFE,
     ROLE_OPERARIO,
     ROLE_LABORAL,
@@ -184,6 +185,9 @@ def _bloquear_operario_en_admin():
         from app.auth.routes import destino_portal_operario
         flash(translate('Tu perfil no tiene acceso al panel de administración.'), 'warning')
         return redirect(destino_portal_operario(current_user))
+    if current_user.is_authenticated and current_user.role == ROLE_ADMIN_SUBCONTRATA:
+        flash(translate('Tu perfil entra por el panel de la subcontrata.'), 'warning')
+        return redirect(url_for('subcontrata.inicio'))
 
 
 _RETURN_TO_ENDPOINTS = {
@@ -1096,6 +1100,16 @@ def company_panel(company_id):
     company = Company.query.get_or_404(company_id)
     panel_stats = get_company_panel_stats(company)
 
+    docs_pendientes = None
+    try:
+        from app.services.tenant_modules import has_documentacion as mod_docs
+        if mod_docs() and user_can(current_user, 'documentacion', 'r'):
+            from app.services.documentacion_service import conteo_badge
+            err, avi = conteo_badge(company.id)
+            docs_pendientes = int(err) + int(avi)
+    except Exception:
+        docs_pendientes = None
+
     from app.utils.nav_back import resolve_back_url
     back_url = resolve_back_url('admin.companies')
     return render_template(
@@ -1107,6 +1121,7 @@ def company_panel(company_id):
         chart_14d_max=panel_stats["chart_14d_max"],
         avg_rating=panel_stats["avg_rating"],
         ratings_count=panel_stats["ratings_count"],
+        docs_pendientes=docs_pendientes,
     )
 
    
@@ -1189,11 +1204,8 @@ def solicitud_detail(solicitud_id):
     ignore_profile = request.args.get('ignore_profile') 
 
     if fecha_inicio and fecha_fin:
-        query = User.query.filter(
-            User.role == ROLE_OPERARIO, 
-            User.active.is_(True), 
-            User.is_deleted.is_(False)
-        )
+        from app.services.cuadrante_visibility import query_cuadrante
+        query = query_cuadrante()
         
         if not ignore_profile:
             # Eliminado el filtro estricto de categoría para sugerir a todos los trabajadores
@@ -2225,18 +2237,24 @@ def obras_detailed():
 @login_required
 @permission_required('trabajadores', 'r')
 def personal():
-    # 1. Usuarios INTERNOS (No operarios, O operarios de empresa interna)
+    roles_campo = (ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA)
+    # Internos: oficina, o gente de campo de la empresa propia (y altas sin empresa).
     internos = User.query.join(Company, User.company_id == Company.id, isouter=True).filter(
-        (User.role != ROLE_OPERARIO) | 
-        ((User.role == ROLE_OPERARIO) & (Company.is_internal == True)),
-        User.is_deleted == False
+        or_(
+            ~User.role.in_(roles_campo),
+            and_(
+                User.role.in_(roles_campo),
+                or_(Company.id.is_(None), Company.is_internal.is_(True)),
+            ),
+        ),
+        User.is_deleted == False,
     ).order_by(User.name).all()
 
-    # 2. Operarios EXTERNOS (Empresa con is_internal=False)
+    # Gente de campo de subcontrata (operario y admin de subcontrata).
     base_operarios = User.query.join(Company).filter(
-        User.role == ROLE_OPERARIO, 
-        Company.is_internal == False, 
-        User.is_deleted == False
+        User.role.in_(roles_campo),
+        Company.is_internal == False,
+        User.is_deleted == False,
     )
     
     # Filtro por empresa en la URL (?company_id=5)
@@ -3225,6 +3243,56 @@ def enviar_acceso_fichaje(user_id):
         flash(translate('No se ha podido enviar el acceso: {error}', error=exc), 'danger')
 
     return redirect(url_for('admin.edit_operario', user_id=user.id))
+
+
+@admin_bp.route("/enviar_credenciales/<int:user_id>", methods=["POST"])
+@login_required
+@permission_required('trabajadores', 'w')
+def enviar_credenciales(user_id):
+    """Manda el enlace para elegir PIN y/o contraseña. El correo hay que escribirlo."""
+    from app.services.acceso_credenciales_service import CredencialesError, enviar_enlace, url_credenciales
+    from app.services.compliance_rules import email_es_real
+
+    user = User.query.get_or_404(user_id)
+    email = (request.form.get('email') or '').strip().lower()
+    if email:
+        if not email_es_real(email):
+            flash(translate('Ese correo no sirve. Escribe uno real.'), 'danger')
+            return redirect(request.referrer or url_for('admin.personal'))
+        choque = User.query.filter(User.email == email, User.id != user.id).first()
+        if choque:
+            flash(translate('Ese correo ya está en otra ficha.'), 'danger')
+            return redirect(request.referrer or url_for('admin.personal'))
+        user.email = email
+        db.session.commit()
+    enlace = ''
+    try:
+        enlace = url_credenciales(user, g.current_tenant)
+    except Exception:
+        enlace = ''
+    try:
+        enviar_enlace(user, g.current_tenant)
+        flash(translate('Enlace enviado a {email}. También puedes copiarlo: {url}', email=user.email, url=enlace), 'success')
+    except CredencialesError as exc:
+        flash(translate('{error} {url}', error=exc, url=enlace), 'warning')
+    return redirect(request.referrer or url_for('admin.personal'))
+
+
+@admin_bp.route("/visible_cuadrante/<int:user_id>", methods=["POST"])
+@login_required
+@permission_required('trabajadores', 'w')
+def visible_cuadrante(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.hiring_state:
+        flash(translate('Sale al cuadrante cuando se finalice la contratación.'), 'warning')
+        return redirect(request.referrer or url_for('admin.personal'))
+    user.visible_en_cuadrante = request.form.get('visible') in ('1', 'on', 'true')
+    db.session.commit()
+    flash(
+        translate('Oculto del cuadrante.') if not user.visible_en_cuadrante else translate('Visible en el cuadrante.'),
+        'success',
+    )
+    return redirect(request.referrer or url_for('admin.personal'))
 
 
 @admin_bp.route("/enviar_informacion_acceso/<int:user_id>", methods=["POST"])
@@ -4399,7 +4467,11 @@ def search_workers():
         .filter(User.active.is_(True), User.is_deleted.is_(False))
     )
     if not plain:
-        query = query.filter(User.role == ROLE_OPERARIO)
+        from app.services.cuadrante_visibility import query_cuadrante
+        query = query_cuadrante().options(
+            joinedload(User.company_rel),
+            selectinload(User.etiquetas),
+        )
     if q:
         query = (
             query
@@ -4757,6 +4829,7 @@ def permisos_roles(role=None):
     )
     from app.services.panel_scope_service import (
         KIND_AUDITORIA,
+        KIND_CERTIFICACION,
         KIND_PLANIFICACION,
         KIND_SOLICITUDES,
         KIND_VALORACIONES,
@@ -4796,6 +4869,7 @@ def permisos_roles(role=None):
         KIND_AUDITORIA: translate('Auditoría fichajes / mapa'),
         KIND_SOLICITUDES: translate('Solicitudes (buzón)'),
         KIND_VALORACIONES: translate('Valoraciones'),
+        KIND_CERTIFICACION: translate('Certificación de horario'),
     }
     scope_option_sets = {
         KIND_VALORACIONES: [
@@ -4823,7 +4897,11 @@ def permisos_roles(role=None):
             'hint': (
                 translate('Qué valoraciones ve en historial, paneles y reputación.')
                 if kind == KIND_VALORACIONES
-                else None
+                else (
+                    translate('Qué obras (y empresas con fichaje en ellas) ve en certificación.')
+                    if kind == KIND_CERTIFICACION
+                    else None
+                )
             ),
         }
         if active == ROLE_JEFE and kind == KIND_PLANIFICACION:

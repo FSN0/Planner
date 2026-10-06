@@ -1,10 +1,11 @@
-"""Alcances de obras por rol (cuatro dimensiones independientes).
+"""Alcances de obras por rol (dimensiones independientes).
 
 Kinds:
 - planificacion → tablero, Gantt, directorio visible, planificar gente/flota, ausencias
 - auditoria_fichajes → auditoría + mapa de fichajes
 - solicitudes → buzón al resolver (personal y flota)
 - valoraciones → qué valoraciones ve (por autor): propias / jefes / todas
+- certificacion → qué obras (y por tanto empresas) ve en certificación de horario
 
 Matriz r/w = entrar/actuar. Alcance = qué obras (o qué autores en valoraciones) entran.
 """
@@ -21,7 +22,14 @@ KIND_PLANIFICACION = 'planificacion'
 KIND_AUDITORIA = 'auditoria_fichajes'
 KIND_SOLICITUDES = 'solicitudes'
 KIND_VALORACIONES = 'valoraciones'
-SCOPE_KINDS = (KIND_PLANIFICACION, KIND_AUDITORIA, KIND_SOLICITUDES, KIND_VALORACIONES)
+KIND_CERTIFICACION = 'certificacion'
+SCOPE_KINDS = (
+    KIND_PLANIFICACION,
+    KIND_AUDITORIA,
+    KIND_SOLICITUDES,
+    KIND_VALORACIONES,
+    KIND_CERTIFICACION,
+)
 
 # Compat: paneles antiguos → kind
 PANEL_PLANIFICADOR = 'planificador'
@@ -31,6 +39,7 @@ PANEL_OBRAS = 'obras'
 PANEL_SOLICITUDES = 'solicitudes'
 PANEL_MAPA = 'mapa_fichajes'
 PANEL_VALORACIONES = 'valoraciones'
+PANEL_CERTIFICACION = 'certificacion'
 PANELS = (
     PANEL_PLANIFICADOR,
     PANEL_TABLERO,
@@ -39,6 +48,7 @@ PANELS = (
     PANEL_SOLICITUDES,
     PANEL_MAPA,
     PANEL_VALORACIONES,
+    PANEL_CERTIFICACION,
 )
 
 SCOPE_NONE = 'none'
@@ -52,6 +62,7 @@ _LEGACY_FLAT_PREFIX = 'obra_scope.'  # obra_scope.{role} sin kind (v1 unified)
 _TRIPLE_MIGRATED = 'obra_scope._kinds_v1'
 _UNIFIED_MIGRATED = 'obra_scope._unified_v1'
 _VALORACIONES_KIND_MIGRATED = 'obra_scope._valoraciones_v1'
+_CERTIFICACION_KIND_MIGRATED = 'obra_scope._certificacion_v1'
 
 
 def _panel_to_kind(panel: str | None) -> str:
@@ -62,6 +73,8 @@ def _panel_to_kind(panel: str | None) -> str:
         return KIND_SOLICITUDES
     if p in (PANEL_VALORACIONES, KIND_VALORACIONES):
         return KIND_VALORACIONES
+    if p in (PANEL_CERTIFICACION, KIND_CERTIFICACION):
+        return KIND_CERTIFICACION
     return KIND_PLANIFICACION
 
 
@@ -200,10 +213,34 @@ def _ensure_valoraciones_kind():
     set_tenant_config(_VALORACIONES_KIND_MIGRATED, '1')
 
 
+def _ensure_certificacion_kind():
+    """Semilla del kind Certificación (independiente)."""
+    if get_tenant_config(_CERTIFICACION_KIND_MIGRATED, default=None):
+        return
+    try:
+        _ensure_kinds_migrated()
+        _ensure_valoraciones_kind()
+    except Exception:
+        pass
+    for role in _list_scope_roles():
+        if get_tenant_config(_config_key(KIND_CERTIFICACION, role), default=None):
+            continue
+        chosen = default_scope_for_role(role)
+        set_tenant_config(
+            _config_key(KIND_CERTIFICACION, role),
+            json.dumps({
+                'mode': chosen['mode'],
+                'jefe_ids': chosen.get('jefe_ids') or [],
+            }),
+        )
+    set_tenant_config(_CERTIFICACION_KIND_MIGRATED, '1')
+
+
 def get_role_scope(role: str, kind: str = KIND_PLANIFICACION) -> dict:
     try:
         _ensure_kinds_migrated()
         _ensure_valoraciones_kind()
+        _ensure_certificacion_kind()
     except Exception:
         pass
     role = (role or '').strip()
@@ -364,6 +401,20 @@ def rating_visible_to_user(user, rating) -> bool:
     if allowed is None:
         return True
     return int(getattr(rating, 'created_by_id', 0) or 0) in allowed
+
+
+def certificacion_obra_ids(user) -> Optional[Set[int]]:
+    """
+    Obras visibles en certificación.
+    None = todas; set vacío = ninguna; set = solo esas.
+    """
+    mode = user_scope_mode(user, KIND_CERTIFICACION)
+    if mode == 'none':
+        return set()
+    if mode == 'office':
+        return None
+    jefe_ids = user_custody_jefe_ids(user, KIND_CERTIFICACION)
+    return set(_obras_ids_for_custody_jefes(jefe_ids))
 
 
 def obra_in_planning_custody(user, obra) -> bool:

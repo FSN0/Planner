@@ -88,7 +88,9 @@
       {% if user_can(current_user, 'permisos', 'r') %}
       <a href="{{ url_for('admin.permisos_roles') }}">{{ _('Permisos por rol') }}</a>
       {% endif %}
-      <a href="#cfg-idioma">{{ _('Idioma') }}</a>
+      {% if user_can(current_user, 'configuracion', 'w') and user_can(current_user, 'documentacion', 'r') %}
+      <a href="{{ url_for('compliance.ajustes') }}">{{ _('Documentación') }}</a>
+      {% endif %}
     </nav>
 
     <div class="config-layout">
@@ -526,6 +528,7 @@
             {% set recipient_opts = notif_matrix.recipient_opts %}
             {% set target_events = ['acceso_pin','acceso_info','password_reset','signup_confirm','tenant_access_link'] %}
             {% set requester_events = ['sol_resuelta','sol_generica','sol_concreta','sol_vehiculo'] %}
+            {% set cert_events = ['cert_pendiente','cert_aceptada','cert_rechazada','cert_retirada'] %}
             {% set office_role_keys = notif_matrix.role_users|map(attribute='key')|list %}
 
             <div class="config-email-groups">
@@ -572,7 +575,9 @@
                             <span class="text-muted">—</span>
                           {% elif rk == 'requester' and ev.key not in requester_events %}
                             <span class="text-muted">—</span>
-                          {% elif rk == 'trabajador' and ev.key in ['sol_generica','hora_corte_reporte','marketing_contact'] %}
+                          {% elif rk == 'admin_subcontrata' and ev.key not in cert_events %}
+                            <span class="text-muted">—</span>
+                          {% elif rk == 'trabajador' and ev.key in ['sol_generica','hora_corte_reporte','marketing_contact'] + cert_events %}
                             <span class="text-muted">—</span>
                           {% elif rk == 'jefe' and ev.key in target_events + ['marketing_contact'] %}
                             <span class="text-muted">—</span>
@@ -604,7 +609,7 @@
           <div class="config-block-icon config-block-icon--slate"><i class="fas fa-building"></i></div>
           <div>
             <h2>{{ _('Marca e informes') }}</h2>
-            <p>{{ _('Imágenes y color de la franja lateral para los informes PDF de reuniones. El informe es un documento externo: solo título, resumen y transcripción.') }}</p>
+            <p>{{ _('Imágenes y color de la franja lateral para los informes PDF (reuniones y certificaciones).') }}</p>
           </div>
         </header>
         <div class="config-block-body">

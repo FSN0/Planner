@@ -13,7 +13,14 @@ from flask import has_request_context, request, url_for
 from flask_login import current_user
 
 from app import db
-from app.models import ROLE_JEFE, ROLE_OPERARIO
+from app.models import (
+    ROLE_ADMIN,
+    ROLE_ADMIN_SUBCONTRATA,
+    ROLE_JEFE,
+    ROLE_LABORAL,
+    ROLE_OPERARIO,
+    ROLE_RRHH,
+)
 from app.services.i18n_service import _
 from app.services.permission_service import is_laboral, user_can
 
@@ -45,6 +52,19 @@ ITEM_MI_FICHAJE = 'mi_fichaje'
 ITEM_MI_CALENDARIO = 'mi_calendario'
 ITEM_MI_HORAS = 'mi_horas'
 ITEM_MI_AUSENCIAS = 'mi_ausencias_portal'
+ITEM_DOCUMENTACION = 'documentacion'
+ITEM_CERTIFICACION = 'certificacion'
+ITEM_CONTRATACION = 'contratacion'
+ITEM_MI_DOCUMENTACION = 'mi_documentacion'
+
+# Roles de oficina: no usan el portal «mi calendario / fichaje / horas».
+_ROLES_OFICINA = frozenset({ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH})
+_PORTAL_NAV_ITEMS = frozenset({
+    ITEM_MI_FICHAJE,
+    ITEM_MI_CALENDARIO,
+    ITEM_MI_HORAS,
+    ITEM_MI_AUSENCIAS,
+})
 
 ALL_ITEM_KEYS = (
     ITEM_INICIO,
@@ -73,6 +93,10 @@ ALL_ITEM_KEYS = (
     ITEM_MI_CALENDARIO,
     ITEM_MI_HORAS,
     ITEM_MI_AUSENCIAS,
+    ITEM_DOCUMENTACION,
+    ITEM_CERTIFICACION,
+    ITEM_CONTRATACION,
+    ITEM_MI_DOCUMENTACION,
 )
 
 
@@ -86,6 +110,23 @@ def _operario_sections_blueprint() -> list[dict]:
                 ITEM_MI_CALENDARIO,
                 ITEM_MI_HORAS,
                 ITEM_MI_AUSENCIAS,
+                ITEM_MI_DOCUMENTACION,
+            ],
+        },
+    ]
+
+
+def _subcontrata_sections_blueprint() -> list[dict]:
+    return [
+        {
+            'id': 'sec_home',
+            'title': '',
+            'items': [
+                ITEM_INICIO,
+                ITEM_MI_FICHAJE,
+                ITEM_MI_CALENDARIO,
+                ITEM_DOCUMENTACION,
+                ITEM_CERTIFICACION,
             ],
         },
     ]
@@ -95,50 +136,59 @@ def _is_operario(user) -> bool:
     return getattr(user, 'role', None) == ROLE_OPERARIO
 
 
+def _is_admin_subcontrata(user) -> bool:
+    return getattr(user, 'role', None) == ROLE_ADMIN_SUBCONTRATA
+
+
+# Hijos absorbidos por un padre-grupo (no se pintan sueltos si el padre está).
+_GROUP_ABSORBS = {
+    ITEM_TRABAJADORES: frozenset({ITEM_AUSENCIAS, ITEM_CONTRATACION}),
+    ITEM_SUBCONTRATAS: frozenset({ITEM_CERTIFICACION}),
+    ITEM_FLOTA: frozenset({ITEM_COCHES_LIBRES, ITEM_AUDITORIA_VEH}),
+    ITEM_CONFIGURACION: frozenset({ITEM_PERMISOS}),
+    ITEM_INTEGRACIONES: frozenset({ITEM_ODOO_ALTA, ITEM_SOLTEC_PORTAL}),
+}
+
+
 def _default_sections_blueprint() -> list[dict]:
     """Estructura por defecto (títulos traducidos al construir)."""
     return [
-        {'id': 'sec_home', 'title': '', 'items': [
-            ITEM_INICIO,
-            ITEM_MI_FICHAJE,
-            ITEM_MI_CALENDARIO,
-            ITEM_MI_HORAS,
-            ITEM_MI_AUSENCIAS,
-        ]},
+        {
+            'id': 'sec_home',
+            'title': '',
+            'items': [ITEM_INICIO],
+        },
         {
             'id': 'sec_plan',
             'title': str(_('Planificación')),
-            'items': [ITEM_TABLERO, ITEM_PLANIFICADOR, ITEM_COCHES_LIBRES],
+            'items': [ITEM_TABLERO, ITEM_PLANIFICADOR],
         },
         {
             'id': 'sec_gestion',
-            # Maestros / fichas: obras, gente, empresas y vehículos
             'title': str(_('Gestión')),
-            'items': [ITEM_DIRECTORIO, ITEM_TRABAJADORES, ITEM_SUBCONTRATAS, ITEM_FLOTA, ITEM_AUSENCIAS],
+            'items': [
+                ITEM_DIRECTORIO,
+                ITEM_TRABAJADORES,
+                ITEM_SUBCONTRATAS,
+                ITEM_FLOTA,
+            ],
         },
         {
-            'id': 'sec_solicitudes',
-            'title': str(_('Solicitudes')),
-            'items': [ITEM_SOLICITUDES],
+            'id': 'sec_ops',
+            'title': str(_('Operaciones')),
+            'items': [ITEM_SOLICITUDES, ITEM_AUDITORIA_FICH],
         },
         {
-            'id': 'sec_audit',
-            'title': str(_('Auditorías')),
-            'items': [ITEM_AUDITORIA_FICH, ITEM_MAPA_FICH, ITEM_REGISTRO_JORNADA, ITEM_AUDITORIA_VEH],
-        },
-        {
-            'id': 'sec_soltec',
-            'title': str(_('Soltec')),
-            'items': [ITEM_ODOO_ALTA, ITEM_SOLTEC_PORTAL],
+            'id': 'sec_docs',
+            'title': str(_('Cumplimiento')),
+            'items': [ITEM_DOCUMENTACION],
         },
         {
             'id': 'sec_sys',
             'title': str(_('Sistema')),
-            # Permisos va como submenú de Configuración (no ítem suelto).
-            # Logs queda oculto por defecto (_default_hidden).
             'items': [
-                ITEM_PRIMEROS_PASOS,
                 ITEM_CONFIGURACION,
+                ITEM_INTEGRACIONES,
                 ITEM_REUNIONES,
                 ITEM_LOGS,
             ],
@@ -148,18 +198,29 @@ def _default_sections_blueprint() -> list[dict]:
 
 def _default_hidden() -> list[str]:
     """Ítems del catálogo ocultos en el menú por defecto (siguen en personalizar)."""
-    return [ITEM_LOGS]
+    return [
+        ITEM_MAPA_FICH,
+        ITEM_REGISTRO_JORNADA,
+        ITEM_PRIMEROS_PASOS,
+    ]
 
 
-def _is_stock_v1_layout(sections: list) -> bool:
-    """True si las prefs parecen el menú stock anterior (antes del rediseño)."""
+def _is_stock_legacy_layout(sections: list) -> bool:
+    """True si hay que migrar prefs al menú con secciones actuales."""
     ids = {str(s.get('id')) for s in sections if isinstance(s, dict)}
-    if 'sec_gestion' in ids or 'sec_solicitudes' in ids or 'sec_audit' in ids:
+    # Layout nuevo: home + plan + gestión + ops + docs + sistema
+    if {'sec_plan', 'sec_gestion', 'sec_ops', 'sec_sys'} <= ids:
         return False
-    if 'sec_soltec' in ids:
-        return False
-    # Layout viejo tenía Personal + Vehículos + Jornada
-    return 'sec_personal' in ids and 'sec_fleet' in ids and 'sec_jornada' in ids
+    # Plano sec_main, stock multi-sección anterior, o Personal/Flota/Jornada
+    if 'sec_main' in ids:
+        return True
+    if ids & {
+        'sec_gestion', 'sec_plan', 'sec_solicitudes', 'sec_audit',
+        'sec_soltec', 'sec_sys', 'sec_home', 'sec_ops', 'sec_docs',
+    }:
+        # Tiene alguna sección conocida pero no el set completo → migrar
+        return not ({'sec_plan', 'sec_gestion', 'sec_ops', 'sec_sys'} <= ids)
+    return 'sec_personal' in ids and 'sec_fleet' in ids
 
 
 def _ep() -> str:
@@ -187,7 +248,8 @@ def _home_href(user) -> str:
 def _home_active() -> bool:
     return _ep() in (
         'main.dashboard', 'admin.panel', 'admin.panel_laboral',
-        'jefe.panel', 'empleado.calendario',
+        'jefe.panel', 'empleado.calendario', 'subcontrata.inicio',
+        'subcontrata.calendario',
         'admin.vehiculos', 'admin.vehicle_panel', 'admin.vehiculos_libres',
         'sync.auditoria_vehiculos',
     )
@@ -242,23 +304,77 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': 'notas' in _ep(),
             'data_tour': None,
         },
-        ITEM_TRABAJADORES: {
-            'id': ITEM_TRABAJADORES,
-            'label': str(_('Trabajadores')),
-            'icon': 'fa-users',
+        ITEM_TRABAJADORES: _nav_group(
+            item_id=ITEM_TRABAJADORES,
+            label=str(_('Trabajadores')),
+            icon='fa-users',
+            href=url_for('admin.personal'),
+            parent_active='personal' in _ep(),
+            children=_trabajadores_children(ctx),
+            data_tour='nav-trabajadores',
+        ),
+        ITEM_SUBCONTRATAS: _nav_group(
+            item_id=ITEM_SUBCONTRATAS,
+            label=str(_('Subcontratas')),
+            icon='fa-industry',
+            href=url_for('admin.companies'),
+            parent_active=('companies' in _ep() or _ep() == 'admin.company_panel'),
+            children=_subcontratas_children(ctx),
+            data_tour='nav-empresas',
+        ),
+        ITEM_DOCUMENTACION: {
+            'id': ITEM_DOCUMENTACION,
+            'label': str(_('Documentación')),
+            'icon': 'fa-folder-open',
             'kind': 'link',
-            'href': url_for('admin.personal'),
-            'active': 'personal' in _ep(),
-            'data_tour': 'nav-trabajadores',
+            'href': (
+                url_for('subcontrata.documentacion')
+                if _is_admin_subcontrata(u)
+                else url_for('compliance.documentacion')
+            ),
+            'active': _ep() in (
+                'compliance.documentacion', 'compliance.documentacion_empresa',
+                'compliance.documentacion_empleado', 'subcontrata.documentacion',
+            ),
+            'data_tour': None,
+            'badge': int(ctx.get('doc_errores') or 0),
+            'badge_warn': int(ctx.get('doc_avisos') or 0),
         },
-        ITEM_SUBCONTRATAS: {
-            'id': ITEM_SUBCONTRATAS,
-            'label': str(_('Subcontratas')),
-            'icon': 'fa-industry',
+        ITEM_CERTIFICACION: {
+            'id': ITEM_CERTIFICACION,
+            'label': str(_('Certificación de horario')),
+            'icon': 'fa-clock',
             'kind': 'link',
-            'href': url_for('admin.companies'),
-            'active': 'companies' in _ep() or _ep() == 'admin.company_panel',
-            'data_tour': 'nav-empresas',
+            'href': (
+                url_for('subcontrata.certificacion')
+                if _is_admin_subcontrata(u)
+                else url_for('compliance.certificacion_lista')
+            ),
+            'active': 'certificacion' in _ep(),
+            'data_tour': None,
+            'badge': int(ctx.get('cert_entrantes') or 0) if not _is_admin_subcontrata(u) else 0,
+        },
+        ITEM_CONTRATACION: {
+            'id': ITEM_CONTRATACION,
+            'label': str(_('Contratación')),
+            'icon': 'fa-user-check',
+            'kind': 'link',
+            'href': url_for('compliance.contratacion_lista'),
+            'active': 'contratacion' in _ep() and not str(_ep()).startswith('empleado.'),
+            'data_tour': None,
+        },
+        ITEM_MI_DOCUMENTACION: {
+            'id': ITEM_MI_DOCUMENTACION,
+            'label': str(_('Mi documentación')) if not getattr(u, 'hiring_state', None) else str(_('Mi contratación')),
+            'icon': 'fa-id-card',
+            'kind': 'link',
+            'href': (
+                url_for('empleado.contratacion')
+                if getattr(u, 'hiring_state', None)
+                else url_for('empleado.mis_documentos')
+            ),
+            'active': _ep() in ('empleado.mis_documentos', 'empleado.contratacion'),
+            'data_tour': None,
         },
         ITEM_SOLICITUDES: {
             'id': ITEM_SOLICITUDES,
@@ -281,15 +397,15 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': 'ausencias' in _ep(),
             'data_tour': None,
         },
-        ITEM_FLOTA: {
-            'id': ITEM_FLOTA,
-            'label': str(_('Flota')),
-            'icon': 'fa-car',
-            'kind': 'link',
-            'href': url_for('admin.vehiculos'),
-            'active': _ep() in ('admin.vehiculos', 'admin.vehicle_panel'),
-            'data_tour': None,
-        },
+        ITEM_FLOTA: _nav_group(
+            item_id=ITEM_FLOTA,
+            label=str(_('Flota')),
+            icon='fa-car',
+            href=url_for('admin.vehiculos'),
+            parent_active=_ep() in ('admin.vehiculos', 'admin.vehicle_panel'),
+            children=_flota_children(ctx),
+            data_tour=None,
+        ),
         ITEM_COCHES_LIBRES: {
             'id': ITEM_COCHES_LIBRES,
             'label': str(_('Coches libres')),
@@ -335,15 +451,15 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': 'registro_jornada' in _ep(),
             'data_tour': 'nav-registro-jornada',
         },
-        ITEM_INTEGRACIONES: {
-            'id': ITEM_INTEGRACIONES,
-            'label': str(_('Integraciones')),
-            'icon': 'fa-plug',
-            'kind': 'link',
-            'href': url_for('sync.panel'),
-            'active': _ep() in ('sync.panel', 'sync.odoo_panel'),
-            'data_tour': None,
-        },
+        ITEM_INTEGRACIONES: _nav_group(
+            item_id=ITEM_INTEGRACIONES,
+            label=str(_('Integraciones')),
+            icon='fa-plug',
+            href=url_for('sync.panel'),
+            parent_active=_ep() in ('sync.panel', 'sync.odoo_panel'),
+            children=_integration_children(ctx),
+            data_tour=None,
+        ),
         ITEM_ODOO_ALTA: {
             'id': ITEM_ODOO_ALTA,
             'label': str(_('Alta Odoo')),
@@ -373,17 +489,15 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': _ep() == 'admin.primeros_pasos',
             'data_tour': None,
         },
-        ITEM_CONFIGURACION: {
-            'id': ITEM_CONFIGURACION,
-            'label': str(_('Configuración')),
-            'icon': 'fa-sliders-h',
-            'kind': 'group',
-            'href': url_for('admin.configuracion_global'),
-            'active': _config_group_active(),
-            'data_tour': None,
-            'open': _config_group_active(),
-            'children': _config_children(ctx),
-        },
+        ITEM_CONFIGURACION: _nav_group(
+            item_id=ITEM_CONFIGURACION,
+            label=str(_('Configuración')),
+            icon='fa-sliders-h',
+            href=url_for('admin.configuracion_global'),
+            parent_active=_config_group_active(),
+            children=_config_children(ctx),
+            data_tour=None,
+        ),
         ITEM_PERMISOS: {
             # Conservado por compatibilidad con prefs antiguas; en el layout
             # nuevo vive como hijo de Configuración.
@@ -418,11 +532,15 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
         },
         ITEM_MI_CALENDARIO: {
             'id': ITEM_MI_CALENDARIO,
-            'label': str(_('Mi calendario')),
+            'label': str(_('Calendario') if _is_admin_subcontrata(u) else _('Mi calendario')),
             'icon': 'fa-calendar-alt',
             'kind': 'link',
-            'href': url_for('empleado.calendario'),
-            'active': _ep() == 'empleado.calendario',
+            'href': (
+                url_for('subcontrata.calendario')
+                if _is_admin_subcontrata(u)
+                else url_for('empleado.calendario')
+            ),
+            'active': _ep() in ('empleado.calendario', 'subcontrata.calendario'),
             'data_tour': None,
         },
         ITEM_MI_HORAS: {
@@ -450,21 +568,100 @@ def _config_group_active() -> bool:
     return (
         'configuracion' in _ep()
         or _ep() == 'admin.permisos_roles'
-        or _ep() in ('sync.panel', 'sync.odoo_panel')
+        # Ajustes de documentación viven dentro de Configuración (no submenú).
+        or _ep() in ('compliance.ajustes', 'compliance.catalogo')
     )
 
 
-def _config_children(ctx: dict) -> list[dict]:
-    """Subentradas bajo Configuración (ajustes, permisos, integraciones)."""
+def _nav_group(*, item_id, label, icon, href, parent_active, children, data_tour=None) -> dict:
+    kids = list(children or [])
+    child_active = any(bool(c.get('active')) for c in kids)
+    active = bool(parent_active) or child_active
+    return {
+        'id': item_id,
+        'label': label,
+        'icon': icon,
+        'kind': 'group',
+        'href': href,
+        'active': active,
+        'open': active,
+        'data_tour': data_tour,
+        'children': kids,
+    }
+
+
+def _trabajadores_children(ctx: dict) -> list[dict]:
     u = ctx.get('user') or current_user
-    kids = [{
-        'id': 'cfg_general',
-        'label': str(_('Ajustes')),
-        'icon': 'fa-sliders-h',
-        'href': url_for('admin.configuracion_global'),
-        'active': 'configuracion' in _ep() and 'permisos' not in _ep(),
-        'external': False,
-    }]
+    kids = []
+    if user_can(u, 'ausencias', 'r'):
+        kids.append({
+            'id': ITEM_AUSENCIAS,
+            'label': str(_('Ausencias')),
+            'icon': 'fa-umbrella-beach',
+            'href': url_for('admin.ausencias_list'),
+            'active': 'ausencias' in _ep() and not str(_ep()).startswith('empleado.'),
+            'external': False,
+        })
+    if item_is_available(ITEM_CONTRATACION, u, ctx):
+        kids.append({
+            'id': ITEM_CONTRATACION,
+            'label': str(_('Contratación')),
+            'icon': 'fa-user-check',
+            'href': url_for('compliance.contratacion_lista'),
+            'active': 'contratacion' in _ep() and not str(_ep()).startswith('empleado.'),
+            'external': False,
+        })
+    return kids
+
+
+def _subcontratas_children(ctx: dict) -> list[dict]:
+    u = ctx.get('user') or current_user
+    kids = []
+    if item_is_available(ITEM_CERTIFICACION, u, ctx):
+        kids.append({
+            'id': ITEM_CERTIFICACION,
+            'label': str(_('Certificación de horario')),
+            'icon': 'fa-clock',
+            'href': (
+                url_for('subcontrata.certificacion')
+                if _is_admin_subcontrata(u)
+                else url_for('compliance.certificacion_lista')
+            ),
+            'active': 'certificacion' in _ep(),
+            'external': False,
+            'badge': int(ctx.get('cert_entrantes') or 0) if not _is_admin_subcontrata(u) else 0,
+        })
+    return kids
+
+
+def _flota_children(ctx: dict) -> list[dict]:
+    u = ctx.get('user') or current_user
+    kids = []
+    if user_can(u, 'vehiculos_libres', 'r'):
+        kids.append({
+            'id': ITEM_COCHES_LIBRES,
+            'label': str(_('Coches libres')),
+            'icon': 'fa-car-side',
+            'href': url_for('admin.vehiculos_libres'),
+            'active': _ep() == 'admin.vehiculos_libres',
+            'external': False,
+        })
+    if item_is_available(ITEM_AUDITORIA_VEH, u, ctx):
+        kids.append({
+            'id': ITEM_AUDITORIA_VEH,
+            'label': str(_('Auditoría de vehículos')),
+            'icon': 'fa-clipboard-check',
+            'href': url_for('sync.auditoria_vehiculos'),
+            'active': _ep() == 'sync.auditoria_vehiculos',
+            'external': False,
+        })
+    return kids
+
+
+def _config_children(ctx: dict) -> list[dict]:
+    """Subentradas bajo Configuración: solo Permisos (ajustes = clic en el padre)."""
+    u = ctx.get('user') or current_user
+    kids = []
     if user_can(u, 'permisos', 'r'):
         kids.append({
             'id': 'cfg_permisos',
@@ -474,31 +671,13 @@ def _config_children(ctx: dict) -> list[dict]:
             'active': _ep() == 'admin.permisos_roles',
             'external': False,
         })
-    if user_can(u, 'integraciones', 'r'):
-        kids.append({
-            'id': 'cfg_integraciones',
-            'label': str(_('Integraciones')),
-            'icon': 'fa-plug',
-            'href': url_for('sync.panel'),
-            'active': _ep() in ('sync.panel', 'sync.odoo_panel'),
-            'external': False,
-        })
     return kids
 
 
 def _integration_children(ctx: dict) -> list[dict]:
-    """Legacy: el hub es ahora un enlace; se mantiene por si hay prefs antiguas."""
+    """Integraciones del tenant (Soltec: Alta Odoo, Portal, Odoo…)."""
     u = ctx.get('user') or current_user
     kids = []
-    if ctx.get('tenant_has_odoo') and user_can(u, 'sync_odoo', 'r'):
-        kids.append({
-            'id': 'odoo_sync',
-            'label': str(_('Sincronización Odoo')),
-            'icon': 'fa-sync',
-            'href': url_for('sync.odoo_panel'),
-            'active': _ep() == 'sync.odoo_panel',
-            'external': False,
-        })
     if ctx.get('tenant_has_odoo_alta') and user_can(u, 'soltec_alta_odoo', 'r'):
         kids.append({
             'id': 'odoo_alta',
@@ -517,20 +696,25 @@ def _integration_children(ctx: dict) -> list[dict]:
             'active': False,
             'external': False,
         })
-    if ctx.get('tenant_has_integrations') and user_can(u, 'integraciones', 'r'):
+    if ctx.get('tenant_has_odoo') and user_can(u, 'sync_odoo', 'r'):
         kids.append({
-            'id': 'integ_all',
-            'label': str(_('Ver todas')),
-            'icon': 'fa-th-large',
-            'href': url_for('sync.panel'),
-            'active': _ep() == 'sync.panel',
+            'id': 'odoo_sync',
+            'label': str(_('Odoo')),
+            'icon': 'fa-sync',
+            'href': url_for('sync.odoo_panel'),
+            'active': _ep() == 'sync.odoo_panel',
             'external': False,
         })
     return kids
 
 
 def item_is_available(item_id: str, user, ctx: dict) -> bool:
+    # Oficina no lleva entradas del portal propio aunque la matriz las tenga.
+    if item_id in _PORTAL_NAV_ITEMS and getattr(user, 'role', None) in _ROLES_OFICINA:
+        return False
     if item_id == ITEM_INICIO:
+        if _is_admin_subcontrata(user):
+            return True
         return user_can(user, 'inicio', 'r')
     if item_id == ITEM_TABLERO:
         return user_can(user, 'tablero', 'r')
@@ -573,11 +757,16 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
     if item_id == ITEM_REGISTRO_JORNADA:
         return user_can(user, 'registro_jornada', 'r') and bool(ctx.get('tenant_has_registro_jornada'))
     if item_id == ITEM_INTEGRACIONES:
-        # Quien tiene Configuración la ve ahí dentro. Quien no (p. ej. un jefe
-        # con Odoo), sigue teniendo el enlace suelto.
-        if user_can(user, 'configuracion', 'r'):
-            return False
-        return user_can(user, 'integraciones', 'r')
+        # Visible si hay hub o alguna integración concreta del tenant.
+        if user_can(user, 'integraciones', 'r'):
+            return True
+        if ctx.get('tenant_has_odoo') and user_can(user, 'sync_odoo', 'r'):
+            return True
+        if ctx.get('tenant_has_odoo_alta') and user_can(user, 'soltec_alta_odoo', 'r'):
+            return True
+        if ctx.get('tenant_has_soltec_portal_sso') and user_can(user, 'soltec_portal', 'r'):
+            return True
+        return False
     if item_id == ITEM_ODOO_ALTA:
         return (
             bool(ctx.get('tenant_has_odoo_alta'))
@@ -616,6 +805,30 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
         )
     if item_id == ITEM_MI_AUSENCIAS:
         return user_can(user, 'operario_ausencias', 'r')
+    if item_id == ITEM_DOCUMENTACION:
+        from app.services.tenant_modules import has_documentacion
+        if not has_documentacion() or not user_can(user, 'documentacion', 'r'):
+            return False
+        if _is_admin_subcontrata(user):
+            return True
+        return getattr(user, 'role', None) != ROLE_OPERARIO
+    if item_id == ITEM_CERTIFICACION:
+        from app.services.tenant_modules import has_certificacion
+        if not has_certificacion() or not user_can(user, 'certificacion', 'r'):
+            return False
+        if _is_admin_subcontrata(user):
+            return True
+        return getattr(user, 'role', None) != ROLE_OPERARIO
+    if item_id == ITEM_CONTRATACION:
+        from app.services.tenant_modules import has_contratacion
+        if not has_contratacion() or not user_can(user, 'contratacion', 'r'):
+            return False
+        return getattr(user, 'role', None) not in (ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA)
+    if item_id == ITEM_MI_DOCUMENTACION:
+        from app.services.tenant_modules import has_documentacion
+        if getattr(user, 'hiring_state', None):
+            return True
+        return has_documentacion() and user_can(user, 'documentacion', 'r') and _is_operario(user)
     return False
 
 
@@ -698,25 +911,32 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
         sections_pref = _operario_sections_blueprint()
         hidden_raw = []
 
-    # Migrar el layout stock antiguo (Personal/Vehículos/Jornada) al nuevo por defecto
-    if sections_pref is not None and _is_stock_v1_layout(sections_pref):
+    # Migrar layouts stock antiguos al menú sec_main
+    if sections_pref is not None and _is_stock_legacy_layout(sections_pref):
         sections_pref = None
         hidden_raw = list(_default_hidden())
 
+    if getattr(user, 'hiring_state', None):
+        sections_pref = [{
+            'id': 'sec_contratacion',
+            'title': '',
+            'items': [ITEM_MI_DOCUMENTACION],
+        }]
+        hidden_raw = []
+
+    def _sections_for_user():
+        if _is_admin_subcontrata(user):
+            return _subcontrata_sections_blueprint()
+        if _is_operario(user):
+            return _operario_sections_blueprint()
+        return _default_sections_blueprint()
+
     if sections_pref is None and hidden_raw is None:
-        sections_pref = (
-            _operario_sections_blueprint()
-            if _is_operario(user)
-            else _default_sections_blueprint()
-        )
+        sections_pref = _sections_for_user()
         hidden_pref = set(_default_hidden())
     else:
         if sections_pref is None:
-            sections_pref = (
-                _operario_sections_blueprint()
-                if _is_operario(user)
-                else _default_sections_blueprint()
-            )
+            sections_pref = _sections_for_user()
         hidden_pref = set(hidden_raw or [])
 
     placed: set[str] = set()
@@ -727,14 +947,21 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
         sid = str(sec.get('id') or f'sec_{uuid.uuid4().hex[:8]}')
         title = str(sec.get('title') if sec.get('title') is not None else '')
         sec_items = [str(x) for x in (sec.get('items') or [])]
+        # Solo absorber hijos si el padre está disponible (si no, salen sueltos).
+        absorbed_here = set()
+        for key in sec_items:
+            if key in available:
+                absorbed_here |= _GROUP_ABSORBS.get(key, frozenset())
         items_resolved = []
         for key in sec_items:
             if key not in available or key in placed:
                 continue
-            # Permisos e Integraciones viven bajo Configuración; no duplicar.
-            if key in (ITEM_PERMISOS, ITEM_INTEGRACIONES) and ITEM_CONFIGURACION in sec_items:
+            # Hijos de un grupo presente en esta sección: no duplicar como ítem suelto.
+            if key in absorbed_here:
                 continue
             placed.add(key)
+            for child_key in _GROUP_ABSORBS.get(key, frozenset()):
+                placed.add(child_key)
             item = copy.deepcopy(available[key])
             item['hidden'] = key in hidden_pref
             items_resolved.append(item)
@@ -743,10 +970,6 @@ def build_sidebar_nav(user, ctx: Optional[dict] = None) -> dict:
             'title': title,
             'items': items_resolved,
         })
-
-    if ITEM_CONFIGURACION in placed:
-        placed.add(ITEM_PERMISOS)
-        placed.add(ITEM_INTEGRACIONES)
 
     # Ítems nuevos (permisos nuevos) que no estaban en prefs → sección al final
     orphan_keys = [k for k in available.keys() if k not in placed]

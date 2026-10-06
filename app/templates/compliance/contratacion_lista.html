@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Contratación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-hire">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Oficina') }}</p>
+      <h1>{{ _('Contratación') }}</h1>
+      <p>{{ _('Altas abiertas. Fase 1 = documentación. Fase 2 = art. 19 y reconocimiento, solo cuando la fase 1 esté validada.') }}</p>
+      <div class="office-hire-actions">
+        {% if user_can(current_user, 'contratacion', 'w') %}
+        <a class="office-hire-btn" href="{{ url_for('compliance.contratacion_nueva') }}"><i class="fas fa-plus"></i> {{ _('Nueva contratación') }}</a>
+        {% endif %}
+        <a class="office-hire-btn ghost" href="#historial"><i class="fas fa-history"></i> {{ _('Historial') }}</a>
+      </div>
+    </section>
+
+    <h3 class="hire-block-title" style="margin-top:0;">{{ _('En curso') }}</h3>
+    {% if personas %}
+    <div class="office-hire-grid">
+      {% for row in personas %}
+        {% set u = row.user %}
+        {% set iniciales = ((u.name or '?')[:1] ~ (u.lastname or '')[:1])|upper %}
+        {% set total = row.prog_total if row.prog_total is defined else (row.exigidos if row.exigidos is defined else row.total) %}
+        {% set validados = row.validados if row.validados is defined else row.ok %}
+        {% set por_validar = row.por_validar if row.por_validar is defined else 0 %}
+        {% set por_completar = row.por_completar if row.por_completar is defined else row.errores %}
+        {% set pct_ok = (validados * 100 / total) if total else 0 %}
+        {% set pct_wait = (por_validar * 100 / total) if total else 0 %}
+        {% set pct_bad = (por_completar * 100 / total) if total else 0 %}
+        <a class="office-hire-card" href="{{ url_for('compliance.contratacion_ficha', user_id=u.id) }}">
+          <div class="office-hire-card-top">
+            <span class="office-hire-avatar">{{ iniciales }}</span>
+            <div style="min-width:0;flex:1;">
+              <h2>{{ u.name }} {{ u.lastname }}</h2>
+              <p class="office-hire-meta">
+                {% if email_es_real(u.email) %}{{ u.email }}{% else %}{{ _('Sin correo todavía') }}{% endif %}
+              </p>
+            </div>
+            <span class="office-hire-pill {% if row.fase == 2 %}fase2{% endif %}">
+              {% if row.fase == 2 %}{{ _('Fase 2') }}{% else %}{{ _('Fase 1') }}{% endif %}
+            </span>
+          </div>
+          <div>
+            <div class="office-hire-meter-top">
+              <span>{{ _('Documentación') }}</span>
+              <span>{{ validados }} {{ _('validados') }} · {{ por_validar }} {{ _('por validar') }}</span>
+            </div>
+            <div class="office-hire-track office-hire-track--split" title="{{ _('Verde: validado · Amarillo: por validar · Rojo: falta') }}">
+              <span class="is-ok" style="width: {{ pct_ok }}%;"></span>
+              <span class="is-wait" style="width: {{ pct_wait }}%;"></span>
+              <span class="is-bad" style="width: {{ pct_bad }}%;"></span>
+            </div>
+          </div>
+          {% if por_completar %}
+          <p class="office-hire-meta" style="color:#b91c1c;margin:0;">{{ _('Quedan documentos por completar') }}</p>
+          {% elif por_validar %}
+          <p class="office-hire-meta" style="color:#b45309;margin:0;">{{ _('Quedan documentos por validar') }}</p>
+          {% elif row.fase == 2 %}
+          <p class="office-hire-meta" style="color:#166534;margin:0;">{{ _('Fase 2 lista para finalizar') }}</p>
+          {% else %}
+          <p class="office-hire-meta" style="color:#166534;margin:0;">{{ _('Al día') }}</p>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="office-hire-empty">
+      <p style="margin:0 0 12px;">{{ _('No hay contrataciones abiertas.') }}</p>
+      {% if user_can(current_user, 'contratacion', 'w') %}
+      <a class="office-hire-btn" href="{{ url_for('compliance.contratacion_nueva') }}">{{ _('Crear la primera') }}</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <section id="historial" class="office-hire-history">
+      <div class="hire-fase-head">
+        <h3>{{ _('Historial') }}</h3>
+        <span class="hire-fase-state">{{ historial|length }} {{ _('cerradas') }}</span>
+      </div>
+      <p class="office-hire-history-lead">{{ _('Altas ya finalizadas, con la fecha en la que entraron a obra.') }}</p>
+      {% if historial %}
+      <div class="office-hire-history-list">
+        {% for u in historial %}
+          {% set iniciales = ((u.name or '?')[:1] ~ (u.lastname or '')[:1])|upper %}
+          {% if user_can(current_user, 'trabajadores', 'r') %}
+            {% set dest = url_for('admin.worker_panel', user_id=u.id) %}
+          {% elif user_can(current_user, 'documentacion', 'r') %}
+            {% set dest = url_for('compliance.documentacion_empleado', user_id=u.id) %}
+          {% else %}
+            {% set dest = url_for('compliance.contratacion_ficha', user_id=u.id) %}
+          {% endif %}
+          <a class="office-hire-history-row" href="{{ dest }}">
+            <span class="office-hire-avatar">{{ iniciales }}</span>
+            <div class="office-hire-history-main">
+              <strong>{{ u.name }} {{ u.lastname }}</strong>
+              <span>
+                {% if u.company_rel %}{{ u.company_rel.nombre }} · {% endif %}
+                {% if email_es_real(u.email) %}{{ u.email }}{% else %}{{ _('Sin correo') }}{% endif %}
+              </span>
+            </div>
+            <div class="office-hire-history-date">
+              <span>{{ _('Inicio') }}</span>
+              <strong>{{ u.fecha_inicio.strftime('%d/%m/%Y') if u.fecha_inicio else '—' }}</strong>
+            </div>
+            <span class="office-hire-pill done">{{ _('Cerrada') }}</span>
+          </a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="office-hire-empty">
+        <p style="margin:0;">{{ _('Todavía no hay contrataciones finalizadas.') }}</p>
+      </div>
+      {% endif %}
+    </section>
+  </main>
+</div>
+{% endblock %}

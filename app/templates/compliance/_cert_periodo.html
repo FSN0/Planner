@@ -1,0 +1,112 @@
+{# Selector de mes / rango reutilizable.
+   Esperados: anio, mes, prev, next, meses, desde, hasta,
+   cert_period_prev_url, cert_period_next_url, cert_period_clear_url,
+   cert_period_status (HTML o texto opcional), cert_period_hidden (dict name→value).
+   Opcional en ficha obra: cert_period_meses (lista), estado_cls, estado_txt,
+   endpoint / vista_subcontrata / company / obra / modo_vista para URLs de mes.
+#}
+{% set cert_period_meses = cert_period_meses if cert_period_meses is defined else none %}
+<div class="cert-hero-side">
+  <div class="cert-period" id="cert-period">
+    <a class="cert-period-nav" href="{{ cert_period_prev_url }}" title="{{ _('Mes anterior') }}">
+      <i class="fas fa-chevron-left" aria-hidden="true"></i>
+    </a>
+    <button type="button" class="cert-period-label cert-period-open" id="cert-period-open" title="{{ _('Elegir mes o rango') }}">
+      {% if desde and hasta %}
+      <strong>{{ desde.strftime('%d/%m/%Y') }} — {{ hasta.strftime('%d/%m/%Y') }}</strong>
+      <span class="cert-status is-wait">{{ _('Rango') }}</span>
+      {% else %}
+      <strong>{{ meses.get(mes, mes) }} {{ anio }}</strong>
+      {% if cert_period_status %}
+      <span class="cert-status {{ cert_period_status_cls|default('is-muted') }}">{{ cert_period_status }}</span>
+      {% endif %}
+      {% endif %}
+    </button>
+    <a class="cert-period-nav" href="{{ cert_period_next_url }}" title="{{ _('Mes siguiente') }}">
+      <i class="fas fa-chevron-right" aria-hidden="true"></i>
+    </a>
+  </div>
+  <div class="cert-range-pop {% if cert_period_meses %}cert-range-pop--wide{% endif %}" id="cert-range-pop" hidden>
+    <form method="get" class="cert-range-form">
+      <input type="hidden" name="anio" id="cert-range-anio" value="{{ anio }}">
+      <input type="hidden" name="mes" id="cert-range-mes" value="{{ mes }}">
+      {% for name, value in (cert_period_hidden or {}).items() %}
+      {% if value is not none %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endif %}
+      {% endfor %}
+      <p class="cert-range-title">{{ _('Filtrar por fechas') }}</p>
+      <p class="cert-range-hint">{{ _('Afecta a lo que ves. La propuesta de cada empresa sigue siendo por mes.') }}</p>
+      <div class="cert-range-fields">
+        <label class="cert-range-field">
+          <span>{{ _('Desde') }}</span>
+          <input type="date" name="desde" id="cert-range-desde" value="{{ desde.isoformat() if desde else '' }}">
+        </label>
+        <label class="cert-range-field">
+          <span>{{ _('Hasta') }}</span>
+          <input type="date" name="hasta" id="cert-range-hasta" value="{{ hasta.isoformat() if hasta else '' }}">
+        </label>
+      </div>
+      <div class="cert-range-actions">
+        <button type="submit" class="btn-admin">{{ _('Aplicar') }}</button>
+        <a class="btn-admin btn-admin-ghost" href="{{ cert_period_clear_url }}">{{ _('Solo mes') }}</a>
+        <button type="button" class="btn-admin btn-admin-ghost" id="cert-range-close">{{ _('Cerrar') }}</button>
+      </div>
+    </form>
+
+    {% if cert_period_meses %}
+    <div class="cert-range-months">
+      <p class="cert-range-title">{{ _('Meses de esta obra') }}</p>
+      <p class="cert-range-hint">{{ _('Elige un mes para ver su propuesta y el estado.') }}</p>
+      <div class="cert-months-list cert-months-list--pop">
+        {% for mrow in cert_period_meses %}
+        {% if vista_subcontrata %}
+          {% set m_url = url_for(endpoint, obra_id=obra.id, anio=mrow.anio, mes=mrow.mes, modo=modo_vista) %}
+        {% else %}
+          {% set m_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=mrow.anio, mes=mrow.mes) %}
+        {% endif %}
+        <a class="cert-months-row {% if mrow.actual %}is-current{% endif %} {% if mrow.requiere_accion %}is-action{% endif %}"
+           href="{{ m_url }}">
+          <span class="cert-months-label">{{ meses.get(mrow.mes, mrow.mes) }} {{ mrow.anio }}</span>
+          <span class="cert-months-vol">{{ mrow.horas }} h</span>
+          <span class="cert-pill {{ estado_cls.get(mrow.estado, 'is-muted') }}">{{ estado_txt.get(mrow.estado, mrow.estado) }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+<script>
+(function () {
+  function bind() {
+    var openBtn = document.getElementById('cert-period-open');
+    var pop = document.getElementById('cert-range-pop');
+    var closeBtn = document.getElementById('cert-range-close');
+    var desde = document.getElementById('cert-range-desde');
+    var hasta = document.getElementById('cert-range-hasta');
+    var anioH = document.getElementById('cert-range-anio');
+    var mesH = document.getElementById('cert-range-mes');
+    if (!openBtn || !pop || openBtn.dataset.bound === '1') return;
+    openBtn.dataset.bound = '1';
+    function syncMonth() {
+      if (!desde || !desde.value) return;
+      var parts = desde.value.split('-');
+      if (parts.length === 3) {
+        if (anioH) anioH.value = parts[0];
+        if (mesH) mesH.value = String(parseInt(parts[1], 10));
+      }
+    }
+    openBtn.addEventListener('click', function () { pop.hidden = !pop.hidden; });
+    if (closeBtn) closeBtn.addEventListener('click', function () { pop.hidden = true; });
+    if (desde) desde.addEventListener('change', syncMonth);
+    if (hasta) hasta.addEventListener('change', function () {
+      if (desde && !desde.value && hasta.value) desde.value = hasta.value;
+      syncMonth();
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bind);
+  } else {
+    bind();
+  }
+})();
+</script>

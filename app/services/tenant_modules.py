@@ -79,6 +79,26 @@ def has_auditoria_vehiculos(tenant=None):
     return _soltec_fallback('auditoria_vehiculos', tenant)
 
 
+def has_documentacion(tenant=None):
+    """Documentación de empresa y de personas. Encendido si la clave no está."""
+    return module_enabled('documentacion', tenant, default=True)
+
+
+def has_certificacion(tenant=None):
+    """Certificación de horario por mes. Encendido si la clave no está."""
+    return module_enabled('certificacion', tenant, default=True)
+
+
+def has_contratacion(tenant=None):
+    """Altas que entran solo a perfil y documentos. Encendido si la clave no está."""
+    return module_enabled('contratacion', tenant, default=True)
+
+
+def has_portal_subcontrata(tenant=None):
+    """Portal del admin de subcontrata. Encendido si la clave no está."""
+    return module_enabled('portal_subcontrata', tenant, default=True)
+
+
 def has_portal_ausencias(tenant=None):
     """
     El trabajador pide y consulta ausencias en /fichaje.

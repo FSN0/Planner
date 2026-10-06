@@ -358,39 +358,64 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 200);
     }
 
-    function planifEnsureRequestLaneSpace() {
-        // Cada obra con solicitud + operarios necesita al menos 2 carriles visibles.
-        if (!window.AppItems || !window.AppTimeline) return;
-        var items = window.AppItems.get() || [];
-        var byGroup = {};
-        items.forEach(function (it) {
-            if (!it || it.type === 'background' || it.group == null) return;
-            var g = String(it.group);
-            if (!byGroup[g]) byGroup[g] = { req: false, workers: 0 };
-            if (planifIsRequestItem(it)) byGroup[g].req = true;
-            else if (planifIsPackableWorker(it.worker_id)) byGroup[g].workers += 1;
+    function planifVisibleLaneNeed(group) {
+        // Un carril por persona visible, no por cada tramo de fechas.
+        // Contar tramos dejaba la obra con cientos de píxeles en blanco.
+        var items = (group && group.visibleItems) || [];
+        var workers = {};
+        var req = false;
+        var draft = false;
+        var n = 0;
+        items.forEach(function (vi) {
+            var data = (vi && vi.data) || vi;
+            if (!data || data.type === 'background') return;
+            n += 1;
+            if (planifIsRequestItem(data)) req = true;
+            else if (String(data.worker_id) === 'NEW') draft = true;
+            else if (planifIsPackableWorker(data.worker_id)) workers[String(data.worker_id)] = true;
         });
+        if (!n) return null;
+        var lanes = Object.keys(workers).length + (req ? 1 : 0) + (draft ? 1 : 0);
+        return {
+            need: lanes ? (8 + lanes * 26) : 36,
+            req: req,
+            draft: draft,
+        };
+    }
+
+    function planifApplyGroupHeight(group, need) {
+        if (group.props && group.props.label) group.props.label.height = need;
+        group.height = need;
+        ['foreground', 'label', 'background'].forEach(function (part) {
+            var el = group.dom && group.dom[part];
+            if (!el) return;
+            el.style.minHeight = need + 'px';
+            el.style.height = need + 'px';
+        });
+    }
+
+    function planifEnsureRequestLaneSpace() {
+        // La fila mide los carriles visibles (solicitud + personas).
+        // Vis reutiliza la altura de la etiqueta: si un minHeight previo era
+        // enorme, el siguiente redibujado dejaba la obra en blanco hasta el final.
+        if (!window.AppTimeline) return;
         var itemSet = window.AppTimeline.itemSet;
         if (!itemSet || !itemSet.groups) return;
-        Object.keys(byGroup).forEach(function (gid) {
-            var info = byGroup[gid];
-            if (!info.req) return;
-            // 1 carril solicitud (≈22) + N operarios (≈20 c/u) + margen
-            var need = 26 + Math.max(1, info.workers || 1) * 22;
-            var g = itemSet.groups[gid];
-            if (!g) return;
-            if (typeof g.setHeight === 'function') {
-                try {
-                    var cur = (typeof g.height === 'number') ? g.height : 0;
-                    if (cur < need) g.setHeight(need);
-                } catch (errH) { /* ignore */ }
-            }
-            if (g.dom && g.dom.foreground) {
-                g.dom.foreground.style.minHeight = need + 'px';
-            }
-            if (g.dom && g.dom.label) {
-                g.dom.label.style.minHeight = need + 'px';
-            }
+        Object.keys(itemSet.groups).forEach(function (gid) {
+            var group = itemSet.groups[gid];
+            if (!group || !group.dom || !group.dom.foreground) return;
+            var info = planifVisibleLaneNeed(group);
+            if (!info) return;
+            var need = info.need;
+            var minSet = parseFloat(group.dom.foreground.style.minHeight) || 0;
+            var labelH = (group.props && group.props.label && group.props.label.height) || 0;
+            var forced = Math.max(minSet, labelH);
+            var cur = group.dom.foreground.offsetHeight || group.height || 0;
+            var limit = Math.max(need * 2, need + 200);
+            var runaway = forced > limit || cur > limit;
+            var clipped = (info.req || info.draft) && cur + 16 < need;
+            if (!runaway && !clipped) return;
+            planifApplyGroupHeight(group, need);
         });
     }
 
@@ -2212,6 +2237,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.AppTimeline.on('changed', function () {
         if (planifViewPin) planifRestoreViewPin();
         planifAlignSameWorkerTops();
+        planifEnsureRequestLaneSpace();
     });
     window.AppTimeline.on('rangechange', function () {
         if (planifViewPin) planifRestoreViewPin();

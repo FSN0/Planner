@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Certificación de horario') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006stack">
+{% endblock %}
+{% block wrapper %}
+{% set meses = {
+  1: _('Enero'), 2: _('Febrero'), 3: _('Marzo'), 4: _('Abril'),
+  5: _('Mayo'), 6: _('Junio'), 7: _('Julio'), 8: _('Agosto'),
+  9: _('Septiembre'), 10: _('Octubre'), 11: _('Noviembre'), 12: _('Diciembre')
+} %}
+{% set estado_cls = {
+  'aceptada': 'is-ok',
+  'recibida': 'is-wait',
+  'enviada': 'is-wait',
+  'rechazada': 'is-bad',
+  'borrador': 'is-muted',
+  'sin_movimiento': 'is-muted'
+} %}
+{% set estado_txt = {
+  'aceptada': _('Aceptada'),
+  'recibida': _('Por revisar'),
+  'enviada': _('Enviada'),
+  'rechazada': _('Rechazada'),
+  'borrador': _('Borrador'),
+  'sin_movimiento': _('Sin movimiento')
+} %}
+{% set puede_w = user_can(current_user, 'certificacion', 'w') %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact cert-page">
+    <header class="cert-hero">
+      <div class="cert-hero-copy">
+        <p class="cert-kicker">{{ _('Oficina') }}</p>
+        <h1>{{ _('Certificación de horario') }}</h1>
+        <p class="cert-hero-sub">
+          {% if vista == 'obras' %}
+            {{ _('Filtro de fechas sobre fichajes. Entra a una obra para ver empresas y gestionar cada propuesta.') }}
+          {% else %}
+            {{ _('Cada empresa tiene una propuesta por obra y mes. Entra para ver el estado de sus obras.') }}
+          {% endif %}
+        </p>
+      </div>
+      <div class="cert-hero-side">
+        <div class="cert-period" id="cert-period">
+          <a class="cert-period-nav" href="{{ url_for('compliance.certificacion_lista', vista=vista, anio=prev.anio, mes=prev.mes) }}" title="{{ _('Mes anterior') }}">
+            <i class="fas fa-chevron-left" aria-hidden="true"></i>
+          </a>
+          <button type="button" class="cert-period-label cert-period-open" id="cert-period-open" title="{{ _('Elegir mes o rango') }}">
+            {% if desde and hasta %}
+            <strong>{{ desde.strftime('%d/%m/%Y') }} — {{ hasta.strftime('%d/%m/%Y') }}</strong>
+            <span class="cert-status is-wait">{{ _('Rango') }}</span>
+            {% else %}
+            <strong>{{ meses.get(mes, mes) }} {{ anio }}</strong>
+            <span class="cert-status {% if entrantes %}is-wait{% else %}is-muted{% endif %}">
+              {% if vista == 'empresas' %}{{ entrantes }} {{ _('por revisar') }}{% else %}{{ filas|length }} {{ _('obras') }}{% endif %}
+            </span>
+            {% endif %}
+          </button>
+          <a class="cert-period-nav" href="{{ url_for('compliance.certificacion_lista', vista=vista, anio=next.anio, mes=next.mes) }}" title="{{ _('Mes siguiente') }}">
+            <i class="fas fa-chevron-right" aria-hidden="true"></i>
+          </a>
+        </div>
+        <div class="cert-range-pop" id="cert-range-pop" hidden>
+          <form method="get" class="cert-range-form">
+            <input type="hidden" name="vista" value="{{ vista }}">
+            <input type="hidden" name="anio" id="cert-range-anio" value="{{ anio }}">
+            <input type="hidden" name="mes" id="cert-range-mes" value="{{ mes }}">
+            <p class="cert-range-title">{{ _('Filtrar por fechas') }}</p>
+            <p class="cert-range-hint">{{ _('Afecta a lo que ves. Cada propuesta sigue siendo por empresa, obra y mes.') }}</p>
+            <div class="cert-range-fields">
+              <label class="cert-range-field">
+                <span>{{ _('Desde') }}</span>
+                <input type="date" name="desde" id="cert-range-desde" value="{{ desde.isoformat() if desde else '' }}">
+              </label>
+              <label class="cert-range-field">
+                <span>{{ _('Hasta') }}</span>
+                <input type="date" name="hasta" id="cert-range-hasta" value="{{ hasta.isoformat() if hasta else '' }}">
+              </label>
+            </div>
+            <div class="cert-range-actions">
+              <button type="submit" class="btn-admin">{{ _('Aplicar') }}</button>
+              <a class="btn-admin btn-admin-ghost" href="{{ url_for('compliance.certificacion_lista', vista=vista, anio=anio, mes=mes) }}">{{ _('Solo mes') }}</a>
+              <button type="button" class="btn-admin btn-admin-ghost" id="cert-range-close">{{ _('Cerrar') }}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="cert-hero-tools">
+        <div class="cert-view-tabs" role="tablist" aria-label="{{ _('Vista') }}">
+          <a class="cert-view-tab {% if vista == 'empresas' %}is-active{% endif %}"
+             href="{{ url_for('compliance.certificacion_lista', vista='empresas', anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Empresas') }}</a>
+          <a class="cert-view-tab {% if vista == 'obras' %}is-active{% endif %}"
+             href="{{ url_for('compliance.certificacion_lista', vista='obras', anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Obras') }}</a>
+        </div>
+        <div class="cert-hero-precio">
+          {% if puede_w %}
+          <form method="post" class="cert-precio" id="cert-precio-plat" data-precio="{{ precio_plataforma }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="anio" value="{{ anio }}">
+            <input type="hidden" name="mes" value="{{ mes }}">
+            <input type="hidden" name="vista" value="{{ vista }}">
+            {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
+            {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
+            <span class="cert-precio-label">{{ _('Precio') }}</span>
+            <button type="button" class="cert-precio-view" id="cert-precio-view" title="{{ _('Editar precio') }}">
+              <strong>{{ precio_plataforma }} €</strong>
+              <i class="fas fa-pen" aria-hidden="true"></i>
+            </button>
+            <div class="cert-precio-edit" id="cert-precio-edit" hidden>
+              <input type="number" name="precio_hora" step="0.01" min="0" value="{{ precio_plataforma }}" inputmode="decimal" required>
+              <em>€/h</em>
+              <button type="submit" name="accion" value="precio_plataforma" class="btn-admin btn-admin-ghost">{{ _('Guardar') }}</button>
+              <button type="button" class="btn-admin btn-admin-ghost" id="cert-precio-cancel">{{ _('Cancelar') }}</button>
+            </div>
+          </form>
+          {% else %}
+          <div class="cert-precio is-readonly">
+            <span class="cert-precio-label">{{ _('Precio') }}</span>
+            <strong>{{ precio_plataforma }} €</strong>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </header>
+
+    <div class="cert-hub">
+      <label class="cert-hub-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="search" id="cert-filtro" placeholder="{% if vista == 'obras' %}{{ _('Buscar obra…') }}{% else %}{{ _('Buscar subcontrata…') }}{% endif %}" autocomplete="off">
+      </label>
+      <span class="cert-hub-count" id="cert-filtro-count">{{ filas|length }}</span>
+    </div>
+
+    {% if filas %}
+    <div class="cert-hub-list" id="cert-lista">
+      {% if vista == 'obras' %}
+        {% for row in filas %}
+        {% set o = row.obra %}
+        {% set busca = (o.nombre or '')|lower %}
+        <a class="cert-hub-row"
+           href="{{ url_for('compliance.certificacion_obra', obra_id=o.id, anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}"
+           data-search="{{ busca }}">
+          <span class="cert-hub-ico" aria-hidden="true"><i class="fas fa-hard-hat"></i></span>
+          <span class="cert-hub-main">
+            <strong>{{ o.nombre }}</strong>
+            <small>{{ row.n_empresas }} {{ _('empresas') }}</small>
+          </span>
+          <span class="cert-hub-vol">{{ row.horas }} h</span>
+          <span class="cert-hub-go" aria-hidden="true"><i class="fas fa-chevron-right"></i></span>
+        </a>
+        {% endfor %}
+      {% else %}
+        {% for row in filas %}
+        {% set c = row.company %}
+        {% set busca = ((c.nombre or '') ~ ' ' ~ (c.nif or ''))|lower %}
+        <a class="cert-hub-row {% if row.estado == 'recibida' %}is-action{% elif row.estado == 'rechazada' %}is-alert{% endif %}"
+           href="{{ url_for('compliance.certificacion_empresa', company_id=c.id, anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}"
+           data-search="{{ busca }}">
+          <span class="cert-hub-ico" aria-hidden="true"><i class="fas fa-building"></i></span>
+          <span class="cert-hub-main">
+            <strong>
+              {% if row.tiene_rechazada %}<i class="fas fa-exclamation-circle cert-hub-alert" title="{{ _('Propuesta rechazada') }}" aria-hidden="true"></i> {% endif %}
+              {% if row.tiene_recibida %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" title="{{ _('Propuesta por revisar') }}" aria-hidden="true"></i> {% endif %}
+              {{ c.nombre }}
+            </strong>
+            <small>
+              {{ row.n_obras }} {{ _('obras') }}
+              {% if row.n_recibida %} · {{ row.n_recibida }} {{ _('por revisar') }}{% endif %}
+              {% if row.n_rechazada %} · {{ row.n_rechazada }} {{ _('rechazadas') }}{% endif %}
+              {% if row.n_aceptada %} · {{ row.n_aceptada }} {{ _('aceptadas') }}{% endif %}
+            </small>
+          </span>
+          <span class="cert-pill {{ estado_cls.get(row.estado, 'is-muted') }}">{{ estado_txt.get(row.estado, row.estado) }}</span>
+          <span class="cert-hub-go" aria-hidden="true"><i class="fas fa-chevron-right"></i></span>
+        </a>
+        {% endfor %}
+      {% endif %}
+    </div>
+    <p class="cert-hub-empty" id="cert-vacio" hidden>{{ _('Ningún resultado coincide con la búsqueda.') }}</p>
+    {% else %}
+    <div class="cert-empty">
+      {% if vista == 'obras' %}
+        {{ _('No hay obras con fichaje de subcontratas en este periodo (según tu alcance).') }}
+      {% else %}
+        {{ _('No hay subcontratas con fichaje en tus obras en este periodo.') }}
+      {% endif %}
+    </div>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var input = document.getElementById('cert-filtro');
+  var list = document.getElementById('cert-lista');
+  var count = document.getElementById('cert-filtro-count');
+  var empty = document.getElementById('cert-vacio');
+  if (input && list) {
+    var rows = Array.prototype.slice.call(list.querySelectorAll('.cert-hub-row'));
+    function paint() {
+      var q = (input.value || '').trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (row) {
+        var ok = !q || (row.getAttribute('data-search') || '').indexOf(q) !== -1;
+        row.hidden = !ok;
+        if (ok) shown += 1;
+      });
+      if (count) count.textContent = String(shown);
+      if (empty) empty.hidden = shown > 0;
+    }
+    input.addEventListener('input', paint);
+  }
+
+  var form = document.getElementById('cert-precio-plat');
+  if (form) {
+    var view = document.getElementById('cert-precio-view');
+    var edit = document.getElementById('cert-precio-edit');
+    var cancel = document.getElementById('cert-precio-cancel');
+    var priceInput = form.querySelector('input[name="precio_hora"]');
+    function openEdit() {
+      form.classList.add('is-editing');
+      if (edit) edit.hidden = false;
+      if (priceInput) { priceInput.focus(); priceInput.select(); }
+    }
+    function closeEdit() {
+      form.classList.remove('is-editing');
+      if (edit) edit.hidden = true;
+      if (priceInput) priceInput.value = form.getAttribute('data-precio') || priceInput.value;
+    }
+    if (view) view.addEventListener('click', openEdit);
+    if (cancel) cancel.addEventListener('click', closeEdit);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && form.classList.contains('is-editing')) closeEdit();
+    });
+  }
+
+  var openBtn = document.getElementById('cert-period-open');
+  var pop = document.getElementById('cert-range-pop');
+  var closeBtn = document.getElementById('cert-range-close');
+  var desde = document.getElementById('cert-range-desde');
+  var hasta = document.getElementById('cert-range-hasta');
+  var anioH = document.getElementById('cert-range-anio');
+  var mesH = document.getElementById('cert-range-mes');
+  function syncMonth() {
+    if (!desde || !desde.value) return;
+    var parts = desde.value.split('-');
+    if (parts.length === 3) {
+      if (anioH) anioH.value = parts[0];
+      if (mesH) mesH.value = String(parseInt(parts[1], 10));
+    }
+  }
+  if (openBtn && pop) {
+    openBtn.addEventListener('click', function () { pop.hidden = !pop.hidden; });
+  }
+  if (closeBtn && pop) closeBtn.addEventListener('click', function () { pop.hidden = true; });
+  if (desde) desde.addEventListener('change', syncMonth);
+  if (hasta) hasta.addEventListener('change', function () {
+    if (desde && !desde.value && hasta.value) desde.value = hasta.value;
+    syncMonth();
+  });
+})();
+</script>
+{% endblock %}

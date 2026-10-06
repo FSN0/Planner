@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Nueva contratación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-hire">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Alta') }}</p>
+      <h1>{{ _('Nueva contratación') }}</h1>
+      <p>{{ _('Alta de personal propio. Con el nombre basta para encontrarle; el resto lo puede completar con el enlace.') }}</p>
+      <div class="office-hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.contratacion_lista') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+      </div>
+    </section>
+    <form method="post" class="office-panel" style="max-width:560px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="hire-fields">
+        <div class="hire-field">
+          <label for="name">{{ _('Nombre') }}</label>
+          <input id="name" name="name" required>
+        </div>
+        <div class="hire-field">
+          <label for="lastname">{{ _('Apellidos') }}</label>
+          <input id="lastname" name="lastname">
+        </div>
+        <div class="hire-field" style="grid-column:1/-1;">
+          <label for="email">{{ _('Correo, si ya lo tienes') }}</label>
+          <input id="email" name="email" type="email">
+        </div>
+        <div class="hire-field" style="grid-column:1/-1;">
+          <label>{{ _('Empresa') }}</label>
+          <input value="{{ empresa_interna.nombre if empresa_interna else _('Empresa interna') }}" readonly>
+          <p class="office-hire-meta" style="margin:6px 0 0;">{{ _('Las contrataciones son siempre de personal propio.') }}</p>
+        </div>
+      </div>
+      <input type="hidden" name="role" value="operario">
+      <button class="hire-save" type="submit">{{ _('Crear y generar enlace') }}</button>
+    </form>
+  </main>
+</div>
+{% endblock %}

@@ -301,6 +301,8 @@ def create_app():
     from app.api.ausencias import ausencias_api
     from app.superadmin import superadmin_bp
     from app.empleado import empleado_bp
+    from app.compliance import compliance_bp
+    from app.subcontrata import subcontrata_bp
     from app.marketing.routes import marketing_bp
 
     # ¡AQUÍ ESTÁ LA SOLUCIÓN!
@@ -318,6 +320,30 @@ def create_app():
     app.register_blueprint(ausencias_api, url_prefix='/api')
     app.register_blueprint(superadmin_bp, url_prefix='/superadmin')
     app.register_blueprint(empleado_bp)
+    app.register_blueprint(compliance_bp)
+    app.register_blueprint(subcontrata_bp)
+
+    @app.before_request
+    def _limitar_contratacion_abierta():
+        """Mientras la contratación no termina, solo perfil, documentos y salir."""
+        if not current_user.is_authenticated:
+            return None
+        if not getattr(current_user, 'hiring_state', None):
+            return None
+        endpoint = request.endpoint or ''
+        if endpoint in (
+            'empleado.contratacion',
+            'empleado.mis_documentos',
+            'empleado.archivo_propio',
+            'auth.logout',
+            'auth.login',
+            'auth.credenciales',
+            'static',
+        ):
+            return None
+        if (request.path or '').startswith('/static'):
+            return None
+        return redirect(url_for('empleado.contratacion'))
 
     from app.cli import register_cli
     register_cli(app)
@@ -611,6 +637,70 @@ def create_app():
             except Exception:
                 demo_data_activa = False
 
+        doc_errores = 0
+        doc_avisos = 0
+        doc_badge_pending = False
+        cert_entrantes = 0
+        if current_user.is_authenticated and not skip_heavy_badges:
+            try:
+                from app.models import ROLE_ADMIN_SUBCONTRATA, ROLE_OPERARIO
+                from app.services.permission_service import user_can as _user_can
+                from app.services.tenant_modules import has_certificacion, has_documentacion
+
+                en_alta = bool(getattr(current_user, 'hiring_state', None))
+                ep = request.endpoint or ''
+                en_modulo = ep in (
+                    'compliance.documentacion',
+                    'subcontrata.inicio',
+                    'subcontrata.documentacion',
+                )
+                if (
+                    not en_alta
+                    and has_documentacion()
+                    and _user_can(current_user, 'documentacion', 'r')
+                ):
+                    from app.services.documentacion_service import badge_en_cache, conteo_badge
+                    if current_user.role == ROLE_ADMIN_SUBCONTRATA and current_user.company_id:
+                        company_id = current_user.company_id
+                    elif current_user.role not in (ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA):
+                        company_id = None
+                    else:
+                        company_id = False
+                    if company_id is not False:
+                        cached = badge_en_cache(company_id)
+                        if cached is not None:
+                            doc_errores, doc_avisos = cached
+                        elif en_modulo:
+                            doc_errores, doc_avisos = conteo_badge(company_id)
+                        else:
+                            # Recalcula en segundo plano vía /documentacion/badge (no bloquea la página).
+                            doc_badge_pending = True
+                if (
+                    not en_alta
+                    and has_certificacion()
+                    and _user_can(current_user, 'certificacion', 'r')
+                    and current_user.role != ROLE_OPERARIO
+                ):
+                    if current_user.role == ROLE_ADMIN_SUBCONTRATA:
+                        from app.models import CertificacionPropuesta
+                        from app.services.certificacion_service import DIR_EMP
+                        cert_entrantes = CertificacionPropuesta.query.filter_by(
+                            company_id=current_user.company_id,
+                            direccion=DIR_EMP,
+                            estado='enviada',
+                        ).count()
+                    else:
+                        from app.services.certificacion_service import (
+                            propuestas_entrantes_oficina,
+                        )
+                        cert_entrantes = propuestas_entrantes_oficina()
+            except Exception:
+                db.session.rollback()
+                doc_errores = 0
+                doc_avisos = 0
+                doc_badge_pending = False
+                cert_entrantes = 0
+
         sidebar_nav = None
         if current_user.is_authenticated:
             try:
@@ -642,6 +732,9 @@ def create_app():
                     'puede_ver_estado_fichaje': puede_ver_estado_fichaje,
                     'impersonacion_activa': impersonacion_activa,
                     'impersonador_label': impersonador_label,
+                    'doc_errores': doc_errores,
+                    'doc_avisos': doc_avisos,
+                    'cert_entrantes': cert_entrantes,
                 })
             except Exception:
                 sidebar_nav = None
@@ -682,6 +775,7 @@ def create_app():
             onboarding_fichaje_activo=onboarding_fichaje_activo,
             demo_data_activa=demo_data_activa,
             sidebar_nav=sidebar_nav,
+            doc_badge_pending=doc_badge_pending,
             user_can=user_can,
             is_laboral=is_laboral,
             is_admin=is_admin,
@@ -718,9 +812,11 @@ def create_app():
             company_search_tag_text,
             user_search_tag_text,
         )
+        from app.services.compliance_rules import email_es_real
         return dict(
             user_search_tag_text=user_search_tag_text,
             company_search_tag_text=company_search_tag_text,
+            email_es_real=email_es_real,
         )
 
     # ---------------------------------------------------------

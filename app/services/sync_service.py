@@ -54,11 +54,19 @@ def _merge_odoo_metric(existing, new):
     return existing_v + new_v
 
 
+def _merge_estado_odoo(existing, new):
+    """Al fusionar varios fichajes del mismo día/obra, gana el estado más avanzado."""
+    from app.services.compliance_rules import estado_fichaje_agregado
+    return estado_fichaje_agregado([existing, new])
+
+
 def _apply_odoo_metrics(registro, fichaje):
     for key in ('odoo_ud', 'odoo_mod', 'odoo_total_hh', 'odoo_moe'):
         value = _odoo_metric_value(fichaje.get(key))
         if value is not None:
             setattr(registro, key, value)
+    if 'estado_odoo' in fichaje:
+        registro.estado_odoo = fichaje.get('estado_odoo') or None
 
 
 def _format_fichaje_log_detail(
@@ -174,6 +182,8 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             'odoo_mod': d.get('odoo_mod'),
             'odoo_total_hh': d.get('odoo_total_hh'),
             'odoo_moe': d.get('odoo_moe'),
+            'estado_odoo': d.get('estado_odoo'),
+            'origen_modelo': d.get('origen_modelo'),
         })
 
     fichajes_unicos = {}
@@ -199,6 +209,9 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                 fichajes_unicos[key][metric_key] = _merge_odoo_metric(
                     fichajes_unicos[key].get(metric_key), f.get(metric_key)
                 )
+            fichajes_unicos[key]['estado_odoo'] = _merge_estado_odoo(
+                fichajes_unicos[key].get('estado_odoo'), f.get('estado_odoo')
+            )
 
     todas_asig = Asignacion.query.filter_by(fecha=fecha_obj).all()
     from app.services.leave_service import user_has_approved_leave
@@ -432,8 +445,10 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     odoo_mod=_odoo_metric_value(f.get('odoo_mod')),
                     odoo_total_hh=_odoo_metric_value(f.get('odoo_total_hh')),
                     odoo_moe=_odoo_metric_value(f.get('odoo_moe')),
+                    estado_odoo=f.get('estado_odoo') or None,
                 )
                 db.session.add(nuevo_reg)
+                _apply_odoo_metrics(nuevo_reg, f)
                 if nuevo_estado == 'Conflicto':
                     desvios_a_notificar.append(nuevo_reg)
 

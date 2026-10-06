@@ -26,11 +26,16 @@ def default_auth_mode_for_role(role: str, tenant=None) -> str:
 
 
 def normalize_auth_mode(value, *, role=None, tenant=None) -> str:
-    if not tenant_usa_acceso_pin(tenant):
-        return AUTH_MODE_PASSWORD
+    """Respeta pin/contraseña/ambas si ya están guardadas.
+
+    En Soltec el alta nueva sigue siendo solo contraseña, pero un enlace
+    de acceso puede dejar PIN elegido a propósito.
+    """
     val = (value or '').strip().lower()
     if val in (AUTH_MODE_PIN, AUTH_MODE_PASSWORD, AUTH_MODE_BOTH):
         return val
+    if not tenant_usa_acceso_pin(tenant):
+        return AUTH_MODE_PASSWORD
     if role:
         return default_auth_mode_for_role(role, tenant=tenant)
     return AUTH_MODE_PASSWORD

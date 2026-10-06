@@ -22,6 +22,10 @@ MODULOS_DISPONIBLES = {
     'notas': 'Notas / reuniones (centro de mando)',
     'auditoria_vehiculos': 'Auditoría de km / anomalías de flota',
     'portal_ausencias': 'Portal: pedir vacaciones / ausencias propias',
+    'documentacion': 'Documentación de empresas y personas',
+    'certificacion': 'Certificación de horario',
+    'contratacion': 'Contratación (alta con enlace)',
+    'portal_subcontrata': 'Portal del admin de subcontrata',
 }
 
 # Solo adaptadores realmente implementados en app/sync/adapters/.

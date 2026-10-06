@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="{{ current_locale|default('es') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ _('Mi contratación') }} — {{ g.current_tenant.nombre if g.current_tenant else 'SignaPlan' }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/brand/favicon-48.png') }}?v=20260807f" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261005aa">
+</head>
+<body class="hire-page">
+  <header class="hire-top">
+    {% if brand_logo_src %}
+    <img src="{{ brand_logo_src }}" alt="{{ g.current_tenant.nombre if g.current_tenant else 'SignaPlan' }}">
+    {% else %}
+    <img src="{{ url_for('static', filename='img/brand/logo-horizontal.svg') }}" alt="SignaPlan">
+    {% endif %}
+    <a href="{{ url_for('auth.logout') }}">{{ _('Salir') }}</a>
+  </header>
+  <main class="hire-body">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="hire-flash {% if category in ('danger', 'error') %}bad{% endif %}">{{ _(message) }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% set prog = namespace(validados=0, por_validar=0, por_completar=0, total=0) %}
+    {% for fila in filas %}
+      {% set prog.total = prog.total + 1 %}
+      {% if fila.estado in ('ok', 'por_caducar') %}
+        {% set prog.validados = prog.validados + 1 %}
+      {% elif fila.estado == 'pendiente_validar' %}
+        {% set prog.por_validar = prog.por_validar + 1 %}
+      {% else %}
+        {% set prog.por_completar = prog.por_completar + 1 %}
+      {% endif %}
+    {% endfor %}
+    <section class="hire">
+      <header class="hire-hero">
+        <p class="hire-kicker">{{ g.current_tenant.nombre if g.current_tenant else _('Tu empresa') }}</p>
+        <h2>{{ _('Hola') }}, {{ current_user.name }}</h2>
+        <p>
+          {% if current_user.hiring_state == 'fase2' %}
+            {{ _('Segunda fase. Sube la formación art. 19 y el reconocimiento médico. Cuando la oficina lo valide, quedas de alta.') }}
+          {% else %}
+            {{ _('Completa tus datos y sube la documentación de la primera fase. El art. 19 y el reconocimiento se pedirán después.') }}
+          {% endif %}
+        </p>
+        <div class="hire-meter">
+          <div class="hire-meter-top">
+            <span>{{ _('Documentación') }}</span>
+            <span>{{ prog.validados }} {{ _('validados') }} · {{ prog.por_validar }} {{ _('en revisión') }}</span>
+          </div>
+          <div class="hire-track office-hire-track--split" aria-hidden="true">
+            <span class="is-ok" style="width: {{ (prog.validados * 100 / prog.total) if prog.total else 0 }}%;"></span>
+            <span class="is-wait" style="width: {{ (prog.por_validar * 100 / prog.total) if prog.total else 0 }}%;"></span>
+            <span class="is-bad" style="width: {{ (prog.por_completar * 100 / prog.total) if prog.total else 0 }}%;"></span>
+          </div>
+        </div>
+      </header>
+
+      <form method="post" class="hire-panel">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="accion" value="perfil">
+        <h3>{{ _('Tus datos') }}</h3>
+        <div class="hire-fields">
+          <div class="hire-field">
+            <label for="name">{{ _('Nombre') }}</label>
+            <input id="name" name="name" value="{{ current_user.name or '' }}" required autocomplete="given-name">
+          </div>
+          <div class="hire-field">
+            <label for="lastname">{{ _('Apellidos') }}</label>
+            <input id="lastname" name="lastname" value="{{ current_user.lastname or '' }}" autocomplete="family-name">
+          </div>
+          <div class="hire-field">
+            <label for="dni">{{ _('DNI') }}</label>
+            <input id="dni" name="dni" value="{{ '' if (current_user.dni or '').startswith('PEND-') else (current_user.dni or '') }}" autocomplete="off" autocapitalize="characters">
+          </div>
+          <div class="hire-field">
+            <label for="email">{{ _('Correo') }}</label>
+            <input id="email" name="email" type="email" value="{{ current_user.email if email_real else '' }}" autocomplete="email" inputmode="email">
+          </div>
+          <div class="hire-field">
+            <label for="telefono">{{ _('Teléfono') }}</label>
+            <input id="telefono" name="telefono" value="{{ current_user.telefono or '' }}" autocomplete="tel" inputmode="tel">
+          </div>
+          <div class="hire-field">
+            <label for="talla_ropa">{{ _('Talla de ropa') }}</label>
+            <input id="talla_ropa" name="talla_ropa" value="{{ current_user.talla_ropa or '' }}">
+          </div>
+          <div class="hire-field" style="grid-column: 1 / -1;">
+            <label for="numero_cuenta">{{ _('Número de cuenta') }}</label>
+            <input id="numero_cuenta" name="numero_cuenta" value="{{ current_user.numero_cuenta or '' }}" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <button class="hire-save" type="submit">{{ _('Guardar datos') }}</button>
+      </form>
+
+      <h3 class="hire-block-title">{{ _('Archivos') }}</h3>
+      {% set con_accion = true %}
+      {% include "empleado/_doc_cards.html" %}
+    </section>
+  </main>
+</body>
+</html>

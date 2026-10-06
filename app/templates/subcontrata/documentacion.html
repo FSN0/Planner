@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% from "compliance/macros_doc.html" import fila_doc with context %}
+{% block title %}{{ _('Documentación') }} · {{ company.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+{% set puede_w = puede_subir %}
+{% set err_emp = namespace(n=0) %}
+{% set pend_total = namespace(n=0) %}
+{% for item in empleados %}
+  {% if item.errores %}{% set err_emp.n = err_emp.n + 1 %}{% endif %}
+  {% set pend_total.n = pend_total.n + (item.errores or 0) %}
+{% endfor %}
+{% set err_docs = namespace(n=0) %}
+{% for fila in filas %}
+  {% if fila.estado in ('falta','rechazado','caducado','pendiente_validar','cert_pendiente') %}{% set err_docs.n = err_docs.n + 1 %}{% endif %}
+{% endfor %}
+{% set pend_total.n = pend_total.n + err_docs.n %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs office-company-docs">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Portal subcontrata') }}</p>
+      <h1>{{ _('Documentación') }}</h1>
+      <p>{{ _('Sube los documentos de tu empresa y de tu gente. La oficina los revisa y valida.') }}</p>
+      {% if pend_total.n %}
+      <p class="docs-pending-banner">
+        <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+        {{ pend_total.n }} {{ _('documentos pendientes') }}
+        · {{ err_docs.n }} {{ _('de empresa') }}
+        · {{ pend_total.n - err_docs.n }} {{ _('de personas') }}
+      </p>
+      {% endif %}
+      <div class="office-docs-hero-stats">
+        <div>
+          <strong>{{ err_docs.n }}</strong>
+          <span>{{ _('Pendientes empresa') }}</span>
+        </div>
+        <div>
+          <strong>{{ err_emp.n }}</strong>
+          <span>{{ _('Personas con error') }}</span>
+        </div>
+        <div>
+          <strong>{{ empleados|length }}</strong>
+          <span>{{ _('Personas') }}</span>
+        </div>
+        <div>
+          <strong>{{ filas|length }}</strong>
+          <span>{{ _('Docs empresa') }}</span>
+        </div>
+      </div>
+      <div class="office-hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('subcontrata.inicio') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+      </div>
+    </section>
+
+    <h2 class="docs-section-title">{{ _('Documentación de la empresa') }}</h2>
+    {% if not filas %}
+    <div class="docs-empty docs-empty--card">{{ _('No hay documentos exigidos a tu empresa.') }}</div>
+    {% else %}
+    <div class="hire-grid office-hire-docs">
+      {% for fila in filas if not fila.tipo.es_certificacion %}
+        {{ fila_doc(fila, puede_w, False, archivo_endpoint='subcontrata.archivo') }}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <h2 class="docs-section-title">{{ _('Personas') }}</h2>
+    {% if not empleados %}
+    <div class="docs-empty docs-empty--card">{{ _('No hay personas en tu empresa.') }}</div>
+    {% else %}
+    <div class="docs-people-toolbar">
+      <label class="docs-people-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="search" id="filtro-personas" placeholder="{{ _('Buscar por nombre o apellidos…') }}" autocomplete="off">
+      </label>
+      <span class="docs-people-count" id="filtro-personas-count">{{ empleados|length }}</span>
+    </div>
+    <div class="docs-people docs-people--rich" id="lista-personas">
+      {% for item in empleados %}
+      {% set u = item.user %}
+      {% set iniciales = ((u.name or '?')[:1] ~ (u.lastname or '')[:1])|upper %}
+      {% set busca = ((u.name or '') ~ ' ' ~ (u.lastname or '') ~ ' ' ~ (u.role or ''))|lower %}
+      <article class="docs-person-block {% if item.errores %}is-error{% elif item.avisos %}is-warn{% else %}is-ok{% endif %}"
+               data-search="{{ busca }}">
+        <div class="docs-person-row">
+          <div class="docs-person-link" style="cursor:default;">
+            <span class="docs-person-avatar">{{ iniciales }}</span>
+            <span class="docs-person-main">
+              <strong>{{ u.name }} {{ u.lastname }}</strong>
+              <small>{% if item.errores %}{{ item.errores }} {{ _('pendientes') }}{% else %}{{ _('Al día') }}{% endif %}</small>
+            </span>
+          </div>
+          <div class="docs-doc-chips" role="list">
+            {% for fila in item.filas if not fila.tipo.es_certificacion %}
+            {% set st = fila.estado %}
+            {% set label = fila.tipo.nombre ~ ' · ' ~ (
+              _('Validado') if st in ('ok','cert_ok') else
+              _('Por validar') if st == 'pendiente_validar' else
+              _('Caduca pronto') if st == 'por_caducar' else
+              _('Rechazado') if st == 'rechazado' else
+              _('Caducado') if st == 'caducado' else
+              _('Opcional') if st == 'opcional_vacio' else
+              _('Sin enviar')
+            ) %}
+            <button type="button"
+                    class="docs-doc-chip {% if st in ('ok','cert_ok','por_caducar') %}is-ok{% elif st == 'pendiente_validar' %}is-wait{% elif st == 'opcional_vacio' %}is-optional{% else %}is-bad{% endif %}"
+                    title="{{ label }}"
+                    aria-label="{{ label }}"
+                    data-chip
+                    data-target="panel-{{ u.id }}-{{ fila.tipo.id }}"
+                    role="listitem">
+              {% if st in ('ok','cert_ok','por_caducar') %}
+                <i class="fas fa-check" aria-hidden="true"></i>
+              {% elif st == 'pendiente_validar' %}
+                <i class="fas fa-clock" aria-hidden="true"></i>
+              {% elif st == 'opcional_vacio' %}
+                <i class="fas fa-minus" aria-hidden="true"></i>
+              {% else %}
+                <i class="fas fa-times" aria-hidden="true"></i>
+              {% endif %}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        {% for fila in item.filas if not fila.tipo.es_certificacion %}
+        <div class="docs-chip-panel" id="panel-{{ u.id }}-{{ fila.tipo.id }}" hidden>
+          <div class="docs-chip-panel-head">
+            <strong>{{ fila.tipo.nombre }}</strong>
+            <button type="button" class="docs-chip-close" data-close>&times;</button>
+          </div>
+          <div class="hire-grid office-hire-docs docs-chip-panel-body">
+            {{ fila_doc(fila, puede_w, False, user_id=u.id, archivo_endpoint='subcontrata.archivo') }}
+          </div>
+        </div>
+        {% endfor %}
+      </article>
+      {% endfor %}
+    </div>
+    <p class="docs-empty docs-empty--card" id="filtro-vacio" hidden>{{ _('Ninguna persona coincide con la búsqueda.') }}</p>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var filtro = document.getElementById('filtro-personas');
+  var lista = document.getElementById('lista-personas');
+  var countEl = document.getElementById('filtro-personas-count');
+  var vacio = document.getElementById('filtro-vacio');
+  function aplicarFiltro() {
+    if (!lista) return;
+    var q = (filtro && filtro.value || '').trim().toLowerCase();
+    var visibles = 0;
+    lista.querySelectorAll('.docs-person-block').forEach(function (block) {
+      var ok = !q || (block.getAttribute('data-search') || '').indexOf(q) !== -1;
+      block.hidden = !ok;
+      if (ok) visibles += 1;
+    });
+    if (countEl) countEl.textContent = String(visibles);
+    if (vacio) vacio.hidden = visibles > 0;
+  }
+  if (filtro) filtro.addEventListener('input', aplicarFiltro);
+
+  function cerrarPaneles(exceptId) {
+    document.querySelectorAll('.docs-chip-panel').forEach(function (p) {
+      if (p.id !== exceptId) p.hidden = true;
+    });
+    document.querySelectorAll('.docs-doc-chip.is-open').forEach(function (c) {
+      if (c.getAttribute('data-target') !== exceptId) c.classList.remove('is-open');
+    });
+  }
+  document.querySelectorAll('[data-chip]').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var id = btn.getAttribute('data-target');
+      var panel = document.getElementById(id);
+      if (!panel) return;
+      var abrir = panel.hidden;
+      cerrarPaneles(abrir ? id : null);
+      panel.hidden = !abrir;
+      btn.classList.toggle('is-open', abrir);
+    });
+  });
+  document.querySelectorAll('[data-close]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var panel = btn.closest('.docs-chip-panel');
+      if (!panel) return;
+      panel.hidden = true;
+      var chip = document.querySelector('[data-target="' + panel.id + '"]');
+      if (chip) chip.classList.remove('is-open');
+    });
+  });
+  document.querySelectorAll('.doc-pick input[type="file"]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      var label = input.parentElement.querySelector('.doc-pick-text');
+      if (!label) return;
+      var file = input.files && input.files[0];
+      label.textContent = file ? file.name : {{ _('Elegir')|tojson }};
+    });
+  });
+})();
+</script>
+{% endblock %}

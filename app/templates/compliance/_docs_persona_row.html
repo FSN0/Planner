@@ -1,0 +1,24 @@
+{% set u = row.user %}
+{% set iniciales = ((u.name or '?')[:1] ~ (u.lastname or '')[:1])|upper %}
+<a class="docs-person docs-person--link {% if row.errores %}is-error{% elif row.avisos %}is-warn{% else %}is-ok{% endif %}"
+   href="{{ url_for('compliance.documentacion_empleado', user_id=u.id) }}">
+  <span class="docs-person-avatar">{{ iniciales }}</span>
+  <span class="docs-person-main">
+    <strong>{{ u.name }} {{ u.lastname }}</strong>
+    <small>
+      {% if row.hiring %}
+        {% if row.hiring_state == 'fase2' %}{{ _('Alta · fase 2') }}{% else %}{{ _('Alta · fase 1') }}{% endif %}
+      {% else %}
+        {{ role_label(u.role) if role_label is defined else u.role }}
+      {% endif %}
+      {% if row.pendientes %}
+        · {{ row.pendientes|map(attribute='nombre')|join(', ') }}{% if row.pendientes_extra %} +{{ row.pendientes_extra }}{% endif %}
+      {% endif %}
+    </small>
+  </span>
+  <span class="docs-person-counts">
+    {% if row.errores %}<span class="docs-pill docs-pill--danger">{{ row.errores }}</span>{% endif %}
+    {% if row.avisos %}<span class="docs-pill docs-pill--warn">!</span>{% endif %}
+    {% if not row.errores and not row.avisos %}<span class="docs-pill docs-pill--ok">{{ _('OK') }}</span>{% endif %}
+  </span>
+</a>

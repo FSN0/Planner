@@ -12,6 +12,35 @@ def test_normalize_acepta_admin_y_alias():
     assert _normalize_import_role('admin') == 'admin'
     assert _normalize_import_role('Administrador') == 'admin'
     assert _normalize_import_role('administración') == 'admin'
+    assert _normalize_import_role('rol_que_no_existe') == 'operario'
+
+
+def test_normalize_acepta_rol_creado_en_signaplan(app, session, tenant_soltec):
+    from flask import g
+    from sqlalchemy import text
+
+    from app.models import TenantRole
+    from app.services.role_registry_service import ensure_tenant_roles
+    from app.services.sync_config_service import list_empleados_import_roles
+
+    with app.app_context():
+        g.current_tenant = tenant_soltec
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+        ensure_tenant_roles()
+        session.add(TenantRole(
+            key='encargado_zona',
+            label='Encargado de zona',
+            is_system=False,
+            is_locked=False,
+            sort_order=80,
+        ))
+        session.commit()
+        assert _normalize_import_role('encargado_zona') == 'encargado_zona'
+        assert _normalize_import_role('Encargado Zona') == 'encargado_zona'
+        keys = [row['key'] for row in list_empleados_import_roles()]
+        assert 'encargado_zona' in keys
+        assert 'operario' in keys
+        assert 'admin' in keys
 
 
 def test_parse_mapa_con_admin():

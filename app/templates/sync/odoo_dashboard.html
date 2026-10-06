@@ -791,7 +791,7 @@ Content-Type: application/json
 
           <section class="sync-cfg-block">
             <h3 class="sync-cfg-title">{{ _('Personal interno: departamento → rol') }}</h3>
-            <p class="sync-cfg-help">{{ _('Solo entra quien esté en un departamento de esta tabla. El rol es el que elijas aquí. Si alguien no aparece, añade su departamento de Odoo.') }}</p>
+            <p class="sync-cfg-help">{{ _('Solo entra quien esté en un departamento de esta tabla. El rol puede ser cualquiera de SignaPlan, también los que hayas creado. Si alguien no aparece, añade su departamento de Odoo.') }}</p>
             <input type="hidden" name="sync_empleados_departamentos" id="syncEmpleadosDepartamentosJson" value="">
             <div class="sync-cfg-table-wrap">
               <table class="sync-cfg-table">
@@ -810,10 +810,12 @@ Content-Type: application/json
                     </td>
                     <td>
                       <select class="form-control form-control-sm sync-dept-role">
-                        <option value="operario" {% if row.role == 'operario' %}selected{% endif %}>{{ _('Operario') }}</option>
-                        <option value="jefe_obra" {% if row.role == 'jefe_obra' %}selected{% endif %}>{{ _('Jefe de obra') }}</option>
-                        <option value="laboral" {% if row.role == 'laboral' %}selected{% endif %}>{{ _('Oficina / laboral') }}</option>
-                        <option value="admin" {% if row.role == 'admin' %}selected{% endif %}>{{ _('Administrador') }}</option>
+                        {% for role in empleados_import_roles %}
+                        <option value="{{ role.key }}" {% if row.role == role.key %}selected{% endif %}>{{ role.label }}</option>
+                        {% endfor %}
+                        {% if row.role and row.role not in (empleados_import_roles|map(attribute='key')|list) %}
+                        <option value="{{ row.role }}" selected>{{ row.role }}</option>
+                        {% endif %}
                       </select>
                     </td>
                     <td class="sync-cfg-row-actions">
@@ -1006,14 +1008,22 @@ function collectDeptMap() {
   return JSON.stringify(rows);
 }
 
+var SYNC_IMPORT_ROLES = {{ empleados_import_roles|default([], true)|tojson }};
+
+function syncRoleOptionsHtml() {
+  return (SYNC_IMPORT_ROLES || []).map(function (role) {
+    var key = String(role.key || '').replace(/"/g, '&quot;');
+    var label = String(role.label || role.key || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<option value="' + key + '">' + label + '</option>';
+  }).join('');
+}
+
 function syncDeptRowHtml() {
   return '<tr>' +
     '<td><input type="text" class="form-control form-control-sm sync-dept-name" placeholder="' + {{ _('Ej. JO clima')|tojson }} + '"></td>' +
     '<td><select class="form-control form-control-sm sync-dept-role">' +
-      '<option value="operario">' + {{ _('Operario')|tojson }} + '</option>' +
-      '<option value="jefe_obra">' + {{ _('Jefe de obra')|tojson }} + '</option>' +
-      '<option value="laboral">' + {{ _('Oficina / laboral')|tojson }} + '</option>' +
-      '<option value="admin">' + {{ _('Administrador')|tojson }} + '</option>' +
+      syncRoleOptionsHtml() +
     '</select></td>' +
     '<td class="sync-cfg-row-actions"><button type="button" class="btn-admin btn-admin-ghost btn-sm sync-dept-remove" title="' + {{ _('Quitar')|tojson }} + '"><i class="fas fa-times"></i></button></td>' +
     '</tr>';

@@ -104,13 +104,16 @@
         <div class="mt-2 d-flex flex-wrap align-items-center" style="gap:0.5rem;">
           <label class="small mb-0">{{ _('Rol al autorizar') }}</label>
           <select class="form-control form-control-sm" style="width:auto;" id="role_dept_{{ o.odoo_id }}">
-            <option value="jefe_obra" {% if o.role_sugerido == 'jefe_obra' %}selected{% endif %}>{{ _('jefe_obra') }}</option>
-            <option value="operario" {% if o.role_sugerido == 'operario' %}selected{% endif %}>{{ _('operario') }}</option>
-            <option value="laboral" {% if o.role_sugerido == 'laboral' %}selected{% endif %}>{{ _('laboral') }}</option>
-            <option value="admin" {% if o.role_sugerido == 'admin' %}selected{% endif %}>{{ _('admin') }}</option>
+            {% for role in empleados_import_roles %}
+            <option value="{{ role.key }}" {% if o.role_sugerido == role.key %}selected{% endif %}>{{ role.label }}</option>
+            {% endfor %}
+            {% if o.role_sugerido and o.role_sugerido not in (empleados_import_roles|map(attribute='key')|list) %}
+            <option value="{{ o.role_sugerido }}" selected>{{ o.role_sugerido }}</option>
+            {% endif %}
           </select>
-          <button type="button" class="btn-admin btn-admin-primary btn-sm"
-                  onclick="authorizeDepartment({{ o.departamento|tojson }}, {{ o.odoo_id }})">
+          <button type="button" class="btn-admin btn-admin-primary btn-sm js-authorize-dept"
+                  data-department="{{ o.departamento }}"
+                  data-odoo-id="{{ o.odoo_id }}">
             <i class="fas fa-check"></i> {{ _('Autorizar departamento') }}
           </button>
           <span class="small text-muted">{{ _('Dejar pendiente: no hagas nada; seguirá en esta lista y en la burbuja del panel.') }}</span>
@@ -221,14 +224,24 @@ function authorizeDepartment(department, odooId) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ department: department, role: role })
-    }).then(function(r) { return r.json(); }).then(function(data) {
-        if (data.success) {
+    }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+      .then(function(res) {
+        if (res.data && res.data.success) {
             window.location.href = "{{ url_for('sync.preview_empleados') }}";
         } else {
-            alert({{ _('Error:')|tojson }} + ' ' + (data.error || ''));
+            alert({{ _('Error:')|tojson }} + ' ' + ((res.data && res.data.error) || ''));
         }
+    }).catch(function() {
+        alert({{ _('Error:')|tojson }} + ' ' + {{ _('No se pudo autorizar el departamento.')|tojson }});
     });
 }
+
+document.addEventListener('click', function (ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest('.js-authorize-dept') : null;
+    if (!btn) return;
+    ev.preventDefault();
+    authorizeDepartment(btn.getAttribute('data-department') || '', btn.getAttribute('data-odoo-id') || '');
+});
 
 function confirmSyncEmpleados() {
     let payload = {{ diff | tojson | safe }};

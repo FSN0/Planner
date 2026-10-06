@@ -184,7 +184,8 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
     header_days = []
     today = today_local()
     
-    all_operarios_count = User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).count()
+    from app.services.cuadrante_visibility import query_cuadrante
+    all_operarios_count = query_cuadrante().count()
     
     month_start = date(year, month, 1)
     month_end = date(year, month, num_days)
@@ -243,7 +244,8 @@ def get_dashboard_data(user, date_arg, view_param='mis'):
         timeline_data.append({'obra': obra, 'days': days_status})
 
     # 7. Listas Auxiliares
-    all_operarios = User.query.filter_by(role=ROLE_OPERARIO, active=True, is_deleted=False).order_by(User.name).all()
+    from app.services.cuadrante_visibility import query_cuadrante
+    all_operarios = query_cuadrante().order_by(User.name).all()
 
     from app.services.inercia_service import ids_ocupados_en_fecha
     busy_ids = ids_ocupados_en_fecha(selected_date)

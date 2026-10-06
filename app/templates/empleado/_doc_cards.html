@@ -1,0 +1,141 @@
+<div class="hire-grid">
+  {% for fila in filas %}
+    {% set codigo = fila.estado %}
+    {% set cat = fila.tipo.categoria %}
+    {% set slots = fila.slots or [] %}
+    {% set archivo_url = namespace(base='empleado.archivo_propio') %}
+    <article class="doc-card{% if codigo in ('ok', 'cert_ok') %} is-ok{% elif codigo == 'por_caducar' %} is-ok is-soon{% elif codigo == 'pendiente_validar' %} is-wait{% elif codigo in ('rechazado', 'caducado') %} is-bad{% elif codigo == 'opcional_vacio' %} is-optional{% endif %}{% if slots|length > 1 %} doc-card--wide{% endif %}">
+      <div class="doc-card-top">
+        <span class="doc-ico" aria-hidden="true">
+          {% if cat == 'Identidad' %}<i class="fas fa-id-card"></i>
+          {% elif cat == 'PRL' %}<i class="fas fa-hard-hat"></i>
+          {% elif cat == 'Laboral' %}<i class="fas fa-briefcase"></i>
+          {% else %}<i class="fas fa-file-alt"></i>{% endif %}
+        </span>
+        <span class="doc-status">
+          {% if codigo == 'ok' %}{{ _('Validado') }}
+          {% elif codigo == 'pendiente_validar' %}{{ _('En revisión') }}
+          {% elif codigo == 'rechazado' %}{{ _('Hay que repetirlo') }}
+          {% elif codigo == 'caducado' %}{{ _('Caducado') }}
+          {% elif codigo == 'por_caducar' %}{{ _('Caduca pronto') }}
+          {% elif codigo == 'opcional_vacio' %}{{ _('Opcional') }}
+          {% elif codigo in ('cert_ok', 'cert_pendiente') %}{{ _('Lo revisa la oficina') }}
+          {% else %}{{ _('Pendiente') }}{% endif %}
+        </span>
+      </div>
+      <h3>{{ fila.tipo.nombre }}</h3>
+
+      {% if codigo == 'rechazado' %}
+        {% for slot in slots %}
+          {% if slot.aporte and slot.aporte.nota_oficina %}
+            <p class="doc-reject">{{ slot.nombre }}: {{ slot.aporte.nota_oficina }}</p>
+          {% endif %}
+        {% endfor %}
+        {% if not slots and fila.aporte and fila.aporte.nota_oficina %}
+          <p class="doc-reject">{{ fila.aporte.nota_oficina }}</p>
+        {% endif %}
+      {% endif %}
+
+      {% if fila.tipo.es_certificacion %}
+        <p class="doc-hint">{{ _('Este punto se cierra con la certificación de horas, no con un archivo.') }}</p>
+      {% else %}
+
+        {# Vista previa de lo ya subido #}
+        {% if slots %}
+          <div class="doc-previews">
+            {% for slot in slots %}
+              {% if slot.aporte and slot.aporte.archivo_path %}
+              {% set nom = (slot.aporte.nombre_original or slot.aporte.archivo_path or '')|lower %}
+              {% set url = url_for('empleado.archivo_propio', aporte_id=slot.aporte.id) %}
+              <a class="doc-preview" href="{{ url }}" target="_blank" rel="noopener" title="{{ slot.nombre }}">
+                {% if nom.endswith('.png') or nom.endswith('.jpg') or nom.endswith('.jpeg') or nom.endswith('.webp') or nom.endswith('.gif') %}
+                  <img src="{{ url }}" alt="{{ slot.nombre }}">
+                {% else %}
+                  <span class="doc-preview-pdf"><i class="fas fa-file-pdf"></i><small>{{ slot.nombre }}</small></span>
+                {% endif %}
+                <span class="doc-preview-cap">
+                  {% if slot.aporte.estado == 'validado' %}{{ _('Validado') }}
+                  {% elif slot.aporte.estado == 'rechazado' %}{{ _('Rechazado') }}
+                  {% else %}{{ _('Enviado') }}{% endif %}
+                  · {{ slot.nombre }}
+                </span>
+              </a>
+              {% endif %}
+            {% endfor %}
+          </div>
+        {% elif fila.aporte and fila.aporte.archivo_path %}
+          {% set nom = (fila.aporte.nombre_original or fila.aporte.archivo_path or '')|lower %}
+          {% set url = url_for('empleado.archivo_propio', aporte_id=fila.aporte.id) %}
+          <div class="doc-previews">
+            <a class="doc-preview" href="{{ url }}" target="_blank" rel="noopener">
+              {% if nom.endswith('.png') or nom.endswith('.jpg') or nom.endswith('.jpeg') or nom.endswith('.webp') or nom.endswith('.gif') %}
+                <img src="{{ url }}" alt="{{ fila.tipo.nombre }}">
+              {% else %}
+                <span class="doc-preview-pdf"><i class="fas fa-file-pdf"></i></span>
+              {% endif %}
+              <span class="doc-preview-cap">
+                {% if fila.aporte.estado == 'validado' %}{{ _('Validado') }}
+                {% elif fila.aporte.estado == 'rechazado' %}{{ _('Rechazado') }}
+                {% else %}{{ _('Enviado') }}{% endif %}
+              </span>
+            </a>
+          </div>
+        {% elif codigo not in ('ok', 'pendiente_validar') %}
+          <p class="doc-hint">{{ _('PDF o una foto, hasta 20 MB.') }}</p>
+        {% endif %}
+
+        {% if codigo == 'ok' %}
+          <p class="doc-done">{{ _('La oficina ya lo ha validado.') }}</p>
+          <details class="doc-replace">
+            <summary>{{ _('Sustituir archivo') }}</summary>
+        {% elif codigo == 'pendiente_validar' %}
+          <p class="doc-done doc-done--wait">{{ _('Ya lo tienes enviado. La oficina lo está revisando.') }}</p>
+          <details class="doc-replace">
+            <summary>{{ _('Sustituir archivo') }}</summary>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" class="{% if codigo in ('ok', 'pendiente_validar') %}doc-replace-form{% endif %}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if con_accion %}<input type="hidden" name="accion" value="subir">{% endif %}
+          <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
+          {% if slots %}
+            <div class="doc-slots">
+              {% for slot in slots %}
+              <div class="doc-slot">
+                <span class="doc-slot-label">{{ slot.nombre }}</span>
+                <label class="doc-pick">
+                  <input type="file" name="archivo_{{ slot.codigo }}" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" {% if codigo not in ('ok', 'pendiente_validar') and not slot.aporte %}{% endif %}>
+                  <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
+                  <span class="doc-pick-text">{{ _('Elegir') }}</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <label class="doc-pick">
+              <input type="file" name="archivo" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" {% if codigo not in ('ok', 'pendiente_validar') %}required{% endif %}>
+              <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
+              <span class="doc-pick-text">{{ _('Elegir archivo') }}</span>
+            </label>
+          {% endif %}
+          <input type="text" name="nota" placeholder="{{ _('Nota') }}" value="{{ fila.aporte.nota if fila.aporte and fila.aporte.nota else '' }}">
+          <button class="doc-send" type="submit">{% if codigo in ('ok', 'pendiente_validar') %}{{ _('Sustituir') }}{% else %}{{ _('Enviar') }}{% endif %}</button>
+        </form>
+
+        {% if codigo in ('ok', 'pendiente_validar') %}
+          </details>
+        {% endif %}
+      {% endif %}
+    </article>
+  {% endfor %}
+</div>
+<script>
+  document.querySelectorAll('.doc-pick input[type="file"]').forEach(function (input) {
+    input.addEventListener('change', function () {
+      var label = input.parentElement.querySelector('.doc-pick-text');
+      if (!label) return;
+      var file = input.files && input.files[0];
+      label.textContent = file ? file.name : '{{ _("Elegir") }}';
+    });
+  });
+</script>

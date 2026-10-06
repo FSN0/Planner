@@ -3,50 +3,139 @@
 {% block body_class %}layout-admin{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260828f">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261006integ">
 <style>
-  .integ-contact {
-    max-width: 40rem;
-    margin: 1.5rem auto 2rem;
-    padding: 1.75rem 1.75rem 1.5rem;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
+  .integ-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    max-width: 56rem;
+  }
+  .integ-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.85rem 0.9rem;
     background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
   }
-  .integ-contact h2 {
-    margin: 0 0 0.65rem;
-    font-size: 1.2rem;
-    color: #0f172a;
+  a.integ-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 6px 18px -12px rgba(15, 23, 42, 0.35);
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: inherit;
   }
-  .integ-contact p {
-    margin: 0 0 0.85rem;
-    color: #475569;
-    line-height: 1.5;
-    font-size: 0.95rem;
+  .integ-card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
   }
-  .integ-contact ul {
-    margin: 0 0 1.1rem;
-    padding-left: 1.15rem;
-    color: #334155;
-    font-size: 0.92rem;
-    line-height: 1.55;
-  }
-  .integ-contact .integ-cta {
+  .integ-card-ico {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 8px;
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.55rem 1rem;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+  }
+  .integ-card-ico--odoo { background: rgba(113, 75, 103, 0.12); color: #714B67; }
+  .integ-card-ico--alta { background: rgba(3, 105, 161, 0.12); color: #0369a1; }
+  .integ-card-ico--portal { background: rgba(15, 118, 110, 0.12); color: #0f766e; }
+  .integ-card-ico--contact { background: rgba(14, 165, 233, 0.12); color: #0284c7; }
+  .integ-card-title {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.25;
+  }
+  .integ-card-desc {
+    margin: 0.15rem 0 0;
+    font-size: 0.72rem;
+    color: #64748b;
+    line-height: 1.4;
+  }
+  .integ-card-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: auto;
+    padding-top: 0.15rem;
+  }
+  .integ-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: rgba(34, 197, 94, 0.12);
+    color: #166534;
+  }
+  .integ-card-go {
+    font-size: 0.72rem;
+    font-weight: 650;
+    color: #0369a1;
+  }
+  a.integ-card:hover .integ-card-go { color: #0c4a6e; }
+
+  .integ-empty {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    max-width: 36rem;
+  }
+  .integ-empty-card {
+    padding: 1rem 1.1rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
     border-radius: 10px;
+  }
+  .integ-empty-card h2 {
+    margin: 0 0 0.4rem;
+    font-size: 0.95rem;
+    color: #0f172a;
+  }
+  .integ-empty-card p {
+    margin: 0 0 0.65rem;
+    color: #64748b;
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+  .integ-empty-card ul {
+    margin: 0 0 0.85rem;
+    padding-left: 1.05rem;
+    color: #475569;
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+  .integ-empty-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
     background: #0ea5e9;
     color: #fff;
     font-weight: 650;
+    font-size: 0.78rem;
     text-decoration: none;
-    font-size: 0.9rem;
   }
-  .integ-contact .integ-cta:hover { filter: brightness(0.97); color: #fff; }
-  .integ-contact .integ-note {
-    margin-top: 1rem;
-    font-size: 0.8rem;
+  .integ-empty-cta:hover { filter: brightness(0.97); color: #fff; text-decoration: none; }
+  .integ-empty-note {
+    margin: 0.65rem 0 0;
+    font-size: 0.72rem;
     color: #94a3b8;
   }
 </style>
@@ -58,10 +147,10 @@
   <main class="admin-main admin-main--compact">
     <header class="page-toolbar">
       <div class="page-toolbar-left">
-        <h1 class="page-toolbar-title"><i class="fas fa-plug text-primary mr-2"></i> {{ _('Integraciones') }}</h1>
+        <h1 class="page-toolbar-title">{{ _('Integraciones') }}</h1>
         <span class="page-toolbar-count">
           {% if tenant_has_integrations %}
-            {{ _('Módulos contratados para tu entorno') }}
+            {{ _('Módulos activos en tu espacio') }}
           {% else %}
             {{ _('Conexiones a medida con tu ERP u otras herramientas') }}
           {% endif %}
@@ -70,71 +159,75 @@
     </header>
 
     {% if not tenant_has_integrations %}
-    <section class="integ-contact" aria-labelledby="integ-contact-title">
-      <h2 id="integ-contact-title">{{ _('Integraciones a medida') }}</h2>
-      <p>
-        {{ _('Las integraciones de SignaPlan se diseñan y activan de forma personalizada para cada cliente: no hay un catálogo genérico que se encienda solo.') }}
-      </p>
-      <p>{{ _('Si quieres conectar un ERP (por ejemplo Odoo), un sistema de fichajes u otra herramienta, necesitamos hablar contigo para:') }}</p>
-      <ul>
-        <li>{{ _('Entender qué datos deben entrar y salir') }}</li>
-        <li>{{ _('Definir el alcance y el calendario de la integración') }}</li>
-        <li>{{ _('Activar los módulos en tu espacio cuando estén listos') }}</li>
-      </ul>
-      <a class="integ-cta" href="mailto:{{ support_email|default('hola@signaplan.com') }}">
-        <i class="fas fa-envelope"></i> {{ _('Contactar con SignaPlan') }}
-      </a>
-      <p class="integ-note">{{ _('Cuando tengas un módulo activo, aquí verás los accesos directos (como la sincronización Odoo).') }}</p>
-    </section>
-    {% else %}
-    <div class="row mt-3">
-      {% if modulos_activos.get('odoo') and user_can(current_user, 'sync_odoo', 'r') %}
-      <div class="col-md-6 col-lg-4 mb-3">
-        <div class="card h-100 shadow-sm border-0">
-          <div class="card-body">
-            <h3 class="h5 mb-2" style="color: #714B67;"><i class="fas fa-sync"></i> {{ _('Sincronización Odoo') }}</h3>
-            <p class="text-muted small mb-3">
-              {{ _('Sincronización de obras, empleados, subcontratas y fichajes con Odoo ERP.') }}
-            </p>
-            <span class="badge badge-success mb-3">{{ _('Módulo activo') }}</span>
-            <a href="{{ url_for('sync.odoo_panel') }}" class="btn btn-primary btn-block">{{ _('Abrir centro de sincronización') }}</a>
+    <div class="integ-empty">
+      <section class="integ-empty-card" aria-labelledby="integ-contact-title">
+        <div class="integ-card-top" style="margin-bottom:0.55rem;">
+          <span class="integ-card-ico integ-card-ico--contact" aria-hidden="true"><i class="fas fa-plug"></i></span>
+          <div>
+            <h2 id="integ-contact-title">{{ _('Integraciones a medida') }}</h2>
+            <p style="margin:0;">{{ _('Se diseñan y activan para cada cliente: no hay un catálogo genérico que se encienda solo.') }}</p>
           </div>
         </div>
-      </div>
+        <p>{{ _('Si quieres conectar un ERP, fichajes u otra herramienta, necesitamos hablar contigo para:') }}</p>
+        <ul>
+          <li>{{ _('Entender qué datos deben entrar y salir') }}</li>
+          <li>{{ _('Definir el alcance y el calendario') }}</li>
+          <li>{{ _('Activar los módulos en tu espacio') }}</li>
+        </ul>
+        <a class="integ-empty-cta" href="mailto:{{ support_email|default('hola@signaplan.com') }}">
+          <i class="fas fa-envelope"></i> {{ _('Contactar con SignaPlan') }}
+        </a>
+        <p class="integ-empty-note">{{ _('Cuando tengas un módulo activo, aquí verás los accesos (p. ej. Odoo).') }}</p>
+      </section>
+    </div>
+    {% else %}
+    <div class="integ-grid">
+      {% if modulos_activos.get('odoo') and user_can(current_user, 'sync_odoo', 'r') %}
+      <a class="integ-card" href="{{ url_for('sync.odoo_panel') }}">
+        <div class="integ-card-top">
+          <span class="integ-card-ico integ-card-ico--odoo" aria-hidden="true"><i class="fas fa-sync"></i></span>
+          <div>
+            <h2 class="integ-card-title">{{ _('Sincronización Odoo') }}</h2>
+            <p class="integ-card-desc">{{ _('Obras, empleados, subcontratas y fichajes.') }}</p>
+          </div>
+        </div>
+        <div class="integ-card-foot">
+          <span class="integ-pill">{{ _('Activo') }}</span>
+          <span class="integ-card-go">{{ _('Abrir') }} →</span>
+        </div>
+      </a>
       {% endif %}
 
       {% if modulos_activos.get('odoo_alta') and user_can(current_user, 'soltec_alta_odoo', 'r') %}
-      <div class="col-md-6 col-lg-4 mb-3">
-        <div class="card h-100 shadow-sm border-0">
-          <div class="card-body">
-            <h3 class="h5 mb-2" style="color: #0369a1;"><i class="fas fa-address-book"></i> {{ _('Alta Odoo') }}</h3>
-            <p class="text-muted small mb-3">
-              {{ _('Gestión de altas y contactos de subcontratas (módulo Fichajes Soltec).') }}
-            </p>
-            <span class="badge badge-success mb-3">{{ _('Módulo activo') }}</span>
-            <a href="{{ url_for('admin.sso_odoo_contactos') }}" class="btn btn-outline-primary btn-block" target="_blank" rel="noopener">
-              {{ _('Abrir panel de altas') }}
-            </a>
+      <a class="integ-card" href="{{ url_for('admin.sso_odoo_contactos') }}" target="_blank" rel="noopener">
+        <div class="integ-card-top">
+          <span class="integ-card-ico integ-card-ico--alta" aria-hidden="true"><i class="fas fa-address-book"></i></span>
+          <div>
+            <h2 class="integ-card-title">{{ _('Alta Odoo') }}</h2>
+            <p class="integ-card-desc">{{ _('Altas y contactos de subcontratas.') }}</p>
           </div>
         </div>
-      </div>
+        <div class="integ-card-foot">
+          <span class="integ-pill">{{ _('Activo') }}</span>
+          <span class="integ-card-go">{{ _('Abrir') }} →</span>
+        </div>
+      </a>
       {% endif %}
 
       {% if tenant_has_soltec_portal_sso and user_can(current_user, 'soltec_portal', 'r') %}
-      <div class="col-md-6 col-lg-4 mb-3">
-        <div class="card h-100 shadow-sm border-0">
-          <div class="card-body">
-            <h3 class="h5 mb-2" style="color: #0f766e;"><i class="fas fa-external-link-alt"></i> {{ _('Portal Soltec') }}</h3>
-            <p class="text-muted small mb-3">
-              {{ _('Entrada directa al Portal Soltec con tu sesión del Planner (SSO).') }}
-            </p>
-            <span class="badge badge-success mb-3">{{ _('SSO activo') }}</span>
-            <a href="{{ url_for('auth.sso_portal') }}" class="btn btn-outline-primary btn-block">
-              {{ _('Abrir Portal') }}
-            </a>
+      <a class="integ-card" href="{{ url_for('auth.sso_portal') }}">
+        <div class="integ-card-top">
+          <span class="integ-card-ico integ-card-ico--portal" aria-hidden="true"><i class="fas fa-external-link-alt"></i></span>
+          <div>
+            <h2 class="integ-card-title">{{ _('Portal Soltec') }}</h2>
+            <p class="integ-card-desc">{{ _('Entrada con tu sesión (SSO).') }}</p>
           </div>
         </div>
-      </div>
+        <div class="integ-card-foot">
+          <span class="integ-pill">{{ _('SSO') }}</span>
+          <span class="integ-card-go">{{ _('Abrir') }} →</span>
+        </div>
+      </a>
       {% endif %}
     </div>
     {% endif %}

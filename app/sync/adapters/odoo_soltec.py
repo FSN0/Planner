@@ -69,7 +69,9 @@ class Adapter(BaseSyncAdapter):
 
         # --- FICHAJES INTERNOS ---
         try:
-            att_fields, metric_map = self._attendance_read_fields('hr.attendance', base_fields_int)
+            att_fields, metric_map, estado_field = self._attendance_read_fields(
+                'hr.attendance', base_fields_int
+            )
             att_int = self.models.execute_kw(
                 self.db_name, self.uid, self.pwd, 
                 'hr.attendance', 'search_read', 
@@ -91,6 +93,7 @@ class Adapter(BaseSyncAdapter):
                         origen_modelo='hr.attendance',
                         fecha_str=fecha_str,
                         metric_map=metric_map,
+                        estado_field=estado_field,
                     )
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en hr.attendance. Error: {str(e)}")
@@ -98,7 +101,7 @@ class Adapter(BaseSyncAdapter):
 
         # --- FICHAJES SUBCONTRATAS ---
         try:
-            att_fields_ext, metric_map_ext = self._attendance_read_fields(
+            att_fields_ext, metric_map_ext, estado_field_ext = self._attendance_read_fields(
                 'partner.attendance', base_fields_ext
             )
             att_ext = self.models.execute_kw(
@@ -121,6 +124,7 @@ class Adapter(BaseSyncAdapter):
                         origen_modelo='partner.attendance',
                         fecha_str=fecha_str,
                         metric_map=metric_map_ext,
+                        estado_field=estado_field_ext,
                     )
         except Exception as e:
             logger.error(f"🚨 [Odoo Adapter - Tenant {self.tenant_id}] CRÍTICO: Fallo de red en partner.attendance. Error: {str(e)}")
@@ -162,13 +166,150 @@ class Adapter(BaseSyncAdapter):
         cache[model_name] = mapping
         return mapping
 
+    def _estado_fichaje_field(self, model_name: str):
+        """Campo cuyo desplegable parece borrador / validado / facturado.
+
+        En Soltec el statusbar vive en partner.attendance.state (subcontratas).
+        hr.attendance de internos no lo tiene.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        cache = getattr(self, '_estado_fichaje_cache', None)
+        if cache is None:
+            cache = {}
+            self._estado_fichaje_cache = cache
+        if model_name in cache:
+            return cache[model_name]
+
+        # Fijo y conocido: partner.attendance.state
+        if model_name == 'partner.attendance':
+            available = self._odoo_fields_get(model_name) or {}
+            if 'state' in available:
+                logger.info('Odoo partner.attendance: campo estado fichaje = state')
+                cache[model_name] = 'state'
+                return 'state'
+            # Por si Studio lo renombró
+            for alt in ('x_studio_state', 'x_estado', 'estado', 'status'):
+                if alt in available:
+                    logger.info('Odoo partner.attendance: campo estado fichaje = %s', alt)
+                    cache[model_name] = alt
+                    return alt
+
+        from app.services.compliance_rules import (
+            campo_estado_parece_fichaje,
+            normalizar_estado_odoo,
+            score_campo_estado_fichaje,
+        )
+        available = self._odoo_fields_get(model_name) or {}
+        priority = (
+            'state',
+            'x_studio_state',
+            'x_studio_estado',
+            'x_studio_status',
+            'x_estado_fichaje',
+            'x_estado',
+            'estado_fichaje',
+            'estado',
+            'status',
+            'x_status',
+        )
+
+        best_name = None
+        best_score = -1
+        for name, meta in available.items():
+            if not isinstance(meta, dict):
+                continue
+            label = (meta.get('string') or '').strip().lower()
+            tipo = (meta.get('type') or '').lower()
+            label_ok = label in (
+                'estado', 'status', 'state', 'estado fichaje',
+                'estado del fichaje', 'statusbar', 'estado odoo',
+            )
+            if label_ok and tipo in ('selection', 'char', 'text', ''):
+                score = max(score_campo_estado_fichaje(name, meta), 2)
+            elif not campo_estado_parece_fichaje(name, meta):
+                continue
+            else:
+                score = score_campo_estado_fichaje(name, meta)
+            boost = 0
+            if name in priority:
+                boost = 10 - priority.index(name)
+            total = score * 100 + boost
+            if total > best_score:
+                best_score = total
+                best_name = name
+
+        if not best_name:
+            for name in priority:
+                meta = available.get(name)
+                if not isinstance(meta, dict):
+                    continue
+                tipo = (meta.get('type') or '').lower()
+                if tipo and tipo not in ('selection', 'char', 'text'):
+                    continue
+                best_name = name
+                break
+
+        if not best_name:
+            sel_fields = [
+                n for n, m in available.items()
+                if isinstance(m, dict) and (m.get('type') or '') == 'selection'
+            ][:25]
+            if sel_fields:
+                try:
+                    rows = self.models.execute_kw(
+                        self.db_name, self.uid, self.pwd,
+                        model_name, 'search_read',
+                        [[]],
+                        {'fields': sel_fields, 'limit': 8, 'order': 'id desc'},
+                    ) or []
+                    hits = {}
+                    for row in rows:
+                        for fname in sel_fields:
+                            got = normalizar_estado_odoo(row.get(fname))
+                            if got:
+                                hits.setdefault(fname, set()).add(got)
+                    ranked = sorted(
+                        ((len(states), name) for name, states in hits.items()),
+                        reverse=True,
+                    )
+                    if ranked and ranked[0][0] >= 1:
+                        best_name = ranked[0][1]
+                except Exception as exc:
+                    logger.debug(
+                        'Odoo %s: no se pudo muestrear selection para estado: %s',
+                        model_name, exc,
+                    )
+
+        if best_name:
+            logger.info('Odoo %s: campo estado fichaje = %s', model_name, best_name)
+        elif model_name == 'hr.attendance':
+            # Esperado en Soltec: el statusbar solo está en partner.attendance
+            logger.debug(
+                'Odoo hr.attendance: sin campo estado (normal; solo partner.attendance.state)'
+            )
+        else:
+            sel_names = sorted(
+                n for n, m in available.items()
+                if isinstance(m, dict) and (m.get('type') or '') == 'selection'
+            )
+            logger.warning(
+                'Odoo %s: no se encontró campo estado draft/validated/invoiced. selections=%s',
+                model_name, sel_names[:30],
+            )
+        cache[model_name] = best_name
+        return best_name
+
     def _attendance_read_fields(self, model_name, base_fields):
         metric_map = self._attendance_metric_field_map(model_name)
         fields = list(base_fields)
         for odoo_field in metric_map.values():
             if odoo_field and odoo_field not in fields:
                 fields.append(odoo_field)
-        return fields, metric_map
+        estado_field = self._estado_fichaje_field(model_name)
+        if estado_field and estado_field not in fields:
+            fields.append(estado_field)
+        return fields, metric_map, estado_field
 
     def _odoo_numeric(self, raw):
         if raw in (None, False, ''):
@@ -196,6 +337,7 @@ class Adapter(BaseSyncAdapter):
         origen_modelo,
         fecha_str,
         metric_map,
+        estado_field=None,
     ):
         actor = row.get(actor_field)
         if not actor:
@@ -214,6 +356,22 @@ class Adapter(BaseSyncAdapter):
             'note': row.get('note') if row.get('note') not in (False, None, '') else None,
         }
         item.update(self._extract_attendance_metrics(row, metric_map))
+        if estado_field:
+            from app.services.compliance_rules import normalizar_estado_odoo
+            raw = row.get(estado_field)
+            item['estado_odoo'] = normalizar_estado_odoo(raw)
+            if item['estado_odoo'] is None and raw not in (None, False, ''):
+                import logging
+                logging.getLogger(__name__).warning(
+                    'estado_odoo no normalizado en %s.%s=%r',
+                    origen_modelo, estado_field, raw,
+                )
+            elif origen_modelo == 'partner.attendance' and item.get('estado_odoo'):
+                import logging
+                logging.getLogger(__name__).debug(
+                    'partner.attendance id=%s state=%r → %s',
+                    row.get('id'), raw, item['estado_odoo'],
+                )
         dest.append(item)
 
     def get_leaves(self, date_from=None, date_to=None) -> list:
@@ -894,12 +1052,12 @@ class Adapter(BaseSyncAdapter):
                 if local_user.email != email: data['cambios']['Email'] = f"{local_user.email} ➔ {email}"
                 from app.services.user_role_sync_service import user_role_sync_locked
                 role_sync_role = role
-                office_roles = {'laboral', 'rrhh', 'admin'}
                 odoo_field_roles = {'operario', 'jefe_obra'}
                 if user_role_sync_locked(local_user):
                     role_sync_role = local_user.role
-                elif local_user.role in office_roles and role in odoo_field_roles:
-                    # p. ej. Lupe importada como operario pero ya es laboral en SignaPlan
+                elif local_user.role not in odoo_field_roles and role in odoo_field_roles:
+                    # Laboral, admin, rrhh o un rol creado en SignaPlan:
+                    # un departamento mapeado a operario/jefe no se lo quita.
                     role_sync_role = local_user.role
                 elif local_user.role == 'jefe_obra' and role != 'admin':
                     # Un cambio de departamento en Odoo no le quita el rol de jefe aquí.
@@ -1144,6 +1302,44 @@ class Adapter(BaseSyncAdapter):
             )
             return []
 
+    def _admin_subcontrata_category_ids(self):
+        """Etiqueta de contacto que abre el portal (admin + subcontrata)."""
+        name_patterns = (
+            'subcontrat',
+            'subcontract',
+            'sous-trait',
+            'subempreit',
+        )
+        domain = ['&', ('name', 'ilike', 'admin')]
+        domain.extend(['|'] * (len(name_patterns) - 1))
+        for pat in name_patterns:
+            domain.append(('name', 'ilike', pat))
+        try:
+            return self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'res.partner.category', 'search',
+                [domain],
+            ) or []
+        except Exception as exc:
+            logger.warning(
+                "[Odoo Adapter - Tenant %s] No se pudieron leer categorías admin subcontrata: %s",
+                self.tenant_id, exc,
+            )
+            return []
+
+    @staticmethod
+    def _category_id_set(raw) -> set:
+        found = set()
+        for item in raw or []:
+            if isinstance(item, int):
+                found.add(item)
+            elif isinstance(item, (list, tuple)) and item:
+                try:
+                    found.add(int(item[0]))
+                except (TypeError, ValueError):
+                    continue
+        return found
+
     def _find_local_externo(self, odoo_id, dni_seguro, email=None):
         """Resuelve externo local por Odoo ID o DNI (con sufijo), incl. archivados.
 
@@ -1301,7 +1497,7 @@ class Adapter(BaseSyncAdapter):
             'res.partner', 'search_read',
             [domain_contactos],
             {
-                'fields': ['id', 'name', 'email', 'vat', 'function', 'parent_id'],
+                'fields': ['id', 'name', 'email', 'vat', 'function', 'parent_id', 'category_id'],
                 'limit': 10000,
             },
         ) or []
@@ -1360,6 +1556,8 @@ class Adapter(BaseSyncAdapter):
             else:
                 diff['empresas']['nuevas'].append(data_emp)
 
+        admin_cat_ids = set(self._admin_subcontrata_category_ids() or [])
+
         for o_cont in odoo_contactos:
             raw_vat = o_cont.get('vat')
             if raw_vat in (False, None):
@@ -1375,6 +1573,9 @@ class Adapter(BaseSyncAdapter):
             raw_email = o_cont.get('email')
             parent_email = parent_email_by_id.get(odoo_company_id) if odoo_company_id else None
             email = self._resolve_externo_email(o_cont['id'], raw_email, parent_email)
+            role = 'operario'
+            if admin_cat_ids and (self._category_id_set(o_cont.get('category_id')) & admin_cat_ids):
+                role = 'admin_subcontrata'
 
             from app.services.personal_conciliation_service import odoo_ids_for_user
             # Solo Odoo ID / DNI: el email de empresa no identifica al operario.
@@ -1390,7 +1591,7 @@ class Adapter(BaseSyncAdapter):
                 'lastname': lastname,
                 'dni': dni_seguro,
                 'email': email,
-                'role': 'operario',
+                'role': role,
                 'categoria_profesional': o_cont.get('function') or 'Externo',
                 'odoo_company_id': odoo_company_id,
                 'cambios': {}
@@ -1423,6 +1624,8 @@ class Adapter(BaseSyncAdapter):
 
                 if local_user.is_deleted or not local_user.active:
                     data_cont['cambios']['Estado'] = 'Inactivo ➔ Activo (reincorporación)'
+                if local_user.role in ('operario', 'admin_subcontrata') and local_user.role != role:
+                    data_cont['cambios']['Rol'] = f'{local_user.role} ➔ {role}'
 
                 if data_cont['cambios'] or not (local_user.external_ids or {}).get('odoo'):
                     diff['empleados']['actualizados'].append(data_cont)
@@ -1758,7 +1961,7 @@ class Adapter(BaseSyncAdapter):
             return self.models.execute_kw(
                 self.db_name, self.uid, self.pwd,
                 model_name, 'fields_get', [],
-                {'attributes': ['string', 'type', 'relation']},
+                {'attributes': ['string', 'type', 'relation', 'selection']},
             ) or {}
         except Exception:
             return {}

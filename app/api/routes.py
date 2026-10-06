@@ -101,7 +101,7 @@ def _autorizar_calendario(context, entity_id):
         return _deny_cal()
 
     if ctx == 'empresa':
-        if can_view_empresa_calendar(current_user):
+        if can_view_empresa_calendar(current_user, entity_id):
             return None
         return _deny_cal()
 

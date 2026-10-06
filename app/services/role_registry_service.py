@@ -10,6 +10,7 @@ from app.models import (
     ROLE_ADMIN,
     ROLE_JEFE,
     ROLE_LABORAL,
+    ROLE_ADMIN_SUBCONTRATA,
     ROLE_OPERARIO,
     ROLE_RRHH,
     ROLES_BUILTIN,
@@ -28,6 +29,7 @@ _BUILTIN_LABELS = {
     ROLE_LABORAL: 'Laboral',
     ROLE_RRHH: 'RRHH',
     ROLE_OPERARIO: 'Operario',
+    ROLE_ADMIN_SUBCONTRATA: 'Admin subcontrata',
 }
 
 _BUILTIN_SORT = {
@@ -36,6 +38,7 @@ _BUILTIN_SORT = {
     ROLE_LABORAL: 30,
     ROLE_RRHH: 40,
     ROLE_OPERARIO: 50,
+    ROLE_ADMIN_SUBCONTRATA: 55,
 }
 
 _KEY_RE = re.compile(r'^[a-z][a-z0-9_]{1,38}$')

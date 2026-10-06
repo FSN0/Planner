@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+{% block title %}{{ sujeto.name }} · {{ _('Contratación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+{% set prog = namespace(validados=0, por_validar=0, por_completar=0, total=0) %}
+{% for fila in filas_activas %}
+  {% set prog.total = prog.total + 1 %}
+  {% if fila.estado in ('ok', 'por_caducar') %}
+    {% set prog.validados = prog.validados + 1 %}
+  {% elif fila.estado == 'pendiente_validar' %}
+    {% set prog.por_validar = prog.por_validar + 1 %}
+  {% else %}
+    {% set prog.por_completar = prog.por_completar + 1 %}
+  {% endif %}
+{% endfor %}
+{% set pct_ok = (prog.validados * 100 / prog.total) if prog.total else 0 %}
+{% set pct_wait = (prog.por_validar * 100 / prog.total) if prog.total else 0 %}
+{% set pct_bad = (prog.por_completar * 100 / prog.total) if prog.total else 0 %}
+{% set fase1_ok = fase1_completa %}
+{% set fase2_abierta = sujeto.hiring_state == 'fase2' %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-hire">
+    <section class="office-hire-hero">
+      <p class="hire-kicker" data-hire-fase>
+        {% if sujeto.hiring_state == 'fase2' %}{{ _('Fase 2') }}
+        {% elif sujeto.hiring_state %}{{ _('Fase 1') }}
+        {% else %}{{ _('Alta cerrada') }}{% endif %}
+      </p>
+      <h1>{{ sujeto.name }} {{ sujeto.lastname }}</h1>
+      <p>
+        {% if sujeto.hiring_state == 'fase2' %}
+          {{ _('Fase 1 lista. Ahora toca el art. 19 y el reconocimiento médico. Cuando estén validados, finaliza el alta.') }}
+        {% elif sujeto.hiring_state %}
+          {{ _('Primero la documentación de fase 1. El art. 19 y el reconocimiento se piden después, en la fase 2.') }}
+        {% else %}
+          {{ _('Esta persona ya está activa.') }}
+        {% endif %}
+      </p>
+      <div class="hire-meter" style="margin-top:14px;" id="hire-meter">
+        <div class="hire-meter-top">
+          <span>{{ _('Documentación') }}</span>
+          <span data-hire-prog>{{ prog.validados }} {{ _('validados') }} · {{ prog.por_validar }} {{ _('por validar') }}</span>
+        </div>
+        <div class="hire-track office-hire-track--split" title="{{ _('Verde: validado · Amarillo: por validar · Rojo: falta') }}">
+          <span class="is-ok" data-hire-bar-ok style="width: {{ pct_ok }}%;"></span>
+          <span class="is-wait" data-hire-bar-wait style="width: {{ pct_wait }}%;"></span>
+          <span class="is-bad" data-hire-bar-bad style="width: {{ pct_bad }}%;"></span>
+        </div>
+      </div>
+      <div class="office-hire-actions" id="hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.contratacion_lista') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+        {% if enlace %}
+        <button type="button" class="office-hire-btn ghost" data-copy-url="{{ enlace }}" data-copied-label="{{ _('Copiado') }}" onclick="(function(b){navigator.clipboard.writeText(b.getAttribute('data-copy-url')).then(function(){var t=b.innerHTML;b.innerHTML='<i class=&quot;fas fa-check&quot;></i> '+b.getAttribute('data-copied-label');setTimeout(function(){b.innerHTML=t;},1400);});})(this)">
+          <i class="fas fa-link"></i> {{ _('Copiar enlace') }}
+        </button>
+        {% if user_can(current_user, 'contratacion', 'w') %}
+        <form method="post" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="office-hire-btn ghost" name="accion" value="enviar_enlace" type="submit" {% if not email_real %}title="{{ _('Guarda un correo abajo para poder enviarlo') }}"{% endif %}>
+            <i class="fas fa-paper-plane"></i> {{ _('Enviar enlace') }}
+          </button>
+        </form>
+        {% endif %}
+        {% endif %}
+        <span id="hire-finalizar-slot">
+        {% if puede_finalizar and user_can(current_user, 'contratacion', 'w') %}
+        <form method="post" class="ml-auto js-hire-finalizar" style="margin:0;" data-hoy="{{ hoy_iso }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="finalizar">
+          <input type="hidden" name="fecha_inicio" value="{{ hoy_iso }}">
+          <button class="office-hire-btn" type="submit">{{ _('Finalizar contratación') }}</button>
+        </form>
+        {% endif %}
+        </span>
+      </div>
+    </section>
+
+    <div class="office-panel">
+      <h3 class="hire-block-title" style="margin-top:0;">{{ _('Datos') }}</h3>
+      {% if user_can(current_user, 'contratacion', 'w') %}
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="accion" value="perfil">
+        <div class="hire-fields">
+          <div class="hire-field">
+            <label for="name">{{ _('Nombre') }}</label>
+            <input id="name" name="name" value="{{ sujeto.name or '' }}" required autocomplete="given-name">
+          </div>
+          <div class="hire-field">
+            <label for="lastname">{{ _('Apellidos') }}</label>
+            <input id="lastname" name="lastname" value="{{ sujeto.lastname or '' }}" autocomplete="family-name">
+          </div>
+          <div class="hire-field">
+            <label for="dni">{{ _('DNI') }}</label>
+            <input id="dni" name="dni" value="{{ '' if (sujeto.dni or '').startswith('PEND-') else (sujeto.dni or '') }}" autocomplete="off" autocapitalize="characters">
+          </div>
+          <div class="hire-field">
+            <label for="email">{{ _('Correo') }}</label>
+            <input id="email" name="email" type="email" value="{{ sujeto.email if email_real else '' }}" autocomplete="email" inputmode="email" placeholder="{{ _('Para enviarle el enlace') }}">
+          </div>
+          <div class="hire-field">
+            <label for="telefono">{{ _('Teléfono') }}</label>
+            <input id="telefono" name="telefono" value="{{ sujeto.telefono or '' }}" autocomplete="tel" inputmode="tel">
+          </div>
+          <div class="hire-field">
+            <label for="talla_ropa">{{ _('Talla') }}</label>
+            <input id="talla_ropa" name="talla_ropa" value="{{ sujeto.talla_ropa or '' }}">
+          </div>
+          <div class="hire-field hire-field--wide">
+            <label for="numero_cuenta">{{ _('Cuenta') }}</label>
+            <input id="numero_cuenta" name="numero_cuenta" value="{{ sujeto.numero_cuenta or '' }}">
+          </div>
+          {% if sujeto.fecha_inicio %}
+          <div class="hire-field">
+            <label>{{ _('Fecha de inicio') }}</label>
+            <input value="{{ sujeto.fecha_inicio.strftime('%d/%m/%Y') }}" readonly>
+          </div>
+          {% endif %}
+        </div>
+        <div style="margin-top:14px;">
+          <button class="hire-save" type="submit">{{ _('Guardar datos') }}</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="hire-fields">
+        <div class="hire-field"><label>{{ _('Nombre') }}</label><div>{{ sujeto.name }}</div></div>
+        <div class="hire-field"><label>{{ _('Apellidos') }}</label><div>{{ sujeto.lastname or '—' }}</div></div>
+        <div class="hire-field"><label>{{ _('DNI') }}</label><div>{{ '' if (sujeto.dni or '').startswith('PEND-') else (sujeto.dni or '—') }}</div></div>
+        <div class="hire-field"><label>{{ _('Correo') }}</label><div>{{ sujeto.email if email_real else '—' }}</div></div>
+        <div class="hire-field"><label>{{ _('Teléfono') }}</label><div>{{ sujeto.telefono or '—' }}</div></div>
+        <div class="hire-field"><label>{{ _('Talla') }}</label><div>{{ sujeto.talla_ropa or '—' }}</div></div>
+        <div class="hire-field hire-field--wide"><label>{{ _('Cuenta') }}</label><div>{{ sujeto.numero_cuenta or '—' }}</div></div>
+        {% if sujeto.fecha_inicio %}
+        <div class="hire-field"><label>{{ _('Fecha de inicio') }}</label><div>{{ sujeto.fecha_inicio.strftime('%d/%m/%Y') }}</div></div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div id="hire-docs-grid"
+         data-csrf="{{ csrf_token() }}"
+         data-msg-ok="{{ _('Validado') }}"
+         data-msg-wait="{{ _('Por validar') }}"
+         data-msg-bad="{{ _('Rechazado') }}"
+         data-msg-saved="{{ _('Guardado.') }}"
+         data-msg-error="{{ _('No se ha podido guardar.') }}"
+         data-finalizar-label="{{ _('Finalizar contratación') }}"
+         data-fecha-label="{{ _('Fecha de inicio en obra') }}"
+         data-fecha-hint="{{ _('A partir de esta fecha aparecerá en el panel de obras.') }}"
+         data-hoy="{{ hoy_iso }}">
+      {% set puede_validar = user_can(current_user, 'contratacion', 'w') %}
+
+      <div class="hire-fase-head">
+        <h3>{{ _('Fase 1') }} · {{ _('Documentación') }}</h3>
+        <span class="hire-fase-state {% if fase1_ok %}is-done{% else %}is-open{% endif %}">
+          {% if fase1_ok %}{{ _('Completada') }}{% else %}{{ _('En curso') }}{% endif %}
+        </span>
+      </div>
+      <div class="hire-grid office-hire-docs">
+        {% for fila in filas_fase1 %}
+          {% include "compliance/_contratacion_doc_card.html" %}
+        {% else %}
+          <p class="doc-hint">{{ _('No hay documentos de fase 1 configurados.') }}</p>
+        {% endfor %}
+      </div>
+
+      <div class="hire-fase {% if not fase2_abierta %}is-locked{% endif %}">
+        <div class="hire-fase-head">
+          <h3>{{ _('Fase 2') }} · {{ _('Art. 19 y reconocimiento') }}</h3>
+          <span class="hire-fase-state {% if fase2_abierta %}is-open{% else %}is-locked{% endif %}">
+            {% if fase2_abierta %}{{ _('Abierta') }}{% else %}{{ _('Bloqueada') }}{% endif %}
+          </span>
+        </div>
+        {% if not fase2_abierta %}
+        <p class="hire-fase-note">{{ _('Estos dos documentos se exigen cuando toda la fase 1 esté validada.') }}</p>
+        {% endif %}
+        <div class="hire-grid office-hire-docs">
+          {% for fila in filas_fase2 %}
+            {% include "compliance/_contratacion_doc_card.html" %}
+          {% else %}
+            <p class="doc-hint">{{ _('No hay documentos de fase 2 configurados.') }}</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+(function () {
+  var grid = document.getElementById('hire-docs-grid');
+  if (!grid) return;
+  var labels = {
+    validado: grid.getAttribute('data-msg-ok') || 'Validado',
+    porValidar: grid.getAttribute('data-msg-wait') || 'Por validar',
+    rechazado: grid.getAttribute('data-msg-bad') || 'Rechazado',
+    saved: grid.getAttribute('data-msg-saved') || 'Guardado.',
+    error: grid.getAttribute('data-msg-error') || 'Error',
+    finalizar: grid.getAttribute('data-finalizar-label') || 'Finalizar contratación',
+    fechaLabel: grid.getAttribute('data-fecha-label') || 'Fecha de inicio',
+    fechaHint: grid.getAttribute('data-fecha-hint') || '',
+  };
+  var hoy = grid.getAttribute('data-hoy') || '';
+
+  function toast(ok, msg) {
+    if (typeof Swal === 'undefined') return;
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: ok ? 'success' : 'error',
+      title: msg || (ok ? labels.saved : labels.error),
+      showConfirmButton: false,
+      timer: ok ? 1600 : 3200,
+    });
+  }
+
+  function estadoLabel(estado, serverLabel) {
+    if (serverLabel) return serverLabel;
+    if (estado === 'ok' || estado === 'por_caducar') return labels.validado;
+    if (estado === 'rechazado') return labels.rechazado;
+    if (estado === 'pendiente_validar') return labels.porValidar;
+    return estado || '';
+  }
+
+  function aporteLabel(estado, slotNombre, serverLabels) {
+    var base = labels.porValidar;
+    if (estado === 'validado') base = (serverLabels && serverLabels.validado) || labels.validado;
+    else if (estado === 'rechazado') base = (serverLabels && serverLabels.rechazado) || labels.rechazado;
+    else if (estado === 'subido') base = (serverLabels && serverLabels.por_validar) || labels.porValidar;
+    return slotNombre ? (base + ' · ' + slotNombre) : base;
+  }
+
+  function applyCard(card, data) {
+    if (!card || !data) return;
+    card.classList.remove('is-ok', 'is-wait', 'is-bad', 'is-soon', 'is-optional');
+    var st = data.estado;
+    if (st === 'ok' || st === 'cert_ok') card.classList.add('is-ok');
+    else if (st === 'por_caducar') { card.classList.add('is-ok', 'is-soon'); }
+    else if (st === 'pendiente_validar') card.classList.add('is-wait');
+    else if (st === 'rechazado' || st === 'caducado' || st === 'falta') card.classList.add('is-bad');
+    else if (st === 'opcional_vacio') card.classList.add('is-optional');
+
+    var statusEl = card.querySelector('[data-doc-status]');
+    if (statusEl) statusEl.textContent = estadoLabel(st, data.estado_label);
+
+    (data.slots || []).forEach(function (slot) {
+      if (!slot.aporte_id) return;
+      var cap = card.querySelector('.doc-preview-cap[data-aporte-id="' + slot.aporte_id + '"]');
+      if (cap) cap.textContent = aporteLabel(slot.estado, slot.nombre, data.labels);
+      if (slot.estado === 'rechazado' && slot.nota_oficina) {
+        var existing = card.querySelector('.doc-reject[data-aporte-id="' + slot.aporte_id + '"]');
+        if (!existing) {
+          var p = document.createElement('p');
+          p.className = 'doc-reject';
+          p.setAttribute('data-aporte-id', String(slot.aporte_id));
+          p.textContent = (slot.nombre ? slot.nombre + ': ' : '') + slot.nota_oficina;
+          var actions = card.querySelector('[data-doc-actions]');
+          if (actions) card.insertBefore(p, actions);
+          else card.appendChild(p);
+        } else {
+          existing.textContent = (slot.nombre ? slot.nombre + ': ' : '') + slot.nota_oficina;
+        }
+      }
+    });
+
+    var pendientes = (data.slots || []).filter(function (s) { return s.estado === 'subido'; }).length;
+    if (!pendientes) {
+      var actions = card.querySelector('[data-doc-actions]');
+      if (actions) actions.remove();
+    }
+  }
+
+  function updateMeter(data) {
+    var prog = document.querySelector('[data-hire-prog]');
+    var ok = document.querySelector('[data-hire-bar-ok]');
+    var wait = document.querySelector('[data-hire-bar-wait]');
+    var bad = document.querySelector('[data-hire-bar-bad]');
+    var fase = document.querySelector('[data-hire-fase]');
+    var total = data.prog_total || 0;
+    var validados = data.validados || 0;
+    var porValidar = data.por_validar || 0;
+    var porCompletar = data.por_completar || 0;
+    if (prog) {
+      prog.textContent = String(validados) + ' {{ _('validados') }} · ' + String(porValidar) + ' {{ _('por validar') }}';
+    }
+    if (total > 0) {
+      if (ok) ok.style.width = String((validados * 100) / total) + '%';
+      if (wait) wait.style.width = String((porValidar * 100) / total) + '%';
+      if (bad) bad.style.width = String((porCompletar * 100) / total) + '%';
+    } else {
+      if (ok) ok.style.width = '0%';
+      if (wait) wait.style.width = '0%';
+      if (bad) bad.style.width = '0%';
+    }
+    if (fase && data.hiring_label) {
+      fase.textContent = data.hiring_label;
+    }
+    if (data.hiring_state === 'fase2') {
+      var locked = document.querySelector('.hire-fase.is-locked');
+      if (locked) locked.classList.remove('is-locked');
+    }
+  }
+
+  function updateFinalizar(data) {
+    var slot = document.getElementById('hire-finalizar-slot');
+    if (!slot) return;
+    if (data.puede_finalizar && !slot.querySelector('form')) {
+      var form = document.createElement('form');
+      form.method = 'post';
+      form.className = 'ml-auto js-hire-finalizar';
+      form.style.margin = '0';
+      form.setAttribute('data-hoy', hoy);
+      form.innerHTML = '<input type="hidden" name="csrf_token" value="'
+        + (grid.getAttribute('data-csrf') || '')
+        + '"><input type="hidden" name="accion" value="finalizar">'
+        + '<input type="hidden" name="fecha_inicio" value="' + (hoy || '') + '">'
+        + '<button class="office-hire-btn" type="submit">'
+        + (data.finalizar_label || labels.finalizar)
+        + '</button>';
+      slot.appendChild(form);
+    }
+  }
+
+  function askFechaInicio(form) {
+    var hidden = form.querySelector('input[name="fecha_inicio"]');
+    var def = (hidden && hidden.value) || hoy || '';
+    if (typeof Swal === 'undefined') {
+      var typed = window.prompt(labels.fechaLabel, def);
+      if (typed === null) return Promise.resolve(null);
+      if (hidden) hidden.value = typed || def;
+      return Promise.resolve(true);
+    }
+    return Swal.fire({
+      title: labels.finalizar,
+      html: '<p style="margin:0 0 12px;color:#64748b;font-size:14px;">' + labels.fechaHint + '</p>'
+        + '<label style="display:block;text-align:left;font-size:13px;margin-bottom:6px;">' + labels.fechaLabel + '</label>'
+        + '<input id="swal-fecha-inicio" type="date" value="' + def + '" class="swal2-input" style="width:100%;margin:0;">',
+      showCancelButton: true,
+      confirmButtonText: labels.finalizar,
+      cancelButtonText: '{{ _('Cancelar') }}',
+      focusConfirm: false,
+      preConfirm: function () {
+        var el = document.getElementById('swal-fecha-inicio');
+        return (el && el.value) ? el.value : def;
+      }
+    }).then(function (result) {
+      if (!result.isConfirmed) return null;
+      if (hidden) hidden.value = result.value || def;
+      return true;
+    });
+  }
+
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (!form || !form.classList || !form.classList.contains('js-hire-finalizar')) return;
+    ev.preventDefault();
+    askFechaInicio(form).then(function (ok) {
+      if (ok) form.submit();
+    });
+  });
+
+  grid.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (!form || !form.classList || !form.classList.contains('js-hire-ajax')) return;
+    ev.preventDefault();
+    if (form.dataset.busy === '1') return;
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    form.dataset.busy = '1';
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    var card = form.closest('.doc-card');
+    var body = new FormData(form);
+    fetch(window.location.href, {
+      method: 'POST',
+      body: body,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+      },
+      credentials: 'same-origin',
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        return { okHttp: res.ok, data: data };
+      }).catch(function () {
+        return { okHttp: false, data: { ok: false, error: labels.error } };
+      });
+    }).then(function (pack) {
+      form.dataset.busy = '0';
+      if (btn) btn.disabled = false;
+      var data = pack.data || {};
+      if (!pack.okHttp || !data.ok) {
+        toast(false, data.error || labels.error);
+        return;
+      }
+      applyCard(card, data);
+      updateMeter(data);
+      updateFinalizar(data);
+      toast(true, data.message || labels.saved);
+      if (data.reload) {
+        window.location.reload();
+      }
+    }).catch(function () {
+      form.dataset.busy = '0';
+      if (btn) btn.disabled = false;
+      toast(false, labels.error);
+    });
+  });
+})();
+</script>
+{% endblock %}

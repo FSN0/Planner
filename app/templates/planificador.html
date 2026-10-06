@@ -286,7 +286,7 @@ window.PLANIFICADOR_FESTIVOS = {{ (planificador_festivos|default([]))|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261005pick"></script>
 <script src="{{ url_for('static', filename='js/etiquetas_select2.js') }}?v=20261005pick"></script>
-<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20261005pick"></script>
+<script src="{{ url_for('static', filename='js/planificador.js') }}?v=20261005lane"></script>
 {% if can_edit_planificador|default(false) %}
 <script src="{{ url_for('static', filename='js/mobile_assign_picker.js') }}?v=20260830b"></script>
 {% endif %}

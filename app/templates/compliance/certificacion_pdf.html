@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>{{ doc_title }}</title>
+  <style type="text/css">
+    /*
+      Margen superior del texto: wkhtmltopdf (header-html + margin-top).
+      Franja verde: va en la cabecera a sangre (no aquí), para llegar al borde.
+    */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 210mm;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 9pt;
+      color: #0f172a;
+      line-height: 1.25;
+      background: #fff;
+      position: relative;
+    }
+
+    .page-wm {
+      position: absolute;
+      left: 0;
+      width: 200mm;
+      height: {{ page_height_mm }}mm;
+      z-index: 1000;
+      pointer-events: none;
+      {% if mark_data_uri %}
+      background-image: url('{{ mark_data_uri }}');
+      background-repeat: no-repeat;
+      background-position: center center;
+      background-size: 105mm auto;
+      {% endif %}
+    }
+
+    /* Vista HTML / fallback: franja solo si no hay header-html de wkhtmltopdf */
+    .page-stripe-fallback {
+      position: absolute;
+      right: 0;
+      width: 10mm;
+      height: {{ page_height_mm }}mm;
+      background: {{ stripe_color }};
+      z-index: 1100;
+      overflow: hidden;
+    }
+    .stripe-logo {
+      position: absolute;
+      left: 1.2mm;
+      width: 7.6mm;
+    }
+    .stripe-logo--top { top: 5mm; }
+    .stripe-logo--bottom { bottom: 5mm; }
+    .stripe-logo img {
+      display: block;
+      width: 7.6mm;
+      height: auto;
+      max-height: 32mm;
+    }
+    .stripe-title {
+      position: absolute;
+      top: 40mm;
+      bottom: 40mm;
+      left: 0;
+      width: 10mm;
+      color: #fff;
+      font-size: 10pt;
+      font-weight: bold;
+      letter-spacing: 0.06em;
+      text-align: center;
+      -webkit-writing-mode: vertical-rl;
+      writing-mode: vertical-rl;
+      -webkit-text-orientation: mixed;
+      text-orientation: mixed;
+      overflow: hidden;
+    }
+    .stripe-title span {
+      display: inline-block;
+      padding: 1.5mm 0 2.5mm 0;
+      max-height: 210mm;
+      overflow: visible;
+      white-space: nowrap;
+      -webkit-transform: rotate(180deg);
+      transform: rotate(180deg);
+    }
+
+    .sheet {
+      position: relative;
+      z-index: 1;
+      width: 200mm;
+      margin: 0;
+      padding: 0;
+    }
+    .banner-inline {
+      display: block;
+      width: 200mm;
+      height: 14mm;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background-repeat: no-repeat;
+      background-position: left center;
+      background-size: auto 14mm;
+    }
+    .banner-inline-fallback {
+      width: 200mm;
+      box-sizing: border-box;
+      padding: 3.5mm 8mm 2mm 10mm;
+      font-size: 11pt;
+      font-weight: bold;
+      border-bottom: 0.6pt solid #0f172a;
+    }
+    .body {
+      padding: 2.5mm 9mm 8mm 8mm;
+      box-sizing: border-box;
+    }
+
+    .hero {
+      display: table;
+      width: 100%;
+      border-bottom: 1pt solid #0f172a;
+      padding-bottom: 2mm;
+      margin-bottom: 2.5mm;
+    }
+    .hero-left, .hero-right { display: table-cell; vertical-align: bottom; }
+    .hero-right { text-align: right; }
+    .kicker {
+      margin: 0 0 1mm;
+      font-size: 7pt;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: bold;
+    }
+    .doc-title {
+      margin: 0;
+      font-size: 13pt;
+      font-weight: bold;
+      color: #0f172a;
+      line-height: 1.15;
+    }
+    .meta {
+      margin: 1mm 0 0;
+      color: #334155;
+      font-size: 8.5pt;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 1mm;
+      padding: 0.6mm 2mm;
+      border: 0.5pt solid #cbd5e1;
+      font-size: 7pt;
+      font-weight: bold;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .summary {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 3mm;
+    }
+    .summary td {
+      border: 0.4pt solid #e2e8f0;
+      padding: 1.4mm 2mm;
+      background: #f8fafc;
+      width: 25%;
+    }
+    .summary .label {
+      display: block;
+      font-size: 6.5pt;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: bold;
+      margin-bottom: 0.4mm;
+    }
+    .summary .value {
+      font-size: 9.5pt;
+      font-weight: bold;
+      color: #0f172a;
+    }
+
+    .obra {
+      margin: 0 0 2.5mm;
+      page-break-inside: avoid;
+    }
+    .obra-head {
+      display: table;
+      width: 100%;
+      margin: 0 0 1mm;
+    }
+    .obra-head h2, .obra-head p {
+      display: table-cell;
+      vertical-align: bottom;
+      margin: 0;
+    }
+    .obra-head h2 {
+      font-size: 9.5pt;
+      font-weight: bold;
+      color: #0f172a;
+    }
+    .obra-head p {
+      text-align: right;
+      font-size: 8.5pt;
+      font-weight: bold;
+      color: #334155;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .data-table thead th {
+      background: {{ stripe_color }};
+      color: #fff;
+      font-size: 6.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      text-align: left;
+      padding: 0.9mm 1.4mm;
+      border: 0.4pt solid {{ stripe_color }};
+      line-height: 1.15;
+    }
+    .data-table tbody td {
+      border: 0.4pt solid #e2e8f0;
+      padding: 0.7mm 1.4mm;
+      vertical-align: middle;
+      font-size: 8pt;
+      line-height: 1.15;
+    }
+    .data-table tbody tr:nth-child(even) td { background: #f8fafc; }
+    .num { text-align: right; white-space: nowrap; }
+    .col-fecha { width: 16mm; color: #475569; font-weight: bold; }
+    .col-persona { font-weight: bold; }
+    .empty, .empty-doc {
+      color: #64748b;
+      font-style: italic;
+      text-align: center;
+      padding: 2.5mm;
+      font-size: 8pt;
+    }
+
+    .footer {
+      margin-top: 3mm;
+      border-top: 1pt solid #0f172a;
+      padding-top: 2mm;
+      display: table;
+      width: 100%;
+    }
+    .footer-left, .footer-right { display: table-cell; vertical-align: middle; }
+    .footer-right { text-align: right; }
+    .footer .total-label {
+      font-size: 6.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      font-weight: bold;
+    }
+    .footer .total-value {
+      font-size: 11pt;
+      font-weight: bold;
+      color: #0f172a;
+    }
+    .footnote {
+      margin-top: 1mm;
+      font-size: 6.5pt;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  {% for i in range(overlay_page_count) %}
+  {% if mark_data_uri %}
+  <div class="page-wm" style="top: {{ i * page_height_mm }}mm;" aria-hidden="true"></div>
+  {% endif %}
+  {% if include_inline_banner %}
+  <div class="page-stripe-fallback" style="top: {{ i * page_height_mm }}mm;" aria-hidden="true">
+    {% if logo_data_uri %}
+    <div class="stripe-logo stripe-logo--top"><img src="{{ logo_data_uri }}" alt=""></div>
+    {% endif %}
+    <div class="stripe-title"><span>{{ stripe_label }}&nbsp;</span></div>
+    {% if logo_data_uri %}
+    <div class="stripe-logo stripe-logo--bottom"><img src="{{ logo_data_uri }}" alt=""></div>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  <div class="sheet">
+    {% if include_inline_banner %}
+      {% if header_data_uri %}
+      <div class="banner-inline" style="background-image: url('{{ header_data_uri }}');"></div>
+      {% else %}
+      <div class="banner-inline-fallback">{{ organizacion }}</div>
+      {% endif %}
+    {% endif %}
+
+    <div class="body">
+      <header class="hero">
+        <div class="hero-left">
+          <p class="kicker">{{ _('Certificación de horas') }}</p>
+          <h1 class="doc-title">{{ empresa }}</h1>
+          <p class="meta">{{ sentido }} · {{ _('Periodo') }} {{ mes_txt }}</p>
+        </div>
+        <div class="hero-right">
+          <span class="badge">{{ estado_txt }}</span>
+        </div>
+      </header>
+
+      <table class="summary">
+        <tr>
+          <td><span class="label">{{ _('Empresa') }}</span><span class="value">{{ empresa }}</span></td>
+          <td><span class="label">{{ _('Periodo') }}</span><span class="value">{{ mes_txt }}</span></td>
+          <td><span class="label">{{ _('Total horas') }}</span><span class="value">{{ total_horas }} h</span></td>
+          <td><span class="label">{{ _('Importe') }}</span><span class="value">{{ total_importe }} €</span></td>
+        </tr>
+      </table>
+
+      {% if obras %}
+        {% for obra in obras %}
+        <section class="obra">
+          <header class="obra-head">
+            <h2>{{ obra.nombre }}</h2>
+            <p>{{ obra.horas }} h · {{ obra.importe }} €</p>
+          </header>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>{{ _('Fecha') }}</th>
+                <th>{{ _('Persona') }}</th>
+                <th>{{ _('Inicio') }}</th>
+                <th>{{ _('Fin') }}</th>
+                <th>{{ _('Horas') }}</th>
+                <th>{{ _('€/h') }}</th>
+                <th>{{ _('Importe') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in obra.filas %}
+              <tr>
+                <td class="col-fecha">{{ row.fecha }}</td>
+                <td class="col-persona">{{ row.persona }}</td>
+                <td class="num">{{ row.inicio }}</td>
+                <td class="num">{{ row.fin }}</td>
+                <td class="num">{{ row.horas }}</td>
+                <td class="num">{{ row.precio }}</td>
+                <td class="num">{{ row.importe }}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" class="empty">{{ _('Sin jornadas en esta obra.') }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+        {% endfor %}
+      {% else %}
+        <p class="empty-doc">{{ _('Sin jornadas con fichaje en este mes.') }}</p>
+      {% endif %}
+
+      <footer class="footer">
+        <div class="footer-left">
+          <div class="footnote">{{ _('Documento generado desde SignaPlan') }} · {{ mes_txt }}</div>
+        </div>
+        <div class="footer-right">
+          <div class="total-label">{{ _('Total certificación') }}</div>
+          <div class="total-value">{{ total_horas }} h · {{ total_importe }} €</div>
+        </div>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>

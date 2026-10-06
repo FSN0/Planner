@@ -165,6 +165,8 @@ def test_resolve_externo_email_empresa_vs_personal():
     assert Adapter._resolve_externo_email(3, 'A@B.COM', 'a@b.com') == 'ext_3@subcontrata.local'
     assert Adapter._resolve_externo_email(4, 'yo@personal.com', 'a@b.com') == 'yo@personal.com'
 
+
+def test_diff_empresa_por_categoria(sub_adapter, session, app, tenant_soltec):
     with app.app_context():
         g.current_tenant = tenant_soltec
         session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))

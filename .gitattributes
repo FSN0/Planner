@@ -1,0 +1,4 @@
+*.sh text eol=lf
+entrypoint.sh text eol=lf
+migrate.sh text eol=lf
+res.sh text eol=lf

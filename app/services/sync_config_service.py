@@ -47,7 +47,31 @@ def _normalize_import_role(role):
     r = aliases.get(r, r)
     if r in EMPLEADOS_IMPORT_ROLES:
         return r
+    # Roles creados en SignaPlan (no solo operario / jefe / laboral / admin).
+    try:
+        from app.services.role_registry_service import valid_role_keys
+        if r in valid_role_keys():
+            return r
+    except Exception:
+        pass
     return 'operario'
+
+
+def list_empleados_import_roles():
+    """Roles del tenant que se pueden enlazar a un departamento de Odoo."""
+    try:
+        from app.services.role_registry_service import list_roles
+        rows = [{'key': key, 'label': label} for key, label in list_roles() if key]
+    except Exception:
+        rows = []
+    if rows:
+        return rows
+    return [
+        {'key': 'operario', 'label': 'Operario'},
+        {'key': 'jefe_obra', 'label': 'Jefe de obra'},
+        {'key': 'laboral', 'label': 'Oficina / laboral'},
+        {'key': 'admin', 'label': 'Administrador'},
+    ]
 
 
 def _row_from_unknown(item):

@@ -26,6 +26,11 @@
             <i class="fas fa-pencil-alt"></i> {{ _('Editar') }}
           </a>
           {% endif %}
+          {% if user_can(current_user, 'certificacion', 'r') %}
+          <a href="{{ url_for('compliance.certificacion_obra', obra_id=obra.id) }}" class="btn-admin btn-admin-ghost">
+            <i class="fas fa-file-invoice"></i> {{ _('Certificación de horario') }}
+          </a>
+          {% endif %}
           <a href="{{ url_for('admin.obras_detailed', selected_date=(obra.fecha_inicio or today).strftime('%Y-%m-%d')) }}" class="btn-admin btn-admin-primary">
             <i class="fas fa-th"></i> {{ _('Tablero') }}
           </a>

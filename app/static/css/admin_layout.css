@@ -486,7 +486,7 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
 .obras-table th.col-actions,
 .obras-table td.col-actions {
   width: 1%;
-  min-width: 7.5rem;
+  min-width: 2.75rem;
   max-width: 9rem;
   padding-left: 0.25rem !important;
   padding-right: 0.5rem !important;
@@ -505,10 +505,11 @@ body.layout-admin .modal-header .close { color: var(--color-text-muted); }
 }
 .admin-data-table--wide-actions th.col-actions,
 .admin-data-table--wide-actions td.col-actions {
-  min-width: 10.5rem;
-  max-width: 11.5rem;
+  min-width: 2.75rem;
+  max-width: 3.25rem;
+  overflow: visible;
 }
-col.col-actions-fixed { width: 7.5rem; }
+col.col-actions-fixed { width: 3rem; }
 .btn-table-action {
   display: inline-flex;
   align-items: center;
@@ -536,6 +537,96 @@ col.col-actions-fixed { width: 7.5rem; }
 .btn-table-action--warn:hover { background: #fffbeb; }
 .btn-table-action--info { border-color: #bae6fd; color: #0369a1; }
 .btn-table-action--info:hover { background: #f0f9ff; }
+
+/* Menú de acciones por fila (Personal, etc.) */
+.row-actions {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+.row-actions-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border-strong, #e2e8f0);
+  border-radius: 6px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+.row-actions-toggle:hover,
+.row-actions.is-open .row-actions-toggle {
+  background: var(--color-bg-main, #f8fafc);
+  color: var(--color-text, #0f172a);
+}
+.row-actions.is-open .row-actions-toggle i {
+  transform: rotate(180deg);
+}
+.row-actions-toggle i {
+  transition: transform 0.15s ease;
+}
+.row-actions-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 12.5rem;
+  max-width: 16rem;
+  padding: 0.3rem;
+  margin: 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+}
+/* Fuera del overflow de la tabla (colgado en body). */
+.row-actions-menu.is-fixed-open {
+  position: fixed;
+  right: auto;
+  z-index: 10050;
+}
+.row-actions-form {
+  display: block;
+  margin: 0;
+}
+.row-actions-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 0.42rem 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.row-actions-item:hover,
+.row-actions-item:focus {
+  background: #f1f5f9;
+  color: #0f172a;
+  text-decoration: none;
+  outline: none;
+}
+.row-actions-item.is-danger {
+  color: #b91c1c;
+}
+.row-actions-item.is-danger:hover {
+  background: #fef2f2;
+}
 
 /* Pestañas compactas (personal interno/externo) */
 .admin-tabs-compact {
@@ -1763,6 +1854,21 @@ body.layout-admin .navbar {
   gap: 0.5rem;
   min-width: 0;
   flex: 1;
+  text-decoration: none;
+  color: inherit;
+}
+.admin-logo:hover,
+.admin-logo:focus {
+  text-decoration: none;
+  color: inherit;
+}
+.admin-logo:hover .admin-logo-brand {
+  color: #fff;
+}
+.admin-logo:focus-visible {
+  outline: 2px solid rgba(148, 163, 184, 0.7);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
 }
 
 .admin-logo-mark {
@@ -2280,12 +2386,14 @@ html.sidebar-collapsed .sidebar-link i.fa-fw {
   color: #fbbf24;
 }
 
-.sidebar-link:hover {
+.sidebar-link:hover,
+.sidebar-link--parent:hover {
   background: rgba(148, 163, 184, 0.1);
   color: #e2e8f0;
 }
 
-.sidebar-link.is-active {
+.sidebar-link.is-active,
+.sidebar-link--parent.is-active {
   background: rgba(34, 197, 94, 0.12);
   color: #ecfdf5;
   border-left-color: #22c55e;
@@ -2303,15 +2411,79 @@ html.sidebar-collapsed .sidebar-link i.fa-fw {
 
 .sidebar-link--parent {
   width: 100%;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
   border: none;
+  border-radius: var(--radius-sm, 0.375rem);
   background: transparent;
-  cursor: pointer;
   text-align: left;
   font-family: inherit;
+  padding: 0;
+  min-width: 0;
+  overflow: hidden; /* un solo bloque: sin raya entre nombre y flecha */
+}
+
+.sidebar-parent-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.35rem 0.4rem 0.55rem;
+  border-radius: 0;
+  color: inherit;
+  text-decoration: none;
+  font-size: inherit;
+  font-weight: inherit;
+  background: transparent;
+}
+.sidebar-parent-main:hover,
+.sidebar-parent-main:focus {
+  color: inherit;
+  text-decoration: none;
+  background: transparent;
+  outline: none;
+}
+.sidebar-link--parent.is-active .sidebar-parent-main {
+  color: inherit;
+}
+
+.sidebar-sub-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  align-self: stretch;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+/* Tras el clic el foco se queda en la flecha y el navegador pinta un marco blanco. */
+.sidebar-sub-toggle:hover,
+.sidebar-sub-toggle:active,
+.sidebar-sub-toggle:focus,
+.sidebar-sub-toggle:focus-visible {
+  background: transparent;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+.sidebar-link--parent:hover .sidebar-sub-chevron {
+  opacity: 0.9;
 }
 
 .sidebar-sub-chevron {
-  margin-left: auto;
+  margin-left: 0;
   font-size: 0.55rem !important;
   opacity: 0.55;
   transition: transform 0.15s ease;
@@ -2340,7 +2512,8 @@ html.sidebar-collapsed .sidebar-link i.fa-fw {
 }
 
 html.sidebar-collapsed .sidebar-subnav,
-html.sidebar-collapsed .sidebar-sub-chevron {
+html.sidebar-collapsed .sidebar-sub-chevron,
+html.sidebar-collapsed .sidebar-sub-toggle {
   display: none !important;
 }
 
@@ -3678,6 +3851,13 @@ th.sp-col-prefs-host {
     font-size: 0.82rem;
     font-weight: 700;
     letter-spacing: 0.02em;
+    color: inherit;
+    text-decoration: none;
+  }
+  a.admin-mobile-top-brand:hover,
+  a.admin-mobile-top-brand:focus {
+    color: inherit;
+    text-decoration: none;
   }
 
   .admin-nav-backdrop {

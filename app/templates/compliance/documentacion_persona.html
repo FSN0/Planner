@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% from "compliance/macros_doc.html" import fila_doc with context %}
+{% block title %}{{ sujeto.name }} · {{ _('Documentación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+{% endblock %}
+{% block wrapper %}
+{% set puede_w = puede_gestionar %}
+{% set email_real = email_real if email_real is defined else true %}
+{% set bag = namespace(hire=[], emp=[], hire_err=0, emp_err=0, hire_ok=0, emp_ok=0) %}
+{% for fila in filas if not fila.tipo.es_certificacion %}
+  {% if (fila.tipo.fase_contratacion or 0) > 0 %}
+    {% set _ = bag.hire.append(fila) %}
+    {% if fila.estado in ('falta','rechazado','caducado','pendiente_validar','cert_pendiente') %}
+      {% set bag.hire_err = bag.hire_err + 1 %}
+    {% elif fila.estado in ('ok','por_caducar','cert_ok') %}
+      {% set bag.hire_ok = bag.hire_ok + 1 %}
+    {% endif %}
+  {% else %}
+    {% set _ = bag.emp.append(fila) %}
+    {% if fila.estado in ('falta','rechazado','caducado','pendiente_validar','cert_pendiente') %}
+      {% set bag.emp_err = bag.emp_err + 1 %}
+    {% elif fila.estado in ('ok','por_caducar','cert_ok') %}
+      {% set bag.emp_ok = bag.emp_ok + 1 %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% set resumen_err = bag.hire_err + bag.emp_err %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs office-company-docs">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ _('Persona') }}</p>
+      <h1>{{ sujeto.name }} {{ sujeto.lastname }}</h1>
+      <p>{{ _('Perfil y documentación: lo del alta y lo que sigue pidiendo como empleado.') }}</p>
+      {% if resumen_err %}
+      <p class="docs-pending-banner">
+        <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+        {{ resumen_err }} {{ _('documentos pendientes') }}
+        {% if bag.hire_err %} · {{ bag.hire_err }} {{ _('de contratación') }}{% endif %}
+        {% if bag.emp_err %} · {{ bag.emp_err }} {{ _('de empleado') }}{% endif %}
+      </p>
+      {% endif %}
+      <div class="office-docs-hero-stats">
+        <div>
+          <strong>{{ bag.hire_err }}</strong>
+          <span>{{ _('Pend. contratación') }}</span>
+        </div>
+        <div>
+          <strong>{{ bag.emp_err }}</strong>
+          <span>{{ _('Pend. empleado') }}</span>
+        </div>
+        <div>
+          <strong>{{ bag.hire|length + bag.emp|length }}</strong>
+          <span>{{ _('Documentos') }}</span>
+        </div>
+        <div>
+          <strong>{{ '—' if not sujeto.fecha_inicio else sujeto.fecha_inicio.strftime('%d/%m/%Y') }}</strong>
+          <span>{{ _('Fecha de inicio') }}</span>
+        </div>
+      </div>
+      <div class="office-hire-actions">
+        {% if sujeto.company_id %}
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.documentacion_empresa', company_id=sujeto.company_id) }}"><i class="fas fa-arrow-left"></i> {{ _('Volver a la empresa') }}</a>
+        {% else %}
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.documentacion') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
+        {% endif %}
+        {% if sujeto.hiring_state and user_can(current_user, 'contratacion', 'r') %}
+        <a class="office-hire-btn ghost" href="{{ url_for('compliance.contratacion_ficha', user_id=sujeto.id) }}">{{ _('Ver contratación') }}</a>
+        {% endif %}
+        {% if puede_w %}
+        <button type="button" class="office-hire-btn" id="btn-exigencias">{{ _('Editar qué se pide') }}</button>
+        {% endif %}
+      </div>
+    </section>
+
+    <details class="docs-fold" open>
+      <summary class="docs-fold-sum">
+        <span class="docs-fold-ico" aria-hidden="true"><i class="fas fa-user"></i></span>
+        <span class="docs-fold-copy">
+          <strong>{{ _('Perfil') }}</strong>
+          <small>{{ sujeto.name }} {{ sujeto.lastname }}{% if email_real %} · {{ sujeto.email }}{% endif %}</small>
+        </span>
+      </summary>
+      <div class="docs-fold-body docs-fold-body--panel">
+        {% if puede_w %}
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="perfil">
+          <div class="hire-fields">
+            <div class="hire-field">
+              <label for="name">{{ _('Nombre') }}</label>
+              <input id="name" name="name" value="{{ sujeto.name or '' }}" required autocomplete="given-name">
+            </div>
+            <div class="hire-field">
+              <label for="lastname">{{ _('Apellidos') }}</label>
+              <input id="lastname" name="lastname" value="{{ sujeto.lastname or '' }}" autocomplete="family-name">
+            </div>
+            <div class="hire-field">
+              <label for="dni">{{ _('DNI') }}</label>
+              <input id="dni" name="dni" value="{{ '' if (sujeto.dni or '').startswith('PEND-') else (sujeto.dni or '') }}" autocomplete="off" autocapitalize="characters">
+            </div>
+            <div class="hire-field">
+              <label for="email">{{ _('Correo') }}</label>
+              <input id="email" name="email" type="email" value="{{ sujeto.email if email_real else '' }}" autocomplete="email" inputmode="email">
+            </div>
+            <div class="hire-field">
+              <label for="telefono">{{ _('Teléfono') }}</label>
+              <input id="telefono" name="telefono" value="{{ sujeto.telefono or '' }}" autocomplete="tel" inputmode="tel">
+            </div>
+            <div class="hire-field">
+              <label for="talla_ropa">{{ _('Talla') }}</label>
+              <input id="talla_ropa" name="talla_ropa" value="{{ sujeto.talla_ropa or '' }}">
+            </div>
+            <div class="hire-field hire-field--wide">
+              <label for="numero_cuenta">{{ _('Cuenta') }}</label>
+              <input id="numero_cuenta" name="numero_cuenta" value="{{ sujeto.numero_cuenta or '' }}">
+            </div>
+            {% if sujeto.fecha_inicio %}
+            <div class="hire-field">
+              <label>{{ _('Fecha de inicio') }}</label>
+              <input value="{{ sujeto.fecha_inicio.strftime('%d/%m/%Y') }}" readonly>
+            </div>
+            {% endif %}
+          </div>
+          <div style="margin-top:14px;">
+            <button class="hire-save" type="submit">{{ _('Guardar perfil') }}</button>
+          </div>
+        </form>
+        {% else %}
+        <div class="hire-fields">
+          <div class="hire-field"><label>{{ _('Nombre') }}</label><div>{{ sujeto.name }}</div></div>
+          <div class="hire-field"><label>{{ _('Apellidos') }}</label><div>{{ sujeto.lastname or '—' }}</div></div>
+          <div class="hire-field"><label>{{ _('DNI') }}</label><div>{{ '' if (sujeto.dni or '').startswith('PEND-') else (sujeto.dni or '—') }}</div></div>
+          <div class="hire-field"><label>{{ _('Correo') }}</label><div>{{ sujeto.email if email_real else '—' }}</div></div>
+          <div class="hire-field"><label>{{ _('Teléfono') }}</label><div>{{ sujeto.telefono or '—' }}</div></div>
+          <div class="hire-field"><label>{{ _('Talla') }}</label><div>{{ sujeto.talla_ropa or '—' }}</div></div>
+          <div class="hire-field hire-field--wide"><label>{{ _('Cuenta') }}</label><div>{{ sujeto.numero_cuenta or '—' }}</div></div>
+          {% if sujeto.fecha_inicio %}
+          <div class="hire-field"><label>{{ _('Fecha de inicio') }}</label><div>{{ sujeto.fecha_inicio.strftime('%d/%m/%Y') }}</div></div>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </details>
+
+    <h2 class="docs-section-title">{{ _('Documentos') }}</h2>
+
+    <details class="docs-fold {% if bag.hire_err %}is-bad{% elif bag.hire %}is-ok{% endif %}" open>
+      <summary class="docs-fold-sum">
+        <span class="docs-fold-ico docs-block-ico--hire" aria-hidden="true"><i class="fas fa-user-check"></i></span>
+        <span class="docs-fold-copy">
+          <strong>{{ _('Contratación') }}</strong>
+          <small>
+            {% if not bag.hire %}{{ _('Sin documentos de alta') }}
+            {% elif bag.hire_err %}{{ bag.hire_err }} {{ _('pendientes') }} · {{ bag.hire_ok }} {{ _('ok') }}
+            {% else %}{{ _('Todo en orden') }} · {{ bag.hire|length }}{% endif %}
+          </small>
+        </span>
+        {% if bag.hire_err %}
+        <span class="docs-pill docs-pill--danger">{{ bag.hire_err }}</span>
+        {% elif bag.hire %}
+        <span class="docs-pill docs-pill--ok">{{ _('OK') }}</span>
+        {% endif %}
+      </summary>
+      <div class="docs-fold-body">
+        {% if bag.hire %}
+        <div class="hire-grid office-hire-docs">
+          {% for fila in bag.hire %}
+            {{ fila_doc(fila, puede_subir, puede_validar, user_id=sujeto.id) }}
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="docs-empty docs-empty--card">{{ _('Esta persona no tiene documentos de contratación.') }}</p>
+        {% endif %}
+      </div>
+    </details>
+
+    <details class="docs-fold {% if bag.emp_err %}is-bad{% elif bag.emp %}is-ok{% endif %}" open>
+      <summary class="docs-fold-sum">
+        <span class="docs-fold-ico" aria-hidden="true"><i class="fas fa-id-card"></i></span>
+        <span class="docs-fold-copy">
+          <strong>{{ _('Empleado') }}</strong>
+          <small>
+            {% if not bag.emp %}{{ _('Sin documentos de empleado') }}
+            {% elif bag.emp_err %}{{ bag.emp_err }} {{ _('pendientes') }} · {{ bag.emp_ok }} {{ _('ok') }}
+            {% else %}{{ _('Todo en orden') }} · {{ bag.emp|length }}{% endif %}
+          </small>
+        </span>
+        {% if bag.emp_err %}
+        <span class="docs-pill docs-pill--danger">{{ bag.emp_err }}</span>
+        {% elif bag.emp %}
+        <span class="docs-pill docs-pill--ok">{{ _('OK') }}</span>
+        {% endif %}
+      </summary>
+      <div class="docs-fold-body">
+        {% if bag.emp %}
+        <div class="hire-grid office-hire-docs">
+          {% for fila in bag.emp %}
+            {{ fila_doc(fila, puede_subir, puede_validar, user_id=sujeto.id) }}
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="docs-empty docs-empty--card">{{ _('No hay documentos extra de empleado. Los del alta están arriba.') }}</p>
+        {% endif %}
+      </div>
+    </details>
+  </main>
+</div>
+
+{% if puede_w %}
+<dialog class="docs-modal" id="modal-exigencias" {% if abrir_exigencias %}data-autoopen="1"{% endif %}>
+  <div class="docs-modal-card">
+    <header class="docs-modal-head docs-modal-head--soft">
+      <div>
+        <p class="docs-modal-kicker">{{ _('Exigencias') }}</p>
+        <h2>{{ _('Qué se pide a') }} {{ sujeto.name }}</h2>
+        <p class="docs-modal-lead">{{ _('Solo afecta a esta persona. El resto sigue con lo de la empresa.') }}</p>
+      </div>
+      <button type="button" class="docs-modal-x" id="cerrar-exigencias" aria-label="{{ _('Cerrar') }}">&times;</button>
+    </header>
+    <div class="docs-modal-body">
+      <section class="docs-modal-section docs-modal-section--empleados">
+        <h3 class="docs-modal-h">
+          <span class="docs-modal-h-ico" aria-hidden="true"><i class="fas fa-id-card"></i></span>
+          {{ _('Documentos de esta persona') }}
+        </h3>
+        <ul class="docs-req-list">
+          {% for fila in filas if not fila.tipo.es_certificacion %}
+          <li class="docs-req-item">
+            <span class="docs-edit-name">
+              <strong>{{ fila.tipo.nombre }}</strong>
+              <small>
+                {{ fila.tipo.categoria }}
+                {% if fila.origen == 'persona' %} · {{ _('Extra personal') }}
+                {% elif (fila.tipo.fase_contratacion or 0) > 0 %} · {{ _('Contratación') }}
+                {% else %} · {{ _('De la empresa') }}{% endif %}
+              </small>
+            </span>
+            <form method="post" action="{{ url_for('compliance.documentacion_empleado', user_id=sujeto.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="accion" value="excluir">
+              <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
+              <button type="submit" class="docs-req-remove">{{ _('Quitar') }}</button>
+            </form>
+          </li>
+          {% else %}
+          <li class="docs-req-empty">{{ _('Ninguno todavía.') }}</li>
+          {% endfor %}
+        </ul>
+        {% if catalogo %}
+        <form method="post" class="docs-req-add" action="{{ url_for('compliance.documentacion_empleado', user_id=sujeto.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="accion" value="anadir">
+          <select name="tipo_id" required>
+            <option value="" disabled selected>{{ _('Elegir plantilla…') }}</option>
+            {% for tipo in catalogo %}
+            <option value="{{ tipo.id }}">{{ tipo.nombre }}</option>
+            {% endfor %}
+          </select>
+          <button class="office-hire-btn" type="submit">{{ _('Añadir solo a esta persona') }}</button>
+        </form>
+        {% else %}
+        <p class="docs-req-hint">{{ _('No hay más plantillas disponibles.') }}</p>
+        {% endif %}
+      </section>
+    </div>
+  </div>
+</dialog>
+<script>
+(function () {
+  var modal = document.getElementById('modal-exigencias');
+  var btnEx = document.getElementById('btn-exigencias');
+  var btnClose = document.getElementById('cerrar-exigencias');
+  function abrirModal() {
+    if (!modal) return;
+    if (typeof modal.showModal === 'function') modal.showModal();
+    else modal.setAttribute('open', '');
+  }
+  function cerrarModal() {
+    if (!modal) return;
+    if (typeof modal.close === 'function') modal.close();
+    else modal.removeAttribute('open');
+  }
+  if (btnEx) btnEx.addEventListener('click', abrirModal);
+  if (btnClose) btnClose.addEventListener('click', cerrarModal);
+  if (modal) {
+    modal.addEventListener('click', function (ev) {
+      if (ev.target === modal) cerrarModal();
+    });
+    if (modal.getAttribute('data-autoopen') === '1') abrirModal();
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

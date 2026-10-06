@@ -10,6 +10,11 @@ from app.services.permission_service import user_can
 # (path_prefix, module, default_action, {HTTP_METHOD: action})
 # Orden: prefijos más específicos primero.
 _ADMIN_RULES = (
+    ('/admin/documentacion', 'documentacion', 'r', {'POST': 'w'}),
+    ('/admin/certificacion', 'certificacion', 'r', {'POST': 'w'}),
+    ('/admin/contratacion', 'contratacion', 'r', {'POST': 'w'}),
+    ('/admin/enviar_credenciales', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/visible_cuadrante', 'trabajadores', 'w', {'POST': 'w'}),
     ('/admin/permisos', 'permisos', 'r', {'POST': 'w'}),
     ('/admin/configuracion/etiquetas', 'etiquetas_catalogo', 'w', {'POST': 'w'}),
     ('/admin/api/etiquetas', 'etiquetas', 'r', {}),

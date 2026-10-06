@@ -774,3 +774,55 @@ def impersonate():
     )
     destino = _destino_por_rol(user)
     return redirect(destino or url_for('admin.panel'))
+
+
+@auth_bp.route('/credenciales/<token>', methods=['GET', 'POST'])
+@limiter.limit('10 per minute; 40 per hour', methods=['POST'])
+def credenciales(token):
+    """La persona elige PIN, contraseña, o las dos, desde el enlace."""
+    from app.services.acceso_credenciales_service import (
+        CredencialesError,
+        aplicar_credenciales,
+        leer_token,
+    )
+    from app.services.tenant_branding_service import logo_data_uri
+
+    if not getattr(g, 'current_tenant', None):
+        flash(translate('Accede desde la URL de tu empresa.'), 'warning')
+        return redirect(url_for('auth.login'))
+    try:
+        data = leer_token(token, g.current_tenant)
+    except CredencialesError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('auth.login'))
+    user = User.query.filter_by(id=data.get('uid'), is_deleted=False).first()
+    if user is None or not user.is_active:
+        flash(translate('Este enlace ya no corresponde a una cuenta activa.'), 'danger')
+        return redirect(url_for('auth.login'))
+    if request.method == 'POST':
+        try:
+            aplicar_credenciales(
+                user,
+                password=request.form.get('password'),
+                pin=request.form.get('pin'),
+            )
+            db.session.commit()
+        except CredencialesError as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+            return render_template(
+                'auth/credenciales.html',
+                nombre=f'{user.name} {user.lastname}'.strip(),
+                brand_logo_src=logo_data_uri(),
+            )
+        if current_user.is_authenticated:
+            logout_user()
+        login_user(user, remember=True)
+        session['tenant_id'] = g.current_tenant.id
+        flash(translate('Acceso creado.'), 'success')
+        return redirect(_destino_por_rol(user) or url_for('main.dashboard'))
+    return render_template(
+        'auth/credenciales.html',
+        nombre=f'{user.name} {user.lastname}'.strip(),
+        brand_logo_src=logo_data_uri(),
+    )

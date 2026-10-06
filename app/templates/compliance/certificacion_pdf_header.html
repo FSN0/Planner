@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <script>
+    /* wkhtmltopdf inyecta ?page=&topage= en la cabecera de cada hoja */
+    function subst() {
+      var vars = {};
+      var q = (document.location.search || '').substring(1).split('&');
+      for (var i = 0; i < q.length; i++) {
+        var p = q[i].split('=', 2);
+        if (p[0]) vars[p[0]] = decodeURIComponent((p[1] || '').replace(/\+/g, ' '));
+      }
+      var page = parseInt(vars.page || '1', 10);
+      var first = document.getElementById('hdr-first');
+      var rest = document.getElementById('hdr-rest');
+      if (first) first.style.display = (page <= 1) ? 'block' : 'none';
+      if (rest) rest.style.display = (page <= 1) ? 'none' : 'block';
+    }
+  </script>
+  <style type="text/css">
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 210mm;
+      height: 14mm;
+      overflow: visible;
+      background: transparent;
+    }
+    /* Franja a sangre: sale del header y cubre toda la hoja (sin margen). */
+    .page-stripe {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 10mm;
+      height: 297mm;
+      background: {{ stripe_color }};
+      z-index: 50;
+      overflow: hidden;
+    }
+    .stripe-logo {
+      position: absolute;
+      left: 1.2mm;
+      width: 7.6mm;
+    }
+    .stripe-logo--top { top: 5mm; }
+    .stripe-logo--bottom { bottom: 5mm; }
+    .stripe-logo img {
+      display: block;
+      width: 7.6mm;
+      height: auto;
+      max-height: 32mm;
+      background: transparent;
+      padding: 0;
+      border: 0;
+    }
+    .stripe-title {
+      position: absolute;
+      top: 40mm;
+      bottom: 40mm;
+      left: 0;
+      width: 10mm;
+      color: #fff;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      font-weight: bold;
+      letter-spacing: 0.06em;
+      text-align: center;
+      -webkit-writing-mode: vertical-rl;
+      writing-mode: vertical-rl;
+      -webkit-text-orientation: mixed;
+      text-orientation: mixed;
+      overflow: hidden;
+    }
+    .stripe-title span {
+      display: inline-block;
+      /* wkhtmltopdf corta el último glifo sin este respiro */
+      padding: 1.5mm 0 2.5mm 0;
+      max-height: 210mm;
+      overflow: visible;
+      white-space: nowrap;
+      -webkit-transform: rotate(180deg);
+      transform: rotate(180deg);
+    }
+    #hdr-first, #hdr-rest {
+      position: relative;
+      z-index: 1;
+      width: 200mm;
+      height: 14mm;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    .banner {
+      width: 200mm;
+      height: 14mm;
+      background-repeat: no-repeat;
+      background-position: left center;
+      background-size: auto 14mm;
+    }
+    .banner-fallback {
+      box-sizing: border-box;
+      width: 200mm;
+      height: 14mm;
+      padding: 3.5mm 8mm 2mm 10mm;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 11pt;
+      font-weight: bold;
+      color: #0f172a;
+      border-bottom: 0.6pt solid #0f172a;
+      background: #fff;
+    }
+  </style>
+</head>
+<body onload="subst()">
+  <div class="page-stripe" aria-hidden="true">
+    {% if logo_data_uri %}
+    <div class="stripe-logo stripe-logo--top"><img src="{{ logo_data_uri }}" alt=""></div>
+    {% endif %}
+    <div class="stripe-title"><span>{{ stripe_label }}&nbsp;</span></div>
+    {% if logo_data_uri %}
+    <div class="stripe-logo stripe-logo--bottom"><img src="{{ logo_data_uri }}" alt=""></div>
+    {% endif %}
+  </div>
+  <div id="hdr-first">
+    {% if header_data_uri %}
+    <div class="banner" style="background-image: url('{{ header_data_uri }}');"></div>
+    {% else %}
+    <div class="banner-fallback">{{ organizacion }}</div>
+    {% endif %}
+  </div>
+  <div id="hdr-rest" style="display:none;height:14mm;"></div>
+  <script>subst();</script>
+</body>
+</html>
