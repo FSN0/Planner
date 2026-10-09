@@ -4,7 +4,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261008persist">
 {% endblock %}
 {% block wrapper %}
 {% set puede_w = puede_subir %}
@@ -146,6 +146,7 @@
 </div>
 {% endblock %}
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/doc_card_actions.js') }}?v=20261008persist"></script>
 <script>
 (function () {
   var filtro = document.getElementById('filtro-personas');

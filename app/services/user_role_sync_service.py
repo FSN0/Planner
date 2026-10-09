@@ -22,15 +22,16 @@ def clear_user_role_manual(user) -> None:
     user.external_ids = ext
 
 
-def apply_subcontrata_portal_role(user, odoo_role: str) -> bool:
+def apply_subcontrata_portal_role(user, odoo_role: str, *, force: bool = False) -> bool:
     """Pasa entre operario y admin de subcontrata según la etiqueta de Odoo.
 
     No toca otros roles ni una ficha en contratación. Un rol fijado a mano
-    tampoco se pisa.
+    no se pisa en sync automática; con force=True (commit manual del preview)
+    sí se aplica y se quita el bloqueo.
     """
     from app.models import ROLE_ADMIN_SUBCONTRATA, ROLE_OPERARIO
 
-    if user_role_sync_locked(user):
+    if user_role_sync_locked(user) and not force:
         return False
     if getattr(user, 'hiring_state', None):
         return False
@@ -40,6 +41,8 @@ def apply_subcontrata_portal_role(user, odoo_role: str) -> bool:
         return False
     if user.role == odoo_role:
         return False
+    if force and user_role_sync_locked(user):
+        clear_user_role_manual(user)
     user.role = odoo_role
     return True
 

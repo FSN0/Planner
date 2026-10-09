@@ -66,11 +66,13 @@
     <div class="page-toolbar">
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title">{{ _('Configuración') }}</h1>
-        <span class="page-toolbar-count">{{ _('Ajustes del sistema') }}</span>
+        {% set can_tenant_config = can_tenant_config if can_tenant_config is defined else user_can(current_user, 'configuracion', 'r') %}
+        <span class="page-toolbar-count">{% if can_tenant_config %}{{ _('Ajustes del sistema') }}{% else %}{{ _('Preferencias personales') }}{% endif %}</span>
       </div>
     </div>
 
     <nav class="config-nav" aria-label="{{ _('Secciones') }}">
+      {% if can_tenant_config %}
       <a href="#cfg-horario">{{ _('Horario') }}</a>
       <a href="#cfg-fichajes">{{ _('Fichajes') }}</a>
       <a href="#cfg-ausencias">{{ _('Ausencias') }}</a>
@@ -81,20 +83,23 @@
       <a href="#cfg-emails">{{ _('Correos') }}</a>
       <a href="#cfg-marca">{{ _('Marca e informes') }}</a>
       <a href="#cfg-etiquetas">{{ _('Etiquetas') }}</a>
+      {% if user_can(current_user, 'documentacion', 'r') %}
+      <a href="#cfg-documentacion">{{ _('Documentación') }}</a>
+      {% endif %}
       {% if tenant_has_onboarding %}
       <a href="#cfg-guia">{{ _('Academia') }}</a>
       {% endif %}
+      {% endif %}
       <a href="#cfg-idioma">{{ _('Idioma') }}</a>
+      <a href="#cfg-avisos-ui">{{ _('Mis avisos') }}</a>
       {% if user_can(current_user, 'permisos', 'r') %}
       <a href="{{ url_for('admin.permisos_roles') }}">{{ _('Permisos por rol') }}</a>
-      {% endif %}
-      {% if user_can(current_user, 'configuracion', 'w') and user_can(current_user, 'documentacion', 'r') %}
-      <a href="{{ url_for('compliance.ajustes') }}">{{ _('Documentación') }}</a>
       {% endif %}
     </nav>
 
     <div class="config-layout">
 
+      {% if can_tenant_config %}
       {# —— 1. Horario y planificación —— #}
       <section class="config-block" id="cfg-horario">
         <header class="config-block-head">
@@ -722,6 +727,38 @@
         </div>
       </section>
 
+      {% if user_can(current_user, 'documentacion', 'r') %}
+      <section class="config-block" id="cfg-documentacion">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--amber"><i class="fas fa-folder-open"></i></div>
+          <div>
+            <h2>{{ _('Documentación') }}</h2>
+            <p>{{ _('Avisos de caducidad de documentos de empresa y personal.') }}</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('admin.update_config') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="form_section" value="documentacion">
+            <div class="config-fields-grid">
+              <div class="config-field">
+                <label for="aviso_dias_doc">{{ _('Días de aviso de caducidad') }}</label>
+                <input type="number" id="aviso_dias_doc" name="aviso_dias" class="form-control form-control-sm text-center font-weight-bold"
+                       value="{{ aviso_dias_documentacion|default(15) }}" min="0" max="365" required
+                       {% if not user_can(current_user, 'configuracion', 'w') %}disabled{% endif %}>
+                <p class="config-field-hint">{{ _('Cuántos días antes de que caduque un documento lo cuentas como aviso (no como error).') }}</p>
+              </div>
+            </div>
+            {% if user_can(current_user, 'configuracion', 'w') %}
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar documentación') }}</button>
+            </div>
+            {% endif %}
+          </form>
+        </div>
+      </section>
+      {% endif %}
+
       {% if tenant_has_onboarding %}
       <section class="config-block" id="cfg-guia">
         <header class="config-block-head">
@@ -776,6 +813,9 @@
         </div>
       </section>
       {% endif %}
+      {% endif %}
+
+      <p class="config-section-label">{{ _('Preferencias personales') }}</p>
 
       {# —— Idioma de interfaz (preferencia del usuario) —— #}
       <section class="config-block" id="cfg-idioma">
@@ -802,6 +842,49 @@
             </div>
             <div class="config-block-actions">
               <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar idioma') }}</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {# —— Avisos UI (preferencia del usuario) —— #}
+      <section class="config-block" id="cfg-avisos-ui">
+        <header class="config-block-head">
+          <div class="config-block-icon config-block-icon--slate"><i class="fas fa-bell"></i></div>
+          <div>
+            <h2>{{ _('Mis avisos') }}</h2>
+            <p>{{ _('Elige qué contadores quieres ver en el menú y en las fichas. No afecta a los correos automáticos.') }}</p>
+          </div>
+        </header>
+        <div class="config-block-body">
+          <form action="{{ url_for('main.update_ui_notif_prefs') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="config-email-table">
+              <table class="filterable-table admin-data-table mb-0">
+                <thead>
+                  <tr class="header-row">
+                    <th style="width:3rem;"></th>
+                    <th>{{ _('Aviso') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in ui_notif_catalog|default([]) %}
+                  <tr>
+                    <td>
+                      <input type="checkbox" name="ui_notif__{{ row.key }}" value="1"
+                             {% if row.enabled %}checked{% endif %}>
+                    </td>
+                    <td class="font-weight-bold">{{ _(row.label) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <p class="config-field-hint mt-2 mb-0">
+              {{ _('Si desmarcas uno, el número deja de mostrarse para ti. El módulo sigue disponible.') }}
+            </p>
+            <div class="config-block-actions">
+              <button type="submit" class="btn-admin btn-admin-primary"><i class="fas fa-save"></i> {{ _('Guardar avisos') }}</button>
             </div>
           </form>
         </div>

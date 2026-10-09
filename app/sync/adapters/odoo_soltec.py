@@ -1340,16 +1340,73 @@ class Adapter(BaseSyncAdapter):
                     continue
         return found
 
+    @staticmethod
+    def _dni_match_weak(dni) -> bool:
+        """DNI no usable para emparejar (placeholder, EXT-*, basura)."""
+        raw = (str(dni or '')).strip().upper()
+        if not raw or len(raw) < 5:
+            return True
+        if raw.startswith('EXT-'):
+            return True
+        alnum = ''.join(ch for ch in raw if ch.isalnum())
+        if len(alnum) < 5:
+            return True
+        # Placeholders tipo XXXXXXXXXXXXXXXX / 00000000
+        if len(set(alnum)) == 1:
+            return True
+        return False
+
+    @classmethod
+    def _looks_like_company_vat(cls, raw: str) -> bool:
+        """CIF sociedad (B12345678…), no DNI/NIE de persona."""
+        s = (raw or '').strip().upper()
+        if not s:
+            return False
+        first = s[0]
+        # NIE: X/Y/Z + dígitos + letra
+        if first in 'XYZ':
+            return False
+        # Sociedad ES: letra A–W (sin I,O,…) + 7–8 dígitos
+        if first in 'ABCDEFGHJNPQRSUVW':
+            body = ''.join(ch for ch in s[1:] if ch.isalnum())
+            if body.isdigit() and 7 <= len(body) <= 9:
+                return True
+        return False
+
+    @classmethod
+    def _externo_dni_from_partner(cls, o_cont) -> str:
+        """DNI del contacto: vat, o attendance_password (Altas), o EXT-{id}.
+
+        Altas escribe el DNI en attendance_password y a menudo deja vat vacío;
+        sin esto salían como EXT-* o chocaban por placeholders en vat.
+        """
+        odoo_id = o_cont.get('id')
+        for key in ('vat', 'attendance_password', 'barcode'):
+            raw = o_cont.get(key)
+            if raw in (False, None, ''):
+                continue
+            s = str(raw).strip()
+            if not s or cls._dni_match_weak(s) or cls._looks_like_company_vat(s):
+                continue
+            return s
+        return f"EXT-{odoo_id}"
+
     def _find_local_externo(self, odoo_id, dni_seguro, email=None):
         """Resuelve externo local por Odoo ID o DNI (con sufijo), incl. archivados.
 
         No se usa el email: en Odoo los hijos de subcontrata suelen heredar el
         correo de la empresa y unificaría personas distintas.
 
+        Por DNI solo si la ficha local no tiene otro Id Odoo distinto (si no,
+        es otra persona con el mismo documento/placeholder → alta nueva).
+
         Si la ficha está unificada por conciliación (merged_into_user_id),
         devolvemos la ficha viva, no el fantasma archivado.
         """
-        from app.services.personal_conciliation_service import find_user_by_any_odoo
+        from app.services.personal_conciliation_service import (
+            find_user_by_any_odoo,
+            odoo_ids_for_user,
+        )
 
         def _resolve(u):
             if not u:
@@ -1364,18 +1421,29 @@ class Adapter(BaseSyncAdapter):
                     return keep
             return u
 
+        def _dni_candidate_ok(u):
+            resolved = _resolve(u)
+            if not resolved:
+                return None
+            linked = set(odoo_ids_for_user(resolved))
+            if linked and str(odoo_id) not in linked:
+                return None
+            return resolved
+
         local_user = find_user_by_any_odoo(odoo_id, include_deleted=True)
         if local_user:
             return _resolve(local_user)
-        if dni_seguro:
+        if dni_seguro and not self._dni_match_weak(dni_seguro):
             local_user = User.query.filter(User.dni == dni_seguro).first()
-            if local_user:
-                return _resolve(local_user)
+            hit = _dni_candidate_ok(local_user)
+            if hit:
+                return hit
             local_user = User.query.filter(
                 User.dni == f"{dni_seguro}-EXT{odoo_id}"
             ).first()
-            if local_user:
-                return _resolve(local_user)
+            hit = _dni_candidate_ok(local_user)
+            if hit:
+                return hit
         return None
 
     @staticmethod
@@ -1492,15 +1560,33 @@ class Adapter(BaseSyncAdapter):
             ('is_company', '=', False),
             ('active', '=', True)
         ]
-        odoo_contactos = self.models.execute_kw(
-            self.db_name, self.uid, self.pwd,
-            'res.partner', 'search_read',
-            [domain_contactos],
-            {
-                'fields': ['id', 'name', 'email', 'vat', 'function', 'parent_id', 'category_id'],
-                'limit': 10000,
-            },
-        ) or []
+        # attendance_password = DNI que escribe Altas; barcode por si existe.
+        contact_fields_full = [
+            'id', 'name', 'email', 'vat', 'function', 'parent_id',
+            'category_id', 'attendance_password', 'barcode',
+        ]
+        contact_fields_basic = [
+            'id', 'name', 'email', 'vat', 'function', 'parent_id', 'category_id',
+        ]
+        try:
+            odoo_contactos = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'res.partner', 'search_read',
+                [domain_contactos],
+                {'fields': contact_fields_full, 'limit': 10000},
+            ) or []
+        except Exception as exc:
+            logger.warning(
+                "[Odoo Adapter - Tenant %s] contactos con attendance_password falló (%s); "
+                "reintento sin ese campo.",
+                self.tenant_id, exc,
+            )
+            odoo_contactos = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'res.partner', 'search_read',
+                [domain_contactos],
+                {'fields': contact_fields_basic, 'limit': 10000},
+            ) or []
 
         seen_odoo_ids = set()
         seen_local_ids = set()
@@ -1559,16 +1645,8 @@ class Adapter(BaseSyncAdapter):
         admin_cat_ids = set(self._admin_subcontrata_category_ids() or [])
 
         for o_cont in odoo_contactos:
-            raw_vat = o_cont.get('vat')
-            if raw_vat in (False, None):
-                raw_vat = ''
-            raw_vat = str(raw_vat).strip()
             odoo_company_id = o_cont.get('parent_id')[0] if o_cont.get('parent_id') else None
-
-            if not raw_vat or raw_vat[0].upper() in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'N', 'P', 'Q', 'R', 'S', 'U', 'V', 'W']:
-                dni_seguro = f"EXT-{o_cont['id']}"
-            else:
-                dni_seguro = raw_vat
+            dni_seguro = self._externo_dni_from_partner(o_cont)
 
             raw_email = o_cont.get('email')
             parent_email = parent_email_by_id.get(odoo_company_id) if odoo_company_id else None
@@ -1578,7 +1656,7 @@ class Adapter(BaseSyncAdapter):
                 role = 'admin_subcontrata'
 
             from app.services.personal_conciliation_service import odoo_ids_for_user
-            # Solo Odoo ID / DNI: el email de empresa no identifica al operario.
+            # Solo Odoo ID / DNI fuerte: el email de empresa no identifica al operario.
             local_user = self._find_local_externo(o_cont['id'], dni_seguro, email)
 
             parts = (o_cont.get('name') or '').split(' ', 1)
@@ -2589,3 +2667,160 @@ class Adapter(BaseSyncAdapter):
                 r['_fecha_desde_registro'] = True
 
         return result
+
+    # ------------------------------------------------------------------
+    # Contratos de asistencia (tarifa €/h empresa + obra)
+    # ------------------------------------------------------------------
+
+    def _contrato_line_model(self):
+        """(campo One2many, modelo línea) en partner.attendance.contract."""
+        meta = self._odoo_fields_get('partner.attendance.contract') or {}
+        for fname in (
+            'lines_ids', 'line_ids', 'operator_line_ids',
+            'employee_line_ids', 'worker_line_ids',
+        ):
+            rel = (meta.get(fname) or {}).get('relation')
+            if rel:
+                return fname, rel
+        for fname, fmeta in meta.items():
+            if not isinstance(fmeta, dict):
+                continue
+            if fmeta.get('type') != 'one2many':
+                continue
+            rel = fmeta.get('relation') or ''
+            name = (fname or '').lower()
+            if rel and ('line' in name or 'line' in rel.lower()):
+                return fname, rel
+        return None, None
+
+    def get_attendance_contract_rates(
+        self, *, partner_id, project_id, on_date=None,
+    ):
+        """Tarifa vigente de partner.attendance.contract para empresa+obra.
+
+        Líneas por operario permiten override personal del hourly_rate base.
+        `lines` indexa por id Odoo del operario (partner y/o employee).
+        """
+        if not partner_id or not project_id:
+            return None
+        if not self._odoo_model_exists('partner.attendance.contract'):
+            return None
+
+        from datetime import date as _date
+        fecha = (on_date or _date.today().isoformat())[:10]
+        cache_key = (int(partner_id), int(project_id), fecha)
+        cache = getattr(self, '_contract_rate_cache', None)
+        if cache is None:
+            cache = {}
+            self._contract_rate_cache = cache
+        if cache_key in cache:
+            return cache[cache_key]
+
+        domain = [
+            ('partner_id', '=', int(partner_id)),
+            ('project_id', '=', int(project_id)),
+            ('date_start', '<=', fecha),
+            '|', ('date_end', '=', False), ('date_end', '>=', fecha),
+        ]
+        line_field, line_model = self._contrato_line_model()
+        contract_fields = [
+            'id', 'name', 'hourly_rate',
+            'date_start', 'date_end', 'state',
+        ]
+        if line_field:
+            contract_fields.append(line_field)
+        try:
+            rows = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'partner.attendance.contract', 'search_read',
+                [domain],
+                {
+                    'fields': contract_fields,
+                    'order': 'date_start desc, id desc',
+                    'limit': 20,
+                },
+            ) or []
+        except Exception as exc:
+            logger.warning(
+                '[Odoo Adapter - Tenant %s] contratos asistencia: %s',
+                self.tenant_id, exc,
+            )
+            cache[cache_key] = None
+            return None
+
+        if not rows:
+            cache[cache_key] = None
+            return None
+
+        preferred = {
+            'open', 'running', 'active', 'confirmed', 'progress',
+            'en_curso', 'activo', 'confirmado',
+        }
+        chosen = None
+        for row in rows:
+            state = str(row.get('state') or '').strip().lower()
+            if not state or state in preferred:
+                chosen = row
+                break
+        if chosen is None:
+            chosen = rows[0]
+
+        lines_map = {}
+        line_ids = chosen.get(line_field) if line_field else None
+        line_ids = line_ids or []
+        if line_model and line_ids:
+            try:
+                line_meta = self._odoo_fields_get(line_model) or {}
+                person_field = None
+                for cand in (
+                    'partner_id', 'employee_id', 'operator_id',
+                    'worker_id', 'user_id', 'operario_id',
+                ):
+                    if cand in line_meta:
+                        person_field = cand
+                        break
+                rate_field = None
+                for cand in (
+                    'hourly_rate', 'cost_hour', 'price_unit',
+                    'amount', 'rate', 'precio_hora',
+                ):
+                    if cand in line_meta:
+                        rate_field = cand
+                        break
+                if person_field and rate_field:
+                    line_rows = self.models.execute_kw(
+                        self.db_name, self.uid, self.pwd,
+                        line_model, 'read',
+                        [line_ids, [person_field, rate_field]],
+                    ) or []
+                    for line in line_rows:
+                        op_id, _ = self._m2o_id_name(line.get(person_field))
+                        rate = line.get(rate_field)
+                        if op_id and rate not in (None, False):
+                            try:
+                                lines_map[int(op_id)] = float(rate)
+                            except (TypeError, ValueError):
+                                pass
+            except Exception as exc:
+                logger.warning(
+                    '[Odoo Adapter - Tenant %s] líneas contrato asistencia: %s',
+                    self.tenant_id, exc,
+                )
+
+        base = chosen.get('hourly_rate')
+        try:
+            base_f = float(base) if base not in (None, False) else 0.0
+        except (TypeError, ValueError):
+            base_f = 0.0
+
+        payload = {
+            'contract_id': chosen.get('id'),
+            'name': (chosen.get('name') or '').strip() or f"#{chosen.get('id')}",
+            'hourly_rate': base_f,
+            'lines': lines_map,
+            'date_start': chosen.get('date_start') or None,
+            'date_end': chosen.get('date_end') or None,
+            'state': chosen.get('state') or '',
+        }
+        cache[cache_key] = payload
+        return payload

@@ -187,9 +187,11 @@
               <h1 class="entity-hero-name">{{ worker.name }} {{ worker.lastname }}</h1>
               <p class="entity-hero-subtitle">
                 {% if worker.company_rel %}
-                  <span class="entity-company-chip" style="--chip-color: {{ worker.company_rel.color }};">
+                  <a href="{{ url_for('admin.company_panel', company_id=worker.company_rel.id) }}"
+                     class="entity-company-chip" style="--chip-color: {{ worker.company_rel.color }};"
+                     title="{{ _('Ver ficha de empresa') }}">
                     {{ worker.company_rel.nombre }}
-                  </span>
+                  </a>
                 {% else %}
                   <span class="entity-code-badge">{{ _('Externo') }}</span>
                 {% endif %}
@@ -208,7 +210,10 @@
               <span class="entity-meta-item-label">{{ _('Empresa') }}</span>
               <span class="entity-meta-item-value">
                 {% if worker.company_rel %}
-                  {{ worker.company_rel.nombre }}
+                  <a href="{{ url_for('admin.company_panel', company_id=worker.company_rel.id) }}"
+                     class="entity-meta-link" title="{{ _('Ver ficha de empresa') }}">
+                    {{ worker.company_rel.nombre }}
+                  </a>
                 {% else %}
                   <span class="entity-meta-item-value--muted">{{ _('Sin empresa') }}</span>
                 {% endif %}

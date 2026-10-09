@@ -129,6 +129,11 @@ def _subcontrata_sections_blueprint() -> list[dict]:
                 ITEM_CERTIFICACION,
             ],
         },
+        {
+            'id': 'sec_sys',
+            'title': str(_('Sistema')),
+            'items': [ITEM_CONFIGURACION],
+        },
     ]
 
 
@@ -342,7 +347,7 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
         },
         ITEM_CERTIFICACION: {
             'id': ITEM_CERTIFICACION,
-            'label': str(_('Certificación de horario')),
+            'label': str(_('Cert. de horario')),
             'icon': 'fa-clock',
             'kind': 'link',
             'href': (
@@ -352,7 +357,7 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             ),
             'active': 'certificacion' in _ep(),
             'data_tour': None,
-            'badge': int(ctx.get('cert_entrantes') or 0) if not _is_admin_subcontrata(u) else 0,
+            'badge': int(ctx.get('cert_entrantes') or 0),
         },
         ITEM_CONTRATACION: {
             'id': ITEM_CONTRATACION,
@@ -362,6 +367,7 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'href': url_for('compliance.contratacion_lista'),
             'active': 'contratacion' in _ep() and not str(_ep()).startswith('empleado.'),
             'data_tour': None,
+            'badge': int(ctx.get('contratacion_pendientes') or 0),
         },
         ITEM_MI_DOCUMENTACION: {
             'id': ITEM_MI_DOCUMENTACION,
@@ -568,8 +574,8 @@ def _config_group_active() -> bool:
     return (
         'configuracion' in _ep()
         or _ep() == 'admin.permisos_roles'
-        # Ajustes de documentación viven dentro de Configuración (no submenú).
-        or _ep() in ('compliance.ajustes', 'compliance.catalogo')
+        # URL antigua de ajustes doc → redirige a Configuración.
+        or _ep() == 'compliance.ajustes'
     )
 
 
@@ -577,6 +583,7 @@ def _nav_group(*, item_id, label, icon, href, parent_active, children, data_tour
     kids = list(children or [])
     child_active = any(bool(c.get('active')) for c in kids)
     active = bool(parent_active) or child_active
+    badge = sum(int(c.get('badge') or 0) for c in kids)
     return {
         'id': item_id,
         'label': label,
@@ -587,6 +594,7 @@ def _nav_group(*, item_id, label, icon, href, parent_active, children, data_tour
         'open': active,
         'data_tour': data_tour,
         'children': kids,
+        'badge': badge,
     }
 
 
@@ -610,6 +618,7 @@ def _trabajadores_children(ctx: dict) -> list[dict]:
             'href': url_for('compliance.contratacion_lista'),
             'active': 'contratacion' in _ep() and not str(_ep()).startswith('empleado.'),
             'external': False,
+            'badge': int(ctx.get('contratacion_pendientes') or 0),
         })
     return kids
 
@@ -620,7 +629,7 @@ def _subcontratas_children(ctx: dict) -> list[dict]:
     if item_is_available(ITEM_CERTIFICACION, u, ctx):
         kids.append({
             'id': ITEM_CERTIFICACION,
-            'label': str(_('Certificación de horario')),
+            'label': str(_('Cert. de horario')),
             'icon': 'fa-clock',
             'href': (
                 url_for('subcontrata.certificacion')
@@ -629,7 +638,7 @@ def _subcontratas_children(ctx: dict) -> list[dict]:
             ),
             'active': 'certificacion' in _ep(),
             'external': False,
-            'badge': int(ctx.get('cert_entrantes') or 0) if not _is_admin_subcontrata(u) else 0,
+            'badge': int(ctx.get('cert_entrantes') or 0),
         })
     return kids
 
@@ -786,7 +795,11 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
             return True
         return bool(ctx.get('academia_visible'))
     if item_id == ITEM_CONFIGURACION:
-        return user_can(user, 'configuracion', 'r')
+        # Preferencias personales (idioma / avisos UI). Operario: solo si tiene
+        # permiso tenant. El resto del shell oficina/subcontrata siempre.
+        if _is_operario(user):
+            return user_can(user, 'configuracion', 'r')
+        return True
     if item_id == ITEM_PERMISOS:
         return user_can(user, 'permisos', 'r')
     if item_id == ITEM_LOGS:

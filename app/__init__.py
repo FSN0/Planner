@@ -641,11 +641,16 @@ def create_app():
         doc_avisos = 0
         doc_badge_pending = False
         cert_entrantes = 0
+        contratacion_pendientes = 0
         if current_user.is_authenticated and not skip_heavy_badges:
             try:
                 from app.models import ROLE_ADMIN_SUBCONTRATA, ROLE_OPERARIO
                 from app.services.permission_service import user_can as _user_can
-                from app.services.tenant_modules import has_certificacion, has_documentacion
+                from app.services.tenant_modules import (
+                    has_certificacion,
+                    has_contratacion,
+                    has_documentacion,
+                )
 
                 en_alta = bool(getattr(current_user, 'hiring_state', None))
                 ep = request.endpoint or ''
@@ -693,13 +698,51 @@ def create_app():
                         from app.services.certificacion_service import (
                             propuestas_entrantes_oficina,
                         )
-                        cert_entrantes = propuestas_entrantes_oficina()
+                        cert_entrantes = propuestas_entrantes_oficina(current_user)
+                if (
+                    not en_alta
+                    and has_contratacion()
+                    and _user_can(current_user, 'contratacion', 'r')
+                    and current_user.role not in (ROLE_OPERARIO, ROLE_ADMIN_SUBCONTRATA)
+                ):
+                    from app.services.documentacion_service import conteo_badge_contratacion
+                    contratacion_pendientes = conteo_badge_contratacion()
             except Exception:
                 db.session.rollback()
                 doc_errores = 0
                 doc_avisos = 0
                 doc_badge_pending = False
                 cert_entrantes = 0
+                contratacion_pendientes = 0
+
+        if current_user.is_authenticated:
+            try:
+                from app.services.ui_notif_prefs_service import apply_to_badge_ctx, is_enabled
+                _badge_prefs = {
+                    'pending_notifications': pending_count,
+                    'pending_solicitudes_personal': pending_personal,
+                    'pending_solicitudes_vehiculos': pending_vehiculos,
+                    'unread_logs_count': unread_logs_count,
+                    'unread_laboral_count': unread_laboral_count,
+                    'doc_errores': doc_errores,
+                    'doc_avisos': doc_avisos,
+                    'cert_entrantes': cert_entrantes,
+                    'contratacion_pendientes': contratacion_pendientes,
+                }
+                apply_to_badge_ctx(_badge_prefs, current_user)
+                pending_count = int(_badge_prefs.get('pending_notifications') or 0)
+                pending_personal = int(_badge_prefs.get('pending_solicitudes_personal') or 0)
+                pending_vehiculos = int(_badge_prefs.get('pending_solicitudes_vehiculos') or 0)
+                unread_logs_count = int(_badge_prefs.get('unread_logs_count') or 0)
+                unread_laboral_count = int(_badge_prefs.get('unread_laboral_count') or 0)
+                doc_errores = int(_badge_prefs.get('doc_errores') or 0)
+                doc_avisos = int(_badge_prefs.get('doc_avisos') or 0)
+                cert_entrantes = int(_badge_prefs.get('cert_entrantes') or 0)
+                contratacion_pendientes = int(_badge_prefs.get('contratacion_pendientes') or 0)
+                if not is_enabled(current_user, 'documentacion'):
+                    doc_badge_pending = False
+            except Exception:
+                pass
 
         sidebar_nav = None
         if current_user.is_authenticated:
@@ -735,6 +778,7 @@ def create_app():
                     'doc_errores': doc_errores,
                     'doc_avisos': doc_avisos,
                     'cert_entrantes': cert_entrantes,
+                    'contratacion_pendientes': contratacion_pendientes,
                 })
             except Exception:
                 sidebar_nav = None

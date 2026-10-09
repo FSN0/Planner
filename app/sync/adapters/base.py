@@ -100,6 +100,21 @@ class BaseSyncAdapter(ABC):
         """
         return []
 
+    def get_attendance_contract_rates(
+        self, partner_id, project_id, on_date=None,
+    ):
+        """Opcional. Tarifa de partner.attendance.contract (empresa+obra).
+
+        {
+          'contract_id': 1,
+          'hourly_rate': 18.5,
+          'lines': {partner_id_operario: 20.0},
+          'date_start': '2026-01-01',
+          'date_end': None,
+        }
+        """
+        return None
+
     def get_viajes_diarios(self, fecha=None, fecha_hasta=None) -> list:
         """
         Opcional. Viajes / trayectos de flota (cobertura por fecha inicio–fin).

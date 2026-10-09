@@ -1,0 +1,25 @@
+<script>
+(function () {
+  document.querySelectorAll('form.cert-precio').forEach(function (form) {
+    var view = form.querySelector('.cert-precio-view');
+    var edit = form.querySelector('.cert-precio-edit');
+    var cancel = form.querySelector('.cert-precio-cancel');
+    var input = form.querySelector('input[name="precio_hora"]');
+    function openEdit() {
+      form.classList.add('is-editing');
+      if (edit) edit.hidden = false;
+      if (input) { input.focus(); input.select(); }
+    }
+    function closeEdit() {
+      form.classList.remove('is-editing');
+      if (edit) edit.hidden = true;
+      if (input) input.value = form.getAttribute('data-precio') || input.value;
+    }
+    if (view) view.addEventListener('click', openEdit);
+    if (cancel) cancel.addEventListener('click', closeEdit);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && form.classList.contains('is-editing')) closeEdit();
+    });
+  });
+})();
+</script>

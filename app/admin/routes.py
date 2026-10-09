@@ -1101,14 +1101,41 @@ def company_panel(company_id):
     panel_stats = get_company_panel_stats(company)
 
     docs_pendientes = None
+    cert_pendientes = None
     try:
+        from app.services.ui_notif_prefs_service import is_enabled as ui_notif_on
         from app.services.tenant_modules import has_documentacion as mod_docs
-        if mod_docs() and user_can(current_user, 'documentacion', 'r'):
+        if (
+            mod_docs()
+            and user_can(current_user, 'documentacion', 'r')
+            and ui_notif_on(current_user, 'documentacion')
+        ):
             from app.services.documentacion_service import conteo_badge
             err, avi = conteo_badge(company.id)
             docs_pendientes = int(err) + int(avi)
     except Exception:
         docs_pendientes = None
+
+    try:
+        from app.services.ui_notif_prefs_service import is_enabled as ui_notif_on
+        from app.services.tenant_modules import has_certificacion as mod_cert
+        if (
+            not company.is_internal
+            and mod_cert()
+            and user_can(current_user, 'certificacion', 'r')
+            and ui_notif_on(current_user, 'certificacion')
+        ):
+            from datetime import date as _date
+            from app.services.certificacion_service import panel_certificacion_empresa_obras
+            hoy = _date.today()
+            filas = panel_certificacion_empresa_obras(
+                current_user, company.id, anio=hoy.year, mes=hoy.month,
+            )
+            cert_pendientes = sum(1 for f in filas if f.get('requiere_accion'))
+            if not cert_pendientes:
+                cert_pendientes = None
+    except Exception:
+        cert_pendientes = None
 
     from app.utils.nav_back import resolve_back_url
     back_url = resolve_back_url('admin.companies')
@@ -1122,6 +1149,7 @@ def company_panel(company_id):
         avg_rating=panel_stats["avg_rating"],
         ratings_count=panel_stats["ratings_count"],
         docs_pendientes=docs_pendientes,
+        cert_pendientes=cert_pendientes,
     )
 
    
@@ -2339,20 +2367,16 @@ def edit_operario(user_id):
                 companies=companies,
             )
 
+        new_email = (
+            request.form.get("email")
+            or request.form.get("email_office")
+            or request.form.get("email_advanced")
+            or ""
+        ).strip().lower()
         if nuevo_rol == ROLE_OPERARIO:
-            new_email = (
-                request.form.get("email")
-                or request.form.get("email_advanced")
-                or ""
-            ).strip().lower()
             if not _email_parece_real_form(new_email):
                 new_email = _email_placeholder_desde_dni(new_dni or user.dni)
         else:
-            new_email = (
-                request.form.get("email_office")
-                or request.form.get("email")
-                or ""
-            ).strip().lower()
             if not _email_parece_real_form(new_email):
                 flash(translate("Email obligatorio para perfiles de oficina."), "danger")
                 return _render_user_form(
@@ -3176,14 +3200,22 @@ def delete_company(company_id):
 @login_required
 @roles_required(ROLE_ADMIN)
 def reset_password(user_id):
-    new_password = request.form.get("new_password")
+    new_password = (request.form.get("new_password") or "").strip()
+    next_url = (request.form.get("next") or "").strip()
     user = User.query.get(user_id)
-    if user:
-        user.password_hash = generate_password_hash(new_password)
-        db.session.commit()
-        flash(translate("Contraseña restablecida"), "success")
-    else:
+    if not user:
         flash(translate("Usuario no encontrado"), "danger")
+        return redirect(url_for("admin.personal"))
+    if len(new_password) < 8:
+        flash(translate("La contraseña debe tener al menos 8 caracteres."), "danger")
+        if next_url.startswith("/admin/"):
+            return redirect(next_url)
+        return redirect(url_for("admin.edit_operario", user_id=user.id))
+    user.password_hash = generate_password_hash(new_password)
+    db.session.commit()
+    flash(translate("Contraseña restablecida"), "success")
+    if next_url.startswith("/admin/"):
+        return redirect(next_url)
     return redirect(url_for("admin.personal"))
 
 
@@ -3517,34 +3549,30 @@ def create_user():
             flash(translate("Error: El DNI {dni} ya pertenece a otro usuario.", dni=dni), "danger")
             return redirect(_url_with_return_to("admin.create_user"))
 
+        email_form = (
+            request.form.get("email")
+            or request.form.get("email_office")
+            or request.form.get("email_advanced")
+            or ""
+        ).strip().lower()
         if role == ROLE_OPERARIO:
-            email_link = (
-                request.form.get("email") or request.form.get("email_advanced") or ""
-            ).strip().lower()
             if pin_mode == "email_link":
-                if not _email_parece_real_form(email_link):
+                if not _email_parece_real_form(email_form):
                     flash(translate("Para enviar el enlace de PIN indica un correo electrónico real."),
                         "danger",
                     )
                     return redirect(_url_with_return_to("admin.create_user"))
-                email = email_link
+                email = email_form
             else:
                 pin_form = (request.form.get("pin") or "").strip()
                 if not pin_form:
                     flash(translate("Indica un PIN de 4 a 6 dígitos, o elige enviar enlace por correo."), "danger")
                     return redirect(_url_with_return_to("admin.create_user"))
-                email_opt = (
-                    request.form.get("email_advanced") or request.form.get("email") or ""
-                ).strip().lower()
-                email = email_opt if _email_parece_real_form(email_opt) else _email_placeholder_desde_dni(dni)
+                email = email_form if _email_parece_real_form(email_form) else _email_placeholder_desde_dni(dni)
             password_hash = generate_password_hash(secrets.token_urlsafe(32))
             web_access = True
         else:
-            email = (
-                request.form.get("email_office")
-                or request.form.get("email")
-                or ""
-            ).strip().lower()
+            email = email_form
             password = request.form.get("password") or ""
             if not _email_parece_real_form(email):
                 flash(translate("Email obligatorio para perfiles de oficina."), "danger")
@@ -4522,10 +4550,40 @@ def search_workers():
 @login_required
 def configuracion_global():
     from app.services.permission_service import user_can
-    if not user_can(current_user, 'configuracion', 'r'):
-        flash(translate("Acceso denegado. Área exclusiva de administración."), "danger")
-        return redirect(url_for('main.dashboard'))
-        
+    from app.services.ui_notif_prefs_service import catalog_for_ui
+
+    can_tenant_config = user_can(current_user, 'configuracion', 'r')
+    ui_notif_catalog = catalog_for_ui(current_user)
+
+    if not can_tenant_config:
+        return render_template(
+            'admin_configuracion.html',
+            can_tenant_config=False,
+            ui_notif_catalog=ui_notif_catalog,
+            festivos=[],
+            limite_custodia=15,
+            configs={},
+            monetizacion_activa=False,
+            tenant_has_fichaje_operario=False,
+            tenant_has_onboarding=False,
+            academia_visible=False,
+            tenant_has_auditoria_vehiculos=False,
+            hora_corte_activa=False,
+            conforme_jornada_activo=False,
+            notif_matrix={'debounce_minutes': 15, 'digest_hour': '08:00',
+                          'hora_limite_entrada': '08:30', 'role_users': [],
+                          'events': [], 'recipient_opts': []},
+            brand_has_logo=False,
+            brand_has_header=False,
+            brand_has_mark=False,
+            brand_report_title='',
+            brand_stripe_color='#0f172a',
+            etiquetas_empleado=[],
+            etiquetas_subcontrata=[],
+            can_manage_etiquetas=False,
+            aviso_dias_documentacion=15,
+        )
+
     from app.models import Festivo, ConfiguracionGlobal, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
     from app.services.plan_service import monetizacion_activa
     from app.services.tenant_modules import (
@@ -4534,14 +4592,14 @@ def configuracion_global():
         hora_corte_activa,
     )
     festivos = Festivo.query.order_by(Festivo.fecha.asc()).all()
-    
+
     # Cargamos TODAS las configuraciones en un diccionario
     todas_configs = ConfiguracionGlobal.query.all()
     configs_dict = {c.clave: c.valor for c in todas_configs}
-    
+
     # Extraemos el límite de custodia (o le damos 15 por defecto)
     limite_custodia = int(configs_dict.get('limite_custodia', 15))
-    
+
     tenant_modulos = getattr(g.current_tenant, 'modulos_activos', {}) or {}
 
     academia_pref = False
@@ -4562,9 +4620,12 @@ def configuracion_global():
     from app.models import Etiqueta
     from app.services.etiqueta_service import list_etiquetas
     from app.services.permission_service import user_can as _uc
+    from app.services.documentacion_service import aviso_dias as _aviso_dias_doc
 
     return render_template(
         'admin_configuracion.html',
+        can_tenant_config=True,
+        ui_notif_catalog=ui_notif_catalog,
         festivos=festivos,
         limite_custodia=limite_custodia,
         configs=configs_dict,
@@ -4584,6 +4645,7 @@ def configuracion_global():
         etiquetas_empleado=list_etiquetas(Etiqueta.TIPO_EMPLEADO, active_only=False),
         etiquetas_subcontrata=list_etiquetas(Etiqueta.TIPO_SUBCONTRATA, active_only=False),
         can_manage_etiquetas=_uc(current_user, 'etiquetas_catalogo', 'w'),
+        aviso_dias_documentacion=_aviso_dias_doc(),
     )
 
 
@@ -5085,7 +5147,7 @@ def update_config():
 
     # Compat: formularios antiguos sin form_section
     if section == 'all':
-        section_keys = {'horario', 'fichajes', 'ausencias', 'laboral', 'vehiculos', 'emails'}
+        section_keys = {'horario', 'fichajes', 'ausencias', 'laboral', 'vehiculos', 'emails', 'documentacion'}
     else:
         section_keys = {section}
 
@@ -5211,6 +5273,13 @@ def update_config():
             'True' if request.form.get('academia_visible') else 'False',
         )
 
+    if 'documentacion' in section_keys:
+        from app.services.documentacion_service import guardar_aviso_dias
+        try:
+            guardar_aviso_dias(int(request.form.get('aviso_dias') or 15))
+        except (TypeError, ValueError):
+            guardar_aviso_dias(15)
+
     odoo_url = request.form.get('odoo_url')
     if odoo_url:
         _upsert('odoo_url', odoo_url)
@@ -5222,6 +5291,7 @@ def update_config():
         'laboral': translate('Permisos de Laboral guardados.'),
         'vehiculos': translate('Alertas de vehículos guardadas.'),
         'emails': translate('Notificaciones por correo guardadas.'),
+        'documentacion': translate('Ajustes de documentación guardados.'),
         'guia': translate('Preferencia de Academia guardada.'),
         'all': translate('Configuración global actualizada correctamente.'),
     }
@@ -5240,6 +5310,7 @@ def update_config():
         'laboral': 'cfg-laboral',
         'vehiculos': 'cfg-vehiculos',
         'emails': 'cfg-emails',
+        'documentacion': 'cfg-documentacion',
         'guia': 'cfg-guia',
     }.get(section)
     if anchor:

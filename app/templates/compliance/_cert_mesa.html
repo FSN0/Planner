@@ -1,0 +1,538 @@
+{# Mesa única + baraja de rondas. Requiere vars de certificacion.html #}
+{% set modo_mesa = modo_mesa if modo_mesa is defined else 'preparar' %}
+{% set baraja = baraja if baraja is defined else [] %}
+{% set mapa_comparar = mapa_comparar if mapa_comparar is defined else {} %}
+{% set comparar_ronda = comparar_ronda if comparar_ronda is defined else none %}
+{% set mesa_carta = mesa_carta if mesa_carta is defined else none %}
+{% set viendo_historial = viendo_historial if viendo_historial is defined else false %}
+{% set ronda_sel = ronda_sel if ronda_sel is defined else none %}
+{% set lado_propio = lado_propio if lado_propio is defined else _('Nosotros') %}
+{% set lado_ajeno = lado_ajeno if lado_ajeno is defined else _('La otra parte') %}
+
+{% macro url_mesa(ronda=none) -%}
+{%- if vista_subcontrata -%}
+{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, ronda=ronda) }}
+{%- else -%}
+{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none, ronda=ronda) }}
+{%- endif -%}
+{%- endmacro %}
+
+{% set resultado_txt = {
+  'en_mesa': _('Actual'),
+  'sustituida': _('Anterior'),
+  'rechazada': _('Rechazada'),
+  'aceptada': _('Aceptada'),
+  'retirada': _('Corregida'),
+} %}
+{% set mesa_carta_seq = mesa_carta_seq if mesa_carta_seq is defined else (mesa_carta.secuencia if mesa_carta else none) %}
+
+{% set chat_mensajes = chat_mensajes if chat_mensajes is defined else [] %}
+<div class="cert-mesa-layout">
+  {# ——— Historial ——— #}
+  <aside class="cert-deck" aria-label="{{ _('Historial de propuestas') }}">
+    <div class="cert-deck-head">
+      <strong>{{ _('Historial') }}</strong>
+      <span>{{ baraja|length }} {{ _('envíos') }}</span>
+    </div>
+    <a class="cert-deck-card is-actual {% if not viendo_historial %}is-active{% endif %} {% if modo_mesa == 'responder' and not viendo_historial %}is-action{% endif %}"
+       href="{{ url_mesa(none) }}">
+      {% if modo_mesa == 'responder' and not viendo_historial %}
+      <i class="fas fa-exclamation-circle cert-deck-alert" title="{{ _('Requiere tu respuesta') }}" aria-hidden="true"></i>
+      <span class="sr-only">{{ _('Requiere tu respuesta') }}</span>
+      {% endif %}
+      <em>
+        {% if mesa_carta_seq and modo_mesa in ('esperando', 'responder') and not viendo_historial %}#{{ mesa_carta_seq }} · {% endif %}{{ _('Propuesta actual') }}
+      </em>
+      <strong>
+        {% if modo_mesa == 'esperando' %}{{ _('Enviada · esperando respuesta') }}
+        {% elif modo_mesa == 'responder' %}{{ _('Por responder') }}
+        {% elif modo_mesa == 'cerrada' %}{{ _('Aceptada') }}
+        {% elif modo_mesa == 'historial' and mesa_carta %}
+          {% if mesa_carta.es_propia %}{{ _('Enviada · esperando respuesta') if (propia and propia.estado == 'enviada') else _('En la mesa') }}
+          {% else %}{{ _('Por responder') }}{% endif %}
+        {% else %}{{ _('Borrador') }}
+        {% endif %}
+      </strong>
+      <small>{% if mesa_carta and mesa_carta.en_mesa %}{{ mesa_carta.lado }}{% else %}{{ lado_propio }}{% endif %}</small>
+    </a>
+    {% for c in baraja|reverse %}
+    {% set requiere_accion = c.en_mesa and not c.es_propia %}
+    <a class="cert-deck-card is-{{ c.resultado }} {% if c.resultado == 'sustituida' %}is-nested{% endif %} {% if c.en_mesa and not viendo_historial %}is-active is-mesa{% elif viendo_historial and ronda_sel and ronda_sel.id == c.id %}is-active{% endif %} {% if requiere_accion %}is-action{% endif %}"
+       href="{{ url_mesa(none) if c.en_mesa else url_mesa(c.id) }}">
+      {% if requiere_accion %}
+      <i class="fas fa-exclamation-circle cert-deck-alert" title="{{ _('Requiere tu respuesta') }}" aria-hidden="true"></i>
+      <span class="sr-only">{{ _('Requiere tu respuesta') }}</span>
+      {% endif %}
+      <em>#{{ c.secuencia }} · {{ resultado_txt.get(c.resultado, c.resultado) }}</em>
+      <strong>{{ c.lado }}</strong>
+      <small>
+        {% if c.enviada_at %}{{ c.enviada_at.strftime('%d/%m %H:%M') }}{% endif %}
+        {% if c.horas is not none %} · {{ c.horas }} h{% endif %}
+      </small>
+    </a>
+    {% else %}
+    <p class="cert-deck-empty">{{ _('Aún no hay envíos. Cuando se envíe la primera propuesta, aparecerá aquí.') }}</p>
+    {% endfor %}
+  </aside>
+
+  {# ——— Carta principal ——— #}
+  <section class="cert-mesa-main">
+    {% if viendo_historial and ronda_sel %}
+    <div class="cert-mesa-banner {% if ronda_sel.resultado == 'rechazada' %}is-bad{% elif ronda_sel.resultado == 'aceptada' %}is-ok{% else %}is-muted{% endif %}">
+      <div>
+        <strong>{{ _('Historial') }} · #{{ ronda_sel.secuencia }}</strong>
+        <span>
+          {{ _('Enviada por') }} {{ lado_propio if (propia and ronda_sel.direccion == propia.direccion) else lado_ajeno }}
+          {% if ronda_sel.enviada_at %} · {{ ronda_sel.enviada_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+          · {{ resultado_txt.get(ronda_sel.resultado, ronda_sel.resultado) }}
+        </span>
+        {% if ronda_sel.comentario_rechazo %}
+        <span class="cert-banner-motivo"><em>{{ _('Motivo') }}:</em> {{ ronda_sel.comentario_rechazo }}</span>
+        {% endif %}
+      </div>
+      <a class="btn-admin btn-admin-ghost" href="{{ url_mesa(none) }}">{{ _('Volver a la propuesta actual') }}</a>
+    </div>
+    <div class="cert-panel cert-panel--{% if ronda_sel.resultado == 'rechazada' %}bad{% elif ronda_sel.resultado == 'aceptada' %}ok{% else %}muted{% endif %}">
+      <div class="cert-panel-head">
+        <div>
+          <h2>{{ _('Propuesta') }} #{{ ronda_sel.secuencia }}</h2>
+          <p>{{ _('Solo lectura · así se envió en su momento') }}</p>
+        </div>
+        <span class="cert-pill {{ estado_cls.get(ronda_sel.resultado if ronda_sel.resultado != 'en_mesa' else 'enviada', 'is-muted') }}">
+          {{ resultado_txt.get(ronda_sel.resultado, ronda_sel.resultado) }}
+        </span>
+      </div>
+      {% set grupos_hist = grupos_hist if grupos_hist is defined else [] %}
+      {% if grupos_hist %}
+      <div class="cert-works">
+        {% for g in grupos_hist %}
+        <details class="cert-work">
+          <summary>
+            <span class="cert-work-name">
+              {% if modo_vista == 'fecha' %}
+                {{ g.fecha.strftime('%d/%m/%Y') if g.fecha is defined and g.fecha else (obra.nombre if obra else _('Obra')) }}
+              {% else %}
+                {{ g.nombre or _('Persona') }}
+              {% endif %}
+            </span>
+            <span class="cert-work-stats">{{ g.horas }} h · {{ g.importe }} €</span>
+          </summary>
+          <div class="cert-days">
+            {% if modo_vista == 'fecha' %}
+              <div class="cert-lines">
+                <div class="cert-line cert-line--head" aria-hidden="true">
+                  <span>{{ _('Persona') }}</span>
+                  <span>{{ _('Inicio') }}</span>
+                  <span>{{ _('Fin') }}</span>
+                  <span>{{ _('Horas') }}</span>
+                  <span>{{ _('€/h') }}</span>
+                  <span>{{ _('Importe') }}</span>
+                  <span></span>
+                </div>
+                {% for row in g.lineas %}
+                <div class="cert-line">
+                  <div class="cert-person"><strong>{{ row.user_name }}</strong></div>
+                  <div class="cert-field"><span class="cert-field-label">{{ _('Inicio') }}</span><span>{{ row.hora_inicio or '—' }}</span></div>
+                  <div class="cert-field"><span class="cert-field-label">{{ _('Fin') }}</span><span>{{ row.hora_fin or '—' }}</span></div>
+                  <div class="cert-field"><span class="cert-field-label">{{ _('Horas') }}</span><span>{{ row.horas }} h</span></div>
+                  <div class="cert-field"><span class="cert-field-label">{{ _('€/h') }}</span><span>{{ row.precio_hora or '—' }}</span></div>
+                  <div class="cert-importe">{{ row.importe }} €</div>
+                  <span class="cert-line-reset-spacer" aria-hidden="true"></span>
+                </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              {% for day in g.fechas %}
+              <details class="cert-day">
+                <summary>
+                  <span>{{ day.fecha.strftime('%d/%m/%Y') }}</span>
+                  <span>{{ day.horas }} h · {{ day.importe }} €</span>
+                </summary>
+                <div class="cert-lines">
+                  <div class="cert-line cert-line--head cert-line--persona" aria-hidden="true">
+                    <span>{{ _('Día') }}</span>
+                    <span>{{ _('Inicio') }}</span>
+                    <span>{{ _('Fin') }}</span>
+                    <span>{{ _('Horas') }}</span>
+                    <span>{{ _('€/h') }}</span>
+                    <span>{{ _('Importe') }}</span>
+                    <span></span>
+                  </div>
+                  {% for row in day.lineas %}
+                  <div class="cert-line cert-line--persona">
+                    <div class="cert-person"></div>
+                    <div class="cert-field"><span class="cert-field-label">{{ _('Inicio') }}</span><span>{{ row.hora_inicio or '—' }}</span></div>
+                    <div class="cert-field"><span class="cert-field-label">{{ _('Fin') }}</span><span>{{ row.hora_fin or '—' }}</span></div>
+                    <div class="cert-field"><span class="cert-field-label">{{ _('Horas') }}</span><span>{{ row.horas }} h</span></div>
+                    <div class="cert-field"><span class="cert-field-label">{{ _('€/h') }}</span><span>{{ row.precio_hora or '—' }}</span></div>
+                    <div class="cert-importe">{{ row.importe }} €</div>
+                    <span class="cert-line-reset-spacer" aria-hidden="true"></span>
+                  </div>
+                  {% endfor %}
+                </div>
+              </details>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+      <footer class="cert-panel-foot">
+        <div class="cert-total">
+          <span>{{ _('Total') }}</span>
+          <strong>{{ ronda_sel.horas_total or 0 }} h · {{ ronda_sel.importe_total or 0 }} €</strong>
+        </div>
+      </footer>
+      {% else %}
+      <div class="cert-empty">{{ _('Este envío no tiene líneas guardadas.') }}</div>
+      {% endif %}
+    </div>
+
+    {% else %}
+    {# ——— Turno / estado de la mesa ——— #}
+    <div class="cert-mesa-banner {% if turno == 'te_toca' or turno == 'esperando' %}is-wait{% elif turno == 'cerrada' %}is-ok{% else %}is-muted{% endif %}">
+      <div>
+        {% if modo_mesa == 'esperando' and mesa_carta %}
+          <strong>{{ _('Propuesta actual') }} · {{ _('enviada') }}</strong>
+          <span>{{ _('Esperando respuesta de') }} {{ lado_ajeno }}{% if mesa_carta.enviada_at %} · {{ mesa_carta.enviada_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}</span>
+        {% elif modo_mesa == 'responder' and mesa_carta %}
+          <strong>{{ _('Propuesta actual') }} · {{ mesa_carta.lado }}</strong>
+          <span>
+            {{ _('Puedes aceptarla, rechazarla o enviar una corrección. Debajo de cada fila ves lo que ellos enviaron.') }}
+            {% if mesa_carta.enviada_at %} · {{ mesa_carta.enviada_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+            {% if mesa_carta.horas is not none %} · {{ mesa_carta.horas }} h{% endif %}
+          </span>
+        {% elif modo_mesa == 'cerrada' %}
+          <strong>{{ _('Mes cerrado') }}</strong>
+          <span>{{ _('La propuesta actual quedó aceptada.') }}</span>
+        {% else %}
+          <strong>{{ _('Borrador') }}</strong>
+          <span>{{ _('Prepara tu propuesta y envíala cuando esté lista. Si hubo un rechazo, está en el historial.') }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="cert-panel cert-panel--{{ estado_cls.get(propia_estado_ui, 'is-muted')|replace('is-', '') }}">
+      <form method="post" id="form-propia" class="cert-panel-form {% if modo_mesa == 'responder' %}js-mesa-responder{% endif %}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="anio" value="{{ anio }}">
+        <input type="hidden" name="mes" value="{{ mes }}">
+        {% if modo_vista %}<input type="hidden" name="modo" value="{{ modo_vista }}">{% endif %}
+        {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
+        {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
+
+        <div class="cert-panel-head">
+          <div>
+            <h2>
+              {% if modo_mesa == 'esperando' %}{{ _('Propuesta actual') }}
+              {% elif modo_mesa == 'responder' %}{{ _('Tu corrección') }}
+              {% elif modo_mesa == 'cerrada' %}{{ _('Propuesta aceptada') }}
+              {% else %}{{ _('Tu propuesta') }}
+              {% endif %}
+            </h2>
+            <p>
+              {% if comparar_ronda and modo_mesa == 'responder' %}
+                {{ _('Arriba: aceptar o rechazar tal cual. Si cambias horas, Aceptar pasa a Enviar corrección (guarda y envía).') }}
+              {% elif modo_mesa == 'esperando' %}
+                {{ _('Así la ve la otra parte. Puedes corregirla (vuelve a borrador) mientras no respondan.') }}
+              {% else %}
+                {{ _('Prepara las horas y envía cuando esté lista.') }}
+              {% endif %}
+            </p>
+          </div>
+          <div class="cert-panel-head-actions">
+            {% if modo_mesa == 'responder' and ajena and ajena.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
+            <button class="btn-admin btn-admin-danger" name="accion" value="rechazar" type="submit"
+                    form="form-propia" title="{{ _('Rechazar la propuesta actual') }}">{{ _('Rechazar') }}</button>
+            <button class="btn-admin cert-btn-guardar js-mesa-aceptar" name="accion" value="aceptar" type="submit"
+                    form="form-propia" title="{{ _('Aceptar tal cual la propuesta actual') }}">{{ _('Aceptar') }}</button>
+            {% if editable %}
+            <button class="btn-admin cert-btn-guardar js-mesa-enviar-corr" name="accion" value="enviar" type="submit"
+                    form="form-propia" hidden
+                    title="{{ _('Guarda los cambios y envía la corrección') }}">{{ _('Enviar corrección') }}</button>
+            {% endif %}
+            {% endif %}
+            <span class="cert-pill {{ estado_cls.get(propia_estado_ui, 'is-muted') }}">
+              {{ estado_txt.get(propia_estado_ui, propia_estado_ui) }}
+            </span>
+          </div>
+        </div>
+
+        {% set tc = totales_comparar if totales_comparar is defined else {} %}
+        {% set cmp_persona = tc.por_persona if tc else {} %}
+        {% set cmp_pf = tc.por_persona_fecha if tc else {} %}
+        {% if grupos_propia %}
+        <div class="cert-works">
+          {% for obra_g in grupos_propia %}
+          {% set cmp_p = cmp_persona.get(obra_g.persona_user_id) if obra_g.persona_user_id and cmp_persona else none %}
+          <details class="cert-work">
+            <summary>
+              <span class="cert-work-name">{{ obra_g.obra.nombre if obra_g.obra else _('Obra') }}</span>
+              {% if modo_vista == 'persona' and editable and obra_g.persona_user_id %}
+              <span class="cert-work-tools" onclick="event.stopPropagation()">
+                <span class="cert-work-col cert-work-col--horas">
+                  <input type="text" inputmode="decimal" name="phoras_{{ obra_g.persona_user_id }}"
+                         class="cert-prorrata-input js-work-horas" value="{{ obra_g.horas if obra_g.horas else '' }}"
+                         placeholder="0"
+                         title="{{ _('Total horas del trabajador. Guardar todo reparte este total entre los días.') }}"
+                         aria-label="{{ _('Total horas del mes') }}">
+                  <em>h</em>
+                </span>
+                <span class="cert-work-col cert-work-col--horas-cmp">
+                  {% if cmp_p %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
+                </span>
+                <span class="cert-work-col cert-work-col--imp" title="{{ _('Importe total de este trabajador') }}">{{ obra_g.importe }} €</span>
+                <span class="cert-work-col cert-work-col--imp-cmp">
+                  {% if cmp_p and cmp_p.importe is not none %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.importe }} €)</span>{% endif %}
+                </span>
+                <span class="cert-work-col cert-work-col--btns">
+                  {% if mesa_carta and not mesa_carta.es_propia %}
+                  <button type="submit" class="cert-work-btn" name="copiar_persona" value="{{ obra_g.persona_user_id }}"
+                          title="{{ _('Copiar su propuesta en este trabajador') }}">
+                    <i class="fas fa-file-import" aria-hidden="true"></i>
+                    <span class="sr-only">{{ _('Copiar suya') }}</span>
+                  </button>
+                  {% else %}
+                  <span class="cert-work-btn-spacer" aria-hidden="true"></span>
+                  {% endif %}
+                  <button type="submit" class="cert-work-btn" name="restablecer_persona" value="{{ obra_g.persona_user_id }}"
+                          title="{{ _('Restablecer tu último envío') if vista_subcontrata else _('Restablecer desde fichaje') }}">
+                    <i class="fas fa-undo" aria-hidden="true"></i>
+                    <span class="sr-only">{{ _('Restablecer') }}</span>
+                  </button>
+                </span>
+              </span>
+              {% else %}
+              <span class="cert-work-tools cert-work-tools--ro js-work-stats">
+                <span class="cert-work-col cert-work-col--horas">{{ obra_g.horas }} h</span>
+                <span class="cert-work-col cert-work-col--horas-cmp">
+                  {% if cmp_p %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
+                </span>
+                <span class="cert-work-col cert-work-col--imp">{{ obra_g.importe }} €</span>
+                <span class="cert-work-col cert-work-col--imp-cmp">
+                  {% if cmp_p and cmp_p.importe is not none %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.importe }} €)</span>{% endif %}
+                </span>
+                <span class="cert-work-col cert-work-col--btns" aria-hidden="true"></span>
+              </span>
+              {% endif %}
+            </summary>
+            <div class="cert-days">
+              {% for fecha in obra_g.fechas %}
+              {% set cmp_d = cmp_pf.get((obra_g.persona_user_id, fecha.fecha)) if obra_g.persona_user_id and cmp_pf else none %}
+              <details class="cert-day">
+                <summary>
+                  <span>{{ fecha.fecha.strftime('%d/%m/%Y') }}</span>
+                  <span class="js-day-stats cert-cmp-pair">
+                    <span>{{ fecha.horas }} h · {{ fecha.importe }} €</span>
+                    {% if cmp_d %}
+                    <span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_d.horas }} h · {{ cmp_d.importe }} €)</span>
+                    {% endif %}
+                  </span>
+                </summary>
+                <div class="cert-lines">
+                  <div class="cert-line cert-line--head {% if modo_vista == 'persona' %}cert-line--persona{% endif %}" aria-hidden="true">
+                    <span>{% if modo_vista == 'persona' %}{{ _('Día') }}{% else %}{{ _('Persona') }}{% endif %}</span>
+                    <span>{{ _('Inicio') }}</span>
+                    <span>{{ _('Fin') }}</span>
+                    <span>{{ _('Horas') }}</span>
+                    <span>{{ _('€/h') }}</span>
+                    <span>{{ _('Importe') }}</span>
+                    <span></span>
+                  </div>
+                  {% for item in fecha.lineas %}
+                  {% set ln = item.linea %}
+                  {% set prev = mapa_comparar.get((ln.user_id, ln.obra_id, ln.fecha)) if mapa_comparar else none %}
+                  <div class="cert-line {% if modo_vista == 'persona' %}cert-line--persona{% endif %} {% if not vista_subcontrata and ln.solape %}is-overlap{% endif %} {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}is-manual{% endif %} {% if ln.id in falta_ids %}is-missing{% endif %}" data-linea-id="{{ ln.id }}">
+                    <div class="cert-person">
+                      {% if modo_vista != 'persona' %}
+                      <strong>{{ ln.user.name }} {{ ln.user.lastname }}</strong>
+                      {% endif %}
+                      <div class="cert-flags">
+                        {% if not vista_subcontrata %}
+                          {% if ln.estado_fichaje == 'borrador' %}<span class="cert-flag">{{ _('Borrador Odoo') }}</span>{% endif %}
+                          {% if ln.estado_fichaje == 'facturado' %}<span class="cert-flag is-ok">{{ _('Facturado') }}</span>{% endif %}
+                          {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}<span class="cert-flag js-editado-flag">{{ _('Editado') }}</span>{% endif %}
+                          {% if ln.solape %}<span class="cert-flag is-bad">{{ _('Solape') }}</span>{% endif %}
+                        {% endif %}
+                        {% if ln.id in falta_ids %}
+                          <span class="cert-flag is-bad js-falta-flag">{{ _('Faltan horas') }}</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    <label class="cert-field cert-field--with-diff">
+                      <span class="cert-field-label">{{ _('Inicio') }}</span>
+                      <span class="cert-field-row">
+                        <input type="time" name="l{{ ln.id }}_inicio" value="{{ ln.hora_inicio.strftime('%H:%M') if ln.hora_inicio else '' }}" {% if not editable %}disabled{% endif %} class="js-inicio">
+                        {% if prev and prev.hora_inicio %}
+                        <span class="cert-diff {% if not ln.hora_inicio or ln.hora_inicio.strftime('%H:%M') != prev.hora_inicio %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.hora_inicio }})</span>
+                        {% endif %}
+                      </span>
+                    </label>
+                    <label class="cert-field cert-field--with-diff">
+                      <span class="cert-field-label">{{ _('Fin') }}</span>
+                      <span class="cert-field-row">
+                        <input type="time" name="l{{ ln.id }}_fin" value="{{ ln.hora_fin.strftime('%H:%M') if ln.hora_fin else '' }}" {% if not editable %}disabled{% endif %} class="js-fin">
+                        {% if prev and prev.hora_fin %}
+                        <span class="cert-diff {% if not ln.hora_fin or ln.hora_fin.strftime('%H:%M') != prev.hora_fin %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.hora_fin }})</span>
+                        {% endif %}
+                      </span>
+                    </label>
+                    <label class="cert-field cert-field--with-diff">
+                      <span class="cert-field-label">{{ _('Horas') }}</span>
+                      <span class="cert-field-row">
+                        <input type="number" step="0.01" name="l{{ ln.id }}_horas" value="{{ ln.horas if ln.horas is not none else '' }}" {% if not editable %}disabled{% endif %} class="js-horas" placeholder="0">
+                        {% if prev and prev.horas is not none and prev.horas != '' %}
+                        <span class="cert-diff {% if ln.horas is none or (ln.horas|string) != (prev.horas|string) %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.horas }})</span>
+                        {% endif %}
+                      </span>
+                    </label>
+                    <input type="hidden" name="l{{ ln.id }}_modo" value="" class="js-modo">
+                    <label class="cert-field cert-field--with-diff">
+                      <span class="cert-field-label">{{ _('€/h') }}</span>
+                      {% set precio_fila = ln.precio_hora if (ln.precio_hora is not none and ln.precio_hora > 0) else precio %}
+                      <span class="cert-field-row">
+                        {% if vista_subcontrata %}
+                        <input type="hidden" name="l{{ ln.id }}_precio" value="{{ precio_fila }}">
+                        <input type="number" step="0.01" value="{{ precio_fila }}" disabled class="js-precio" title="{{ _('Fijado por el contrato de asistencia') }}">
+                        {% else %}
+                        <input type="number" step="0.01" name="l{{ ln.id }}_precio" value="{{ precio_fila }}" {% if not editable %}disabled{% endif %} class="js-precio">
+                        {% endif %}
+                        {% if prev and prev.precio_hora is not none and prev.precio_hora != '' %}
+                        <span class="cert-diff {% if precio_fila is none or (precio_fila|string) != (prev.precio_hora|string) %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.precio_hora }})</span>
+                        {% endif %}
+                      </span>
+                    </label>
+                    <div class="cert-importe js-importe cert-field-row">
+                      <span>{{ item.importe }} €</span>
+                      {% if prev and prev.importe is not none and prev.importe != '' %}
+                      <span class="cert-diff {% if item.importe is none or (item.importe|string) != (prev.importe|string) %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.importe }} €)</span>
+                      {% endif %}
+                    </div>
+                    {% if editable and not vista_subcontrata %}
+                    <span class="cert-line-actions">
+                      <button type="button" class="cert-line-reset js-restablecer-fila" value="{{ ln.id }}" title="{{ _('Restablecer desde fichaje') }}">
+                        <i class="fas fa-undo" aria-hidden="true"></i>
+                        <span class="sr-only">{{ _('Restablecer') }}</span>
+                      </button>
+                    </span>
+                    {% else %}
+                    <span class="cert-line-reset-spacer" aria-hidden="true"></span>
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </details>
+              {% endfor %}
+            </div>
+          </details>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="cert-empty">{{ _('No hay fichajes de su personal en este mes.') }}</div>
+        {% endif %}
+
+        <footer class="cert-panel-foot">
+          <div class="cert-total">
+            <span>{{ _('Total') }}</span>
+            <strong class="js-panel-total cert-cmp-pair">
+              <span>{{ totales_propia.horas }} h · {{ totales_propia.importe }} €</span>
+              {% if tc and (tc.horas or tc.importe) %}
+              <span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ tc.horas }} h · {{ tc.importe }} €)</span>
+              {% endif %}
+            </strong>
+          </div>
+          <div class="cert-actions cert-actions--stack">
+            {% if modo_mesa == 'responder' and ajena and ajena.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
+            <textarea name="comentario" class="cert-comment" rows="2" placeholder="{{ _('Nota al aceptar / rechazar / enviar (opcional)…') }}"></textarea>
+            {% if editable %}
+            <div class="cert-actions">
+              <button class="btn-admin btn-admin-ghost" name="accion" value="copiar_mesa" type="submit" title="{{ _('Copiar a tu borrador las horas de la propuesta actual') }}">{{ _('Copiar su propuesta') }}</button>
+              <button class="btn-admin cert-btn-guardar" name="accion" value="guardar" type="submit">{{ _('Guardar todo') }}</button>
+            </div>
+            {% endif %}
+            {% elif editable %}
+            <textarea name="comentario" class="cert-comment" rows="2" placeholder="{{ _('Nota al enviar (opcional)…') }}"></textarea>
+            <div class="cert-actions">
+              <button class="btn-admin cert-btn-guardar" name="accion" value="guardar" type="submit">{{ _('Guardar todo') }}</button>
+              <button class="btn-admin {% if not vista_subcontrata %}js-enviar-propuesta{% endif %}" name="accion" value="enviar" type="submit"
+                      {% if not vista_subcontrata %}
+                      data-borradores="{{ borradores_odoo|default(0) }}"
+                      data-title="{{ _('Hay fichajes en borrador en Odoo') }}"
+                      data-text="{{ _('Hay {n} filas todavía en borrador en Odoo. ¿Quieres enviar la propuesta igualmente?', n=borradores_odoo|default(0)) }}"
+                      data-confirm="{{ _('Sí, enviar') }}"
+                      data-cancel="{{ _('Cancelar') }}"
+                      {% endif %}>
+                {{ _('Enviar propuesta') }}
+              </button>
+            </div>
+            {% elif propia.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
+            <div class="cert-actions">
+              <button class="btn-admin btn-admin-ghost js-desenviar-propuesta" name="accion" value="desenviar" type="submit"
+                      data-title="{{ _('¿Corregir la propuesta?') }}"
+                      data-text="{{ _('Volverá a borrador para que puedas corregirla. Dejará de ser la propuesta actual hasta que la reenvíes.') }}"
+                      data-confirm="{{ _('Sí, corregir') }}"
+                      data-cancel="{{ _('Cancelar') }}">
+                {{ _('Corregir') }}
+              </button>
+              {% if propia.id %}
+              <a class="btn-admin btn-admin-ghost js-cert-pdf-dl" href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=propia.id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=propia.id) }}" data-no-page-loading>
+                <i class="fas fa-file-pdf" aria-hidden="true"></i> {{ _('PDF') }}
+              </a>
+              {% endif %}
+            </div>
+            {% elif propia.estado == 'aceptada' or (ajena and ajena.estado == 'aceptada') %}
+            {% set pdf_id = propia.id if propia.estado == 'aceptada' else (ajena.id if ajena else none) %}
+            {% if pdf_id %}
+            <a class="btn-admin btn-admin-ghost js-cert-pdf-dl" href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=pdf_id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=pdf_id) }}" data-no-page-loading>
+              <i class="fas fa-file-pdf" aria-hidden="true"></i> {{ _('PDF') }}
+            </a>
+            {% endif %}
+            {% endif %}
+          </div>
+        </footer>
+      </form>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ——— Chat / notas ——— #}
+  <aside class="cert-chat" aria-label="{{ _('Chat de la certificación') }}">
+    <div class="cert-chat-head">
+      <strong>{{ _('Chat') }}</strong>
+      <span>{{ _('Notas y envíos') }}</span>
+    </div>
+    <div class="cert-chat-log" id="cert-chat-log">
+      {% if chat_mensajes %}
+        {% for m in chat_mensajes %}
+        <div class="cert-chat-msg {% if m.es_sistema %}is-system is-{{ m.tipo }}{% elif m.es_mio %}is-mine{% else %}is-theirs{% endif %}">
+          <div class="cert-chat-meta">
+            <strong>{{ m.autor or m.lado or _('Sistema') }}</strong>
+            {% if m.cuando %}<time>{{ m.cuando.strftime('%d/%m %H:%M') }}</time>{% endif %}
+          </div>
+          <p>{{ m.texto }}</p>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="cert-chat-empty">{{ _('Todavía no hay mensajes. Puedes dejar una nota en cualquier momento.') }}</p>
+      {% endif %}
+    </div>
+    {% if user_can(current_user, 'certificacion', 'w') and not bloqueado %}
+    <form method="post" id="form-cert-chat" class="cert-chat-compose">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="anio" value="{{ anio }}">
+      <input type="hidden" name="mes" value="{{ mes }}">
+      {% if modo_vista %}<input type="hidden" name="modo" value="{{ modo_vista }}">{% endif %}
+      {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
+      {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
+      <textarea name="chat_texto" rows="2" placeholder="{{ _('Escribe una nota…') }}"></textarea>
+      <button type="submit" name="accion" value="nota_chat" class="btn-admin btn-admin-ghost">{{ _('Enviar nota') }}</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+<script>
+(function () {
+  var log = document.getElementById('cert-chat-log');
+  if (log) log.scrollTop = log.scrollHeight;
+})();
+</script>

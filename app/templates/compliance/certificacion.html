@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006stack">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261009align">
 {% endblock %}
 {% block wrapper %}
 {% set endpoint = 'subcontrata.certificacion_obra' if vista_subcontrata else 'compliance.certificacion_empresa_obra' %}
@@ -13,10 +13,15 @@
   9: _('Septiembre'), 10: _('Octubre'), 11: _('Noviembre'), 12: _('Diciembre')
 } %}
 {% set obra = obra if obra is defined else propia.obra %}
+{% set precio_propio_obra = precio_propio_obra if precio_propio_obra is defined else false %}
+{% set modo_mesa = modo_mesa if modo_mesa is defined else 'preparar' %}
+{% set viendo_historial = viendo_historial if viendo_historial is defined else false %}
+{% set baraja = baraja if baraja is defined else [] %}
 {% set estado_cls = {
   'aceptada': 'is-ok',
   'recibida': 'is-wait',
   'enviada': 'is-wait',
+  'por_responder': 'is-wait',
   'rechazada': 'is-bad',
   'borrador': 'is-muted',
   'cerrada': 'is-ok',
@@ -26,6 +31,7 @@
   'aceptada': _('Aceptada'),
   'recibida': _('Propuesta recibida'),
   'enviada': _('Enviada'),
+  'por_responder': _('Por responder'),
   'rechazada': _('Rechazada'),
   'borrador': _('Borrador'),
   'cerrada': _('Cerrada (se aceptó la otra)'),
@@ -38,14 +44,16 @@
 {% set ajena_visible = ajena_visible if ajena_visible is defined else (ajena and ajena.estado in ('enviada', 'aceptada')) %}
 {% if propia.estado == 'cerrada' %}
   {% set propia_estado_ui = 'cerrada' %}
-{% elif not bloqueado and propia.estado == 'borrador' and propia.comentario_rechazo %}
-  {% set propia_estado_ui = 'rechazada' %}
+{% elif modo_mesa == 'responder' %}
+  {% set propia_estado_ui = 'por_responder' %}
 {% elif bloqueado and propia.estado == 'borrador' %}
   {% set propia_estado_ui = 'cerrada' %}
 {% else %}
   {% set propia_estado_ui = propia.estado %}
 {% endif %}
-{% set editable = propia.estado == 'borrador' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
+{% set editable = propia.estado == 'borrador' and not bloqueado and user_can(current_user, 'certificacion', 'w') and not viendo_historial %}
+{% set contrato = contrato if contrato is defined else none %}
+{% set modo_vista = modo_vista if modo_vista is defined else 'persona' %}
 {# Comparación SaaS: verde = igual; rojo = piden más; cyan = piden menos (favorable). #}
 {% macro cert_cmp_cls(ellos, app) -%}
 {%- if ellos is none or app is none -%}is-muted
@@ -66,17 +74,24 @@
           {{ company.nombre }}
           {% endif %}
         </p>
-        <h1>{{ obra.nombre if obra else _('Certificación') }}</h1>
-        <p class="cert-hero-sub">{{ _('Revisa horas y precios de esta obra. Envía tu propuesta o acepta la de la otra parte.') }}</p>
+        <h1>
+          {{ obra.nombre if obra else _('Certificación') }}
+          {% if contrato and contrato.contract_id %}
+          <span class="cert-contrato-tag" title="{{ _('Contrato de asistencia') }}">
+            {{ _('Contrato') }} {{ contrato.name or ('#' ~ contrato.contract_id) }}
+          </span>
+          {% endif %}
+        </h1>
+        <p class="cert-hero-sub">{{ _('Ves la propuesta actual. A la izquierda, el historial de envíos anteriores.') }}</p>
       </div>
       {% if vista_subcontrata %}
       {% set cert_period_prev_url = url_for(endpoint, obra_id=obra.id, anio=prev.anio, mes=prev.mes, modo=modo_vista) %}
       {% set cert_period_next_url = url_for(endpoint, obra_id=obra.id, anio=next.anio, mes=next.mes, modo=modo_vista) %}
       {% set cert_period_clear_url = url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista) %}
       {% else %}
-      {% set cert_period_prev_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=prev.anio, mes=prev.mes) %}
-      {% set cert_period_next_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=next.anio, mes=next.mes) %}
-      {% set cert_period_clear_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes) %}
+      {% set cert_period_prev_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=prev.anio, mes=prev.mes, modo=modo_vista) %}
+      {% set cert_period_next_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=next.anio, mes=next.mes, modo=modo_vista) %}
+      {% set cert_period_clear_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista) %}
       {% endif %}
       {% set cert_period_status = estado_txt.get(estado, estado) %}
       {% set cert_period_status_cls = estado_cls.get(estado, 'is-muted') %}
@@ -95,38 +110,71 @@
           </a>
           {% endif %}
         </div>
-        {% if vista_subcontrata %}
         <div class="cert-view-tabs" role="tablist">
-          <a class="cert-view-tab {% if modo_vista != 'persona' %}is-active{% endif %}"
-             href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo='fecha') }}">{{ _('Por fecha') }}</a>
+          {% if vista_subcontrata %}
           <a class="cert-view-tab {% if modo_vista == 'persona' %}is-active{% endif %}"
              href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo='persona') }}">{{ _('Por persona') }}</a>
+          <a class="cert-view-tab {% if modo_vista != 'persona' %}is-active{% endif %}"
+             href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo='fecha') }}">{{ _('Por fecha') }}</a>
+          {% else %}
+          <a class="cert-view-tab {% if modo_vista == 'persona' %}is-active{% endif %}"
+             href="{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo='persona', desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por persona') }}</a>
+          <a class="cert-view-tab {% if modo_vista != 'persona' %}is-active{% endif %}"
+             href="{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo='fecha', desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por fecha') }}</a>
+          {% endif %}
         </div>
-        {% endif %}
         <div class="cert-hero-precio">
           {% if not vista_subcontrata and user_can(current_user, 'certificacion', 'w') %}
-          <form method="post" class="cert-precio" id="cert-precio" data-precio="{{ company.precio_hora if company.precio_hora is not none else precio }}">
+          <form method="post" class="cert-precio" id="cert-precio" data-precio="{{ precio }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="anio" value="{{ anio }}">
             <input type="hidden" name="mes" value="{{ mes }}">
-            <span class="cert-precio-label">{{ _('Precio') }}</span>
-            <button type="button" class="cert-precio-view" id="cert-precio-view" title="{{ _('Editar precio') }}">
+            <input type="hidden" name="modo" value="{{ modo_vista }}">
+            {% if precio_propio_obra %}<input type="hidden" name="ambito" value="obra">{% endif %}
+            <span class="cert-precio-label">
+              {{ _('Precio') }}{% if precio_propio_obra %} · {{ _('obra') }}{% elif precio_origen == 'empresa' %} · {{ _('manual') }}{% endif %}
+            </span>
+            <button type="button" class="cert-precio-view" id="cert-precio-view" title="{{ _('Editar precio (vacío = contrato de asistencia)') }}">
               <strong>{{ precio }} €</strong>
               <i class="fas fa-pen" aria-hidden="true"></i>
             </button>
             <div class="cert-precio-edit" id="cert-precio-edit" hidden>
               <input type="number" name="precio_hora" step="0.01" min="0"
-                     value="{{ company.precio_hora if company.precio_hora is not none else precio }}"
-                     inputmode="decimal" required>
+                     value="{{ precio if precio_propio_obra or precio_origen == 'empresa' else '' }}"
+                     inputmode="decimal" placeholder="{{ _('Contrato') }}">
               <em>€/h</em>
               <button type="submit" name="accion" value="precio" class="btn-admin btn-admin-ghost">{{ _('Guardar') }}</button>
               <button type="button" class="btn-admin btn-admin-ghost" id="cert-precio-cancel">{{ _('Cancelar') }}</button>
             </div>
+            {% if precio_origen == 'contrato' and contrato %}
+            <em class="cert-precio-hint">{{ _('Fijado por el contrato') }} {{ contrato.name or ('#' ~ contrato.contract_id) }}</em>
+            {% endif %}
           </form>
-          {% else %}
+          {% elif precio_origen == 'contrato' and contrato %}
           <div class="cert-precio is-readonly">
             <span class="cert-precio-label">{{ _('Precio') }}</span>
             <strong>{{ precio }} €</strong>
+            <em class="cert-precio-hint">{{ _('Fijado por el contrato') }} {{ contrato.name or ('#' ~ contrato.contract_id) }}</em>
+          </div>
+          {% elif precio_origen in ('obra', 'empresa') or (precio and precio_origen != 'sin') %}
+          <div class="cert-precio is-readonly">
+            <span class="cert-precio-label">
+              {{ _('Precio') }}{% if precio_origen == 'obra' %} · {{ _('obra') }}{% elif precio_origen == 'empresa' %} · {{ _('manual') }}{% endif %}
+            </span>
+            <strong>{{ precio }} €</strong>
+            {% if vista_subcontrata %}
+            <em class="cert-precio-hint">{{ _('Acordado para esta obra') }}</em>
+            {% endif %}
+          </div>
+          {% elif vista_subcontrata and precio is not none and precio > 0 %}
+          <div class="cert-precio is-readonly">
+            <span class="cert-precio-label">{{ _('Precio') }}</span>
+            <strong>{{ precio }} €</strong>
+            {% if contrato %}
+            <em class="cert-precio-hint">{{ _('Fijado por el contrato') }} {{ contrato.name or ('#' ~ contrato.contract_id) }}</em>
+            {% else %}
+            <em class="cert-precio-hint">{{ _('Acordado para esta obra') }}</em>
+            {% endif %}
           </div>
           {% endif %}
         </div>
@@ -165,351 +213,18 @@
         </span>
       </div>
       {% if pdf_prop and pdf_prop.id %}
-      <a class="cert-banner-pdf"
+      <a class="cert-banner-pdf js-cert-pdf-dl"
          href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=pdf_prop.id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=pdf_prop.id) }}"
+         data-no-page-loading
          title="{{ _('Descargar PDF') }}"
          aria-label="{{ _('Descargar PDF') }}">
         <i class="fas fa-file-pdf" aria-hidden="true"></i>
       </a>
       {% endif %}
     </div>
-    {% elif propia.comentario_rechazo %}
-    <div class="cert-banner is-warn">
-      <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
-      <div>
-        <strong>{{ _('Propuesta rechazada') }}</strong>
-        <span>{{ propia.comentario_rechazo }}</span>
-      </div>
-    </div>
     {% endif %}
 
-    <div class="cert-grid">
-      {# ——— Nuestra propuesta ——— #}
-      <section class="cert-panel cert-panel--{{ estado_cls.get(propia_estado_ui, 'is-muted')|replace('is-', '') }}">
-        <form method="post" id="form-propia" class="cert-panel-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="anio" value="{{ anio }}">
-          <input type="hidden" name="mes" value="{{ mes }}">
-          {% if modo_vista %}<input type="hidden" name="modo" value="{{ modo_vista }}">{% endif %}
-          {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
-          {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
-
-          <div class="cert-panel-head">
-            <div>
-              <h2>{{ _('Nuestra propuesta') }}</h2>
-              <p>{{ _('Lo que enviamos nosotros en esta obra.') }}</p>
-            </div>
-            <span class="cert-pill {{ estado_cls.get(propia_estado_ui, 'is-muted') }}">
-              {{ estado_txt.get(propia_estado_ui, propia_estado_ui) }}
-            </span>
-          </div>
-
-          {% if grupos_propia %}
-          <div class="cert-works">
-            {% for obra in grupos_propia %}
-            <details class="cert-work">
-              <summary>
-                <span class="cert-work-name">{{ obra.obra.nombre if obra.obra else _('Obra') }}</span>
-                <span class="cert-work-stats">{{ obra.horas }} h · {{ obra.importe }} €</span>
-              </summary>
-              <div class="cert-days">
-                {% for fecha in obra.fechas %}
-                <details class="cert-day">
-                  <summary>
-                    <span>{{ fecha.fecha.strftime('%d/%m/%Y') }}</span>
-                    <span>{{ fecha.horas }} h · {{ fecha.importe }} €</span>
-                  </summary>
-                  <div class="cert-lines">
-                    <div class="cert-line cert-line--head" aria-hidden="true">
-                      <span>{{ _('Persona') }}</span>
-                      <span>{{ _('Inicio') }}</span>
-                      <span>{{ _('Fin') }}</span>
-                      <span>{{ _('Horas') }}</span>
-                      <span>{{ _('€/h') }}</span>
-                      <span>{{ _('Importe') }}</span>
-                      <span></span>
-                    </div>
-                    {% for item in fecha.lineas %}
-                    {% set ln = item.linea %}
-                    <div class="cert-line {% if ln.solape %}is-overlap{% endif %} {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}is-manual{% endif %} {% if ln.id in falta_ids %}is-missing{% endif %}" data-linea-id="{{ ln.id }}">
-                      <div class="cert-person">
-                        <strong>{{ ln.user.name }} {{ ln.user.lastname }}</strong>
-                        <div class="cert-flags">
-                          {% if not vista_subcontrata %}
-                            {% if ln.estado_fichaje == 'borrador' %}<span class="cert-flag">{{ _('Borrador Odoo') }}</span>{% endif %}
-                            {% if ln.estado_fichaje == 'facturado' %}<span class="cert-flag is-ok">{{ _('Facturado') }}</span>{% endif %}
-                            {% if not ln.estado_fichaje %}<span class="cert-flag is-muted">{{ _('Sin estado Odoo') }}</span>{% endif %}
-                            {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}<span class="cert-flag js-editado-flag">{{ _('Editado') }}</span>{% endif %}
-                          {% endif %}
-                          {% if ln.solape %}<span class="cert-flag is-bad">{{ _('Horarios solapados') }}</span>{% endif %}
-                          {% if ln.id in falta_ids %}
-                            {% if ln.hora_inicio and ln.hora_fin and ln.horas is none %}
-                              <span class="cert-flag is-bad js-falta-flag">{{ _('Fin ≤ inicio') }}</span>
-                            {% else %}
-                              <span class="cert-flag is-bad js-falta-flag">{{ _('Faltan horas') }}</span>
-                            {% endif %}
-                          {% endif %}
-                        </div>
-                      </div>
-                      <label class="cert-field">
-                        <span class="cert-field-label">{{ _('Inicio') }}</span>
-                        <input type="time" name="l{{ ln.id }}_inicio" value="{{ ln.hora_inicio.strftime('%H:%M') if ln.hora_inicio else '' }}" {% if not editable %}disabled{% endif %} class="js-inicio{% if ln.id in falta_ids and ln.hora_inicio and ln.hora_fin and ln.horas is none %} is-invalid{% endif %}">
-                      </label>
-                      <label class="cert-field">
-                        <span class="cert-field-label">{{ _('Fin') }}</span>
-                        <input type="time" name="l{{ ln.id }}_fin" value="{{ ln.hora_fin.strftime('%H:%M') if ln.hora_fin else '' }}" {% if not editable %}disabled{% endif %} class="js-fin{% if ln.id in falta_ids and ln.hora_inicio and ln.hora_fin and ln.horas is none %} is-invalid{% endif %}">
-                      </label>
-                      <label class="cert-field">
-                        <span class="cert-field-label">{{ _('Horas') }}</span>
-                        <input type="number" step="0.01" name="l{{ ln.id }}_horas" value="{{ ln.horas if ln.horas is not none else '' }}" {% if not editable %}disabled{% endif %} class="js-horas" placeholder="0">
-                      </label>
-                      <input type="hidden" name="l{{ ln.id }}_modo" value="" class="js-modo">
-                      <label class="cert-field">
-                        <span class="cert-field-label">{{ _('€/h') }}</span>
-                        <input type="number" step="0.01" name="l{{ ln.id }}_precio" value="{{ ln.precio_hora if ln.precio_hora is not none else precio }}" {% if not editable %}disabled{% endif %} class="js-precio">
-                      </label>
-                      <div class="cert-importe js-importe">{{ item.importe }} €</div>
-                      {% if editable %}
-                      <span class="cert-line-actions">
-                        <button type="button" class="cert-line-save js-guardar-fila" value="{{ ln.id }}" title="{{ _('Guardar esta fila') }}">
-                          <i class="fas fa-check" aria-hidden="true"></i>
-                          <span class="sr-only">{{ _('Guardar') }}</span>
-                        </button>
-                        <button type="button" class="cert-line-reset js-restablecer-fila" value="{{ ln.id }}" title="{{ _('Restablecer desde fichaje') }}">
-                          <i class="fas fa-undo" aria-hidden="true"></i>
-                          <span class="sr-only">{{ _('Restablecer') }}</span>
-                        </button>
-                      </span>
-                      {% else %}
-                      <span class="cert-line-reset-spacer" aria-hidden="true"></span>
-                      {% endif %}
-                    </div>
-                    {% endfor %}
-                  </div>
-                </details>
-                {% endfor %}
-              </div>
-            </details>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="cert-empty">{{ _('No hay fichajes de su personal en este mes.') }}</div>
-          {% endif %}
-
-          <footer class="cert-panel-foot">
-            <div class="cert-total">
-              <span>{{ _('Total') }}</span>
-              <strong>{{ totales_propia.horas }} h · {{ totales_propia.importe }} €</strong>
-            </div>
-            <div class="cert-actions">
-              {% if editable %}
-              <button class="btn-admin btn-admin-ghost" name="accion" value="guardar" type="submit">{{ _('Guardar') }}</button>
-              <button class="btn-admin {% if not vista_subcontrata %}js-enviar-propuesta{% endif %}" name="accion" value="enviar" type="submit"
-                      {% if not vista_subcontrata %}
-                      data-borradores="{{ borradores_odoo|default(0) }}"
-                      data-title="{{ _('Hay fichajes en borrador en Odoo') }}"
-                      data-text="{{ _('Hay {n} filas todavía en borrador en Odoo. ¿Quieres enviar la propuesta igualmente?', n=borradores_odoo|default(0)) }}"
-                      data-confirm="{{ _('Sí, enviar') }}"
-                      data-cancel="{{ _('Cancelar') }}"
-                      {% endif %}>
-                {{ _('Enviar propuesta') }}
-              </button>
-              {% endif %}
-              {% if propia.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
-              <button class="btn-admin btn-admin-ghost js-desenviar-propuesta" name="accion" value="desenviar" type="submit"
-                      data-title="{{ _('¿Cancelar el envío?') }}"
-                      data-text="{{ _('La propuesta dejará de verse en el panel de la otra parte y volverá a borrador.') }}"
-                      data-confirm="{{ _('Sí, desenviar') }}"
-                      data-cancel="{{ _('Cancelar') }}">
-                {{ _('Desenviar') }}
-              </button>
-              {% endif %}
-              {% if propia.estado == 'enviada' or propia.estado == 'aceptada' %}
-              <a class="btn-admin btn-admin-ghost" href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=propia.id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=propia.id) }}">
-                <i class="fas fa-file-pdf" aria-hidden="true"></i> {{ _('PDF') }}
-              </a>
-              {% endif %}
-            </div>
-          </footer>
-        </form>
-      </section>
-
-      {# ——— Propuesta recibida ——— #}
-      {% set ajena_estado_ui = ajena_estado_ui if ajena_estado_ui is defined else (ajena.estado if ajena_visible else 'sin_movimiento') %}
-      <section class="cert-panel cert-panel--{{ estado_cls.get(ajena_estado_ui, 'is-muted')|replace('is-', '') }}">
-        <form method="post" class="cert-panel-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="anio" value="{{ anio }}">
-          <input type="hidden" name="mes" value="{{ mes }}">
-          {% if modo_vista %}<input type="hidden" name="modo" value="{{ modo_vista }}">{% endif %}
-          {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
-          {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
-
-          <div class="cert-panel-head">
-            <div>
-              <h2>{{ _('Propuesta recibida') }}</h2>
-              <p>{{ _('Lo que envía la otra parte. Marca lo que no cuadre.') }}</p>
-            </div>
-            <span class="cert-pill {{ estado_cls.get(ajena_estado_ui, 'is-muted') }}">
-              {% if not ajena_visible %}{{ _('Sin propuesta') }}
-              {% elif ajena_estado_ui == 'recibida' %}{{ _('Recibida') }}
-              {% else %}{{ estado_txt.get(ajena_estado_ui, ajena_estado_ui) }}
-              {% endif %}
-            </span>
-          </div>
-
-          {% if ajena_visible and grupos_ajena %}
-          <div class="cert-works">
-            {% for obra in grupos_ajena %}
-            <details class="cert-work">
-              <summary>
-                <span class="cert-work-name">{{ obra.obra.nombre if obra.obra else _('Obra') }}</span>
-                <span class="cert-work-stats cert-cmp-pair">
-                  <span class="cert-row-val">
-                    {{ obra.horas }} h
-                    {% if not vista_subcontrata and obra.horas_app is defined %}
-                    <span class="cert-ref {{ cert_cmp_cls(obra.horas, obra.horas_app) }}">({{ obra.horas_app }} h)</span>
-                    {% endif %}
-                  </span>
-                  <span class="cert-row-val">
-                    {{ obra.importe }} €
-                    {% if not vista_subcontrata and obra.importe_app is defined %}
-                    <span class="cert-ref {{ cert_cmp_cls(obra.importe, obra.importe_app) }}">({{ obra.importe_app }} €)</span>
-                    {% endif %}
-                  </span>
-                </span>
-              </summary>
-              <div class="cert-days">
-                {% for fecha in obra.fechas %}
-                <details class="cert-day">
-                  <summary>
-                    <span>{{ fecha.fecha.strftime('%d/%m/%Y') }}</span>
-                    <span class="cert-cmp-pair">
-                      <span class="cert-row-val">
-                        {{ fecha.horas }} h
-                        {% if not vista_subcontrata and fecha.horas_app is defined %}
-                        <span class="cert-ref {{ cert_cmp_cls(fecha.horas, fecha.horas_app) }}">({{ fecha.horas_app }} h)</span>
-                        {% endif %}
-                      </span>
-                      <span class="cert-row-val">
-                        {{ fecha.importe }} €
-                        {% if not vista_subcontrata and fecha.importe_app is defined %}
-                        <span class="cert-ref {{ cert_cmp_cls(fecha.importe, fecha.importe_app) }}">({{ fecha.importe_app }} €)</span>
-                        {% endif %}
-                      </span>
-                    </span>
-                  </summary>
-                  <div class="cert-lines cert-lines--review">
-                    {% for item in fecha.lineas %}
-                    {% set ln = item.linea %}
-                    {% set ref = mapa_propia.get((ln.user_id, ln.obra_id, ln.fecha)) if mapa_propia is defined else none %}
-                    {% set h_app = ref.horas if ref else none %}
-                    {% set i_app = (h_app * ref.precio_hora) if (ref and h_app is not none and ref.precio_hora is not none) else none %}
-                    {% set tiene_nota = ln.nota_discrepancia and ln.nota_discrepancia.strip() %}
-                    <div class="cert-review {% if not vista_subcontrata %}cert-review--row{% endif %} {% if tiene_nota or ln.discrepancia %}is-flagged{% endif %} {% if ln.solape %}is-overlap{% endif %}">
-                      {% if not vista_subcontrata %}
-                      <div class="cert-row">
-                        <span class="cert-row-name">{{ ln.user.name }} {{ ln.user.lastname }}</span>
-                        <span class="cert-row-dots" aria-hidden="true"></span>
-                        <span class="cert-row-val">
-                          {{ ln.horas or '—' }} h
-                          {% if ref %}
-                          <span class="cert-ref {{ cert_cmp_cls(ln.horas, h_app) }}">({{ h_app if h_app is not none else '—' }}{% if h_app is not none %} h{% endif %})</span>
-                          {% else %}
-                          <span class="cert-ref is-muted">(—)</span>
-                          {% endif %}
-                        </span>
-                        <span class="cert-row-val">
-                          {{ item.importe }} €
-                          {% if ref and i_app is not none %}
-                          <span class="cert-ref {{ cert_cmp_cls(item.importe, i_app) }}">({{ i_app|round(2) }} €)</span>
-                          {% else %}
-                          <span class="cert-ref is-muted">(—)</span>
-                          {% endif %}
-                        </span>
-                      </div>
-                      {% else %}
-                      <div class="cert-check">
-                        <span>
-                          <strong>{{ ln.user.name }} {{ ln.user.lastname }}</strong>
-                          <em>{{ ln.horas or '—' }} h × {{ ln.precio_hora or '—' }} € = {{ item.importe }} €</em>
-                        </span>
-                      </div>
-                      {% endif %}
-                      <div class="cert-flags">
-                        {% if ln.solape %}<span class="cert-flag is-bad">{{ _('Solape') }}</span>{% endif %}
-                        <button type="button"
-                                class="cert-note-btn js-note-toggle {% if tiene_nota %}has-note{% endif %}"
-                                title="{{ _('Nota / por qué no cuadra') }}"
-                                aria-expanded="false"
-                                {% if ajena.estado != 'enviada' or bloqueado %}disabled{% endif %}>
-                          <i class="fas fa-sticky-note" aria-hidden="true"></i>
-                          <span class="sr-only">{{ _('Nota') }}</span>
-                        </button>
-                      </div>
-                      <div class="cert-note-pop" hidden>
-                        <input type="text" class="cert-note" name="nota_disc_{{ ln.id }}" value="{{ ln.nota_discrepancia or '' }}" placeholder="{{ _('Por qué no cuadra') }}" {% if ajena.estado != 'enviada' or bloqueado %}disabled{% endif %}>
-                      </div>
-                    </div>
-                    {% endfor %}
-                  </div>
-                </details>
-                {% endfor %}
-              </div>
-            </details>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="cert-empty">
-            {% if ajena_visible %}
-              {{ _('Todavía no hay propuesta recibida.') }}
-            {% else %}
-              {{ _('La otra parte aún no ha enviado su propuesta. Cuando la envíe, aparecerá aquí.') }}
-            {% endif %}
-          </div>
-          {% endif %}
-
-          <footer class="cert-panel-foot">
-            <div class="cert-total">
-              <span>{{ _('Total recibido') }}</span>
-              <strong class="cert-cmp-pair">
-                {% if ajena_visible %}
-                  <span class="cert-row-val">
-                    {{ totales_ajena.horas }} h
-                    {% if not vista_subcontrata %}
-                    <span class="cert-ref {{ cert_cmp_cls(totales_ajena.horas, totales_propia.horas) }}">({{ totales_propia.horas }} h)</span>
-                    {% endif %}
-                  </span>
-                  <span class="cert-row-val">
-                    {{ totales_ajena.importe }} €
-                    {% if not vista_subcontrata %}
-                    <span class="cert-ref {{ cert_cmp_cls(totales_ajena.importe, totales_propia.importe) }}">({{ totales_propia.importe }} €)</span>
-                    {% endif %}
-                  </span>
-                {% else %}—{% endif %}
-              </strong>
-            </div>
-            <div class="cert-actions cert-actions--stack">
-              {% if ajena_visible and ajena.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
-              <textarea name="comentario" class="cert-comment" rows="2" placeholder="{{ _('Comentario si la devuelves') }}"></textarea>
-              <div class="cert-actions">
-                <button class="btn-admin btn-admin-ghost" name="accion" value="marcar" type="submit">{{ _('Guardar marcas') }}</button>
-                <button class="btn-admin btn-admin-danger" name="accion" value="rechazar" type="submit">{{ _('Rechazar') }}</button>
-                <button class="btn-admin" name="accion" value="aceptar" type="submit">{{ _('Aceptar el mes') }}</button>
-                <a class="btn-admin btn-admin-ghost" href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=ajena.id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=ajena.id) }}">
-                  <i class="fas fa-file-pdf" aria-hidden="true"></i> {{ _('PDF') }}
-                </a>
-              </div>
-              {% elif ajena_visible and ajena and ajena.id and (ajena.estado == 'aceptada' or ajena.estado == 'enviada') %}
-              <a class="btn-admin btn-admin-ghost" href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=ajena.id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=ajena.id) }}">
-                <i class="fas fa-file-pdf" aria-hidden="true"></i> {{ _('PDF') }}
-              </a>
-              {% endif %}
-            </div>
-          </footer>
-        </form>
-      </section>
-    </div>
+    {% include 'compliance/_cert_mesa.html' %}
 
     {% if actividad %}
     <section class="cert-activity" aria-label="{{ _('Actividad') }}">
@@ -529,7 +244,9 @@
             {% if item.cuando %}<time datetime="{{ item.cuando.isoformat() }}">{{ item.cuando.strftime('%d/%m/%Y %H:%M') }}</time>{% else %}<time class="is-empty">—</time>{% endif %}
             <span>
               {{ _('{actor} devolvió la propuesta de {origen}.', actor=item.actor, origen=item.origen) }}
-              {% if item.detalle %} {{ item.detalle }}{% endif %}
+              {% if item.detalle %}
+              <strong class="cert-activity-motivo">{{ _('Motivo') }}:</strong> {{ item.detalle }}
+              {% endif %}
             </span>
           {% elif item.tipo == 'aceptada' %}
             <i class="fas fa-check" aria-hidden="true"></i>
@@ -547,6 +264,48 @@
 {% block extra_js %}
 <script>
 (function () {
+  /* Descarga PDF sin navegar: evita la barra «Cargando…» eterna del layout. */
+  document.addEventListener('click', function (ev) {
+    var a = ev.target.closest('a.js-cert-pdf-dl');
+    if (!a || !a.href) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    var loading = window.SP_pageLoading;
+    if (loading && loading.show) loading.show({{ _('Generando PDF…')|tojson }});
+    fetch(a.href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (res) {
+        if (!res.ok) throw new Error({{ _('No se pudo generar el PDF')|tojson }});
+        var disp = res.headers.get('Content-Disposition') || '';
+        var match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disp);
+        var name = match ? decodeURIComponent(match[1].replace(/["']/g, '')) : 'certificacion.pdf';
+        return res.blob().then(function (blob) { return { blob: blob, name: name }; });
+      })
+      .then(function (pack) {
+        var url = URL.createObjectURL(pack.blob);
+        var link = document.createElement('a');
+        link.href = url;
+        link.download = pack.name || 'certificacion.pdf';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      })
+      .catch(function (err) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'error',
+            title: {{ _('Error')|tojson }},
+            text: (err && err.message) || {{ _('No se pudo generar el PDF')|tojson }},
+          });
+        } else {
+          window.alert((err && err.message) || 'PDF');
+        }
+      })
+      .finally(function () {
+        if (loading && loading.hide) loading.hide();
+      });
+  });
+
   var form = document.getElementById('cert-precio');
   if (form) {
     var view = document.getElementById('cert-precio-view');
@@ -671,6 +430,62 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
         flags.appendChild(ed);
       }
     }
+    recalcFromRow(row);
+  }
+
+  function num(v) {
+    var n = parseFloat(String(v || '').replace(',', '.'));
+    return isFinite(n) ? n : 0;
+  }
+
+  function fmt(n) {
+    return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+  }
+
+  function fmtPair(h, i) {
+    return fmt(h) + ' h · ' + fmt(i) + ' €';
+  }
+
+  function lineVals(row) {
+    return {
+      h: num(row.querySelector('.js-horas') && row.querySelector('.js-horas').value),
+      p: num(row.querySelector('.js-precio') && row.querySelector('.js-precio').value),
+    };
+  }
+
+  function recalcFromRow(row) {
+    var day = row.closest('.cert-day');
+    var work = row.closest('.cert-work');
+    if (day) {
+      var dH = 0, dI = 0;
+      day.querySelectorAll('.cert-line:not(.cert-line--head)').forEach(function (r) {
+        var v = lineVals(r);
+        dH += v.h;
+        dI += v.h * v.p;
+      });
+      var dayStats = day.querySelector('.js-day-stats');
+      if (dayStats) dayStats.textContent = fmtPair(dH, dI);
+    }
+    if (work) {
+      var wH = 0, wI = 0;
+      work.querySelectorAll('.cert-line:not(.cert-line--head)').forEach(function (r) {
+        var v = lineVals(r);
+        wH += v.h;
+        wI += v.h * v.p;
+      });
+      var inp = work.querySelector('.js-work-horas');
+      if (inp) inp.value = fmt(wH);
+      var workStats = work.querySelector('.js-work-stats');
+      if (workStats) workStats.textContent = fmtPair(wH, wI);
+    }
+    var pH = 0, pI = 0;
+    form.querySelectorAll('.cert-line:not(.cert-line--head)').forEach(function (r) {
+      var v = lineVals(r);
+      pH += v.h;
+      pI += v.h * v.p;
+    });
+    var panel = form.querySelector('.js-panel-total');
+    if (panel) panel.textContent = fmtPair(pH, pI);
   }
 
   function flashInline(row, text, ok) {
@@ -812,8 +627,49 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
   });
 })();
 (function () {
+  var form = document.getElementById('form-propia');
+  if (!form || !form.classList.contains('js-mesa-responder')) return;
+  var btnAceptar = form.querySelector('.js-mesa-aceptar');
+  var btnEnviar = form.querySelector('.js-mesa-enviar-corr');
+  if (!btnAceptar || !btnEnviar) return;
+  var skipNames = {
+    csrf_token: 1, accion: 1, comentario: 1, chat_texto: 1,
+    anio: 1, mes: 1, modo: 1, desde: 1, hasta: 1
+  };
+  var initial = [];
+  form.querySelectorAll('input, select, textarea').forEach(function (el) {
+    if (!el.name || skipNames[el.name]) return;
+    if (el.type === 'hidden' && (el.name === 'csrf_token' || el.name.indexOf('accion') === 0)) return;
+    initial.push({
+      el: el,
+      val: el.type === 'checkbox' || el.type === 'radio' ? el.checked : String(el.value || '')
+    });
+  });
+  function isDirty() {
+    for (var i = 0; i < initial.length; i++) {
+      var item = initial[i];
+      var cur = item.el.type === 'checkbox' || item.el.type === 'radio'
+        ? item.el.checked
+        : String(item.el.value || '');
+      if (cur !== item.val) return true;
+    }
+    return false;
+  }
+  function syncMesaActions() {
+    var dirty = isDirty();
+    form.classList.toggle('is-dirty', dirty);
+    btnAceptar.hidden = dirty;
+    btnAceptar.disabled = dirty;
+    btnEnviar.hidden = !dirty;
+  }
+  form.addEventListener('input', syncMesaActions);
+  form.addEventListener('change', syncMesaActions);
+  syncMesaActions();
+})();
+(function () {
   document.querySelectorAll('.js-note-toggle').forEach(function (btn) {
     btn.addEventListener('click', function (ev) {
+      if (btn.disabled && !btn.classList.contains('has-note')) return;
       ev.preventDefault();
       ev.stopPropagation();
       var row = btn.closest('.cert-review');

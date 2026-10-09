@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006stack">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006dense">
 {% endblock %}
 {% block wrapper %}
 {% set meses = {
@@ -47,7 +47,7 @@
       {% set cert_period_status_cls = 'is-wait' %}
       {% elif entrantes %}
       {% set cert_period_status = entrantes ~ ' ' ~ _('por revisar') %}
-      {% set cert_period_status_cls = 'is-wait' %}
+      {% set cert_period_status_cls = 'is-bad' %}
       {% else %}
       {% set cert_period_status = filas|length ~ ' ' ~ _('obras') %}
       {% set cert_period_status_cls = 'is-muted' %}
@@ -61,10 +61,33 @@
           </a>
         </div>
         <div class="cert-hero-precio">
+          {% if precio_propio and user_can(current_user, 'certificacion', 'w') %}
+          <form method="post" class="cert-precio" data-precio="{{ precio }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="anio" value="{{ anio }}">
+            <input type="hidden" name="mes" value="{{ mes }}">
+            {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
+            {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
+            <span class="cert-precio-label">{{ _('Precio') }} · {{ _('manual') }}</span>
+            <button type="button" class="cert-precio-view" title="{{ _('Editar override (vacío = contrato)') }}">
+              <strong>{{ precio }} €</strong>
+              <i class="fas fa-pen" aria-hidden="true"></i>
+            </button>
+            <div class="cert-precio-edit" hidden>
+              <input type="number" name="precio_hora" step="0.01" min="0"
+                     value="{{ precio }}"
+                     inputmode="decimal" placeholder="{{ _('Contrato') }}">
+              <em>€/h</em>
+              <button type="submit" name="accion" value="precio" class="btn-admin btn-admin-ghost">{{ _('Guardar') }}</button>
+              <button type="button" class="btn-admin btn-admin-ghost cert-precio-cancel">{{ _('Cancelar') }}</button>
+            </div>
+          </form>
+          {% elif precio_propio %}
           <div class="cert-precio is-readonly">
-            <span class="cert-precio-label">{{ _('Precio') }}</span>
+            <span class="cert-precio-label">{{ _('Precio') }} · {{ _('manual') }}</span>
             <strong>{{ precio }} €</strong>
           </div>
+          {% endif %}
         </div>
       </div>
     </header>
@@ -91,8 +114,16 @@
             {% if row.estado == 'rechazada' %}<i class="fas fa-exclamation-circle cert-hub-alert" title="{{ _('Propuesta rechazada') }}" aria-hidden="true"></i> {% endif %}
             {% if row.estado == 'recibida' %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" title="{{ _('Propuesta por revisar') }}" aria-hidden="true"></i> {% endif %}
             {{ o.nombre }}
+            {% if row.contrato and row.contrato.contract_id %}
+            <span class="cert-contrato-tag">{{ _('Contrato') }} {{ row.contrato.name or ('#' ~ row.contrato.contract_id) }}</span>
+            {% endif %}
           </strong>
-          <small>{{ estado_txt.get(row.estado, row.estado) }}</small>
+          <small>
+            {{ estado_txt.get(row.estado, row.estado) }}
+            {% if row.comentario_rechazo %}
+            · {{ _('Motivo') }}: {{ row.comentario_rechazo }}
+            {% endif %}
+          </small>
         </span>
         <span class="cert-hub-vol">{{ row.horas }} h</span>
         <span class="cert-pill {{ estado_cls.get(row.estado, 'is-muted') }}">{{ estado_txt.get(row.estado, row.estado) }}</span>
@@ -108,6 +139,7 @@
 </div>
 {% endblock %}
 {% block extra_js %}
+{% include "compliance/_cert_precio_js.html" %}
 <script>
 (function () {
   var input = document.getElementById('cert-filtro');

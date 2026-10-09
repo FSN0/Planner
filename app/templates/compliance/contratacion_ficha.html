@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% from "compliance/macros_doc.html" import fila_doc with context %}
 {% block title %}{{ sujeto.name }} · {{ _('Contratación') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261008persist">
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/doc_card_actions.js') }}?v=20261008persist"></script>
 {% endblock %}
 {% block wrapper %}
 {% set prog = namespace(validados=0, por_validar=0, por_completar=0, total=0) %}
@@ -153,7 +157,9 @@
          data-fecha-label="{{ _('Fecha de inicio en obra') }}"
          data-fecha-hint="{{ _('A partir de esta fecha aparecerá en el panel de obras.') }}"
          data-hoy="{{ hoy_iso }}">
-      {% set puede_validar = user_can(current_user, 'contratacion', 'w') %}
+      {% set puede_w = user_can(current_user, 'contratacion', 'w') %}
+      {% set puede_validar = puede_w %}
+      {% set puede_subir = puede_w %}
 
       <div class="hire-fase-head">
         <h3>{{ _('Fase 1') }} · {{ _('Documentación') }}</h3>
@@ -163,7 +169,7 @@
       </div>
       <div class="hire-grid office-hire-docs">
         {% for fila in filas_fase1 %}
-          {% include "compliance/_contratacion_doc_card.html" %}
+          {{ fila_doc(fila, puede_subir, puede_validar, user_id=sujeto.id) }}
         {% else %}
           <p class="doc-hint">{{ _('No hay documentos de fase 1 configurados.') }}</p>
         {% endfor %}
@@ -181,7 +187,7 @@
         {% endif %}
         <div class="hire-grid office-hire-docs">
           {% for fila in filas_fase2 %}
-            {% include "compliance/_contratacion_doc_card.html" %}
+            {{ fila_doc(fila, puede_subir and fase2_abierta, puede_validar and fase2_abierta, user_id=sujeto.id) }}
           {% else %}
             <p class="doc-hint">{{ _('No hay documentos de fase 2 configurados.') }}</p>
           {% endfor %}

@@ -227,6 +227,13 @@ def path_allows_user(user) -> bool:
     if module == 'subcontratas' and path.startswith('/admin/company_panel'):
         if user_can(user, 'trabajadores', 'r'):
             return True
+    # Configuración GET: perfil personal (idioma / avisos UI)
+    if (
+        module == 'configuracion'
+        and action == 'r'
+        and (path.rstrip('/') or '/') == '/admin/configuracion'
+    ):
+        return True
     # Quien tiene sync_odoo w puede lanzar cualquier sync de módulo
     if action == 'w' and path.startswith('/sync/api/run/') and user_can(user, 'sync_odoo', 'w'):
         return True
@@ -326,6 +333,11 @@ def enforce_rules(rules, *, redirect_to='main.dashboard', require_auth=True):
 
 
 def enforce_admin_permissions():
+    # GET Configuración: preferencias personales (idioma / avisos UI) sin permiso tenant.
+    path = (request.path or '').rstrip('/') or '/'
+    method = (request.method or 'GET').upper()
+    if path == '/admin/configuracion' and method == 'GET':
+        return None
     return enforce_rules(_ADMIN_RULES)
 
 

@@ -75,7 +75,7 @@
           </span>
         {% else %}
           <h2 class="admin-panel-title">{{ _('Nuevo usuario') }}</h2>
-          <span class="admin-panel-subtitle">{{ _('Solo lo necesario según el rol. El resto está en opciones avanzadas.') }}</span>
+          <span class="admin-panel-subtitle">{{ _('Datos de la persona, empresa y acceso según el rol.') }}</span>
         {% endif %}
       </div>
 
@@ -125,9 +125,35 @@
           </div>
         </div>
 
-        <div class="form-group" style="max-width: 220px;">
-          <label class="admin-form-label">{{ _('DNI / NIE') }}</label>
-          <input type="text" name="dni" class="form-control" value="{% if edit_mode %}{{ user.dni }}{% endif %}" required>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label class="admin-form-label">{{ _('DNI / NIE') }}</label>
+            <input type="text" name="dni" class="form-control" value="{% if edit_mode %}{{ user.dni }}{% endif %}" required>
+          </div>
+          <div class="form-group col-md-8">
+            <label class="admin-form-label">{{ _('Empresa') }}</label>
+            <select name="company_id" class="form-control custom-select">
+              <option value="">{{ _('— Sin empresa —') }}</option>
+              {% for company in companies %}
+                <option value="{{ company.id }}"
+                  {% if edit_mode and user.company_id == company.id %}selected
+                  {% elif not edit_mode and default_company_id and company.id == default_company_id %}selected
+                  {% endif %}>
+                  {{ company.nombre }}{% if company.is_internal %} ({{ _('interna') }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" id="userEmailGroup">
+          <label class="admin-form-label" id="userEmailLabel">{{ _('Email') }}</label>
+          <input type="email" name="email" id="userEmail" class="form-control" style="max-width:420px;"
+                 value="{% if edit_mode and not email_es_placeholder %}{{ user.email }}{% endif %}"
+                 autocomplete="off">
+          <small class="form-text text-muted" style="font-size: 0.72rem;" id="userEmailHint">
+            {{ _('Correo de acceso y avisos.') }}
+          </small>
         </div>
 
         {% if etiquetas_empleado is defined %}
@@ -143,11 +169,43 @@
         </div>
         {% endif %}
 
-        {# —— Operario: PIN —— #}
+        <div class="admin-form-section">{{ _('Perfil profesional') }}</div>
+        <div class="form-row">
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">{{ _('Categoría (nómina)') }}</label>
+            <input type="text" name="categoria_profesional" class="form-control"
+                   placeholder="{{ _('Ej: Oficial 1ª') }}"
+                   value="{% if edit_mode %}{{ user.categoria_profesional or '' }}{% endif %}">
+          </div>
+          <div class="form-group col-md-6">
+            <label class="admin-form-label">{{ _('Especialidad (oficio)') }}</label>
+            <input type="text" name="especialidad" class="form-control"
+                   placeholder="{{ _('Ej: Electricista') }}"
+                   value="{% if edit_mode %}{{ user.especialidad or '' }}{% endif %}">
+          </div>
+        </div>
+
+        <div class="admin-form-section">{{ _('Acceso') }}</div>
+        {% if tenant_usa_acceso_pin %}
+        <div class="form-group" id="authModeGroup">
+          <label class="admin-form-label">{{ _('Modo de acceso') }}</label>
+          <select name="auth_mode" id="authModeSelect" class="form-control" style="max-width:320px;">
+            {% set modo = user.auth_mode if edit_mode else ('pin' if role_actual == 'operario' else 'password') %}
+            <option value="pin" {% if modo == 'pin' %}selected{% endif %}>{{ _('DNI + PIN') }}</option>
+            <option value="password" {% if modo == 'password' %}selected{% endif %}>{{ _('Correo + contraseña') }}</option>
+            <option value="both" {% if modo == 'both' %}selected{% endif %}>{{ _('PIN y contraseña') }}</option>
+          </select>
+          <p class="admin-form-switch-hint mb-0">{{ _('En el login unificado: correo o DNI en el primer campo; contraseña o PIN en el segundo.') }}</p>
+        </div>
+        {% else %}
+        <input type="hidden" name="auth_mode" value="password">
+        <p class="admin-form-switch-hint mb-2">{{ _('Acceso con correo y contraseña.') }}</p>
+        {% endif %}
+
+        {# —— Operario: PIN (alta) —— #}
         {% if tenant_usa_acceso_pin %}
         <div id="operarioAccessBlock" data-tour="user-acceso">
           {% if not edit_mode %}
-          <div class="admin-form-section">{{ _('Acceso del operario (DNI + PIN)') }}</div>
           <div class="pin-mode-options" data-tour="user-pin-modes">
             <label>
               <input type="radio" name="pin_mode" value="manual" id="pinModeManual" checked>
@@ -168,104 +226,28 @@
             </small>
           </div>
           {% endif %}
-          <div class="form-group" id="operarioEmailMainGroup" style="display: none;">
-            <label class="admin-form-label">{{ _('Email') }}</label>
-            <input type="email" name="email" id="operarioEmailMain" class="form-control"
-                   value="{% if edit_mode and not email_es_placeholder %}{{ user.email }}{% endif %}"
-                   autocomplete="off">
-            <small class="form-text text-muted" style="font-size: 0.72rem;" id="operarioEmailHint">
-              {{ _('Necesario para enviarle el enlace de definir PIN.') }}
-            </small>
-          </div>
         </div>
         {% else %}
         <div id="operarioAccessBlock" style="display:none;" aria-hidden="true"></div>
         {% endif %}
 
-        {# —— Oficina: email + contraseña —— #}
+        {# —— Oficina: contraseña en alta —— #}
         <div id="officeAccessBlock" style="display: none;" data-tour="user-acceso-office">
-          <div class="admin-form-section">{{ _('Acceso de oficina') }}</div>
-          <div class="form-row">
-            <div class="form-group col-md-6">
-              <label class="admin-form-label">{{ _('Email') }}</label>
-              <input type="email" name="email_office" id="officeEmail" class="form-control"
-                     value="{% if edit_mode and not email_es_placeholder %}{{ user.email }}{% elif edit_mode %}{{ user.email }}{% endif %}"
-                     autocomplete="off">
-            </div>
-            {% if not edit_mode %}
-            <div class="form-group col-md-6">
-              <label class="admin-form-label">{{ _('Contraseña') }}</label>
-              <input type="password" name="password" id="officePassword" class="form-control"
-                     autocomplete="new-password" minlength="8">
-              <small class="form-text text-muted" style="font-size: 0.72rem;">
-                {{ _('Mínimo 8 caracteres. Login del panel de oficina.') }}
-              </small>
-            </div>
-            {% endif %}
+          {% if not edit_mode %}
+          <div class="form-group" style="max-width: 280px;">
+            <label class="admin-form-label">{{ _('Contraseña') }}</label>
+            <input type="password" name="password" id="officePassword" class="form-control"
+                   autocomplete="new-password" minlength="8">
+            <small class="form-text text-muted" style="font-size: 0.72rem;">
+              {{ _('Mínimo 8 caracteres. Login del panel de oficina.') }}
+            </small>
           </div>
+          {% endif %}
         </div>
 
         <details class="user-form-advanced" id="advancedDetails">
           <summary>{{ _('Opciones avanzadas') }}</summary>
           <div class="advanced-body">
-            <div class="form-group" id="operarioEmailAdvancedGroup">
-              <label class="admin-form-label">{{ _('Email (opcional)') }}</label>
-              <input type="email" name="email_advanced" id="operarioEmailAdvanced" class="form-control"
-                     value="{% if edit_mode and not email_es_placeholder %}{{ user.email }}{% endif %}"
-                     autocomplete="off">
-              <small class="form-text text-muted" style="font-size: 0.72rem;">
-                {{ _('Avisos y enlace para definir PIN. Si está vacío, el operario solo entra con DNI + PIN.') }}
-              </small>
-            </div>
-
-            <div class="form-group">
-              <label class="admin-form-label">{{ _('Empresa') }}</label>
-              <select name="company_id" class="form-control custom-select">
-                <option value="">{{ _('— Sin empresa —') }}</option>
-                {% for company in companies %}
-                  <option value="{{ company.id }}"
-                    {% if edit_mode and user.company_id == company.id %}selected
-                    {% elif not edit_mode and default_company_id and company.id == default_company_id %}selected
-                    {% endif %}>
-                    {{ company.nombre }}{% if company.is_internal %} ({{ _('interna') }}){% endif %}
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
-
-            <div class="admin-form-section">{{ _('Acceso') }}</div>
-            <div class="form-group">
-              {% if tenant_usa_acceso_pin %}
-              <label class="admin-form-label">{{ _('Modo de acceso') }}</label>
-              <select name="auth_mode" class="form-control" style="max-width:320px;">
-                {% set modo = user.auth_mode if edit_mode else ('pin' if role_actual == 'operario' else 'password') %}
-                <option value="pin" {% if modo == 'pin' %}selected{% endif %}>{{ _('DNI + PIN') }}</option>
-                <option value="password" {% if modo == 'password' %}selected{% endif %}>{{ _('Correo + contraseña') }}</option>
-                <option value="both" {% if modo == 'both' %}selected{% endif %}>{{ _('PIN y contraseña') }}</option>
-              </select>
-              <p class="admin-form-switch-hint mb-0">{{ _('En el login unificado: correo o DNI en el primer campo; contraseña o PIN en el segundo.') }}</p>
-              {% else %}
-              <input type="hidden" name="auth_mode" value="password">
-              <p class="admin-form-switch-hint mb-0">{{ _('Acceso con correo y contraseña.') }}</p>
-              {% endif %}
-            </div>
-
-            <div class="admin-form-section">{{ _('Perfil profesional') }}</div>
-            <div class="form-row">
-              <div class="form-group col-md-6">
-                <label class="admin-form-label">{{ _('Categoría (nómina)') }}</label>
-                <input type="text" name="categoria_profesional" class="form-control"
-                       placeholder="{{ _('Ej: Oficial 1ª') }}"
-                       value="{{ user.categoria_profesional or '' }}">
-              </div>
-              <div class="form-group col-md-6">
-                <label class="admin-form-label">{{ _('Especialidad (oficio)') }}</label>
-                <input type="text" name="especialidad" class="form-control"
-                       placeholder="{{ _('Ej: Electricista') }}"
-                       value="{{ user.especialidad or '' }}">
-              </div>
-            </div>
-
             <div class="admin-form-options">
               <div class="admin-form-switch-row mb-2">
                 <label class="admin-form-switch">
@@ -310,89 +292,111 @@
       </form>
     </section>
 
-    {% if edit_mode and user.role == 'operario' and tenant_usa_acceso_pin %}
-    <section class="admin-panel admin-form-panel mt-3" id="pinEditSection" data-tour="user-pin-edit">
+    {% if edit_mode %}
+    <section class="admin-panel admin-form-panel mt-3" id="accessManageSection">
       <div class="admin-panel-header">
-        <h2 class="admin-panel-title">{{ _('PIN de fichaje') }}</h2>
-        <span class="admin-panel-subtitle">{{ _('Acceso con DNI + PIN desde el login de la app') }}</span>
+        <h2 class="admin-panel-title">{{ _('Gestionar acceso') }}</h2>
+        <span class="admin-panel-subtitle">
+          {% if tenant_usa_acceso_pin %}
+            {{ _('Contraseña y/o PIN según el modo de acceso elegido arriba') }}
+          {% else %}
+            {{ _('Restablecer acceso con correo y contraseña') }}
+          {% endif %}
+        </span>
       </div>
       <div class="p-3">
-        <p class="small text-muted mb-3">
-          {% if user.pin_hash %}
-            {{ _('Este operario ya tiene PIN. Elige una opción: guardar uno nuevo tú, o enviarle un enlace para que lo defina.') }}
-          {% else %}
-            {{ _('Todavía no tiene PIN. Elige una opción (no hace falta rellenar las dos).') }}
-          {% endif %}
-        </p>
-        <div class="pin-mode-options mb-3" data-tour="user-pin-modes" id="pinEditModeOptions">
-          <label>
-            <input type="radio" name="pin_edit_mode" value="manual" id="pinEditModeManual" checked>
-            <span>{{ _('Guardar PIN yo') }} — {{ _('lo generas o escribes y se lo das en mano') }}</span>
-          </label>
-          <label>
-            <input type="radio" name="pin_edit_mode" value="email_link" id="pinEditModeEmail">
-            <span>{{ _('Enviar enlace por correo') }} — {{ _('el operario define su PIN (requiere email)') }}</span>
-          </label>
+        {% if tenant_usa_acceso_pin and user.role == 'operario' %}
+        <div id="pinEditSection" data-tour="user-pin-edit" class="mb-4">
+          <h3 class="admin-form-section" style="margin-top:0;">{{ _('PIN de fichaje') }}</h3>
+          <p class="small text-muted mb-3">
+            {% if user.pin_hash %}
+              {{ _('Este operario ya tiene PIN. Elige una opción: guardar uno nuevo tú, o enviarle un enlace para que lo defina.') }}
+            {% else %}
+              {{ _('Todavía no tiene PIN. Elige una opción (no hace falta rellenar las dos).') }}
+            {% endif %}
+          </p>
+          <div class="pin-mode-options mb-3" data-tour="user-pin-modes" id="pinEditModeOptions">
+            <label>
+              <input type="radio" name="pin_edit_mode" value="manual" id="pinEditModeManual" checked>
+              <span>{{ _('Guardar PIN yo') }} — {{ _('lo generas o escribes y se lo das en mano') }}</span>
+            </label>
+            <label>
+              <input type="radio" name="pin_edit_mode" value="email_link" id="pinEditModeEmail">
+              <span>{{ _('Enviar enlace por correo') }} — {{ _('el operario define su PIN (requiere email)') }}</span>
+            </label>
+          </div>
+
+          <div id="pinEditManualBlock">
+            <form method="POST" action="{{ url_for('admin.reset_pin', user_id=user.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="next" value="{{ url_for('admin.edit_operario', user_id=user.id) }}">
+              <label class="admin-form-label">{{ _('Nuevo PIN') }}</label>
+              <input type="password" name="nuevo_pin" id="pinEditNuevo" class="form-control mb-2" style="max-width:220px;"
+                     inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
+                     placeholder="••••" required>
+              <div class="d-flex flex-wrap" style="gap:.5rem;">
+                <button type="submit" name="accion" value="asignar" class="btn-admin btn-admin-primary">{{ _('Guardar PIN') }}</button>
+                <button type="submit" name="accion" value="generar" class="btn-admin btn-admin-ghost"
+                        formnovalidate
+                        onclick="this.form.nuevo_pin.required=false;">{{ _('Generar aleatorio') }}</button>
+                <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
+                        formnovalidate style="color:#b91c1c;"
+                        onclick="this.form.nuevo_pin.required=false;return confirm({{ _('¿Quitar el PIN?')|tojson }});">{{ _('Quitar') }}</button>
+              </div>
+            </form>
+          </div>
+
+          <div id="pinEditEmailBlock" style="display:none;">
+            <form method="POST" action="{{ url_for('admin.enviar_acceso_fichaje', user_id=user.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="regenerar" value="1">
+              <label class="admin-form-label">{{ _('Email del operario') }}</label>
+              <input type="email" name="email" id="pinEditEmail" class="form-control mb-2" style="max-width:360px;"
+                     value="{% if user.email and '@demo.signaplan' not in (user.email or '') and '@local.signaplan' not in (user.email or '') %}{{ user.email }}{% endif %}"
+                     placeholder="{{ _('Obligatorio para enviar el enlace') }}" required>
+              <p class="small text-muted mb-2">
+                {{ _('Se envía un enlace para que defina su PIN. El PIN no viaja en el correo.') }}
+              </p>
+              <button type="submit" class="btn-admin btn-admin-primary">
+                <i class="fas fa-paper-plane"></i> {{ _('Enviar enlace') }}
+              </button>
+            </form>
+          </div>
         </div>
 
-        <div id="pinEditManualBlock">
-          <form method="POST" action="{{ url_for('admin.reset_pin', user_id=user.id) }}">
+        <div id="pinAccessInfoSection" class="mb-4">
+          <h3 class="admin-form-section">{{ _('Información de acceso (fichaje)') }}</h3>
+          <p class="small text-muted mb-3">
+            {{ _('Envía por correo la URL, el DNI y el enlace para definir o cambiar el PIN. El PIN nunca viaja en el correo.') }}
+          </p>
+          <form method="POST" action="{{ url_for('admin.enviar_informacion_acceso', user_id=user.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="next" value="{{ url_for('admin.edit_operario', user_id=user.id) }}">
-            <label class="admin-form-label">{{ _('Nuevo PIN') }}</label>
-            <input type="password" name="nuevo_pin" id="pinEditNuevo" class="form-control mb-2" style="max-width:220px;"
-                   inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6"
-                   placeholder="••••" required>
-            <div class="d-flex flex-wrap" style="gap:.5rem;">
-              <button type="submit" name="accion" value="asignar" class="btn-admin btn-admin-primary">{{ _('Guardar PIN') }}</button>
-              <button type="submit" name="accion" value="generar" class="btn-admin btn-admin-ghost"
-                      formnovalidate
-                      onclick="this.form.nuevo_pin.required=false;">{{ _('Generar aleatorio') }}</button>
-              <button type="submit" name="accion" value="quitar" class="btn-admin btn-admin-ghost"
-                      formnovalidate style="color:#b91c1c;"
-                      onclick="this.form.nuevo_pin.required=false;return confirm({{ _('¿Quitar el PIN?')|tojson }});">{{ _('Quitar') }}</button>
-            </div>
-          </form>
-        </div>
-
-        <div id="pinEditEmailBlock" style="display:none;">
-          <form method="POST" action="{{ url_for('admin.enviar_acceso_fichaje', user_id=user.id) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="regenerar" value="1">
             <label class="admin-form-label">{{ _('Email del operario') }}</label>
-            <input type="email" name="email" id="pinEditEmail" class="form-control mb-2" style="max-width:360px;"
+            <input type="email" name="email" class="form-control mb-3" style="max-width:360px;"
                    value="{% if user.email and '@demo.signaplan' not in (user.email or '') and '@local.signaplan' not in (user.email or '') %}{{ user.email }}{% endif %}"
-                   placeholder="{{ _('Obligatorio para enviar el enlace') }}" required>
-            <p class="small text-muted mb-2">
-              {{ _('Se envía un enlace para que defina su PIN. El PIN no viaja en el correo.') }}
-            </p>
+                   placeholder="{{ _('Obligatorio para enviar') }}" required>
             <button type="submit" class="btn-admin btn-admin-primary">
-              <i class="fas fa-paper-plane"></i> {{ _('Enviar enlace') }}
+              <i class="fas fa-envelope"></i> {{ _('Enviar información de acceso') }}
             </button>
           </form>
         </div>
-      </div>
-    </section>
+        {% endif %}
 
-    <section class="admin-panel admin-form-panel mt-3" id="pinAccessInfoSection">
-      <div class="admin-panel-header">
-        <h2 class="admin-panel-title">{{ _('Acceso al fichaje') }}</h2>
-        <span class="admin-panel-subtitle">{{ _('Envía por correo la URL, el DNI y el enlace para definir o cambiar el PIN') }}</span>
-      </div>
-      <div class="p-3">
-        <p class="small text-muted mb-3">
-          {{ _('El PIN nunca viaja en el correo. Si se lo diste a mano, el operario ya puede entrar; el enlace sirve para definirlo o cambiarlo.') }}
-        </p>
-        <form method="POST" action="{{ url_for('admin.enviar_informacion_acceso', user_id=user.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label class="admin-form-label">{{ _('Email del operario') }}</label>
-          <input type="email" name="email" class="form-control mb-3" style="max-width:360px;"
-                 value="{% if user.email and '@demo.signaplan' not in (user.email or '') and '@local.signaplan' not in (user.email or '') %}{{ user.email }}{% endif %}"
-                 placeholder="{{ _('Obligatorio para enviar') }}" required>
-          <button type="submit" class="btn-admin btn-admin-primary">
-            <i class="fas fa-envelope"></i> {{ _('Enviar información de acceso') }}
-          </button>
-        </form>
+        <div id="passwordResetSection">
+          <h3 class="admin-form-section" style="margin-top:0;">{{ _('Contraseña') }}</h3>
+          <p class="small text-muted mb-3">{{ _('Restablecer acceso con correo y contraseña.') }}</p>
+          <form method="POST" action="{{ url_for('admin.reset_password', user_id=user.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ url_for('admin.edit_operario', user_id=user.id) }}">
+            <label class="admin-form-label">{{ _('Nueva contraseña') }}</label>
+            <input type="password" name="new_password" class="form-control mb-2" style="max-width:280px;"
+                   autocomplete="new-password" minlength="8" required
+                   placeholder="{{ _('Mínimo 8 caracteres') }}">
+            <button type="submit" class="btn-admin btn-admin-primary">
+              <i class="fas fa-key"></i> {{ _('Restablecer contraseña') }}
+            </button>
+          </form>
+        </div>
       </div>
     </section>
     {% endif %}
@@ -407,17 +411,36 @@
   var pinEmail = document.getElementById('pinModeEmail');
   var pinManualGroup = document.getElementById('pinManualGroup');
   var pinInput = document.getElementById('pinInput');
-  var emailMainGroup = document.getElementById('operarioEmailMainGroup');
-  var emailMain = document.getElementById('operarioEmailMain');
-  var emailAdvGroup = document.getElementById('operarioEmailAdvancedGroup');
-  var emailAdv = document.getElementById('operarioEmailAdvanced');
-  var officeEmail = document.getElementById('officeEmail');
+  var userEmail = document.getElementById('userEmail');
+  var userEmailLabel = document.getElementById('userEmailLabel');
+  var userEmailHint = document.getElementById('userEmailHint');
   var officePassword = document.getElementById('officePassword');
   var editMode = {{ edit_mode|tojson }};
   var tenantUsaPin = {{ tenant_usa_acceso_pin|default(false)|tojson }};
+  var tEmail = {{ _('Email')|tojson }};
+  var tEmailOpt = {{ _('Email (opcional)')|tojson }};
+  var tHintOffice = {{ _('Correo de acceso al panel de oficina.')|tojson }};
+  var tHintPinOpt = {{ _('Opcional. Sirve para avisos y para enviarle el enlace de definir PIN.')|tojson }};
+  var tHintPinReq = {{ _('Necesario para enviarle el enlace de definir PIN.')|tojson }};
+  var tHintAll = {{ _('Correo de acceso y avisos.')|tojson }};
 
   function isOperario() {
     return roleSelect && roleSelect.value === 'operario';
+  }
+
+  function syncEmailHints() {
+    if (!userEmail) return;
+    var op = isOperario();
+    var sendLink = !editMode && tenantUsaPin && op && pinEmail && pinEmail.checked;
+    if (!tenantUsaPin || !op) {
+      if (userEmailLabel) userEmailLabel.textContent = tEmail;
+      if (userEmailHint) userEmailHint.textContent = tenantUsaPin ? tHintOffice : tHintAll;
+      userEmail.required = true;
+      return;
+    }
+    if (userEmailLabel) userEmailLabel.textContent = sendLink ? tEmail : tEmailOpt;
+    if (userEmailHint) userEmailHint.textContent = sendLink ? tHintPinReq : tHintPinOpt;
+    userEmail.required = !!sendLink;
   }
 
   function syncPinMode() {
@@ -428,63 +451,36 @@
       pinInput.required = !sendLink;
       if (sendLink) pinInput.value = '';
     }
-    if (emailMainGroup) emailMainGroup.style.display = sendLink ? '' : 'none';
-    if (emailMain) {
-      emailMain.required = !!sendLink;
-      emailMain.disabled = !sendLink;
-    }
-    if (emailAdvGroup) emailAdvGroup.style.display = sendLink ? 'none' : '';
-    if (emailAdv) {
-      emailAdv.disabled = !!sendLink;
-      if (sendLink) emailAdv.value = '';
-    }
+    syncEmailHints();
   }
 
   function syncRole() {
     var op = isOperario();
     if (!tenantUsaPin) {
       if (operarioBlock) operarioBlock.style.display = 'none';
-      if (officeBlock) officeBlock.style.display = '';
-      if (officeEmail) {
-        officeEmail.required = true;
-        officeEmail.disabled = false;
-      }
+      if (officeBlock) officeBlock.style.display = editMode ? 'none' : '';
       if (officePassword) {
         officePassword.required = !editMode;
         officePassword.disabled = false;
       }
+      syncEmailHints();
       return;
     }
     if (operarioBlock) operarioBlock.style.display = op ? '' : 'none';
-    if (officeBlock) officeBlock.style.display = op ? 'none' : '';
+    if (officeBlock) officeBlock.style.display = (!op && !editMode) ? '' : 'none';
 
-    if (officeEmail) {
-      officeEmail.required = !op;
-      officeEmail.disabled = op;
-    }
     if (officePassword) {
       officePassword.required = !op && !editMode;
       officePassword.disabled = op;
     }
 
     if (op) {
-      if (emailMain) emailMain.disabled = false;
-      if (emailAdv) emailAdv.disabled = false;
       if (pinInput) pinInput.disabled = false;
-      if (editMode) {
-        if (emailMainGroup) emailMainGroup.style.display = 'none';
-        if (emailMain) { emailMain.required = false; emailMain.disabled = true; }
-        if (emailAdvGroup) emailAdvGroup.style.display = '';
-      } else {
-        syncPinMode();
-      }
+      if (!editMode) syncPinMode();
+      else syncEmailHints();
     } else {
       if (pinInput) { pinInput.required = false; pinInput.disabled = true; }
-      if (emailMain) { emailMain.required = false; emailMain.disabled = true; }
-      if (emailMainGroup) emailMainGroup.style.display = 'none';
-      // Oficina ya tiene email arriba: no duplicar en avanzadas
-      if (emailAdvGroup) emailAdvGroup.style.display = 'none';
-      if (emailAdv) { emailAdv.disabled = true; emailAdv.value = ''; }
+      syncEmailHints();
     }
   }
 
@@ -493,17 +489,16 @@
   if (pinEmail) pinEmail.addEventListener('change', syncPinMode);
 
   function syncPinEditMode() {
-    var manual = document.getElementById('pinEditModeManual');
     var emailMode = document.getElementById('pinEditModeEmail');
     var manualBlock = document.getElementById('pinEditManualBlock');
     var emailBlock = document.getElementById('pinEditEmailBlock');
-    var pinInput = document.getElementById('pinEditNuevo');
+    var pinEditInput = document.getElementById('pinEditNuevo');
     var emailInput = document.getElementById('pinEditEmail');
     if (!manualBlock || !emailBlock) return;
     var sendLink = emailMode && emailMode.checked;
     manualBlock.style.display = sendLink ? 'none' : '';
     emailBlock.style.display = sendLink ? '' : 'none';
-    if (pinInput) pinInput.required = !sendLink;
+    if (pinEditInput) pinEditInput.required = !sendLink;
     if (emailInput) emailInput.required = !!sendLink;
     try {
       document.dispatchEvent(new CustomEvent('sp-pin-mode-changed'));

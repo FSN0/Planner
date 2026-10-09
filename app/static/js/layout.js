@@ -130,8 +130,12 @@ function initPageNavLoading() {
         if (ev.defaultPrevented || ev.button !== 0) return;
         if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
         if (a.target && a.target !== "_self") return;
+        // Descargas / PDF: no navegan la página → la barra se quedaría eterna.
+        if (a.hasAttribute("download") || a.getAttribute("data-no-page-loading") != null) return;
+        if (a.classList.contains("js-no-page-loading") || a.classList.contains("cert-banner-pdf")) return;
         var href = a.getAttribute("href") || "";
         if (!href || href.charAt(0) === "#" || href.indexOf("javascript:") === 0) return;
+        if (/\/pdf(\/|$|\?)/i.test(href) || /\.pdf(\?|$)/i.test(href)) return;
         // Solo navegación misma origen / relativa
         if (/^https?:\/\//i.test(href) && href.indexOf(window.location.origin) !== 0) return;
         show(t("Cargando…"));

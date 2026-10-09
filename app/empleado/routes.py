@@ -474,9 +474,15 @@ def contratacion():
                     actor_id=current_user.id,
                 )
             db.session.commit()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                from flask import jsonify
+                return jsonify(ok=True, message=translate('Guardado.'))
             flash(translate('Guardado.'), 'success')
         except Exception as exc:
             db.session.rollback()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                from flask import jsonify
+                return jsonify(ok=False, error=str(exc)), 400
             flash(str(exc), 'danger')
         return redirect(url_for('empleado.contratacion'))
     from app.services.contratacion_service import refrescar_fase
@@ -519,9 +525,15 @@ def mis_documentos():
                 actor_id=current_user.id,
             )
             db.session.commit()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                from flask import jsonify
+                return jsonify(ok=True, message=translate('Documento subido.'))
             flash(translate('Documento subido.'), 'success')
         except Exception as exc:
             db.session.rollback()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                from flask import jsonify
+                return jsonify(ok=False, error=str(exc)), 400
             flash(str(exc), 'danger')
         return redirect(url_for('empleado.mis_documentos'))
     return render_template('empleado/mis_documentos.html', filas=filas_persona(current_user))

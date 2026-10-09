@@ -38,6 +38,26 @@ def dashboard():
     return redirect(url_for('auth.login'))
 
 
+@main_bp.route('/preferencias/avisos-ui', methods=['POST'])
+@login_required
+def update_ui_notif_prefs():
+    """Preferencias personales de avisos UI (badges). No toca correos ni config tenant."""
+    from app.services.ui_notif_prefs_service import save_prefs
+
+    try:
+        save_prefs(current_user, form=request.form)
+        flash(translate('Preferencias de avisos guardadas.'), 'success')
+    except Exception:
+        db.session.rollback()
+        flash(translate('No se pudieron guardar las preferencias.'), 'danger')
+    dest = request.referrer or url_for('admin.configuracion_global')
+    if dest and '/preferencias/avisos-ui' in dest:
+        dest = url_for('admin.configuracion_global')
+    if dest and '#' not in dest:
+        dest = dest.rstrip('/') + '#cfg-avisos-ui'
+    return redirect(dest)
+
+
 @main_bp.route('/preferencias/idioma', methods=['GET', 'POST'])
 def update_user_locale():
     """Cambia idioma (cookie + sesión; si hay login, también en el usuario)."""

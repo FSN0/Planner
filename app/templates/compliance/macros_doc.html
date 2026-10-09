@@ -12,11 +12,149 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro _caduca_valor(fila, aporte=None) -%}
+{%- if aporte and aporte.caduca_el -%}{{ aporte.caduca_el.isoformat() }}
+{%- elif fila.caducidad_sugerida -%}{{ fila.caducidad_sugerida.isoformat() }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro _caduca_input(fila, aporte=None, name='caduca_el') -%}
+  {% set regla = (fila.tipo.regla_renovacion or 'ninguna')|lower %}
+  {% if regla not in ('', 'ninguna', 'none') %}
+  <label class="doc-caduca-field">
+    <span>{{ _('Caduca el') }}</span>
+    <input type="date" name="{{ name }}" value="{{ _caduca_valor(fila, aporte) }}" required>
+  </label>
+  {% endif %}
+{%- endmacro %}
+
+{% macro doc_historial_btn(historial, archivo_endpoint) %}
+  {% set previos = historial|default([]) %}
+  {% set archivados = previos|rejectattr('vigente')|list %}
+  {% if previos|length > 1 or archivados|length %}
+  <button type="button" class="doc-btn doc-btn--ghost js-doc-historial"
+          data-title="{{ _('Historial del documento') }}"
+          data-versions="{{ previos|length }}">
+    {{ _('Historial') }} · {{ previos|length }}
+  </button>
+  <template class="js-doc-historial-tpl">
+    <ul class="doc-history-list doc-history-list--modal">
+      {% for h in previos %}
+      <li class="{% if h.vigente %}is-current{% endif %}">
+        <span class="doc-history-ver">v{{ h.version }}</span>
+        {% if h.archivo_path %}
+        <a href="{{ url_for(archivo_endpoint, aporte_id=h.id) }}" target="_blank" rel="noopener">
+          {{ h.nombre_original or _('Documento') }}
+        </a>
+        {% else %}
+        <span>{{ _('Sin fichero') }}</span>
+        {% endif %}
+        <small>
+          {% if h.slot %}{{ h.slot }} · {% endif %}
+          {% if h.vigente %}{{ _('Vigente') }} · {% endif %}
+          {% if h.estado == 'validado' %}{{ _('Validado') }}
+          {% elif h.estado == 'rechazado' %}{{ _('Rechazado') }}
+          {% else %}{{ _('Subido') }}{% endif %}
+          {% if h.caduca_el %} · {{ _('Caduca') }} {{ h.caduca_el.strftime('%d/%m/%Y') }}{% endif %}
+          {% if h.created_at %} · {{ h.created_at.strftime('%d/%m/%Y') }}{% endif %}
+        </small>
+      </li>
+      {% endfor %}
+    </ul>
+  </template>
+  {% endif %}
+{% endmacro %}
+
+{% macro doc_toolbar(aporte, fila, puede_subir, puede_validar, user_id=None, slot=None, archivo_endpoint='compliance.archivo') %}
+  {% set show_validate = puede_validar and aporte and aporte.estado == 'subido' %}
+  {% set show_eliminar = puede_subir and aporte and aporte.vigente and aporte.estado == 'validado' %}
+  {% set show_resubir = puede_subir and aporte and aporte.vigente %}
+  {% set show_hist = (fila.historial|default([])|length > 1) or (fila.historial|default([])|rejectattr('vigente')|list|length > 0) %}
+  {% set regla = (fila.tipo.regla_renovacion or 'ninguna')|lower %}
+  {% set has_caduca = regla not in ('', 'ninguna', 'none') %}
+  {% set caduca_val = _caduca_valor(fila, aporte) %}
+  {% if show_validate or show_eliminar or show_resubir or show_hist %}
+  <div class="doc-toolbar">
+    <div class="doc-toolbar-actions">
+      {% if show_validate %}
+      <button type="button" class="doc-btn doc-btn--ok js-doc-validar"
+              data-title="{{ _('Validar documento') }}"
+              data-confirm="{{ _('Validar') }}"
+              data-cancel="{{ _('Cancelar') }}"
+              data-caduca-label="{{ _('Caduca el') }}"
+              data-aceptar-label="{{ _('Aceptar caducado') }}"
+              data-inicio-label="{{ _('Fecha de inicio') }}"
+              data-caduca-required="{{ _('Indica la fecha de caducidad') }}"
+              data-has-caduca="{% if has_caduca %}1{% else %}0{% endif %}"
+              data-caduca="{{ caduca_val }}"
+              data-needs-inicio="{% if fila.tipo.fase_contratacion == 2 %}1{% else %}0{% endif %}">
+        {{ _('Validar') }}
+      </button>
+      <form method="post" class="js-doc-validar-form" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="accion" value="validar">
+        <input type="hidden" name="aporte_id" value="{{ aporte.id }}">
+        <input type="hidden" name="caduca_el" value="{{ caduca_val }}">
+        <input type="hidden" name="aceptado_caducado" value="">
+        <input type="hidden" name="fecha_inicio" value="">
+      </form>
+      <button type="button" class="doc-btn doc-btn--danger js-doc-rechazar"
+              data-aporte-id="{{ aporte.id }}"
+              data-title="{{ _('Rechazar documento') }}"
+              data-confirm="{{ _('Rechazar') }}"
+              data-cancel="{{ _('Cancelar') }}"
+              data-placeholder="{{ _('Motivo (opcional)') }}">
+        {{ _('Rechazar') }}
+      </button>
+      <form method="post" class="js-doc-rechazar-form" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="accion" value="rechazar">
+        <input type="hidden" name="aporte_id" value="{{ aporte.id }}">
+        <input type="hidden" name="nota_oficina" value="">
+      </form>
+      {% endif %}
+
+      {% if show_eliminar %}
+      <form method="post" class="doc-toolbar-form" onsubmit="return confirm({{ _('¿Eliminar este documento validado? Quedará en el historial.')|tojson }});">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="accion" value="eliminar_aporte">
+        <input type="hidden" name="aporte_id" value="{{ aporte.id }}">
+        <button class="doc-btn doc-btn--danger" type="submit">{{ _('Eliminar') }}</button>
+      </form>
+      {% endif %}
+
+      {% if show_resubir %}
+      <button type="button" class="doc-btn doc-btn--ghost js-doc-resubir"
+              data-title="{{ _('Subir nueva versión') }}"
+              data-confirm="{{ _('Subir') }}"
+              data-cancel="{{ _('Cancelar') }}"
+              data-file-label="{{ _('Elegir archivo') }}"
+              data-has-caduca="0">
+        {{ _('Resubir') }}
+      </button>
+      <form method="post" enctype="multipart/form-data" class="js-doc-resubir-form" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="accion" value="subir">
+        <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
+        {% if user_id %}<input type="hidden" name="user_id" value="{{ user_id }}">{% endif %}
+        {% if slot %}<input type="hidden" name="slot" value="{{ slot }}">{% endif %}
+        <input type="file" name="{% if slot %}archivo_{{ slot }}{% else %}archivo{% endif %}" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*">
+      </form>
+      {% endif %}
+
+      {{ doc_historial_btn(fila.historial, archivo_endpoint) }}
+    </div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
 {% macro fila_doc(fila, puede_subir, puede_validar, company_id=None, user_id=None, archivo_endpoint='compliance.archivo') %}
 {% set codigo = fila.estado %}
 {% set cat = fila.tipo.categoria %}
 {% set slots = fila.slots or [] %}
-<article class="doc-card{% if codigo in ('ok','cert_ok') %} is-ok{% elif codigo == 'por_caducar' %} is-ok is-soon{% elif codigo == 'pendiente_validar' %} is-wait{% elif codigo in ('rechazado','caducado','falta','cert_pendiente') %} is-bad{% elif codigo == 'opcional_vacio' %} is-optional{% endif %}{% if slots|length > 1 %} doc-card--wide{% endif %}">
+{% set tiene_fichero = fila.aporte and fila.aporte.archivo_path and fila.aporte.vigente %}
+{% set bloqueada = fila.fase_bloqueada %}
+<article class="doc-card{% if bloqueada %} is-optional{% elif codigo in ('ok','cert_ok') %} is-ok{% elif codigo == 'por_caducar' %} is-ok is-soon{% elif codigo == 'pendiente_validar' %} is-wait{% elif codigo in ('rechazado','caducado','falta','cert_pendiente') %} is-bad{% elif codigo == 'opcional_vacio' %} is-optional{% endif %}{% if slots|length > 1 %} doc-card--wide{% endif %}">
   <div class="doc-card-top">
     <span class="doc-ico" aria-hidden="true">
       {% if cat == 'Identidad' %}<i class="fas fa-id-card"></i>
@@ -25,18 +163,24 @@
       {% elif cat == 'Empresa' or cat == 'Mensual' %}<i class="fas fa-building"></i>
       {% else %}<i class="fas fa-file-alt"></i>{% endif %}
     </span>
+    {% if bloqueada %}
+    <span class="doc-status">{{ _('Aún no') }}</span>
+    {% else %}
     {{ estado_pill(codigo, _) }}
+    {% endif %}
   </div>
   <h3>{{ fila.tipo.nombre }}</h3>
   <p class="doc-hint" style="margin-top:4px;">{{ fila.tipo.categoria }}{% if fila.origen == 'especifica' or fila.origen == 'persona' %} · {{ _('Extra') }}{% endif %}</p>
 
-  {% if fila.tipo.es_certificacion %}
+  {% if fila.fase_bloqueada %}
+    <p class="doc-hint">{{ _('Se pedirá cuando la fase 1 esté validada.') }}</p>
+  {% elif fila.tipo.es_certificacion %}
     <p class="doc-hint">{{ _('Se cierra con la certificación de horas.') }}</p>
   {% elif slots %}
     <div class="doc-previews">
       {% for slot in slots %}
         {% set aporte = slot.aporte %}
-        {% if aporte and aporte.archivo_path %}
+        {% if aporte and aporte.archivo_path and aporte.vigente %}
           {% set nom = (aporte.nombre_original or aporte.archivo_path or '')|lower %}
           {% set url = url_for(archivo_endpoint, aporte_id=aporte.id) %}
           <a class="doc-preview" href="{{ url }}" target="_blank" rel="noopener" title="{{ slot.nombre }}">
@@ -51,6 +195,7 @@
               {% elif aporte.estado == 'subido' %}{{ _('Por validar') }}
               {% else %}{{ aporte.estado }}{% endif %}
               · {{ slot.nombre }}
+              {% if aporte.caduca_el %} · {{ _('Caduca') }} {{ aporte.caduca_el.strftime('%d/%m/%Y') }}{% endif %}
             </span>
           </a>
         {% else %}
@@ -65,15 +210,25 @@
       {% if slot.aporte and slot.aporte.nota_oficina %}
         <p class="doc-reject">{{ slot.nombre }}: {{ slot.aporte.nota_oficina }}</p>
       {% endif %}
+      {% if slot.aporte and slot.aporte.caduca_el and slot.aporte.vigente %}
+        <p class="doc-hint doc-hint--caduca">{{ slot.nombre }} · {{ _('Caduca el') }} {{ slot.aporte.caduca_el.strftime('%d/%m/%Y') }}</p>
+      {% endif %}
     {% endfor %}
-    {% if puede_subir %}
-    <form method="post" enctype="multipart/form-data" class="office-card-actions" style="flex-direction:column;align-items:stretch;">
+    {% set alguno_vacio = namespace(n=0) %}
+    {% for slot in slots %}
+      {% if not (slot.aporte and slot.aporte.archivo_path and slot.aporte.vigente) %}
+        {% set alguno_vacio.n = alguno_vacio.n + 1 %}
+      {% endif %}
+    {% endfor %}
+    {% if puede_subir and alguno_vacio.n %}
+    <form method="post" enctype="multipart/form-data" class="doc-upload-fresh">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="accion" value="subir">
       <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
       {% if user_id %}<input type="hidden" name="user_id" value="{{ user_id }}">{% endif %}
       <div class="doc-slots">
         {% for slot in slots %}
+        {% if not (slot.aporte and slot.aporte.archivo_path and slot.aporte.vigente) %}
         <div class="doc-slot">
           <span class="doc-slot-label">{{ slot.nombre }}</span>
           <label class="doc-pick">
@@ -82,34 +237,21 @@
             <span class="doc-pick-text">{{ _('Elegir') }}</span>
           </label>
         </div>
+        {% endif %}
         {% endfor %}
       </div>
-      <button class="doc-send" type="submit">{{ _('Subir') }}</button>
+      <button class="doc-btn doc-btn--ok" type="submit">{{ _('Subir') }}</button>
     </form>
     {% endif %}
-    {% if puede_validar %}
-      {% for slot in slots if slot.aporte and slot.aporte.estado == 'subido' %}
-      <div class="office-card-actions">
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="aporte_id" value="{{ slot.aporte.id }}">
-          <label class="validate-all-date">{{ _('Caduca el') }}
-            <input type="date" name="caduca_el" value="{{ fila.caducidad_sugerida.isoformat() if fila.caducidad_sugerida else '' }}">
-          </label>
-          <button class="office-hire-btn" name="accion" value="validar" type="submit">{{ _('Validar') }} · {{ slot.nombre }}</button>
-        </form>
-        <form method="post">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="aporte_id" value="{{ slot.aporte.id }}">
-          <input type="text" name="nota_oficina" placeholder="{{ _('Motivo') }}" required>
-          <button class="office-hire-btn ghost office-hire-btn--danger" name="accion" value="rechazar" type="submit">{{ _('Rechazar') }}</button>
-        </form>
-      </div>
-      {% endfor %}
+    {% for slot in slots if slot.aporte and slot.aporte.vigente %}
+      {{ doc_toolbar(slot.aporte, fila, puede_subir, puede_validar, user_id=user_id, slot=slot.codigo, archivo_endpoint=archivo_endpoint) }}
+    {% endfor %}
+    {% if not (slots|selectattr('aporte')|list) %}
+      {{ doc_historial_btn(fila.historial, archivo_endpoint) }}
     {% endif %}
 
   {% else %}
-    {% if fila.aporte and fila.aporte.archivo_path %}
+    {% if tiene_fichero %}
       {% set aporte = fila.aporte %}
       {% set nom = (aporte.nombre_original or aporte.archivo_path or '')|lower %}
       {% set url = url_for(archivo_endpoint, aporte_id=aporte.id) %}
@@ -124,57 +266,34 @@
             {% if aporte.estado == 'validado' %}{{ _('Validado') }}
             {% elif aporte.estado == 'rechazado' %}{{ _('Rechazado') }}
             {% else %}{{ _('Por validar') }}{% endif %}
+            {% if aporte.caduca_el %} · {{ _('Caduca') }} {{ aporte.caduca_el.strftime('%d/%m/%Y') }}{% endif %}
           </span>
         </a>
       </div>
+      {% if aporte.caduca_el %}
+      <p class="doc-hint doc-hint--caduca">{{ _('Caduca el') }} {{ aporte.caduca_el.strftime('%d/%m/%Y') }}</p>
+      {% endif %}
       {% if aporte.nota %}<p class="doc-hint">{{ aporte.nota }}</p>{% endif %}
       {% if aporte.nota_oficina %}<p class="doc-reject">{{ aporte.nota_oficina }}</p>{% endif %}
-      {% if aporte.caduca_el %}<p class="doc-hint">{{ _('Caduca') }}: {{ aporte.caduca_el.strftime('%d/%m/%Y') }}</p>{% endif %}
+      {{ doc_toolbar(aporte, fila, puede_subir, puede_validar, user_id=user_id, archivo_endpoint=archivo_endpoint) }}
     {% else %}
       <p class="doc-hint">{{ _('Todavía no hay fichero.') }}</p>
-    {% endif %}
-
-    {% if puede_subir %}
-    <form method="post" enctype="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="accion" value="subir">
-      <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
-      {% if user_id %}<input type="hidden" name="user_id" value="{{ user_id }}">{% endif %}
-      <label class="doc-pick">
-        <input type="file" name="archivo" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" required>
-        <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
-        <span class="doc-pick-text">{{ _('Elegir archivo') }}</span>
-      </label>
-      <input type="text" name="nota" placeholder="{{ _('Nota') }}">
-      <button class="doc-send" type="submit">{{ _('Subir') }}</button>
-    </form>
-    {% endif %}
-
-    {% if puede_validar and fila.aporte and fila.aporte.estado == 'subido' %}
-    <div class="office-card-actions">
-      <form method="post">
+      {% if puede_subir %}
+      <form method="post" enctype="multipart/form-data" class="doc-upload-fresh">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="aporte_id" value="{{ fila.aporte.id }}">
-        <label class="validate-all-date">{{ _('Caduca el') }}
-          <input type="date" name="caduca_el" value="{{ fila.caducidad_sugerida.isoformat() if fila.caducidad_sugerida else '' }}">
+        <input type="hidden" name="accion" value="subir">
+        <input type="hidden" name="tipo_id" value="{{ fila.tipo.id }}">
+        {% if user_id %}<input type="hidden" name="user_id" value="{{ user_id }}">{% endif %}
+        <label class="doc-pick">
+          <input type="file" name="archivo" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/*" required>
+          <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i>
+          <span class="doc-pick-text">{{ _('Elegir archivo') }}</span>
         </label>
-        <label class="validate-all-date" style="flex-direction:row;align-items:center;gap:6px;font-weight:600;">
-          <input type="checkbox" name="aceptado_caducado"> {{ _('Aceptar caducado') }}
-        </label>
-        {% if fila.tipo.fase_contratacion == 2 %}
-        <label class="validate-all-date">{{ _('Fecha de inicio') }}
-          <input type="date" name="fecha_inicio">
-        </label>
-        {% endif %}
-        <button class="office-hire-btn" name="accion" value="validar" type="submit">{{ _('Validar') }}</button>
+        <input type="text" name="nota" placeholder="{{ _('Nota') }}">
+        <button class="doc-btn doc-btn--ok" type="submit">{{ _('Subir') }}</button>
       </form>
-      <form method="post">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="aporte_id" value="{{ fila.aporte.id }}">
-        <input type="text" name="nota_oficina" placeholder="{{ _('Motivo') }}" required>
-        <button class="office-hire-btn ghost office-hire-btn--danger" name="accion" value="rechazar" type="submit">{{ _('Rechazar') }}</button>
-      </form>
-    </div>
+      {% endif %}
+      {{ doc_historial_btn(fila.historial, archivo_endpoint) }}
     {% endif %}
   {% endif %}
 </article>

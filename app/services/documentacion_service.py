@@ -319,6 +319,12 @@ def asegurar_catalogo() -> None:
             ))
             db.session.commit()
             cols.add('created_at')
+        if 'periodo_anos' not in cols:
+            db.session.execute(text(
+                'ALTER TABLE documento_tipos ADD COLUMN periodo_anos INTEGER NULL'
+            ))
+            db.session.commit()
+            cols.add('periodo_anos')
     except Exception:
         tiene_slots = False
 
@@ -381,19 +387,16 @@ def asegurar_catalogo() -> None:
 
 
 def _sincronizar_tipo_catalogo(tipo: DocumentoTipo, row: tuple, *, tiene_slots: bool) -> bool:
-    """Alinea plantillas de sistema con CATALOGO_BASE (nombres, audiencia, fases…)."""
+    """Alinea plantillas de sistema con CATALOGO_BASE.
+
+    No pisa caducidad / obligatorio / fase / audiencia: eso se edita en el
+    catálogo de la oficina y debe persistir entre visitas.
+    """
     changed = False
     mapping = (
         ('nombre', 1),
         ('categoria', 2),
         ('ambito', 3),
-        ('audiencia', 4),
-        ('regla_renovacion', 5),
-        ('dia_renovacion', 6),
-        ('mes_renovacion', 7),
-        ('fase_contratacion', 8),
-        ('bloquea_fase', 9),
-        ('obligatorio', 10),
         ('es_certificacion', 11),
         ('orden', 12),
     )
@@ -891,7 +894,21 @@ def _estado_pack(pack: _DocPack, tipo, bucket: dict, company_id, hoy: date) -> s
     )
 
 
-def _fila(pack, tipo, bucket: dict, company_id, hoy, origen) -> dict:
+def _historial_aportes(tipo_id: int, *, company_id=None, user_id=None, limit: int = 12) -> list:
+    """Versiones vigentes y anteriores (más reciente primero)."""
+    q = DocumentoAporte.query.filter_by(tipo_id=tipo_id)
+    if user_id:
+        q = q.filter_by(user_id=user_id)
+    else:
+        q = q.filter(DocumentoAporte.user_id.is_(None), DocumentoAporte.company_id == company_id)
+    return (
+        q.order_by(DocumentoAporte.version.desc(), DocumentoAporte.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def _fila(pack, tipo, bucket: dict, company_id, hoy, origen, *, user_id=None) -> dict:
     slots = slots_de(tipo)
     legacy = bucket.get('')
     slot_filas = []
@@ -912,7 +929,16 @@ def _fila(pack, tipo, bucket: dict, company_id, hoy, origen) -> dict:
         'estado': _estado_pack(pack, tipo, bucket, company_id, hoy),
         'origen': origen,
         'caducidad_sugerida': sugerir_caducidad(
-            tipo.regla_renovacion, tipo.dia_renovacion, tipo.mes_renovacion, hoy,
+            tipo.regla_renovacion,
+            tipo.dia_renovacion,
+            tipo.mes_renovacion,
+            hoy,
+            periodo_anos=getattr(tipo, 'periodo_anos', None),
+        ),
+        'historial': _historial_aportes(
+            tipo.id,
+            company_id=None if user_id else company_id,
+            user_id=user_id,
         ),
     }
 
@@ -1057,7 +1083,7 @@ def _filas_empresa_pack(pack: _DocPack, company: Company, hoy: date) -> list[dic
     for tipo in _tipos_empresa_pack(pack, company):
         bucket = {} if tipo.es_certificacion else pack.aporte_empresa.get((company.id, tipo.id), {})
         origen = 'especifica' if tipo.id in anadidas else 'generica'
-        filas.append(_fila(pack, tipo, bucket, company.id, hoy, origen))
+        filas.append(_fila(pack, tipo, bucket, company.id, hoy, origen, user_id=None))
     return filas
 
 
@@ -1069,7 +1095,7 @@ def _filas_persona_pack(pack: _DocPack, user: User, hoy: date, solo_fase: int | 
             continue
         bucket = pack.aporte_user.get((user.id, tipo.id), {})
         origen = 'persona' if tipo.id in personales else 'generica'
-        filas.append(_fila(pack, tipo, bucket, user.company_id, hoy, origen))
+        filas.append(_fila(pack, tipo, bucket, user.company_id, hoy, origen, user_id=user.id))
     return filas
 
 
@@ -1142,6 +1168,20 @@ def progreso_contratacion(filas: list[dict]) -> dict:
         'pct_wait': (por_validar * 100 / total) if total else 0,
         'pct_bad': (por_completar * 100 / total) if total else 0,
     }
+
+
+def conteo_badge_contratacion() -> int:
+    """Documentos de alta pendientes de validar (pelotita del menú Contratación)."""
+    personas = User.query.filter(
+        User.hiring_state.isnot(None),
+        User.is_deleted.is_(False),
+    ).all()
+    total = 0
+    for persona in personas:
+        for fila in filas_contratacion_activas(persona):
+            if fila.get('estado') == 'pendiente_validar':
+                total += 1
+    return total
 
 
 def excluir_generica(tipo_id: int, company_id: int, destino: str) -> None:
@@ -1238,7 +1278,17 @@ def ruta_aporte(aporte: DocumentoAporte) -> str | None:
     return path
 
 
-def subir(tipo: DocumentoTipo, storage, *, company_id=None, user_id=None, nota=None, actor_id=None, slot=None) -> DocumentoAporte:
+def subir(
+    tipo: DocumentoTipo,
+    storage,
+    *,
+    company_id=None,
+    user_id=None,
+    nota=None,
+    actor_id=None,
+    slot=None,
+    caduca_el=None,
+) -> DocumentoAporte:
     if tipo.es_certificacion:
         raise ValueError('Este requisito se cumple con la certificación de horario, no con un fichero.')
     huecos = slots_de(tipo)
@@ -1263,6 +1313,15 @@ def subir(tipo: DocumentoTipo, storage, *, company_id=None, user_id=None, nota=N
     for previo in previos.all():
         version = max(version, int(previo.version or 1) + 1)
         previo.vigente = False
+    if caduca_el is None:
+        from app.utils.timezone_utils import today_local
+        caduca_el = sugerir_caducidad(
+            tipo.regla_renovacion,
+            tipo.dia_renovacion,
+            tipo.mes_renovacion,
+            today_local(),
+            periodo_anos=getattr(tipo, 'periodo_anos', None),
+        )
     aporte = DocumentoAporte(
         tipo_id=tipo.id,
         company_id=None if user_id else company_id,
@@ -1271,6 +1330,7 @@ def subir(tipo: DocumentoTipo, storage, *, company_id=None, user_id=None, nota=N
         nombre_original=original,
         nota=(nota or '').strip() or None,
         estado='subido',
+        caduca_el=caduca_el,
         subido_por_id=actor_id,
         version=version,
         vigente=True,
@@ -1284,7 +1344,16 @@ def subir(tipo: DocumentoTipo, storage, *, company_id=None, user_id=None, nota=N
 
 def subir_desde_request(tipo: DocumentoTipo, request, *, company_id=None, user_id=None, actor_id=None) -> list[DocumentoAporte]:
     """Acepta un fichero, o varios si la plantilla tiene huecos (archivo_anverso, …)."""
+    from datetime import datetime as _dt
+
     nota = request.form.get('nota')
+    caduca_raw = (request.form.get('caduca_el') or '').strip()
+    caduca_el = None
+    if caduca_raw:
+        try:
+            caduca_el = _dt.strptime(caduca_raw, '%Y-%m-%d').date()
+        except ValueError:
+            caduca_el = None
     huecos = slots_de(tipo)
     subidos = []
     if huecos:
@@ -1298,6 +1367,7 @@ def subir_desde_request(tipo: DocumentoTipo, request, *, company_id=None, user_i
                     tipo, storage,
                     company_id=company_id, user_id=user_id,
                     nota=nota, actor_id=actor_id, slot=slot['codigo'],
+                    caduca_el=caduca_el,
                 ))
         if not subidos:
             storage = request.files.get('archivo')
@@ -1307,6 +1377,7 @@ def subir_desde_request(tipo: DocumentoTipo, request, *, company_id=None, user_i
                     tipo, storage,
                     company_id=company_id, user_id=user_id,
                     nota=nota, actor_id=actor_id, slot=slot,
+                    caduca_el=caduca_el,
                 ))
         if not subidos:
             raise ValueError('Elige al menos un archivo.')
@@ -1318,7 +1389,16 @@ def subir_desde_request(tipo: DocumentoTipo, request, *, company_id=None, user_i
         tipo, storage,
         company_id=company_id, user_id=user_id,
         nota=nota, actor_id=actor_id,
+        caduca_el=caduca_el,
     )]
+
+
+def archivar_aporte(aporte: DocumentoAporte) -> None:
+    """Deja de ser el vigente; el fichero queda en el historial."""
+    if not aporte:
+        raise ValueError('Aporte no encontrado.')
+    aporte.vigente = False
+    _invalidar_badge()
 
 
 def validar(aporte: DocumentoAporte, *, actor_id, caduca_el, aceptado_caducado=False, nota=None) -> None:
@@ -1332,12 +1412,12 @@ def validar(aporte: DocumentoAporte, *, actor_id, caduca_el, aceptado_caducado=F
     _invalidar_badge()
 
 
-def rechazar(aporte: DocumentoAporte, *, actor_id, nota: str) -> None:
-    if not (nota or '').strip():
-        raise ValueError('El rechazo necesita una nota.')
+def rechazar(aporte: DocumentoAporte, *, actor_id, nota: str = '') -> None:
+    """Rechaza y archiva: queda en historial y se puede volver a subir."""
     aporte.estado = 'rechazado'
-    aporte.nota_oficina = nota.strip()
+    aporte.nota_oficina = (nota or '').strip() or None
     aporte.validado_por_id = actor_id
+    aporte.vigente = False
     from app.utils.timezone_utils import utc_now
     aporte.validado_at = utc_now()
     _invalidar_badge()
@@ -1345,14 +1425,27 @@ def rechazar(aporte: DocumentoAporte, *, actor_id, nota: str) -> None:
 
 def crear_tipo(**kwargs) -> DocumentoTipo:
     from app.utils.timezone_utils import utc_now
+    regla = (kwargs.get('regla_renovacion') or 'ninguna').strip().lower()
+    if regla in ('años', 'years'):
+        regla = 'anos'
+    periodo = kwargs.get('periodo_anos')
+    try:
+        periodo_i = int(periodo) if periodo not in (None, '') else None
+    except (TypeError, ValueError):
+        periodo_i = None
+    if regla == 'anos':
+        periodo_i = max(1, min(int(periodo_i or 4), 50))
+    else:
+        periodo_i = None
     tipo = DocumentoTipo(
         nombre=(kwargs.get('nombre') or '').strip(),
         categoria=(kwargs.get('categoria') or 'General').strip() or 'General',
         ambito=kwargs.get('ambito') or 'empleado',
         audiencia=kwargs.get('audiencia') or 'ambos',
-        regla_renovacion=kwargs.get('regla_renovacion') or 'ninguna',
+        regla_renovacion=regla,
         dia_renovacion=int(kwargs.get('dia_renovacion') or 1),
         mes_renovacion=int(kwargs['mes_renovacion']) if kwargs.get('mes_renovacion') else None,
+        periodo_anos=periodo_i,
         fase_contratacion=int(kwargs.get('fase_contratacion') or 0),
         bloquea_fase=bool(kwargs.get('bloquea_fase')),
         obligatorio=bool(kwargs.get('obligatorio', True)),
@@ -1618,6 +1711,7 @@ def panel_documentacion_oficina(hoy: date | None = None) -> dict:
     }
 
     subcontratas = []
+    subcontratas_ok = []
     for company in companies:
         if company.is_internal:
             continue
@@ -1631,14 +1725,12 @@ def panel_documentacion_oficina(hoy: date | None = None) -> dict:
                 emp_err += 1
             elif r['avisos']:
                 emp_aviso += 1
-        if not (resumen_emp['errores'] or resumen_emp['avisos'] or emp_err or emp_aviso):
-            continue
         pendientes_empresa = [
             {'nombre': f['tipo'].nombre, 'estado': f['estado']}
             for f in filas_emp
             if es_error_documental(f['estado']) or es_aviso_documental(f['estado'])
         ]
-        subcontratas.append({
+        row = {
             'company': company,
             'empresa_errores': resumen_emp['errores'],
             'empresa_avisos': resumen_emp['avisos'],
@@ -1652,7 +1744,20 @@ def panel_documentacion_oficina(hoy: date | None = None) -> dict:
             ),
             'pendientes_empresa': pendientes_empresa[:8],
             'pendientes_empresa_extra': max(0, len(pendientes_empresa) - 8),
-        })
+        }
+        if resumen_emp['errores'] or resumen_emp['avisos'] or emp_err or emp_aviso:
+            subcontratas.append(row)
+        else:
+            subcontratas_ok.append(row)
+
+    subcontratas.sort(
+        key=lambda s: (
+            -(s['empresa_errores'] + s['empleados_con_error']),
+            -(s['empresa_avisos'] + s['empleados_con_aviso']),
+            (s['company'].nombre or '').lower(),
+        ),
+    )
+    subcontratas_ok.sort(key=lambda s: (s['company'].nombre or '').lower())
 
     # Pelota: acción interna + cada subcontrata con fallo. No cuentan los 100 sin expediente.
     padres_error = len(accion_i) + sum(
@@ -1686,6 +1791,7 @@ def panel_documentacion_oficina(hoy: date | None = None) -> dict:
         'avisos': padres_aviso,
         'interna': panel_interna,
         'subcontratas': subcontratas,
+        'subcontratas_ok': subcontratas_ok,
         'empresas': empresas_legacy,
     }
 

@@ -3,11 +3,12 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261007docui6">
 {% endblock %}
 {% block wrapper %}
 {% set interna = panel.interna %}
 {% set subs = panel.subcontratas %}
+{% set subs_ok = panel.subcontratas_ok|default([]) %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact office-docs">
@@ -29,16 +30,13 @@
           <span>{{ _('Internos') }}</span>
         </div>
         <div>
-          <strong>{{ subs|length }}</strong>
+          <strong>{{ (subs|length) + (subs_ok|length) }}</strong>
           <span>{{ _('Subcontratas') }}</span>
         </div>
       </div>
       <div class="office-hire-actions">
         {% if user_can(current_user, 'documentacion', 'w') %}
         <a class="office-hire-btn ghost" href="{{ url_for('compliance.catalogo') }}">{{ _('Catálogo') }}</a>
-        {% endif %}
-        {% if user_can(current_user, 'configuracion', 'w') %}
-        <a class="office-hire-btn ghost" href="{{ url_for('compliance.ajustes') }}">{{ _('Ajustes') }}</a>
         {% endif %}
       </div>
     </section>
@@ -84,14 +82,17 @@
     {% endif %}
 
     {# —— SUBCONTRATAS —— #}
-    <h2 class="docs-section-title">{{ _('Subcontratas con pendientes') }}</h2>
+    <h2 class="docs-section-title">{{ _('Subcontratas con pendientes') }}
+      {% if subs %}<span class="docs-people-count" style="margin-left:0.35rem;">{{ subs|length }}</span>{% endif %}
+    </h2>
     {% if not subs %}
-    <div class="docs-empty docs-empty--card">{{ _('Todas las subcontratas están al día.') }}</div>
+    <div class="docs-empty docs-empty--card">{{ _('Ninguna subcontrata con pendientes ahora mismo.') }}</div>
     {% else %}
     <div class="docs-jump-grid">
       {% for sub in subs %}
       <a class="docs-jump-card {% if sub.empresa_errores or sub.empleados_con_error %}is-alert{% else %}is-warn{% endif %}"
-         href="{{ url_for('compliance.documentacion_empresa', company_id=sub.company.id) }}">
+         href="{{ url_for('compliance.documentacion_empresa', company_id=sub.company.id) }}"
+         title="{{ sub.company.nombre }}">
         <span class="docs-block-ico docs-block-ico--firm"><i class="fas fa-industry"></i></span>
         <span class="docs-jump-main">
           <strong>{{ sub.company.nombre }}</strong>
@@ -116,6 +117,28 @@
       </a>
       {% endfor %}
     </div>
+    {% endif %}
+
+    {% if subs_ok %}
+    <details class="docs-subs-ok">
+      <summary>{{ _('Al día') }} · {{ subs_ok|length }} {{ _('subcontratas') }}</summary>
+      <div class="docs-jump-grid">
+        {% for sub in subs_ok %}
+        <a class="docs-jump-card is-ok"
+           href="{{ url_for('compliance.documentacion_empresa', company_id=sub.company.id) }}"
+           title="{{ sub.company.nombre }}">
+          <span class="docs-block-ico docs-block-ico--firm"><i class="fas fa-industry"></i></span>
+          <span class="docs-jump-main">
+            <strong>{{ sub.company.nombre }}</strong>
+            <small>{{ sub.empleados_total }} {{ _('personas') }} · {{ _('Sin pendientes') }}</small>
+          </span>
+          <span class="docs-block-pills">
+            <span class="docs-pill docs-pill--ok">{{ _('Al día') }}</span>
+          </span>
+        </a>
+        {% endfor %}
+      </div>
+    </details>
     {% endif %}
   </main>
 </div>

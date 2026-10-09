@@ -742,6 +742,10 @@ def commit_subcontratas():
                     if not choque_email:
                         user.email = email_nuevo
 
+                if obj.get('role'):
+                    from app.services.user_role_sync_service import apply_subcontrata_portal_role
+                    apply_subcontrata_portal_role(user, obj['role'], force=True)
+
                 # --- CORRECCIÓN: Búsqueda dinámica de la empresa ---
                 odoo_c_id = obj.get('odoo_company_id')
                 if odoo_c_id:
@@ -812,6 +816,9 @@ def commit_subcontratas():
                     reactivar(existente, actor_id=current_user.id, commit=False)
                 else:
                     existente.active = True
+                if obj.get('role'):
+                    from app.services.user_role_sync_service import apply_subcontrata_portal_role
+                    apply_subcontrata_portal_role(existente, obj['role'], force=True)
                 db.session.add(existente)
                 dnis_en_transaccion.add(existente.dni)
                 emails_en_transaccion.add(existente.email)

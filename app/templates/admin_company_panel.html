@@ -33,6 +33,9 @@
           {% if user_can(current_user, 'certificacion', 'r') and not company.is_internal %}
           <a href="{{ url_for('compliance.certificacion_empresa', company_id=company.id) }}" class="btn-admin btn-admin-ghost">
             <i class="fas fa-file-invoice"></i> {{ _('Certificación de horario') }}
+            {% if cert_pendientes %}
+            <span class="entity-docs-badge" title="{{ _('Pendientes de certificación') }}">{{ cert_pendientes }}</span>
+            {% endif %}
           </a>
           {% endif %}
           <a href="{{ url_for('admin.edit_company', company_id=company.id) }}" class="btn-admin btn-admin-ghost">

@@ -231,6 +231,23 @@
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-left: 3px solid var(--chip-color, #94a3b8);
+  color: inherit;
+  text-decoration: none;
+}
+a.entity-company-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+  text-decoration: none;
+}
+.entity-meta-link {
+  color: #1d4ed8;
+  text-decoration: none;
+  font-weight: 600;
+}
+.entity-meta-link:hover {
+  color: #1e40af;
+  text-decoration: underline;
 }
 
 .entity-meta-grid {

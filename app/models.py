@@ -159,7 +159,7 @@ class Company(db.Model):
     is_internal = db.Column(db.Boolean, nullable=False, default=False)
     # Archivo sin borrado: baja de subcontrata / sin personal activo.
     active = db.Column(db.Boolean, nullable=False, default=True, server_default='true')
-    # Precio hora de certificación. Vacío = el de la plataforma.
+    # Precio hora override manual de certificación. Vacío = contrato de asistencia Odoo.
     precio_hora = db.Column(db.Numeric(10, 2), nullable=True)
     
     def __repr__(self):
@@ -260,6 +260,8 @@ class User(UserMixin, db.Model):
     locale = db.Column(db.String(8), nullable=True)
     # Preferencias del menú lateral: secciones, orden, títulos, ocultos.
     sidebar_prefs = db.Column(JSONB, server_default='{}', nullable=False)
+    # Preferencias personales de avisos UI (badges): qué contadores ver.
+    ui_notif_prefs = db.Column(JSONB, server_default='{}', nullable=False)
     especialidad = db.Column(db.String(100), nullable=True) # Electricista, Fontanero, Albañil...
     
     # Programación de estados (Activación/Desactivación futura)
@@ -553,6 +555,9 @@ class Obra(db.Model):
     # Estilo
     color = db.Column(db.String(7), nullable=False, default=generate_random_color)
     is_deleted = db.Column(db.Boolean, default=False)
+
+    # Certificación: override €/h de esta obra (vacío = contrato de asistencia / empresa)
+    precio_hora = db.Column(db.Numeric(10, 2), nullable=True)
 
     # Relación inversa
     asignaciones = db.relationship('Asignacion', backref='obra', lazy=True)
@@ -1489,10 +1494,12 @@ class DocumentoTipo(db.Model):
     ambito = db.Column(db.String(20), nullable=False)
     # subcontrata | interno | ambos
     audiencia = db.Column(db.String(20), nullable=False, default='ambos')
-    # ninguna | mensual | anual
+    # ninguna | mensual | anual | anos
     regla_renovacion = db.Column(db.String(20), nullable=False, default='ninguna')
     dia_renovacion = db.Column(db.Integer, nullable=False, default=1, server_default='1')
     mes_renovacion = db.Column(db.Integer, nullable=True)
+    # Solo si regla_renovacion == 'anos' (p. ej. 4 = cada cuatro años).
+    periodo_anos = db.Column(db.Integer, nullable=True)
     es_sistema = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     # 0 = no es de contratación; 1 = primera tanda; 2 = art. 19 y reconocimiento.
     fase_contratacion = db.Column(db.Integer, nullable=False, default=0, server_default='0')
@@ -1595,6 +1602,66 @@ class CertificacionPropuesta(db.Model):
         cascade='all, delete-orphan',
         order_by='CertificacionLinea.fecha',
     )
+
+
+class CertificacionRonda(db.Model):
+    """Envío inmutable (carta del historial / mesa). Una por cada Enviar."""
+    __tablename__ = 'certificacion_rondas'
+    __table_args__ = (
+        db.Index('ix_cert_ronda_obra_periodo', 'company_id', 'obra_id', 'anio', 'mes'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id', ondelete='CASCADE'), nullable=False)
+    anio = db.Column(db.Integer, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    # subcontrata_a_empresa | empresa_a_subcontrata
+    direccion = db.Column(db.String(32), nullable=False)
+    secuencia = db.Column(db.Integer, nullable=False, default=1)
+    # en_mesa | sustituida | rechazada | aceptada | retirada
+    resultado = db.Column(db.String(20), nullable=False, default='en_mesa')
+    propuesta_id = db.Column(
+        db.Integer, db.ForeignKey('certificacion_propuestas.id', ondelete='SET NULL'), nullable=True,
+    )
+    enviada_at = db.Column(db.DateTime, nullable=False, default=_utc_now)
+    enviada_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    respondida_at = db.Column(db.DateTime, nullable=True)
+    respondida_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    comentario_rechazo = db.Column(db.Text, nullable=True)
+    horas_total = db.Column(db.Numeric(10, 2), nullable=True)
+    importe_total = db.Column(db.Numeric(12, 2), nullable=True)
+    # Snapshot JSON de líneas (lista de dicts)
+    lineas_json = db.Column(db.JSON, nullable=False, default=list)
+
+    company = db.relationship('Company')
+    obra = db.relationship('Obra')
+    propuesta = db.relationship('CertificacionPropuesta')
+
+
+class CertificacionChatMensaje(db.Model):
+    """Chat / notas de la certificación por empresa+obra+mes."""
+    __tablename__ = 'certificacion_chat_mensajes'
+    __table_args__ = (
+        db.Index('ix_cert_chat_obra_periodo', 'company_id', 'obra_id', 'anio', 'mes'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id', ondelete='CASCADE'), nullable=False)
+    anio = db.Column(db.Integer, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    # subcontrata_a_empresa | empresa_a_subcontrata | sistema
+    direccion = db.Column(db.String(32), nullable=False, default='sistema')
+    # nota | envio | rechazo | aceptacion | desenvio
+    tipo = db.Column(db.String(20), nullable=False, default='nota')
+    texto = db.Column(db.Text, nullable=False, default='')
+    autor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=_utc_now, nullable=False)
+
+    company = db.relationship('Company')
+    obra = db.relationship('Obra')
+    autor = db.relationship('User')
 
 
 class CertificacionLinea(db.Model):

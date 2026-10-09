@@ -400,6 +400,13 @@
   line-height: 1.35;
   color: #64748b;
 }
+.doc-hint--caduca {
+  font-weight: 700;
+  color: #334155;
+}
+.doc-card.is-ok .doc-hint--caduca { color: #166534; }
+.doc-card.is-soon .doc-hint--caduca { color: #92400e; }
+.doc-card.is-bad .doc-hint--caduca { color: #991b1b; }
 .doc-reject { color: #b91c1c; }
 .doc-card form { margin-top: auto; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .doc-pick {
@@ -975,13 +982,17 @@
 }
 .docs-jump-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
+  /* Más ancho mínimo: el nombre usa casi toda la tarjeta */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
 }
 .docs-jump-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: start;
   padding: 14px 16px;
   background: #fff;
   border: 1px solid rgba(148, 163, 184, 0.28);
@@ -990,6 +1001,7 @@
   text-decoration: none;
   color: #0f172a;
   transition: transform .15s ease, box-shadow .15s ease;
+  min-width: 0;
 }
 .docs-jump-card:hover {
   transform: translateY(-1px);
@@ -999,25 +1011,62 @@
 }
 .docs-jump-card.is-alert { border-color: rgba(220, 38, 38, 0.4); }
 .docs-jump-card.is-warn { border-color: rgba(217, 119, 6, 0.4); }
+.docs-jump-card.is-ok { border-color: rgba(22, 101, 52, 0.28); }
+.docs-jump-card > .docs-block-ico {
+  grid-row: 1 / span 2;
+  align-self: center;
+}
 .docs-jump-main {
-  flex: 1;
   min-width: 0;
+  grid-column: 2;
 }
 .docs-jump-main strong {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 0.98rem;
   letter-spacing: -0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  white-space: normal;
+  word-break: break-word;
 }
 .docs-jump-main small {
   display: block;
-  margin-top: 2px;
-  color: #0f172a;
+  margin-top: 3px;
+  color: #64748b;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.3;
 }
+.docs-jump-card > .docs-block-pills {
+  grid-column: 2;
+  justify-content: flex-start;
+}
+.docs-subs-ok {
+  margin-top: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 0.35rem 0.85rem 0.85rem;
+}
+.docs-subs-ok > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #334155;
+  padding: 0.55rem 0.15rem;
+  list-style: none;
+}
+.docs-subs-ok > summary::-webkit-details-marker { display: none; }
+.docs-subs-ok > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 0.4rem;
+  color: #64748b;
+}
+.docs-subs-ok[open] > summary::before { content: '▾'; }
+.docs-subs-ok .docs-jump-grid { margin-top: 0.35rem; }
 .docs-note {
   margin: 12px 0 0;
   padding: 12px 14px;
@@ -1575,6 +1624,300 @@
   padding: 0 12px;
   font-size: 13px;
   border-radius: 10px;
+}
+
+/* Caducidad editable al subir / validar */
+.doc-caduca-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  min-width: 150px;
+}
+.doc-caduca-field > span {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.01em;
+}
+.doc-caduca-field input[type="date"] {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  min-height: 36px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #fff;
+  max-width: 168px;
+}
+.doc-upload-fresh .doc-caduca-field {
+  margin-bottom: 4px;
+}
+.doc-upload-fresh .doc-caduca-field input[type="date"] {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Barra única: validar / rechazar / eliminar / resubir / historial */
+.doc-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+.doc-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.doc-toolbar-form {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+}
+.doc-toolbar-form--validate {
+  flex: 1 1 auto;
+}
+.doc-card .doc-toolbar-form,
+.doc-card .doc-toolbar-form--validate {
+  margin-top: 0;
+  padding-top: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.doc-history-list--modal {
+  text-align: left;
+  max-height: 50vh;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.doc-swal-resubir {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+.doc-swal-file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+.doc-swal-file input[type="file"] {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Acciones compactas en tarjeta de documento (legacy) */
+.doc-action-bar,
+.doc-manage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+.doc-action-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.doc-action-form--reject { flex: 1 1 180px; }
+.doc-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  margin: 0;
+}
+.doc-inline-field input[type="date"] {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  min-height: 32px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 148px;
+}
+.doc-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.doc-inline-check input { margin: 0; }
+.doc-inline-motivo {
+  flex: 1 1 120px;
+  min-width: 100px;
+  max-width: 220px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.doc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.doc-btn--ok {
+  background: #166534;
+  color: #fff;
+  border-color: #166534;
+}
+.doc-btn--ok:hover { background: #15803d; color: #fff; }
+.doc-btn--danger {
+  background: #fff;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.doc-btn--danger:hover { background: #fef2f2; }
+.doc-btn--ghost {
+  background: #fff;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+.doc-btn--ghost:hover { background: #f8fafc; color: #0f172a; }
+.doc-resubir {
+  position: relative;
+}
+.doc-resubir > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.doc-resubir > summary::-webkit-details-marker { display: none; }
+.doc-resubir-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.doc-pick--compact {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.doc-upload-fresh {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.doc-upload-fresh.is-ready .doc-pick {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.doc-upload-fresh.is-uploading {
+  opacity: 0.65;
+  pointer-events: none;
+}
+.doc-history {
+  margin-top: 10px;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 8px;
+}
+.doc-history > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  list-style: none;
+}
+.doc-history > summary::-webkit-details-marker { display: none; }
+.doc-history > summary::before {
+  content: '▸ ';
+  color: #94a3b8;
+}
+.doc-history[open] > summary::before { content: '▾ '; }
+.doc-history-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.doc-history-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.doc-history-list li.is-current { background: #ecfdf5; }
+.doc-history-ver {
+  font-weight: 800;
+  color: #475569;
+  font-size: 11px;
+}
+.doc-history-list small { color: #64748b; }
+
+/* Evitar que .doc-card form (columna + margin-top:auto) hinche Validar/Rechazar */
+.doc-card .doc-action-bar,
+.doc-card .doc-manage-bar {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+.doc-card .doc-action-form,
+.doc-card .doc-manage-bar > form,
+.doc-card .doc-resubir-form,
+.doc-card .doc-upload-fresh {
+  margin-top: 0;
+  padding-top: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.doc-card .doc-upload-fresh {
+  flex-direction: column;
+  align-items: stretch;
+  margin-top: 8px;
+}
+.doc-card .doc-upload-fresh .doc-btn {
+  align-self: flex-start;
+  min-width: 96px;
 }
 .office-hire-btn--danger,
 .office-hire-btn.ghost.office-hire-btn--danger {

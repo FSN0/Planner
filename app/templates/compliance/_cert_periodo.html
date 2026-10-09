@@ -2,14 +2,21 @@
    Esperados: anio, mes, prev, next, meses, desde, hasta,
    cert_period_prev_url, cert_period_next_url, cert_period_clear_url,
    cert_period_status (HTML o texto opcional), cert_period_hidden (dict name→value).
-   Opcional en ficha obra: cert_period_meses (lista), estado_cls, estado_txt,
-   endpoint / vista_subcontrata / company / obra / modo_vista para URLs de mes.
+   Opcional: cert_avisos={actual,prev,next,scope,puede_quitar,silenciado},
+   cert_avisos_quitar_url, cert_period_meses, estado_cls, estado_txt,
+   endpoint / vista_subcontrata / company / obra / modo_vista.
 #}
 {% set cert_period_meses = cert_period_meses if cert_period_meses is defined else none %}
+{% set cert_avisos = cert_avisos if cert_avisos is defined else none %}
+{% set _aviso_mes = cert_avisos and cert_avisos.actual %}
 <div class="cert-hero-side">
   <div class="cert-period" id="cert-period">
-    <a class="cert-period-nav" href="{{ cert_period_prev_url }}" title="{{ _('Mes anterior') }}">
+    <a class="cert-period-nav {% if cert_avisos and cert_avisos.prev %}has-aviso{% endif %}"
+       href="{{ cert_period_prev_url }}" title="{{ _('Mes anterior') }}">
       <i class="fas fa-chevron-left" aria-hidden="true"></i>
+      {% if cert_avisos and cert_avisos.prev %}
+      <span class="cert-period-badge" title="{{ cert_avisos.prev }} {{ _('meses anteriores con avisos') }}">{{ cert_avisos.prev }}</span>
+      {% endif %}
     </a>
     <button type="button" class="cert-period-label cert-period-open" id="cert-period-open" title="{{ _('Elegir mes o rango') }}">
       {% if desde and hasta %}
@@ -17,13 +24,19 @@
       <span class="cert-status is-wait">{{ _('Rango') }}</span>
       {% else %}
       <strong>{{ meses.get(mes, mes) }} {{ anio }}</strong>
-      {% if cert_period_status %}
+      {% if _aviso_mes %}
+      <span class="cert-status is-bad" title="{{ _('Este mes tiene avisos pendientes') }}">{% if cert_period_status and cert_period_status_cls|default('') == 'is-bad' %}{{ cert_period_status }}{% else %}{{ _('por revisar') }}{% endif %}</span>
+      {% elif cert_period_status %}
       <span class="cert-status {{ cert_period_status_cls|default('is-muted') }}">{{ cert_period_status }}</span>
       {% endif %}
       {% endif %}
     </button>
-    <a class="cert-period-nav" href="{{ cert_period_next_url }}" title="{{ _('Mes siguiente') }}">
+    <a class="cert-period-nav {% if cert_avisos and cert_avisos.next %}has-aviso{% endif %}"
+       href="{{ cert_period_next_url }}" title="{{ _('Mes siguiente') }}">
       <i class="fas fa-chevron-right" aria-hidden="true"></i>
+      {% if cert_avisos and cert_avisos.next %}
+      <span class="cert-period-badge" title="{{ cert_avisos.next }} {{ _('meses posteriores con avisos') }}">{{ cert_avisos.next }}</span>
+      {% endif %}
     </a>
   </div>
   <div class="cert-range-pop {% if cert_period_meses %}cert-range-pop--wide{% endif %}" id="cert-range-pop" hidden>
@@ -71,6 +84,35 @@
         </a>
         {% endfor %}
       </div>
+    </div>
+    {% endif %}
+
+    {% if cert_avisos and cert_avisos_quitar_url and cert_avisos.puede_quitar and user_can(current_user, 'certificacion', 'w') %}
+    <div class="cert-avisos-box">
+      <p class="cert-range-title">{{ _('Avisos de este mes') }}</p>
+      <p class="cert-range-hint">
+        {% if cert_avisos.silenciado %}
+          {{ _('Los avisos de este mes están ocultos en este alcance. Un cambio en la certificación puede volver a mostrarlos.') }}
+        {% elif cert_avisos.actual %}
+          {{ _('Hay certificación pendiente de cierre en este mes (en el alcance actual). Puedes ocultar el aviso sin cerrar la propuesta.') }}
+        {% else %}
+          {{ _('Oculta el aviso de este mes en el alcance en el que estás (lista, empresa u obra).') }}
+        {% endif %}
+      </p>
+      <form method="post" action="{{ cert_avisos_quitar_url }}" class="cert-avisos-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="scope" value="{{ cert_avisos.scope }}">
+        <input type="hidden" name="anio" value="{{ anio }}">
+        <input type="hidden" name="mes" value="{{ mes }}">
+        <input type="hidden" name="next" value="{{ request.full_path if request else '' }}">
+        {% if cert_avisos.silenciado %}
+        <input type="hidden" name="accion" value="reactivar">
+        <button type="submit" class="btn-admin btn-admin-ghost">{{ _('Reactivar avisos de este mes') }}</button>
+        {% else %}
+        <input type="hidden" name="accion" value="quitar">
+        <button type="submit" class="btn-admin btn-admin-ghost">{{ _('Quitar avisos de este mes') }}</button>
+        {% endif %}
+      </form>
     </div>
     {% endif %}
   </div>

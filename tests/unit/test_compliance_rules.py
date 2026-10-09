@@ -80,11 +80,12 @@ def test_descubre_campo_con_los_tres_estados():
     })
 
 
-def test_caducidad_mensual_cae_en_el_dia_y_se_puede_pisar():
-    assert sugerir_caducidad('mensual', 1, None, hoy=date(2026, 10, 5)) == date(2026, 11, 1)
-    assert sugerir_caducidad('anual', 1, 3, hoy=date(2026, 10, 5)) == date(2027, 3, 1)
-    assert sugerir_caducidad('ninguna', 1, None, hoy=date(2026, 10, 5)) is None
-    assert sugerir_caducidad('mensual', 31, None, hoy=date(2026, 1, 31)) == date(2026, 2, 28)
+def test_caducidad_relativa_desde_hoy():
+    assert sugerir_caducidad('mensual', hoy=date(2026, 10, 5)) == date(2026, 11, 5)
+    assert sugerir_caducidad('anual', hoy=date(2026, 10, 5)) == date(2027, 10, 5)
+    assert sugerir_caducidad('anos', periodo_anos=4, hoy=date(2026, 10, 5)) == date(2030, 10, 5)
+    assert sugerir_caducidad('ninguna', hoy=date(2026, 10, 5)) is None
+    assert sugerir_caducidad('mensual', hoy=date(2026, 1, 31)) == date(2026, 2, 28)
 
 
 def test_horas_y_propuestas_vacias_no_coinciden():

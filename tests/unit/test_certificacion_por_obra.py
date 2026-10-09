@@ -260,3 +260,91 @@ def test_scope_jefe_panel_solo_sus_obras(cert_ctx, monkeypatch):
     assert o_out.id not in {r['obra'].id for r in hub}
     # listado empresas no debe exigir obras fuera de alcance
     assert any(f['company'].id == company.id for f in filas) or hub
+
+
+def test_prorratear_horas_persona_reparte_igual(cert_ctx, monkeypatch):
+    from app.services.certificacion_service import prorratear_horas_persona
+
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra Prorrata')
+    u = _operario(session, company, 'Luis')
+    prop = CertificacionPropuesta(
+        company_id=company.id, obra_id=o.id, anio=2026, mes=10,
+        direccion=DIR_SUB, estado='borrador',
+    )
+    session.add(prop)
+    session.flush()
+    for d in (1, 2, 3):
+        session.add(CertificacionLinea(
+            propuesta_id=prop.id,
+            user_id=u.id,
+            obra_id=o.id,
+            fecha=date(2026, 10, d),
+            horas=Decimal('8.00'),
+            precio_hora=Decimal('10.00'),
+            origen_horas='app',
+        ))
+    session.flush()
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    n = prorratear_horas_persona(prop, u.id, '10')
+    assert n == 3
+    horas = sorted(float(ln.horas) for ln in prop.lineas)
+    assert sum(horas) == pytest.approx(10.0)
+    assert abs(max(horas) - min(horas)) <= 0.01
+    assert all(ln.origen_horas == 'manual_total' for ln in prop.lineas)
+    assert all(ln.hora_inicio is None and ln.hora_fin is None for ln in prop.lineas)
+
+
+def test_precio_contrato_usa_tarifa_de_operario(cert_ctx, monkeypatch):
+    """Si el contrato tiene línea del operario, manda sobre el hourly_rate base."""
+    from app.services import certificacion_service as cs
+
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra Contrato')
+    u = _operario(session, company, 'Tarifa')
+    u.external_ids = {'odoo': '55', 'odoo_model': 'res.partner'}
+    session.flush()
+
+    monkeypatch.setattr(
+        cs,
+        'contrato_asistencia',
+        lambda company, obra, fecha=None, cache=None: {
+            'contract_id': 1,
+            'name': 'C-1',
+            'hourly_rate': 18.0,
+            'lines': {55: 27.5},
+        },
+    )
+    assert cs.precio_contrato(company, o, user=u) == Decimal('27.50')
+    assert cs.precio_contrato(company, o, user=None) == Decimal('18.00')
+    otro = _operario(session, company, 'Base')
+    otro.external_ids = {'odoo': '99', 'odoo_model': 'res.partner'}
+    session.flush()
+    assert cs.precio_para(company, o, user=u) == Decimal('27.50')
+    assert cs.precio_para(company, o, user=otro) == Decimal('18.00')
+
+
+def test_precio_contrato_sin_base_usa_linea(cert_ctx, monkeypatch):
+    """Si hourly_rate viene a 0, la cabecera toma una tarifa de línea del contrato."""
+    from app.services import certificacion_service as cs
+
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra Solo Lineas')
+    monkeypatch.setattr(
+        cs,
+        'contrato_asistencia',
+        lambda company, obra, fecha=None, cache=None: {
+            'contract_id': 2,
+            'name': 'C-2',
+            'hourly_rate': 0.0,
+            'lines': {10: 22.5, 11: 22.5},
+        },
+    )
+    assert cs.precio_contrato(company, o, user=None) == Decimal('22.50')
+    assert cs.precio_para(company, o) == Decimal('22.50')

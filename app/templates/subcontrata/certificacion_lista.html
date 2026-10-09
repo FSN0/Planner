@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006stack">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006dense">
 {% endblock %}
 {% block wrapper %}
 {% set meses = {
@@ -42,7 +42,7 @@
       {% set cert_period_clear_url = url_for('subcontrata.certificacion', anio=anio, mes=mes) %}
       {% if entrantes %}
       {% set cert_period_status = entrantes ~ ' ' ~ _('por revisar') %}
-      {% set cert_period_status_cls = 'is-wait' %}
+      {% set cert_period_status_cls = 'is-bad' %}
       {% else %}
       {% set cert_period_status = filas|length ~ ' ' ~ _('obras') %}
       {% set cert_period_status_cls = 'is-muted' %}
@@ -82,8 +82,16 @@
             {% if row.estado == 'rechazada' %}<i class="fas fa-exclamation-circle cert-hub-alert" title="{{ _('Propuesta rechazada') }}" aria-hidden="true"></i> {% endif %}
             {% if row.estado == 'recibida' %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" title="{{ _('Propuesta por revisar') }}" aria-hidden="true"></i> {% endif %}
             {{ o.nombre }}
+            {% if row.contrato and row.contrato.contract_id %}
+            <span class="cert-contrato-tag">{{ _('Contrato') }} {{ row.contrato.name or ('#' ~ row.contrato.contract_id) }}</span>
+            {% endif %}
           </strong>
-          <small>{{ estado_txt.get(row.estado, row.estado) }}</small>
+          <small>
+            {{ estado_txt.get(row.estado, row.estado) }}
+            {% if row.comentario_rechazo %}
+            · {{ _('Motivo') }}: {{ row.comentario_rechazo }}
+            {% endif %}
+          </small>
         </span>
         <span class="cert-hub-vol">{{ row.horas }} h</span>
         <span class="cert-pill {{ estado_cls.get(row.estado, 'is-muted') }}">{{ estado_txt.get(row.estado, row.estado) }}</span>
@@ -93,7 +101,7 @@
     </div>
     <p class="cert-hub-empty" id="cert-vacio" hidden>{{ _('Ningún resultado coincide con la búsqueda.') }}</p>
     {% else %}
-    <div class="cert-empty">{{ _('No hay obras con fichaje tuyo en este periodo.') }}</div>
+    <div class="cert-empty">{{ _('No hay obras pendientes de certificación en este periodo.') }}</div>
     {% endif %}
   </main>
 </div>

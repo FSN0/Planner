@@ -80,27 +80,50 @@ def documentacion():
         if not user_can(current_user, 'documentacion', 'w'):
             abort(403)
         try:
-            tipo = DocumentoTipo.query.get_or_404(int(request.form['tipo_id']))
-            user_id = request.form.get('user_id')
-            persona_id = int(user_id) if user_id else None
-            if persona_id:
-                persona = User.query.filter_by(
-                    id=persona_id, company_id=company.id, is_deleted=False,
-                ).first()
-                if not persona:
+            accion = (request.form.get('accion') or 'subir').strip()
+            if accion == 'eliminar_aporte':
+                from app.services.documentacion_service import archivar_aporte
+                aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
+                if aporte.company_id and aporte.company_id != company.id:
                     abort(403)
-            from app.services.documentacion_service import subir_desde_request
-            subir_desde_request(
-                tipo,
-                request,
-                company_id=None if persona_id else company.id,
-                user_id=persona_id,
-                actor_id=current_user.id,
-            )
-            db.session.commit()
-            flash(translate('Documento subido.'), 'success')
+                if aporte.user_id:
+                    dueno = User.query.get(aporte.user_id)
+                    if not dueno or dueno.company_id != company.id:
+                        abort(403)
+                archivar_aporte(aporte)
+                db.session.commit()
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    from flask import jsonify
+                    return jsonify(ok=True, message=translate('Documento archivado. Puedes subir otra versión.'))
+                flash(translate('Documento archivado. Puedes subir otra versión.'), 'success')
+            else:
+                tipo = DocumentoTipo.query.get_or_404(int(request.form['tipo_id']))
+                user_id = request.form.get('user_id')
+                persona_id = int(user_id) if user_id else None
+                if persona_id:
+                    persona = User.query.filter_by(
+                        id=persona_id, company_id=company.id, is_deleted=False,
+                    ).first()
+                    if not persona:
+                        abort(403)
+                from app.services.documentacion_service import subir_desde_request
+                subir_desde_request(
+                    tipo,
+                    request,
+                    company_id=None if persona_id else company.id,
+                    user_id=persona_id,
+                    actor_id=current_user.id,
+                )
+                db.session.commit()
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    from flask import jsonify
+                    return jsonify(ok=True, message=translate('Documento subido.'))
+                flash(translate('Documento subido.'), 'success')
         except Exception as exc:
             db.session.rollback()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                from flask import jsonify
+                return jsonify(ok=False, error=str(exc)), 400
             flash(str(exc), 'danger')
         return redirect(url_for('subcontrata.documentacion'))
     empleados = User.query.filter_by(company_id=company.id, is_deleted=False).order_by(User.name).all()
@@ -136,10 +159,39 @@ def archivo(aporte_id):
     return send_file(path, as_attachment=False, download_name=aporte.nombre_original or 'documento')
 
 
+@subcontrata_bp.route('/certificacion/avisos/quitar', methods=['POST'])
+def certificacion_avisos_quitar():
+    if not has_certificacion() or not user_can(current_user, 'certificacion', 'w'):
+        abort(403)
+    from app.services.certificacion_avisos_service import dismiss_aviso, undismiss_aviso
+    from app.services.i18n_service import translate
+    scope = (request.form.get('scope') or '').strip()
+    accion = (request.form.get('accion') or 'quitar').strip().lower()
+    try:
+        anio = int(request.form.get('anio') or 0)
+        mes = int(request.form.get('mes') or 0)
+    except (TypeError, ValueError):
+        anio, mes = 0, 0
+    if not scope or not (1 <= mes <= 12) or anio < 2000:
+        flash(translate('No se pudo actualizar el aviso.'), 'danger')
+    elif accion == 'reactivar':
+        undismiss_aviso(scope, anio, mes)
+        flash(translate('Avisos de este mes reactivados.'), 'success')
+    else:
+        dismiss_aviso(scope, anio, mes)
+        flash(translate('Avisos de este mes ocultos en este alcance.'), 'success')
+    nxt = (request.form.get('next') or '').strip()
+    if nxt.startswith('/'):
+        return redirect(nxt)
+    return redirect(url_for('subcontrata.certificacion', anio=anio or None, mes=mes or None))
+
+
 @subcontrata_bp.route('/certificacion')
 def certificacion():
     if not has_certificacion() or not user_can(current_user, 'certificacion', 'r'):
         abort(403)
+    from app.compliance.routes import _cert_avisos_ctx
+    from app.services.certificacion_avisos_service import scope_company
     company = _company()
     anio, mes, _desde, _hasta = _periodo()
     filas = panel_certificacion_subcontrata_obras(company, anio=anio, mes=mes)
@@ -152,6 +204,13 @@ def certificacion():
         mes=mes,
         prev=_shift(anio, mes, -1),
         next=_shift(anio, mes, 1),
+        **_cert_avisos_ctx(
+            scope_company(company.id, vista_subcontrata=True),
+            anio=anio,
+            mes=mes,
+            company_id=company.id,
+            vista_subcontrata=True,
+        ),
     )
 
 
@@ -170,7 +229,9 @@ def certificacion_obra(obra_id):
             direccion_propia=DIR_SUB,
             endpoint='subcontrata.certificacion_obra',
         )
-    sub, emp = sincronizar(company, anio, mes, obra_id)
+    # Sin refresco de precios Odoo en cada carga: si no, cada "Guardar" + redirect
+    # tarda mucho y la subcontrata percibe que no se ha guardado.
+    sub, emp = sincronizar(company, anio, mes, obra_id, refrescar_precios=False)
     db.session.commit()
     return _render_cert(
         company, anio, mes, obra=obra, propia=sub, ajena=emp, vista_subcontrata=True,
@@ -181,15 +242,27 @@ def certificacion_obra(obra_id):
 def certificacion_pdf(propuesta_id):
     if not has_certificacion() or not user_can(current_user, 'certificacion', 'r'):
         abort(403)
-    from app.models import CertificacionPropuesta
-    from app.services.certificacion_service import html_propuesta, nombre_archivo_pdf, pdf_propuesta
-    from flask import Response
-    prop = CertificacionPropuesta.query.get_or_404(propuesta_id)
-    if prop.company_id != current_user.company_id:
+    from io import BytesIO
+    from flask import Response, flash, send_file
+    from app.services.certificacion_service import (
+        cargar_propuesta_para_pdf,
+        html_propuesta,
+        nombre_archivo_pdf,
+        pdf_propuesta,
+    )
+    from app.services.i18n_service import translate
+
+    prop = cargar_propuesta_para_pdf(propuesta_id)
+    if prop is None or prop.company_id != current_user.company_id:
         abort(403)
     pdf = pdf_propuesta(prop)
     if pdf:
-        return Response(pdf, mimetype='application/pdf', headers={
-            'Content-Disposition': f'attachment; filename={nombre_archivo_pdf(prop)}',
-        })
+        return send_file(
+            BytesIO(pdf),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=nombre_archivo_pdf(prop),
+            max_age=0,
+        )
+    flash(translate('No se pudo generar el PDF. Se muestra la vista HTML.'), 'warning')
     return Response(html_propuesta(prop), mimetype='text/html')

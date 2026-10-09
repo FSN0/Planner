@@ -90,6 +90,9 @@
                        {% if item['data_tour'] %}data-tour="{{ item['data_tour'] }}"{% endif %}>
                       <i class="fas {{ item['icon'] }} fa-fw" aria-hidden="true"></i>
                       <span>{{ item['label'] }}</span>
+                      {% if item.get('badge') and item['badge'] > 0 %}
+                      <span class="sidebar-badges"><span class="sidebar-badge sidebar-badge--danger">{{ item['badge'] }}</span></span>
+                      {% endif %}
                     </a>
                     {% if item['children'] %}
                     <button type="button" class="sidebar-sub-toggle" data-sidebar-subtoggle

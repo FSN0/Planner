@@ -154,34 +154,51 @@ def campo_estado_parece_fichaje(name: str, meta: dict) -> bool:
     return selection_vacia
 
 
-def sugerir_caducidad(regla: str, dia: int | None, mes: int | None, hoy: date | None = None) -> date | None:
+def _add_months(d: date, months: int) -> date:
+    m0 = d.month - 1 + int(months)
+    year = d.year + m0 // 12
+    month = m0 % 12 + 1
+    last = calendar.monthrange(year, month)[1]
+    return date(year, month, min(d.day, last))
+
+
+def _add_years(d: date, years: int) -> date:
+    years = int(years)
+    try:
+        return d.replace(year=d.year + years)
+    except ValueError:
+        # 29-feb → último día de febrero del año destino
+        return date(d.year + years, 2, 28)
+
+
+def sugerir_caducidad(
+    regla: str,
+    dia: int | None = None,
+    mes: int | None = None,
+    hoy: date | None = None,
+    *,
+    periodo_anos: int | None = None,
+) -> date | None:
+    """Caducidad relativa al día de hoy (al subir / validar).
+
+    - ninguna → sin fecha
+    - mensual → hoy + 1 mes
+    - anual → hoy + 1 año
+    - anos → hoy + periodo_anos años (mín. 1)
+    """
     hoy = hoy or date.today()
     regla = (regla or 'ninguna').strip().lower()
-    if regla == 'ninguna':
+    if regla in ('', 'ninguna', 'none'):
         return None
-    dia = int(dia or 1)
-    dia = min(max(dia, 1), 31)
     if regla == 'mensual':
-        year, month = hoy.year, hoy.month
-        last = calendar.monthrange(year, month)[1]
-        candidate = date(year, month, min(dia, last))
-        if candidate <= hoy:
-            month += 1
-            if month == 13:
-                month = 1
-                year += 1
-            last = calendar.monthrange(year, month)[1]
-            candidate = date(year, month, min(dia, last))
-        return candidate
+        return _add_months(hoy, 1)
     if regla == 'anual':
-        month = int(mes or 1)
-        month = min(max(month, 1), 12)
-        last = calendar.monthrange(hoy.year, month)[1]
-        candidate = date(hoy.year, month, min(dia, last))
-        if candidate <= hoy:
-            last = calendar.monthrange(hoy.year + 1, month)[1]
-            candidate = date(hoy.year + 1, month, min(dia, last))
-        return candidate
+        return _add_years(hoy, 1)
+    if regla in ('anos', 'años', 'years', 'periodica', 'periodica_anos'):
+        n = int(periodo_anos or 1)
+        n = max(1, min(n, 50))
+        return _add_years(hoy, n)
+    # Compat: si llega día/mes antiguos sin regla reconocida, no inventar
     return None
 
 

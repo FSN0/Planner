@@ -36,3 +36,14 @@ def test_apply_odoo_role_updates_when_unlocked():
     user = User(role='operario', external_ids={'odoo': '1'})
     assert apply_odoo_role_if_allowed(user, 'jefe_obra') is True
     assert user.role == 'jefe_obra'
+
+
+def test_apply_subcontrata_portal_role_force_clears_manual_lock():
+    from app.services.user_role_sync_service import apply_subcontrata_portal_role
+
+    user = User(role='operario', external_ids={'odoo': '1', 'role_manual': True})
+    assert apply_subcontrata_portal_role(user, 'admin_subcontrata') is False
+    assert user.role == 'operario'
+    assert apply_subcontrata_portal_role(user, 'admin_subcontrata', force=True) is True
+    assert user.role == 'admin_subcontrata'
+    assert not user.external_ids.get('role_manual')

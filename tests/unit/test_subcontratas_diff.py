@@ -166,6 +166,150 @@ def test_resolve_externo_email_empresa_vs_personal():
     assert Adapter._resolve_externo_email(4, 'yo@personal.com', 'a@b.com') == 'yo@personal.com'
 
 
+def test_externo_dni_from_attendance_password_and_weak_vat():
+    from app.sync.adapters.odoo_soltec import Adapter
+
+    assert Adapter._externo_dni_from_partner({
+        'id': 10,
+        'vat': False,
+        'attendance_password': '52655354M',
+    }) == '52655354M'
+    assert Adapter._externo_dni_from_partner({
+        'id': 11,
+        'vat': 'XXXXXXXXXXXXXXXX',
+        'attendance_password': '44896149B',
+    }) == '44896149B'
+    assert Adapter._externo_dni_from_partner({
+        'id': 12,
+        'vat': 'XXXXXXXXXXXXXXXX',
+        'attendance_password': False,
+    }) == 'EXT-12'
+    assert Adapter._externo_dni_from_partner({
+        'id': 13,
+        'vat': 'B12345678',
+        'attendance_password': False,
+    }) == 'EXT-13'
+    assert Adapter._dni_match_weak('XXXXXXXXXXXXXXXX')
+    assert Adapter._dni_match_weak('EXT-99')
+    assert not Adapter._dni_match_weak('52655354M')
+
+
+def test_diff_no_une_por_dni_si_otro_odoo_id(
+    sub_adapter, session, app, tenant_soltec, company_subcontrata,
+):
+    """Mismo DNI en otra ficha con Id Odoo distinto → alta nueva, no «cambio Id Odoo»."""
+    with app.app_context():
+        g.current_tenant = tenant_soltec
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+        company_subcontrata.external_ids = {'odoo': '50'}
+        session.add(company_subcontrata)
+
+        viejo = User(
+            name='Otra',
+            lastname='Persona',
+            dni='52655354M',
+            email='ext_1@subcontrata.local',
+            role='operario',
+            company_id=company_subcontrata.id,
+            active=True,
+            is_deleted=False,
+            email_verified=True,
+            password_hash=generate_password_hash('x'),
+            external_ids={'odoo': '1'},
+        )
+        session.add(viejo)
+        session.commit()
+
+        def execute_kw(*args, **kwargs):
+            model, method = args[3], args[4]
+            if model == 'res.partner.category' and method == 'search':
+                return [9]
+            if model == 'res.partner' and method == 'search_read':
+                domain = args[5][0]
+                if any(
+                    isinstance(d, (list, tuple)) and d[0] == 'is_company' and d[2] is True
+                    for d in domain
+                ):
+                    return [{
+                        'id': 50,
+                        'name': company_subcontrata.nombre,
+                        'vat': '',
+                        'email': False,
+                        'category_id': [9],
+                        'is_company': True,
+                        'parent_id': False,
+                    }]
+                return [{
+                    'id': 9999,
+                    'name': 'ADRIAN MACIAN',
+                    'email': False,
+                    'vat': False,
+                    'attendance_password': '52655354M',
+                    'function': 'Externo',
+                    'parent_id': [50, company_subcontrata.nombre],
+                    'category_id': [],
+                }]
+            return []
+
+        sub_adapter.models.execute_kw.side_effect = execute_kw
+        diff = sub_adapter.get_diff_subcontratas()
+
+        assert diff['empleados']['actualizados'] == []
+        assert len(diff['empleados']['nuevos']) == 1
+        assert diff['empleados']['nuevos'][0]['odoo_id'] == 9999
+        assert diff['empleados']['nuevos'][0]['dni'] == '52655354M'
+
+
+def test_diff_lee_dni_desde_attendance_password(
+    sub_adapter, session, app, tenant_soltec, company_subcontrata,
+):
+    with app.app_context():
+        g.current_tenant = tenant_soltec
+        session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+
+        company_subcontrata.external_ids = {'odoo': '50'}
+        session.add(company_subcontrata)
+        session.commit()
+
+        def execute_kw(*args, **kwargs):
+            model, method = args[3], args[4]
+            if model == 'res.partner.category' and method == 'search':
+                return [9]
+            if model == 'res.partner' and method == 'search_read':
+                domain = args[5][0]
+                if any(
+                    isinstance(d, (list, tuple)) and d[0] == 'is_company' and d[2] is True
+                    for d in domain
+                ):
+                    return [{
+                        'id': 50,
+                        'name': company_subcontrata.nombre,
+                        'vat': '',
+                        'email': False,
+                        'category_id': [9],
+                        'is_company': True,
+                        'parent_id': False,
+                    }]
+                return [{
+                    'id': 777,
+                    'name': 'Lorena Grupo',
+                    'email': False,
+                    'vat': False,
+                    'attendance_password': '12345678Z',
+                    'function': 'Externo',
+                    'parent_id': [50, company_subcontrata.nombre],
+                    'category_id': [],
+                }]
+            return []
+
+        sub_adapter.models.execute_kw.side_effect = execute_kw
+        diff = sub_adapter.get_diff_subcontratas()
+
+        assert len(diff['empleados']['nuevos']) == 1
+        assert diff['empleados']['nuevos'][0]['dni'] == '12345678Z'
+
+
 def test_diff_empresa_por_categoria(sub_adapter, session, app, tenant_soltec):
     with app.app_context():
         g.current_tenant = tenant_soltec

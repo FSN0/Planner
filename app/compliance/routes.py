@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from flask import (
     Response,
@@ -11,6 +12,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -19,7 +21,7 @@ from app import db
 from app.compliance import compliance_bp
 from app.decorators import permission_required
 from app.models import ROLE_ADMIN_SUBCONTRATA, ROLE_OPERARIO
-from app.models import Company, DocumentoAporte, DocumentoTipo, User
+from app.models import CertificacionPropuesta, Company, DocumentoAporte, DocumentoTipo, Obra, User
 from app.services.certificacion_service import (
     DIR_EMP,
     DIR_SUB,
@@ -28,7 +30,16 @@ from app.services.certificacion_service import (
     agrupar_por_fecha,
     agrupar_por_persona,
     aplicar_precio_borrador,
-    aplicar_precio_plataforma_herederos,
+    aplicar_precio_obra_borrador,
+    aplicar_ronda_a_borrador,
+    reaplicar_precios_empresa_borrador,
+    reaplicar_precios_obra_borrador,
+    contexto_mesa,
+    contrato_asistencia,
+    publicar_chat,
+    sembrar_borrador_desde_ronda_propia,
+    ronda_en_mesa,
+    restablecer_persona_base,
     contar_borradores_odoo,
     enriquecer_grupos_ref_app,
     mapa_lineas_propuesta,
@@ -39,12 +50,13 @@ from app.services.certificacion_service import (
     filtrar_grupos_por_rango,
     guardar_linea,
     guardar_precio_empresa,
-    guardar_precio_plataforma,
+    guardar_precio_obra,
     html_propuesta,
     interseccion_mes,
     lineas_incompletas,
     lineas_tramo_invalido,
     marcar_discrepancias,
+    cargar_propuesta_para_pdf,
     nombre_archivo_pdf,
     panel_certificacion_empresa_obras,
     panel_certificacion_obras,
@@ -54,7 +66,10 @@ from app.services.certificacion_service import (
     pdf_propuesta,
     periodo_bloqueado,
     precio_empresa,
-    precio_plataforma,
+    precio_mostrado_obra,
+    precio_obra,
+    precio_para,
+    prorratear_horas_persona,
     propuestas_entrantes_oficina,
     rechazar,
     restablecer_linea_desde_fichaje,
@@ -63,7 +78,7 @@ from app.services.certificacion_service import (
     totales,
     totales_grupos,
 )
-from app.services.compliance_rules import email_es_real
+from app.services.compliance_rules import cuantizar, email_es_real
 from app.services.contratacion_service import (
     actualizar_perfil,
     asegurar_empresa_interna,
@@ -76,6 +91,7 @@ from app.services.documentacion_service import (
     alertas_oficina,
     anadir_especifica,
     aporte_vigente,
+    archivar_aporte,
     aviso_dias,
     borrar_tipo_definitivo,
     crear_tipo,
@@ -108,6 +124,51 @@ def _exigir(flag):
         abort(404)
 
 
+def _cert_avisos_ctx(
+    scope: str,
+    *,
+    anio: int,
+    mes: int,
+    company_id: int | None = None,
+    obra_id: int | None = None,
+    vista_subcontrata: bool = False,
+) -> dict:
+    from app.services.certificacion_avisos_service import resumen_avisos
+    avisos = resumen_avisos(
+        scope,
+        anio=anio,
+        mes=mes,
+        company_id=company_id,
+        obra_id=obra_id,
+        user=None if vista_subcontrata else current_user,
+    )
+    quitar = (
+        url_for('subcontrata.certificacion_avisos_quitar')
+        if vista_subcontrata
+        else url_for('compliance.certificacion_avisos_quitar')
+    )
+    return {'cert_avisos': avisos, 'cert_avisos_quitar_url': quitar}
+
+
+def _scope_obra_aviso(obra_id: int, company_id: int | None, vista_subcontrata: bool) -> str:
+    from app.services.certificacion_avisos_service import scope_obra
+    return scope_obra(obra_id, company_id=company_id, vista_subcontrata=vista_subcontrata)
+
+
+def _doc_ajax() -> bool:
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+
+def _doc_ajax_ok(message: str | None = None):
+    from flask import jsonify
+    return jsonify(ok=True, message=message or translate('Cambios guardados.'))
+
+
+def _doc_ajax_err(exc) -> tuple:
+    from flask import jsonify
+    return jsonify(ok=False, error=str(exc)), 400
+
+
 @compliance_bp.before_request
 @login_required
 def _solo_oficina():
@@ -127,7 +188,7 @@ def documentacion():
         panel=panel,
         alertas=panel,
         aviso_dias=aviso_dias(),
-        entrantes=propuestas_entrantes_oficina() if has_certificacion() else 0,
+        entrantes=propuestas_entrantes_oficina(current_user) if has_certificacion() else 0,
     )
 
 
@@ -155,6 +216,7 @@ def documentacion_badge():
 @login_required
 @permission_required('configuracion', 'w')
 def ajustes():
+    """Compat: el aviso de caducidad vive en Configuración → Documentación."""
     if request.method == 'POST':
         try:
             guardar_aviso_dias(int(request.form.get('aviso_dias') or 15))
@@ -163,11 +225,7 @@ def ajustes():
         except Exception as exc:
             db.session.rollback()
             flash(translate('No se han podido guardar: {error}', error=exc), 'danger')
-        return redirect(url_for('compliance.ajustes'))
-    return render_template(
-        'compliance/ajustes.html',
-        aviso_dias=aviso_dias(),
-    )
+    return redirect(url_for('admin.configuracion_global') + '#cfg-documentacion')
 
 
 @compliance_bp.route('/documentacion/catalogo', methods=['GET', 'POST'])
@@ -253,6 +311,7 @@ def catalogo():
                     regla_renovacion=request.form.get('regla_renovacion') or 'ninguna',
                     dia_renovacion=request.form.get('dia_renovacion') or 1,
                     mes_renovacion=request.form.get('mes_renovacion') or None,
+                    periodo_anos=request.form.get('periodo_anos'),
                     fase_contratacion=fase,
                     bloquea_fase=request.form.get('bloquea_fase') == 'on',
                     obligatorio=request.form.get('obligatorio') == 'on',
@@ -283,10 +342,20 @@ def catalogo():
                 tipo.categoria = (request.form.get('categoria') or tipo.categoria).strip()
                 if tipo.ambito != 'empresa' and request.form.get('audiencia'):
                     tipo.audiencia = request.form.get('audiencia')
-                tipo.regla_renovacion = request.form.get('regla_renovacion') or tipo.regla_renovacion
+                regla = (request.form.get('regla_renovacion') or tipo.regla_renovacion or 'ninguna').strip().lower()
+                if regla in ('años', 'years'):
+                    regla = 'anos'
+                tipo.regla_renovacion = regla
                 tipo.dia_renovacion = int(request.form.get('dia_renovacion') or tipo.dia_renovacion or 1)
                 mes = request.form.get('mes_renovacion')
                 tipo.mes_renovacion = int(mes) if mes else None
+                if regla == 'anos':
+                    try:
+                        tipo.periodo_anos = max(1, min(int(request.form.get('periodo_anos') or 4), 50))
+                    except (TypeError, ValueError):
+                        tipo.periodo_anos = 4
+                else:
+                    tipo.periodo_anos = None
                 tipo.fase_contratacion = int(request.form.get('fase_contratacion') or 0)
                 tipo.bloquea_fase = request.form.get('bloquea_fase') == 'on'
                 tipo.obligatorio = request.form.get('obligatorio') == 'on'
@@ -471,10 +540,17 @@ def _post_empresa(company):
         elif accion == 'rechazar':
             aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
             rechazar_doc(aporte, actor_id=current_user.id, nota=request.form.get('nota_oficina') or '')
+        elif accion == 'eliminar_aporte':
+            aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
+            archivar_aporte(aporte)
         db.session.commit()
+        if _doc_ajax():
+            return _doc_ajax_ok()
         flash(translate('Cambios guardados.'), 'success')
     except Exception as exc:
         db.session.rollback()
+        if _doc_ajax():
+            return _doc_ajax_err(exc)
         flash(str(exc), 'danger')
     kwargs = {}
     if accion in ('excluir', 'anadir', 'obligatorio', 'crear_y_anadir', 'borrar_tipo'):
@@ -545,10 +621,17 @@ def _post_persona(user, endpoint):
         elif accion == 'rechazar':
             aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
             rechazar_doc(aporte, actor_id=current_user.id, nota=request.form.get('nota_oficina') or '')
+        elif accion == 'eliminar_aporte':
+            aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
+            archivar_aporte(aporte)
         db.session.commit()
+        if _doc_ajax():
+            return _doc_ajax_ok()
         flash(translate('Cambios guardados.'), 'success')
     except Exception as exc:
         db.session.rollback()
+        if _doc_ajax():
+            return _doc_ajax_err(exc)
         flash(str(exc), 'danger')
     kwargs = {}
     if accion in ('excluir', 'anadir'):
@@ -573,40 +656,49 @@ def archivo(aporte_id):
     return send_file(path, as_attachment=False, download_name=aporte.nombre_original or 'documento')
 
 
-@compliance_bp.route('/certificacion', methods=['GET', 'POST'])
+@compliance_bp.route('/certificacion/avisos/quitar', methods=['POST'])
+@login_required
+@permission_required('certificacion', 'w')
+def certificacion_avisos_quitar():
+    _exigir(has_certificacion)
+    from app.services.certificacion_avisos_service import dismiss_aviso, undismiss_aviso
+    scope = (request.form.get('scope') or '').strip()
+    accion = (request.form.get('accion') or 'quitar').strip().lower()
+    try:
+        anio = int(request.form.get('anio') or 0)
+        mes = int(request.form.get('mes') or 0)
+    except (TypeError, ValueError):
+        anio, mes = 0, 0
+    if not scope or not (1 <= mes <= 12) or anio < 2000:
+        flash(translate('No se pudo actualizar el aviso.'), 'danger')
+    elif accion == 'reactivar':
+        undismiss_aviso(scope, anio, mes)
+        flash(translate('Avisos de este mes reactivados.'), 'success')
+    else:
+        dismiss_aviso(scope, anio, mes)
+        flash(translate('Avisos de este mes ocultos en este alcance.'), 'success')
+    nxt = (request.form.get('next') or '').strip()
+    if nxt.startswith('/'):
+        return redirect(nxt)
+    return redirect(url_for('compliance.certificacion_lista', anio=anio or None, mes=mes or None))
+
+
+@compliance_bp.route('/certificacion', methods=['GET'])
 @login_required
 @permission_required('certificacion', 'r')
 def certificacion_lista():
-    """Entrada: empresas u obras del alcance; precio plataforma; mes o rango."""
+    """Entrada: empresas u obras del alcance; mes o rango."""
     _exigir(has_certificacion)
+    from app.services.certificacion_avisos_service import scope_oficina
     anio, mes, desde, hasta = _periodo()
-    vista = (request.args.get('vista') or request.form.get('vista') or 'empresas').strip().lower()
-    if vista not in ('empresas', 'obras'):
-        vista = 'empresas'
-
-    if request.method == 'POST':
-        from app.services.permission_service import user_can
-        if request.form.get('accion') == 'precio_plataforma':
-            if not user_can(current_user, 'certificacion', 'w'):
-                abort(403)
-            try:
-                guardar_precio_plataforma(request.form.get('precio_hora'))
-                precio = precio_plataforma()
-                n = aplicar_precio_plataforma_herederos(anio=anio, mes=mes, precio=precio)
-                db.session.commit()
-                if n:
-                    flash(translate('Precio plataforma guardado y aplicado a empresas sin precio propio.'), 'success')
-                else:
-                    flash(translate('Precio plataforma guardado.'), 'success')
-            except Exception as exc:
-                db.session.rollback()
-                flash(str(exc), 'danger')
-            return redirect(url_for(
-                'compliance.certificacion_lista',
-                anio=anio, mes=mes, vista=vista,
-                desde=desde.isoformat() if desde else None,
-                hasta=hasta.isoformat() if hasta else None,
-            ))
+    raw_vista = (request.args.get('vista') or request.form.get('vista') or '').strip().lower()
+    if raw_vista in ('empresas', 'obras'):
+        vista = raw_vista
+        session['certificacion_vista'] = vista
+    else:
+        vista = (session.get('certificacion_vista') or 'empresas').strip().lower()
+        if vista not in ('empresas', 'obras'):
+            vista = 'empresas'
 
     if vista == 'obras':
         filas = panel_certificacion_obras(
@@ -630,25 +722,59 @@ def certificacion_lista():
         prev=_shift(anio, mes, -1),
         next=_shift(anio, mes, 1),
         entrantes=entrantes,
-        precio_plataforma=precio_plataforma(),
+        **_cert_avisos_ctx(scope_oficina(), anio=anio, mes=mes),
     )
 
 
-@compliance_bp.route('/certificacion/obra/<int:obra_id>')
+@compliance_bp.route('/certificacion/obra/<int:obra_id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('certificacion', 'r')
 def certificacion_obra(obra_id):
     _exigir(has_certificacion)
     anio, mes, desde, hasta = _periodo()
-    agrupacion = (request.args.get('agrupacion') or 'empresa').strip().lower()
+    agrupacion = (request.args.get('agrupacion') or request.form.get('agrupacion') or 'empresa').strip().lower()
     if agrupacion not in ('empresa', 'fecha'):
         agrupacion = 'empresa'
+
+    if request.method == 'POST' and request.form.get('accion') == 'precio_obra':
+        from app.services.permission_service import user_can
+        if not user_can(current_user, 'certificacion', 'w'):
+            abort(403)
+        obra = Obra.query.get_or_404(obra_id)
+        try:
+            raw = (request.form.get('precio_hora') or '').strip()
+            if not raw:
+                guardar_precio_obra(obra, '')
+                n = reaplicar_precios_obra_borrador(obra, anio, mes)
+            else:
+                precio = guardar_precio_obra(obra, raw)
+                n = aplicar_precio_obra_borrador(obra.id, anio, mes, precio)
+            db.session.commit()
+            if n:
+                flash(translate('Precio de obra guardado y aplicado a los borradores del mes.'), 'success')
+            else:
+                flash(translate('Precio de obra guardado.'), 'success')
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+        return redirect(url_for(
+            'compliance.certificacion_obra',
+            obra_id=obra_id, anio=anio, mes=mes, agrupacion=agrupacion,
+            desde=desde.isoformat() if desde else None,
+            hasta=hasta.isoformat() if hasta else None,
+        ))
+
+    from app.services.certificacion_avisos_service import scope_obra as _scope_obra
     detalle = detalle_certificacion_obra(
         current_user, obra_id, anio=anio, mes=mes, desde=desde, hasta=hasta,
     )
     if not detalle:
         abort(404)
     db.session.commit()
+    obra = detalle['obra']
+    primera = (detalle.get('empresas') or [None])[0]
+    company_ref = primera['company'] if primera else None
+    contrato = contrato_asistencia(company_ref, obra) if company_ref else None
     return render_template(
         'compliance/certificacion_obra.html',
         detalle=detalle,
@@ -659,11 +785,15 @@ def certificacion_obra(obra_id):
         hasta=hasta,
         prev=_shift(anio, mes, -1),
         next=_shift(anio, mes, 1),
-        precio_plataforma=precio_plataforma(),
+        precio=precio_mostrado_obra(obra, company=company_ref),
+        precio_propio=precio_obra(obra) is not None,
+        precio_origen='obra' if precio_obra(obra) is not None else ('contrato' if contrato else 'sin'),
+        contrato=contrato,
+        **_cert_avisos_ctx(_scope_obra(obra_id), anio=anio, mes=mes, obra_id=obra_id),
     )
 
 
-@compliance_bp.route('/certificacion/empresa/<int:company_id>')
+@compliance_bp.route('/certificacion/empresa/<int:company_id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('certificacion', 'r')
 def certificacion_empresa(company_id):
@@ -679,6 +809,35 @@ def certificacion_empresa(company_id):
         )
         if company.id not in {f['company'].id for f in filas_alcance}:
             abort(404)
+
+    if request.method == 'POST' and request.form.get('accion') == 'precio':
+        from app.services.permission_service import user_can
+        if not user_can(current_user, 'certificacion', 'w'):
+            abort(403)
+        try:
+            raw = (request.form.get('precio_hora') or '').strip()
+            if not raw:
+                guardar_precio_empresa(company, '')
+                n = reaplicar_precios_empresa_borrador(company, anio, mes)
+            else:
+                precio = guardar_precio_empresa(company, raw)
+                n = aplicar_precio_borrador(company, anio, mes, precio)
+            db.session.commit()
+            if n:
+                flash(translate('Precio guardado y aplicado al borrador del mes.'), 'success')
+            else:
+                flash(translate('Precio guardado para esta empresa.'), 'success')
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), 'danger')
+        return redirect(url_for(
+            'compliance.certificacion_empresa',
+            company_id=company.id, anio=anio, mes=mes,
+            desde=desde.isoformat() if desde else None,
+            hasta=hasta.isoformat() if hasta else None,
+        ))
+
+    from app.services.certificacion_avisos_service import scope_company as _scope_company
     filas = panel_certificacion_empresa_obras(
         current_user, company.id, anio=anio, mes=mes, desde=desde, hasta=hasta,
     )
@@ -693,7 +852,9 @@ def certificacion_empresa(company_id):
         hasta=hasta,
         prev=_shift(anio, mes, -1),
         next=_shift(anio, mes, 1),
-        precio=precio_empresa(company),
+        precio=precio_empresa(company) if company.precio_hora is not None else None,
+        precio_propio=company.precio_hora is not None,
+        **_cert_avisos_ctx(_scope_company(company.id), anio=anio, mes=mes, company_id=company.id),
     )
 
 
@@ -742,8 +903,11 @@ def _grupos_como_obra(obra, fechas_o_vacio, prop):
     }]
 
 
-def _grupos_como_persona(personas):
-    """Convierte agrupación por persona a la forma obra→fechas→lineas de la plantilla."""
+def _grupos_como_persona(personas, *, obra_real=None):
+    """Convierte agrupación por persona a la forma obra→fechas→lineas de la plantilla.
+
+    El 'obra' del grupo es la persona (nombre); user_id permite prorrata de horas.
+    """
     from types import SimpleNamespace
     out = []
     for p in personas or []:
@@ -758,7 +922,8 @@ def _grupos_como_persona(personas):
                 'importe': f.get('importe') or 0,
             })
         out.append({
-            'obra': SimpleNamespace(nombre=nombre),
+            'obra': SimpleNamespace(nombre=nombre, id=getattr(obra_real, 'id', None)),
+            'persona_user_id': getattr(user, 'id', None),
             'fechas': fechas,
             'horas': p.get('horas') or 0,
             'importe': p.get('importe') or 0,
@@ -771,20 +936,30 @@ def _render_cert(
     desde=None, hasta=None, modo_vista=None,
 ):
     filtro_desde, filtro_hasta = (None, None)
-    if vista_subcontrata:
-        modo = (modo_vista or request.args.get('modo') or 'fecha').strip().lower()
-        if modo not in ('fecha', 'persona'):
-            modo = 'fecha'
-        if modo == 'persona':
-            g_propia = _grupos_como_persona(agrupar_por_persona(propia))
-            g_ajena = _grupos_como_persona(agrupar_por_persona(ajena)) if ajena else []
-        else:
-            g_propia = _grupos_como_obra(obra, agrupar_por_fecha(propia), propia)
-            g_ajena = _grupos_como_obra(obra, agrupar_por_fecha(ajena), ajena) if ajena else []
+    modo = (modo_vista or request.args.get('modo') or 'persona').strip().lower()
+    if modo not in ('fecha', 'persona'):
+        modo = 'persona'
+
+    # Al responder: si el borrador está vacío, rellena con lo que tú enviaste antes.
+    propia_dir = DIR_SUB if vista_subcontrata else DIR_EMP
+    mesa_ahora = ronda_en_mesa(company.id, obra.id, anio, mes)
+    if (
+        propia
+        and propia.estado == 'borrador'
+        and mesa_ahora
+        and mesa_ahora.direccion != propia_dir
+    ):
+        if sembrar_borrador_desde_ronda_propia(propia, propia_dir=propia_dir):
+            db.session.flush()
+
+    if modo == 'persona':
+        g_propia = _grupos_como_persona(agrupar_por_persona(propia), obra_real=obra)
+        g_ajena = _grupos_como_persona(agrupar_por_persona(ajena), obra_real=obra) if ajena else []
     else:
-        modo = None
-        g_propia = agrupar(propia)
-        g_ajena = agrupar(ajena) if ajena else []
+        g_propia = _grupos_como_obra(obra, agrupar_por_fecha(propia), propia)
+        g_ajena = _grupos_como_obra(obra, agrupar_por_fecha(ajena), ajena) if ajena else []
+
+    if not vista_subcontrata:
         filtro_desde, filtro_hasta = interseccion_mes(anio, mes, desde, hasta)
         if desde or hasta:
             if filtro_desde is None:
@@ -829,6 +1004,63 @@ def _render_cert(
             aceptada_at = p.aceptada_at
             break
 
+    ronda_id = request.args.get('ronda', type=int)
+    mesa_ctx = contexto_mesa(
+        company, obra, anio, mes,
+        propia=propia, ajena=ajena,
+        vista_subcontrata=vista_subcontrata,
+        ronda_id=ronda_id,
+        modo_vista=modo,
+    )
+    # Backfill de historial (rondas) hecho en contexto_mesa: hay que persistirlo.
+    db.session.commit()
+
+    cache_precios: dict = {}
+
+    def _precio_linea_util(prop) -> Decimal | None:
+        if not prop:
+            return None
+        for ln in prop.lineas or []:
+            if ln.precio_hora is not None and ln.precio_hora > 0:
+                return cuantizar(ln.precio_hora) or ln.precio_hora
+        return None
+
+    # Subcontrata: prioriza precios ya materializados (sin Odoo en cada carga).
+    # Oficina: consulta contrato de asistencia.
+    if vista_subcontrata:
+        contrato = None
+        if precio_obra(obra) is not None:
+            precio_origen = 'obra'
+            precio_val = precio_obra(obra)
+        elif company.precio_hora is not None:
+            precio_origen = 'empresa'
+            precio_val = precio_empresa(company)
+        else:
+            from_line = _precio_linea_util(propia) or _precio_linea_util(ajena)
+            if from_line is not None:
+                precio_origen = 'contrato'
+                precio_val = from_line
+            else:
+                precio_origen = 'sin'
+                precio_val = Decimal('0.00')
+    else:
+        contrato = contrato_asistencia(company, obra, cache=cache_precios)
+        if precio_obra(obra) is not None:
+            precio_origen = 'obra'
+        elif company.precio_hora is not None:
+            precio_origen = 'empresa'
+        elif contrato:
+            precio_origen = 'contrato'
+        else:
+            precio_origen = 'sin'
+        precio_val = precio_para(company, obra, cache=cache_precios)
+        if not precio_val or precio_val <= 0:
+            from_line = _precio_linea_util(propia) or _precio_linea_util(ajena)
+            if from_line is not None:
+                precio_val = from_line
+                if precio_origen == 'sin' and contrato:
+                    precio_origen = 'contrato'
+
     return render_template(
         'compliance/certificacion.html',
         company=company,
@@ -853,7 +1085,11 @@ def _render_cert(
         ),
         bloqueado=bloqueado,
         aceptada_at=aceptada_at,
-        precio=precio_empresa(company),
+        precio=precio_val,
+        precio_propio_obra=precio_obra(obra) is not None,
+        precio_propio_empresa=company.precio_hora is not None,
+        precio_origen=precio_origen,
+        contrato=contrato,
         vista_subcontrata=vista_subcontrata,
         falta_ids=falta_ids,
         borradores_odoo=0 if vista_subcontrata else contar_borradores_odoo(propia),
@@ -871,6 +1107,15 @@ def _render_cert(
         ),
         prev=_shift(anio, mes, -1),
         next=_shift(anio, mes, 1),
+        **_cert_avisos_ctx(
+            _scope_obra_aviso(obra.id, company.id, vista_subcontrata),
+            anio=anio,
+            mes=mes,
+            company_id=company.id,
+            obra_id=obra.id,
+            vista_subcontrata=vista_subcontrata,
+        ),
+        **mesa_ctx,
     )
 
 
@@ -885,17 +1130,52 @@ def _cert_redirect(endpoint, company, anio, mes, obra_id, **extra):
 
 
 def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
-    sub, emp = sincronizar(company, anio, mes, obra_id)
-    propia = emp if direccion_propia == DIR_EMP else sub
-    ajena = sub if direccion_propia == DIR_EMP else emp
+    obra = Obra.query.get_or_404(obra_id)
     accion = request.form.get('accion')
     restablecer_id = request.form.get('restablecer')
     guardar_fila_id = request.form.get('guardar_fila')
     desde_q = request.form.get('desde') or None
     hasta_q = request.form.get('hasta') or None
     modo_q = request.form.get('modo') or None
+
+    # Guardar/prorratear: sin sincronizar (evita Odoo en cada guardado; la subcontrata
+    # no debe perder horas por un refresh del esqueleto antes de aplicar el POST).
+    copiar_persona = request.form.get('copiar_persona')
+    restablecer_persona = request.form.get('restablecer_persona')
+    fast = bool(
+        guardar_fila_id
+        or restablecer_id
+        or copiar_persona
+        or restablecer_persona
+        or accion in ('prorrata_persona', 'guardar', 'copiar_mesa', 'nota_chat')
+    )
+    if fast:
+        propia = CertificacionPropuesta.query.filter_by(
+            company_id=company.id,
+            obra_id=obra_id,
+            anio=anio,
+            mes=mes,
+            direccion=direccion_propia,
+        ).first()
+        if not propia:
+            sub, emp = sincronizar(company, anio, mes, obra_id)
+            propia = emp if direccion_propia == DIR_EMP else sub
+        ajena = CertificacionPropuesta.query.filter_by(
+            company_id=company.id,
+            obra_id=obra_id,
+            anio=anio,
+            mes=mes,
+            direccion=(DIR_EMP if direccion_propia == DIR_SUB else DIR_SUB),
+        ).first()
+    else:
+        sub, emp = sincronizar(company, anio, mes, obra_id)
+        propia = emp if direccion_propia == DIR_EMP else sub
+        ajena = sub if direccion_propia == DIR_EMP else emp
+
     try:
         if restablecer_id:
+            if direccion_propia != DIR_EMP:
+                abort(403)
             try:
                 lid = int(restablecer_id)
             except (TypeError, ValueError):
@@ -918,7 +1198,10 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                 raise ValueError(translate('Línea no válida.'))
             if not any(x.id == lid for x in propia.lineas):
                 raise ValueError(translate('Línea no encontrada.'))
-            _aplicar_lineas(propia, solo_id=lid)
+            _aplicar_lineas(
+                propia, solo_id=lid,
+                bloquear_precio=(direccion_propia == DIR_SUB),
+            )
             db.session.commit()
             ln = next(x for x in propia.lineas if x.id == lid)
             if _cert_wants_json():
@@ -933,21 +1216,149 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
             return _cert_redirect(
                 endpoint, company, anio, mes, obra_id, desde=desde_q, hasta=hasta_q, modo=modo_q,
             )
+        if accion == 'prorrata_persona':
+            try:
+                uid = int(request.form.get('user_id') or 0)
+            except (TypeError, ValueError):
+                raise ValueError(translate('Persona no válida.'))
+            n = prorratear_horas_persona(propia, uid, request.form.get('horas_total'))
+            db.session.commit()
+            flash(
+                translate(
+                    'Total de {h} h repartido en {n} días.',
+                    h=request.form.get('horas_total'),
+                    n=n,
+                ),
+                'success',
+            )
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q or 'persona',
+            )
+        if copiar_persona:
+            try:
+                uid = int(copiar_persona)
+            except (TypeError, ValueError):
+                raise ValueError(translate('Persona no válida.'))
+            if propia.estado != 'borrador':
+                raise ValueError(translate('Solo puedes copiar sobre tu borrador.'))
+            mesa = ronda_en_mesa(company.id, obra_id, anio, mes)
+            if not mesa or mesa.direccion == direccion_propia:
+                raise ValueError(translate('No hay una propuesta actual de la otra parte.'))
+            n = aplicar_ronda_a_borrador(propia, mesa, user_id=uid)
+            db.session.commit()
+            flash(
+                translate('Se han copiado {n} días de su propuesta en este trabajador.', n=n),
+                'success',
+            )
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q or 'persona',
+            )
+        if restablecer_persona:
+            try:
+                uid = int(restablecer_persona)
+            except (TypeError, ValueError):
+                raise ValueError(translate('Persona no válida.'))
+            if propia.estado != 'borrador':
+                raise ValueError(translate('Solo puedes restablecer un borrador.'))
+            n = restablecer_persona_base(
+                propia, uid,
+                vista_subcontrata=(direccion_propia == DIR_SUB),
+            )
+            db.session.commit()
+            if direccion_propia == DIR_SUB:
+                flash(
+                    translate('Restablecido el último envío de este trabajador ({n} días).', n=n),
+                    'success',
+                )
+            else:
+                flash(
+                    translate('Restablecido desde fichaje para este trabajador ({n} días).', n=n),
+                    'success',
+                )
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q or 'persona',
+            )
         if accion == 'precio':
             if direccion_propia != DIR_EMP:
                 abort(403)
-            precio = guardar_precio_empresa(company, request.form.get('precio_hora'))
-            n = aplicar_precio_borrador(company, anio, mes, precio)
-            db.session.commit()
-            if n:
-                flash(translate('Precio por defecto guardado y aplicado al borrador del mes.'), 'success')
+            # En detalle de obra: si la obra ya tiene tarifa propia, se edita esa;
+            # si no, el precio de empresa (como hasta ahora).
+            if precio_obra(obra) is not None or request.form.get('ambito') == 'obra':
+                raw = (request.form.get('precio_hora') or '').strip()
+                if not raw:
+                    guardar_precio_obra(obra, '')
+                    n = reaplicar_precios_obra_borrador(obra, anio, mes)
+                else:
+                    precio = guardar_precio_obra(obra, raw)
+                    n = aplicar_precio_obra_borrador(obra.id, anio, mes, precio)
+                db.session.commit()
+                if n:
+                    flash(translate('Precio de obra guardado y aplicado a los borradores del mes.'), 'success')
+                else:
+                    flash(translate('Precio de obra guardado.'), 'success')
             else:
-                flash(translate('Precio por defecto guardado para esta empresa.'), 'success')
-            return _cert_redirect(endpoint, company, anio, mes, obra_id)
+                raw = (request.form.get('precio_hora') or '').strip()
+                if not raw:
+                    guardar_precio_empresa(company, '')
+                    n = reaplicar_precios_empresa_borrador(company, anio, mes)
+                else:
+                    precio = guardar_precio_empresa(company, raw)
+                    n = aplicar_precio_borrador(company, anio, mes, precio)
+                db.session.commit()
+                if n:
+                    flash(translate('Precio guardado y aplicado al borrador del mes.'), 'success')
+                else:
+                    flash(translate('Precio guardado para esta empresa.'), 'success')
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q,
+            )
+        bloquear_precio = direccion_propia == DIR_SUB
         if accion == 'guardar':
-            _aplicar_lineas(propia)
+            uids_prorrata = _aplicar_prorratas_persona(propia)
+            _aplicar_lineas(
+                propia,
+                bloquear_precio=bloquear_precio,
+                excluir_users=uids_prorrata,
+            )
+            db.session.commit()
+            flash(translate('Propuesta guardada.'), 'success')
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q,
+            )
+        if accion == 'nota_chat':
+            texto = (request.form.get('comentario') or '').strip()
+            if not texto:
+                for raw in request.form.getlist('chat_texto'):
+                    if (raw or '').strip():
+                        texto = raw.strip()
+                        break
+            if not texto:
+                raise ValueError(translate('Escribe una nota.'))
+            publicar_chat(
+                company.id, obra_id, anio, mes,
+                texto=texto,
+                tipo='nota',
+                direccion=direccion_propia,
+                autor_id=current_user.id,
+            )
+            db.session.commit()
+            flash(translate('Nota publicada.'), 'success')
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q,
+            )
         elif accion == 'enviar':
-            _aplicar_lineas(propia)
+            uids_prorrata = _aplicar_prorratas_persona(propia)
+            _aplicar_lineas(
+                propia,
+                bloquear_precio=bloquear_precio,
+                excluir_users=uids_prorrata,
+            )
             db.session.flush()
             faltan = lineas_incompletas(propia)
             if faltan:
@@ -990,6 +1401,22 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                         pass
             marcar_discrepancias(ajena, set(), notas)
             rechazar(ajena, current_user.id, request.form.get('comentario') or '')
+        elif accion == 'copiar_mesa':
+            mesa = ronda_en_mesa(company.id, obra_id, anio, mes)
+            if not mesa or mesa.direccion == direccion_propia:
+                raise ValueError(translate('No hay una propuesta actual de la otra parte para copiar.'))
+            if propia.estado != 'borrador':
+                raise ValueError(translate('Solo puedes copiar sobre tu borrador.'))
+            n = aplicar_ronda_a_borrador(propia, mesa)
+            db.session.commit()
+            flash(
+                translate('Se han copiado {n} filas de la propuesta actual.', n=n),
+                'success',
+            )
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q,
+            )
         elif accion == 'marcar':
             if not ajena or ajena.estado != 'enviada':
                 raise ValueError(translate('No hay propuesta enviada.'))
@@ -1052,9 +1479,61 @@ def _json_linea(ln):
     })
 
 
-def _aplicar_lineas(prop, solo_id=None):
+def _aplicar_prorratas_persona(prop) -> set[int]:
+    """Si el total del trabajador (phoras_UID) no cuadra con las filas del form, reparte.
+
+    Así «Guardar todo» respeta el total escrito junto al nombre del operario.
+    """
+    from collections import defaultdict
+
+    sumas: dict[int, Decimal] = defaultdict(lambda: Decimal('0.00'))
+    for ln in list(prop.lineas or []):
+        pref = f'l{ln.id}_'
+        if pref + 'horas' not in request.form and pref + 'inicio' not in request.form:
+            continue
+        horas_raw = request.form.get(pref + 'horas')
+        inicio = parse_hora(request.form.get(pref + 'inicio'))
+        fin = parse_hora(request.form.get(pref + 'fin'))
+        if inicio and fin:
+            from app.services.compliance_rules import horas_desde_datetimes
+            from datetime import datetime as _dt
+            h = horas_desde_datetimes(
+                _dt.combine(ln.fecha, inicio),
+                _dt.combine(ln.fecha, fin),
+            )
+            if h is not None:
+                sumas[ln.user_id] += h
+        elif (horas_raw or '').strip():
+            h = cuantizar(horas_raw)
+            if h is not None:
+                sumas[ln.user_id] += h
+
+    tocados: set[int] = set()
+    for key, raw in request.form.items():
+        if not key.startswith('phoras_'):
+            continue
+        try:
+            uid = int(key.replace('phoras_', '', 1))
+        except (TypeError, ValueError):
+            continue
+        want = cuantizar(raw)
+        if want is None or want < 0:
+            continue
+        have = cuantizar(sumas.get(uid) or Decimal('0.00')) or Decimal('0.00')
+        if abs(want - have) <= Decimal('0.009'):
+            continue
+        prorratear_horas_persona(prop, uid, want)
+        tocados.add(uid)
+    return tocados
+
+
+def _aplicar_lineas(prop, solo_id=None, *, bloquear_precio=False, excluir_users=None):
+    """Aplica horas del POST. Sin llamadas a Odoo: el guardado debe ser instantáneo."""
+    excluir = set(excluir_users or ())
     for ln in list(prop.lineas):
         if solo_id is not None and ln.id != solo_id:
+            continue
+        if ln.user_id in excluir:
             continue
         pref = f'l{ln.id}_'
         if pref + 'horas' not in request.form and pref + 'inicio' not in request.form:
@@ -1062,10 +1541,27 @@ def _aplicar_lineas(prop, solo_id=None):
         horas_raw = request.form.get(pref + 'horas')
         inicio = parse_hora(request.form.get(pref + 'inicio'))
         fin = parse_hora(request.form.get(pref + 'fin'))
-        precio = request.form.get(pref + 'precio')
-        if inicio and fin:
+        tiene_tramo = bool(inicio and fin)
+        tiene_horas = bool((horas_raw or '').strip())
+        vacia_ahora = not tiene_tramo and not tiene_horas
+        vacia_antes = ln.horas is None and not ln.hora_inicio and not ln.hora_fin
+        if vacia_ahora and vacia_antes:
+            continue
+
+        if bloquear_precio:
+            # Hidden del form o valor ya guardado; nunca bloquear el save por Odoo.
+            posted = request.form.get(pref + 'precio')
+            precio = cuantizar(posted) if posted not in (None, '') else None
+            if precio is None or precio <= 0:
+                precio = ln.precio_hora if ln.precio_hora is not None else Decimal('0.00')
+        else:
+            precio = request.form.get(pref + 'precio')
+            if (precio is None or str(precio).strip() == '') and ln.precio_hora is not None:
+                precio = ln.precio_hora
+
+        if tiene_tramo:
             guardar_linea(ln, hora_inicio=inicio, hora_fin=fin, horas=None, precio=precio)
-        elif (horas_raw or '').strip():
+        elif tiene_horas:
             guardar_linea(ln, hora_inicio=None, hora_fin=None, horas=horas_raw, precio=precio)
         else:
             guardar_linea(ln, hora_inicio=None, hora_fin=None, horas=None, precio=precio)
@@ -1076,15 +1572,22 @@ def _aplicar_lineas(prop, solo_id=None):
 @permission_required('certificacion', 'r')
 def certificacion_pdf(company_id, propuesta_id):
     _exigir(has_certificacion)
-    from app.models import CertificacionPropuesta
-    prop = CertificacionPropuesta.query.get_or_404(propuesta_id)
-    if prop.company_id != company_id:
+    from io import BytesIO
+
+    prop = cargar_propuesta_para_pdf(propuesta_id)
+    if prop is None or prop.company_id != company_id:
         abort(404)
     pdf = pdf_propuesta(prop)
     if pdf:
-        return Response(pdf, mimetype='application/pdf', headers={
-            'Content-Disposition': f'attachment; filename={nombre_archivo_pdf(prop)}',
-        })
+        return send_file(
+            BytesIO(pdf),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=nombre_archivo_pdf(prop),
+            max_age=0,
+        )
+    # Sin wkhtmltopdf / fallo: HTML previsualizable, no fingir descarga eterna.
+    flash(translate('No se pudo generar el PDF. Se muestra la vista HTML.'), 'warning')
     return Response(html_propuesta(prop), mimetype='text/html')
 
 
@@ -1209,6 +1712,20 @@ def contratacion_ficha(user_id):
                 except CredencialesError as exc:
                     flash(str(exc), 'warning')
                 return redirect(url_for('compliance.contratacion_ficha', user_id=user.id))
+            elif accion == 'subir':
+                from app.services.documentacion_service import subir_desde_request
+                tipo = DocumentoTipo.query.get_or_404(int(request.form['tipo_id']))
+                subir_desde_request(
+                    tipo, request,
+                    user_id=user.id, actor_id=current_user.id,
+                )
+                refrescar_fase(user)
+            elif accion == 'eliminar_aporte':
+                aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
+                if aporte.user_id != user.id:
+                    abort(403)
+                archivar_aporte(aporte)
+                refrescar_fase(user)
             elif accion == 'validar':
                 aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
                 validar(
@@ -1237,19 +1754,26 @@ def contratacion_ficha(user_id):
             elif accion == 'rechazar':
                 aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
                 rechazar_doc(aporte, actor_id=current_user.id, nota=request.form.get('nota_oficina') or '')
+                refrescar_fase(user)
             elif accion == 'finalizar':
                 fecha = _parse_fecha(request.form.get('fecha_inicio'))
                 finalizar(user, fecha_inicio=fecha)
             db.session.commit()
-            if wants_json and accion in ('validar', 'validar_tipo', 'rechazar'):
+            if wants_json and accion in ('validar', 'validar_tipo', 'rechazar', 'subir', 'eliminar_aporte'):
                 from flask import jsonify
+                if accion in ('subir', 'eliminar_aporte'):
+                    return jsonify({
+                        'ok': True,
+                        'reload': True,
+                        'message': translate('Guardado.'),
+                    })
                 estado = _contratacion_ajax_estado(user, accion=accion, form=request.form)
                 estado['reload'] = fase_antes != user.hiring_state
                 return jsonify(estado)
             flash(translate('Guardado.'), 'success')
         except Exception as exc:
             db.session.rollback()
-            if wants_json and accion in ('validar', 'validar_tipo', 'rechazar'):
+            if wants_json and accion in ('validar', 'validar_tipo', 'rechazar', 'subir', 'eliminar_aporte'):
                 from flask import jsonify
                 return jsonify({'ok': False, 'error': str(exc)}), 400
             flash(str(exc), 'danger')

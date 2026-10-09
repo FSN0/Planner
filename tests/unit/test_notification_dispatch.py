@@ -139,3 +139,61 @@ def test_dispatch_debounce_enqueues(session, tenant_soltec, company_internal, ap
             assert n == 1
             send.assert_called_once()
             assert EmailNotifQueue.query.count() == 0
+
+
+def test_set_event_settings_empty_recipients_persist(session, tenant_soltec, app):
+    """Desmarcar todos los tics no debe restaurar los destinatarios por defecto.
+
+    get_tenant_config traga '' como «sin config»; hay que guardar sentinel.
+    """
+    from sqlalchemy import text
+
+    from app.services.config_service import get_tenant_config
+    from app.services.notification_catalog import CONFIG_INCLUDE_NONE, MODE_OFF
+    from app.services.notification_dispatch_service import (
+        _config_to_key,
+        get_event_settings,
+        set_event_settings,
+    )
+
+    session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+    with app.app_context():
+        set_event_settings('asignacion', MODE_OFF, [])
+        st = get_event_settings('asignacion')
+        assert st['mode'] == MODE_OFF
+        assert st['recipients'] == []
+        assert get_tenant_config(_config_to_key('asignacion')) == CONFIG_INCLUDE_NONE
+
+        set_event_settings('asignacion', 'immediate', [])
+        st2 = get_event_settings('asignacion')
+        assert st2['mode'] == 'immediate'
+        assert st2['recipients'] == []
+
+
+def test_save_matrix_from_form_clears_recipients(session, tenant_soltec, app):
+    from sqlalchemy import text
+    from werkzeug.datastructures import ImmutableMultiDict
+
+    from app.services.notification_catalog import MODE_OFF, event_keys
+    from app.services.notification_dispatch_service import (
+        get_event_settings,
+        save_matrix_from_form,
+        set_event_settings,
+    )
+
+    session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+    with app.app_context():
+        set_event_settings('asignacion', 'immediate', ['admin', 'jefe'])
+        data = [
+            ('notif_debounce_minutes', '10'),
+            ('notif_digest_hour', '08:00'),
+            ('hora_limite_entrada', '09:00'),
+            ('notif_users_panel', '0'),
+        ]
+        for key in event_keys():
+            data.append((f'notif__{key}__mode', MODE_OFF))
+            # Sin notif__{key}__to → lista vacía (tics desmarcados)
+        save_matrix_from_form(ImmutableMultiDict(data))
+        st = get_event_settings('asignacion')
+        assert st['mode'] == MODE_OFF
+        assert st['recipients'] == []

@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006hero2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261007docui">
 {% endblock %}
 {% block wrapper %}
 {% set subcontratas = namespace(items=[]) %}
@@ -75,7 +75,6 @@
       </div>
       <div class="office-hire-actions">
         <a class="office-hire-btn ghost" href="{{ url_for('compliance.documentacion') }}"><i class="fas fa-arrow-left"></i> {{ _('Volver') }}</a>
-        <a class="office-hire-btn ghost" href="{{ url_for('compliance.ajustes') }}">{{ _('Ajustes') }}</a>
       </div>
     </section>
 
@@ -140,19 +139,20 @@
           </label>
           <label class="hire-field">
             <span>{{ _('Caducidad') }}</span>
-            <select name="regla_renovacion">
-              {% for regla, etiqueta in (('ninguna', _('Sin caducidad')), ('mensual', _('Mensual')), ('anual', _('Anual'))) %}
+            <select name="regla_renovacion" class="js-regla-renovacion">
+              {% for regla, etiqueta in (
+                ('ninguna', _('Sin caducidad')),
+                ('mensual', _('Mensual (hoy + 1 mes)')),
+                ('anual', _('Anual (hoy + 1 año)')),
+                ('anos', _('Cada X años')),
+              ) %}
               <option value="{{ regla }}" {% if tipo.regla_renovacion == regla %}selected{% endif %}>{{ etiqueta }}</option>
               {% endfor %}
             </select>
           </label>
-          <label class="hire-field">
-            <span>{{ _('Día') }}</span>
-            <input name="dia_renovacion" type="number" min="1" max="31" value="{{ tipo.dia_renovacion or 1 }}">
-          </label>
-          <label class="hire-field">
-            <span>{{ _('Mes') }}</span>
-            <input name="mes_renovacion" type="number" min="1" max="12" value="{{ tipo.mes_renovacion or '' }}">
+          <label class="hire-field js-periodo-anos" {% if tipo.regla_renovacion != 'anos' %}hidden{% endif %}>
+            <span>{{ _('Cada cuántos años') }}</span>
+            <input name="periodo_anos" type="number" min="1" max="50" value="{{ tipo.periodo_anos or 4 }}">
           </label>
           {% if tipo.ambito == 'empleado' %}
           <label class="hire-field">
@@ -458,6 +458,18 @@
         if (result && result.isConfirmed) form.submit();
       });
     });
+  });
+
+  function syncReglaFields(select) {
+    var form = select.closest('form') || select.closest('.catalog-item');
+    if (!form) return;
+    var anos = form.querySelector('.js-periodo-anos');
+    if (!anos) return;
+    anos.hidden = select.value !== 'anos';
+  }
+  document.querySelectorAll('.js-regla-renovacion').forEach(function (sel) {
+    syncReglaFields(sel);
+    sel.addEventListener('change', function () { syncReglaFields(sel); });
   });
 })();
 </script>

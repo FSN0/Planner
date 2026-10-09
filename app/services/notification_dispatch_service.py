@@ -133,7 +133,7 @@ def ensure_notification_matrix_migrated():
                 recipients = [x.strip() for x in str(raw).split(',') if x.strip()]
                 mode = MODE_IMMEDIATE if recipients else MODE_OFF
         set_tenant_config(mode_k, mode)
-        set_tenant_config(to_k, ','.join(recipients))
+        set_tenant_config(to_k, ','.join(recipients) if recipients else CONFIG_INCLUDE_NONE)
     if get_tenant_config(CONFIG_DEBOUNCE_MINUTES, default=None) is None:
         set_tenant_config(CONFIG_DEBOUNCE_MINUTES, str(DEFAULT_DEBOUNCE_MINUTES))
     if get_tenant_config(CONFIG_DIGEST_HOUR, default=None) is None:
@@ -204,7 +204,10 @@ def ensure_hora_corte_folded_into_matrix():
     # Solo escribir mode/to si aún no hay config explícita del evento
     if get_tenant_config(_config_mode_key('hora_corte_reporte'), default=None) is None:
         set_tenant_config(_config_mode_key('hora_corte_reporte'), mode)
-        set_tenant_config(_config_to_key('hora_corte_reporte'), ','.join(recipients))
+        set_tenant_config(
+            _config_to_key('hora_corte_reporte'),
+            ','.join(recipients) if recipients else CONFIG_INCLUDE_NONE,
+        )
     else:
         # Ya había matriz: alinear modo con flag legado si el flag existía
         if raw_flag is not None:
@@ -352,6 +355,19 @@ def get_digest_hour() -> str:
     return DEFAULT_DIGEST_HOUR
 
 
+def _parse_recipients_raw(raw_to, default_to) -> list[str]:
+    """Interpreta notif.*.to. '' lo traga get_tenant_config → None (= defaults).
+
+    Sentinel CONFIG_INCLUDE_NONE = nadie a propósito (tics desmarcados).
+    """
+    if raw_to is None:
+        return list(default_to)
+    text = str(raw_to).strip()
+    if text in (CONFIG_INCLUDE_NONE, '-', '0'):
+        return []
+    return [x.strip() for x in text.split(',') if x.strip()]
+
+
 def get_event_settings(event_key: str) -> dict:
     try:
         ensure_notification_matrix_migrated()
@@ -365,8 +381,8 @@ def get_event_settings(event_key: str) -> dict:
     mode = (get_tenant_config(_config_mode_key(key), default=default_mode) or default_mode).strip().lower()
     if mode not in allowed:
         mode = default_mode if default_mode in allowed else MODE_OFF
-    raw_to = get_tenant_config(_config_to_key(key), default=','.join(default_to))
-    recipients = [x.strip() for x in (raw_to or '').split(',') if x.strip()]
+    raw_to = get_tenant_config(_config_to_key(key), default=None)
+    recipients = _parse_recipients_raw(raw_to, default_to)
     return {'mode': mode, 'recipients': recipients, 'allowed_modes': allowed}
 
 
@@ -382,10 +398,14 @@ def set_event_settings(event_key: str, mode: str, recipients: list[str]):
     clean = []
     for r in recipients or []:
         r = (r or '').strip()
-        if r and r not in clean:
+        if r and r not in clean and r not in (CONFIG_INCLUDE_NONE, '-', '0'):
             clean.append(r)
     set_tenant_config(_config_mode_key(key), mode)
-    set_tenant_config(_config_to_key(key), ','.join(clean))
+    # Nunca '' : get_tenant_config lo trata como «sin config» y restaura defaults.
+    set_tenant_config(
+        _config_to_key(key),
+        ','.join(clean) if clean else CONFIG_INCLUDE_NONE,
+    )
 
 
 def matrix_for_ui() -> dict:
