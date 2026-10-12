@@ -76,7 +76,12 @@ class Tenant(db.Model):
     legal_aceptado_at = db.Column(db.DateTime, nullable=True)
     legal_privacidad_version = db.Column(db.String(32), nullable=True)
     legal_condiciones_version = db.Column(db.String(32), nullable=True)
-    
+
+    # Opt-in LSSI/RGPD a comunicaciones comerciales (casilla aparte, no premarcada).
+    marketing_consent_at = db.Column(db.DateTime, nullable=True)
+    marketing_consent_ip = db.Column(db.String(64), nullable=True)
+    marketing_consent_source = db.Column(db.String(40), nullable=True)
+
     def __repr__(self):
         return f'<Tenant {self.nombre} - Subdominio: {self.subdominio}>'
 
@@ -115,6 +120,9 @@ class SignupReservation(db.Model):
     locale = db.Column(db.String(8), nullable=True)
     legal_privacidad_version = db.Column(db.String(32), nullable=True)
     legal_condiciones_version = db.Column(db.String(32), nullable=True)
+    marketing_consent_at = db.Column(db.DateTime, nullable=True)
+    marketing_consent_ip = db.Column(db.String(64), nullable=True)
+    marketing_consent_source = db.Column(db.String(40), nullable=True)
     status = db.Column(
         db.String(20), nullable=False, default=STATUS_PENDING, server_default='pending'
     )
@@ -126,6 +134,34 @@ class SignupReservation(db.Model):
 
     def __repr__(self):
         return f'<SignupReservation {self.subdominio} {self.status}>'
+
+
+class MarketingLead(db.Model):
+    """
+    Lead de marketing (contacto o alta con opt-in).
+    Solo se usa marketing_consent=True para envíos comerciales.
+    """
+    __tablename__ = 'marketing_leads'
+    __table_args__ = (
+        db.Index('ix_marketing_leads_email', 'email'),
+        db.Index('ix_marketing_leads_consent', 'marketing_consent', 'created_at'),
+        {'schema': 'public'},
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), nullable=False)
+    nombre = db.Column(db.String(120), nullable=True)
+    empresa = db.Column(db.String(160), nullable=True)
+    source = db.Column(db.String(40), nullable=False)
+    locale = db.Column(db.String(8), nullable=True)
+    mensaje = db.Column(db.Text, nullable=True)
+    marketing_consent = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    marketing_consent_at = db.Column(db.DateTime, nullable=True)
+    marketing_consent_ip = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f'<MarketingLead {self.email} consent={self.marketing_consent}>'
 
 
 def generate_random_color():

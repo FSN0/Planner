@@ -75,7 +75,7 @@ y el <a href="/soluciones/planificador-personal-obra">planificador de personal</
         "faq": [
             {
                 "q": "¿Es un Gantt de proyecto tipo ERP?",
-                "a": "No. SignaPlan se centra en el cuadrante operativo: qué persona está en qué obra qué días. No sustituye presupuestos BC3 ni certificaciones.",
+                "a": "No. SignaPlan se centra en el cuadrante operativo: qué persona está en qué obra qué días. No sustituye presupuestos BC3 ni la certificación de partidas de obra. Sí incluye (aparte) portal de subcontrata para documentación y certificación de horas trabajadas.",
             },
             {
                 "q": "¿Puede usarlo el jefe de obra?",
@@ -98,16 +98,20 @@ SignaPlan es exactamente ese tablero.</p>
   <li>Que oficina y jefe de obra vean la misma versión: se acabó el «final_v7.xlsx».</li>
   <li>Ver choques (doble obra, baja, vacaciones) antes de que salga el primer coche.</li>
   <li>Ausencias en el mismo sitio que las asignaciones, no en otro Excel.</li>
-  <li>Cuando lo necesites: <a href="/soluciones/fichaje-construccion">fichaje</a> y
-      <a href="/soluciones/flota-obra">flota</a> sobre el mismo calendario.</li>
+  <li>Cuando lo necesites: <a href="/soluciones/fichaje-construccion">fichaje</a>,
+      <a href="/soluciones/flota-obra">flota</a> y
+      <a href="/soluciones/subcontratas-documentacion-horas">docs y horas con subcontratas</a>
+      sobre el mismo calendario.</li>
 </ul>
 
 <h2>Para quién sí / para quién no</h2>
 <p><strong>Sí:</strong> constructora o empresa de obra PYME (aprox. 5–80 personas en
 campo) que hoy reparte gente con WhatsApp y hojas. El jefe tiene que poder mover a
 alguien sin un curso.</p>
-<p><strong>No:</strong> si lo que buscas es presupuestar en BC3, certificar partidas o
-llevar la contabilidad. Eso es un ERP. SignaPlan no lo sustituye; puede convivir.</p>
+<p><strong>No:</strong> si lo que buscas es presupuestar en BC3, certificar partidas de
+obra o llevar la contabilidad. Eso es un ERP. SignaPlan no lo sustituye; puede
+convivir. (La <em>certificación de horas</em> con la subcontrata sí está en SignaPlan:
+es acuerdo de jornada, no certificación de mediciones.)</p>
 
 <h2>Cómo se usa el primer día</h2>
 <ol>
@@ -228,6 +232,69 @@ esperar: empieza por el cuadrante.</p>
 <p><a href="/alta">Probar SignaPlan</a> ·
 <a href="/recursos/gestion-flota-obra">Guía: gestión de flota en obra</a> ·
 <a href="/soluciones/">Ver todas las soluciones</a></p>
+""",
+    },
+    "subcontratas-documentacion-horas": {
+        "title": "Subcontratas en obra: documentación y certificación de horas",
+        "description": (
+            "Portal para subcontratas: suben documentación exigida y proponen horas "
+            "trabajadas para certificarlas contigo. Encaja con el cuadrante de SignaPlan."
+        ),
+        "h1": "Documentación y horas con la subcontrata (sin Excel eterno)",
+        "eyebrow": "Solución · Subcontratas",
+        "updated": "2026-10-12",
+        "priority": 2,
+        "keywords": (
+            "documentación subcontrata obra, certificación horas subcontrata, "
+            "portal subcontratas construcción, control documental obra"
+        ),
+        "faq": [
+            {
+                "q": "¿Es la certificación de obra (partidas / BC3)?",
+                "a": "No. Aquí hablamos de documentación exigida (PRL, seguros, etc.) y de certificar horas trabajadas con la subcontrata. La certificación de mediciones y el BC3 siguen en tu ERP o en oficina técnica.",
+            },
+            {
+                "q": "¿La subcontrata entra en SignaPlan?",
+                "a": "Sí. Tiene un acceso limitado: aportar documentos y participar en la propuesta / acuerdo de horas. No ve todo tu planificador interno.",
+            },
+            {
+                "q": "¿Sirve si solo tengo personal propio?",
+                "a": "El núcleo sigue siendo cuadrante, fichaje y flota. Documentación y horas con subcontrata las activas cuando trabajas con exteriores.",
+            },
+        ],
+        "body_html": """
+<p>El cuadrante te dice quién va a cada obra. Con subcontratas aparece otro fuego:
+<strong>docs caducados</strong> y la pelea de fin de mes por las
+<strong>horas trabajadas</strong>. SignaPlan añade un portal para que la
+subcontrata entre, aporte lo exigido y proponga horas a certificar contigo —
+sin sustituir tu ERP ni el BC3.</p>
+
+<h2>Qué resuelve (y qué no)</h2>
+<ul>
+  <li><strong>Documentación:</strong> tipos exigidos, subidas, validación y caducidad.</li>
+  <li><strong>Certificación de horas:</strong> propuestas, rondas y acuerdo de jornada
+      (no certificación de partidas de obra).</li>
+  <li><strong>Contratación / altas:</strong> apoyo al onboarding de personal cuando
+      lo necesitas, sin montar un módulo de RRHH completo.</li>
+  <li><strong>No es:</strong> presupuestos BC3, mediciones ni facturación al cliente.</li>
+</ul>
+
+<h2>Cómo encaja con el planificador</h2>
+<p>Primero el día a día: <a href="/soluciones/planificador-personal-obra">cuadrante</a>,
+<a href="/soluciones/fichaje-construccion">fichaje</a> y
+<a href="/soluciones/flota-obra">flota</a>. Cuando la subcontrata entra en juego,
+docs y horas viven en la misma plataforma — no en otro Excel ni en un grupo de
+WhatsApp aparte.</p>
+
+<h2>Para quién</h2>
+<p><strong>Sí:</strong> constructoras PYME que ya usan (o van a usar) subcontratas y
+sufren el “pásame el PDF” y el “esas horas no son”.
+<strong>No hace falta</strong> para empezar si solo tenéis personal propio: el
+cuadrante y el fichaje bastan el primer mes.</p>
+
+<p><a href="/alta">Crear cuenta gratuita</a> ·
+<a href="/soluciones/">Ver todas las soluciones</a> ·
+<a href="/contacto">Hablar de una demo</a></p>
 """,
     },
 }

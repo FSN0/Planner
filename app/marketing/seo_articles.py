@@ -4,13 +4,13 @@ from __future__ import annotations
 
 SEO_ARTICLES = {
     "planificador-de-obra": {
-        "title": "Planificador de obra: Gantt, ERP o cuadrante de personal",
+        "title": "Planificador de obra: quién va a cada tajo (no un Gantt)",
         "description": (
-            "Cuando buscas planificador de obra sale software de proyecto, Gantt y ERP. "
-            "Guía para elegir: barras de partidas vs quién va a cada tajo cada día."
+            "Planificador de obra para constructoras: el cuadrante de quién va a cada tajo "
+            "cada día. No es Gantt ni ERP. Guía clara + alta gratis en SignaPlan."
         ),
         "h1": "Qué es un planificador de obra (y cuál te hace falta)",
-        "updated": "2026-08-27",
+        "updated": "2026-10-12",
         "keywords": "planificador de obra, planificador obra constructora, gantt obra vs cuadrante",
         "body_html": """
 <p>Quien busca <strong>planificador de obra</strong> casi nunca busca lo mismo. Google
@@ -237,23 +237,25 @@ pierdes tiempo cada mañana. La flota debe mirar el mismo calendario que el pers
 """,
     },
     "software-constructoras": {
-        "title": "Software para constructoras PYME: cuadrante y fichaje (no un ERP)",
+        "title": "Software para constructoras: gestión del día a día (no un ERP)",
         "description": (
-            "Software para constructoras: quién va a cada obra, fichaje en el tajo y flota. "
-            "No es un ERP de presupuestos. Alta gratuita, sin tarjeta."
+            "Software para constructoras PYME: cuadrante, fichaje y flota. Alta gratis, "
+            "sin tarjeta. El programa del tajo, no el de presupuestos BC3."
         ),
         "h1": "Software para constructoras (sin montar un ERP)",
-        "updated": "2026-08-27",
+        "updated": "2026-10-12",
         "keywords": "software constructoras, software para constructoras, software obra",
         "body_html": """
 <p>El <strong>software para constructoras</strong> que aparece en Google suele ser un ERP:
 presupuestos, mediciones, facturación. Una PYME de obra también necesita otra capa, más
-sucia y más diaria: quién va a cada tajo, quién ha fichado y qué furgoneta está libre.</p>
+sucia y más diaria: quién va a cada tajo, quién ha fichado, qué furgoneta está libre y,
+si hay subcontratas, que suban docs y certifiquen horas sin otro Excel.</p>
 
 <h2>Qué cubre un ERP (y qué no)</h2>
-<p>Un ERP de constructora es el sistema de <em>negocio</em>: oferta, certificación, compras.
-No está pensado para que el jefe mueva a un peón a las 07:10 ni para que el peón fiche
-con guantes en el tajo. Por eso conviven Excel y WhatsApp aunque «ya tengáis programa».</p>
+<p>Un ERP de constructora es el sistema de <em>negocio</em>: oferta, certificación de
+partidas, compras. No está pensado para que el jefe mueva a un peón a las 07:10 ni para
+que el peón fiche con guantes en el tajo. Por eso conviven Excel y WhatsApp aunque
+«ya tengáis programa».</p>
 
 <h2>Qué tiene que hacer el software operativo</h2>
 <ul>
@@ -261,6 +263,8 @@ con guantes en el tajo. Por eso conviven Excel y WhatsApp aunque «ya tengáis p
   <li>Fichaje en el móvil, no un reloj de pared en caseta.</li>
   <li>Registro de jornada exportable (inspección, asesoría).</li>
   <li>Flota alineada con el mismo calendario, no otra hoja.</li>
+  <li>Portal de subcontrata: documentación exigida y certificación de <em>horas</em>
+      (no de mediciones BC3).</li>
   <li>Que un jefe de obra lo use en diez minutos, no en un curso de tres días.</li>
 </ul>
 
@@ -270,11 +274,14 @@ con guantes en el tajo. Por eso conviven Excel y WhatsApp aunque «ya tengáis p
   <li>¿El fichaje funciona con DNI/PIN o equivalente, sin hardware extra?</li>
   <li>¿Puedes enseñar jornada cuando llama inspección?</li>
   <li>¿La flota mira el mismo tablero que el personal?</li>
+  <li>¿La subcontrata puede aportar docs y horas sin otro canal?</li>
   <li>¿El alta es usable sin comercial ni tarjeta el primer día?</li>
 </ul>
 
 <p>SignaPlan es ese software operativo. No sustituye BC3 ni facturación. Empieza en
-<a href="/alta">alta gratuita</a>. Si buscabas un ERP gratis, lee
+<a href="/alta">alta gratuita</a>. Más detalle de subcontratas en
+<a href="/soluciones/subcontratas-documentacion-horas">docs y horas con subcontratas</a>.
+Si buscabas un ERP gratis, lee
 <a href="/recursos/erp-constructoras-gratis">ERP para constructoras gratis</a>.
 Integración con Odoo u otro ERP: <a href="/contacto">contacto</a>.</p>
 """,
@@ -323,32 +330,33 @@ ya facturáis con método y os duele la certificación, no el WhatsApp.</p>
   <li>Si más adelante hace falta ERP, se integra. No al revés.</li>
 </ol>
 
-<p>SignaPlan no es un ERP y no lo pretende: cuadrante, fichaje y flota, alta
-<strong>sin tarjeta</strong>. Empieza en <a href="/alta">crear cuenta</a>. Para
-elegir categoría de producto, la guía
+<p>SignaPlan no es un ERP y no lo pretende: cuadrante, fichaje, flota y control con
+subcontratas (docs y horas), alta <strong>sin tarjeta</strong>. Empieza en
+<a href="/alta">crear cuenta</a>. Para elegir categoría de producto, la guía
 <a href="/recursos/software-constructoras">software para constructoras</a>
 y <a href="/recursos/software-gestion-empresa-constructora">software de gestión
 para empresa constructora</a>.</p>
 """,
     },
     "software-gestion-empresa-constructora": {
-        "title": "Software de gestión para empresa constructora: oficina vs tajo",
+        "title": "Software de gestión operativa para constructoras (cuadrante y fichaje)",
         "description": (
-            "Software de gestión para empresa constructora: lo que cubre administración "
-            "(ERP) y lo que cubre obra (cuadrante, fichaje, flota). Cómo elegir sin "
-            "montar un mamotreto el primer día."
+            "Software de gestión operativa para constructoras: quién va a cada obra, "
+            "quién ficha y qué coche está libre. Diferente de un ERP. Alta gratis."
         ),
-        "h1": "Software de gestión para empresa constructora (oficina y tajo)",
-        "updated": "2026-08-27",
+        "h1": "Software de gestión operativa para constructoras",
+        "updated": "2026-10-12",
         "keywords": (
+            "software de gestión operativa para constructoras, "
             "software de gestion para empresa constructora, software gestión constructora, "
-            "software para empresas constructoras"
+            "sistema de gestion para empresas constructoras"
         ),
         "body_html": """
-<p>El <strong>software de gestión para empresa constructora</strong> no es un único
-programa. Hay gestión de <em>negocio</em> (euros, partidas, facturas) y gestión
-<em>operativa</em> (personas, horas, vehículos). Mezclarlas en la misma ficha de
-compra es el origen de implantaciones que nadie usa.</p>
+<p>El <strong>software de gestión operativa para constructoras</strong> (también buscado
+como software de gestión para empresa constructora) no es un único programa. Hay gestión
+de <em>negocio</em> (euros, partidas, facturas) y gestión <em>operativa</em> (personas,
+horas, vehículos). Mezclarlas en la misma ficha de compra es el origen de implantaciones
+que nadie usa.</p>
 
 <h2>Capa oficina (ERP / contabilidad / presupuestos)</h2>
 <ul>
@@ -389,18 +397,22 @@ y en la solución de
 """,
     },
     "programa-para-constructoras": {
-        "title": "Programa para constructoras: el que usa el jefe, no solo administración",
+        "title": "Programas de una empresa constructora: el del tajo (no solo oficina)",
         "description": (
-            "Programa para constructoras PYME: cuadrante de quién va a cada obra, fichaje "
-            "y flota. Sin montar un ERP. Alta gratuita, sin tarjeta."
+            "Programas de una empresa constructora: el que usa el jefe a las 07:00 "
+            "(cuadrante, fichaje, flota). Alta gratis, sin montar un ERP."
         ),
-        "h1": "Programa para constructoras (el del día a día de obra)",
-        "updated": "2026-08-27",
-        "keywords": "programa para constructoras, programa constructoras, programa gestión obra",
+        "h1": "Programas de una empresa constructora (el del día a día)",
+        "updated": "2026-10-12",
+        "keywords": (
+            "programas de una empresa constructora, programa para constructoras, "
+            "mejor programa gestion empresa constructora, programa constructoras"
+        ),
         "body_html": """
-<p>«<strong>Programa para constructoras</strong>» es la búsqueda de quien no quiere
-jerga (ERP, SaaS, Gantt) y sí una herramienta que el jefe abra por la mañana.
-Si el programa solo lo entiende administración, en obra seguirá el Excel.</p>
+<p>«<strong>Programas de una empresa constructora</strong>» (o programa para constructoras)
+es la búsqueda de quien no quiere jerga (ERP, SaaS, Gantt) y sí una herramienta que el
+jefe abra por la mañana. Si el programa solo lo entiende administración, en obra
+seguirá el Excel.</p>
 
 <h2>Qué tiene que hacer el programa el lunes a las 07:00</h2>
 <ul>
@@ -408,12 +420,14 @@ Si el programa solo lo entiende administración, en obra seguirá el Excel.</p>
   <li>Permitir un cambio de última hora que vea todo el mundo.</li>
   <li>Dejar fichar en el tajo, no en un reloj que nadie usa.</li>
   <li>Saber qué furgoneta está libre si hay baja.</li>
+  <li>Si hay subcontrata: que aporte docs y proponga horas sin otro canal.</li>
 </ul>
 
 <h2>Lo que no tiene que hacer el primer mes</h2>
 <p>No tiene que presupuestar en BC3, ni llevar el IVA, ni sustituir a tu gestoría.
 Eso es otro programa (o el mismo, años más tarde). Empezar por «todo» es la forma
-más rápida de no usar nada.</p>
+más rápida de no usar nada. La certificación de <em>horas</em> con la subcontrata
+sí puede entrar pronto; la de partidas, no.</p>
 
 <h2>Prueba de 10 minutos</h2>
 <p>Sienta al jefe de obra delante. Si en diez minutos no sabe asignar a un peón a
@@ -421,7 +435,9 @@ una obra, ese no es vuestro programa, por muchos módulos que tenga.</p>
 
 <p>SignaPlan está hecho para esa prueba. Crea cuenta en
 <a href="/alta">alta gratuita</a> (sin tarjeta) o compara categorías en
-<a href="/recursos/software-constructoras">software para constructoras</a>.</p>
+<a href="/recursos/software-constructoras">software para constructoras</a>.
+Subcontratas:
+<a href="/soluciones/subcontratas-documentacion-horas">docs y horas</a>.</p>
 """,
     },
 }

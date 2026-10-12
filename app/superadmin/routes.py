@@ -91,14 +91,23 @@ def dashboard():
         dias_para_purga,
         enrich_tenants,
     )
+    from app.models import MarketingLead
+
     tenants = Tenant.query.order_by(Tenant.created_at.desc()).all()
     rows = enrich_tenants(tenants)
     for row in rows:
         row['dias_purga'] = dias_para_purga(row['tenant'])
+    marketing_leads = (
+        MarketingLead.query.filter_by(marketing_consent=True)
+        .order_by(MarketingLead.created_at.desc())
+        .limit(100)
+        .all()
+    )
     return render_template(
         'superadmin/dashboard.html',
         tenant_rows=rows,
         tenants=tenants,
+        marketing_leads=marketing_leads,
         modulos=MODULOS_DISPONIBLES,
         adaptadores_odoo=ADAPTADORES_ODOO,
         dias_purga=DIAS_PURGA_TRAS_DESACTIVAR,

@@ -43,6 +43,10 @@ services:
       - NOTA_AUDIO_MAX_BYTES=${NOTA_AUDIO_MAX_BYTES:-536870912}
       - NOTA_AUDIO_MAX_SECONDS=${NOTA_AUDIO_MAX_SECONDS:-10800}
       - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-600}
+      # Sin esta línea el .env no llega al contenedor: gaId queda "" y GA no carga.
+      - GOOGLE_ANALYTICS_ID=${GOOGLE_ANALYTICS_ID:-}
+      - SIGNAPLAN_PUBLIC_ORIGIN=${SIGNAPLAN_PUBLIC_ORIGIN:-https://signaplan.com}
+      - CONTACT_EMAIL=${CONTACT_EMAIL:-info@signaplan.com}
     depends_on:
       db:
         condition: service_healthy

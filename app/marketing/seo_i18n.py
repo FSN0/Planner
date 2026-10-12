@@ -234,21 +234,22 @@ ARTICLES = {
         'software-constructoras': {
             'title': 'Software for SME builders: crew board and time clock (not an ERP)',
             'description': (
-                'Software for builders: who goes to which site, working-time control and fleet. '
-                'Not an estimating ERP. Free signup, no card.'
+                'Software for builders: crew board, time clock, fleet and subcontractor '
+                'docs/hours. Not an estimating ERP. Free signup, no card.'
             ),
             'h1': 'Software for builders (without standing up an ERP)',
             'keywords': 'construction software, site software, construction management program',
             'body_html': """
-<p>Many small construction companies do not need a huge ERP on day one. They need to control the <strong>site day</strong>: who goes where, who has clocked in and which van is free. If you are looking for a “free ERP for builders”, this does not replace estimates or invoicing: it is the crew board, time clocking and fleet, and signup does not ask for a card.</p>
+<p>Many small construction companies do not need a huge ERP on day one. They need to control the <strong>site day</strong>: who goes where, who has clocked in, which van is free — and, with subcontractors, docs and hour certification without another spreadsheet. If you are looking for a “free ERP for builders”, this does not replace estimates or invoicing.</p>
 <h2>Quick checklist</h2>
 <ul>
   <li>Does a site manager understand the planner in 10 minutes?</li>
   <li>Does time clocking work on the labourer’s phone?</li>
   <li>Can you export the working-time record when someone outside asks?</li>
   <li>Does the fleet look at the same calendar?</li>
+  <li>Can subcontractors upload docs and propose hours in the same tool?</li>
 </ul>
-<p>SignaPlan is built exactly for that. Start with <a href="/alta">free signup</a> (no card). If you also run Odoo or another ERP, the integration is discussed as a project from <a href="/contacto">contact</a>.</p>
+<p>SignaPlan is built exactly for that. Start with <a href="/alta">free signup</a> (no card). Subcontractors: <a href="/soluciones/subcontratas-documentacion-horas">docs and hours</a>. If you also run Odoo or another ERP, the integration is discussed as a project from <a href="/contacto">contact</a>.</p>
 """,
         },
     },
@@ -403,13 +404,14 @@ ARTICLES = {
             'h1': 'Software para construtoras (sem montar um ERP)',
             'keywords': 'software construtoras, software obra, programa gestão construção',
             'body_html': """
-<p>Muitas PME de construção não precisam de um ERP enorme no primeiro dia. Precisam de controlar o <strong>dia a dia de obra</strong>: quem vai aonde, quem registou o ponto e que carro está livre. Se está à procura de um “ERP para construtoras grátis”, isto não substitui orçamentos nem faturação: é o quadro, o ponto e a frota, e a alta não pede cartão.</p>
+<p>Muitas PME de construção não precisam de um ERP enorme no primeiro dia. Precisam de controlar o <strong>dia a dia de obra</strong>: quem vai aonde, quem registou o ponto, que carro está livre e, com subempreitadas, docs e horas sem outro Excel. Se está à procura de um “ERP para construtoras grátis”, isto não substitui orçamentos nem faturação.</p>
 <h2>Lista rápida</h2>
 <ul>
   <li>O planeador percebe-o um chefe de obra em 10 minutos?</li>
   <li>O ponto funciona no telemóvel do operário?</li>
   <li>Pode exportar a jornada quando alguém de fora o pedir?</li>
   <li>A frota olha para o mesmo calendário?</li>
+  <li>A subempreitada pode enviar docs e propor horas na mesma ferramenta?</li>
 </ul>
 <p>O SignaPlan está pensado exactamente para isso. Comece em <a href="/pt/alta">alta gratuita</a> (sem cartão). Se além disso tem Odoo ou outro ERP, a integração fala-se como projeto a partir de <a href="/pt/contacto">contacto</a>.</p>
 """,
@@ -566,13 +568,14 @@ ARTICLES = {
             'h1': 'Logiciel pour le BTP (sans monter un ERP)',
             'keywords': 'logiciel BTP, logiciel chantier, programme gestion construction',
             'body_html': """
-<p>Beaucoup de PME du BTP n’ont pas besoin d’un énorme ERP dès le premier jour. Elles ont besoin de contrôler le <strong>quotidien de chantier</strong> : qui va où, qui a pointé et quel véhicule est libre. Si vous cherchez un « ERP BTP gratuit », ceci ne remplace ni les devis ni la facturation : c’est le planning, le pointage et la flotte, et l’inscription ne demande pas de carte.</p>
+<p>Beaucoup de PME du BTP n’ont pas besoin d’un énorme ERP dès le premier jour. Elles ont besoin de contrôler le <strong>quotidien de chantier</strong> : qui va où, qui a pointé, quel véhicule est libre — et, avec des sous-traitants, docs et heures sans un autre Excel. Si vous cherchez un « ERP BTP gratuit », ceci ne remplace ni les devis ni la facturation.</p>
 <h2>Liste rapide</h2>
 <ul>
   <li>Le planificateur, un chef de chantier le comprend-il en 10 minutes ?</li>
   <li>Le pointage marche-t-il sur le téléphone de l’ouvrier ?</li>
   <li>Pouvez-vous exporter la journée quand quelqu’un de l’extérieur le demande ?</li>
   <li>La flotte regarde-t-elle le même calendrier ?</li>
+  <li>Le sous-traitant peut-il déposer des docs et proposer des heures dans le même outil ?</li>
 </ul>
 <p>SignaPlan est pensé exactement pour ça. Commencez par <a href="/fr/alta">l’inscription gratuite</a> (sans carte). Si vous avez aussi Odoo ou un autre ERP, l’intégration se discute comme un projet depuis <a href="/fr/contacto">contact</a>.</p>
 """,
@@ -636,7 +639,7 @@ SOLUTIONS = {
             'faq': [
                 {
                     'q': 'Is it a project Gantt like an ERP?',
-                    'a': 'No. SignaPlan focuses on the operational board: which person is on which site on which days. It does not replace BC3 estimates or certificates.',
+                    'a': 'No. SignaPlan focuses on the operational board: which person is on which site on which days. It does not replace BC3 estimates or progress certificates. It does include a separate subcontractor portal for required docs and hour certification.',
                 },
                 {
                     'q': 'Can the site manager use it?',
@@ -659,10 +662,10 @@ SOLUTIONS = {
 <ul>
   <li>Assign people to sites by dates, with a clear view.</li>
   <li>Spot clashes before the labourer is in the wrong place.</li>
-  <li>Connect to <a href="/soluciones/fichaje-construccion">time clocking</a> and <a href="/soluciones/flota-obra">fleet</a> when you need them.</li>
+  <li>Connect to <a href="/soluciones/fichaje-construccion">time clocking</a>, <a href="/soluciones/flota-obra">fleet</a> and <a href="/soluciones/subcontratas-documentacion-horas">subcontractor docs &amp; hours</a> when you need them.</li>
 </ul>
 <h2>It is not a full ERP (and that is fine)</h2>
-<p>If you need BC3, certificates and invoicing, there are tools for that. SignaPlan covers the <em>day-to-day of people and vehicles</em>. You can start here and link an ERP later if you need to.</p>
+<p>If you need BC3, progress certificates and invoicing, there are tools for that. SignaPlan covers the <em>day-to-day of people and vehicles</em> — and hour agreements with subcontractors. You can start here and link an ERP later if you need to.</p>
 <p><a href="/alta">Create a free account</a> · <a href="/recursos/cuadrante-personal-obra">Guide: site crew board</a></p>
 """,
         },
@@ -733,6 +736,45 @@ SOLUTIONS = {
 <p><a href="/alta">Try SignaPlan</a> · <a href="/soluciones/">See all solutions</a></p>
 """,
         },
+        'subcontratas-documentacion-horas': {
+            'title': 'Subcontractors on site: documentation and hour certification',
+            'description': (
+                'Subcontractor portal: they upload required documents and propose worked hours '
+                'for you to certify together. Fits SignaPlan’s crew board.'
+            ),
+            'h1': 'Docs and hours with subcontractors (no endless Excel)',
+            'eyebrow': 'Solution · Subcontractors',
+            'keywords': (
+                'subcontractor documentation construction, certify subcontractor hours, '
+                'construction subcontractor portal'
+            ),
+            'faq': [
+                {
+                    'q': 'Is this progress billing / BC3 certification?',
+                    'a': 'No. This is required paperwork (H&S, insurance, etc.) and certifying worked hours with the subcontractor. Measurements and BC3 stay in your ERP or technical office.',
+                },
+                {
+                    'q': 'Does the subcontractor get into SignaPlan?',
+                    'a': 'Yes — with a limited login: upload documents and take part in the hours proposal. They do not see your full internal planner.',
+                },
+                {
+                    'q': 'What if I only have my own staff?',
+                    'a': 'The core remains crew board, time clock and fleet. Docs and hours with subcontractors are there when you work with outsiders.',
+                },
+            ],
+            'body_html': """
+<p>The crew board says who goes to which site. With subcontractors another fire starts: <strong>expired docs</strong> and the end-of-month fight over <strong>worked hours</strong>. SignaPlan adds a portal so the subcontractor can log in, upload what you require and propose hours to certify with you — without replacing your ERP or BC3.</p>
+<h2>What it solves (and what it does not)</h2>
+<ul>
+  <li><strong>Documentation:</strong> required types, uploads, validation and expiry.</li>
+  <li><strong>Hour certification:</strong> proposals and agreement on worked time (not progress billing of quantities).</li>
+  <li><strong>Not:</strong> BC3 estimates, measurements or client invoicing.</li>
+</ul>
+<h2>How it fits the planner</h2>
+<p>First the day-to-day: <a href="/soluciones/planificador-personal-obra">crew board</a>, <a href="/soluciones/fichaje-construccion">time clock</a> and <a href="/soluciones/flota-obra">fleet</a>. When subcontractors enter the picture, docs and hours live on the same platform.</p>
+<p><a href="/alta">Create a free account</a> · <a href="/soluciones/">See all solutions</a></p>
+""",
+        },
     },
     'pt': {
         'fichaje-construccion': {
@@ -790,7 +832,7 @@ SOLUTIONS = {
             'faq': [
                 {
                     'q': 'É um Gantt de projeto tipo ERP?',
-                    'a': 'Não. O SignaPlan centra-se no quadro operativo: que pessoa está em que obra em que dias. Não substitui orçamentos BC3 nem certificações.',
+                    'a': 'Não. O SignaPlan centra-se no quadro operativo: que pessoa está em que obra em que dias. Não substitui orçamentos BC3 nem certificações de medições. Inclui (à parte) portal de subempreitada para documentação e certificação de horas trabalhadas.',
                 },
                 {
                     'q': 'Pode usá-lo o chefe de obra?',
@@ -813,10 +855,10 @@ SOLUTIONS = {
 <ul>
   <li>Atribuir pessoal a obras por datas, com vista clara.</li>
   <li>Detetar choques antes de o operário estar no sítio errado.</li>
-  <li>Ligar ao <a href="/pt/soluciones/fichaje-construccion">ponto</a> e à <a href="/pt/soluciones/flota-obra">frota</a> quando precisar.</li>
+  <li>Ligar ao <a href="/pt/soluciones/fichaje-construccion">ponto</a>, à <a href="/pt/soluciones/flota-obra">frota</a> e a <a href="/pt/soluciones/subcontratas-documentacion-horas">docs e horas com subempreitadas</a> quando precisar.</li>
 </ul>
 <h2>Não é um ERP completo (e está bem)</h2>
-<p>Se precisa de BC3, certificações e faturação, há ferramentas para isso. O SignaPlan cobre o <em>dia a dia de gente e veículos</em>. Pode começar por aqui e ligar um ERP depois se for preciso.</p>
+<p>Se precisa de BC3, certificações de medições e faturação, há ferramentas para isso. O SignaPlan cobre o <em>dia a dia de gente e veículos</em> — e o acordo de horas com a subempreitada. Pode começar por aqui e ligar um ERP depois se for preciso.</p>
 <p><a href="/pt/alta">Criar conta gratuita</a> · <a href="/pt/recursos/cuadrante-personal-obra">Guia: quadro de pessoal</a></p>
 """,
         },
@@ -887,6 +929,43 @@ SOLUTIONS = {
 <p><a href="/pt/alta">Provar o SignaPlan</a> · <a href="/pt/soluciones/">Ver todas as soluções</a></p>
 """,
         },
+        'subcontratas-documentacion-horas': {
+            'title': 'Subempreitadas em obra: documentação e certificação de horas',
+            'description': (
+                'Portal para subempreitadas: enviam documentação exigida e propõem horas '
+                'trabalhadas para certificá-las consigo. Encaixa no quadro do SignaPlan.'
+            ),
+            'h1': 'Documentação e horas com a subempreitada (sem Excel eterno)',
+            'eyebrow': 'Solução · Subempreitadas',
+            'keywords': (
+                'documentação subempreitada obra, certificação horas subempreitada, '
+                'portal subempreitadas construção'
+            ),
+            'faq': [
+                {
+                    'q': 'É a certificação de obra (medições / BC3)?',
+                    'a': 'Não. Aqui falamos de documentação exigida e de certificar horas trabalhadas com a subempreitada. As medições e o BC3 continuam no ERP ou no gabinete técnico.',
+                },
+                {
+                    'q': 'A subempreitada entra no SignaPlan?',
+                    'a': 'Sim, com acesso limitado: enviar documentos e participar na proposta de horas. Não vê todo o planeador interno.',
+                },
+                {
+                    'q': 'Serve se só tenho pessoal próprio?',
+                    'a': 'O núcleo continua a ser quadro, ponto e frota. Documentação e horas com subempreitada ativam-se quando trabalha com exteriores.',
+                },
+            ],
+            'body_html': """
+<p>O quadro diz quem vai a cada obra. Com subempreitadas aparece outro fogo: <strong>docs caducados</strong> e a discussão de fim de mês pelas <strong>horas trabalhadas</strong>. O SignaPlan acrescenta um portal para a subempreitada entrar, enviar o exigido e propor horas a certificar consigo — sem substituir o ERP nem o BC3.</p>
+<h2>O que resolve (e o que não)</h2>
+<ul>
+  <li><strong>Documentação:</strong> tipos exigidos, envios, validação e validade.</li>
+  <li><strong>Certificação de horas:</strong> propostas e acordo de jornada (não certificação de medições).</li>
+  <li><strong>Não é:</strong> orçamentos BC3, medições nem faturação ao cliente.</li>
+</ul>
+<p><a href="/pt/alta">Criar conta gratuita</a> · <a href="/pt/soluciones/">Ver todas as soluções</a></p>
+""",
+        },
     },
     'fr': {
         'fichaje-construccion': {
@@ -944,7 +1023,7 @@ SOLUTIONS = {
             'faq': [
                 {
                     'q': 'C’est un Gantt de projet type ERP ?',
-                    'a': 'Non. SignaPlan se concentre sur le tableau opérationnel : quelle personne est sur quel chantier quels jours. Ça ne remplace ni les devis BC3 ni les situations.',
+                    'a': 'Non. SignaPlan se concentre sur le tableau opérationnel : quelle personne est sur quel chantier quels jours. Ça ne remplace ni les devis BC3 ni les situations de travaux. Il inclut (à part) un portail sous-traitant pour documents et certification d’heures travaillées.',
                 },
                 {
                     'q': 'Le chef de chantier peut l’utiliser ?',
@@ -967,10 +1046,10 @@ SOLUTIONS = {
 <ul>
   <li>Affecter le personnel aux chantiers par dates, avec une vue claire.</li>
   <li>Repérer les collisions avant que l’ouvrier soit au mauvais endroit.</li>
-  <li>Relier le <a href="/fr/soluciones/fichaje-construccion">pointage</a> et la <a href="/fr/soluciones/flota-obra">flotte</a> quand vous en avez besoin.</li>
+  <li>Relier le <a href="/fr/soluciones/fichaje-construccion">pointage</a>, la <a href="/fr/soluciones/flota-obra">flotte</a> et les <a href="/fr/soluciones/subcontratas-documentacion-horas">docs et heures sous-traitants</a> quand vous en avez besoin.</li>
 </ul>
 <h2>Ce n’est pas un ERP complet (et c’est très bien)</h2>
-<p>Si vous avez besoin de BC3, de situations et de facturation, il existe des outils pour ça. SignaPlan couvre le <em>quotidien des gens et des véhicules</em>. Vous pouvez commencer ici et relier un ERP plus tard si besoin.</p>
+<p>Si vous avez besoin de BC3, de situations de travaux et de facturation, il existe des outils pour ça. SignaPlan couvre le <em>quotidien des gens et des véhicules</em> — et l’accord d’heures avec le sous-traitant. Vous pouvez commencer ici et relier un ERP plus tard si besoin.</p>
 <p><a href="/fr/alta">Créer un compte gratuit</a> · <a href="/fr/recursos/cuadrante-personal-obra">Guide : planning d’équipe</a></p>
 """,
         },
@@ -1039,6 +1118,43 @@ SOLUTIONS = {
 <h2>Pour qui</h2>
 <p>Les entreprises avec plusieurs fourgons ou voitures de société qui subissent déjà le chaos matinal du « qui prend laquelle ? ».</p>
 <p><a href="/fr/alta">Essayer SignaPlan</a> · <a href="/fr/soluciones/">Voir toutes les solutions</a></p>
+""",
+        },
+        'subcontratas-documentacion-horas': {
+            'title': 'Sous-traitants sur chantier : documents et certification d’heures',
+            'description': (
+                'Portail sous-traitants : ils déposent les documents exigés et proposent '
+                'les heures travaillées à certifier avec vous. Compatible avec le planning SignaPlan.'
+            ),
+            'h1': 'Documents et heures avec le sous-traitant (sans Excel éternel)',
+            'eyebrow': 'Solution · Sous-traitance',
+            'keywords': (
+                'documents sous-traitant chantier, certification heures sous-traitant, '
+                'portail sous-traitants BTP'
+            ),
+            'faq': [
+                {
+                    'q': 'Est-ce la situation de travaux / BC3 ?',
+                    'a': 'Non. Ici il s’agit des documents exigés et de certifier les heures travaillées avec le sous-traitant. Les métrés et le BC3 restent dans votre ERP ou bureau d’études.',
+                },
+                {
+                    'q': 'Le sous-traitant entre-t-il dans SignaPlan ?',
+                    'a': 'Oui, avec un accès limité : déposer des documents et participer à la proposition d’heures. Il ne voit pas tout votre planning interne.',
+                },
+                {
+                    'q': 'Et si je n’ai que mon personnel ?',
+                    'a': 'Le cœur reste planning, pointage et flotte. Docs et heures sous-traitants s’activent quand vous travaillez avec des externes.',
+                },
+            ],
+            'body_html': """
+<p>Le planning dit qui va sur quel chantier. Avec des sous-traitants, un autre feu démarre : <strong>docs périmés</strong> et la bagarre de fin de mois sur les <strong>heures travaillées</strong>. SignaPlan ajoute un portail pour que le sous-traitant se connecte, dépose ce qui est exigé et propose des heures à certifier avec vous — sans remplacer votre ERP ni le BC3.</p>
+<h2>Ce que ça résout (et ce que ça ne fait pas)</h2>
+<ul>
+  <li><strong>Documentation :</strong> types exigés, dépôts, validation et échéance.</li>
+  <li><strong>Certification d’heures :</strong> propositions et accord de temps travaillé (pas une situation de métrés).</li>
+  <li><strong>Ce n’est pas :</strong> devis BC3, métrés ni facturation client.</li>
+</ul>
+<p><a href="/fr/alta">Créer un compte gratuit</a> · <a href="/fr/soluciones/">Voir toutes les solutions</a></p>
 """,
         },
     },

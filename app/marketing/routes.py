@@ -8,6 +8,7 @@ from flask import (
     Blueprint,
     Response,
     abort,
+    current_app,
     flash,
     jsonify,
     make_response,
@@ -135,6 +136,7 @@ def alta():
                 admin_password2=request.form.get('admin_password2'),
                 acepta_privacidad=bool(request.form.get('acepta_privacidad')),
                 acepta_condiciones=bool(request.form.get('acepta_condiciones')),
+                acepta_comunicaciones=bool(request.form.get('acepta_comunicaciones')),
             )
             if not email_enviado:
                 flash(
@@ -366,28 +368,51 @@ def contacto():
             flash(translate('Mensaje enviado. Te responderemos lo antes posible.'), 'success')
             return _mkt_redirect('marketing.contacto')
 
+        acepta_comunicaciones = bool(request.form.get('acepta_comunicaciones'))
         form = {
             'nombre': (request.form.get('nombre') or '').strip()[:120],
             'email': (request.form.get('email') or '').strip().lower()[:120],
             'empresa': (request.form.get('empresa') or '').strip()[:160],
             'mensaje': (request.form.get('mensaje') or '').strip()[:4000],
+            'acepta_comunicaciones': acepta_comunicaciones,
         }
         if not form['nombre'] or '@' not in form['email'] or len(form['mensaje']) < 10:
             flash(translate('Completa nombre, un correo válido y un mensaje (mín. 10 caracteres).'), 'danger')
         else:
+            from app.services.marketing_consent_service import record_lead
+
+            try:
+                record_lead(
+                    email=form['email'],
+                    source='contacto',
+                    nombre=form['nombre'],
+                    empresa=form['empresa'],
+                    mensaje=form['mensaje'],
+                    marketing_consent=acepta_comunicaciones,
+                )
+            except Exception:
+                current_app.logger.exception('No se pudo guardar lead de marketing (contacto)')
+
+            consentimiento = (
+                'Sí (opt-in comunicaciones comerciales)'
+                if acepta_comunicaciones
+                else 'No'
+            )
             asunto = f"Contacto SignaPlan — {form['nombre']}"
             if form['empresa']:
                 asunto += f" ({form['empresa']})"
             texto = (
                 f"Nombre: {form['nombre']}\n"
                 f"Email: {form['email']}\n"
-                f"Empresa: {form['empresa'] or '—'}\n\n"
+                f"Empresa: {form['empresa'] or '—'}\n"
+                f"Comunicaciones comerciales: {consentimiento}\n\n"
                 f"{form['mensaje']}\n"
             )
             html = (
                 f"<p><strong>Nombre:</strong> {form['nombre']}<br>"
                 f"<strong>Email:</strong> <a href=\"mailto:{form['email']}\">{form['email']}</a><br>"
-                f"<strong>Empresa:</strong> {form['empresa'] or '—'}</p>"
+                f"<strong>Empresa:</strong> {form['empresa'] or '—'}<br>"
+                f"<strong>Comunicaciones comerciales:</strong> {consentimiento}</p>"
                 f"<p>{form['mensaje'].replace(chr(10), '<br>')}</p>"
             )
             ok = False
@@ -511,10 +536,10 @@ def sitemap_xml():
     from app.services.seo_origin_service import marketing_origin
 
     base = marketing_origin()
+    # /entrar es utilidad de clientes: noindex + fuera del sitemap (no compite por SEO).
     paths = [
         ('/', '1.0', 'weekly', None),
         ('/alta', '0.8', 'monthly', None),
-        ('/entrar', '0.6', 'monthly', None),
         ('/contacto', '0.7', 'monthly', None),
         ('/demo', '0.9', 'monthly', None),
         ('/soluciones/', '0.9', 'weekly', None),

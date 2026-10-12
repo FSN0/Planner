@@ -72,12 +72,20 @@
                     <a href="{{ mkt_url('marketing.legal', slug='privacidad') }}" target="_blank">{{ _('alta.privacy_2') }}</a>
                 </label>
             </div>
-            <div class="mb-4">
+            <div class="mb-2">
                 <label>
                     <input type="checkbox" name="acepta_condiciones" value="1" required>
                     {{ _('alta.terms_1') }}
                     <a href="{{ mkt_url('marketing.legal', slug='condiciones') }}" target="_blank">{{ _('alta.terms_2') }}</a>
                 </label>
+            </div>
+            <div class="mb-4">
+                <label>
+                    <input type="checkbox" name="acepta_comunicaciones" value="1"
+                           {% if form.get('acepta_comunicaciones') %}checked{% endif %}>
+                    {{ _('alta.marketing_1') }}
+                </label>
+                <p style="color:#64748b;font-size:.85rem;margin:.35rem 0 0 1.5rem;">{{ _('alta.marketing_hint') }}</p>
             </div>
 
             <button type="submit" class="mkt-btn mkt-btn-primary" style="width: 100%;">{{ _('hero.cta_primary') }}</button>

@@ -21,7 +21,7 @@ from app.services.i18n_service import get_locale, marketing_path, normalize_loca
 from app.services.tenant_domain_service import _RESERVED_SUBDOMAINS
 from app.services.tenant_service import provision_new_tenant
 
-LEGAL_PRIVACIDAD_VERSION = '2026-08'
+LEGAL_PRIVACIDAD_VERSION = '2026-10'
 LEGAL_CONDICIONES_VERSION = '2026-08'
 
 RESERVATION_TTL = timedelta(days=7)
@@ -308,6 +308,7 @@ def registrar_empresa(
     admin_password2,
     acepta_privacidad,
     acepta_condiciones,
+    acepta_comunicaciones=False,
 ):
     """
     Reserva el subdominio y envía el correo de confirmación.
@@ -315,6 +316,8 @@ def registrar_empresa(
 
     Devuelve (reserva, email_enviado).
     """
+    from app.services.marketing_consent_service import consent_fields, record_lead
+
     nombre_empresa = (nombre_empresa or '').strip()
     admin_email = (admin_email or '').strip().lower()
 
@@ -335,6 +338,7 @@ def registrar_empresa(
         )
 
     ahora = datetime.utcnow()
+    mkt = consent_fields(bool(acepta_comunicaciones), source='alta')
     reserva = SignupReservation(
         subdominio=subdominio,
         nombre_empresa=nombre_empresa,
@@ -343,6 +347,9 @@ def registrar_empresa(
         locale=normalize_locale(get_locale()),
         legal_privacidad_version=LEGAL_PRIVACIDAD_VERSION,
         legal_condiciones_version=LEGAL_CONDICIONES_VERSION,
+        marketing_consent_at=mkt['marketing_consent_at'],
+        marketing_consent_ip=mkt['marketing_consent_ip'],
+        marketing_consent_source=mkt['marketing_consent_source'],
         status=SignupReservation.STATUS_PENDING,
         created_at=ahora,
         updated_at=ahora,
@@ -350,6 +357,18 @@ def registrar_empresa(
     )
     db.session.add(reserva)
     db.session.commit()
+
+    if acepta_comunicaciones:
+        try:
+            record_lead(
+                email=admin_email,
+                source='alta',
+                nombre=None,
+                empresa=nombre_empresa,
+                marketing_consent=True,
+            )
+        except Exception:
+            current_app.logger.exception('No se pudo guardar lead de marketing (alta)')
 
     email_enviado = bool(enviar_email_confirmacion(reserva))
     return reserva, email_enviado
@@ -548,6 +567,9 @@ def confirmar_reserva(token):
         tenant.legal_aceptado_at = datetime.utcnow()
         tenant.legal_privacidad_version = legal_priv
         tenant.legal_condiciones_version = legal_cond
+        tenant.marketing_consent_at = reserva.marketing_consent_at
+        tenant.marketing_consent_ip = reserva.marketing_consent_ip
+        tenant.marketing_consent_source = reserva.marketing_consent_source
         reserva.status = SignupReservation.STATUS_READY
         reserva.tenant_id = tenant.id
         reserva.updated_at = datetime.utcnow()

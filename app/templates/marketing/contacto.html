@@ -57,6 +57,16 @@
             <textarea name="mensaje" id="mensaje" required maxlength="4000" rows="6"
                       style="width:100%;padding:.75rem 1rem;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:1rem;">{{ form.mensaje or '' }}</textarea>
 
+            <div style="margin-bottom:1rem;">
+                <label style="display:flex;gap:.5rem;align-items:flex-start;">
+                    <input type="checkbox" name="acepta_comunicaciones" value="1"
+                           {% if form.get('acepta_comunicaciones') %}checked{% endif %}
+                           style="margin-top:.2rem;">
+                    <span>{{ _('alta.marketing_1') }}</span>
+                </label>
+                <p style="color:#64748b;font-size:.85rem;margin:.35rem 0 0 1.5rem;">{{ _('alta.marketing_hint') }}</p>
+            </div>
+
             <button type="submit" class="mkt-btn mkt-btn-primary" style="width:100%;">{{ _('Enviar mensaje') }}</button>
         </form>
     </section>

@@ -139,6 +139,45 @@
         </div>
     </div>
 
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">{{ _('Leads con opt-in comercial') }} ({{ marketing_leads|length }})</h5>
+        </div>
+        <div class="card-body p-0">
+            <p class="text-muted small px-3 pt-3 mb-0">
+                {{ _('Solo quienes marcaron la casilla opcional de comunicaciones. Úsalos para campañas de SignaPlan u otros productos de construcción del mismo titular. No envíes publicidad a quien no figure aquí.') }}
+            </p>
+            {% if marketing_leads %}
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>{{ _('Fecha') }}</th>
+                        <th>{{ _('Email') }}</th>
+                        <th>{{ _('Nombre') }}</th>
+                        <th>{{ _('Empresa') }}</th>
+                        <th>{{ _('Origen') }}</th>
+                        <th>{{ _('Idioma') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lead in marketing_leads %}
+                    <tr>
+                        <td class="small">{{ lead.marketing_consent_at or lead.created_at }}</td>
+                        <td><a href="mailto:{{ lead.email }}">{{ lead.email }}</a></td>
+                        <td>{{ lead.nombre or '—' }}</td>
+                        <td>{{ lead.empresa or '—' }}</td>
+                        <td><code>{{ lead.source }}</code></td>
+                        <td>{{ lead.locale or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted px-3 py-3 mb-0">{{ _('Aún no hay opt-ins comerciales.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+
     <h4>{{ _('Clientes') }}</h4>
     <table class="table table-hover bg-white shadow-sm border align-middle table-sm">
         <thead class="table-light">

@@ -251,6 +251,19 @@
                     form="form-propia" hidden
                     title="{{ _('Guarda los cambios y envía la corrección') }}">{{ _('Enviar corrección') }}</button>
             {% endif %}
+            {% elif editable and user_can(current_user, 'certificacion', 'w') %}
+            <button class="btn-admin cert-btn-guardar {% if not vista_subcontrata %}js-enviar-propuesta{% endif %}"
+                    name="accion" value="enviar" type="submit" form="form-propia"
+                    title="{{ _('Guarda y envía la propuesta') }}"
+                    {% if not vista_subcontrata %}
+                    data-borradores="{{ borradores_odoo|default(0) }}"
+                    data-title="{{ _('Hay fichajes en borrador en Odoo') }}"
+                    data-text="{{ _('Hay {n} filas todavía en borrador en Odoo. ¿Quieres enviar la propuesta igualmente?', n=borradores_odoo|default(0)) }}"
+                    data-confirm="{{ _('Sí, enviar') }}"
+                    data-cancel="{{ _('Cancelar') }}"
+                    {% endif %}>
+              {{ _('Enviar propuesta') }}
+            </button>
             {% endif %}
             <span class="cert-pill {{ estado_cls.get(propia_estado_ui, 'is-muted') }}">
               {{ estado_txt.get(propia_estado_ui, propia_estado_ui) }}
@@ -453,17 +466,7 @@
             {% elif editable %}
             <textarea name="comentario" class="cert-comment" rows="2" placeholder="{{ _('Nota al enviar (opcional)…') }}"></textarea>
             <div class="cert-actions">
-              <button class="btn-admin cert-btn-guardar" name="accion" value="guardar" type="submit">{{ _('Guardar todo') }}</button>
-              <button class="btn-admin {% if not vista_subcontrata %}js-enviar-propuesta{% endif %}" name="accion" value="enviar" type="submit"
-                      {% if not vista_subcontrata %}
-                      data-borradores="{{ borradores_odoo|default(0) }}"
-                      data-title="{{ _('Hay fichajes en borrador en Odoo') }}"
-                      data-text="{{ _('Hay {n} filas todavía en borrador en Odoo. ¿Quieres enviar la propuesta igualmente?', n=borradores_odoo|default(0)) }}"
-                      data-confirm="{{ _('Sí, enviar') }}"
-                      data-cancel="{{ _('Cancelar') }}"
-                      {% endif %}>
-                {{ _('Enviar propuesta') }}
-              </button>
+              <button class="btn-admin btn-admin-ghost" name="accion" value="guardar" type="submit">{{ _('Guardar todo') }}</button>
             </div>
             {% elif propia.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
             <div class="cert-actions">

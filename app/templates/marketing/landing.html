@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}?v=20260902h">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/marketing.css') }}?v=20261012a">
 </head>
 <body class="marketing-page">
     <header class="mkt-nav">
@@ -61,6 +61,13 @@
                 <span class="mkt-suite-num">03</span>
                 <h3>{{ _('suite.fleet.title') }}</h3>
                 <p>{{ _('suite.fleet.body') }}</p>
+                </a>
+            </article>
+            <article class="mkt-suite-item">
+                <a class="mkt-suite-link" href="{{ mkt_url('marketing.solucion', slug='subcontratas-documentacion-horas') }}">
+                <span class="mkt-suite-num">04</span>
+                <h3>{{ _('suite.subs.title') }}</h3>
+                <p>{{ _('suite.subs.body') }}</p>
                 </a>
             </article>
         </div>

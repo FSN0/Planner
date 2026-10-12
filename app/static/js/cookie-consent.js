@@ -28,7 +28,10 @@
     function gtag() { dataLayer.push(arguments); }
     window.gtag = gtag;
     gtag('js', new Date());
-    gtag('config', gaId, { anonymize_ip: true });
+    gtag('config', gaId, {
+      anonymize_ip: true,
+      send_page_view: true,
+    });
     var s = document.createElement('script');
     s.async = true;
     s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(gaId);
