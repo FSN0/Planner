@@ -4,6 +4,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006hero">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subcontrata_home.css') }}?v=20261012a">
 {% endblock %}
 {% block wrapper %}
 {% set cert_txt = {
@@ -14,73 +15,83 @@
   'borrador': _('Borrador'),
   'sin_movimiento': _('Sin movimiento')
 } %}
-{% set cert_cls = {
-  'aceptada': 'is-ok',
-  'recibida': 'is-wait',
-  'enviada': 'is-wait',
-  'rechazada': 'is-bad',
-  'borrador': 'is-muted',
-  'sin_movimiento': 'is-muted'
-} %}
+{% set cta = datos.cta_principal|default('certificacion') %}
+{% if cta == 'documentacion' %}
+  {% set cta_url = url_for('subcontrata.documentacion') %}
+  {% set cta_label = _('Resolver documentación') %}
+  {% set cta_urgent = true %}
+{% elif cta == 'calendario' %}
+  {% set cta_url = url_for('subcontrata.calendario', modo='empresa') %}
+  {% set cta_label = _('Ver calendario del equipo') %}
+  {% set cta_urgent = false %}
+{% else %}
+  {% set cta_url = url_for('subcontrata.certificacion') %}
+  {% set cta_label = _('Ir a certificación') %}
+  {% set cta_urgent = datos.cert_pendientes|default(0) > 0 %}
+{% endif %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main admin-main--compact cert-page">
-    <header class="cert-hero">
-      <div class="cert-hero-main">
-        <div class="cert-hero-copy">
-          <p class="cert-kicker">{{ _('Portal subcontrata') }}</p>
-          <h1>{{ company.nombre }}</h1>
-          <p class="cert-hero-sub">{{ _('Resumen de hoy y del mes. Sin horas ni importes hasta que haya certificaciones enviadas.') }}</p>
+  <main class="admin-main admin-main--compact sub-portal">
+    <header class="sub-portal-hero">
+      <div class="sub-portal-hero-inner">
+        <div>
+          <p class="sub-portal-kicker">{{ _('Portal subcontrata') }}</p>
+          <h1 class="sub-portal-title">{{ company.nombre }}</h1>
+          <p class="sub-portal-lead">{{ _('Tu equipo en obra, la documentación al día y la certificación de horario — todo en un solo sitio.') }}</p>
         </div>
-        <div class="cert-hero-side">
-          <div class="cert-meta-item">
-            <span>{{ _('Hoy') }}</span>
-            <strong>{{ datos.hoy.strftime('%d/%m/%Y') }}</strong>
-          </div>
-        </div>
+        <a class="sub-portal-cta {% if cta_urgent %}is-urgent{% endif %}" href="{{ cta_url }}">
+          {{ cta_label }}
+          <i class="fas fa-arrow-right" aria-hidden="true"></i>
+        </a>
       </div>
     </header>
 
-    <div class="admin-card-grid sub-home-kpis">
-      <div class="admin-stat-card">
-        <span class="admin-stat-label">{{ _('En obra hoy') }}</span>
-        <span class="admin-stat-value">{{ datos.en_obra_hoy }}</span>
-        <span class="admin-stat-caption">{{ _('personas con fichaje') }}</span>
-      </div>
-      <div class="admin-stat-card">
-        <span class="admin-stat-label">{{ _('Obras hoy') }}</span>
-        <span class="admin-stat-value">{{ datos.obras_hoy_count }}</span>
-        <span class="admin-stat-caption">{{ _('con personal tuyo') }}</span>
-      </div>
-      <a class="admin-stat-card" href="{{ url_for('subcontrata.certificacion') }}" style="text-decoration:none;color:inherit;">
-        <span class="admin-stat-label">{{ _('Certificación') }}</span>
-        <span class="admin-stat-value" style="font-size:1.1rem;">
-          <span class="cert-status {{ cert_cls.get(datos.certificacion, 'is-muted') }}">{{ cert_txt.get(datos.certificacion, datos.certificacion) }}</span>
+    <div class="sub-kpi-strip">
+      <a class="sub-kpi {% if datos.docs_pendientes %}is-bad{% elif datos.docs_avisos %}is-warn{% else %}is-ok{% endif %}"
+         href="{{ url_for('subcontrata.documentacion') }}">
+        <span class="sub-kpi-label">{{ _('Documentación') }}</span>
+        <span class="sub-kpi-value">{{ datos.docs_pendientes }}</span>
+        <span class="sub-kpi-caption">
+          {% if datos.docs_pendientes %}{{ _('pendientes') }}{% else %}{{ _('al día') }}{% endif %}
+          {% if datos.docs_avisos %} · {{ datos.docs_avisos }} {{ _('avisos') }}{% endif %}
         </span>
-        <span class="admin-stat-caption">{{ _('mes en curso') }}</span>
       </a>
-      <a class="admin-stat-card" href="{{ url_for('subcontrata.documentacion') }}" style="text-decoration:none;color:inherit;">
-        <span class="admin-stat-label">{{ _('Documentación') }}</span>
-        <span class="admin-stat-value">{{ datos.documentacion.errores }}</span>
-        <span class="admin-stat-caption">
-          {{ _('pendientes') }}
-          {% if datos.documentacion.avisos %} · {{ datos.documentacion.avisos }} {{ _('avisos') }}{% endif %}
+      <a class="sub-kpi {% if datos.cert_pendientes %}is-warn{% elif datos.certificacion == 'aceptada' %}is-ok{% endif %}"
+         href="{{ url_for('subcontrata.certificacion') }}">
+        <span class="sub-kpi-label">{{ _('Certificación') }}</span>
+        <span class="sub-kpi-value is-sm">
+          {% if datos.cert_pendientes %}
+            {{ datos.cert_pendientes }} {{ _('por revisar') }}
+          {% else %}
+            {{ cert_txt.get(datos.certificacion, datos.certificacion) }}
+          {% endif %}
         </span>
+        <span class="sub-kpi-caption">{{ _('mes en curso') }}</span>
+      </a>
+      <a class="sub-kpi" href="#sub-hoy">
+        <span class="sub-kpi-label">{{ _('En obra hoy') }}</span>
+        <span class="sub-kpi-value">{{ datos.en_obra_hoy }}</span>
+        <span class="sub-kpi-caption">{{ datos.obras_hoy_count }} {{ _('obras') }}</span>
+      </a>
+      <a class="sub-kpi" href="{{ url_for('subcontrata.personal') }}">
+        <span class="sub-kpi-label">{{ _('Equipo') }}</span>
+        <span class="sub-kpi-value">{{ datos.equipo_activo }}</span>
+        <span class="sub-kpi-caption">{{ _('personas activas') }}</span>
       </a>
     </div>
 
-    <div class="admin-panels-grid sub-home-panels">
-      <section class="admin-panel">
-        <div class="admin-panel-header">
-          <h2 class="admin-panel-title">{{ _('Dónde están hoy') }}</h2>
-          <span class="admin-panel-subtitle">{{ datos.hoy.strftime('%d/%m/%Y') }}</span>
+    <div class="sub-home-grid">
+      <section class="sub-section" id="sub-hoy">
+        <div class="sub-section-head">
+          <h2>{{ _('Hoy en obra') }}</h2>
+          <span>{{ datos.hoy.strftime('%d/%m/%Y') }}</span>
         </div>
         {% if datos.obras_hoy %}
-        <div class="sub-home-obras">
+        <div class="sub-obra-cards">
           {% for obra in datos.obras_hoy %}
-          <div class="sub-home-obra">
-            <strong>{{ obra.obra }}</strong>
-            <ul>
+          <article class="sub-obra-card">
+            <h3>{{ obra.obra }}</h3>
+            <ul class="sub-obra-people">
               {% for persona in obra.personas %}
               <li>
                 <span>{{ persona.nombre }}</span>
@@ -92,38 +103,58 @@
               </li>
               {% endfor %}
             </ul>
-          </div>
+          </article>
           {% endfor %}
         </div>
         {% else %}
-        <p class="sub-home-empty">{{ _('Hoy no hay fichajes de tu personal.') }}</p>
+        <p class="sub-empty">{{ _('Hoy no hay fichajes de tu personal. Cuando fichan, aquí ves en qué obra están.') }}</p>
         {% endif %}
       </section>
 
-      <section class="admin-panel">
-        <div class="admin-panel-header">
-          <h2 class="admin-panel-title">{{ _('Este mes') }}</h2>
+      <section class="sub-section">
+        <div class="sub-section-head">
+          <h2>{{ _('Este mes') }}</h2>
+          <a href="{{ url_for('subcontrata.certificacion') }}" style="font-size:0.8rem;font-weight:700;color:#0f766e;text-decoration:none;">{{ _('Certificar →') }}</a>
         </div>
-        <div class="sub-home-mes-stats">
+        <div class="sub-mes-stats">
           <div><strong>{{ datos.personas_mes }}</strong><span>{{ _('personas') }}</span></div>
           <div><strong>{{ datos.obras_mes|length }}</strong><span>{{ _('obras') }}</span></div>
           <div><strong>{{ datos.jornadas_mes }}</strong><span>{{ _('jornadas') }}</span></div>
         </div>
         {% if datos.obras_mes %}
-        <ul class="sub-home-mes-list">
+        <ul class="sub-mes-list">
           {% for nombre in datos.obras_mes %}
           <li>{{ nombre }}</li>
           {% endfor %}
         </ul>
         {% else %}
-        <p class="sub-home-empty">{{ _('Aún no hay jornadas este mes.') }}</p>
+        <p class="sub-empty">{{ _('Aún no hay jornadas este mes.') }}</p>
         {% endif %}
-        <div class="sub-home-actions">
-          <a class="btn-admin" href="{{ url_for('subcontrata.certificacion') }}">{{ _('Certificación') }}</a>
-          <a class="btn-admin btn-admin-ghost" href="{{ url_for('subcontrata.documentacion') }}">{{ _('Documentación') }}</a>
-        </div>
       </section>
     </div>
+
+    <nav class="sub-shortcuts" aria-label="{{ _('Atajos') }}">
+      <a class="sub-shortcut" href="{{ url_for('subcontrata.documentacion') }}">
+        <i class="fas fa-folder-open" aria-hidden="true"></i>
+        <strong>{{ _('Documentación') }}</strong>
+        <span>{{ _('Empresa y personal') }}</span>
+      </a>
+      <a class="sub-shortcut" href="{{ url_for('subcontrata.certificacion') }}">
+        <i class="fas fa-clock" aria-hidden="true"></i>
+        <strong>{{ _('Certificación') }}</strong>
+        <span>{{ _('Propuestas del mes') }}</span>
+      </a>
+      <a class="sub-shortcut" href="{{ url_for('subcontrata.personal') }}">
+        <i class="fas fa-users" aria-hidden="true"></i>
+        <strong>{{ _('Trabajadores') }}</strong>
+        <span>{{ _('Equipo y calendarios') }}</span>
+      </a>
+      <a class="sub-shortcut" href="{{ url_for('subcontrata.calendario', modo='empresa') }}">
+        <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+        <strong>{{ _('Calendario') }}</strong>
+        <span>{{ _('Quién va a cada obra') }}</span>
+      </a>
+    </nav>
   </main>
 </div>
 {% endblock %}

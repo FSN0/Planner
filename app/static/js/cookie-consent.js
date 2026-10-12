@@ -3,6 +3,7 @@
   var name = cfg.cookieName || 'sp_cookie_consent';
   var days = cfg.maxAgeDays || 180;
   var gaId = (cfg.gaId || '').trim();
+  var bound = false;
 
   function readConsent() {
     var m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
@@ -52,14 +53,16 @@
     if (el) el.hidden = false;
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    var existing = readConsent();
-    if (existing) {
-      apply(existing);
-      hideBanner();
-      return;
-    }
-    showBanner();
+  // Consentimiento guardado cuando aún no había GA (gaId "") → no se ofreció analítica.
+  function needsAnalyticsReprompt(consent) {
+    if (!gaId || !consent) return false;
+    if (consent.analytics) return false;
+    return consent.analyticsOffered !== true;
+  }
+
+  function bindButtons() {
+    if (bound) return;
+    bound = true;
     document.querySelectorAll('[data-sp-cookie]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var mode = btn.getAttribute('data-sp-cookie');
@@ -67,6 +70,7 @@
           essential: true,
           analytics: mode === 'all' && !!gaId,
           marketing: false,
+          analyticsOffered: !!gaId,
           ts: Date.now(),
         };
         writeConsent(consent);
@@ -74,6 +78,17 @@
         hideBanner();
       });
     });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    bindButtons();
+    var existing = readConsent();
+    if (existing && !needsAnalyticsReprompt(existing)) {
+      apply(existing);
+      hideBanner();
+      return;
+    }
+    showBanner();
   });
 
   window.SP_openCookiePreferences = function () {

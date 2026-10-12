@@ -81,10 +81,11 @@
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/locales-all.global.min.js"></script>
 <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
-<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20260921past"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261012portal"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   var modo = {{ modo|tojson }};
+  var workerPortalUrl = {{ url_for('subcontrata.personal_calendario', user_id=999999)|tojson }}.replace('999999', '{id}');
   if (modo === 'empresa') {
     window.subcontrataCalendar = new UniversalCalendarManager('subcontrata-calendar', {
       context: 'empresa',
@@ -93,7 +94,8 @@ document.addEventListener('DOMContentLoaded', function () {
       mode: 'empleados',
       hideTitle: true,
       readonly: true,
-      selfService: true
+      selfService: true,
+      workerPortalUrl: workerPortalUrl
     });
   } else {
     window.subcontrataCalendar = new UniversalCalendarManager('subcontrata-calendar', {

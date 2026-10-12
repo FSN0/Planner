@@ -56,6 +56,7 @@ ITEM_DOCUMENTACION = 'documentacion'
 ITEM_CERTIFICACION = 'certificacion'
 ITEM_CONTRATACION = 'contratacion'
 ITEM_MI_DOCUMENTACION = 'mi_documentacion'
+ITEM_SUB_PERSONAL = 'sub_personal'
 
 # Roles de oficina: no usan el portal «mi calendario / fichaje / horas».
 _ROLES_OFICINA = frozenset({ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH})
@@ -97,6 +98,7 @@ ALL_ITEM_KEYS = (
     ITEM_CERTIFICACION,
     ITEM_CONTRATACION,
     ITEM_MI_DOCUMENTACION,
+    ITEM_SUB_PERSONAL,
 )
 
 
@@ -123,6 +125,7 @@ def _subcontrata_sections_blueprint() -> list[dict]:
             'title': '',
             'items': [
                 ITEM_INICIO,
+                ITEM_SUB_PERSONAL,
                 ITEM_MI_FICHAJE,
                 ITEM_MI_CALENDARIO,
                 ITEM_DOCUMENTACION,
@@ -131,7 +134,7 @@ def _subcontrata_sections_blueprint() -> list[dict]:
         },
         {
             'id': 'sec_sys',
-            'title': str(_('Sistema')),
+            'title': str(_('Cuenta')),
             'items': [ITEM_CONFIGURACION],
         },
     ]
@@ -340,6 +343,7 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': _ep() in (
                 'compliance.documentacion', 'compliance.documentacion_empresa',
                 'compliance.documentacion_empleado', 'subcontrata.documentacion',
+                'subcontrata.documentacion_persona',
             ),
             'data_tour': None,
             'badge': int(ctx.get('doc_errores') or 0),
@@ -495,15 +499,36 @@ def catalog_definitions(ctx: dict) -> dict[str, dict]:
             'active': _ep() == 'admin.primeros_pasos',
             'data_tour': None,
         },
-        ITEM_CONFIGURACION: _nav_group(
-            item_id=ITEM_CONFIGURACION,
-            label=str(_('Configuración')),
-            icon='fa-sliders-h',
-            href=url_for('admin.configuracion_global'),
-            parent_active=_config_group_active(),
-            children=_config_children(ctx),
-            data_tour=None,
+        ITEM_CONFIGURACION: (
+            {
+                'id': ITEM_CONFIGURACION,
+                'label': str(_('Preferencias')),
+                'icon': 'fa-user-cog',
+                'kind': 'link',
+                'href': url_for('admin.configuracion_global'),
+                'active': _ep() == 'admin.configuracion_global',
+                'data_tour': None,
+            }
+            if _is_admin_subcontrata(u)
+            else _nav_group(
+                item_id=ITEM_CONFIGURACION,
+                label=str(_('Configuración')),
+                icon='fa-sliders-h',
+                href=url_for('admin.configuracion_global'),
+                parent_active=_config_group_active(),
+                children=_config_children(ctx),
+                data_tour=None,
+            )
         ),
+        ITEM_SUB_PERSONAL: {
+            'id': ITEM_SUB_PERSONAL,
+            'label': str(_('Trabajadores')),
+            'icon': 'fa-users',
+            'kind': 'link',
+            'href': url_for('subcontrata.personal'),
+            'active': _ep() in ('subcontrata.personal', 'subcontrata.personal_calendario'),
+            'data_tour': None,
+        },
         ITEM_PERMISOS: {
             # Conservado por compatibilidad con prefs antiguas; en el layout
             # nuevo vive como hijo de Configuración.
@@ -735,6 +760,8 @@ def item_is_available(item_id: str, user, ctx: dict) -> bool:
         return user_can(user, 'reuniones', 'r') and bool(ctx.get('tenant_has_notas'))
     if item_id == ITEM_TRABAJADORES:
         return user_can(user, 'trabajadores', 'r')
+    if item_id == ITEM_SUB_PERSONAL:
+        return _is_admin_subcontrata(user)
     if item_id == ITEM_SUBCONTRATAS:
         return user_can(user, 'subcontratas', 'r')
     if item_id == ITEM_SOLICITUDES:

@@ -4,7 +4,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261008persist">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261012persona">
 {% endblock %}
 {% block wrapper %}
 {% set puede_w = puede_subir %}
@@ -85,15 +85,16 @@
       {% set iniciales = ((u.name or '?')[:1] ~ (u.lastname or '')[:1])|upper %}
       {% set busca = ((u.name or '') ~ ' ' ~ (u.lastname or '') ~ ' ' ~ (u.role or ''))|lower %}
       <article class="docs-person-block {% if item.errores %}is-error{% elif item.avisos %}is-warn{% else %}is-ok{% endif %}"
-               data-search="{{ busca }}">
+               data-search="{{ busca }}" id="persona-{{ u.id }}">
         <div class="docs-person-row">
-          <div class="docs-person-link" style="cursor:default;">
+          <a class="docs-person-link" href="{{ url_for('subcontrata.documentacion_persona', user_id=u.id) }}">
             <span class="docs-person-avatar">{{ iniciales }}</span>
             <span class="docs-person-main">
               <strong>{{ u.name }} {{ u.lastname }}</strong>
               <small>{% if item.errores %}{{ item.errores }} {{ _('pendientes') }}{% else %}{{ _('Al día') }}{% endif %}</small>
             </span>
-          </div>
+            <span class="docs-person-open">{{ _('Abrir docs') }} →</span>
+          </a>
           <div class="docs-doc-chips" role="list">
             {% for fila in item.filas if not fila.tipo.es_certificacion %}
             {% set st = fila.estado %}

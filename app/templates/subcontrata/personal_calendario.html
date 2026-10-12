@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}{{ worker.name }} {{ worker.lastname }} · {{ company.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261006sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/universal_calendar.css') }}?v=20260921past">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subcontrata_home.css') }}?v=20261012b">
+<style>
+  .sub-cal-wrap {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 12px;
+    min-height: 480px;
+  }
+  .sub-ficha-obras {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .sub-ficha-obras li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 10px;
+    background: var(--sub-soft, #f4f6fa);
+    font-size: 0.9rem;
+  }
+  .sub-ficha-obras strong {
+    font-variant-numeric: tabular-nums;
+    color: #0f766e;
+  }
+</style>
+{% endblock %}
+{% block wrapper %}
+{% set ficha = ficha if ficha is defined else {} %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact sub-portal">
+    <header class="sub-portal-hero" style="padding:1.15rem 1.25rem;margin-bottom:1rem;">
+      <div class="sub-portal-hero-inner">
+        <div>
+          <p class="sub-portal-kicker">{{ company.nombre }}</p>
+          <h1 class="sub-portal-title" style="font-size:clamp(1.4rem,2.4vw,1.85rem);">
+            {{ worker.name }} {{ worker.lastname }}
+          </h1>
+          <p class="sub-portal-lead">
+            {% if ficha.obra_hoy %}
+              {{ _('Hoy en') }} {{ ficha.obra_hoy }}
+            {% elif ficha.asignado_hoy %}
+              {{ _('Asignado hoy') }}
+            {% else %}
+              {{ _('Documentación, jornadas del mes y calendario. Solo lectura.') }}
+            {% endif %}
+          </p>
+        </div>
+        <a class="sub-portal-cta" href="{{ url_for('subcontrata.personal') }}" style="box-shadow:none;background:#fff;color:#0f766e!important;border-color:#99f6e4;">
+          <i class="fas fa-arrow-left" aria-hidden="true"></i>
+          {{ _('Volver al equipo') }}
+        </a>
+      </div>
+    </header>
+
+    <div class="sub-kpi-strip">
+      <a class="sub-kpi {% if ficha.docs_errores %}is-bad{% elif ficha.docs_avisos %}is-warn{% else %}is-ok{% endif %}"
+         href="{{ url_for('subcontrata.documentacion_persona', user_id=worker.id) }}">
+        <span class="sub-kpi-label">{{ _('Documentación') }}</span>
+        <span class="sub-kpi-value">{{ ficha.docs_errores|default(0) }}</span>
+        <span class="sub-kpi-caption">
+          {% if ficha.docs_errores %}{{ _('pendientes') }}
+          {% else %}{{ _('al día') }}{% endif %}
+          {% if ficha.docs_ok %} · {{ ficha.docs_ok }} {{ _('OK') }}{% endif %}
+          {% if ficha.docs_avisos %} · {{ ficha.docs_avisos }} {{ _('avisos') }}{% endif %}
+        </span>
+      </a>
+      <div class="sub-kpi">
+        <span class="sub-kpi-label">{{ _('Días este mes') }}</span>
+        <span class="sub-kpi-value">{{ ficha.dias_mes|default(0) }}</span>
+        <span class="sub-kpi-caption">{{ _('en calendario') }}</span>
+      </div>
+      <div class="sub-kpi">
+        <span class="sub-kpi-label">{{ _('Obras este mes') }}</span>
+        <span class="sub-kpi-value">{{ ficha.obras_mes|default(0) }}</span>
+        <span class="sub-kpi-caption">{{ _('distintas') }}</span>
+      </div>
+      <div class="sub-kpi {% if ficha.asignado_hoy %}is-ok{% endif %}">
+        <span class="sub-kpi-label">{{ _('Hoy') }}</span>
+        <span class="sub-kpi-value is-sm">
+          {% if ficha.obra_hoy %}{{ ficha.obra_hoy }}
+          {% elif ficha.asignado_hoy %}{{ _('Asignado') }}
+          {% else %}{{ _('Libre') }}{% endif %}
+        </span>
+        <span class="sub-kpi-caption">{{ ficha.hoy.strftime('%d/%m/%Y') if ficha.hoy else '' }}</span>
+      </div>
+    </div>
+
+    <div class="sub-home-grid" style="margin-bottom:1rem;">
+      <section class="sub-section">
+        <div class="sub-section-head">
+          <h2>{{ _('Días por obra (mes)') }}</h2>
+        </div>
+        {% if ficha.por_obra %}
+        <ul class="sub-ficha-obras">
+          {% for row in ficha.por_obra %}
+          <li>
+            <span>{{ row.nombre }}</span>
+            <strong>{{ row.dias }} {{ _('días') }}</strong>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="sub-empty">{{ _('Sin asignaciones este mes.') }}</p>
+        {% endif %}
+      </section>
+      <section class="sub-section">
+        <div class="sub-section-head">
+          <h2>{{ _('Documentación') }}</h2>
+          <a href="{{ url_for('subcontrata.documentacion_persona', user_id=worker.id) }}" style="font-size:0.8rem;font-weight:700;color:#0f766e;text-decoration:none;">{{ _('Abrir docs →') }}</a>
+        </div>
+        <div class="sub-mes-stats">
+          <div><strong>{{ ficha.docs_ok|default(0) }}</strong><span>{{ _('OK') }}</span></div>
+          <div><strong>{{ ficha.docs_errores|default(0) }}</strong><span>{{ _('pendientes') }}</span></div>
+          <div><strong>{{ ficha.docs_avisos|default(0) }}</strong><span>{{ _('avisos') }}</span></div>
+        </div>
+        <p class="sub-empty" style="padding-top:0;">
+          {% if ficha.docs_errores %}
+            {{ _('Hay documentación pendiente de completar o validar.') }}
+          {% elif ficha.docs_avisos %}
+            {{ _('Todo enviado; revisa los avisos de caducidad.') }}
+          {% else %}
+            {{ _('Documentación al día.') }}
+          {% endif %}
+        </p>
+      </section>
+    </div>
+
+    <section class="sub-section" style="padding:0.85rem;">
+      <div class="sub-section-head" style="padding:0 0.35rem 0.65rem;">
+        <h2>{{ _('Calendario') }}</h2>
+        <span>{{ _('Solo lectura') }}</span>
+      </div>
+      <div class="sub-cal-wrap">
+        <div id="subcontrata-worker-calendar" class="univ-calendar-root"></div>
+      </div>
+    </section>
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.8/locales-all.global.min.js"></script>
+<script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261012portal"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  window.subcontrataCalendar = new UniversalCalendarManager('subcontrata-worker-calendar', {
+    context: 'worker',
+    id: {{ worker.id }},
+    entityName: {{ ((worker.name or '') ~ ' ' ~ (worker.lastname or ''))|tojson }},
+    mode: 'obras',
+    hideTitle: true,
+    readonly: true,
+    selfService: true
+  });
+});
+</script>
+{% endblock %}

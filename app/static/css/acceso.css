@@ -2316,6 +2316,17 @@
 .docs-person-link:hover .docs-person-main strong {
   color: #15803d;
 }
+.docs-person-open {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0f766e;
+  white-space: nowrap;
+}
+.docs-person-link:hover .docs-person-open {
+  text-decoration: underline;
+}
 .docs-pending-banner {
   display: inline-flex;
   align-items: center;

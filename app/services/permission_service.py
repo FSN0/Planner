@@ -427,7 +427,19 @@ def can_view_worker_calendar(user, worker_id: int | None = None) -> bool:
         if user_can(user, 'trabajadores', 'r'):
             return True
         return False
-    return user_can(user, 'trabajadores', 'r')
+    if user_can(user, 'trabajadores', 'r'):
+        return True
+    # Portal subcontrata: calendarios de su propia empresa
+    from app.models import ROLE_ADMIN_SUBCONTRATA, User
+    if getattr(user, 'role', None) != ROLE_ADMIN_SUBCONTRATA:
+        return False
+    company_id = getattr(user, 'company_id', None)
+    if not company_id or worker_id is None:
+        return False
+    target = User.query.filter_by(
+        id=int(worker_id), company_id=int(company_id), is_deleted=False,
+    ).first()
+    return target is not None
 
 
 def can_view_obra_calendar(user) -> bool:

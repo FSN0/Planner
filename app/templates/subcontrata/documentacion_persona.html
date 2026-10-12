@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "compliance/macros_doc.html" import fila_doc with context %}
+{% block title %}{{ sujeto.name }} {{ sujeto.lastname }} · {{ _('Documentación') }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/acceso.css') }}?v=20261008persist">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subcontrata_home.css') }}?v=20261012b">
+{% endblock %}
+{% block wrapper %}
+{% set puede_w = puede_subir %}
+{% set err = resumen.errores|default(0) %}
+{% set avi = resumen.avisos|default(0) %}
+{% set ok = resumen.ok|default(0) %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact office-docs office-company-docs sub-portal">
+    <section class="office-hire-hero">
+      <p class="hire-kicker">{{ company.nombre }}</p>
+      <h1>{{ sujeto.name }} {{ sujeto.lastname }}</h1>
+      <p>{{ _('Documentación de esta persona. Sube lo pendiente; la oficina lo valida.') }}</p>
+      {% if err %}
+      <p class="docs-pending-banner">
+        <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+        {{ err }} {{ _('documentos pendientes') }}
+        {% if avi %} · {{ avi }} {{ _('avisos') }}{% endif %}
+      </p>
+      {% endif %}
+      <div class="office-docs-hero-stats">
+        <div>
+          <strong>{{ err }}</strong>
+          <span>{{ _('Pendientes') }}</span>
+        </div>
+        <div>
+          <strong>{{ avi }}</strong>
+          <span>{{ _('Avisos') }}</span>
+        </div>
+        <div>
+          <strong>{{ ok }}</strong>
+          <span>{{ _('Al día') }}</span>
+        </div>
+        <div>
+          <strong>{{ filas|length }}</strong>
+          <span>{{ _('Documentos') }}</span>
+        </div>
+      </div>
+      <div class="office-hire-actions">
+        <a class="office-hire-btn ghost" href="{{ url_for('subcontrata.documentacion') }}">
+          <i class="fas fa-arrow-left"></i> {{ _('Volver a documentación') }}
+        </a>
+        <a class="office-hire-btn ghost" href="{{ url_for('subcontrata.personal_calendario', user_id=sujeto.id) }}">
+          {{ _('Ver ficha') }}
+        </a>
+      </div>
+    </section>
+
+    <h2 class="docs-section-title">{{ _('Documentos de la persona') }}</h2>
+    {% set n_docs = namespace(n=0) %}
+    {% for fila in filas if not fila.tipo.es_certificacion %}{% set n_docs.n = n_docs.n + 1 %}{% endfor %}
+    {% if not n_docs.n %}
+    <div class="docs-empty docs-empty--card">{{ _('No hay documentos exigidos a esta persona.') }}</div>
+    {% else %}
+    <div class="hire-grid office-hire-docs">
+      {% for fila in filas if not fila.tipo.es_certificacion %}
+        {{ fila_doc(fila, puede_w, False, user_id=sujeto.id, archivo_endpoint='subcontrata.archivo') }}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/doc_card_actions.js') }}?v=20261008persist"></script>
+<script>
+document.querySelectorAll('.doc-pick input[type="file"]').forEach(function (input) {
+  input.addEventListener('change', function () {
+    var label = input.parentElement.querySelector('.doc-pick-text');
+    if (!label) return;
+    var file = input.files && input.files[0];
+    label.textContent = file ? file.name : {{ _('Elegir')|tojson }};
+  });
+});
+</script>
+{% endblock %}

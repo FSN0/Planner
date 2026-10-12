@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Trabajadores') }} · {{ company.nombre }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/subcontrata_home.css') }}?v=20261012a">
+{% endblock %}
+{% block wrapper %}
+{% set rol_txt = {
+  'operario': _('Operario'),
+  'admin_subcontrata': _('Admin subcontrata'),
+  'jefe_obra': _('Jefe de obra'),
+  'admin': _('Admin'),
+  'rrhh': _('RRHH'),
+  'laboral': _('Laboral')
+} %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+  <main class="admin-main admin-main--compact sub-portal">
+    <header class="sub-portal-hero" style="padding:1.25rem 1.35rem;">
+      <div class="sub-portal-hero-inner">
+        <div>
+          <p class="sub-portal-kicker">{{ company.nombre }}</p>
+          <h1 class="sub-portal-title" style="font-size:clamp(1.5rem,2.5vw,2rem);">{{ _('Trabajadores') }}</h1>
+          <p class="sub-portal-lead">{{ _('Tu equipo. Entra en cada ficha para ver documentación, jornadas y calendario.') }}</p>
+        </div>
+        <a class="sub-portal-cta" href="{{ url_for('subcontrata.calendario', modo='empresa') }}">
+          {{ _('Calendario empresa') }}
+          <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+        </a>
+      </div>
+    </header>
+
+    <div class="sub-personal-toolbar">
+      <label class="sub-personal-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="search" id="sub-personal-filtro" placeholder="{{ _('Buscar persona…') }}" autocomplete="off">
+      </label>
+      <span class="sub-kpi-caption">{{ filas|length }} {{ _('personas') }}</span>
+    </div>
+
+    {% if filas %}
+    <div class="sub-personal-list" id="sub-personal-lista">
+      {% for row in filas %}
+      <a class="sub-personal-row"
+         href="{{ url_for('subcontrata.personal_calendario', user_id=row.user.id) }}"
+         data-nombre="{{ row.nombre|lower }}">
+        <div>
+          <div class="sub-personal-name">{{ row.nombre }}</div>
+          <div class="sub-personal-meta">
+            {{ rol_txt.get(row.rol, row.rol) }}
+            · {% if row.activo %}{{ _('Activo') }}{% else %}{{ _('Inactivo') }}{% endif %}
+          </div>
+        </div>
+        <div class="sub-personal-docs {% if row.docs_errores %}is-bad{% else %}is-ok{% endif %}">
+          {% if row.docs_errores %}{{ row.docs_errores }} {{ _('docs') }}{% else %}{{ _('Docs OK') }}{% endif %}
+        </div>
+        <span class="sub-personal-action">{{ _('Ver ficha') }} →</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="sub-empty">{{ _('No hay personal vinculado a tu empresa en SignaPlan.') }}</p>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var input = document.getElementById('sub-personal-filtro');
+  var list = document.getElementById('sub-personal-lista');
+  if (!input || !list) return;
+  input.addEventListener('input', function () {
+    var q = (input.value || '').trim().toLowerCase();
+    list.querySelectorAll('.sub-personal-row').forEach(function (row) {
+      var name = row.getAttribute('data-nombre') || '';
+      row.hidden = q && name.indexOf(q) === -1;
+    });
+  });
+})();
+</script>
+{% endblock %}

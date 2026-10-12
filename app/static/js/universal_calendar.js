@@ -38,6 +38,8 @@ class UniversalCalendarManager {
         this.showFichajes = config.showFichajes || false;
         this.readonly = config.readonly || false;
         this.selfService = config.selfService || false;
+        // Portal subcontrata/operario: plantilla con {id} → ficha del trabajador
+        this.workerPortalUrl = config.workerPortalUrl || null;
         this.hideInercia = (config.hideInercia != null)
             ? !!config.hideInercia
             : (this.context === 'vehiculo');
@@ -64,6 +66,12 @@ class UniversalCalendarManager {
     /** En portal /fichaje no saltar a pantallas de administración. */
     _adminUrl(url) {
         return (this.selfService || !url) ? null : url;
+    }
+
+    /** URL de ficha de trabajador en portal (selfService). */
+    _workerPortalHref(workerId) {
+        if (!workerId || !this.workerPortalUrl) return null;
+        return String(this.workerPortalUrl).replace(/\{id\}/g, String(workerId));
     }
 
     init() {
@@ -493,7 +501,15 @@ class UniversalCalendarManager {
                     if (info.event.id === _this.ghostEventId) return;
 
                     let props = info.event.extendedProps || {};
-                    if (info.event.url) { window.open(info.event.url, '_blank'); return; }
+                    if (_this.selfService && props.worker_id && _this.context !== 'worker') {
+                        let portal = _this._workerPortalHref(props.worker_id);
+                        if (portal) { window.location.href = portal; return; }
+                    }
+                    if (info.event.url) {
+                        if (_this.selfService && String(info.event.url).indexOf('/admin/') !== -1) return;
+                        window.open(info.event.url, '_blank');
+                        return;
+                    }
 
                     let targetUrl = null;
                     if (props.worker_id && _this.context !== 'worker') targetUrl = _this._adminUrl(`/admin/worker_panel/${props.worker_id}`);
@@ -595,8 +611,22 @@ class UniversalCalendarManager {
                     return; 
                 }
 
+                if (_this.selfService && props.worker_id && _this.context !== 'worker') {
+                    let portal = _this._workerPortalHref(props.worker_id);
+                    if (portal) {
+                        window.location.href = portal;
+                        return;
+                    }
+                }
+
                 if (info.event.url) {
                     if (_this.selfService && String(info.event.url).indexOf('/admin/') !== -1) {
+                        // Si el evento apunta a ficha admin, redirigir al portal si hay plantilla
+                        let m = String(info.event.url).match(/\/admin\/worker_panel\/(\d+)/);
+                        if (m) {
+                            let portal = _this._workerPortalHref(m[1]);
+                            if (portal) { window.location.href = portal; return; }
+                        }
                         return;
                     }
                     if (_this.readonly) window.open(info.event.url, '_blank');

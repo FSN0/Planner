@@ -186,6 +186,10 @@ def _bloquear_operario_en_admin():
         flash(translate('Tu perfil no tiene acceso al panel de administración.'), 'warning')
         return redirect(destino_portal_operario(current_user))
     if current_user.is_authenticated and current_user.role == ROLE_ADMIN_SUBCONTRATA:
+        # Preferencias personales (idioma / avisos UI); el resto de /admin sigue cerrado.
+        path = (request.path or '').rstrip('/') or '/'
+        if path == '/admin/configuracion' and (request.method or 'GET').upper() == 'GET':
+            return None
         flash(translate('Tu perfil entra por el panel de la subcontrata.'), 'warning')
         return redirect(url_for('subcontrata.inicio'))
 

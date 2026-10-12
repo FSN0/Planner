@@ -14,7 +14,12 @@ from app.services.certificacion_service import (
 from app.services.documentacion_service import filas_empresa, filas_persona, resumir, ruta_aporte, subir
 from app.services.i18n_service import translate
 from app.services.permission_service import user_can
-from app.services.subcontrata_portal_service import panel
+from app.services.subcontrata_portal_service import (
+    ficha_trabajador,
+    listado_personal,
+    panel,
+    usuario_de_company,
+)
 from app.services.tenant_modules import has_certificacion, has_documentacion, has_portal_subcontrata
 from app.subcontrata import subcontrata_bp
 from app.compliance.routes import _periodo, _post_cert, _render_cert, _shift
@@ -41,6 +46,32 @@ def _company() -> Company:
 @subcontrata_bp.route('/')
 def inicio():
     return render_template('subcontrata/panel.html', company=_company(), datos=panel(_company()))
+
+
+@subcontrata_bp.route('/personal')
+def personal():
+    """Equipo de la subcontrata: listado y acceso a calendarios."""
+    company = _company()
+    return render_template(
+        'subcontrata/personal.html',
+        company=company,
+        filas=listado_personal(company),
+    )
+
+
+@subcontrata_bp.route('/personal/<int:user_id>/calendario')
+def personal_calendario(user_id):
+    """Ficha de un trabajador de la misma empresa: KPIs + calendario (solo lectura)."""
+    company = _company()
+    worker = usuario_de_company(company, user_id)
+    if not worker:
+        abort(403)
+    return render_template(
+        'subcontrata/personal_calendario.html',
+        company=company,
+        worker=worker,
+        ficha=ficha_trabajador(company, worker),
+    )
 
 
 @subcontrata_bp.route('/calendario')
@@ -71,61 +102,78 @@ def calendario():
     )
 
 
+def _post_documentacion(company: Company, *, redirect_endpoint: str, redirect_kwargs: dict | None = None):
+    """Subir / archivar doc de empresa o persona de la subcontrata."""
+    if not user_can(current_user, 'documentacion', 'w'):
+        abort(403)
+    redirect_kwargs = redirect_kwargs or {}
+    try:
+        accion = (request.form.get('accion') or 'subir').strip()
+        if accion == 'eliminar_aporte':
+            from app.services.documentacion_service import archivar_aporte
+            aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
+            if aporte.company_id and aporte.company_id != company.id:
+                abort(403)
+            if aporte.user_id:
+                dueno = User.query.get(aporte.user_id)
+                if not dueno or dueno.company_id != company.id:
+                    abort(403)
+            archivar_aporte(aporte)
+            db.session.commit()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                from flask import jsonify
+                return jsonify(ok=True, message=translate('Documento archivado. Puedes subir otra versión.'))
+            flash(translate('Documento archivado. Puedes subir otra versión.'), 'success')
+        else:
+            tipo = DocumentoTipo.query.get_or_404(int(request.form['tipo_id']))
+            user_id = request.form.get('user_id')
+            persona_id = int(user_id) if user_id else None
+            if persona_id:
+                persona = User.query.filter_by(
+                    id=persona_id, company_id=company.id, is_deleted=False,
+                ).first()
+                if not persona:
+                    abort(403)
+            from app.services.documentacion_service import subir_desde_request
+            subir_desde_request(
+                tipo,
+                request,
+                company_id=None if persona_id else company.id,
+                user_id=persona_id,
+                actor_id=current_user.id,
+            )
+            db.session.commit()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                from flask import jsonify
+                return jsonify(ok=True, message=translate('Documento subido.'))
+            flash(translate('Documento subido.'), 'success')
+    except Exception as exc:
+        db.session.rollback()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            from flask import jsonify
+            return jsonify(ok=False, error=str(exc)), 400
+        flash(str(exc), 'danger')
+    return redirect(url_for(redirect_endpoint, **redirect_kwargs))
+
+
 @subcontrata_bp.route('/documentacion', methods=['GET', 'POST'])
 def documentacion():
     if not has_documentacion() or not user_can(current_user, 'documentacion', 'r'):
         abort(403)
     company = _company()
     if request.method == 'POST':
-        if not user_can(current_user, 'documentacion', 'w'):
-            abort(403)
-        try:
-            accion = (request.form.get('accion') or 'subir').strip()
-            if accion == 'eliminar_aporte':
-                from app.services.documentacion_service import archivar_aporte
-                aporte = DocumentoAporte.query.get_or_404(int(request.form['aporte_id']))
-                if aporte.company_id and aporte.company_id != company.id:
-                    abort(403)
-                if aporte.user_id:
-                    dueno = User.query.get(aporte.user_id)
-                    if not dueno or dueno.company_id != company.id:
-                        abort(403)
-                archivar_aporte(aporte)
-                db.session.commit()
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    from flask import jsonify
-                    return jsonify(ok=True, message=translate('Documento archivado. Puedes subir otra versión.'))
-                flash(translate('Documento archivado. Puedes subir otra versión.'), 'success')
-            else:
-                tipo = DocumentoTipo.query.get_or_404(int(request.form['tipo_id']))
-                user_id = request.form.get('user_id')
-                persona_id = int(user_id) if user_id else None
-                if persona_id:
-                    persona = User.query.filter_by(
-                        id=persona_id, company_id=company.id, is_deleted=False,
-                    ).first()
-                    if not persona:
-                        abort(403)
-                from app.services.documentacion_service import subir_desde_request
-                subir_desde_request(
-                    tipo,
-                    request,
-                    company_id=None if persona_id else company.id,
-                    user_id=persona_id,
-                    actor_id=current_user.id,
+        # Si el upload es de una persona, volver a su ficha documental.
+        uid = request.form.get('user_id')
+        if uid:
+            try:
+                return _post_documentacion(
+                    company,
+                    redirect_endpoint='subcontrata.documentacion_persona',
+                    redirect_kwargs={'user_id': int(uid)},
                 )
-                db.session.commit()
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    from flask import jsonify
-                    return jsonify(ok=True, message=translate('Documento subido.'))
-                flash(translate('Documento subido.'), 'success')
-        except Exception as exc:
-            db.session.rollback()
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                from flask import jsonify
-                return jsonify(ok=False, error=str(exc)), 400
-            flash(str(exc), 'danger')
-        return redirect(url_for('subcontrata.documentacion'))
+            except (TypeError, ValueError):
+                pass
+        return _post_documentacion(company, redirect_endpoint='subcontrata.documentacion')
     empleados = User.query.filter_by(company_id=company.id, is_deleted=False).order_by(User.name).all()
     filas_empresa_vista = filas_empresa(company)
     empleados_vista = []
@@ -137,6 +185,33 @@ def documentacion():
         company=company,
         filas=filas_empresa_vista,
         empleados=empleados_vista,
+        puede_subir=user_can(current_user, 'documentacion', 'w'),
+    )
+
+
+@subcontrata_bp.route('/documentacion/persona/<int:user_id>', methods=['GET', 'POST'])
+def documentacion_persona(user_id):
+    """Ficha documental de un operario de la subcontrata (subir / revisar)."""
+    if not has_documentacion() or not user_can(current_user, 'documentacion', 'r'):
+        abort(403)
+    company = _company()
+    persona = usuario_de_company(company, user_id)
+    if not persona:
+        abort(403)
+    if request.method == 'POST':
+        return _post_documentacion(
+            company,
+            redirect_endpoint='subcontrata.documentacion_persona',
+            redirect_kwargs={'user_id': persona.id},
+        )
+    filas = filas_persona(persona)
+    resumen = resumir(filas)
+    return render_template(
+        'subcontrata/documentacion_persona.html',
+        company=company,
+        sujeto=persona,
+        filas=filas,
+        resumen=resumen,
         puede_subir=user_can(current_user, 'documentacion', 'w'),
     )
 
