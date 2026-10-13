@@ -321,6 +321,7 @@ function getAdminCellSortValue(row, colIndex) {
     const cell = row.cells[colIndex];
     if (!cell) return '';
     if (cell.dataset.sortValue !== undefined && cell.dataset.sortValue !== '') return cell.dataset.sortValue;
+    if (cell.dataset.order !== undefined && cell.dataset.order !== '') return cell.dataset.order;
     if (cell.dataset.sort !== undefined && cell.dataset.sort !== '') return cell.dataset.sort;
     return (cell.textContent || '').trim();
 }

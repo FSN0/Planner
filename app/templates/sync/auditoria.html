@@ -2,8 +2,8 @@
 {% block title %}{{ _('Auditoría de Fichajes') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
-{% macro audit_sort_th(col, label, width='', align='', sort_type='', col_key='') %}
-<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}"{% if col_key %} data-col-key="{{ col_key }}"{% endif %} data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
+{% macro audit_sort_th(col, label, width='', align='', sort_type='', col_key='', title='') %}
+<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}"{% if col_key %} data-col-key="{{ col_key }}"{% endif %} data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %}{% if title %} title="{{ title }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
 {% endmacro %}
 
 {% macro audit_metric_val(val) -%}
@@ -212,7 +212,7 @@ tr.audit-row-highlight {
 
         {% if 'conflictos' in visible_sections %}
         <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-desviaciones">
-            <div class="auditoria-section-header card-header {% if not var_conflictos %}collapsed{% endif %}" data-target="#collapseConflictos" role="button" aria-expanded="{% if var_conflictos %}true{% else %}false{% endif %}" data-tour="audit-desviaciones-toggle">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseConflictos" role="button" aria-expanded="false" data-tour="audit-desviaciones-toggle">
                 <h6 class="auditoria-section-title text-danger mb-0">
                     <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-random"></i></span>
                     {{ _('Desviaciones de plan') }}
@@ -220,7 +220,7 @@ tr.audit-row-highlight {
                 </h6>
                 <i class="fas fa-chevron-down text-muted chevron-icon"></i>
             </div>
-            <div id="collapseConflictos" class="collapse {% if var_conflictos %}show{% endif %}">
+            <div id="collapseConflictos" class="collapse">
                 {% if var_conflictos %}
                 <div class="audit-table-wrap">
                     <table id="auditConflictosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
@@ -708,36 +708,48 @@ tr.audit-row-highlight {
                                autocomplete="off"
                                aria-label="{{ _('Buscar en histórico') }}">
                     </div>
+                    <select id="historialOrigenFilter" class="form-control form-control-sm" style="max-width:13rem;"
+                            aria-label="{{ _('Filtrar por origen') }}">
+                        <option value="">{{ _('Todos los orígenes') }}</option>
+                        <option value="ausencia">{{ _('Ausencia') }}</option>
+                        <option value="sin_planificar">{{ _('Sin planificar') }}</option>
+                        <option value="desvio">{{ _('Desviación') }}</option>
+                        <option value="cumplio">{{ _('Cumplió el plan') }}</option>
+                        <option value="decisiones">{{ _('Solo decisiones') }}</option>
+                    </select>
                     <span class="text-muted small" id="historialSearchHint">
-                        {{ _('Hoy primero; dentro del día, las resoluciones salen antes. Busca en servidor si no aparece.') }}
+                        {{ _('Histórico completo, por páginas. Arriba, el día de trabajo más reciente.') }}
                     </span>
                 </div>
                 <div class="audit-table-wrap">
             <table id="historialTable" class="table table-audit table-audit--historial audit-sortable-table filterable-table mb-0">
                 <thead>
                     <tr>
+                        {% set hist_metrics = metrics_col + 1 %}
+                        {% set hist_after = after_metrics + 1 %}
                         {{ audit_sort_th(0, 'Fecha', '5.8rem', '', 'date', 'fecha') }}
                         {{ audit_sort_th(1, 'Operario', '10rem', '', '', 'operario') }}
-                        {{ audit_sort_th(2, 'Estado final', '7.5rem', '', '', 'estado') }}
-                        {{ audit_sort_th(3, 'Trazabilidad', 'auto', 'center', '', 'trazabilidad') }}
-                        {{ audit_sort_th(4, 'Entrada', '5.2rem', 'center', 'time', 'entrada') }}
-                        {{ audit_sort_th(5, 'Salida', '5.2rem', 'center', 'time', 'salida') }}
-                        {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '2.4rem', 'center', '', 'ubicacion') }}{% endif %}
+                        {{ audit_sort_th(2, 'Origen', '7.2rem', '', '', 'origen') }}
+                        {{ audit_sort_th(3, 'Estado final', '7.5rem', '', '', 'estado') }}
+                        {{ audit_sort_th(4, 'Obra', 'auto', '', '', 'obra') }}
+                        {{ audit_sort_th(5, 'Entrada', '5.2rem', 'center', 'time', 'entrada') }}
+                        {{ audit_sort_th(6, 'Salida', '5.2rem', 'center', 'time', 'salida') }}
+                        {% if muestra_geo_audit %}{{ audit_sort_th(7, 'Ubicación', '2.4rem', 'center', '', 'ubicacion') }}{% endif %}
                         {% if tenant_has_odoo %}
-                        {{ audit_sort_th(metrics_col, 'UD', '2.6rem', 'center', 'num', 'odoo_ud') }}
-                        {{ audit_sort_th(metrics_col + 1, 'HH', '2.6rem', 'center', 'num', 'odoo_hh') }}
-                        {{ audit_sort_th(metrics_col + 2, 'MOD', '2.6rem', 'center', 'num', 'odoo_mod') }}
-                        {{ audit_sort_th(metrics_col + 3, 'MOE', '2.6rem', 'center', 'num', 'odoo_moe') }}
+                        {{ audit_sort_th(hist_metrics, 'UD', '2.6rem', 'center', 'num', 'odoo_ud') }}
+                        {{ audit_sort_th(hist_metrics + 1, 'HH', '2.6rem', 'center', 'num', 'odoo_hh') }}
+                        {{ audit_sort_th(hist_metrics + 2, 'MOD', '2.6rem', 'center', 'num', 'odoo_mod') }}
+                        {{ audit_sort_th(hist_metrics + 3, 'MOE', '2.6rem', 'center', 'num', 'odoo_moe') }}
                         {% endif %}
-                        {{ audit_sort_th(after_metrics, 'Notas', '7rem', '', '', 'notas') }}
-                        {{ audit_sort_th(after_metrics + 1, 'Auditado por', '6.5rem', '', '', 'auditor') }}
-                        {{ audit_sort_th(after_metrics + 2, 'Hora reg.', '6rem', '', 'date', 'hora_reg') }}
+                        {{ audit_sort_th(hist_after, 'Notas', '7rem', '', '', 'notas') }}
+                        {{ audit_sort_th(hist_after + 1, 'Auditado por', '6.5rem', '', '', 'auditor') }}
+                        {{ audit_sort_th(hist_after + 2, 'Auditado', '6.4rem', '', 'date', 'hora_reg', _('Primer clic: la auditoría más reciente')) }}
                         {% if can_resolve_fichajes %}
                         <th style="width:5.8rem;" class="text-center no-sort no-col-hide" data-col-key="accion">{{ _('Acción') }}</th>
                         {% endif %}
                     </tr>
                 </thead>
-                <tbody id="historialTableBody" data-lazy-seccion="historial" data-loaded="{% if historial %}1{% else %}0{% endif %}">
+                <tbody id="historialTableBody" data-lazy-seccion="historial" data-loaded="0">
                     {% if historial %}
                     {% for reg in historial %}
                     <tr id="hist-row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-registro-id="{{ reg.id }}" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
@@ -830,11 +842,11 @@ tr.audit-row-highlight {
                         </td>
                         {% if can_resolve_fichajes %}
                         <td class="text-center" onclick="event.stopPropagation();">
-                            {% if ((reg.estado or '').startswith('Resuelto_') or reg.estado == 'Falta') and reg.estado_antes_resolucion %}
+                            {% if (reg.estado or '').startswith('Resuelto_') or reg.estado == 'Falta' %}
                             <button type="button"
                                     class="btn btn-sm btn-outline-secondary"
                                     style="font-size:0.7rem; padding:0.15rem 0.45rem;"
-                                    title="{{ _('Vuelve a la clasificación anterior (el cuadrante no se deshace solo)') }}"
+                                    title="{{ _('Vuelve al estado anterior para poder auditarla de nuevo') }}"
                                     onclick="reabrirResolucion({{ reg.id }}, this)">
                                 <i class="fas fa-undo"></i> {{ _('Reabrir') }}
                             </button>
@@ -849,6 +861,7 @@ tr.audit-row-highlight {
                 </tbody>
             </table>
                 </div>
+                <div id="historialPager" class="d-flex flex-wrap align-items-center px-3 pb-3" style="gap:0.5rem;"></div>
             </div>
         </div>
         {% endif %}
@@ -1020,25 +1033,96 @@ function applyGeoDudosaFilter(active) {
     }
 }
 
+function auditRowCell(row, col) {
+    if (row && row.anCells && row.anCells[col]) return row.anCells[col];
+    if (row && row.nTr && row.nTr.cells && row.nTr.cells[col]) return row.nTr.cells[col];
+    return null;
+}
+
+function auditCellSortKey(cell, kind) {
+    var raw = '';
+    if (cell) {
+        raw = cell.getAttribute('data-order');
+        if (raw == null || raw === '') raw = cell.getAttribute('data-sort-value');
+        if (raw == null || raw === '') raw = (cell.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    if (kind === 'date' && typeof parseAdminDateSortValue === 'function') {
+        return parseAdminDateSortValue(raw);
+    }
+    if (kind === 'time' && typeof parseAdminTimeSortValue === 'function') {
+        return parseAdminTimeSortValue(raw);
+    }
+    if (kind === 'num' || kind === 'rating') {
+        var n = parseFloat(String(raw).replace(/\s/g, '').replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+    }
+    return String(raw || '').toLocaleLowerCase();
+}
+
+function bindAuditHeaderSort(tableId) {
+    var table = document.getElementById(tableId);
+    if (!table || !$.fn.DataTable.isDataTable(table)) return;
+    var $table = $(table);
+    $table.find('thead').off('click.spAuditSort').on('click.spAuditSort', 'th.sortable-col', function (e) {
+        if (e.target.closest && e.target.closest('.sp-col-prefs, .sp-col-prefs-btn')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var th = this;
+        var col = parseInt(th.getAttribute('data-col-index'), 10);
+        if (isNaN(col)) col = Array.prototype.indexOf.call(th.parentNode.children, th);
+        var kind = th.getAttribute('data-sort-type') || 'text';
+        var cur = th.getAttribute('data-sort') || 'none';
+        var next = (kind === 'date' || kind === 'time')
+            ? (cur === 'desc' ? 'asc' : 'desc')
+            : (cur === 'asc' ? 'desc' : 'asc');
+        var api = $table.DataTable();
+        var settings = api.settings()[0];
+        var master = settings.aiDisplayMaster.slice();
+        master.sort(function (ia, ib) {
+            var ka = auditCellSortKey(auditRowCell(settings.aoData[ia], col), kind);
+            var kb = auditCellSortKey(auditRowCell(settings.aoData[ib], col), kind);
+            var cmp;
+            if (typeof ka === 'number' && typeof kb === 'number') cmp = ka - kb;
+            else cmp = String(ka).localeCompare(String(kb), 'es', { numeric: true, sensitivity: 'base' });
+            if (cmp === 0) return ia - ib;
+            return next === 'asc' ? cmp : -cmp;
+        });
+        settings.aiDisplayMaster = master;
+        settings.aaSorting = [];
+        table.querySelectorAll('thead th.sortable-col').forEach(function (other) {
+            if (other === th) return;
+            other.setAttribute('data-sort', 'none');
+            var otherIcon = other.querySelector('.sort-icon');
+            if (otherIcon) otherIcon.className = 'fas fa-sort sort-icon';
+        });
+        th.setAttribute('data-sort', next);
+        var icon = th.querySelector('.sort-icon');
+        if (icon) icon.className = 'fas fa-sort-' + (next === 'asc' ? 'up' : 'down') + ' sort-icon';
+        api.page(0);
+        api.draw(false);
+    });
+}
+
 function initAuditDataTable(tableId, options) {
     var $el = $('#' + tableId);
     if (!$el.length || $.fn.DataTable.isDataTable($el)) return;
-    // DataTables no admite filas con una sola celda colspan (tn/1, tn/4)
     $el.find('tbody tr').each(function () {
         if ($(this).find('> td[colspan]').length) $(this).remove();
     });
+    // El clic lo atiende bindAuditHeaderSort: ordena las 500 filas, no el texto dd/mm ni la página visible.
     $el.find('thead th[onclick]').removeAttr('onclick');
     var dtLang = {es:'es-ES', en:'en-GB', pt:'pt-PT', fr:'fr-FR'}[window.SP_LOCALE || 'es'] || 'es-ES';
-    var defaults = {
-        order: [[0, 'desc']],
-        ordering: true,
-        columnDefs: [{ targets: 0, type: 'num' }],
+    var opts = $.extend({}, {
+        ordering: false,
+        order: [],
         language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/' + dtLang + '.json' }
-    };
-    if (tableId === 'historialTable') {
-        defaults.columnDefs.push({ targets: SP_HISTORIAL_DATE_COL, type: 'num' });
-    }
-    return $el.DataTable($.extend(true, {}, defaults, options || {}));
+    }, options || {});
+    opts.ordering = false;
+    opts.order = [];
+    opts.columnDefs = [{ targets: 'no-sort', orderable: false }];
+    var api = $el.DataTable(opts);
+    bindAuditHeaderSort(tableId);
+    return api;
 }
 
 function openAuditoriaSection(collapseSelector) {
@@ -1092,21 +1176,20 @@ window.applyAuditoriaDeepLink = applyAuditoriaDeepLink;
 
 var AUDIT_UI_STATE_KEY = 'sp_auditoria_ui';
 
-function saveAuditoriaUiState() {
-    var open = [];
-    document.querySelectorAll('#accordionAuditoria .collapse.show').forEach(function (el) {
-        if (el.id) open.push(el.id);
-    });
+/** Tras resolver/reabrir: a dónde saltar al recargar (el resto queda cerrado). */
+function softReloadAuditoria(delayMs, focus) {
     try {
         sessionStorage.setItem(AUDIT_UI_STATE_KEY, JSON.stringify({
-            y: window.scrollY || window.pageYOffset || 0,
-            open: open,
-            t: Date.now()
+            t: Date.now(),
+            focus: focus || null
         }));
     } catch (e) { /* ignore */ }
+    var ms = (typeof delayMs === 'number') ? delayMs : 350;
+    setTimeout(function () { window.location.reload(); }, ms);
 }
+window.softReloadAuditoria = softReloadAuditoria;
 
-function restoreAuditoriaUiState() {
+function restoreAuditoriaFocus() {
     var raw;
     try {
         raw = sessionStorage.getItem(AUDIT_UI_STATE_KEY);
@@ -1118,35 +1201,61 @@ function restoreAuditoriaUiState() {
     var st;
     try { st = JSON.parse(raw); } catch (e) { return false; }
     if (!st || (Date.now() - (st.t || 0)) > 90000) return false;
+    var focus = st.focus;
+    if (!focus) return false;
 
-    (st.open || []).forEach(function (id) {
-        var $c = $('#' + id);
-        if ($c.length && !$c.hasClass('show')) $c.addClass('show');
-        var $h = $c.prev('.auditoria-section-header');
-        if ($h.length) {
-            $h.removeClass('collapsed').attr('aria-expanded', 'true');
-        }
-    });
+    var registroId = focus.registroId ? String(focus.registroId) : '';
+    var seccionMap = {
+        conflictos: '#collapseConflictos',
+        desviaciones: '#collapseConflictos',
+        paracaidistas: '#collapseParacaidistas',
+        ausencias: '#collapseAusencias',
+        historial: '#collapseHistorial',
+        correcciones: '#collapseCorrecciones'
+    };
 
-    var y = st.y || 0;
-    var applyScroll = function () { window.scrollTo(0, y); };
-    applyScroll();
-    requestAnimationFrame(applyScroll);
-    setTimeout(applyScroll, 80);
-    setTimeout(applyScroll, 250);
-    return true;
+    if (focus.historial) {
+        var q = focus.historialQ != null ? String(focus.historialQ) : registroId;
+        window.historialSearchQ = q;
+        var input = document.getElementById('historialSearchInput');
+        if (input) input.value = q;
+        openAuditoriaSection('#collapseHistorial');
+        // shown.bs.collapse refresca; forzar búsqueda por id tras abrir
+        setTimeout(function () {
+            if (typeof window.refreshHistorialTable !== 'function') return;
+            window.refreshHistorialTable(q, function () {
+                var row = document.getElementById('hist-row-' + registroId)
+                    || document.querySelector('#historialTableBody tr[data-registro-id="' + registroId + '"]');
+                if (row) {
+                    row.classList.add('audit-row-highlight');
+                    try { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { row.scrollIntoView(true); }
+                }
+            });
+        }, 200);
+        return true;
+    }
+
+    var sel = seccionMap[focus.seccion] || null;
+    if (sel) {
+        openAuditoriaSection(sel);
+        setTimeout(function () {
+            var row = registroId
+                ? (document.getElementById('row-' + registroId)
+                    || document.getElementById('row-espejo-plan-' + registroId)
+                    || document.getElementById('row-espejo-real-' + registroId)
+                    || document.querySelector(sel + ' tr[data-registro-id="' + registroId + '"]'))
+                : null;
+            if (row) {
+                row.classList.add('audit-row-highlight');
+                try { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { row.scrollIntoView(true); }
+            }
+        }, 450);
+        return true;
+    }
+    return false;
 }
-
-function softReloadAuditoria(delayMs) {
-    saveAuditoriaUiState();
-    var ms = (typeof delayMs === 'number') ? delayMs : 350;
-    setTimeout(function () { window.location.reload(); }, ms);
-}
-window.softReloadAuditoria = softReloadAuditoria;
 
 $(document).ready(function() {
-    restoreAuditoriaUiState();
-
     ['auditConflictosTable', 'auditParacaidistasTable', 'auditAusenciasTable'].forEach(function(id) {
         if (document.getElementById(id)) applyDefaultDateSort(id, 0);
     });
@@ -1181,14 +1290,21 @@ $(document).ready(function() {
     });
 
     var historialSearchTimer = null;
-    var historialSearchQ = '';
+    window.historialSearchQ = window.historialSearchQ || '';
+    var historialSearchQ = window.historialSearchQ;
+    window.historialState = window.historialState || {
+        q: historialSearchQ,
+        page: 1,
+        sort: 'fecha',
+        dir: 'desc',
+        perPage: 25,
+        origen: ''
+    };
 
     function destroyAuditDataTable(tableId) {
         var $el = $('#' + tableId);
         if ($el.length && $.fn.DataTable && $.fn.DataTable.isDataTable($el)) {
-            try { $el.DataTable().clear().destroy(); } catch (e) {
-                try { $el.DataTable().destroy(); } catch (e2) { /* ignore */ }
-            }
+            try { $el.DataTable().destroy(); } catch (e) { /* ignore */ }
         }
         if (tableId === 'historialTable') dtHistorial = null;
         if (tableId === 'correccionesTable') dtCorrecciones = null;
@@ -1228,7 +1344,19 @@ $(document).ready(function() {
             '" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _("Cargando…") }}</td></tr>'
         );
         var url = {{ url_for('sync.auditoria_fichajes_seccion', seccion='__SEC__')|tojson }}.replace('__SEC__', seccion);
-        if (q) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'q=' + encodeURIComponent(q);
+        function addParam(key, value) {
+            if (value == null || value === '') return;
+            url += (url.indexOf('?') >= 0 ? '&' : '?') + key + '=' + encodeURIComponent(value);
+        }
+        if (q) addParam('q', q);
+        if (seccion === 'historial') {
+            var st = window.historialState || {};
+            addParam('page', st.page || 1);
+            addParam('per_page', st.perPage || 25);
+            addParam('sort', st.sort || 'fecha');
+            addParam('dir', st.dir || 'desc');
+            addParam('origen', st.origen || '');
+        }
         fetch(url, {
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         })
@@ -1250,13 +1378,19 @@ $(document).ready(function() {
             $tbody.attr('data-loaded', '1');
             $tbody.attr('data-q', q || '');
             var count = data.count || 0;
+            var total = (data.total != null) ? data.total : count;
             var hint = document.getElementById('historialSearchHint');
             if (hint && seccion === 'historial') {
                 hint.textContent = q
-                    ? ({{ _('Resultados')|tojson }} + ': ' + count)
-                    : {{ _('Hoy primero; dentro del día, las resoluciones salen antes. Busca en servidor si no aparece.')|tojson }};
+                    ? ({{ _('Resultados')|tojson }} + ': ' + total)
+                    : {{ _('Histórico completo, por páginas. Arriba, el día de trabajo más reciente.')|tojson }};
             }
-            if (onDone) onDone({ empty: count === 0, count: count });
+            if (seccion === 'historial') {
+                if (data.page) window.historialState.page = data.page;
+                renderHistorialPager(data);
+                paintHistorialSortHeaders();
+            }
+            if (onDone) onDone({ empty: total === 0, count: count, total: total });
         })
         .catch(function() {
             $tbody.html(
@@ -1267,12 +1401,60 @@ $(document).ready(function() {
         });
     }
 
+    function paintHistorialSortHeaders() {
+        var table = document.getElementById('historialTable');
+        if (!table) return;
+        var st = window.historialState;
+        table.querySelectorAll('thead th.sortable-col').forEach(function (th) {
+            th.removeAttribute('onclick');
+            var key = th.getAttribute('data-col-key');
+            var active = key && key === st.sort;
+            th.setAttribute('data-sort', active ? st.dir : 'none');
+            var icon = th.querySelector('.sort-icon');
+            if (!icon) return;
+            icon.className = 'fas sort-icon ' + (
+                active ? (st.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'
+            );
+        });
+    }
+
+    function renderHistorialPager(data) {
+        var el = document.getElementById('historialPager');
+        if (!el) return;
+        var total = data.total || 0;
+        var page = data.page || 1;
+        var pages = data.pages || 1;
+        var per = data.per_page || 25;
+        if (!total) {
+            el.innerHTML = '';
+            return;
+        }
+        var start = (page - 1) * per + 1;
+        var end = Math.min(page * per, total);
+        el.innerHTML =
+            '<span class="text-muted small">' + start + '–' + end + ' / ' + total + '</span>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary" data-hist-page="' + (page - 1) + '"' +
+                (page <= 1 ? ' disabled' : '') + '>{{ _("Anterior") }}</button>' +
+            '<label class="small mb-0 text-muted">{{ _("Página") }} ' +
+                '<input type="number" id="historialPageInput" min="1" max="' + pages + '" value="' + page + '" ' +
+                'class="form-control form-control-sm d-inline-block" style="width:4.5rem;"> / ' + pages +
+            '</label>' +
+            '<button type="button" class="btn btn-sm btn-outline-secondary" data-hist-page="' + (page + 1) + '"' +
+                (page >= pages ? ' disabled' : '') + '>{{ _("Siguiente") }}</button>';
+    }
+
     function refreshHistorialTable(q, onReady) {
+        var nextQ = q || '';
+        if (nextQ !== (window.historialState.q || '')) {
+            window.historialState.page = 1;
+        }
+        window.historialState.q = nextQ;
+        window.historialSearchQ = nextQ;
+        historialSearchQ = nextQ;
         var $body = $('#historialTableBody');
         loadAuditoriaSeccion('historial', $body, function (meta) {
             meta = meta || {};
             var table = document.getElementById('historialTable');
-            // Quitar filas placeholder/error con colspan antes de init
             if (table) {
                 table.querySelectorAll('tbody tr').forEach(function (tr) {
                     if (tr.querySelector('td[colspan]')) tr.remove();
@@ -1283,23 +1465,48 @@ $(document).ready(function() {
                 });
             }
             destroyAuditDataTable('historialTable');
-            dtHistorial = initAuditDataTable('historialTable', {
-                pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, {{ _('Todos')|tojson }}]],
-                searching: false,
-                autoWidth: false,
-                language: {
-                    emptyTable: {{ _('Sin histórico')|tojson }},
-                    zeroRecords: {{ _('Sin coincidencias')|tojson }}
-                }
-            });
-            if (dtHistorial && dtHistorial.columns) {
-                try { dtHistorial.columns.adjust(); } catch (e) { /* ignore */ }
-            }
+            dtHistorial = null;
             if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
+            paintHistorialSortHeaders();
             if (typeof onReady === 'function') onReady(meta);
-        }, { force: true, q: q || '' });
+        }, { force: true, q: nextQ });
     }
+    window.refreshHistorialTable = refreshHistorialTable;
+
+    $('#historialTable').on('click', 'thead th.sortable-col', function (e) {
+        if (e.target.closest && e.target.closest('.sp-col-prefs, .sp-col-prefs-btn')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var key = this.getAttribute('data-col-key') || 'fecha';
+        var kind = this.getAttribute('data-sort-type') || 'text';
+        var st = window.historialState;
+        if (st.sort === key) {
+            st.dir = st.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+            st.sort = key;
+            st.dir = (kind === 'date' || kind === 'time') ? 'desc' : 'asc';
+        }
+        st.page = 1;
+        refreshHistorialTable(st.q);
+    });
+    $('#historialPager').on('click', '[data-hist-page]', function () {
+        if (this.disabled) return;
+        var n = parseInt(this.getAttribute('data-hist-page'), 10);
+        var pages = parseInt($('#historialPageInput').attr('max'), 10) || 1;
+        if (!n || n < 1 || n > pages || n === window.historialState.page) return;
+        window.historialState.page = n;
+        refreshHistorialTable(window.historialState.q);
+    });
+    $('#historialPager').on('change', '#historialPageInput', function () {
+        var pages = parseInt(this.max, 10) || 1;
+        var n = parseInt(this.value, 10);
+        if (!n || n < 1) n = 1;
+        if (n > pages) n = pages;
+        this.value = n;
+        if (n === window.historialState.page) return;
+        window.historialState.page = n;
+        refreshHistorialTable(window.historialState.q);
+    });
 
     function clearAuditoriaRowHighlight() {
         document.querySelectorAll('tr.audit-row-highlight').forEach(function (r) {
@@ -1461,6 +1668,8 @@ $(document).ready(function() {
         });
     });
     $('#collapseHistorial').on('shown.bs.collapse', function() {
+        var q = window.historialSearchQ != null ? window.historialSearchQ : historialSearchQ;
+        historialSearchQ = q || '';
         refreshHistorialTable(historialSearchQ, function (meta) {
             if (typeof window._auditHistorialJumpReady === 'function') {
                 var cb = window._auditHistorialJumpReady;
@@ -1470,12 +1679,21 @@ $(document).ready(function() {
         });
     });
 
+    $('#historialOrigenFilter').on('change', function () {
+        window.historialState.origen = this.value || '';
+        window.historialState.page = 1;
+        if (!$('#collapseHistorial').hasClass('show')) return;
+        refreshHistorialTable(window.historialState.q || '');
+    });
+
     $('#historialSearchInput').on('input', function () {
         var val = (this.value || '').trim();
         historialSearchQ = val;
+        window.historialSearchQ = val;
         clearTimeout(historialSearchTimer);
         historialSearchTimer = setTimeout(function () {
             if (!$('#collapseHistorial').hasClass('show')) {
+                // Al abrir, el handler shown.bs.collapse ya llama refresh con historialSearchQ.
                 $('#collapseHistorial').collapse('show');
                 return;
             }
@@ -1484,6 +1702,8 @@ $(document).ready(function() {
     });
 
     applyAuditoriaDeepLink();
+    // Tras definir refreshHistorialTable: salto post-resolver/reabrir (arranque todo cerrado).
+    restoreAuditoriaFocus();
 });
 
 function showToast(message, isSuccess = false) {
@@ -1506,7 +1726,7 @@ var AUDIT_RESOLVE_I18N = {{ {
   'invalid': _('Respuesta inválida'),
   'network': _('Error de red al resolver'),
   'http_fail': _('Error al resolver'),
-  'reopen_confirm': _('¿Reabrir esta decisión? Volverá a la clasificación anterior. Si moviste o borraste asignaciones, el cuadrante no se deshace solo.'),
+  'reopen_confirm': _('¿Reabrir esta decisión? Vuelve a la alerta anterior. Si se desasignó, se reasigna la plaza planificada.'),
   'reopened': _('Reabierto'),
   'reopen_fail': _('No se pudo reabrir'),
   'reopen_network': _('Fallo de red al reabrir.'),
@@ -1730,7 +1950,8 @@ var AUDIT_RESOLVE_I18N = {{ {
             if (data.message) {
                 try { showToast(data.message, true); } catch (e) { /* ignore */ }
             }
-            softReloadAuditoria(320);
+            // Recarga con todo cerrado; el histórico se consulta a mano.
+            softReloadAuditoria(320, null);
         })
         .catch(function (err) {
             console.error('Error critico:', err);
@@ -1865,7 +2086,10 @@ var AUDIT_RESOLVE_I18N = {{ {
             var data = result.data;
             if (result.ok && data.success) {
                 showToast(data.aviso || t.reopened || 'OK', true);
-                softReloadAuditoria(700);
+                softReloadAuditoria(700, {
+                    seccion: data.seccion || 'ausencias',
+                    registroId: id
+                });
                 return;
             }
             alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.reopen_fail || 'Error'));
