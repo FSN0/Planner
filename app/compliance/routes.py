@@ -770,11 +770,18 @@ def certificacion_obra(obra_id):
     )
     if not detalle:
         abort(404)
-    db.session.commit()
     obra = detalle['obra']
-    primera = (detalle.get('empresas') or [None])[0]
-    company_ref = primera['company'] if primera else None
-    contrato = contrato_asistencia(company_ref, obra) if company_ref else None
+    # Hub: solo datos locales (fichajes/overrides/líneas). Sin Odoo ni sync.
+    propio = precio_obra(obra)
+    precio_cabecera = propio
+    if precio_cabecera is None:
+        for emp in (detalle.get('empresas') or []):
+            p = emp.get('precio')
+            if p is not None and p > 0:
+                precio_cabecera = p
+                break
+        if precio_cabecera is None:
+            precio_cabecera = Decimal('0.00')
     return render_template(
         'compliance/certificacion_obra.html',
         detalle=detalle,
@@ -785,10 +792,10 @@ def certificacion_obra(obra_id):
         hasta=hasta,
         prev=_shift(anio, mes, -1),
         next=_shift(anio, mes, 1),
-        precio=precio_mostrado_obra(obra, company=company_ref),
-        precio_propio=precio_obra(obra) is not None,
-        precio_origen='obra' if precio_obra(obra) is not None else ('contrato' if contrato else 'sin'),
-        contrato=contrato,
+        precio=precio_cabecera,
+        precio_propio=propio is not None,
+        precio_origen='obra' if propio is not None else 'sin',
+        contrato=None,
         **_cert_avisos_ctx(_scope_obra(obra_id), anio=anio, mes=mes, obra_id=obra_id),
     )
 

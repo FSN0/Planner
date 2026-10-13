@@ -2244,6 +2244,25 @@ def panel_certificacion_obras(
     return out
 
 
+def _precio_hub_local(
+    company: Company | None,
+    obra: Obra | None,
+    *,
+    precio_linea_company: dict[int, Decimal] | None = None,
+) -> Decimal:
+    """€/h del hub sin tocar Odoo: override obra > override empresa > línea ya guardada > 0."""
+    propio = precio_obra(obra)
+    if propio is not None:
+        return propio
+    if company is not None and company.precio_hora is not None:
+        return cuantizar(company.precio_hora) or Decimal('0.00')
+    if company is not None and precio_linea_company:
+        got = precio_linea_company.get(company.id)
+        if got is not None:
+            return got
+    return Decimal('0.00')
+
+
 def detalle_certificacion_obra(
     user,
     obra_id: int,
@@ -2253,7 +2272,10 @@ def detalle_certificacion_obra(
     desde: date | None = None,
     hasta: date | None = None,
 ) -> dict | None:
-    """Detalle obra: agrupaciones por empresa y por fecha, con estado de propuesta."""
+    """Detalle obra: fichajes + propuestas locales. Cero sync / cero Odoo.
+
+    La tarifa de contrato y la sync viven en «Gestionar» (empresa+obra).
+    """
     from app.services.panel_scope_service import certificacion_obra_ids
 
     allowed = certificacion_obra_ids(user)
@@ -2269,26 +2291,54 @@ def detalle_certificacion_obra(
     )
     # Incluir empresas con propuesta aunque el filtro de fechas no pille fichaje
     props_obra = CertificacionPropuesta.query.filter_by(obra_id=obra_id, anio=anio, mes=mes).all()
-    company_ids = {f['company_id'] for f in filas} | {p.company_id for p in props_obra}
+    props_por_company: dict[int, list] = defaultdict(list)
+    for p in props_obra:
+        props_por_company[p.company_id].append(p)
+    estados_por_company = {
+        cid: _estado_desde_par(rows, vista_subcontrata=False)
+        for cid, rows in props_por_company.items()
+    }
+
+    # Precio ya persistido en líneas (una query), sin contrato Odoo.
+    prop_ids = [p.id for p in props_obra]
+    precio_linea_company: dict[int, Decimal] = {}
+    if prop_ids:
+        for company_id, precio in (
+            db.session.query(CertificacionPropuesta.company_id, CertificacionLinea.precio_hora)
+            .join(CertificacionLinea, CertificacionLinea.propuesta_id == CertificacionPropuesta.id)
+            .filter(
+                CertificacionPropuesta.id.in_(prop_ids),
+                CertificacionLinea.precio_hora.isnot(None),
+            )
+            .all()
+        ):
+            if company_id not in precio_linea_company and precio is not None:
+                got = cuantizar(precio)
+                if got is not None:
+                    precio_linea_company[company_id] = got
+
+    company_ids = {f['company_id'] for f in filas} | set(props_por_company)
     user_ids = {f['user_id'] for f in filas}
     users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
     companies = {
         c.id: c for c in Company.query.filter(Company.id.in_(list(company_ids))).all()
     } if company_ids else {}
 
+    precios_company = {
+        cid: _precio_hub_local(companies.get(cid), obra, precio_linea_company=precio_linea_company)
+        for cid in company_ids
+    }
+
     dias: dict[date, dict] = {}
     por_empresa: dict[int, dict] = {}
     total_horas = Decimal('0.00')
     total_importe = Decimal('0.00')
-    cache: dict = {}
     for f in filas:
         company = companies.get(f['company_id'])
         persona = users.get(f['user_id'])
         if not company or not persona:
             continue
-        precio = precio_para(
-            company, obra, user=persona, fecha=f['fecha'], cache=cache,
-        )
+        precio = precios_company.get(company.id) or Decimal('0.00')
         importe = cuantizar(f['horas'] * precio) or Decimal('0.00')
         total_horas += f['horas']
         total_importe += importe
@@ -2361,19 +2411,17 @@ def detalle_certificacion_obra(
 
     for cid in company_ids:
         company = companies.get(cid)
-        if not company:
+        if not company or cid in por_empresa:
             continue
-        sincronizar(company, anio, mes, obra_id)
-        if cid not in por_empresa:
-            por_empresa[cid] = {
-                'company': company,
-                'horas': Decimal('0.00'),
-                'importe': Decimal('0.00'),
-                'precio': precio_para(company, obra),
-                'fechas': {},
-                'personas': {},
-                'contrato': None,
-            }
+        por_empresa[cid] = {
+            'company': company,
+            'horas': Decimal('0.00'),
+            'importe': Decimal('0.00'),
+            'precio': precios_company.get(cid) or Decimal('0.00'),
+            'fechas': {},
+            'personas': {},
+            'contrato': None,
+        }
 
     fechas = []
     for fecha in sorted(dias.keys(), reverse=True):
@@ -2386,9 +2434,7 @@ def detalle_certificacion_obra(
             emp['horas'] = cuantizar(emp['horas']) or Decimal('0.00')
             emp['importe'] = cuantizar(emp['importe']) or Decimal('0.00')
             emp['personas'].sort(key=lambda p: (-(p['horas'] or 0), (p['user'].name or '').lower()))
-            emp['estado'] = estado_propuesta(
-                emp['company'].id, obra_id, anio, mes, vista_subcontrata=False,
-            )
+            emp['estado'] = estados_por_company.get(emp['company'].id, 'sin_movimiento')
         fechas.append({
             'fecha': fecha,
             'horas': cuantizar(d['horas']) or Decimal('0.00'),
@@ -2400,7 +2446,7 @@ def detalle_certificacion_obra(
     for cid, emp in por_empresa.items():
         emp['horas'] = cuantizar(emp['horas']) or Decimal('0.00')
         emp['importe'] = cuantizar(emp['importe']) or Decimal('0.00')
-        emp['estado'] = estado_propuesta(cid, obra_id, anio, mes, vista_subcontrata=False)
+        emp['estado'] = estados_por_company.get(cid, 'sin_movimiento')
         emp['contrato'] = None
         fechas_emp = []
         for fecha in sorted(emp['fechas'].keys(), reverse=True):

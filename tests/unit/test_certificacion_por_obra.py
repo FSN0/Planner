@@ -348,3 +348,69 @@ def test_precio_contrato_sin_base_usa_linea(cert_ctx, monkeypatch):
     )
     assert cs.precio_contrato(company, o, user=None) == Decimal('22.50')
     assert cs.precio_para(company, o) == Decimal('22.50')
+
+
+def test_detalle_obra_no_sincroniza_ni_odoo(cert_ctx, monkeypatch):
+    """Hub por obra: solo lectura local; sync/Odoo quedan para «Gestionar»."""
+    from app.services import certificacion_service as cs
+
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra Hub Rapido')
+    u = _operario(session, company, 'HubOp')
+    _fichaje(session, u, o, date(2026, 10, 5))
+    _fichaje(session, u, o, date(2026, 10, 6))
+    prop = CertificacionPropuesta(
+        company_id=company.id, obra_id=o.id, anio=2026, mes=10,
+        direccion=DIR_EMP, estado='borrador',
+    )
+    session.add(prop)
+    session.flush()
+    session.add(CertificacionLinea(
+        propuesta_id=prop.id,
+        user_id=u.id,
+        obra_id=o.id,
+        fecha=date(2026, 10, 5),
+        horas=Decimal('8.00'),
+        precio_hora=Decimal('19.50'),
+        origen_horas='app',
+    ))
+    session.commit()
+
+    sync_calls = []
+    odoo_calls = []
+    monkeypatch.setattr(
+        cs, 'sincronizar',
+        lambda *a, **k: sync_calls.append((a, k)) or (None, None),
+    )
+    monkeypatch.setattr(
+        cs, 'contrato_asistencia',
+        lambda *a, **k: odoo_calls.append(1) or {'contract_id': 1, 'hourly_rate': 99.0, 'lines': {}},
+    )
+    monkeypatch.setattr(
+        cs, 'precio_para',
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError('hub no debe llamar precio_para/Odoo')),
+    )
+    admin = User(
+        email='admin.hub@cert.test',
+        password_hash=generate_password_hash('x'),
+        role='admin',
+        name='Admin',
+        lastname='Hub',
+        dni='ADMINHUB',
+        company_id=cert_ctx['internal'].id,
+        active=True,
+        email_verified=True,
+        is_deleted=False,
+    )
+    session.add(admin)
+    session.flush()
+
+    detalle = cs.detalle_certificacion_obra(admin, o.id, anio=2026, mes=10)
+    assert detalle is not None
+    assert sync_calls == []
+    assert odoo_calls == []
+    assert float(detalle['horas']) == pytest.approx(16.0)
+    assert len(detalle['empresas']) == 1
+    assert detalle['empresas'][0]['estado'] == 'borrador'
+    assert detalle['empresas'][0]['precio'] == Decimal('19.50')

@@ -34,9 +34,12 @@
 
         <form method="POST" action="{{ mkt_url('marketing.contacto') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            {# Honeypot anti-spam #}
+            <input type="hidden" name="form_ts" value="{{ form_ts }}">
+            {# Honeypots anti-spam (deben quedar vacíos) #}
             <input type="text" name="website" value="" tabindex="-1" autocomplete="off"
-                   style="position:absolute;left:-9999px;opacity:0;" aria-hidden="true">
+                   style="position:absolute;left:-9999px;opacity:0;height:0;width:0;" aria-hidden="true">
+            <input type="text" name="company_url" value="" tabindex="-1" autocomplete="off"
+                   style="position:absolute;left:-9999px;opacity:0;height:0;width:0;" aria-hidden="true">
 
             <label for="nombre" style="display:block;font-weight:600;margin-bottom:.35rem;">{{ _('Nombre') }}</label>
             <input type="text" name="nombre" id="nombre" required maxlength="120"

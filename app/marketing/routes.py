@@ -353,20 +353,26 @@ def demo():
 
 
 @marketing_bp.route('/contacto', methods=['GET', 'POST'])
-@limiter.limit('5 per minute; 20 per hour', methods=['POST'])
+@limiter.limit('3 per minute; 10 per hour', methods=['POST'])
 def contacto():
     """Formulario de contacto → info@signaplan.com (buzón comercial)."""
     _require_marketing()
+    from markupsafe import escape
+
+    from app.services.contact_spam_service import looks_like_spam, new_form_ts
     from app.services.email_service import send_email
 
     destino = _contact_email()
     form = {}
 
+    def _fake_ok():
+        flash(translate('Mensaje enviado. Te responderemos lo antes posible.'), 'success')
+        return _mkt_redirect('marketing.contacto')
+
     if request.method == 'POST':
-        # Honeypot: si viene relleno, fingimos éxito
-        if (request.form.get('website') or '').strip():
-            flash(translate('Mensaje enviado. Te responderemos lo antes posible.'), 'success')
-            return _mkt_redirect('marketing.contacto')
+        # Honeypots: rellenos = bot. Fingimos éxito para no dar pistas.
+        if (request.form.get('website') or '').strip() or (request.form.get('company_url') or '').strip():
+            return _fake_ok()
 
         acepta_comunicaciones = bool(request.form.get('acepta_comunicaciones'))
         form = {
@@ -376,6 +382,20 @@ def contacto():
             'mensaje': (request.form.get('mensaje') or '').strip()[:4000],
             'acepta_comunicaciones': acepta_comunicaciones,
         }
+        if looks_like_spam(
+            nombre=form['nombre'],
+            email=form['email'],
+            empresa=form['empresa'],
+            mensaje=form['mensaje'],
+            form_ts=request.form.get('form_ts'),
+        ):
+            current_app.logger.info(
+                'Contacto descartado como spam: %s <%s>',
+                form['nombre'][:40],
+                form['email'][:80],
+            )
+            return _fake_ok()
+
         if not form['nombre'] or '@' not in form['email'] or len(form['mensaje']) < 10:
             flash(translate('Completa nombre, un correo válido y un mensaje (mín. 10 caracteres).'), 'danger')
         else:
@@ -408,20 +428,20 @@ def contacto():
                 f"Comunicaciones comerciales: {consentimiento}\n\n"
                 f"{form['mensaje']}\n"
             )
+            msg_html = str(escape(form['mensaje'])).replace('\n', '<br>')
             html = (
-                f"<p><strong>Nombre:</strong> {form['nombre']}<br>"
-                f"<strong>Email:</strong> <a href=\"mailto:{form['email']}\">{form['email']}</a><br>"
-                f"<strong>Empresa:</strong> {form['empresa'] or '—'}<br>"
+                f"<p><strong>Nombre:</strong> {escape(form['nombre'])}<br>"
+                f"<strong>Email:</strong> <a href=\"mailto:{escape(form['email'])}\">{escape(form['email'])}</a><br>"
+                f"<strong>Empresa:</strong> {escape(form['empresa'] or '—')}<br>"
                 f"<strong>Comunicaciones comerciales:</strong> {consentimiento}</p>"
-                f"<p>{form['mensaje'].replace(chr(10), '<br>')}</p>"
+                f"<p>{msg_html}</p>"
             )
             ok = False
             from app.services.notification_dispatch_service import event_allows_send
             if event_allows_send('marketing_contact'):
                 ok = send_email(asunto, [destino], texto, html_body=html)
             if ok:
-                flash(translate('Mensaje enviado. Te responderemos lo antes posible.'), 'success')
-                return _mkt_redirect('marketing.contacto')
+                return _fake_ok()
             flash(
                 translate(
                     'No hemos podido enviar el mensaje ahora. Escríbenos a {email} o inténtalo más tarde.',
@@ -435,6 +455,7 @@ def contacto():
         current_year=datetime.utcnow().year,
         form=form,
         contact_email=destino,
+        form_ts=new_form_ts(),
     )
 
 
