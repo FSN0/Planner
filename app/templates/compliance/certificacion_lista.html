@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006dense">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014req">
 {% endblock %}
 {% block wrapper %}
 {% set meses = {
@@ -27,6 +27,21 @@
   'borrador': _('Borrador'),
   'sin_movimiento': _('Sin movimiento')
 } %}
+{% set motivo_aviso_txt = {
+  'recibida': _('Propuesta recibida: aceptar, rechazar o enviar contrapropuesta'),
+  'requerida': _('Se ha requerido completar la certificación')
+} %}
+{# Desglose completo: 4 obras · 1 por revisar · 2 en borrador · 1 aceptada #}
+{% macro cert_hub_desglose(row, unidad) -%}
+{{- unidad -}}
+{%- if row.n_recibida %} · {{ row.n_recibida }} {{ _('por revisar') }}{% endif -%}
+{%- if row.n_rechazada %} · {{ row.n_rechazada }} {{ _('rechazadas') }}{% endif -%}
+{%- if row.n_enviada %} · {{ row.n_enviada }} {{ _('enviadas') }}{% endif -%}
+{%- if row.n_borrador %} · {{ row.n_borrador }} {{ _('en borrador') }}{% endif -%}
+{%- if row.n_aceptada %} · {{ row.n_aceptada }} {{ _('aceptadas') }}{% endif -%}
+{%- if row.n_sin_movimiento %} · {{ row.n_sin_movimiento }} {{ _('sin movimiento') }}{% endif -%}
+{%- endmacro %}
+{% set sin_cerrar = sin_cerrar if sin_cerrar is defined else (filas|selectattr('aviso_pendiente')|list|length) %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact cert-page">
@@ -48,11 +63,17 @@
       {% if desde and hasta %}
       {% set cert_period_status = _('Rango') %}
       {% set cert_period_status_cls = 'is-wait' %}
-      {% elif vista == 'empresas' %}
+      {% elif entrantes %}
       {% set cert_period_status = entrantes ~ ' ' ~ _('por revisar') %}
-      {% set cert_period_status_cls = 'is-bad' if entrantes else 'is-muted' %}
-      {% else %}
+      {% set cert_period_status_cls = 'is-bad' %}
+      {% elif sin_cerrar %}
+      {% set cert_period_status = sin_cerrar ~ ' ' ~ _('con aviso') %}
+      {% set cert_period_status_cls = 'is-bad' %}
+      {% elif vista == 'obras' %}
       {% set cert_period_status = filas|length ~ ' ' ~ _('obras') %}
+      {% set cert_period_status_cls = 'is-muted' %}
+      {% else %}
+      {% set cert_period_status = filas|length ~ ' ' ~ _('empresas') %}
       {% set cert_period_status_cls = 'is-muted' %}
       {% endif %}
       {% set cert_period_hidden = {'vista': vista} %}
@@ -81,15 +102,25 @@
         {% for row in filas %}
         {% set o = row.obra %}
         {% set busca = (o.nombre or '')|lower %}
-        <a class="cert-hub-row"
+        <a class="cert-hub-row {% if row.estado == 'recibida' %}is-action{% elif row.estado == 'rechazada' %}is-alert{% elif row.aviso_pendiente %}is-aviso{% endif %}"
            href="{{ url_for('compliance.certificacion_obra', obra_id=o.id, anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}"
            data-search="{{ busca }}">
           <span class="cert-hub-ico" aria-hidden="true"><i class="fas fa-hard-hat"></i></span>
           <span class="cert-hub-main">
-            <strong>{{ o.nombre }}</strong>
-            <small>{{ row.n_empresas }} {{ _('empresas') }}</small>
+            <strong>
+              {% if row.requiere_accion %}<span class="cert-hub-star" title="{% if row.motivo_aviso == 'requerida' %}{{ _('Acción requerida') }}{% else %}{{ _('Por revisar') }}{% endif %}" aria-label="{% if row.motivo_aviso == 'requerida' %}{{ _('Acción requerida') }}{% else %}{{ _('Por revisar') }}{% endif %}">*</span>{% endif %}
+              {% if row.tiene_rechazada %}<i class="fas fa-exclamation-circle cert-hub-alert" title="{{ _('Propuesta rechazada') }}" aria-hidden="true"></i> {% endif %}
+              {% if row.tiene_recibida %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" title="{{ _('Propuesta por revisar') }}" aria-hidden="true"></i> {% endif %}
+              {% if row.tiene_requerida or row.motivo_aviso == 'requerida' %}<i class="fas fa-bell cert-hub-alert is-wait" title="{{ _('Se ha requerido completar la certificación') }}" aria-hidden="true"></i> {% endif %}
+              {{ o.nombre }}
+              {% if row.aviso_pendiente %}<span class="cert-hub-aviso" title="{{ motivo_aviso_txt.get(row.motivo_aviso, _('Acción pendiente')) }}">{% if row.motivo_aviso == 'requerida' %}{{ _('requerida') }}{% else %}{{ _('por revisar') }}{% endif %}{% if row.n_aviso and row.n_aviso > 1 %} · {{ row.n_aviso }}{% endif %}</span>{% endif %}
+            </strong>
+            <small>
+              {{ cert_hub_desglose(row, row.n_empresas ~ ' ' ~ _('empresas')) }}
+            </small>
           </span>
           <span class="cert-hub-vol">{{ row.horas }} h</span>
+          <span class="cert-pill {{ estado_cls.get(row.estado, 'is-muted') }}">{{ estado_txt.get(row.estado, row.estado) }}</span>
           <span class="cert-hub-go" aria-hidden="true"><i class="fas fa-chevron-right"></i></span>
         </a>
         {% endfor %}
@@ -97,21 +128,21 @@
         {% for row in filas %}
         {% set c = row.company %}
         {% set busca = ((c.nombre or '') ~ ' ' ~ (c.nif or ''))|lower %}
-        <a class="cert-hub-row {% if row.estado == 'recibida' %}is-action{% elif row.estado == 'rechazada' %}is-alert{% endif %}"
+        <a class="cert-hub-row {% if row.estado == 'recibida' %}is-action{% elif row.estado == 'rechazada' %}is-alert{% elif row.aviso_pendiente %}is-aviso{% endif %}"
            href="{{ url_for('compliance.certificacion_empresa', company_id=c.id, anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}"
            data-search="{{ busca }}">
           <span class="cert-hub-ico" aria-hidden="true"><i class="fas fa-building"></i></span>
           <span class="cert-hub-main">
             <strong>
+              {% if row.requiere_accion %}<span class="cert-hub-star" title="{% if row.motivo_aviso == 'requerida' %}{{ _('Acción requerida') }}{% else %}{{ _('Por revisar') }}{% endif %}" aria-label="{% if row.motivo_aviso == 'requerida' %}{{ _('Acción requerida') }}{% else %}{{ _('Por revisar') }}{% endif %}">*</span>{% endif %}
               {% if row.tiene_rechazada %}<i class="fas fa-exclamation-circle cert-hub-alert" title="{{ _('Propuesta rechazada') }}" aria-hidden="true"></i> {% endif %}
               {% if row.tiene_recibida %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" title="{{ _('Propuesta por revisar') }}" aria-hidden="true"></i> {% endif %}
+              {% if row.tiene_requerida or row.motivo_aviso == 'requerida' %}<i class="fas fa-bell cert-hub-alert is-wait" title="{{ _('Se ha requerido completar la certificación') }}" aria-hidden="true"></i> {% endif %}
               {{ c.nombre }}
+              {% if row.aviso_pendiente %}<span class="cert-hub-aviso" title="{{ motivo_aviso_txt.get(row.motivo_aviso, _('Acción pendiente')) }}">{% if row.motivo_aviso == 'requerida' %}{{ _('requerida') }}{% else %}{{ _('por revisar') }}{% endif %}{% if row.n_aviso and row.n_aviso > 1 %} · {{ row.n_aviso }}{% endif %}</span>{% endif %}
             </strong>
             <small>
-              {{ row.n_obras }} {{ _('obras') }}
-              {% if row.n_recibida %} · {{ row.n_recibida }} {{ _('por revisar') }}{% endif %}
-              {% if row.n_rechazada %} · {{ row.n_rechazada }} {{ _('rechazadas') }}{% endif %}
-              {% if row.n_aceptada %} · {{ row.n_aceptada }} {{ _('aceptadas') }}{% endif %}
+              {{ cert_hub_desglose(row, row.n_obras ~ ' ' ~ _('obras')) }}
             </small>
           </span>
           <span class="cert-pill {{ estado_cls.get(row.estado, 'is-muted') }}">{{ estado_txt.get(row.estado, row.estado) }}</span>

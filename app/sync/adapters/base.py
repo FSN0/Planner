@@ -102,6 +102,7 @@ class BaseSyncAdapter(ABC):
 
     def get_attendance_contract_rates(
         self, partner_id, project_id, on_date=None,
+        date_from=None, date_to=None,
     ):
         """Opcional. Tarifa de partner.attendance.contract (empresa+obra).
 
@@ -112,8 +113,20 @@ class BaseSyncAdapter(ABC):
           'date_start': '2026-01-01',
           'date_end': None,
         }
+
+        Con date_from/date_to: contrato que solape ese rango (mes de certificación).
         """
         return None
+
+    def list_attendance_contracts(self, partner_id, project_id):
+        """Opcional. Contratos de asistencia empresa+obra (vigencias).
+
+        [
+          {'contract_id': 1, 'date_start': '2026-01-01', 'date_end': '2026-06-30', 'state': 'open'},
+          ...
+        ]
+        """
+        return []
 
     def get_viajes_diarios(self, fecha=None, fecha_hasta=None) -> list:
         """

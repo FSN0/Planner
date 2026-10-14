@@ -50,6 +50,8 @@ def _complete_login(user, remember, *, source, success_message=None):
 
     login_user(user, remember=remember)
     session['tenant_id'] = g.current_tenant.id
+    if remember:
+        session.permanent = True
     # register_log no hace commit: hay que persistirlo con el resto del login.
     register_log(
         user_id=user.id,
@@ -138,6 +140,7 @@ def signup_ticket():
 
     login_user(user, remember=True)
     session['tenant_id'] = g.current_tenant.id
+    session.permanent = True
     try:
         from app.utils import register_log
         register_log(
@@ -199,6 +202,7 @@ def verificar_email():
 
     login_user(user, remember=True)
     session['tenant_id'] = g.current_tenant.id
+    session.permanent = True
     try:
         from app.utils import register_log
         register_log(
@@ -319,6 +323,8 @@ def login():
                 db.session.add(user)
                 login_user(user, remember=remember)
                 session['tenant_id'] = g.current_tenant.id
+                if remember:
+                    session.permanent = True
                 register_log(
                     user_id=user.id,
                     category='accesos',
@@ -819,6 +825,7 @@ def credenciales(token):
             logout_user()
         login_user(user, remember=True)
         session['tenant_id'] = g.current_tenant.id
+        session.permanent = True
         flash(translate('Acceso creado.'), 'success')
         return redirect(_destino_por_rol(user) or url_for('main.dashboard'))
     return render_template(

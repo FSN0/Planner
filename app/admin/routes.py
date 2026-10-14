@@ -942,6 +942,10 @@ def worker_panel(user_id):
     else:
         back_url = resolve_back_url('admin.obras_detailed')
     rep_score, rep_count = reputation_for_viewer(worker, current_user)
+    obras_valoracion = []
+    if user_can(current_user, 'valoraciones', 'w'):
+        from app.services.rating_service import obras_participadas_usuario
+        obras_valoracion = obras_participadas_usuario(worker.id)
     return render_template(
         "admin_worker_panel.html",
         worker=worker,
@@ -970,6 +974,7 @@ def worker_panel(user_id):
         ),
         reputation_score=rep_score,
         reputation_count=rep_count,
+        obras_valoracion=obras_valoracion,
     )
 
 
@@ -1952,7 +1957,7 @@ def edit_company(company_id):
 @login_required
 def rate_worker():
     from app.services.tenant_modules import has_valoraciones
-    from app.services.rating_service import parse_rating_payload
+    from app.services.rating_service import parse_rating_payload, resolve_obra_id
     if not has_valoraciones():
         return jsonify({'success': False, 'message': translate('Módulo no activo')}), 404
     if not user_can(current_user, 'valoraciones', 'w'):
@@ -1965,6 +1970,7 @@ def rate_worker():
 
     try:
         actitud, conocimiento, media, reason = parse_rating_payload(data)
+        obra_id = resolve_obra_id(data.get('obra_id'), user_id=int(worker_id))
     except ValueError as e:
         return jsonify({'success': False, 'message': translate(str(e))}), 400
 
@@ -1972,6 +1978,7 @@ def rate_worker():
         new_rating = Rating(
             user_id=int(worker_id),
             created_by_id=current_user.id,
+            obra_id=obra_id,
             score=media,
             actitud=actitud,
             conocimiento=conocimiento,
@@ -1987,11 +1994,19 @@ def rate_worker():
             dims.append(f"actitud {actitud}")
         if conocimiento is not None:
             dims.append(f"conocimiento {conocimiento}")
+        obra_txt = ''
+        if obra_id:
+            obra = Obra.query.get(obra_id)
+            if obra:
+                obra_txt = f" en obra {obra.nombre}"
         register_log(
             user_id=current_user.id,
             category='valoraciones',
             action='Nueva Valoración',
-            detail=f"Ha puntuado a {nombre_operario} ({', '.join(dims)}; media {media}). Motivo: {reason}",
+            detail=(
+                f"Ha puntuado a {nombre_operario}{obra_txt} "
+                f"({', '.join(dims)}; media {media}). Motivo: {reason}"
+            ),
             target_user_id=int(worker_id),
         )
         db.session.commit()
@@ -2127,7 +2142,13 @@ def worker_ratings_history(user_id):
         flash(translate('No tienes permiso para ver valoraciones.'), 'danger')
         return redirect(url_for('admin.worker_panel', user_id=user_id))
     worker = User.query.get_or_404(user_id)
-    all_ratings = Rating.query.filter_by(user_id=worker.id).order_by(Rating.created_at.desc()).all()
+    from sqlalchemy.orm import joinedload
+    all_ratings = (
+        Rating.query.filter_by(user_id=worker.id)
+        .options(joinedload(Rating.obra), joinedload(Rating.created_by))
+        .order_by(Rating.created_at.desc())
+        .all()
+    )
     # Histórico: oficina ve todo; custodia solo las firmadas por autores permitidos
     # (incluye inactivas propias / de su alcance para trazabilidad).
     if valoraciones_acts_as_office(current_user):

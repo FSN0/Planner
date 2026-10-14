@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 
 def _env_bool(name, default=False):
@@ -55,8 +56,12 @@ class Config:
     SESSION_COOKIE_SECURE = not _env_bool('FLASK_DEBUG', default=False)
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    # Con «Recordarme»: sesión + cookie remember ~30 días (mismo dispositivo).
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
+    REMEMBER_COOKIE_DURATION = timedelta(days=30)
     REMEMBER_COOKIE_SECURE = not _env_bool('FLASK_DEBUG', default=False)
     REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
 
 
     # Detrás de Caddy/Traefik: ProxyFix para esquema/host/IP reales.

@@ -400,6 +400,16 @@
         {% with btn_class='rating-btn', dim_prefix='rating' %}
           {% include 'components/_rating_dimensions.html' %}
         {% endwith %}
+        <label class="form-label-sm" for="ratingObraId">{{ _('Obra') }} <span class="text-muted">({{ _('opcional') }})</span></label>
+        <select id="ratingObraId" class="form-control mb-3">
+          <option value="">{{ _('Sin obra asociada') }}</option>
+          {% for o in obras_valoracion|default([]) %}
+          <option value="{{ o.id }}">{{ o.nombre }}{% if o.codigo %} ({{ o.codigo }}){% endif %}</option>
+          {% else %}
+          <option value="" disabled>{{ _('Este trabajador no tiene obras en las que haya participado') }}</option>
+          {% endfor %}
+        </select>
+        <p class="text-muted small mb-3" style="margin-top:-0.5rem;">{{ _('Solo aparecen obras con asignación o fichaje de esta persona.') }}</p>
         <label class="form-label-sm" for="ratingReason">{{ _('Motivo') }}</label>
         <textarea id="ratingReason" class="form-control mb-3" rows="3" placeholder="{{ _('Describe el motivo de la valoración…') }}" required></textarea>
         <button type="button" class="btn-admin btn-admin-primary btn-block" onclick="submitRating()">
@@ -573,6 +583,7 @@ var workerRatingDims = RatingDims.bind({
 function openRatingModal() {
     workerRatingDims.reset();
     $('#ratingReason').val('');
+    $('#ratingObraId').val('');
     $('#ratingModal').modal('show');
 }
 function submitRating() {
@@ -580,16 +591,19 @@ function submitRating() {
     if (!dims) { alert({{ _('Indica al menos actitud o conocimiento.')|tojson }}); return; }
     var reason = ($('#ratingReason').val() || '').trim();
     if (!reason) { alert({{ _('El motivo es obligatorio.')|tojson }}); return; }
+    var obraId = ($('#ratingObraId').val() || '').trim();
+    var payload = {
+        worker_id: {{ worker.id }},
+        actitud: dims.actitud,
+        conocimiento: dims.conocimiento,
+        reason: reason
+    };
+    if (obraId) { payload.obra_id = parseInt(obraId, 10); }
     $.ajax({
         url: "/admin/api/rate_worker",
         type: "POST",
         contentType: "application/json",
-        data: JSON.stringify({
-            worker_id: {{ worker.id }},
-            actitud: dims.actitud,
-            conocimiento: dims.conocimiento,
-            reason: reason
-        }),
+        data: JSON.stringify(payload),
         success: function() { window.location.reload(); },
         error: function(xhr) { alert({{ _('Error')|tojson }} + ": " + (xhr.responseJSON ? xhr.responseJSON.message : {{ _('Error')|tojson }})); }
     });

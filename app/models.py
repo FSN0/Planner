@@ -465,15 +465,19 @@ def load_user(user_id):
     # Asegurarnos de que hay un tenant activo en la petición actual
     if not hasattr(g, 'current_tenant') or not g.current_tenant:
         return None
-        
-    # SEGURIDAD SAAS: Evitar que una cookie de la "Empresa A" abra la cuenta en "Empresa B"
-    if session.get('tenant_id') != g.current_tenant.id:
+
+    # SEGURIDAD SAAS: cookie de sesión de otro tenant → no.
+    # Si solo queda remember_token (sesión caducada al cerrar el navegador),
+    # tenant_id falta: el host ya fijó el schema; rehidratamos tenant_id.
+    stored = session.get('tenant_id')
+    if stored is not None and stored != g.current_tenant.id:
         return None
-    
+
     # Si una query anterior dejó la transacción abortada (p. ej. columna
     # pendiente de migración), recuperamos la sesión antes de cargar el user.
+    user = None
     try:
-        return User.query.get(int(user_id))
+        user = User.query.get(int(user_id))
     except Exception:
         try:
             from app import db
@@ -481,9 +485,12 @@ def load_user(user_id):
         except Exception:
             pass
         try:
-            return User.query.get(int(user_id))
+            user = User.query.get(int(user_id))
         except Exception:
             return None
+    if user is not None and stored is None:
+        session['tenant_id'] = g.current_tenant.id
+    return user
 
 
 
@@ -1176,6 +1183,8 @@ class Rating(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # Opcional: contexto de obra (solo se muestra en el historial de valoraciones).
+    obra_id = db.Column(db.Integer, db.ForeignKey('obras.id', ondelete='SET NULL'), nullable=True, index=True)
     # Media de dimensiones (v2) o puntuación legacy (−3…+3). Float para medias 0–5.
     score = db.Column(db.Float, nullable=False)
     actitud = db.Column(db.Integer, nullable=True)       # 0–5 (v2)
@@ -1188,6 +1197,7 @@ class Rating(db.Model):
     
     user = db.relationship('User', foreign_keys=[user_id], backref='ratings_received')
     created_by = db.relationship('User', foreign_keys=[created_by_id])
+    obra = db.relationship('Obra', foreign_keys=[obra_id])
 
     @property
     def is_v2(self):
@@ -1628,6 +1638,11 @@ class CertificacionPropuesta(db.Model):
     aceptada_at = db.Column(db.DateTime, nullable=True)
     enviada_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     respondida_por_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    # SaaS «Requerir acción»: pide a la subcontrata completar/enviar este obra+mes.
+    requerida_at = db.Column(db.DateTime, nullable=True)
+    requerida_por_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True,
+    )
     created_at = db.Column(db.DateTime, default=_utc_now)
 
     company = db.relationship('Company')

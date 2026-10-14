@@ -14,14 +14,20 @@ from app.services.certificacion_service import (
     _build_cert_pdf_context,
     aceptar,
     anadir_dia_manual,
+    cadena_rondas_negociacion,
     contexto_mesa,
     desenviar,
     etiquetas_rondas,
     enviar,
     frase_delta_plataforma,
+    ids_propuestas_pdf_cerradas,
+    periodo_bloqueado,
+    programar_warmup_pdf_certificacion,
+    reabrir_periodo,
     ronda_en_mesa,
     rechazar,
     sembrar_borrador_desde_mesa,
+    siguiente_etiqueta_propuesta,
     sincronizar,
 )
 
@@ -120,6 +126,73 @@ def test_enviar_crea_ronda_en_mesa(mesa_ctx, monkeypatch):
     assert mesa.resultado == 'en_mesa'
     assert mesa.secuencia == 1
     assert sub.estado == 'enviada'
+
+
+def test_siguiente_etiqueta_y_cadena(mesa_ctx, monkeypatch):
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra Cadena')
+    u = _operario(session, company, 'Cad')
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    assert siguiente_etiqueta_propuesta('3') == '3.2'
+    assert siguiente_etiqueta_propuesta('3.3') == '3.4'
+
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    for prop in (sub, emp):
+        for ln in list(prop.lineas):
+            session.delete(ln)
+    session.flush()
+    _linea(session, sub, u, o, horas='8.00')
+    _linea(session, emp, u, o, horas='7.50')
+    session.flush()
+
+    enviar(sub, actor_id=u.id)
+    session.flush()
+    r1 = ronda_en_mesa(company.id, o.id, 2026, 10)
+    enviar(emp, actor_id=u.id)
+    session.flush()
+    r2 = ronda_en_mesa(company.id, o.id, 2026, 10)
+    # Sub vuelve a contestar → 1.3 en mesa
+    session.refresh(sub)
+    for ln in list(sub.lineas):
+        ln.horas = Decimal('7.00')
+        ln.precio_hora = Decimal('20.00')
+        ln.origen_horas = 'manual_total'
+    if not sub.lineas:
+        _linea(session, sub, u, o, horas='7.00')
+    session.flush()
+    enviar(sub, actor_id=u.id)
+    session.flush()
+    r3 = ronda_en_mesa(company.id, o.id, 2026, 10)
+
+    rondas = CertificacionRonda.query.filter_by(
+        company_id=company.id, obra_id=o.id, anio=2026, mes=10,
+    ).all()
+    et = etiquetas_rondas(rondas)
+    assert et[r1.id] == '1'
+    assert et[r2.id] == '1.2'
+    assert et[r3.id] == '1.3'
+
+    cadena = cadena_rondas_negociacion(rondas, r3, et)
+    assert [c['etiqueta'] for c in cadena] == ['1', '1.2', '1.3']
+    assert siguiente_etiqueta_propuesta(cadena[-1]['etiqueta']) == '1.4'
+
+    ctx = contexto_mesa(
+        company, o, 2026, 10,
+        propia=emp, ajena=sub,
+        vista_subcontrata=False,
+        corr=True,
+    )
+    assert ctx['modo_mesa'] == 'responder'
+    assert [c['etiqueta'] for c in ctx['comparar_cadena']] == ['1', '1.2', '1.3']
+    assert ctx['etiqueta_borrador'] == '1.4'
 
 
 def test_contraoferta_sustituye_mesa(mesa_ctx, monkeypatch):
@@ -404,6 +477,60 @@ def test_sembrar_borrador_desde_mesa_al_responder(mesa_ctx, monkeypatch):
     assert float(ln_sub.horas) == pytest.approx(9.0)
 
 
+def test_programar_warmup_pdf_lanza_hilo(monkeypatch, app):
+    import app.services.certificacion_service as svc
+    from flask import g
+    from types import SimpleNamespace
+
+    called = {}
+
+    class _FakeThread:
+        def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+            called['args'] = args
+            called['daemon'] = daemon
+
+        def start(self):
+            called['started'] = True
+
+    monkeypatch.setattr(svc.threading, 'Thread', _FakeThread)
+    with app.app_context():
+        g.current_tenant = SimpleNamespace(schema_name='tenant_test')
+        with svc._warmup_pdf_lock:
+            svc._warmup_pdf_inflight.clear()
+        programar_warmup_pdf_certificacion(42, schema_name='tenant_test')
+        assert called.get('started') is True
+        assert called.get('args')[2] == [42]
+        assert called.get('daemon') is True
+
+
+def test_ids_propuestas_pdf_cerradas(mesa_ctx, monkeypatch):
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra PDF Warm')
+    u = _operario(session, company, 'Pdf')
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    for ln in list(sub.lineas):
+        session.delete(ln)
+    session.flush()
+    _linea(session, sub, u, o)
+    session.flush()
+    enviar(sub, actor_id=u.id)
+    session.flush()
+    aceptar(sub, actor_id=u.id)
+    session.flush()
+    ids = ids_propuestas_pdf_cerradas(sub)
+    assert sub.id in ids
+    assert emp.id in ids
+
+
 def test_nombre_oficina_sin_empresa_principal(monkeypatch):
     from app.services.certificacion_service import _nombre_oficina_certificacion
     from types import SimpleNamespace
@@ -484,3 +611,117 @@ def test_anadir_dia_manual_sin_fichaje(mesa_ctx, monkeypatch):
     session.flush()
     ids = {x.id for x in CertificacionLinea.query.filter_by(propuesta_id=sub.id).all()}
     assert ln.id in ids
+
+
+def test_reabrir_tras_aceptar(mesa_ctx, monkeypatch):
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra Reabrir OK')
+    u = _operario(session, company, 'Rea')
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    for ln in list(sub.lineas):
+        session.delete(ln)
+    session.flush()
+    _linea(session, sub, u, o, horas='8.00')
+    session.flush()
+    enviar(sub, actor_id=u.id)
+    session.flush()
+    aceptar(sub, actor_id=u.id)
+    session.flush()
+    assert periodo_bloqueado(company.id, 2026, 10, o.id) is True
+    assert ronda_en_mesa(company.id, o.id, 2026, 10) is None
+
+    mesa = reabrir_periodo(company.id, o.id, 2026, 10, actor_id=u.id)
+    session.flush()
+    session.refresh(sub)
+    session.refresh(emp)
+
+    assert mesa is not None
+    assert mesa.resultado == 'en_mesa'
+    assert mesa.direccion == DIR_SUB
+    assert periodo_bloqueado(company.id, 2026, 10, o.id) is False
+    assert sub.estado == 'enviada'
+    assert emp.estado == 'borrador'
+    assert float(sub.lineas[0].horas) == pytest.approx(8.0)
+
+    ctx = contexto_mesa(
+        company, o, 2026, 10,
+        propia=emp, ajena=sub,
+        vista_subcontrata=False,
+    )
+    assert ctx['modo_mesa'] == 'recibida'
+    assert ctx['puede_reabrir'] is False
+
+
+def test_reabrir_tras_rechazar(mesa_ctx, monkeypatch):
+    """Tras rechazo limpio: nueva propuesta (#2), no hace falta «reabrir».
+
+    ``reabrir_periodo`` sigue pudiendo restaurar la carta rechazada a la mesa
+    (caso raro / SaaS), pero ``puede_reabrir`` no debe empujar ese CTA.
+    """
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra Reabrir No')
+    u = _operario(session, company, 'Reb')
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    for ln in list(sub.lineas):
+        session.delete(ln)
+    session.flush()
+    _linea(session, sub, u, o, horas='9.00')
+    session.flush()
+    enviar(sub, actor_id=u.id)
+    session.flush()
+    rechazar(sub, actor_id=u.id, comentario='Mal el viernes')
+    session.flush()
+    assert ronda_en_mesa(company.id, o.id, 2026, 10) is None
+    assert sub.estado == 'borrador'
+    assert emp.estado == 'borrador'
+
+    ctx_prev = contexto_mesa(
+        company, o, 2026, 10,
+        propia=emp, ajena=sub,
+        vista_subcontrata=False,
+    )
+    assert ctx_prev['modo_mesa'] == 'preparar'
+    assert ctx_prev['turno'] == 'puedes_enviar'
+    assert ctx_prev['etiqueta_borrador'] == '2'
+    assert ctx_prev['puede_reabrir'] is False
+
+    # Mirando la carta rechazada en historial: sigue habiendo borrador #2.
+    rechazada = CertificacionRonda.query.filter_by(
+        company_id=company.id, obra_id=o.id, anio=2026, mes=10,
+        resultado='rechazada',
+    ).one()
+    ctx_hist = contexto_mesa(
+        company, o, 2026, 10,
+        propia=emp, ajena=sub,
+        vista_subcontrata=False,
+        ronda_id=rechazada.id,
+    )
+    assert ctx_hist['modo_mesa'] == 'historial'
+    assert ctx_hist['turno'] == 'puedes_enviar'
+    assert ctx_hist['etiqueta_borrador'] == '2'
+    assert ctx_hist['puede_reabrir'] is False
+
+    mesa = reabrir_periodo(company.id, o.id, 2026, 10, actor_id=u.id)
+    session.flush()
+    session.refresh(sub)
+
+    assert mesa is not None
+    assert mesa.resultado == 'en_mesa'
+    assert mesa.direccion == DIR_SUB
+    assert sub.estado == 'enviada'
+    assert float(sub.lineas[0].horas) == pytest.approx(9.0)
+    assert 'viernes' not in (mesa.comentario_rechazo or '')

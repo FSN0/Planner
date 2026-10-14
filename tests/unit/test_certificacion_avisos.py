@@ -1,5 +1,9 @@
-"""Avisos de certificación por mes: pendientes, dismiss y reactivación."""
+"""Avisos de certificación: solo acción en tu tejado + requerir a subcontrata."""
 from sqlalchemy import text
+
+
+DIR_SUB = 'subcontrata_a_empresa'
+DIR_EMP = 'empresa_a_subcontrata'
 
 
 def _obra(session, tenant, nombre='Obra avisos'):
@@ -11,7 +15,7 @@ def _obra(session, tenant, nombre='Obra avisos'):
     return o
 
 
-def _prop(session, tenant, company, obra, *, anio, mes, estado='borrador', direccion='empresa'):
+def _prop(session, tenant, company, obra, *, anio, mes, estado='borrador', direccion=DIR_EMP, **extra):
     from app.models import CertificacionPropuesta
     session.execute(text(f'SET search_path TO {tenant.schema_name}'))
     p = CertificacionPropuesta(
@@ -21,13 +25,14 @@ def _prop(session, tenant, company, obra, *, anio, mes, estado='borrador', direc
         mes=mes,
         direccion=direccion,
         estado=estado,
+        **extra,
     )
     session.add(p)
     session.commit()
     return p
 
 
-def test_resumen_avisos_counts_prev_and_actual(session, tenant_soltec, company_internal, app):
+def test_resumen_avisos_solo_recibida_no_borrador(session, tenant_soltec, company_subcontrata, app):
     from app.services.certificacion_avisos_service import (
         dismiss_aviso,
         resumen_avisos,
@@ -35,40 +40,87 @@ def test_resumen_avisos_counts_prev_and_actual(session, tenant_soltec, company_i
     )
 
     obra = _obra(session, tenant_soltec)
-    _prop(session, tenant_soltec, company_internal, obra, anio=2026, mes=8, estado='borrador')
+    # Borrador sin enviar: NO aviso
+    _prop(session, tenant_soltec, company_subcontrata, obra, anio=2026, mes=8, estado='borrador', direccion=DIR_SUB)
+    # Subcontrata envió → oficina tiene recibida
     _prop(
-        session, tenant_soltec, company_internal, obra,
-        anio=2026, mes=9, estado='enviada', direccion='subcontrata',
+        session, tenant_soltec, company_subcontrata, obra,
+        anio=2026, mes=9, estado='enviada', direccion=DIR_SUB,
     )
-    _prop(session, tenant_soltec, company_internal, obra, anio=2026, mes=10, estado='aceptada')
+    _prop(session, tenant_soltec, company_subcontrata, obra, anio=2026, mes=10, estado='aceptada', direccion=DIR_SUB)
 
     with app.app_context():
         session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
-        scope = scope_obra(obra.id, company_id=company_internal.id)
+        scope = scope_obra(obra.id, company_id=company_subcontrata.id)
         r = resumen_avisos(
             scope, anio=2026, mes=9,
-            company_id=company_internal.id, obra_id=obra.id,
+            company_id=company_subcontrata.id, obra_id=obra.id,
+            vista_subcontrata=False,
         )
         assert r['actual'] is True
-        assert r['prev'] >= 1
+        assert r['motivo_actual'] == 'recibida'
+        assert r['prev'] == 0
         assert r['next'] == 0
 
         dismiss_aviso(scope, 2026, 9)
         r2 = resumen_avisos(
             scope, anio=2026, mes=9,
-            company_id=company_internal.id, obra_id=obra.id,
+            company_id=company_subcontrata.id, obra_id=obra.id,
+            vista_subcontrata=False,
         )
         assert r2['actual'] is False
         assert r2['silenciado'] is True
 
-        from app.services.certificacion_avisos_service import undismiss_aviso
-        undismiss_aviso(scope, 2026, 9)
-        r3 = resumen_avisos(
-            scope, anio=2026, mes=9,
-            company_id=company_internal.id, obra_id=obra.id,
+
+def test_avisos_subcontrata_recibida_y_requerida(
+    session, tenant_soltec, company_subcontrata, app,
+):
+    from app.services.certificacion_avisos_service import pares_pendientes_mes, resumen_avisos, scope_obra
+    from app.utils.timezone_utils import utc_now
+
+    obra = _obra(session, tenant_soltec, 'Obra sub aviso')
+    # Oficina envió contrapropuesta → subcontrata recibida
+    _prop(
+        session, tenant_soltec, company_subcontrata, obra,
+        anio=2026, mes=7, estado='enviada', direccion=DIR_EMP,
+    )
+    # Requerida completar (borrador DIR_SUB con requerida_at)
+    _prop(
+        session, tenant_soltec, company_subcontrata, obra,
+        anio=2026, mes=8, estado='borrador', direccion=DIR_SUB,
+        requerida_at=utc_now(),
+    )
+
+    with app.app_context():
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        pares7 = pares_pendientes_mes(
+            anio=2026, mes=7, company_id=company_subcontrata.id, obra_id=obra.id,
+            vista_subcontrata=True,
         )
-        assert r3['actual'] is True
-        assert r3['silenciado'] is False
+        assert pares7.get((company_subcontrata.id, obra.id)) == 'recibida'
+
+        pares8 = pares_pendientes_mes(
+            anio=2026, mes=8, company_id=company_subcontrata.id, obra_id=obra.id,
+            vista_subcontrata=True,
+        )
+        assert pares8.get((company_subcontrata.id, obra.id)) == 'requerida'
+
+        # Oficina no ve el requerimiento como aviso propio
+        pares8_ofi = pares_pendientes_mes(
+            anio=2026, mes=8, company_id=company_subcontrata.id, obra_id=obra.id,
+            vista_subcontrata=False,
+        )
+        assert (company_subcontrata.id, obra.id) not in pares8_ofi
+
+        scope = scope_obra(obra.id, company_id=company_subcontrata.id, vista_subcontrata=True)
+        r = resumen_avisos(
+            scope, anio=2026, mes=8,
+            company_id=company_subcontrata.id, obra_id=obra.id,
+            vista_subcontrata=True,
+        )
+        assert r['actual'] is True
+        assert r['motivo_actual'] == 'requerida'
+        assert r['prev'] >= 1
 
 
 def test_reactivar_avisos_clears_dismiss(session, tenant_soltec, company_internal, app):

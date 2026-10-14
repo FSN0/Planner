@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014peer3">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014colalign4">
 {% endblock %}
 {% block wrapper %}
 {% set endpoint = 'subcontrata.certificacion_obra' if vista_subcontrata else 'compliance.certificacion_empresa_obra' %}
@@ -25,7 +25,8 @@
   'rechazada': 'is-bad',
   'borrador': 'is-muted',
   'cerrada': 'is-ok',
-  'sin_movimiento': 'is-muted'
+  'sin_movimiento': 'is-muted',
+  'sin_contrato': 'is-muted'
 } %}
 {% set estado_txt = {
   'aceptada': _('Aceptada'),
@@ -34,8 +35,9 @@
   'por_responder': _('Por responder'),
   'rechazada': _('Rechazada'),
   'borrador': _('Borrador'),
-  'cerrada': _('Cerrada (se aceptó la otra)'),
-  'sin_movimiento': _('Sin movimiento')
+  'cerrada': _('Cerrada'),
+  'sin_movimiento': _('Sin movimiento'),
+  'sin_contrato': _('Sin contrato de asistencia')
 } %}
 {% set falta_ids = falta_ids if falta_ids is defined else [] %}
 {% set mapa_propia = mapa_propia if mapa_propia is defined else {} %}
@@ -51,13 +53,23 @@
 {% else %}
   {% set propia_estado_ui = propia.estado %}
 {% endif %}
-{% set editable = propia.estado == 'borrador' and not bloqueado and user_can(current_user, 'certificacion', 'w') and not viendo_historial %}
+{% set sin_contrato_periodo = sin_contrato_periodo if sin_contrato_periodo is defined else false %}
+{% set mostrar_sin_contrato = mostrar_sin_contrato if mostrar_sin_contrato is defined else false %}
+{% set mes_completo = mes_completo if mes_completo is defined else (not (desde or hasta)) %}
+{% set editable = propia.estado == 'borrador' and not bloqueado and user_can(current_user, 'certificacion', 'w') and not viendo_historial and not sin_contrato_periodo and mes_completo %}
 {% set contrato = contrato if contrato is defined else none %}
 {% set modo_vista = modo_vista if modo_vista is defined else 'persona' %}
-{# Comparación SaaS: verde = igual; rojo = piden más; cyan = piden menos (favorable). #}
+{% set corr_activa = corr_activa if corr_activa is defined else false %}
+{% set ronda_sel = ronda_sel if ronda_sel is defined else none %}
+{% set tab_corr = '1' if corr_activa else none %}
+{% set tab_ronda = ronda_sel.id if (viendo_historial and ronda_sel) else none %}
+{% set puede_reabrir = puede_reabrir if puede_reabrir is defined else false %}
+{% set mostrar_reabrir = (not vista_subcontrata) and user_can(current_user, 'certificacion', 'w') and (puede_reabrir or bloqueado) and mes_completo %}
+{% set fuera_contrato_n = fuera_contrato_n if fuera_contrato_n is defined else 0 %}
+{# Comparación SaaS: neutro = igual; rojo/ámbar = piden más; verde = piden menos (favorable). #}
 {% macro cert_cmp_cls(ellos, app) -%}
 {%- if ellos is none or app is none -%}is-muted
-{%- elif ellos == app -%}is-ok
+{%- elif ellos == app -%}is-flat
 {%- elif ellos > app -%}is-bad
 {%- else -%}is-better
 {%- endif -%}
@@ -93,8 +105,10 @@
       {% set cert_period_next_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=next.anio, mes=next.mes, modo=modo_vista) %}
       {% set cert_period_clear_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista) %}
       {% endif %}
-      {% set cert_period_status = estado_txt.get(estado, estado) %}
-      {% set cert_period_status_cls = estado_cls.get(estado, 'is-muted') %}
+      {# Misma etiqueta/color que el panel de la mesa (no el aviso genérico «por revisar»). #}
+      {% set cert_period_status = estado_txt.get(propia_estado_ui, propia_estado_ui) %}
+      {% set cert_period_status_cls = estado_cls.get(propia_estado_ui, 'is-muted') %}
+      {% set cert_period_prefer_status = true %}
       {% set cert_period_hidden = {} %}
       {% set cert_period_meses = meses_obra %}
       {% include "compliance/_cert_periodo.html" %}
@@ -109,21 +123,24 @@
             <i class="fas fa-arrow-left" aria-hidden="true"></i> {{ _('Volver') }}
           </a>
           {% endif %}
+          {# Reabrir en hero solo si el mes está cerrado (aceptada). Tras un rechazo
+             ambos ya tienen borrador nuevo: el CTA es el borrador de la baraja. #}
         </div>
         <div class="cert-view-tabs" role="tablist">
           {% if vista_subcontrata %}
           <a class="cert-view-tab {% if modo_vista == 'persona' %}is-active{% endif %}"
-             href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo='persona') }}">{{ _('Por persona') }}</a>
+             href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo='persona', corr=tab_corr, ronda=tab_ronda) }}">{{ _('Por persona') }}</a>
           <a class="cert-view-tab {% if modo_vista != 'persona' %}is-active{% endif %}"
-             href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo='fecha') }}">{{ _('Por fecha') }}</a>
+             href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo='fecha', corr=tab_corr, ronda=tab_ronda) }}">{{ _('Por fecha') }}</a>
           {% else %}
           <a class="cert-view-tab {% if modo_vista == 'persona' %}is-active{% endif %}"
-             href="{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo='persona', desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por persona') }}</a>
+             href="{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo='persona', corr=tab_corr, ronda=tab_ronda, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por persona') }}</a>
           <a class="cert-view-tab {% if modo_vista != 'persona' %}is-active{% endif %}"
-             href="{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo='fecha', desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por fecha') }}</a>
+             href="{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo='fecha', corr=tab_corr, ronda=tab_ronda, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">{{ _('Por fecha') }}</a>
           {% endif %}
         </div>
         <div class="cert-hero-precio">
+          {% if not sin_contrato_periodo %}
           {% if not vista_subcontrata and user_can(current_user, 'certificacion', 'w') %}
           <form method="post" class="cert-precio" id="cert-precio" data-precio="{{ precio }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -180,6 +197,7 @@
             {% endif %}
           </div>
           {% endif %}
+          {% endif %}
         </div>
       </div>
     </header>
@@ -215,51 +233,74 @@
           · {{ totales_propia.horas }} h · {{ totales_propia.importe }} €
         </span>
       </div>
-      {% if pdf_prop and pdf_prop.id %}
-      <a class="cert-banner-pdf js-cert-pdf-dl"
-         href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=pdf_prop.id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=pdf_prop.id) }}"
-         data-no-page-loading
-         title="{{ _('Descargar PDF') }}"
-         aria-label="{{ _('Descargar PDF') }}">
-        <i class="fas fa-file-pdf" aria-hidden="true"></i>
-      </a>
-      {% endif %}
+      <div class="cert-banner-actions">
+        {% if mostrar_reabrir %}
+        <form method="post" class="cert-banner-reabrir">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="anio" value="{{ anio }}">
+          <input type="hidden" name="mes" value="{{ mes }}">
+          {% if modo_vista %}<input type="hidden" name="modo" value="{{ modo_vista }}">{% endif %}
+          {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
+          {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
+          <button class="btn-admin js-reabrir-certificacion" name="accion" value="reabrir" type="submit"
+                  data-title="{{ _('¿Volver a abrir?') }}"
+                  data-text="{{ _('La certificación aceptada volverá a la mesa. Podréis aceptar o corregir de nuevo.') }}"
+                  data-confirm="{{ _('Sí, volver a abrir') }}"
+                  data-cancel="{{ _('Cancelar') }}">
+            <i class="fas fa-unlock-alt" aria-hidden="true"></i> {{ _('Volver a abrir') }}
+          </button>
+        </form>
+        {% endif %}
+        {% if pdf_prop and pdf_prop.id %}
+        <a class="cert-banner-pdf js-cert-pdf-dl"
+           href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=pdf_prop.id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=pdf_prop.id) }}"
+           data-no-page-loading
+           title="{{ _('Descargar PDF') }}"
+           aria-label="{{ _('Descargar PDF') }}">
+          <i class="fas fa-file-pdf" aria-hidden="true"></i>
+        </a>
+        {% endif %}
+      </div>
     </div>
     {% endif %}
 
-    {% include 'compliance/_cert_mesa.html' %}
-
-    {% if actividad %}
-    <section class="cert-activity" aria-label="{{ _('Actividad') }}">
-      <div class="cert-activity-head">
-        <strong>{{ _('Actividad') }}</strong>
-        <span>{{ _('Quién envió, devolvió o aceptó (resumen actual)') }}</span>
+    {% if mostrar_sin_contrato %}
+    <section class="cert-sin-contrato" aria-live="polite">
+      <div class="cert-sin-contrato-card">
+        <i class="fas fa-file-contract" aria-hidden="true"></i>
+        <h2>{{ _('Sin contrato de asistencia en este periodo') }}</h2>
+        <p>
+          {{ _('No hay contratos de asistencia vinculados a {mes} {anio} para esta obra y empresa.', mes=meses.get(mes, mes), anio=anio) }}
+        </p>
+        <p class="cert-sin-contrato-hint">
+          {{ _('La certificación de horario solo aplica en los meses cubiertos por el contrato. Usa la navegación de meses para ir al periodo vigente.') }}
+        </p>
       </div>
-      <ul class="cert-activity-list">
-        {% for item in actividad %}
-        <li class="cert-activity-item is-{{ item.tipo }}">
-          {% if item.tipo == 'enviada' %}
-            <i class="fas fa-paper-plane" aria-hidden="true"></i>
-            {% if item.cuando %}<time datetime="{{ item.cuando.isoformat() }}">{{ item.cuando.strftime('%d/%m/%Y %H:%M') }}</time>{% endif %}
-            <span>{{ _('{actor} envió su propuesta a {destino}.', actor=item.actor, destino=item.destino) }}</span>
-          {% elif item.tipo == 'rechazo' %}
-            <i class="fas fa-undo" aria-hidden="true"></i>
-            {% if item.cuando %}<time datetime="{{ item.cuando.isoformat() }}">{{ item.cuando.strftime('%d/%m/%Y %H:%M') }}</time>{% else %}<time class="is-empty">—</time>{% endif %}
-            <span>
-              {{ _('{actor} devolvió la propuesta de {origen}.', actor=item.actor, origen=item.origen) }}
-              {% if item.detalle %}
-              <strong class="cert-activity-motivo">{{ _('Motivo') }}:</strong> {{ item.detalle }}
-              {% endif %}
-            </span>
-          {% elif item.tipo == 'aceptada' %}
-            <i class="fas fa-check" aria-hidden="true"></i>
-            {% if item.cuando %}<time datetime="{{ item.cuando.isoformat() }}">{{ item.cuando.strftime('%d/%m/%Y %H:%M') }}</time>{% endif %}
-            <span>{{ _('{actor} aceptó la propuesta enviada por {origen}.', actor=item.actor, origen=item.origen) }}</span>
-          {% endif %}
-        </li>
-        {% endfor %}
-      </ul>
     </section>
+    {% else %}
+    {% if not mes_completo %}
+    <div class="cert-banner is-wait">
+      <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+      <div>
+        <strong>{{ _('Consulta por rango de fechas') }}</strong>
+        <span>
+          {{ _('Estás viendo un trozo del mes. Enviar, aceptar, rechazar o editar solo se puede en el mes completo.') }}
+          <a href="{{ cert_period_clear_url }}">{{ _('Volver al mes completo') }}</a>
+        </span>
+      </div>
+    </div>
+    {% elif editable and fuera_contrato_n and fuera_contrato_n > 0 %}
+    <div class="cert-banner is-warn">
+      <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
+      <div>
+        <strong>{{ _('Fichajes fuera del periodo del contrato') }}</strong>
+        <span>
+          {{ _('Hay {n} días con horas fuera de la vigencia ({a} – {b}). Al enviar se avisará; no es obligatorio corregirlos.', n=fuera_contrato_n, a=(contrato_inicio.strftime('%d/%m/%Y') if contrato_inicio else '—'), b=(contrato_fin.strftime('%d/%m/%Y') if contrato_fin else '—')) }}
+        </span>
+      </div>
+    </div>
+    {% endif %}
+    {% include 'compliance/_cert_mesa.html' %}
     {% endif %}
   </main>
 </div>
@@ -362,13 +403,26 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       row.classList.add('is-missing');
     }
   }
-  inicio.addEventListener('change', calc);
-  fin.addEventListener('change', calc);
+  inicio.addEventListener('change', function () {
+    calc();
+    if (typeof window.certRecalcFromRow === 'function') window.certRecalcFromRow(row);
+  });
+  fin.addEventListener('change', function () {
+    calc();
+    if (typeof window.certRecalcFromRow === 'function') window.certRecalcFromRow(row);
+  });
   horas.addEventListener('input', function () {
     inicio.value = '';
     fin.value = '';
     if (modo) modo.value = '';
+    if (typeof window.certRecalcFromRow === 'function') window.certRecalcFromRow(row);
   });
+  var precio = row.querySelector('.js-precio');
+  if (precio) {
+    precio.addEventListener('input', function () {
+      if (typeof window.certRecalcFromRow === 'function') window.certRecalcFromRow(row);
+    });
+  }
 });
 (function () {
   var missing = document.querySelectorAll('.cert-line.is-missing');
@@ -404,7 +458,9 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     if (inicio && data.hora_inicio !== undefined) inicio.value = data.hora_inicio || '';
     if (fin && data.hora_fin !== undefined) fin.value = data.hora_fin || '';
     if (horas) horas.value = data.horas || '';
-    if (precio && data.precio) precio.value = data.precio;
+    if (precio && data.precio !== undefined && data.precio !== null && data.precio !== '') {
+      precio.value = data.precio;
+    }
     if (importe) {
       var impMain = importe.querySelector('span:not(.cert-diff)');
       if (impMain) impMain.textContent = data.importe || '—';
@@ -414,6 +470,11 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     row.querySelectorAll('.js-falta-flag').forEach(function (el) { el.remove(); });
     if (inicio) inicio.classList.remove('is-invalid');
     if (fin) fin.classList.remove('is-invalid');
+
+    if (data.editado === false) {
+      row.querySelectorAll('.js-editado-flag').forEach(function (el) { el.remove(); });
+      row.classList.remove('is-manual');
+    }
 
     if (data.tramo_invalido || data.incompleta) {
       row.classList.add('is-missing');
@@ -461,8 +522,102 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
 
   function updateWorkImp(work, wI) {
     if (!work) return;
-    var impCol = work.querySelector('.js-work-imp');
+    // Preferir la cabecera del bloque (obra / persona-día), no la primera fila anidada.
+    var impCol = work.querySelector(':scope > summary .js-work-imp')
+      || work.querySelector(':scope > .cert-persona-day-head .js-work-imp')
+      || work.querySelector('.js-work-imp');
     if (impCol) impCol.textContent = fmt(wI) + ' €';
+  }
+
+  function updateWorkTotalHoras(work, wH) {
+    if (!work) return;
+    var summary = work.querySelector(':scope > summary');
+    if (!summary) return;
+    var inp = summary.querySelector('.js-work-horas');
+    if (inp) {
+      inp.value = fmt(wH);
+      return;
+    }
+    var ro = summary.querySelector('.js-work-total-horas');
+    if (ro) ro.textContent = fmt(wH) + ' h';
+  }
+
+  var DELTA_I18N = {
+    cuadra: {{ _('La propuesta que vas a enviar cuadra exacto con el fichaje de la plataforma.')|tojson }},
+    masCara: {{ _('La propuesta que vas a enviar es un {pct}% más cara que el fichaje (desfavorable).')|tojson }},
+    masBarata: {{ _('La propuesta que vas a enviar es un {pct}% más barata que el fichaje (favorable).')|tojson }},
+    masHoras: {{ _('La propuesta que vas a enviar tiene un {pct}% más de horas que el fichaje (desfavorable).')|tojson }},
+    menosHoras: {{ _('La propuesta que vas a enviar tiene un {pct}% menos de horas que el fichaje (favorable).')|tojson }},
+  };
+
+  function pctTxt(absPct) {
+    if (absPct >= 10 || Math.abs(absPct - Math.round(absPct)) < 0.05) {
+      return String(Math.round(absPct));
+    }
+    return (Math.round(absPct * 10) / 10).toFixed(1).replace(/\.0$/, '');
+  }
+
+  function fillPct(tpl, pct) {
+    return String(tpl || '').replace('{pct}', pctTxt(pct));
+  }
+
+  function updateDeltaBanner(pH, pI) {
+    var box = form.querySelector('.js-delta-plat');
+    if (!box) return;
+    var platH = num(box.getAttribute('data-plat-horas'));
+    var platI = num(box.getAttribute('data-plat-importe'));
+    var propTxt = box.querySelector('.js-delta-prop-txt');
+    if (propTxt) propTxt.textContent = fmtPair(pH, pI);
+    var fraseEl = box.querySelector('.js-delta-frase');
+    var dI = pI - platI;
+    var dH = pH - platH;
+    var frase = DELTA_I18N.cuadra;
+    var cls = 'is-flat';
+    if (platI > 0 || pI > 0) {
+      if (platI > 0) {
+        var pctI = (dI / platI) * 100;
+        if (pctI > 0.05) {
+          frase = fillPct(DELTA_I18N.masCara, Math.abs(pctI));
+          cls = 'is-up';
+        } else if (pctI < -0.05) {
+          frase = fillPct(DELTA_I18N.masBarata, Math.abs(pctI));
+          cls = 'is-down';
+        }
+      } else if (dI > 0.05) {
+        frase = fillPct(DELTA_I18N.masCara, 100);
+        cls = 'is-up';
+      } else if (dI < -0.05) {
+        frase = fillPct(DELTA_I18N.masBarata, 100);
+        cls = 'is-down';
+      }
+    } else if (platH > 0 || pH > 0) {
+      if (platH > 0) {
+        var pctH = (dH / platH) * 100;
+        if (pctH > 0.05) {
+          frase = fillPct(DELTA_I18N.masHoras, Math.abs(pctH));
+          cls = 'is-up';
+        } else if (pctH < -0.05) {
+          frase = fillPct(DELTA_I18N.menosHoras, Math.abs(pctH));
+          cls = 'is-down';
+        }
+      }
+    }
+    if (fraseEl) fraseEl.textContent = frase;
+    box.classList.remove('is-up', 'is-down', 'is-ok', 'is-flat');
+    box.classList.add(cls);
+  }
+
+  function updatePanelTotal(pH, pI) {
+    var panel = form.querySelector('.js-panel-total');
+    if (!panel) return;
+    var horasCol = panel.querySelector('.js-panel-total-horas');
+    var impCol = panel.querySelector('.js-panel-total-imp');
+    var main = panel.querySelector('.js-panel-total-main');
+    if (horasCol) horasCol.textContent = fmt(pH) + ' h';
+    if (impCol) impCol.textContent = fmt(pI) + ' €';
+    if (main) main.textContent = fmtPair(pH, pI);
+    if (!horasCol && !impCol && !main) panel.textContent = fmtPair(pH, pI);
+    updateDeltaBanner(pH, pI);
   }
 
   function recalcFromRow(row) {
@@ -477,8 +632,15 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       });
       var dayStats = day.querySelector('.js-day-stats');
       if (dayStats) {
-        var dayMain = dayStats.querySelector(':scope > span:first-child') || dayStats;
-        dayMain.textContent = fmtPair(dH, dI);
+        var dayH = dayStats.querySelector('.js-day-horas');
+        var dayI = dayStats.querySelector('.js-day-imp');
+        if (dayH || dayI) {
+          if (dayH) dayH.textContent = fmt(dH) + ' h';
+          if (dayI) dayI.textContent = fmt(dI) + ' €';
+        } else {
+          var dayMain = dayStats.querySelector(':scope > span:first-child') || dayStats;
+          dayMain.textContent = fmtPair(dH, dI);
+        }
       }
     }
     if (work) {
@@ -488,11 +650,12 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
         wH += v.h;
         wI += v.h * v.p;
       });
-      var inp = work.querySelector('.js-work-horas');
-      if (inp) inp.value = fmt(wH);
+      updateWorkTotalHoras(work, wH);
       updateWorkImp(work, wI);
-      var workStats = work.querySelector('.js-work-stats');
-      if (workStats) workStats.textContent = fmtPair(wH, wI);
+      var workStats = work.querySelector(':scope > summary .js-work-stats');
+      if (workStats && !workStats.classList.contains('cert-work-tools') && !workStats.querySelector('.cert-work-col')) {
+        workStats.textContent = fmtPair(wH, wI);
+      }
     }
     var pH = 0, pI = 0;
     form.querySelectorAll('.cert-line:not(.cert-line--head)').forEach(function (r) {
@@ -500,9 +663,9 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       pH += v.h;
       pI += v.h * v.p;
     });
-    var panel = form.querySelector('.js-panel-total');
-    if (panel) panel.textContent = fmtPair(pH, pI);
+    updatePanelTotal(pH, pI);
   }
+  window.certRecalcFromRow = recalcFromRow;
 
   function flashInline(row, text, ok) {
     var old = row.querySelector('.js-fila-msg');
@@ -596,6 +759,45 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     setTimeout(function () { msg.remove(); }, 2500);
   }
 
+  function certAppendPeriod(fd) {
+    fd.append('csrf_token', csrfToken());
+    fd.append('anio', form.querySelector('input[name="anio"]').value);
+    fd.append('mes', form.querySelector('input[name="mes"]').value);
+    var desde = form.querySelector('input[name="desde"]');
+    var hasta = form.querySelector('input[name="hasta"]');
+    if (desde) fd.append('desde', desde.value);
+    if (hasta) fd.append('hasta', hasta.value);
+    var corr = form.querySelector('input[name="corr"]');
+    if (corr && corr.value) fd.append('corr', corr.value);
+    var modoEl = form.querySelector('input[name="modo"]');
+    if (modoEl && modoEl.value) fd.append('modo', modoEl.value);
+    fd.append('_ajax', '1');
+  }
+
+  function syncPersonaDayTotals(dayEl, lineas) {
+    if (!dayEl || !lineas || !lineas.length) return;
+    var byUid = {};
+    lineas.forEach(function (ln) {
+      var uid = String(ln.user_id || '');
+      if (!uid) return;
+      if (!byUid[uid]) byUid[uid] = { h: 0, i: 0 };
+      byUid[uid].h += num(ln.horas);
+      byUid[uid].i += num(String(ln.importe || '').replace(/[^\d.,-]/g, '').replace(',', '.'));
+    });
+    dayEl.querySelectorAll('.cert-persona-day').forEach(function (pd) {
+      var uid = pd.getAttribute('data-user-id') || '';
+      var pack = byUid[uid];
+      if (!pack) return;
+      var inp = pd.querySelector('.js-work-horas');
+      if (inp) {
+        var hv = String(Math.round(pack.h * 100) / 100);
+        inp.value = hv;
+        inp.setAttribute('data-focus-val', hv);
+      }
+      updateWorkImp(pd, pack.i);
+    });
+  }
+
   function postProrrataWork(work, input) {
     if (!work || !input || work.getAttribute('data-saving') === '1') {
       return Promise.resolve();
@@ -609,19 +811,14 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     }
     if (!uid) return Promise.resolve();
     var fd = new FormData();
-    fd.append('csrf_token', csrfToken());
-    fd.append('anio', form.querySelector('input[name="anio"]').value);
-    fd.append('mes', form.querySelector('input[name="mes"]').value);
-    var desde = form.querySelector('input[name="desde"]');
-    var hasta = form.querySelector('input[name="hasta"]');
-    if (desde) fd.append('desde', desde.value);
-    if (hasta) fd.append('hasta', hasta.value);
-    var corr = form.querySelector('input[name="corr"]');
-    if (corr && corr.value) fd.append('corr', corr.value);
+    certAppendPeriod(fd);
     fd.append('accion', 'prorrata_persona');
     fd.append('user_id', uid);
     fd.append('horas_total', input.value);
-    fd.append('_ajax', '1');
+    var fechaDia = input.getAttribute('data-fecha')
+      || (work && work.getAttribute('data-fecha'))
+      || '';
+    if (fechaDia) fd.append('fecha', fechaDia);
     work.setAttribute('data-saving', '1');
     input.classList.add('is-busy');
     return fetch(form.action || window.location.href, {
@@ -653,8 +850,34 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       }
       if (data.importe_total !== undefined) {
         updateWorkImp(work, num(data.importe_total));
-      } else {
-        recalcFromRow(work.querySelector('.cert-line:not(.cert-line--head)') || work);
+      }
+      var sample = work.querySelector('.cert-line:not(.cert-line--head)');
+      if (sample) {
+        recalcFromRow(sample);
+      } else if (data.importe_total === undefined) {
+        recalcFromRow(work);
+      }
+      var dayEl = work.closest('.cert-day');
+      if (dayEl && fechaDia) {
+        var dayInp = dayEl.querySelector('.js-day-prorrata');
+        if (dayInp) {
+          var sumH = 0;
+          dayEl.querySelectorAll('.cert-persona-day .js-work-horas').forEach(function (pi) {
+            sumH += num(pi.value);
+          });
+          var sh = String(Math.round(sumH * 100) / 100);
+          dayInp.value = sh;
+          dayInp.setAttribute('data-focus-val', sh);
+        }
+        var dayImp = dayEl.querySelector('.js-day-imp');
+        if (dayImp && sample) {
+          var dI = 0;
+          dayEl.querySelectorAll('.cert-line:not(.cert-line--head)').forEach(function (r) {
+            var v = lineVals(r);
+            dI += v.h * v.p;
+          });
+          dayImp.textContent = fmt(dI) + ' €';
+        }
       }
       if (typeof window.certSyncMesaActions === 'function') {
         window.certSyncMesaActions();
@@ -664,6 +887,81 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       flashWorkError(work, MSG_WORK_FAIL);
     }).finally(function () {
       work.removeAttribute('data-saving');
+      input.classList.remove('is-busy');
+    });
+  }
+
+  function postProrrataFecha(day, input) {
+    if (!day || !input || day.getAttribute('data-saving') === '1') {
+      return Promise.resolve();
+    }
+    var fechaDia = input.getAttribute('data-fecha') || day.getAttribute('data-fecha') || '';
+    if (!fechaDia) return Promise.resolve();
+    var fd = new FormData();
+    certAppendPeriod(fd);
+    fd.append('accion', 'prorrata_fecha');
+    fd.append('fecha', fechaDia);
+    fd.append('horas_total', input.value);
+    day.setAttribute('data-saving', '1');
+    input.classList.add('is-busy');
+    return fetch(form.action || window.location.href, {
+      method: 'POST',
+      body: fd,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+      },
+      credentials: 'same-origin',
+      keepalive: true,
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        return { okHttp: res.ok, data: data };
+      });
+    }).then(function (pack) {
+      var data = pack.data || {};
+      if (!pack.okHttp || data.error) {
+        flashWorkError(day, data.error || MSG_WORK_FAIL);
+        return data;
+      }
+      (data.lineas || []).forEach(function (ln) {
+        var row = form.querySelector('.cert-line[data-linea-id="' + ln.linea_id + '"]');
+        if (row) applyLinea(row, ln);
+      });
+      if (data.horas_total !== undefined) {
+        input.value = data.horas_total;
+        input.setAttribute('data-focus-val', String(data.horas_total));
+      }
+      if (data.importe_total !== undefined) {
+        var dayImp = day.querySelector('.js-day-imp');
+        if (dayImp) dayImp.textContent = fmt(num(data.importe_total)) + ' €';
+      }
+      syncPersonaDayTotals(day, data.lineas || []);
+      // Cabecera de obra (# borrador) + total del panel.
+      var sample = day.querySelector('.cert-line:not(.cert-line--head)');
+      if (sample) {
+        recalcFromRow(sample);
+      } else {
+        var work = day.closest('.cert-work');
+        if (work) {
+          var wH = 0, wI = 0;
+          work.querySelectorAll('.cert-line:not(.cert-line--head)').forEach(function (r) {
+            var v = lineVals(r);
+            wH += v.h;
+            wI += v.h * v.p;
+          });
+          updateWorkTotalHoras(work, wH);
+          updateWorkImp(work, wI);
+          updatePanelTotal(wH, wI);
+        }
+      }
+      if (typeof window.certSyncMesaActions === 'function') {
+        window.certSyncMesaActions();
+      }
+      return data;
+    }).catch(function () {
+      flashWorkError(day, MSG_WORK_FAIL);
+    }).finally(function () {
+      day.removeAttribute('data-saving');
       input.classList.remove('is-busy');
     });
   }
@@ -678,6 +976,92 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     btn.addEventListener('click', function () {
       var row = btn.closest('.cert-line');
       postFilaRow(row, 'restablecer', { btn: btn, id: btn.value });
+    });
+  });
+
+  var MSG_PERSONA_FAIL = {{ _('No se pudo actualizar este trabajador.')|tojson }};
+
+  function postPersonaAccion(work, fieldName, btn) {
+    if (!work || !btn || work.getAttribute('data-saving') === '1') {
+      return Promise.resolve();
+    }
+    var uid = btn.value || work.getAttribute('data-user-id') || '';
+    if (!uid) return Promise.resolve();
+    var fd = new FormData();
+    fd.append('csrf_token', csrfToken());
+    fd.append('anio', form.querySelector('input[name="anio"]').value);
+    fd.append('mes', form.querySelector('input[name="mes"]').value);
+    var desde = form.querySelector('input[name="desde"]');
+    var hasta = form.querySelector('input[name="hasta"]');
+    if (desde) fd.append('desde', desde.value);
+    if (hasta) fd.append('hasta', hasta.value);
+    var corr = form.querySelector('input[name="corr"]');
+    if (corr && corr.value) fd.append('corr', corr.value);
+    var modo = form.querySelector('input[name="modo"]');
+    if (modo && modo.value) fd.append('modo', modo.value);
+    fd.append(fieldName, uid);
+    fd.append('_ajax', '1');
+    work.setAttribute('data-saving', '1');
+    btn.disabled = true;
+    btn.classList.add('is-busy');
+    return fetch(form.action || window.location.href, {
+      method: 'POST',
+      body: fd,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+      },
+      credentials: 'same-origin',
+      keepalive: true,
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        return { okHttp: res.ok, data: data };
+      });
+    }).then(function (pack) {
+      var data = pack.data || {};
+      if (!pack.okHttp || data.error) {
+        flashWorkError(work, data.error || MSG_PERSONA_FAIL);
+        return data;
+      }
+      (data.lineas || []).forEach(function (ln) {
+        var row = form.querySelector('.cert-line[data-linea-id="' + ln.linea_id + '"]');
+        if (row) applyLinea(row, ln);
+      });
+      var inp = work.querySelector('.js-work-horas');
+      if (inp && data.horas_total !== undefined) {
+        inp.value = data.horas_total;
+        inp.setAttribute('data-focus-val', String(data.horas_total));
+      }
+      if (data.importe_total !== undefined) {
+        updateWorkImp(work, num(data.importe_total));
+      } else {
+        recalcFromRow(work.querySelector('.cert-line:not(.cert-line--head)') || work);
+      }
+      if (typeof window.certSyncMesaActions === 'function') {
+        window.certSyncMesaActions();
+      }
+      return data;
+    }).catch(function () {
+      flashWorkError(work, MSG_PERSONA_FAIL);
+    }).finally(function () {
+      work.removeAttribute('data-saving');
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+    });
+  }
+
+  form.querySelectorAll('.js-copiar-persona').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var work = btn.closest('.cert-work');
+      postPersonaAccion(work, 'copiar_persona', btn);
+    });
+  });
+  form.querySelectorAll('.js-restablecer-persona').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var work = btn.closest('.cert-work');
+      postPersonaAccion(work, 'restablecer_persona', btn);
     });
   });
 
@@ -714,12 +1098,34 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       var prev = input.getAttribute('data-focus-val');
       var cur = String(input.value || '');
       if (prev === cur) return;
-      var work = input.closest('.cert-work');
+      var work = input.closest('.cert-persona-day') || input.closest('.cert-work');
       if (!work || !form.contains(work)) return;
       postProrrataWork(work, input);
     });
   }
   form.querySelectorAll('.js-work-horas').forEach(bindWorkAutosave);
+
+  function bindDayAutosave(input) {
+    if (!input || input.disabled) return;
+    input.addEventListener('focus', function () {
+      input.setAttribute('data-focus-val', String(input.value || ''));
+    });
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        input.blur();
+      }
+    });
+    input.addEventListener('blur', function () {
+      var prev = input.getAttribute('data-focus-val');
+      var cur = String(input.value || '');
+      if (prev === cur) return;
+      var day = input.closest('.cert-day');
+      if (!day || !form.contains(day)) return;
+      postProrrataFecha(day, input);
+    });
+  }
+  form.querySelectorAll('.js-day-prorrata').forEach(bindDayAutosave);
 
   var MSG_ADD_FAIL = {{ _('No se pudo añadir el día.')|tojson }};
   var LBL_DIA = {{ _('Día')|tojson }};
@@ -940,7 +1346,8 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
 
 (function () {
   function submitAccion(btn) {
-    var form = btn.closest('form');
+    // btn.form respeta form="…"; closest falla si el botón está fuera del <form>.
+    var form = btn.form || btn.closest('form');
     if (!form) return;
     var hidden = document.createElement('input');
     hidden.type = 'hidden';
@@ -972,24 +1379,89 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       },
       buttonsStyling: false,
     }).then(function (result) {
-      if (result && result.isConfirmed) submitAccion(btn);
+      if (!(result && result.isConfirmed)) return;
+      if (btn.classList.contains('js-reabrir-certificacion')) {
+        Swal.fire({
+          title: {{ _('Abriendo…')|tojson }},
+          html: '<p style="margin:0;color:#475569;">' + {{ _('Un momento.')|tojson }} + '</p>',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: function () { Swal.showLoading(); },
+        });
+      }
+      submitAccion(btn);
     });
   }
   document.querySelectorAll('.js-enviar-propuesta').forEach(function (btn) {
     btn.addEventListener('click', function (ev) {
-      var n = parseInt(btn.getAttribute('data-borradores') || '0', 10);
-      if (!n) return;
+      var nBorr = parseInt(btn.getAttribute('data-borradores') || '0', 10);
+      var nFuera = parseInt(btn.getAttribute('data-fuera') || '0', 10);
+      if (!nBorr && !nFuera) return;
+      ev.preventDefault();
+      var steps = [];
+      if (nBorr) {
+        steps.push({
+          title: btn.getAttribute('data-title-borrador') || btn.getAttribute('data-title'),
+          text: btn.getAttribute('data-text-borrador') || btn.getAttribute('data-text'),
+        });
+      }
+      if (nFuera) {
+        steps.push({
+          title: btn.getAttribute('data-title-fuera'),
+          text: btn.getAttribute('data-text-fuera'),
+        });
+      }
+      if (typeof Swal === 'undefined') {
+        var ok = true;
+        steps.forEach(function (s) {
+          if (ok) ok = window.confirm((s.title || '') + '\n\n' + (s.text || ''));
+        });
+        if (ok) submitAccion(btn);
+        return;
+      }
+      (function next(i) {
+        if (i >= steps.length) {
+          submitAccion(btn);
+          return;
+        }
+        var s = steps[i];
+        Swal.fire({
+          title: s.title || '',
+          html: '<p style="margin:0;color:#475569;line-height:1.45;">' + (s.text || '') + '</p>',
+          icon: 'warning',
+          showCancelButton: true,
+          focusCancel: true,
+          confirmButtonText: btn.getAttribute('data-confirm') || {{ _('Continuar')|tojson }},
+          cancelButtonText: btn.getAttribute('data-cancel') || {{ _('Cancelar')|tojson }},
+          customClass: {
+            popup: 'admin-swal-popup',
+            title: 'admin-swal-title',
+            htmlContainer: 'admin-swal-html',
+            actions: 'admin-swal-actions',
+            confirmButton: 'admin-swal-btn',
+            cancelButton: 'admin-swal-btn admin-swal-btn-ghost',
+          },
+          buttonsStyling: false,
+        }).then(function (result) {
+          if (result && result.isConfirmed) next(i + 1);
+        });
+      })(0);
+    });
+  });
+  document.querySelectorAll('.js-desenviar-propuesta').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       ask(btn, {
         title: btn.getAttribute('data-title'),
         text: btn.getAttribute('data-text'),
         confirm: btn.getAttribute('data-confirm'),
         cancel: btn.getAttribute('data-cancel'),
-        icon: 'warning',
+        icon: 'question',
       });
     });
   });
-  document.querySelectorAll('.js-desenviar-propuesta').forEach(function (btn) {
+  document.querySelectorAll('.js-reabrir-certificacion').forEach(function (btn) {
     btn.addEventListener('click', function (ev) {
       ev.preventDefault();
       ask(btn, {

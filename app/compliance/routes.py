@@ -38,8 +38,10 @@ from app.services.certificacion_service import (
     reaplicar_precios_empresa_borrador,
     reaplicar_precios_obra_borrador,
     contexto_mesa,
-    contrato_asistencia,
+    contrato_asistencia_mes,
     publicar_chat,
+    lineas_fuera_vigencia_contrato,
+    rango_vigencia_contrato,
     sembrar_borrador_desde_mesa,
     ronda_en_mesa,
     restablecer_persona_base,
@@ -57,6 +59,7 @@ from app.services.certificacion_service import (
     desenviar,
     detalle_certificacion_obra,
     enviar,
+    reabrir_periodo,
     estado_propuesta,
     filtrar_grupos_por_rango,
     guardar_linea,
@@ -74,15 +77,19 @@ from app.services.certificacion_service import (
     panel_certificacion_oficina,
     panel_meses_obra,
     parse_hora,
+    ids_propuestas_pdf_cerradas,
     pdf_propuesta,
+    programar_warmup_pdf_certificacion,
     periodo_bloqueado,
     precio_empresa,
     precio_mostrado_obra,
     precio_obra,
     precio_para,
+    prorratear_horas_fecha,
     prorratear_horas_persona,
     propuestas_entrantes_oficina,
     rechazar,
+    requerir_accion,
     restablecer_linea_desde_fichaje,
     resumen_actividad,
     sincronizar,
@@ -152,6 +159,7 @@ def _cert_avisos_ctx(
         company_id=company_id,
         obra_id=obra_id,
         user=None if vista_subcontrata else current_user,
+        vista_subcontrata=vista_subcontrata,
     )
     quitar = (
         url_for('subcontrata.certificacion_avisos_quitar')
@@ -715,12 +723,12 @@ def certificacion_lista():
         filas = panel_certificacion_obras(
             current_user, anio=anio, mes=mes, desde=desde, hasta=hasta,
         )
-        entrantes = 0
     else:
         filas = panel_certificacion_oficina(
             current_user, anio=anio, mes=mes, desde=desde, hasta=hasta,
         )
-        entrantes = sum(1 for f in filas if f['requiere_accion'])
+    entrantes = sum(1 for f in filas if f.get('requiere_accion'))
+    sin_cerrar = sum(1 for f in filas if f.get('aviso_pendiente'))
 
     return render_template(
         'compliance/certificacion_lista.html',
@@ -733,6 +741,7 @@ def certificacion_lista():
         prev=_shift(anio, mes, -1),
         next=_shift(anio, mes, 1),
         entrantes=entrantes,
+        sin_cerrar=sin_cerrar,
         **_cert_avisos_ctx(scope_oficina(), anio=anio, mes=mes),
     )
 
@@ -911,12 +920,51 @@ def certificacion_empresa_obra(company_id, obra_id):
 
 
 def _grupos_como_obra(obra, fechas_o_vacio, prop):
+    """Obra → días → personas → líneas (espejo de la vista por persona)."""
     if not fechas_o_vacio and not (prop and prop.lineas):
         return []
+    fechas_out = []
+    for f in fechas_o_vacio or []:
+        by_uid: dict = {}
+        for item in f.get('lineas') or []:
+            ln = item.get('linea')
+            if not ln:
+                continue
+            uid = ln.user_id
+            user = ln.user
+            nombre = (
+                f'{(user.name or "")} {(user.lastname or "")}'.strip()
+                if user else translate('Persona')
+            )
+            bucket = by_uid.setdefault(uid, {
+                'user': user,
+                'user_id': uid,
+                'nombre': nombre or translate('Persona'),
+                'lineas': [],
+                'horas': Decimal('0.00'),
+                'importe': Decimal('0.00'),
+            })
+            bucket['lineas'].append(item)
+            bucket['horas'] += cuantizar(item.get('horas') or ln.horas) or Decimal('0.00')
+            bucket['importe'] += cuantizar(item.get('importe')) or Decimal('0.00')
+        personas = sorted(
+            by_uid.values(),
+            key=lambda p: (p.get('nombre') or '').lower(),
+        )
+        for p in personas:
+            p['horas'] = cuantizar(p['horas']) or Decimal('0.00')
+            p['importe'] = cuantizar(p['importe']) or Decimal('0.00')
+        fechas_out.append({
+            'fecha': f.get('fecha'),
+            'lineas': f.get('lineas') or [],
+            'personas': personas,
+            'horas': f.get('horas') or 0,
+            'importe': f.get('importe') or 0,
+        })
     tot = totales(prop) if prop else {'horas': 0, 'importe': 0}
     return [{
         'obra': obra,
-        'fechas': fechas_o_vacio or [],
+        'fechas': fechas_out,
         'horas': tot['horas'],
         'importe': tot['importe'],
     }]
@@ -1049,31 +1097,42 @@ def _render_cert(
 
     # Oficina y subcontrata: misma tarifa (obra > empresa > contrato asistencia).
     # La subcontrata no la edita; sí la ve para que horas × €/h cuadren al enviar.
+    # Contrato del mes (solape con vigencia), no el vigente «hoy».
+    contrato = contrato_asistencia_mes(company, obra, anio, mes, cache=cache_precios)
+    contrato_inicio, contrato_fin = rango_vigencia_contrato(contrato)
+    fecha_tarifa = None
+    if contrato_inicio or contrato_fin:
+        mes_ini, mes_fin = date(anio, mes, 1), date(anio, mes, monthrange(anio, mes)[1])
+        fecha_tarifa = max(mes_ini, contrato_inicio or mes_ini)
+        if contrato_fin:
+            fecha_tarifa = min(fecha_tarifa, contrato_fin)
+    sin_contrato_periodo = contrato is None
+
     if vista_subcontrata:
         if precio_obra(obra) is not None:
             precio_origen = 'obra'
             precio_val = precio_obra(obra)
-            contrato = None
         elif company.precio_hora is not None:
             precio_origen = 'empresa'
             precio_val = precio_empresa(company)
-            contrato = None
         else:
             from_line = _precio_linea_util(propia) or _precio_linea_util(ajena)
             if from_line is not None:
                 precio_origen = 'contrato'
                 precio_val = from_line
-                contrato = None
-            else:
-                contrato = contrato_asistencia(company, obra, cache=cache_precios)
-                precio_val = precio_para(company, obra, cache=cache_precios)
+            elif contrato:
+                precio_val = precio_para(
+                    company, obra, fecha=fecha_tarifa, cache=cache_precios,
+                )
                 if precio_val and precio_val > 0:
                     precio_origen = 'contrato'
                 else:
                     precio_origen = 'sin'
                     precio_val = Decimal('0.00')
+            else:
+                precio_origen = 'sin'
+                precio_val = Decimal('0.00')
     else:
-        contrato = contrato_asistencia(company, obra, cache=cache_precios)
         if precio_obra(obra) is not None:
             precio_origen = 'obra'
         elif company.precio_hora is not None:
@@ -1082,13 +1141,29 @@ def _render_cert(
             precio_origen = 'contrato'
         else:
             precio_origen = 'sin'
-        precio_val = precio_para(company, obra, cache=cache_precios)
+        precio_val = precio_para(
+            company, obra, fecha=fecha_tarifa, cache=cache_precios,
+        )
         if not precio_val or precio_val <= 0:
             from_line = _precio_linea_util(propia) or _precio_linea_util(ajena)
             if from_line is not None:
                 precio_val = from_line
                 if precio_origen == 'sin' and contrato:
                     precio_origen = 'contrato'
+
+    fuera_contrato = lineas_fuera_vigencia_contrato(propia, contrato) if contrato else []
+    # Si ya hay propuesta enviada/aceptada, se muestra aunque el contrato no solape
+    # (historial). Si es borrador vacío sin contrato, pantalla vacía.
+    tiene_senal = bool(
+        bloqueado
+        or (propia and (propia.estado or '') in ('enviada', 'aceptada', 'cerrada'))
+        or (ajena and (ajena.estado or '') in ('enviada', 'aceptada', 'cerrada'))
+        or (propia and any(
+            (ln.horas is not None) or ln.hora_inicio or ln.hora_fin
+            for ln in (propia.lineas or [])
+        ))
+    )
+    mostrar_sin_contrato = sin_contrato_periodo and not tiene_senal
 
     totales_plat = {'horas': 0, 'importe': 0}
     delta_propuesta_plat = None
@@ -1168,14 +1243,24 @@ def _render_cert(
                 except (TypeError, ValueError):
                     senal_f = 0.0
                 delta_propuesta_plat['etiqueta'] = etiqueta
-                delta_propuesta_plat['soltec_pierde'] = senal_f < -0.05
-                delta_propuesta_plat['soltec_gana'] = not delta_propuesta_plat['soltec_pierde']
+                # SaaS paga: propuesto > App → pierde; < App → gana; ≈ → cuadra (verde).
+                delta_propuesta_plat['soltec_pierde'] = senal_f > 0.05
+                delta_propuesta_plat['soltec_gana'] = senal_f < -0.05
                 delta_propuesta_plat['frase'] = frase_delta_plataforma(
                     delta_propuesta_plat,
                     etiqueta=etiqueta,
                     nombre_empresa=getattr(company, 'nombre', None),
                 )
         marcar_sin_fichaje_grupos(g_propia)
+
+    # Si el mes ya está cerrado, precarga PDF en segundo plano (por si aún no hay caché).
+    if bloqueado or (propia and propia.estado == 'aceptada') or (ajena and ajena.estado == 'aceptada'):
+        target = (
+            propia if propia and propia.estado == 'aceptada'
+            else (ajena if ajena and ajena.estado == 'aceptada' else propia)
+        )
+        if target and (target.estado or '') in ('aceptada', 'cerrada'):
+            programar_warmup_pdf_certificacion(*ids_propuestas_pdf_cerradas(target))
 
     return render_template(
         'compliance/certificacion.html',
@@ -1202,12 +1287,22 @@ def _render_cert(
             company.id, obra.id, anio, mes, vista_subcontrata=vista_subcontrata,
         ),
         bloqueado=bloqueado,
+        # Con desde/hasta solo consulta: enviar/aceptar/rechazar exigen mes completo.
+        mes_completo=not bool(desde or hasta),
         aceptada_at=aceptada_at,
         precio=precio_val,
         precio_propio_obra=precio_obra(obra) is not None,
         precio_propio_empresa=company.precio_hora is not None,
         precio_origen=precio_origen,
         contrato=contrato,
+        sin_contrato_periodo=sin_contrato_periodo,
+        mostrar_sin_contrato=mostrar_sin_contrato,
+        contrato_inicio=contrato_inicio,
+        contrato_fin=contrato_fin,
+        fuera_contrato_n=len(fuera_contrato),
+        fuera_contrato_fechas=sorted({
+            ln.fecha.isoformat() for ln in fuera_contrato if ln.fecha
+        }),
         vista_subcontrata=vista_subcontrata,
         falta_ids=falta_ids,
         borradores_odoo=0 if vista_subcontrata else contar_borradores_odoo(propia),
@@ -1246,7 +1341,7 @@ def _cert_redirect(endpoint, company, anio, mes, obra_id, **extra):
         kwargs['company_id'] = company.id
     # Tras enviar/aceptar/rechazar no volvemos a «corr»: el turno cambió.
     accion = (request.form.get('accion') or '').strip()
-    keep_corr = accion not in ('enviar', 'aceptar', 'rechazar', 'desenviar')
+    keep_corr = accion not in ('enviar', 'aceptar', 'rechazar', 'desenviar', 'reabrir')
     corr = extra.pop('corr', None)
     if corr is None and keep_corr:
         raw = request.form.get('corr') or request.args.get('corr')
@@ -1269,6 +1364,28 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
     hasta_q = request.form.get('hasta') or None
     modo_q = request.form.get('modo') or None
 
+    # Rango de fechas = solo lectura. Enviar/aceptar/rechazar/editar comprometen el mes entero.
+    if desde_q or hasta_q:
+        flash(
+            translate(
+                'Con un rango de fechas solo puedes consultar. '
+                'Quita el filtro («Solo mes») para enviar, aceptar, rechazar o editar la propuesta.'
+            ),
+            'warning',
+        )
+        if _cert_wants_json():
+            from flask import jsonify
+            return jsonify(
+                ok=False,
+                error=translate(
+                    'Las acciones de certificación solo están disponibles en el mes completo.'
+                ),
+            ), 400
+        return _cert_redirect(
+            endpoint, company, anio, mes, obra_id,
+            desde=desde_q, hasta=hasta_q, modo=modo_q,
+        )
+
     # Guardar/prorratear: sin sincronizar (evita Odoo en cada guardado; la subcontrata
     # no debe perder horas por un refresh del esqueleto antes de aplicar el POST).
     copiar_persona = request.form.get('copiar_persona')
@@ -1280,7 +1397,7 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
         or restablecer_persona
         or request.form.get('anadir_dia_para')
         or accion in (
-            'prorrata_persona', 'guardar', 'copiar_mesa', 'nota_chat', 'anadir_dia',
+            'prorrata_persona', 'prorrata_fecha', 'guardar', 'copiar_mesa', 'nota_chat', 'anadir_dia',
         )
     )
     if fast:
@@ -1306,6 +1423,7 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
         propia = emp if direccion_propia == DIR_EMP else sub
         ajena = sub if direccion_propia == DIR_EMP else emp
 
+    pdf_warmup_ids: list[int] = []
     try:
         if restablecer_id:
             if direccion_propia != DIR_EMP:
@@ -1356,18 +1474,26 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
             except (TypeError, ValueError):
                 raise ValueError(translate('Persona no válida.'))
             horas_total = request.form.get('horas_total')
-            n = prorratear_horas_persona(propia, uid, horas_total)
+            fecha_raw = (request.form.get('fecha') or '').strip()
+            fecha_dia = None
+            if fecha_raw:
+                try:
+                    fecha_dia = date.fromisoformat(fecha_raw)
+                except ValueError:
+                    raise ValueError(translate('Fecha no válida.'))
+            n = prorratear_horas_persona(propia, uid, horas_total, fecha=fecha_dia)
             db.session.commit()
             if _cert_wants_json():
                 from flask import jsonify
                 from app.services.compliance_rules import importe_linea
                 lineas_u = [
-                    ln for ln in (propia.lineas or []) if ln.user_id == uid
+                    ln for ln in (propia.lineas or [])
+                    if ln.user_id == uid and (fecha_dia is None or ln.fecha == fecha_dia)
                 ]
                 th = Decimal('0.00')
                 ti = Decimal('0.00')
                 payload_lineas = []
-                for ln in sorted(lineas_u, key=lambda x: x.fecha or date.min):
+                for ln in sorted(lineas_u, key=lambda x: (x.fecha or date.min, x.id or 0)):
                     h = cuantizar(ln.horas) or Decimal('0.00')
                     imp = importe_linea(ln.horas, ln.precio_hora) or Decimal('0.00')
                     th += h
@@ -1385,6 +1511,7 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                     'ok': True,
                     'saved': True,
                     'user_id': uid,
+                    'fecha': fecha_dia.isoformat() if fecha_dia else None,
                     'n': n,
                     'horas_total': str(cuantizar(th) or Decimal('0.00')),
                     'importe_total': str(cuantizar(ti) or Decimal('0.00')),
@@ -1394,6 +1521,53 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
             return _cert_redirect(
                 endpoint, company, anio, mes, obra_id,
                 desde=desde_q, hasta=hasta_q, modo=modo_q or 'persona',
+            )
+        if accion == 'prorrata_fecha':
+            fecha_raw = (request.form.get('fecha') or '').strip()
+            try:
+                fecha_dia = date.fromisoformat(fecha_raw)
+            except ValueError:
+                raise ValueError(translate('Fecha no válida.'))
+            horas_total = request.form.get('horas_total')
+            n = prorratear_horas_fecha(propia, fecha_dia, horas_total)
+            db.session.commit()
+            if _cert_wants_json():
+                from flask import jsonify
+                from app.services.compliance_rules import importe_linea
+                lineas_d = [
+                    ln for ln in (propia.lineas or [])
+                    if ln.fecha == fecha_dia
+                ]
+                th = Decimal('0.00')
+                ti = Decimal('0.00')
+                payload_lineas = []
+                for ln in sorted(lineas_d, key=lambda x: (x.user_id or 0, x.id or 0)):
+                    h = cuantizar(ln.horas) or Decimal('0.00')
+                    imp = importe_linea(ln.horas, ln.precio_hora) or Decimal('0.00')
+                    th += h
+                    ti += imp
+                    payload_lineas.append({
+                        'linea_id': int(ln.id),
+                        'user_id': int(ln.user_id) if ln.user_id else None,
+                        'horas': str(ln.horas) if ln.horas is not None else '',
+                        'precio': str(ln.precio_hora) if ln.precio_hora is not None else '',
+                        'importe': f'{imp} €',
+                        'hora_inicio': '',
+                        'hora_fin': '',
+                        'editado': True,
+                    })
+                return jsonify({
+                    'ok': True,
+                    'saved': True,
+                    'fecha': fecha_dia.isoformat(),
+                    'n': n,
+                    'horas_total': str(cuantizar(th) or Decimal('0.00')),
+                    'importe_total': str(cuantizar(ti) or Decimal('0.00')),
+                    'lineas': payload_lineas,
+                })
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q or 'fecha',
             )
         if accion == 'anadir_dia' or request.form.get('anadir_dia_para'):
             raw_uid = request.form.get('anadir_dia_para') or request.form.get('anadir_user_id')
@@ -1465,6 +1639,8 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                 raise ValueError(translate('No hay una propuesta actual de la otra parte.'))
             n = aplicar_ronda_a_borrador(propia, mesa, user_id=uid)
             db.session.commit()
+            if _cert_wants_json():
+                return _json_lineas_persona(propia, uid, n=n, accion='copiar_persona')
             flash(
                 translate('Se han copiado {n} días de su propuesta en este trabajador.', n=n),
                 'success',
@@ -1485,6 +1661,8 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                 vista_subcontrata=(direccion_propia == DIR_SUB),
             )
             db.session.commit()
+            if _cert_wants_json():
+                return _json_lineas_persona(propia, uid, n=n, accion='restablecer_persona')
             if direccion_propia == DIR_SUB:
                 flash(
                     translate('Restablecido el último envío de este trabajador ({n} días).', n=n),
@@ -1600,13 +1778,34 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                     desde=desde_q, hasta=hasta_q, modo=modo_q,
                     falta=','.join(str(x) for x in faltan),
                 )
-            enviar(propia, current_user.id)
+            enviar(
+                propia, current_user.id,
+                company=company, obra=obra,
+                contrato=contrato_asistencia_mes(company, obra, anio, mes),
+            )
+            if propia.estado == 'aceptada':
+                pdf_warmup_ids.extend(ids_propuestas_pdf_cerradas(propia))
         elif accion == 'desenviar':
             desenviar(propia, current_user.id)
+        elif accion == 'reabrir':
+            if direccion_propia != DIR_EMP:
+                abort(403)
+            reabrir_periodo(company.id, obra_id, anio, mes, current_user.id)
+        elif accion == 'requerir':
+            if direccion_propia != DIR_EMP:
+                abort(403)
+            requerir_accion(company, obra_id, anio, mes, current_user.id)
+            db.session.commit()
+            flash(translate('Se ha requerido a la subcontrata completar esta certificación.'), 'success')
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q,
+            )
         elif accion == 'aceptar':
             if not ajena or ajena.estado != 'enviada':
                 raise ValueError(translate('No hay propuesta enviada que aceptar.'))
             aceptar(ajena, current_user.id)
+            pdf_warmup_ids.extend(ids_propuestas_pdf_cerradas(ajena))
         elif accion == 'rechazar':
             if not ajena or ajena.estado != 'enviada':
                 raise ValueError(translate('No hay propuesta enviada que rechazar.'))
@@ -1647,13 +1846,19 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                         pass
             marcar_discrepancias(ajena, set(), notas)
         db.session.commit()
+        if pdf_warmup_ids:
+            # wkhtmltopdf es lento: precarga en disco para que el primer clic ya vaya rápido.
+            programar_warmup_pdf_certificacion(*pdf_warmup_ids)
         flash(translate('Certificación actualizada.'), 'success')
     except Exception as exc:
         db.session.rollback()
         if _cert_wants_json() and (
             guardar_fila_id
             or restablecer_id
+            or copiar_persona
+            or restablecer_persona
             or accion == 'prorrata_persona'
+            or accion == 'prorrata_fecha'
             or accion == 'anadir_dia'
             or request.form.get('anadir_dia_para')
         ):
@@ -1676,8 +1881,7 @@ def _cert_wants_json() -> bool:
     return 'application/json' in (request.headers.get('Accept') or '')
 
 
-def _json_linea(ln):
-    from flask import jsonify
+def _linea_payload(ln) -> dict:
     from app.services.compliance_rules import importe_linea
     tramo_mal = (
         ln.hora_inicio is not None
@@ -1691,7 +1895,7 @@ def _json_linea(ln):
         error = translate('La hora de fin tiene que ser posterior a la de inicio.')
     elif incompleta:
         error = translate('Faltan horas o precio.')
-    return jsonify({
+    return {
         'ok': not tramo_mal and not incompleta,
         'saved': True,
         'linea_id': int(ln.id),
@@ -1704,6 +1908,38 @@ def _json_linea(ln):
         'incompleta': incompleta,
         'editado': bool(ln.origen_horas and str(ln.origen_horas).startswith('manual')),
         'error': error,
+    }
+
+
+def _json_linea(ln):
+    from flask import jsonify
+    return jsonify(_linea_payload(ln))
+
+
+def _json_lineas_persona(prop, uid: int, *, n: int, accion: str):
+    """Respuesta AJAX tras copiar/restablecer un trabajador (sin recargar)."""
+    from flask import jsonify
+    from app.services.compliance_rules import importe_linea
+
+    lineas_u = [ln for ln in (prop.lineas or []) if ln.user_id == int(uid)]
+    th = Decimal('0.00')
+    ti = Decimal('0.00')
+    payload_lineas = []
+    for ln in sorted(lineas_u, key=lambda x: x.fecha or date.min):
+        h = cuantizar(ln.horas) or Decimal('0.00')
+        imp = importe_linea(ln.horas, ln.precio_hora) or Decimal('0.00')
+        th += h
+        ti += imp
+        payload_lineas.append(_linea_payload(ln))
+    return jsonify({
+        'ok': True,
+        'saved': True,
+        'accion': accion,
+        'user_id': int(uid),
+        'n': n,
+        'horas_total': str(cuantizar(th) or Decimal('0.00')),
+        'importe_total': str(cuantizar(ti) or Decimal('0.00')),
+        'lineas': payload_lineas,
     })
 
 

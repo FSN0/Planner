@@ -2695,11 +2695,15 @@ class Adapter(BaseSyncAdapter):
 
     def get_attendance_contract_rates(
         self, *, partner_id, project_id, on_date=None,
+        date_from=None, date_to=None,
     ):
         """Tarifa vigente de partner.attendance.contract para empresa+obra.
 
         Líneas por operario permiten override personal del hourly_rate base.
         `lines` indexa por id Odoo del operario (partner y/o employee).
+
+        Con `date_from`+`date_to` busca un contrato que solape ese rango
+        (p. ej. el mes de certificación), no solo el vigente «hoy».
         """
         if not partner_id or not project_id:
             return None
@@ -2707,21 +2711,31 @@ class Adapter(BaseSyncAdapter):
             return None
 
         from datetime import date as _date
-        fecha = (on_date or _date.today().isoformat())[:10]
-        cache_key = (int(partner_id), int(project_id), fecha)
+        d_from = (str(date_from)[:10] if date_from else None) or None
+        d_to = (str(date_to)[:10] if date_to else None) or None
+        if d_from and d_to:
+            cache_key = (int(partner_id), int(project_id), f'{d_from}:{d_to}')
+            domain = [
+                ('partner_id', '=', int(partner_id)),
+                ('project_id', '=', int(project_id)),
+                ('date_start', '<=', d_to),
+                '|', ('date_end', '=', False), ('date_end', '>=', d_from),
+            ]
+        else:
+            fecha = (on_date or _date.today().isoformat())[:10]
+            cache_key = (int(partner_id), int(project_id), fecha)
+            domain = [
+                ('partner_id', '=', int(partner_id)),
+                ('project_id', '=', int(project_id)),
+                ('date_start', '<=', fecha),
+                '|', ('date_end', '=', False), ('date_end', '>=', fecha),
+            ]
         cache = getattr(self, '_contract_rate_cache', None)
         if cache is None:
             cache = {}
             self._contract_rate_cache = cache
         if cache_key in cache:
             return cache[cache_key]
-
-        domain = [
-            ('partner_id', '=', int(partner_id)),
-            ('project_id', '=', int(project_id)),
-            ('date_start', '<=', fecha),
-            '|', ('date_end', '=', False), ('date_end', '>=', fecha),
-        ]
         line_field, line_model = self._contrato_line_model()
         contract_fields = [
             'id', 'name', 'hourly_rate',
@@ -2824,3 +2838,57 @@ class Adapter(BaseSyncAdapter):
         }
         cache[cache_key] = payload
         return payload
+
+    def list_attendance_contracts(self, partner_id, project_id):
+        """Lista vigencias de partner.attendance.contract para empresa+obra."""
+        if not partner_id or not project_id:
+            return []
+        if not self._odoo_model_exists('partner.attendance.contract'):
+            return []
+        cache = getattr(self, '_contract_list_cache', None)
+        if cache is None:
+            cache = {}
+            self._contract_list_cache = cache
+        cache_key = (int(partner_id), int(project_id))
+        if cache_key in cache:
+            return cache[cache_key]
+        try:
+            rows = self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'partner.attendance.contract', 'search_read',
+                [[
+                    ('partner_id', '=', int(partner_id)),
+                    ('project_id', '=', int(project_id)),
+                ]],
+                {
+                    'fields': ['id', 'date_start', 'date_end', 'state'],
+                    'order': 'date_start asc, id asc',
+                    'limit': 80,
+                },
+            ) or []
+        except Exception as exc:
+            logger.warning(
+                '[Odoo Adapter - Tenant %s] listar contratos asistencia: %s',
+                self.tenant_id, exc,
+            )
+            cache[cache_key] = []
+            return []
+        preferred = {
+            'open', 'running', 'active', 'confirmed', 'progress',
+            'en_curso', 'activo', 'confirmado',
+        }
+        out = []
+        for row in rows:
+            state = str(row.get('state') or '').strip().lower()
+            if state and state not in preferred:
+                # Cancelados / borradores Odoo: no cuentan para el calendario.
+                if state in ('cancel', 'cancelled', 'canceled', 'draft', 'borrador', 'done', 'closed', 'cerrado'):
+                    continue
+            out.append({
+                'contract_id': row.get('id'),
+                'date_start': row.get('date_start') or None,
+                'date_end': row.get('date_end') or None,
+                'state': row.get('state') or '',
+            })
+        cache[cache_key] = out
+        return out

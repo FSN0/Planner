@@ -169,6 +169,52 @@ class TestLogin:
         if panel.status_code == 302:
             assert '/auth/login' in (panel.location or '')
 
+    def test_remember_me_revive_sesion_sin_tenant_id(
+        self, tenant_client, tenant_soltec, company_internal, session,
+    ):
+        """Tras perder la cookie de sesión, remember_token debe reabrir la cuenta."""
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        laboral = User(
+            email='remember@test.com',
+            password_hash=generate_password_hash('remember123'),
+            role='laboral',
+            name='Reme',
+            lastname='Mber',
+            dni='77777777R',
+            company_id=company_internal.id,
+            active=True,
+            email_verified=True,
+        )
+        session.add(laboral)
+        session.commit()
+
+        login = tenant_client.post('/auth/login', data={
+            'email': 'remember@test.com',
+            'password': 'remember123',
+            'remember': 'on',
+        }, follow_redirects=False)
+        assert login.status_code == 302
+        assert any(
+            c.name == 'remember_token' and c.value
+            for c in tenant_client._client.cookie_jar
+        )
+
+        # Simula cerrar el navegador: se pierde la cookie de sesión, queda remember.
+        jar = tenant_client._client.cookie_jar
+        for c in list(jar):
+            if c.name == 'session':
+                jar.clear(c.domain, c.path, c.name)
+
+        with tenant_client.session_transaction() as sess:
+            sess.pop('tenant_id', None)
+            sess.pop('_user_id', None)
+            sess.pop('_id', None)
+
+        panel = tenant_client.get('/admin/panel-laboral', follow_redirects=False)
+        assert panel.status_code == 200
+        with tenant_client.session_transaction() as sess:
+            assert sess.get('tenant_id') == tenant_soltec.id
+
 
 class TestRegistro:
     """

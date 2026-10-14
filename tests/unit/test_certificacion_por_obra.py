@@ -21,6 +21,7 @@ from app.services.certificacion_service import (
     estado_empresa_mes,
     estado_propuesta,
     obras_ids_certificacion,
+    panel_certificacion_obras,
     panel_certificacion_oficina,
     panel_certificacion_subcontrata_obras,
     periodo_bloqueado,
@@ -622,3 +623,199 @@ def test_obra_sin_fichaje_con_contrato_si_sale(cert_ctx, monkeypatch):
         lambda *a, **k: {'hourly_rate': '25.00', 'lines': {}},
     )
     assert o.id in obras_ids_certificacion(company.id, 2026, 10)
+
+
+def test_panel_obras_marca_por_revisar(cert_ctx, monkeypatch):
+    """Vista Obras: la obra con propuesta recibida sale con requiere_accion."""
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o_ok = _obra(session, 'Obra Con Recibida')
+    o_otra = _obra(session, 'Obra Solo Fichaje')
+    u = _operario(session, company, 'Marta')
+    _fichaje(session, u, o_ok, date(2026, 10, 5))
+    _fichaje(session, u, o_otra, date(2026, 10, 6))
+    session.flush()
+
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        'app.services.panel_scope_service.certificacion_obra_ids',
+        lambda _user: {o_ok.id, o_otra.id},
+    )
+
+    sub, _emp = sincronizar(company, 2026, 10, o_ok.id)
+    session.flush()
+    for ln in list(sub.lineas):
+        ln.horas = Decimal('8.00')
+        ln.precio_hora = Decimal('20.00')
+        ln.origen_horas = 'manual_total'
+    if not sub.lineas:
+        session.add(CertificacionLinea(
+            propuesta_id=sub.id,
+            user_id=u.id,
+            obra_id=o_ok.id,
+            fecha=date(2026, 10, 5),
+            horas=Decimal('8.00'),
+            precio_hora=Decimal('20.00'),
+            origen_horas='manual_total',
+        ))
+    session.flush()
+    enviar(sub, actor_id=u.id)
+    session.flush()
+
+    filas = panel_certificacion_obras(u, anio=2026, mes=10)
+    by_id = {r['obra'].id: r for r in filas}
+    assert o_ok.id in by_id
+    assert by_id[o_ok.id]['requiere_accion'] is True
+    assert by_id[o_ok.id]['tiene_recibida'] is True
+    assert by_id[o_ok.id]['estado'] == 'recibida'
+    if o_otra.id in by_id:
+        assert by_id[o_otra.id]['requiere_accion'] is False
+    # Las pendientes salen primero
+    assert filas[0]['obra'].id == o_ok.id
+
+
+def test_requerir_accion_marca_y_limpia_al_enviar(cert_ctx, monkeypatch):
+    from app.services.certificacion_avisos_service import pares_pendientes_mes
+    from app.services.certificacion_service import requerir_accion
+
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra Requerir')
+    u = _operario(session, company, 'ReqOp')
+    _fichaje(session, u, o, date(2026, 10, 5))
+    admin = User(
+        email='admin.req@test.com',
+        password_hash=generate_password_hash('x'),
+        role='admin',
+        name='Admin',
+        lastname='Req',
+        dni='REQ001',
+        company_id=cert_ctx['internal'].id,
+        active=True,
+        email_verified=True,
+        is_deleted=False,
+    )
+    session.add(admin)
+    session.commit()
+
+    monkeypatch.setattr('app.services.certificacion_service._avisar', lambda *a, **k: None)
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+
+    sub = requerir_accion(company, o.id, 2026, 10, admin.id)
+    session.commit()
+    assert sub.requerida_at is not None
+    assert sub.estado == 'borrador'
+    pares = pares_pendientes_mes(
+        anio=2026, mes=10, company_id=company.id, obra_id=o.id,
+        vista_subcontrata=True,
+    )
+    assert pares.get((company.id, o.id)) == 'requerida'
+
+    sub, _emp = sincronizar(company, 2026, 10, o.id, refrescar_precios=False)
+    session.flush()
+    if not sub.lineas:
+        session.add(CertificacionLinea(
+            propuesta_id=sub.id,
+            user_id=u.id,
+            obra_id=o.id,
+            fecha=date(2026, 10, 5),
+            horas=Decimal('8.00'),
+            precio_hora=Decimal('20.00'),
+            origen_horas='manual_total',
+        ))
+        session.flush()
+    else:
+        for ln in sub.lineas:
+            ln.horas = Decimal('8.00')
+            ln.precio_hora = Decimal('20.00')
+    enviar(sub, u.id)
+    session.commit()
+    sub = CertificacionPropuesta.query.get(sub.id)
+    assert sub.requerida_at is None
+    assert sub.estado == 'enviada'
+    pares2 = pares_pendientes_mes(
+        anio=2026, mes=10, company_id=company.id, obra_id=o.id,
+        vista_subcontrata=True,
+    )
+    assert (company.id, o.id) not in pares2
+    pares_ofi = pares_pendientes_mes(
+        anio=2026, mes=10, company_id=company.id, obra_id=o.id,
+        vista_subcontrata=False,
+    )
+    assert pares_ofi.get((company.id, o.id)) == 'recibida'
+
+
+def test_panel_marca_aviso_recibida_empresa_y_obra(cert_ctx, monkeypatch):
+    """Aviso = propuesta recibida en tu tejado; se marca en la fila de empresa/obra."""
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o_pend = _obra(session, 'Obra Recibida')
+    o_ok = _obra(session, 'Obra Ya Aceptada')
+    u = _operario(session, company, 'AvisoMark')
+    _fichaje(session, u, o_pend, date(2026, 10, 3))
+    _fichaje(session, u, o_ok, date(2026, 10, 4))
+    # Solo fichaje/borrador en o_pend no basta: hace falta enviada de la subcontrata.
+    session.add(CertificacionPropuesta(
+        company_id=company.id, obra_id=o_pend.id, anio=2026, mes=10,
+        direccion=DIR_SUB, estado='enviada',
+    ))
+    session.add(CertificacionPropuesta(
+        company_id=company.id, obra_id=o_ok.id, anio=2026, mes=10,
+        direccion=DIR_EMP, estado='aceptada',
+    ))
+    session.add(CertificacionPropuesta(
+        company_id=company.id, obra_id=o_ok.id, anio=2026, mes=10,
+        direccion=DIR_SUB, estado='aceptada',
+    ))
+    session.commit()
+
+    monkeypatch.setattr(
+        'app.services.panel_scope_service.certificacion_obra_ids',
+        lambda _user: None,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_avisos_service._obra_ids_permitidas',
+        lambda _user: None,
+    )
+
+    admin = User(
+        email='admin.aviso@mark.test',
+        password_hash=generate_password_hash('x'),
+        role='admin',
+        name='Admin',
+        lastname='Aviso',
+        dni='AVISO1',
+        company_id=cert_ctx['internal'].id,
+        active=True,
+        email_verified=True,
+        is_deleted=False,
+    )
+    session.add(admin)
+    session.commit()
+
+    empresas = panel_certificacion_oficina(admin, anio=2026, mes=10)
+    emp = next(r for r in empresas if r['company'].id == company.id)
+    assert emp['aviso_pendiente'] is True
+    assert emp['n_aviso'] >= 1
+    assert emp['motivo_aviso'] == 'recibida'
+
+    obras = panel_certificacion_obras(admin, anio=2026, mes=10)
+    by_obra = {r['obra'].id: r for r in obras}
+    assert by_obra[o_pend.id]['aviso_pendiente'] is True
+    assert by_obra[o_ok.id]['aviso_pendiente'] is False
+
+    from app.services.certificacion_service import panel_certificacion_empresa_obras
+    hub = panel_certificacion_empresa_obras(admin, company.id, anio=2026, mes=10)
+    by_hub = {r['obra'].id: r for r in hub}
+    assert by_hub[o_pend.id]['aviso_pendiente'] is True
+    assert by_hub[o_ok.id]['aviso_pendiente'] is False

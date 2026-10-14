@@ -149,9 +149,11 @@
             </div>
             <div class="modal-body">
                 <input type="hidden" id="ratingWorkerId">
+                <input type="hidden" id="ratingObraId">
                 {% with btn_class='rating-btn', dim_prefix='rating' %}
                   {% include 'components/_rating_dimensions.html' %}
                 {% endwith %}
+                <p class="small text-muted mb-2 d-none" id="ratingObraHint"></p>
                 <label class="form-label-sm" for="ratingReason">{{ _('Motivo') }}</label>
                 <textarea id="ratingReason" class="form-control mb-0" rows="2" placeholder="{{ _('Motivo de la valoración…') }}" required></textarea>
             </div>
@@ -226,10 +228,21 @@
 
   // Funciones rápidas para el rating (el resto está en kanban_logic.js pero esto asegura funcionamiento en modal)
   {% if tenant_has_valoraciones and user_can(current_user, 'valoraciones', 'w') %}
-  function openRatingModal(workerId, workerName) {
+  function openRatingModal(workerId, workerName, obraId, obraNombre) {
       $('#ratingWorkerId').val(workerId);
       $('#ratingWorkerName').text(workerName);
       $('#ratingReason').val('');
+      $('#ratingObraId').val(obraId || '');
+      var hint = document.getElementById('ratingObraHint');
+      if (hint) {
+        if (obraId && obraNombre) {
+          hint.textContent = {{ _('Obra:')|tojson }} + ' ' + obraNombre;
+          hint.classList.remove('d-none');
+        } else {
+          hint.textContent = '';
+          hint.classList.add('d-none');
+        }
+      }
       if (window.kanbanRatingDims) { window.kanbanRatingDims.reset(); }
       $('#ratingModal').modal('show');
   }
@@ -281,16 +294,19 @@
         if (!dims) { alert({{ _('Indica al menos actitud o conocimiento.')|tojson }}); return; }
         var reason = ($('#ratingReason').val() || '').trim();
         if (!reason) { alert({{ _('El motivo es obligatorio.')|tojson }}); return; }
+        var obraId = ($('#ratingObraId').val() || '').trim();
+        var payload = {
+            worker_id: $('#ratingWorkerId').val(),
+            actitud: dims.actitud,
+            conocimiento: dims.conocimiento,
+            reason: reason
+        };
+        if (obraId) { payload.obra_id = parseInt(obraId, 10); }
         $.ajax({
             url: "/admin/api/rate_worker",
             type: "POST",
             contentType: "application/json",
-            data: JSON.stringify({
-                worker_id: $('#ratingWorkerId').val(),
-                actitud: dims.actitud,
-                conocimiento: dims.conocimiento,
-                reason: reason
-            }),
+            data: JSON.stringify(payload),
             success: function() { location.reload(); },
             error: function(e) { alert({{ _('Error')|tojson }} + ': ' + (e.responseJSON ? e.responseJSON.message : {{ _('Error')|tojson }})); }
         });

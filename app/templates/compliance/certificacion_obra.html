@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006dense">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014req">
 {% endblock %}
 {% block wrapper %}
 {% set meses = {
@@ -26,6 +26,10 @@
   'rechazada': _('Rechazada'),
   'borrador': _('Borrador'),
   'sin_movimiento': _('Sin movimiento')
+} %}
+{% set motivo_aviso_txt = {
+  'recibida': _('Propuesta recibida: aceptar, rechazar o enviar contrapropuesta'),
+  'requerida': _('Se ha requerido completar la certificación')
 } %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
@@ -110,12 +114,16 @@
       <div class="cert-works">
         {% for emp in detalle.empresas %}
         {% set emp_open = emp.requiere_accion if emp.requiere_accion is defined else emp.estado in ('recibida', 'rechazada') %}
-        <details class="cert-work" {% if emp_open %}open{% endif %}>
+        {% set emp_aviso = emp.aviso_pendiente if emp.aviso_pendiente is defined else false %}
+        <details class="cert-work" {% if emp_open or emp_aviso %}open{% endif %}>
           <summary>
             <span class="cert-work-name">
+              {% if emp_open or emp.motivo_aviso == 'requerida' %}<span class="cert-hub-star" title="{% if emp.motivo_aviso == 'requerida' %}{{ _('Acción requerida') }}{% else %}{{ _('Por revisar') }}{% endif %}" aria-label="{% if emp.motivo_aviso == 'requerida' %}{{ _('Acción requerida') }}{% else %}{{ _('Por revisar') }}{% endif %}">*</span>{% endif %}
               {% if emp.estado == 'rechazada' %}<i class="fas fa-exclamation-circle cert-hub-alert" aria-hidden="true"></i> {% endif %}
               {% if emp.estado == 'recibida' %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" aria-hidden="true"></i> {% endif %}
+              {% if emp.motivo_aviso == 'requerida' %}<i class="fas fa-bell cert-hub-alert is-wait" title="{{ _('Se ha requerido completar la certificación') }}" aria-hidden="true"></i> {% endif %}
               {{ emp.company.nombre }}
+              {% if emp_aviso %}<span class="cert-hub-aviso" title="{{ motivo_aviso_txt.get(emp.motivo_aviso, _('Acción pendiente')) }}">{% if emp.motivo_aviso == 'requerida' %}{{ _('requerida') }}{% else %}{{ _('por revisar') }}{% endif %}</span>{% endif %}
               {% if emp.contrato and emp.contrato.contract_id %}
               <span class="cert-contrato-tag" title="{{ _('Contrato de asistencia') }}">
                 {{ _('Contrato') }} {{ emp.contrato.name or ('#' ~ emp.contrato.contract_id) }}

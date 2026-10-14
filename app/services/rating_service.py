@@ -48,6 +48,72 @@ def parse_rating_payload(data: dict) -> Tuple[Optional[int], Optional[int], floa
     return actitud, conocimiento, composite_score(actitud, conocimiento), motivo
 
 
+def obras_participadas_usuario(user_id: int) -> list:
+    """Obras en las que el trabajador ha tenido asignación o fichaje (no borradas)."""
+    from app import db
+    from app.models import Asignacion, Obra, RegistroFichaje
+
+    ids: set[int] = set()
+    for (oid,) in (
+        db.session.query(Asignacion.obra_id)
+        .filter(Asignacion.user_id == int(user_id), Asignacion.obra_id.isnot(None))
+        .distinct()
+        .all()
+    ):
+        if oid:
+            ids.add(int(oid))
+    for (oid,) in (
+        db.session.query(RegistroFichaje.obra_real_id)
+        .filter(
+            RegistroFichaje.user_id == int(user_id),
+            RegistroFichaje.obra_real_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    ):
+        if oid:
+            ids.add(int(oid))
+    if not ids:
+        return []
+    return (
+        Obra.query.filter(Obra.id.in_(ids), Obra.is_deleted.is_(False))
+        .order_by(Obra.nombre.asc())
+        .all()
+    )
+
+
+def usuario_participo_en_obra(user_id: int, obra_id: int) -> bool:
+    """True si el trabajador tuvo asignación o fichaje en esa obra."""
+    from app.models import Asignacion, RegistroFichaje
+
+    if Asignacion.query.filter_by(user_id=int(user_id), obra_id=int(obra_id)).first():
+        return True
+    if RegistroFichaje.query.filter_by(
+        user_id=int(user_id), obra_real_id=int(obra_id),
+    ).first():
+        return True
+    return False
+
+
+def resolve_obra_id(raw: Any, *, user_id: int | None = None) -> Optional[int]:
+    """obra_id opcional: vacío/None → None; valida obra y (si hay user_id) participación."""
+    if raw is None:
+        return None
+    if isinstance(raw, str) and not raw.strip():
+        return None
+    try:
+        obra_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Obra no válida') from exc
+    from app.models import Obra
+    obra = Obra.query.filter_by(id=obra_id, is_deleted=False).first()
+    if not obra:
+        raise ValueError('Obra no encontrada')
+    if user_id is not None and not usuario_participo_en_obra(int(user_id), obra_id):
+        raise ValueError('Solo puedes asociar obras en las que ha participado el trabajador')
+    return obra.id
+
+
 def composite_score(actitud: Optional[int], conocimiento: Optional[int]) -> float:
     """Media de las dimensiones presentes (1 decimal)."""
     vals = [v for v in (actitud, conocimiento) if v is not None]

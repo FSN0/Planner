@@ -3,12 +3,13 @@ import uuid
 
 from sqlalchemy import text
 
-from app.models import Rating, User, ROLE_OPERARIO
+from app.models import Obra, Rating, User, ROLE_OPERARIO
 from app.services.rating_service import (
     composite_score,
     parse_rating_payload,
     rating_display_score,
     rating_is_v2,
+    resolve_obra_id,
 )
 
 
@@ -106,3 +107,80 @@ def test_rating_is_v2_helpers():
     assert not rating_is_v2(legacy)
     assert rating_is_v2(v2)
     assert rating_display_score(v2) == 3.5
+
+
+def test_resolve_obra_id_optional(app, session, tenant_soltec):
+    session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+    assert resolve_obra_id(None) is None
+    assert resolve_obra_id('') is None
+    o = Obra(nombre='Obra Rating', codigo=_uid('OR')[:8], estado='En Curso', is_deleted=False)
+    session.add(o)
+    session.flush()
+    assert resolve_obra_id(o.id) == o.id
+    try:
+        resolve_obra_id(999999)
+        assert False, 'expected ValueError'
+    except ValueError:
+        pass
+
+
+def test_obras_valoracion_solo_participadas(app, session, tenant_soltec):
+    from datetime import date, datetime, time
+    from app.models import Asignacion, RegistroFichaje, ROLE_OPERARIO
+    from app.services.rating_service import obras_participadas_usuario, resolve_obra_id
+
+    session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+    dni = _uid('OP')
+    u = User(
+        name='P', lastname='Art', email=f'{dni.lower()}@test.com', dni=dni,
+        role=ROLE_OPERARIO, active=True, password_hash='x',
+    )
+    o_si = Obra(nombre='Con Fichaje', codigo=_uid('CF')[:8], estado='En Curso', is_deleted=False)
+    o_asig = Obra(nombre='Con Asig', codigo=_uid('CA')[:8], estado='En Curso', is_deleted=False)
+    o_no = Obra(nombre='Sin Nada', codigo=_uid('SN')[:8], estado='En Curso', is_deleted=False)
+    session.add_all([u, o_si, o_asig, o_no])
+    session.flush()
+    dia = date(2026, 10, 1)
+    session.add(RegistroFichaje(
+        user_id=u.id, obra_real_id=o_si.id, fecha=dia,
+        check_in=datetime.combine(dia, time(8, 0)),
+        check_out=datetime.combine(dia, time(16, 0)),
+        estado='Correcto',
+    ))
+    session.add(Asignacion(user_id=u.id, obra_id=o_asig.id, fecha=dia))
+    session.flush()
+
+    obras = obras_participadas_usuario(u.id)
+    ids = {o.id for o in obras}
+    assert o_si.id in ids
+    assert o_asig.id in ids
+    assert o_no.id not in ids
+
+    assert resolve_obra_id(o_si.id, user_id=u.id) == o_si.id
+    try:
+        resolve_obra_id(o_no.id, user_id=u.id)
+        assert False, 'expected ValueError'
+    except ValueError as e:
+        assert 'participado' in str(e).lower()
+
+
+def test_rating_guarda_obra(app, session, tenant_soltec):
+    session.execute(text(f"SET search_path TO {tenant_soltec.schema_name}"))
+    dni = _uid('RO')
+    u = User(
+        name='R', lastname='Obra', email=f'{dni.lower()}@test.com', dni=dni,
+        role=ROLE_OPERARIO, active=True, password_hash='x',
+    )
+    o = Obra(nombre='Tajo Norte', codigo=_uid('TN')[:8], estado='En Curso', is_deleted=False)
+    session.add_all([u, o])
+    session.flush()
+    r = Rating(
+        user_id=u.id, created_by_id=u.id, obra_id=o.id,
+        score=4.0, actitud=4, conocimiento=4, reason='Buen trabajo en tajo',
+        is_active=True,
+    )
+    session.add(r)
+    session.flush()
+    session.refresh(r)
+    assert r.obra_id == o.id
+    assert r.obra.nombre == 'Tajo Norte'

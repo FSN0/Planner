@@ -15,7 +15,7 @@
        href="{{ cert_period_prev_url }}" title="{{ _('Mes anterior') }}">
       <i class="fas fa-chevron-left" aria-hidden="true"></i>
       {% if cert_avisos and cert_avisos.prev %}
-      <span class="cert-period-badge" title="{{ cert_avisos.prev }} {{ _('meses anteriores con avisos') }}">{{ cert_avisos.prev }}</span>
+      <span class="cert-period-badge" title="{{ cert_avisos.prev }} {{ _('obras con aviso en meses anteriores (por revisar o requeridas)') }}">{{ cert_avisos.prev }}</span>
       {% endif %}
     </a>
     <button type="button" class="cert-period-label cert-period-open" id="cert-period-open" title="{{ _('Elegir mes o rango') }}">
@@ -24,8 +24,13 @@
       <span class="cert-status is-wait">{{ _('Rango') }}</span>
       {% else %}
       <strong>{{ meses.get(mes, mes) }} {{ anio }}</strong>
-      {% if _aviso_mes %}
-      <span class="cert-status is-bad" title="{{ _('Este mes tiene avisos pendientes') }}">{% if cert_period_status and cert_period_status_cls|default('') == 'is-bad' %}{{ cert_period_status }}{% else %}{{ _('por revisar') }}{% endif %}</span>
+      {% if cert_period_prefer_status|default(false) and cert_period_status %}
+      {# Vista de obra/mesa: el estado de ESTA propuesta manda (texto + color). #}
+      <span class="cert-status {{ cert_period_status_cls|default('is-muted') }}">{{ cert_period_status }}</span>
+      {% elif cert_period_status and cert_period_status_cls|default('') == 'is-bad' %}
+      <span class="cert-status is-bad" title="{{ _('Hay acción pendiente en tu tejado: mira las filas con * o «por revisar» / «requerida».') }}">{{ cert_period_status }}</span>
+      {% elif _aviso_mes %}
+      <span class="cert-status is-bad" title="{{ _('Hay algo pendiente de tu lado este mes (propuesta recibida o requerimiento). Las filas marcadas indican en qué obra o empresa.') }}">{% if cert_avisos.motivo_actual == 'requerida' %}{{ _('requerida') }}{% else %}{{ _('por revisar') }}{% endif %}</span>
       {% elif cert_period_status %}
       <span class="cert-status {{ cert_period_status_cls|default('is-muted') }}">{{ cert_period_status }}</span>
       {% endif %}
@@ -35,7 +40,7 @@
        href="{{ cert_period_next_url }}" title="{{ _('Mes siguiente') }}">
       <i class="fas fa-chevron-right" aria-hidden="true"></i>
       {% if cert_avisos and cert_avisos.next %}
-      <span class="cert-period-badge" title="{{ cert_avisos.next }} {{ _('meses posteriores con avisos') }}">{{ cert_avisos.next }}</span>
+      <span class="cert-period-badge" title="{{ cert_avisos.next }} {{ _('obras con aviso en meses posteriores (por revisar o requeridas)') }}">{{ cert_avisos.next }}</span>
       {% endif %}
     </a>
   </div>
@@ -68,7 +73,7 @@
     {% if cert_period_meses %}
     <div class="cert-range-months">
       <p class="cert-range-title">{{ _('Meses de esta obra') }}</p>
-      <p class="cert-range-hint">{{ _('Elige un mes para ver su propuesta y el estado.') }}</p>
+      <p class="cert-range-hint">{{ _('Meses con contrato de asistencia (y el mes en el que estás). Elige uno para ver el estado.') }}</p>
       <div class="cert-months-list cert-months-list--pop">
         {% for mrow in cert_period_meses %}
         {% if vista_subcontrata %}
@@ -76,10 +81,10 @@
         {% else %}
           {% set m_url = url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=mrow.anio, mes=mrow.mes) %}
         {% endif %}
-        <a class="cert-months-row {% if mrow.actual %}is-current{% endif %} {% if mrow.requiere_accion %}is-action{% endif %}"
+        <a class="cert-months-row {% if mrow.actual %}is-current{% endif %} {% if mrow.requiere_accion %}is-action{% endif %} {% if mrow.estado == 'sin_contrato' %}is-sin-contrato{% endif %}"
            href="{{ m_url }}">
           <span class="cert-months-label">{{ meses.get(mrow.mes, mrow.mes) }} {{ mrow.anio }}</span>
-          <span class="cert-months-vol">{{ mrow.horas }} h</span>
+          <span class="cert-months-vol">{% if mrow.horas is none %}—{% else %}{{ mrow.horas }} h{% endif %}</span>
           <span class="cert-pill {{ estado_cls.get(mrow.estado, 'is-muted') }}">{{ estado_txt.get(mrow.estado, mrow.estado) }}</span>
         </a>
         {% endfor %}
@@ -94,7 +99,7 @@
         {% if cert_avisos.silenciado %}
           {{ _('Los avisos de este mes están ocultos en este alcance. Un cambio en la certificación puede volver a mostrarlos.') }}
         {% elif cert_avisos.actual %}
-          {{ _('Hay certificación pendiente de cierre en este mes (en el alcance actual). Puedes ocultar el aviso sin cerrar la propuesta.') }}
+          {{ _('Hay acción pendiente en tu tejado este mes (propuesta recibida o requerimiento). Puedes ocultar el aviso sin resolverla.') }}
         {% else %}
           {{ _('Oculta el aviso de este mes en el alcance en el que estás (lista, empresa u obra).') }}
         {% endif %}

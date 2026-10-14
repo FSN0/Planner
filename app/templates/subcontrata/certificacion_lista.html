@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261006dense">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014req">
 {% endblock %}
 {% block wrapper %}
 {% set meses = {
@@ -27,7 +27,12 @@
   'borrador': _('Borrador'),
   'sin_movimiento': _('Sin movimiento')
 } %}
+{% set motivo_aviso_txt = {
+  'recibida': _('Propuesta recibida: aceptar, rechazar o enviar contrapropuesta'),
+  'requerida': _('Soltec te ha requerido completar la certificación')
+} %}
 {% set entrantes = filas|selectattr('requiere_accion')|list|length %}
+{% set n_requeridas = filas|selectattr('motivo_aviso', 'equalto', 'requerida')|list|length %}
 <div class="admin-shell">
   {% include "_admin_sidebar.html" %}
   <main class="admin-main admin-main--compact cert-page">
@@ -40,7 +45,10 @@
       {% set cert_period_prev_url = url_for('subcontrata.certificacion', anio=prev.anio, mes=prev.mes) %}
       {% set cert_period_next_url = url_for('subcontrata.certificacion', anio=next.anio, mes=next.mes) %}
       {% set cert_period_clear_url = url_for('subcontrata.certificacion', anio=anio, mes=mes) %}
-      {% if entrantes %}
+      {% if entrantes and n_requeridas and entrantes == n_requeridas %}
+      {% set cert_period_status = n_requeridas ~ ' ' ~ _('requeridas') %}
+      {% set cert_period_status_cls = 'is-bad' %}
+      {% elif entrantes %}
       {% set cert_period_status = entrantes ~ ' ' ~ _('por revisar') %}
       {% set cert_period_status_cls = 'is-bad' %}
       {% else %}
@@ -73,21 +81,25 @@
       {% for row in filas %}
       {% set o = row.obra %}
       {% set busca = (o.nombre or '')|lower %}
-      <a class="cert-hub-row {% if row.estado == 'recibida' %}is-action{% elif row.estado == 'rechazada' %}is-alert{% endif %}"
+      <a class="cert-hub-row {% if row.estado == 'recibida' %}is-action{% elif row.estado == 'rechazada' %}is-alert{% elif row.motivo_aviso == 'requerida' %}is-aviso{% elif row.aviso_pendiente %}is-aviso{% endif %}"
          href="{{ url_for('subcontrata.certificacion_obra', obra_id=o.id, anio=anio, mes=mes) }}"
          data-search="{{ busca }}">
         <span class="cert-hub-ico" aria-hidden="true"><i class="fas fa-hard-hat"></i></span>
         <span class="cert-hub-main">
           <strong>
+            {% if row.requiere_accion %}<span class="cert-hub-star" title="{% if row.motivo_aviso == 'requerida' %}{{ _('Acción requerida') }}{% else %}{{ _('Por revisar') }}{% endif %}">*</span>{% endif %}
             {% if row.estado == 'rechazada' %}<i class="fas fa-exclamation-circle cert-hub-alert" title="{{ _('Propuesta rechazada') }}" aria-hidden="true"></i> {% endif %}
             {% if row.estado == 'recibida' %}<i class="fas fa-exclamation-circle cert-hub-alert is-wait" title="{{ _('Propuesta por revisar') }}" aria-hidden="true"></i> {% endif %}
+            {% if row.motivo_aviso == 'requerida' %}<i class="fas fa-bell cert-hub-alert is-wait" title="{{ _('Soltec te ha requerido completar la certificación') }}" aria-hidden="true"></i> {% endif %}
             {{ o.nombre }}
+            {% if row.aviso_pendiente %}<span class="cert-hub-aviso" title="{{ motivo_aviso_txt.get(row.motivo_aviso, _('Acción pendiente')) }}">{% if row.motivo_aviso == 'requerida' %}{{ _('requerida') }}{% else %}{{ _('por revisar') }}{% endif %}</span>{% endif %}
             {% if row.contrato and row.contrato.contract_id %}
             <span class="cert-contrato-tag">{{ _('Contrato') }} {{ row.contrato.name or ('#' ~ row.contrato.contract_id) }}</span>
             {% endif %}
           </strong>
           <small>
-            {{ estado_txt.get(row.estado, row.estado) }}
+            {% if row.motivo_aviso == 'requerida' %}{{ _('Te han requerido completar esta certificación') }}
+            {% else %}{{ estado_txt.get(row.estado, row.estado) }}{% endif %}
             {% if row.comentario_rechazo %}
             · {{ _('Motivo') }}: {{ row.comentario_rechazo }}
             {% endif %}

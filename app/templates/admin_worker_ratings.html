@@ -34,6 +34,7 @@
           <thead>
             <tr>
               <th style="width: 130px;">{{ _('Fecha') }}</th>
+              <th style="width: 140px;">{{ _('Obra') }}</th>
               <th style="width: 70px;" class="text-center">{{ _('Actitud') }}</th>
               <th style="width: 90px;" class="text-center">{{ _('Conocimiento') }}</th>
               <th style="width: 70px;" class="text-center">{{ _('Media') }}</th>
@@ -49,6 +50,13 @@
             <tr class="{% if not rating.is_active %}is-archived{% endif %}" data-rating-id="{{ rating.id }}">
               <td class="text-muted small text-nowrap">
                 {{ rating.created_at|format_dt }}
+              </td>
+              <td class="small">
+                {% if rating.obra %}
+                  <span class="font-weight-bold text-dark" title="{{ rating.obra.codigo or '' }}">{{ rating.obra.nombre }}</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
               </td>
               {% if rating.is_v2 %}
               <td class="text-center">
@@ -125,7 +133,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="8">
+              <td colspan="9">
                 <div class="ratings-empty">
                   <i class="far fa-folder-open d-block"></i>
                   {{ _('Aún no hay valoraciones registradas para este trabajador.') }}

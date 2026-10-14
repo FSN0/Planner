@@ -330,6 +330,9 @@ def certificacion_pdf(propuesta_id):
     prop = cargar_propuesta_para_pdf(propuesta_id)
     if prop is None or prop.company_id != current_user.company_id:
         abort(403)
+    # La subcontrata solo descarga el PDF cuando ya hay acuerdo (aceptada).
+    if (prop.estado or '') != 'aceptada':
+        abort(403)
     pdf = pdf_propuesta(prop)
     if pdf:
         return send_file(

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from collections import defaultdict
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -107,37 +108,109 @@ def guardar_precio_plataforma(valor) -> None:
     set_tenant_config(CONFIG_PRECIO, str(cuantizar(valor) or Decimal('0.00')))
 
 
+def _parse_fecha_contrato(raw) -> date | None:
+    if raw in (None, False, ''):
+        return None
+    if isinstance(raw, date) and not isinstance(raw, datetime):
+        return raw
+    try:
+        return date.fromisoformat(str(raw)[:10])
+    except (TypeError, ValueError):
+        return None
+
+
 def contrato_asistencia(
     company: Company,
     obra: Obra | None,
     *,
     fecha: date | None = None,
     cache: dict | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> dict | None:
-    """Lee el contrato de asistencia Odoo (empresa+obra) vigente en fecha."""
+    """Lee el contrato de asistencia Odoo (empresa+obra) vigente en fecha o rango."""
     if company is None or obra is None:
         return None
     partner_id = _ext_odoo_id(company)
     project_id = _ext_odoo_id(obra)
     if not partner_id or not project_id:
         return None
-    on_date = (fecha or date.today()).isoformat()
-    key = (partner_id, project_id, on_date)
     store = cache if cache is not None else {}
+    if date_from is not None and date_to is not None:
+        key = (partner_id, project_id, f'{date_from.isoformat()}:{date_to.isoformat()}')
+        kwargs = {
+            'partner_id': partner_id,
+            'project_id': project_id,
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+        }
+    else:
+        on_date = (fecha or date.today()).isoformat()
+        key = (partner_id, project_id, on_date)
+        kwargs = {
+            'partner_id': partner_id,
+            'project_id': project_id,
+            'on_date': on_date,
+        }
     if key in store:
         return store[key]
     try:
         from app.sync.dispatcher import get_sync_adapter
         adapter = get_sync_adapter()
         getter = getattr(adapter, 'get_attendance_contract_rates', None)
-        payload = (
-            getter(partner_id=partner_id, project_id=project_id, on_date=on_date)
-            if callable(getter) else None
-        )
+        payload = getter(**kwargs) if callable(getter) else None
     except Exception:
         payload = None
     store[key] = payload
     return payload
+
+
+def contrato_asistencia_mes(
+    company: Company,
+    obra: Obra | None,
+    anio: int,
+    mes: int,
+    *,
+    cache: dict | None = None,
+) -> dict | None:
+    """Contrato de asistencia que solapa el mes de certificación (si existe)."""
+    inicio, fin = _mes_rango(anio, mes)
+    return contrato_asistencia(
+        company, obra, date_from=inicio, date_to=fin, cache=cache,
+    )
+
+
+def rango_vigencia_contrato(contrato: dict | None) -> tuple[date | None, date | None]:
+    if not contrato:
+        return None, None
+    return (
+        _parse_fecha_contrato(contrato.get('date_start')),
+        _parse_fecha_contrato(contrato.get('date_end')),
+    )
+
+
+def lineas_fuera_vigencia_contrato(
+    prop: CertificacionPropuesta | None,
+    contrato: dict | None,
+) -> list:
+    """Filas con horas cuya fecha cae fuera de date_start..date_end del contrato."""
+    if not prop or not contrato:
+        return []
+    inicio, fin = rango_vigencia_contrato(contrato)
+    if inicio is None and fin is None:
+        return []
+    fuera = []
+    for ln in prop.lineas or []:
+        if ln.fecha is None:
+            continue
+        if ln.horas is None and ln.hora_inicio is None and ln.hora_fin is None:
+            continue
+        if inicio is not None and ln.fecha < inicio:
+            fuera.append(ln)
+            continue
+        if fin is not None and ln.fecha > fin:
+            fuera.append(ln)
+    return fuera
 
 
 def precio_contrato(
@@ -624,6 +697,10 @@ def sincronizar(
                 # Subcontrata: filas vacías, sin datos del fichaje de la plataforma.
                 ln.estado_fichaje = None
                 ln.solape = False
+        if direccion == DIR_SUB and prop.estado == 'borrador':
+            # La sub certifica totales (h × €/h), no el reloj del fichaje de la App.
+            for ln in list(prop.lineas or []):
+                _limpiar_tramo_subcontrata(ln)
         for key, ln in actuales.items():
             if key not in vistos and ln.origen_horas in ('vacio', 'fichaje'):
                 db.session.delete(ln)
@@ -660,13 +737,8 @@ def _otra(direccion: str) -> str:
     return DIR_EMP if direccion == DIR_SUB else DIR_SUB
 
 
-def guardar_linea(linea: CertificacionLinea, *, hora_inicio, hora_fin, horas, precio) -> None:
-    if linea.propuesta.estado != 'borrador':
-        raise ValueError('Esta propuesta ya no se puede editar.')
-    if periodo_bloqueado(
-        linea.propuesta.company_id, linea.propuesta.anio, linea.propuesta.mes, linea.propuesta.obra_id,
-    ):
-        raise ValueError('Esta obra ya está aceptada en el mes.')
+def _escribir_campos_linea(linea: CertificacionLinea, *, hora_inicio, hora_fin, horas, precio) -> None:
+    """Escribe horas/tramo/precio sin reconsultar bloqueo (uso interno / lotes)."""
     precio_q = cuantizar(precio)
     if precio_q is None:
         precio_q = cuantizar(linea.precio_hora)
@@ -699,6 +771,18 @@ def guardar_linea(linea: CertificacionLinea, *, hora_inicio, hora_fin, horas, pr
     linea.origen_horas = 'manual_anadido' if anadido else 'vacio'
 
 
+def guardar_linea(linea: CertificacionLinea, *, hora_inicio, hora_fin, horas, precio) -> None:
+    if linea.propuesta.estado != 'borrador':
+        raise ValueError('Esta propuesta ya no se puede editar.')
+    if periodo_bloqueado(
+        linea.propuesta.company_id, linea.propuesta.anio, linea.propuesta.mes, linea.propuesta.obra_id,
+    ):
+        raise ValueError('Esta obra ya está aceptada en el mes.')
+    _escribir_campos_linea(
+        linea, hora_inicio=hora_inicio, hora_fin=hora_fin, horas=horas, precio=precio,
+    )
+
+
 def lineas_tramo_invalido(prop: CertificacionPropuesta) -> list[int]:
     """Inicio y fin rellenos pero fin ≤ inicio (horas calculadas a None)."""
     return [
@@ -710,25 +794,20 @@ def lineas_tramo_invalido(prop: CertificacionPropuesta) -> list[int]:
     ]
 
 
-def restablecer_linea_desde_fichaje(linea: CertificacionLinea) -> None:
-    """Vuelve a poner inicio/fin/horas desde el fichaje de la plataforma."""
-    prop = linea.propuesta
-    if prop.direccion != DIR_EMP:
-        raise ValueError('El restablecimiento desde fichaje solo está disponible para la oficina.')
-    if prop.estado != 'borrador':
-        raise ValueError('Esta propuesta ya no se puede editar.')
-    if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
-        raise ValueError('Esta obra ya está aceptada en el mes.')
-    filas = _esqueleto(prop.company_id, prop.anio, prop.mes, obra_id=prop.obra_id)
-    match = next(
-        (
-            f for f in filas
-            if f['user_id'] == linea.user_id
-            and f['obra_id'] == linea.obra_id
-            and f['fecha'] == linea.fecha
-        ),
-        None,
-    )
+def _esqueleto_mapa(
+    company_id: int,
+    anio: int,
+    mes: int,
+    obra_id: int | None = None,
+) -> dict[tuple, dict]:
+    """Índice (user_id, obra_id, fecha) → fila de fichaje del mes."""
+    return {
+        (f['user_id'], f['obra_id'], f['fecha']): f
+        for f in _esqueleto(company_id, anio, mes, obra_id=obra_id)
+    }
+
+
+def _aplicar_fichaje_a_linea(linea: CertificacionLinea, match: dict | None) -> None:
     if not match:
         linea.hora_inicio = None
         linea.hora_fin = None
@@ -743,6 +822,28 @@ def restablecer_linea_desde_fichaje(linea: CertificacionLinea) -> None:
     linea.origen_horas = 'fichaje'
     linea.estado_fichaje = match['estado_fichaje']
     linea.solape = bool(match['solape'])
+
+
+def restablecer_linea_desde_fichaje(
+    linea: CertificacionLinea,
+    *,
+    fichaje_mapa: dict | None = None,
+) -> None:
+    """Vuelve a poner inicio/fin/horas desde el fichaje de la plataforma."""
+    prop = linea.propuesta
+    if prop.direccion != DIR_EMP:
+        raise ValueError('El restablecimiento desde fichaje solo está disponible para la oficina.')
+    if prop.estado != 'borrador':
+        raise ValueError('Esta propuesta ya no se puede editar.')
+    if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
+        raise ValueError('Esta obra ya está aceptada en el mes.')
+    mapa = fichaje_mapa
+    if mapa is None:
+        mapa = _esqueleto_mapa(
+            prop.company_id, prop.anio, prop.mes, obra_id=prop.obra_id,
+        )
+    match = mapa.get((linea.user_id, linea.obra_id, linea.fecha))
+    _aplicar_fichaje_a_linea(linea, match)
 
 
 def _lineas_completas(prop: CertificacionPropuesta) -> bool:
@@ -760,6 +861,21 @@ def _limpiar_rechazo_mes(company_id: int, anio: int, mes: int, obra_id: int) -> 
         row.comentario_rechazo = None
 
 
+def _limpiar_tramo_subcontrata(ln: CertificacionLinea) -> None:
+    """Subcontrata: conserva horas; quita inicio/fin heredados del fichaje."""
+    if ln.hora_inicio is None and ln.hora_fin is None:
+        return
+    if ln.horas is None and ln.hora_inicio and ln.hora_fin and ln.fecha:
+        ln.horas = horas_desde_datetimes(
+            datetime.combine(ln.fecha, ln.hora_inicio),
+            datetime.combine(ln.fecha, ln.hora_fin),
+        )
+    ln.hora_inicio = None
+    ln.hora_fin = None
+    if ln.origen_horas == 'manual_tramo':
+        ln.origen_horas = 'manual_total' if ln.horas is not None else 'vacio'
+
+
 def _snapshot_lineas(prop: CertificacionPropuesta) -> list[dict]:
     # Query explícita: la collection lazy puede estar stale tras borrar/recrear filas.
     lineas = (
@@ -767,18 +883,24 @@ def _snapshot_lineas(prop: CertificacionPropuesta) -> list[dict]:
         if prop.id else list(prop.lineas or [])
     )
     out = []
+    es_sub = prop.direccion == DIR_SUB
     for ln in sorted(lineas, key=lambda x: (x.fecha, x.user_id or 0)):
+        if es_sub:
+            _limpiar_tramo_subcontrata(ln)
         nombre = ''
         if ln.user:
             nombre = f'{(ln.user.name or "").strip()} {(ln.user.lastname or "").strip()}'.strip()
         imp = importe_linea(ln.horas, ln.precio_hora)
+        # Subcontrata: el envío es por totales; no persistir reloj de fichaje.
+        hi = None if es_sub else (ln.hora_inicio.strftime('%H:%M') if ln.hora_inicio else None)
+        hf = None if es_sub else (ln.hora_fin.strftime('%H:%M') if ln.hora_fin else None)
         out.append({
             'user_id': ln.user_id,
             'user_name': nombre,
             'obra_id': ln.obra_id,
             'fecha': ln.fecha.isoformat() if ln.fecha else None,
-            'hora_inicio': ln.hora_inicio.strftime('%H:%M') if ln.hora_inicio else None,
-            'hora_fin': ln.hora_fin.strftime('%H:%M') if ln.hora_fin else None,
+            'hora_inicio': hi,
+            'hora_fin': hf,
             'horas': str(ln.horas) if ln.horas is not None else None,
             'precio_hora': str(ln.precio_hora) if ln.precio_hora is not None else None,
             'importe': str(imp) if imp is not None else None,
@@ -857,6 +979,60 @@ def etiqueta_ronda(ronda: CertificacionRonda | None, etiquetas: dict[int, str] |
             _rondas_periodo(ronda.company_id, ronda.obra_id, ronda.anio, ronda.mes)
         )
     return etiquetas.get(int(ronda.id), str(ronda.secuencia or ''))
+
+
+def siguiente_etiqueta_propuesta(etiqueta: str | None) -> str:
+    """Etiqueta del próximo envío en la misma negociación (3 → 3.2 → 3.3 → 3.4)."""
+    et = (etiqueta or '').strip()
+    if not et:
+        return '1'
+    if '.' not in et:
+        return f'{et}.2'
+    major, rev = et.rsplit('.', 1)
+    try:
+        return f'{major}.{int(rev) + 1}'
+    except ValueError:
+        return f'{et}.2'
+
+
+def cadena_rondas_negociacion(
+    rondas: list[CertificacionRonda] | None,
+    ancla: CertificacionRonda | None,
+    etiquetas: dict[int, str] | None = None,
+) -> list[dict]:
+    """Rondas de la misma negociación (mismo nº mayor) hasta el ancla inclusive.
+
+    Pensado para columnas de comparación al corregir: #3, #3.2, #3.3…
+    """
+    if not ancla or not ancla.id:
+        return []
+    et = etiquetas if etiquetas is not None else etiquetas_rondas(rondas)
+    ancla_et = et.get(int(ancla.id), '')
+    if not ancla_et:
+        return []
+    major = ancla_et.split('.', 1)[0]
+    ancla_key = (ancla.secuencia or 0, ancla.id or 0)
+    vivos = sorted(
+        [r for r in (rondas or []) if r and r.resultado != 'retirada' and r.id],
+        key=lambda r: (r.secuencia or 0, r.id or 0),
+    )
+    out: list[dict] = []
+    for r in vivos:
+        e = et.get(int(r.id), '')
+        if not e or e.split('.', 1)[0] != major:
+            continue
+        if (r.secuencia or 0, r.id or 0) > ancla_key:
+            continue
+        out.append({
+            'id': int(r.id),
+            'etiqueta': e,
+            'ronda': r,
+            'mapa': mapa_lineas_ronda(r),
+            'totales': totales_comparar_ronda(r),
+            'direccion': r.direccion,
+            'resultado': r.resultado,
+        })
+    return out
 
 
 def _purgar_retiradas_y_renumerar(company_id: int, obra_id: int, anio: int, mes: int) -> None:
@@ -1002,6 +1178,7 @@ def mapa_lineas_ronda(ronda: CertificacionRonda | None) -> dict:
     out = {}
     if not ronda or not ronda.lineas_json:
         return out
+    obra_fallback = getattr(ronda, 'obra_id', None)
     for row in ronda.lineas_json:
         fecha = row.get('fecha')
         if isinstance(fecha, str):
@@ -1013,18 +1190,20 @@ def mapa_lineas_ronda(ronda: CertificacionRonda | None) -> dict:
             fecha_d = fecha
         else:
             continue
-        key = (row.get('user_id'), row.get('obra_id'), fecha_d)
+        oid = row.get('obra_id') if row.get('obra_id') is not None else obra_fallback
+        key = (row.get('user_id'), oid, fecha_d)
         out[key] = row
     return out
 
 
 def totales_comparar_ronda(ronda: CertificacionRonda | None) -> dict:
-    """Totales + agregados por persona y por (persona, día) para la UI de comparación."""
+    """Totales + agregados por persona, día y (persona, día) para la UI de comparación."""
     vacio = {
         'horas': Decimal('0.00'),
         'importe': Decimal('0.00'),
         'por_persona': {},
         'por_persona_fecha': {},
+        'por_fecha': {},
     }
     if not ronda or not ronda.lineas_json:
         if ronda and ronda.horas_total is not None:
@@ -1035,6 +1214,7 @@ def totales_comparar_ronda(ronda: CertificacionRonda | None) -> dict:
     ti = Decimal('0.00')
     por_p: dict = {}
     por_pf: dict = {}
+    por_f: dict = {}
     for row in ronda.lineas_json:
         uid = row.get('user_id')
         fecha = _parse_fecha_snap(row.get('fecha'))
@@ -1045,6 +1225,10 @@ def totales_comparar_ronda(ronda: CertificacionRonda | None) -> dict:
             imp = importe_linea(h, p) or Decimal('0.00')
         th += h
         ti += imp
+        if fecha is not None:
+            bf = por_f.setdefault(fecha, {'horas': Decimal('0.00'), 'importe': Decimal('0.00')})
+            bf['horas'] += h
+            bf['importe'] += imp
         if uid is not None:
             bucket = por_p.setdefault(uid, {'horas': Decimal('0.00'), 'importe': Decimal('0.00')})
             bucket['horas'] += h
@@ -1060,11 +1244,15 @@ def totales_comparar_ronda(ronda: CertificacionRonda | None) -> dict:
     for b in por_pf.values():
         b['horas'] = cuantizar(b['horas']) or Decimal('0.00')
         b['importe'] = cuantizar(b['importe']) or Decimal('0.00')
+    for b in por_f.values():
+        b['horas'] = cuantizar(b['horas']) or Decimal('0.00')
+        b['importe'] = cuantizar(b['importe']) or Decimal('0.00')
     return {
         'horas': cuantizar(th) or Decimal('0.00'),
         'importe': cuantizar(ti) or Decimal('0.00'),
         'por_persona': por_p,
         'por_persona_fecha': por_pf,
+        'por_fecha': por_f,
     }
 
 
@@ -1085,7 +1273,12 @@ def _snap_dec(raw) -> Decimal | None:
     return cuantizar(raw)
 
 
-def agrupar_snapshot(lineas_json: list | None, *, modo: str = 'persona') -> list[dict]:
+def agrupar_snapshot(
+    lineas_json: list | None,
+    *,
+    modo: str = 'persona',
+    obra_id: int | None = None,
+) -> list[dict]:
     """Misma forma que la propuesta viva: persona→días o fecha→líneas (solo lectura)."""
     rows = []
     for row in lineas_json or []:
@@ -1097,16 +1290,20 @@ def agrupar_snapshot(lineas_json: list | None, *, modo: str = 'persona') -> list
         imp = _snap_dec(row.get('importe'))
         if imp is None:
             imp = importe_linea(h, p) or Decimal('0.00')
+        oid = row.get('obra_id')
+        if oid is None:
+            oid = obra_id
         rows.append({
             'user_id': row.get('user_id'),
             'user_name': (row.get('user_name') or '').strip() or 'Persona',
-            'obra_id': row.get('obra_id'),
+            'obra_id': oid,
             'fecha': fecha,
             'hora_inicio': row.get('hora_inicio'),
             'hora_fin': row.get('hora_fin'),
             'horas': h,
             'precio_hora': p,
             'importe': imp,
+            'origen_horas': row.get('origen_horas'),
         })
 
     if modo == 'fecha':
@@ -1351,12 +1548,35 @@ def _texto_chat_ui(texto: str, autor: str = '', tipo: str = '') -> str:
     return out
 
 
-def enviar(prop: CertificacionPropuesta, actor_id: int) -> None:
+def enviar(
+    prop: CertificacionPropuesta,
+    actor_id: int,
+    *,
+    company: Company | None = None,
+    obra: Obra | None = None,
+    contrato: dict | None = None,
+) -> None:
     """Envía borrador a la mesa: una sola carta activa; historial en rondas."""
     if prop.estado != 'borrador':
         raise ValueError('Solo se envía un borrador.')
     if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
         raise ValueError('Esta obra ya está aceptada en el mes.')
+
+    company = company or Company.query.get(prop.company_id)
+    obra = obra or (Obra.query.get(prop.obra_id) if prop.obra_id else None)
+    if contrato is None and company is not None and obra is not None:
+        contrato = contrato_asistencia_mes(company, obra, prop.anio, prop.mes)
+    if not contrato:
+        raise ValueError(
+            'No hay un contrato de asistencia vinculado a este periodo. '
+            'No se puede enviar la propuesta.'
+        )
+    con_horas = [
+        ln for ln in (prop.lineas or [])
+        if ln.horas is not None or (ln.hora_inicio and ln.hora_fin)
+    ]
+    if not con_horas:
+        raise ValueError('No hay horas que enviar en este periodo.')
     if not _lineas_completas(prop):
         raise ValueError('Rellena las horas de todas las filas antes de enviar.')
 
@@ -1369,6 +1589,8 @@ def enviar(prop: CertificacionPropuesta, actor_id: int) -> None:
         prop.enviada_at = utc_now()
         prop.enviada_por_id = actor_id
         prop.comentario_rechazo = None
+        prop.requerida_at = None
+        prop.requerida_por_id = None
         _crear_ronda(prop, actor_id, resultado='aceptada')
         previa.resultado = 'aceptada'
         previa.respondida_at = utc_now()
@@ -1422,6 +1644,9 @@ def enviar(prop: CertificacionPropuesta, actor_id: int) -> None:
     prop.enviada_at = utc_now()
     prop.enviada_por_id = actor_id
     prop.comentario_rechazo = None
+    # Al enviar, el requerimiento de completar queda satisfecho.
+    prop.requerida_at = None
+    prop.requerida_por_id = None
     # El rechazo anterior queda en la ronda del historial; la otra parte ya no es "rechazada".
     otra_viva = CertificacionPropuesta.query.filter_by(
         company_id=prop.company_id,
@@ -1444,6 +1669,50 @@ def enviar(prop: CertificacionPropuesta, actor_id: int) -> None:
     except Exception:
         pass
     _avisar(prop, actor_id)
+
+
+def requerir_accion(
+    company: Company,
+    obra_id: int,
+    anio: int,
+    mes: int,
+    actor_id: int,
+) -> CertificacionPropuesta:
+    """SaaS pide a la subcontrata que complete/envíe la certificación de esta obra+mes."""
+    if periodo_bloqueado(company.id, anio, mes, obra_id):
+        raise ValueError('Esta obra ya está aceptada en el mes.')
+    sub, emp = sincronizar(company, anio, mes, obra_id, refrescar_precios=False)
+    if not sub:
+        raise ValueError('No se pudo preparar la propuesta de la subcontrata.')
+    if sub.estado == 'enviada':
+        raise ValueError('Ya hay una propuesta enviada pendiente de revisar.')
+    if sub.estado == 'aceptada':
+        raise ValueError('El mes ya está aceptado.')
+    if emp and emp.estado == 'enviada':
+        raise ValueError(
+            'La subcontrata ya tiene una propuesta nuestra pendiente de respuesta.'
+        )
+    if sub.requerida_at:
+        return sub
+    sub.requerida_at = utc_now()
+    sub.requerida_por_id = actor_id
+    try:
+        publicar_chat(
+            company.id, obra_id, anio, mes,
+            texto='Ha requerido completar la certificación de horario.',
+            tipo='requerimiento',
+            direccion=DIR_EMP,
+            autor_id=actor_id,
+        )
+    except Exception:
+        db.session.flush()
+    try:
+        from app.services.certificacion_avisos_service import reactivar_avisos_mes
+        reactivar_avisos_mes(anio, mes, company_id=company.id, obra_id=obra_id)
+    except Exception:
+        pass
+    _avisar(sub, actor_id, requerida=True)
+    return sub
 
 
 def desenviar(prop: CertificacionPropuesta, actor_id: int) -> None:
@@ -1516,6 +1785,23 @@ def aceptar(prop: CertificacionPropuesta, actor_id: int) -> None:
     _avisar(prop, actor_id, aceptada=True)
 
 
+def _reiniciar_lineas_propuesta(prop: CertificacionPropuesta) -> None:
+    """Horas/tramos a punto de partida (oficina = fichaje; subcontrata = vacío)."""
+    lineas = list(prop.lineas or [])
+    if not lineas:
+        return
+    if prop.direccion != DIR_EMP:
+        for ln in lineas:
+            ln.hora_inicio = None
+            ln.hora_fin = None
+            ln.horas = None
+            ln.origen_horas = 'vacio'
+        return
+    mapa = _esqueleto_mapa(prop.company_id, prop.anio, prop.mes, obra_id=prop.obra_id)
+    for ln in lineas:
+        _aplicar_fichaje_a_linea(ln, mapa.get((ln.user_id, ln.obra_id, ln.fecha)))
+
+
 def _reiniciar_a_propuesta_nueva(prop: CertificacionPropuesta) -> None:
     """Tras un rechazo: la carta queda en historial y el borrador vuelve a cero."""
     prop.estado = 'borrador'
@@ -1523,15 +1809,98 @@ def _reiniciar_a_propuesta_nueva(prop: CertificacionPropuesta) -> None:
     prop.enviada_por_id = None
     prop.comentario_rechazo = None
     prop.respondida_por_id = None
-    if prop.direccion == DIR_EMP:
-        for ln in prop.lineas:
-            restablecer_linea_desde_fichaje(ln)
+    prop.aceptada_at = None
+    _reiniciar_lineas_propuesta(prop)
+
+
+def reabrir_periodo(
+    company_id: int,
+    obra_id: int,
+    anio: int,
+    mes: int,
+    actor_id: int,
+) -> CertificacionRonda | None:
+    """SaaS: vuelve a abrir un mes aceptado o una propuesta rechazada.
+
+    Desbloquea el periodo y pone de nuevo sobre la mesa la última carta
+    aceptada/rechazada (si existe), para poder aceptar o corregir otra vez.
+    """
+    if ronda_en_mesa(company_id, obra_id, anio, mes):
+        raise ValueError('Ya hay una propuesta sobre la mesa.')
+
+    props = list(
+        CertificacionPropuesta.query.filter_by(
+            company_id=company_id, obra_id=obra_id, anio=anio, mes=mes,
+        ).all()
+    )
+    by_dir = {p.direccion: p for p in props}
+    estaba_cerrado = any((p.estado or '') == 'aceptada' for p in props)
+
+    rondas = _rondas_periodo(company_id, obra_id, anio, mes)
+    candidata = None
+    for r in reversed(rondas):
+        if (r.resultado or '') in ('aceptada', 'rechazada'):
+            candidata = r
+            break
+
+    if not estaba_cerrado and candidata is None:
+        raise ValueError('No hay una certificación aceptada o rechazada que reabrir.')
+
+    # 1) Quitar el candado (aceptada) antes de tocar líneas.
+    for p in props:
+        p.estado = 'borrador'
+        p.aceptada_at = None
+        p.enviada_at = None
+        p.enviada_por_id = None
+        p.respondida_por_id = None
+        p.comentario_rechazo = None
+    db.session.flush()
+
+    mesa = None
+    if candidata is not None:
+        prop = by_dir.get(candidata.direccion)
+        if prop is None and candidata.propuesta_id:
+            prop = CertificacionPropuesta.query.get(candidata.propuesta_id)
+        if prop is None:
+            raise ValueError('No se encuentra la propuesta a reabrir.')
+        # No hace falta vaciar antes: aplicar_ronda_a_borrador pisa horas/tramos.
+        aplicar_ronda_a_borrador(prop, candidata)
+        prop.estado = 'enviada'
+        prop.enviada_at = candidata.enviada_at or utc_now()
+        prop.enviada_por_id = candidata.enviada_por_id or actor_id
+        candidata.resultado = 'en_mesa'
+        candidata.respondida_at = None
+        candidata.respondida_por_id = None
+        candidata.comentario_rechazo = None
+        mesa = candidata
+
+        otra = by_dir.get(_otra(prop.direccion))
+        if otra is not None:
+            _reiniciar_lineas_propuesta(otra)
     else:
-        for ln in prop.lineas:
-            ln.hora_inicio = None
-            ln.hora_fin = None
-            ln.horas = None
-            ln.origen_horas = 'vacio'
+        for p in props:
+            _reiniciar_lineas_propuesta(p)
+
+    etiqueta = etiqueta_ronda(mesa) if mesa else ''
+    texto = (
+        f'Ha vuelto a abrir la certificación (propuesta #{etiqueta} sobre la mesa).'
+        if etiqueta
+        else 'Ha vuelto a abrir la certificación.'
+    )
+    # Actor SaaS = lado empresa.
+    publicar_chat(
+        company_id, obra_id, anio, mes,
+        texto=texto,
+        tipo='desenvio',
+        direccion=DIR_EMP,
+        autor_id=actor_id,
+    )
+    try:
+        from app.services.certificacion_avisos_service import reactivar_avisos_mes
+        reactivar_avisos_mes(anio, mes, company_id=company_id, obra_id=obra_id)
+    except Exception:
+        pass
+    return mesa
 
 
 def rechazar(prop: CertificacionPropuesta, actor_id: int, comentario: str) -> None:
@@ -1598,11 +1967,20 @@ def marcar_discrepancias(prop: CertificacionPropuesta, ids_marcados: set[int], n
         ln.nota_discrepancia = nota if ln.discrepancia else None
 
 
-def _avisar(prop: CertificacionPropuesta, actor_id: int, *, aceptada=False, rechazo=None, retirada=False) -> None:
+def _avisar(
+    prop: CertificacionPropuesta,
+    actor_id: int,
+    *,
+    aceptada=False,
+    rechazo=None,
+    retirada=False,
+    requerida=False,
+) -> None:
     """Avisa según la matriz de correos (grupo Certificación).
 
     - Enviar / retirar: avisa a la otra parte.
     - Aceptar / rechazar: avisa al dueño de la propuesta tocada.
+    - Requerir: avisa a la subcontrata.
     """
     from app.services.compliance_rules import email_es_real
     from app.services.notification_dispatch_service import (
@@ -1634,6 +2012,15 @@ def _avisar(prop: CertificacionPropuesta, actor_id: int, *, aceptada=False, rech
         cuerpo = f'La propuesta enviada de {obra_txt} ha sido cancelada y ya no está pendiente de revisión.'
         notify_office = prop.direccion == DIR_SUB
         notify_sub = prop.direccion == DIR_EMP
+    elif requerida:
+        event_key = 'cert_pendiente'
+        asunto = f'Certificación requerida · {nombre} · {obra_txt} · {periodo}'
+        cuerpo = (
+            f'Se te ha requerido completar y enviar la certificación de horario '
+            f'de {obra_txt} ({periodo}).'
+        )
+        notify_sub = True
+        notify_office = False
     else:
         event_key = 'cert_pendiente'
         asunto = f'Certificación pendiente · {nombre} · {obra_txt} · {periodo}'
@@ -1735,27 +2122,15 @@ def totales_grupos(grupos: list[dict]) -> dict:
     }
 
 
-def prorratear_horas_persona(
-    prop: CertificacionPropuesta,
-    user_id: int,
-    horas_total,
-) -> int:
-    """Reparte un total de horas del mes entre los días de esa persona (prorrata igual)."""
-    if prop.estado != 'borrador':
-        raise ValueError('Esta propuesta ya no se puede editar.')
-    if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
-        raise ValueError('Esta obra ya está aceptada en el mes.')
+def _prorratear_lineas(lineas: list, horas_total) -> int:
+    """Reparte horas a partes iguales entre las filas (centavos; el resto al inicio)."""
     total = cuantizar(horas_total)
     if total is None or total < 0:
         raise ValueError('El total de horas no es válido.')
-    lineas = sorted(
-        [ln for ln in prop.lineas if ln.user_id == int(user_id)],
-        key=lambda ln: ln.fecha,
-    )
+    lineas = list(lineas)
     if not lineas:
-        raise ValueError('No hay días de esa persona en la propuesta.')
+        raise ValueError('No hay fichajes para prorratear.')
     n = len(lineas)
-    # Centavos: reparte y el último absorbe el resto para cuadrar.
     cents = int((total * 100).to_integral_value())
     base, resto = divmod(cents, n)
     for i, ln in enumerate(lineas):
@@ -1765,6 +2140,53 @@ def prorratear_horas_persona(
         ln.hora_fin = None
         ln.origen_horas = 'manual_total'
     return n
+
+
+def prorratear_horas_persona(
+    prop: CertificacionPropuesta,
+    user_id: int,
+    horas_total,
+    *,
+    fecha: date | None = None,
+) -> int:
+    """Reparte un total de horas entre las filas de esa persona (mes o un día concreto)."""
+    if prop.estado != 'borrador':
+        raise ValueError('Esta propuesta ya no se puede editar.')
+    if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
+        raise ValueError('Esta obra ya está aceptada en el mes.')
+    lineas = [
+        ln for ln in prop.lineas
+        if ln.user_id == int(user_id) and (fecha is None or ln.fecha == fecha)
+    ]
+    lineas = sorted(lineas, key=lambda ln: (ln.fecha, ln.id or 0))
+    if not lineas:
+        raise ValueError(
+            'No hay fichajes de esa persona en ese día.'
+            if fecha is not None
+            else 'No hay días de esa persona en la propuesta.'
+        )
+    return _prorratear_lineas(lineas, horas_total)
+
+
+def prorratear_horas_fecha(
+    prop: CertificacionPropuesta,
+    fecha: date,
+    horas_total,
+) -> int:
+    """Reparte un total de horas del día entre todas las personas/filas de esa fecha."""
+    if prop.estado != 'borrador':
+        raise ValueError('Esta propuesta ya no se puede editar.')
+    if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
+        raise ValueError('Esta obra ya está aceptada en el mes.')
+    if fecha is None:
+        raise ValueError('Fecha no válida.')
+    lineas = sorted(
+        [ln for ln in prop.lineas if ln.fecha == fecha],
+        key=lambda ln: (ln.user_id or 0, ln.id or 0),
+    )
+    if not lineas:
+        raise ValueError('No hay fichajes en ese día.')
+    return _prorratear_lineas(lineas, horas_total)
 
 
 def operarios_empresa_certificacion(company_id: int) -> list[User]:
@@ -1984,6 +2406,17 @@ def enriquecer_grupos_plataforma(
                 i_f += imp
             fecha['plat_horas'] = cuantizar(h_f) or Decimal('0.00')
             fecha['plat_importe'] = cuantizar(i_f) or Decimal('0.00')
+            # Vista por fecha: personas anidadas bajo el día.
+            for pers in fecha.get('personas') or []:
+                hp = Decimal('0.00')
+                ip = Decimal('0.00')
+                for item in pers.get('lineas') or []:
+                    if item.get('plat_horas') is not None:
+                        hp += item['plat_horas'] or Decimal('0.00')
+                    if item.get('plat_importe') is not None:
+                        ip += item['plat_importe'] or Decimal('0.00')
+                pers['plat_horas'] = cuantizar(hp) or Decimal('0.00')
+                pers['plat_importe'] = cuantizar(ip) or Decimal('0.00')
             h_obra += h_f
             i_obra += i_f
         obra['plat_horas'] = cuantizar(h_obra) or Decimal('0.00')
@@ -2079,16 +2512,16 @@ def frase_delta_plataforma(
         )
         if pct_f > 0.05:
             return translate(
-                '{sujeto} es un {pct}% más cara que el fichaje de la plataforma.',
+                '{sujeto} es un {pct}% más cara que el fichaje (desfavorable).',
                 sujeto=sujeto, pct=abs_txt,
             )
         if pct_f < -0.05:
             return translate(
-                '{sujeto} es un {pct}% más barata que el fichaje de la plataforma.',
+                '{sujeto} es un {pct}% más barata que el fichaje (favorable).',
                 sujeto=sujeto, pct=abs_txt,
             )
         return translate(
-            '{sujeto} cuadra con el fichaje de la plataforma.',
+            '{sujeto} cuadra exacto con el fichaje de la plataforma.',
             sujeto=sujeto,
         )
     pct_h = delta.get('pct_horas')
@@ -2101,16 +2534,16 @@ def frase_delta_plataforma(
         )
         if pct_f > 0.05:
             return translate(
-                '{sujeto} tiene un {pct}% más de horas que el fichaje de la plataforma.',
+                '{sujeto} tiene un {pct}% más de horas que el fichaje (desfavorable).',
                 sujeto=sujeto, pct=abs_txt,
             )
         if pct_f < -0.05:
             return translate(
-                '{sujeto} tiene un {pct}% menos de horas que el fichaje de la plataforma.',
+                '{sujeto} tiene un {pct}% menos de horas que el fichaje (favorable).',
                 sujeto=sujeto, pct=abs_txt,
             )
         return translate(
-            '{sujeto} cuadra con el fichaje de la plataforma.',
+            '{sujeto} cuadra exacto con el fichaje de la plataforma.',
             sujeto=sujeto,
         )
     return None
@@ -2130,6 +2563,57 @@ def _shift_ym(anio: int, mes: int, delta: int) -> tuple[int, int]:
     return idx // 12, idx % 12 + 1
 
 
+def _ym_range(desde: date, hasta: date) -> set[tuple[int, int]]:
+    """Meses calendario (anio, mes) entre dos fechas inclusive."""
+    if desde > hasta:
+        desde, hasta = hasta, desde
+    out: set[tuple[int, int]] = set()
+    y, m = desde.year, desde.month
+    y1, m1 = hasta.year, hasta.month
+    while (y, m) <= (y1, m1):
+        out.add((y, m))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return out
+
+
+def _meses_contrato_asistencia_obra(
+    company: Company | None,
+    obra: Obra | None,
+    *,
+    hasta: date,
+) -> set[tuple[int, int]]:
+    """Meses cubiertos por algún contrato de asistencia empresa+obra (1 RPC)."""
+    if not company or not obra:
+        return set()
+    partner_id = _ext_odoo_id(company)
+    project_id = _ext_odoo_id(obra)
+    if not partner_id or not project_id:
+        return set()
+    try:
+        from app.sync.dispatcher import get_sync_adapter
+        adapter = get_sync_adapter()
+        lister = getattr(adapter, 'list_attendance_contracts', None)
+        rows = lister(partner_id, project_id) if callable(lister) else []
+    except Exception:
+        rows = []
+    meses: set[tuple[int, int]] = set()
+    for row in rows or []:
+        d0 = _parse_fecha_contrato(row.get('date_start'))
+        if not d0:
+            continue
+        d1 = _parse_fecha_contrato(row.get('date_end')) or hasta
+        if d1 < d0:
+            continue
+        # No proyectar indefinidamente: hasta el tope pedido (mes abierto + adelante).
+        if d1 > hasta:
+            d1 = hasta
+        meses |= _ym_range(d0, d1)
+    return meses
+
+
 def panel_meses_obra(
     company_id: int,
     obra_id: int,
@@ -2140,7 +2624,7 @@ def panel_meses_obra(
     meses_atras: int = 17,
     meses_adelante: int = 1,
 ) -> list[dict]:
-    """Meses con propuesta o fichaje de esta empresa+obra (ventana alrededor del mes actual)."""
+    """Meses de la obra: con contrato de asistencia, fichaje/propuesta, o el mes abierto."""
     propia_dir = DIR_SUB if vista_subcontrata else DIR_EMP
     props = CertificacionPropuesta.query.filter_by(
         company_id=company_id, obra_id=obra_id,
@@ -2148,6 +2632,14 @@ def panel_meses_obra(
     props_by_ym: dict[tuple[int, int], list[CertificacionPropuesta]] = defaultdict(list)
     for p in props:
         props_by_ym[(p.anio, p.mes)].append(p)
+
+    company = Company.query.get(int(company_id))
+    obra = Obra.query.get(int(obra_id))
+    tope_a, tope_m = _shift_ym(anio_ref, mes_ref, meses_adelante)
+    tope = date(tope_a, tope_m, 1)
+    # Último día del mes tope.
+    _, tope_fin = _mes_rango(tope_a, tope_m)
+    meses_contrato = _meses_contrato_asistencia_obra(company, obra, hasta=tope_fin)
 
     usuarios = [
         u.id for u in User.query.filter(
@@ -2157,10 +2649,14 @@ def panel_meses_obra(
     ]
     fichaje_ym: set[tuple[int, int]] = set()
     if usuarios:
-        inicio_a, inicio_m = _shift_ym(anio_ref, mes_ref, -meses_atras)
-        fin_a, fin_m = _shift_ym(anio_ref, mes_ref, meses_adelante)
+        # Ventana amplia: desde el contrato más antiguo o meses_atras.
+        if meses_contrato:
+            min_c = min(meses_contrato)
+            inicio_a, inicio_m = min_c
+        else:
+            inicio_a, inicio_m = _shift_ym(anio_ref, mes_ref, -meses_atras)
         inicio = date(inicio_a, inicio_m, 1)
-        fa, fm = _shift_ym(fin_a, fin_m, 1)
+        fa, fm = _shift_ym(tope_a, tope_m, 1)
         fin = date(fa, fm, 1)
         fechas = (
             db.session.query(RegistroFichaje.fecha)
@@ -2178,38 +2674,64 @@ def panel_meses_obra(
             if f:
                 fichaje_ym.add((f.year, f.month))
 
-    # Solo meses con fichaje o propuesta; el mes abierto siempre.
-    # No consultar contrato Odoo aquí: al abrir la obra serían ~19 RPCs.
-    candidatos: set[tuple[int, int]] = set(props_by_ym) | set(fichaje_ym)
+    # Contrato + fichaje + propuesta con señal + mes que estás viendo.
+    candidatos: set[tuple[int, int]] = set(meses_contrato) | set(fichaje_ym)
     candidatos.add((anio_ref, mes_ref))
-    ventana = {
-        _shift_ym(anio_ref, mes_ref, d)
-        for d in range(-meses_atras, meses_adelante + 1)
+    for ym, rows in props_by_ym.items():
+        if any(_propuesta_tiene_senal(p) for p in rows):
+            candidatos.add(ym)
+
+    # No listar indefinido hacia el futuro: corta en mes_ref + adelante.
+    candidatos = {
+        ym for ym in candidatos
+        if ym <= (tope_a, tope_m)
     }
-    candidatos &= ventana
 
     out = []
     for anio, mes in sorted(candidatos, reverse=True):
         rows = props_by_ym.get((anio, mes), [])
         tiene_fichaje = (anio, mes) in fichaje_ym
+        tiene_contrato = (anio, mes) in meses_contrato
         es_actual = (anio, mes) == (anio_ref, mes_ref)
-        if not es_actual and not tiene_fichaje and not any(
-            _propuesta_tiene_senal(p) for p in rows
+        if (
+            not es_actual
+            and not tiene_fichaje
+            and not tiene_contrato
+            and not any(_propuesta_tiene_senal(p) for p in rows)
         ):
             continue
         propia = next((r for r in rows if r.direccion == propia_dir), None)
         tot = totales(propia) if propia else {'horas': Decimal('0.00'), 'importe': Decimal('0.00'), 'filas': 0}
         aceptada = next((r for r in rows if r.estado == 'aceptada'), None)
         estado = _estado_desde_par(rows, vista_subcontrata=vista_subcontrata)
+        horas = tot['horas']
+        # Sin contrato y sin movimiento real → etiqueta clara (p. ej. mes abierto).
+        if (
+            not tiene_contrato
+            and estado in ('borrador', 'sin_movimiento')
+            and not any(_propuesta_tiene_senal(p) for p in rows)
+            and (horas is None or horas == 0)
+        ):
+            estado = 'sin_contrato'
+            horas = None
+        elif (
+            tiene_contrato
+            and estado in ('borrador', 'sin_movimiento')
+            and not any(_propuesta_tiene_senal(p) for p in rows)
+            and (horas is None or horas == 0)
+        ):
+            # Con contrato pero sin horas aún: «—», no «0 h».
+            horas = None
         out.append({
             'anio': anio,
             'mes': mes,
             'estado': estado,
-            'horas': tot['horas'],
-            'importe': tot['importe'],
+            'horas': horas,
+            'importe': tot['importe'] if estado != 'sin_contrato' else None,
             'aceptada_at': aceptada.aceptada_at if aceptada else None,
             'actual': es_actual,
             'requiere_accion': estado in ('recibida', 'rechazada'),
+            'tiene_contrato': tiene_contrato,
         })
     return out
 
@@ -2543,6 +3065,13 @@ def panel_certificacion_oficina(
         if allowed is None or prop.obra_id in allowed:
             company_ids.add(prop.company_id)
 
+    from app.services.certificacion_avisos_service import pares_pendientes_mes
+    pares_aviso = pares_pendientes_mes(anio=anio, mes=mes, user=user)
+    for cid, oid in pares_aviso:
+        if allowed is not None and oid not in allowed:
+            continue
+        company_ids.add(cid)
+
     if not company_ids:
         return []
 
@@ -2557,6 +3086,10 @@ def panel_certificacion_oficina(
         oids = obras_ids_certificacion(
             cid, anio, mes, obra_ids=None if allowed is None else allowed,
         )
+        # Incluir obras con aviso aunque no salgan en obras_ids_certificacion.
+        oids = set(oids) | {oid for (c, oid) in pares_aviso if c == cid}
+        if allowed is not None:
+            oids = {oid for oid in oids if oid in allowed}
         if not oids:
             continue
         props = CertificacionPropuesta.query.filter(
@@ -2580,21 +3113,37 @@ def panel_certificacion_oficina(
             if cont.get(key, 0):
                 estado = key
                 break
+        avisos_obra = [pares_aviso[(cid, oid)] for oid in oids if (cid, oid) in pares_aviso]
+        motivo_aviso = None
+        if 'recibida' in avisos_obra:
+            motivo_aviso = 'recibida'
+        elif 'requerida' in avisos_obra:
+            motivo_aviso = 'requerida'
         out.append({
             'company': company,
             'estado': estado,
-            'requiere_accion': cont.get('recibida', 0) > 0 or cont.get('rechazada', 0) > 0,
+            'requiere_accion': (
+                cont.get('recibida', 0) > 0
+                or cont.get('rechazada', 0) > 0
+                or bool(avisos_obra)
+            ),
+            'aviso_pendiente': bool(avisos_obra),
+            'motivo_aviso': motivo_aviso,
+            'n_aviso': len(avisos_obra),
             'n_obras': len(oids),
             'n_recibida': cont.get('recibida', 0),
             'n_rechazada': cont.get('rechazada', 0),
-            'n_aceptada': cont.get('aceptada', 0),
             'n_enviada': cont.get('enviada', 0),
             'n_borrador': cont.get('borrador', 0),
+            'n_aceptada': cont.get('aceptada', 0),
+            'n_sin_movimiento': cont.get('sin_movimiento', 0),
             'tiene_recibida': cont.get('recibida', 0) > 0,
             'tiene_rechazada': cont.get('rechazada', 0) > 0,
+            'tiene_requerida': 'requerida' in avisos_obra,
         })
     out.sort(key=lambda row: (
-        0 if row['estado'] == 'recibida' else (1 if row['estado'] == 'rechazada' else 2),
+        0 if row['estado'] == 'recibida' else (1 if row['estado'] == 'rechazada' else (2 if row.get('aviso_pendiente') else 3)),
+        -(row.get('n_aviso') or 0),
         -(row['n_obras'] or 0),
         (row['company'].nombre or '').lower(),
     ))
@@ -2621,10 +3170,18 @@ def panel_certificacion_empresa_obras(
     if not company:
         return []
 
-    oids = obras_ids_certificacion(
+    from app.services.certificacion_avisos_service import pares_pendientes_mes
+    pares_aviso = pares_pendientes_mes(
+        anio=anio, mes=mes, company_id=company_id, user=user,
+    )
+
+    oids = set(obras_ids_certificacion(
         company_id, anio, mes,
         obra_ids=None if allowed is None else allowed,
-    )
+    ))
+    oids |= {oid for (cid, oid) in pares_aviso if cid == company_id}
+    if allowed is not None:
+        oids = {oid for oid in oids if oid in allowed}
     if not oids:
         return []
 
@@ -2660,16 +3217,28 @@ def panel_certificacion_empresa_obras(
         motivo = ''
         if propia and propia.estado == 'borrador':
             motivo = (propia.comentario_rechazo or '').strip()
+        motivo_aviso = pares_aviso.get((company_id, oid))
         out.append({
             'obra': obra,
             'estado': estado,
             'horas': horas,
-            'requiere_accion': estado in ('recibida', 'rechazada'),
+            'requiere_accion': (
+                estado in ('recibida', 'rechazada')
+                or motivo_aviso in ('recibida', 'requerida')
+            ),
+            'aviso_pendiente': bool(motivo_aviso),
+            'motivo_aviso': motivo_aviso,
             'contrato': None,
             'comentario_rechazo': motivo,
         })
     out.sort(key=lambda row: (
-        0 if row['estado'] == 'recibida' else (1 if row['estado'] == 'rechazada' else 2),
+        0 if row['estado'] == 'recibida' else (
+            1 if row['estado'] == 'rechazada' else (
+                2 if row.get('motivo_aviso') == 'requerida' else (
+                    3 if row.get('aviso_pendiente') else 4
+                )
+            )
+        ),
         -(row['horas'] or 0),
         (row['obra'].nombre or '').lower(),
     ))
@@ -2687,7 +3256,13 @@ def panel_certificacion_subcontrata_obras(
     Las horas mostradas son solo las de su propuesta (DIR_SUB), nunca el fichaje
     de la plataforma. No sincroniza ni llama a Odoo: eso ocurre al abrir la obra.
     """
-    oids = obras_ids_certificacion(company.id, anio, mes)
+    from app.services.certificacion_avisos_service import pares_pendientes_mes
+
+    pares_aviso = pares_pendientes_mes(
+        anio=anio, mes=mes, company_id=company.id, vista_subcontrata=True,
+    )
+    oids = set(obras_ids_certificacion(company.id, anio, mes))
+    oids |= {oid for (cid, oid) in pares_aviso if cid == company.id}
     if not oids:
         return []
     obras = {o.id: o for o in Obra.query.filter(Obra.id.in_(oids)).all()}
@@ -2715,16 +3290,23 @@ def panel_certificacion_subcontrata_obras(
         motivo = ''
         if propia and propia.estado == 'borrador':
             motivo = (propia.comentario_rechazo or '').strip()
+        motivo_aviso = pares_aviso.get((company.id, oid))
         out.append({
             'obra': obra,
             'estado': estado,
             'horas': tot['horas'],
-            'requiere_accion': estado in ('recibida', 'rechazada'),
+            'requiere_accion': (
+                estado in ('recibida', 'rechazada') or motivo_aviso in ('recibida', 'requerida')
+            ),
+            'aviso_pendiente': bool(motivo_aviso),
+            'motivo_aviso': motivo_aviso,
             'contrato': None,
             'comentario_rechazo': motivo,
         })
     out.sort(key=lambda row: (
-        0 if row['estado'] == 'recibida' else (1 if row['estado'] == 'rechazada' else 2),
+        0 if row['estado'] == 'recibida' else (
+            1 if row['estado'] == 'rechazada' else (2 if row.get('aviso_pendiente') else 3)
+        ),
         -(row['horas'] or 0),
         (row['obra'].nombre or '').lower(),
     ))
@@ -2739,7 +3321,7 @@ def panel_certificacion_obras(
     desde: date | None = None,
     hasta: date | None = None,
 ) -> list[dict]:
-    """Listado de obras del alcance con volumen, para vista por obra."""
+    """Listado de obras del alcance con volumen + estado (por revisar)."""
     from app.services.panel_scope_service import certificacion_obra_ids
 
     allowed = certificacion_obra_ids(user)
@@ -2757,23 +3339,131 @@ def panel_certificacion_obras(
         bucket['horas'] += f['horas']
         bucket['companies'].add(f['company_id'])
 
+    # Incluir obras con propuesta pendiente aunque el filtro de fechas no pille fichaje.
+    if desde and hasta:
+        periodos = _meses_en_rango(desde, hasta)
+    else:
+        periodos = [(anio, mes)]
+    pend = (
+        CertificacionPropuesta.query
+        .filter(
+            CertificacionPropuesta.direccion == DIR_SUB,
+            CertificacionPropuesta.estado == 'enviada',
+            db.or_(
+                *[
+                    db.and_(
+                        CertificacionPropuesta.anio == ay,
+                        CertificacionPropuesta.mes == mo,
+                    )
+                    for ay, mo in periodos
+                ]
+            ),
+        )
+        .all()
+    ) if periodos else []
+    for prop in pend:
+        if allowed is not None and prop.obra_id not in allowed:
+            continue
+        bucket = por_obra.setdefault(prop.obra_id, {
+            'horas': Decimal('0.00'),
+            'companies': set(),
+        })
+        bucket['companies'].add(prop.company_id)
+
+    props_mes = CertificacionPropuesta.query.filter_by(anio=anio, mes=mes).all()
+    for prop in props_mes:
+        if allowed is not None and prop.obra_id not in allowed:
+            continue
+        bucket = por_obra.setdefault(prop.obra_id, {
+            'horas': Decimal('0.00'),
+            'companies': set(),
+        })
+        bucket['companies'].add(prop.company_id)
+
+    from app.services.certificacion_avisos_service import pares_pendientes_mes
+    pares_aviso = pares_pendientes_mes(anio=anio, mes=mes, user=user)
+    for cid, oid in pares_aviso:
+        if allowed is not None and oid not in allowed:
+            continue
+        bucket = por_obra.setdefault(oid, {
+            'horas': Decimal('0.00'),
+            'companies': set(),
+        })
+        bucket['companies'].add(cid)
+
     if not por_obra:
         return []
 
     obras = {o.id: o for o in Obra.query.filter(Obra.id.in_(list(por_obra))).all()}
+    props_por_obra: dict[int, list] = defaultdict(list)
+    for prop in props_mes:
+        if prop.obra_id in por_obra:
+            props_por_obra[prop.obra_id].append(prop)
+
     out = []
     for oid, data in por_obra.items():
         obra = obras.get(oid)
         if not obra:
             continue
+        by_company: dict[int, list] = defaultdict(list)
+        for p in props_por_obra.get(oid, []):
+            by_company[p.company_id].append(p)
+        for cid in data['companies']:
+            by_company.setdefault(cid, [])
+
+        cont = {
+            'aceptada': 0, 'recibida': 0, 'enviada': 0, 'rechazada': 0,
+            'borrador': 0, 'sin_movimiento': 0,
+        }
+        for rows in by_company.values():
+            est = _estado_desde_par(rows, vista_subcontrata=False)
+            cont[est] = cont.get(est, 0) + 1
+        estado = 'sin_movimiento'
+        for key in ('recibida', 'rechazada', 'enviada', 'borrador', 'aceptada'):
+            if cont.get(key, 0):
+                estado = key
+                break
+        avisos_emp = [
+            pares_aviso[(cid, oid)]
+            for cid in by_company
+            if (cid, oid) in pares_aviso
+        ]
+        motivo_aviso = None
+        if 'recibida' in avisos_emp:
+            motivo_aviso = 'recibida'
+        elif 'requerida' in avisos_emp:
+            motivo_aviso = 'requerida'
         horas = cuantizar(data['horas']) or Decimal('0.00')
         out.append({
             'obra': obra,
             'horas': horas,
-            'n_empresas': len(data['companies']),
+            'n_empresas': len(by_company) or len(data['companies']),
             'importe': None,  # se calcula en detalle (precios por empresa)
+            'estado': estado,
+            'requiere_accion': (
+                cont.get('recibida', 0) > 0
+                or cont.get('rechazada', 0) > 0
+                or bool(avisos_emp)
+            ),
+            'aviso_pendiente': bool(avisos_emp),
+            'motivo_aviso': motivo_aviso,
+            'n_aviso': len(avisos_emp),
+            'n_recibida': cont.get('recibida', 0),
+            'n_rechazada': cont.get('rechazada', 0),
+            'n_enviada': cont.get('enviada', 0),
+            'n_borrador': cont.get('borrador', 0),
+            'n_aceptada': cont.get('aceptada', 0),
+            'n_sin_movimiento': cont.get('sin_movimiento', 0),
+            'tiene_recibida': cont.get('recibida', 0) > 0,
+            'tiene_rechazada': cont.get('rechazada', 0) > 0,
+            'tiene_requerida': 'requerida' in avisos_emp,
         })
-    out.sort(key=lambda row: (-(row['horas'] or 0), (row['obra'].nombre or '').lower()))
+    out.sort(key=lambda row: (
+        0 if row['estado'] == 'recibida' else (1 if row['estado'] == 'rechazada' else (2 if row.get('aviso_pendiente') else 3)),
+        -(row.get('n_aviso') or 0),
+        -(row['horas'] or 0),
+        (row['obra'].nombre or '').lower(),
+    ))
     return out
 
 
@@ -2850,7 +3540,13 @@ def detalle_certificacion_obra(
                 if got is not None:
                     precio_linea_company[company_id] = got
 
+    from app.services.certificacion_avisos_service import pares_pendientes_mes
+    pares_aviso = pares_pendientes_mes(
+        anio=anio, mes=mes, obra_id=obra_id, user=user,
+    )
+
     company_ids = {f['company_id'] for f in filas} | set(props_por_company)
+    company_ids |= {cid for (cid, oid) in pares_aviso if oid == obra_id}
     user_ids = {f['user_id'] for f in filas}
     users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
     companies = {
@@ -2980,6 +3676,13 @@ def detalle_certificacion_obra(
         emp['horas'] = cuantizar(emp['horas']) or Decimal('0.00')
         emp['importe'] = cuantizar(emp['importe']) or Decimal('0.00')
         emp['estado'] = estados_por_company.get(cid, 'sin_movimiento')
+        motivo_aviso = pares_aviso.get((cid, obra_id))
+        emp['requiere_accion'] = (
+            emp['estado'] in ('recibida', 'rechazada')
+            or motivo_aviso in ('recibida', 'requerida')
+        )
+        emp['aviso_pendiente'] = bool(motivo_aviso)
+        emp['motivo_aviso'] = motivo_aviso
         emp['contrato'] = None
         fechas_emp = []
         for fecha in sorted(emp['fechas'].keys(), reverse=True):
@@ -3008,7 +3711,7 @@ def detalle_certificacion_obra(
         emp['personas'] = personas_emp
         empresas_out.append(emp)
     empresas_out.sort(key=lambda e: (
-        0 if e['estado'] == 'recibida' else (1 if e['estado'] == 'rechazada' else 2),
+        0 if e['estado'] == 'recibida' else (1 if e['estado'] == 'rechazada' else (2 if e.get('aviso_pendiente') else 3)),
         -(e['horas'] or 0),
         (e['company'].nombre or '').lower(),
     ))
@@ -3498,6 +4201,14 @@ def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = Non
 
         return pdf_bytes
     except Exception:
+        try:
+            from flask import current_app
+            current_app.logger.exception(
+                'cert PDF: fallo generando propuesta_id=%s',
+                getattr(prop, 'id', None),
+            )
+        except Exception:
+            pass
         return None
     finally:
         if header_path:
@@ -3505,7 +4216,106 @@ def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = Non
                 os.unlink(header_path)
             except OSError:
                 pass
-# fragment appended to certificacion_service.py
+
+
+_warmup_pdf_inflight: set[tuple] = set()
+_warmup_pdf_lock = threading.Lock()
+
+
+def _warmup_pdf_worker(app, schema_name: str, prop_ids: list[int]) -> None:
+    """Hilo: genera y cachea PDFs de propuestas ya aceptadas/cerradas."""
+    from sqlalchemy import text
+    from app import db, is_safe_schema_name
+    from flask import g
+
+    key = (schema_name, tuple(sorted(prop_ids)))
+    try:
+        with app.app_context():
+            if not is_safe_schema_name(schema_name):
+                return
+            try:
+                db.session.execute(text('SET search_path TO public'))
+                from app.models import Tenant
+                tenant = Tenant.query.filter_by(schema_name=schema_name, is_active=True).first()
+                if tenant:
+                    g.current_tenant = tenant
+                db.session.execute(text(f'SET search_path TO {schema_name}, public'))
+                for pid in prop_ids:
+                    prop = cargar_propuesta_para_pdf(pid)
+                    if not prop or (prop.estado or '') not in ('aceptada', 'cerrada'):
+                        continue
+                    pdf_propuesta(prop, schema_name=schema_name)
+                    app.logger.info(
+                        'cert PDF: warmup listo prop_id=%s estado=%s schema=%s',
+                        pid, prop.estado, schema_name,
+                    )
+            except Exception:
+                app.logger.exception(
+                    'cert PDF: warmup falló schema=%s ids=%s', schema_name, prop_ids,
+                )
+            finally:
+                try:
+                    db.session.remove()
+                except Exception:
+                    pass
+    finally:
+        with _warmup_pdf_lock:
+            _warmup_pdf_inflight.discard(key)
+
+
+def programar_warmup_pdf_certificacion(
+    *prop_ids,
+    schema_name: str | None = None,
+) -> None:
+    """Tras aceptar: precarga el PDF en disco en segundo plano (no bloquea la UI)."""
+    from flask import current_app, g, has_app_context
+
+    ids = []
+    for raw in prop_ids:
+        try:
+            pid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if pid and pid not in ids:
+            ids.append(pid)
+    if not ids or not has_app_context():
+        return
+    if schema_name is None:
+        tenant = getattr(g, 'current_tenant', None)
+        schema_name = getattr(tenant, 'schema_name', None) if tenant else None
+    if not schema_name:
+        return
+    key = (schema_name, tuple(sorted(ids)))
+    with _warmup_pdf_lock:
+        if key in _warmup_pdf_inflight:
+            return
+        _warmup_pdf_inflight.add(key)
+    app = current_app._get_current_object()
+    threading.Thread(
+        target=_warmup_pdf_worker,
+        args=(app, schema_name, ids),
+        daemon=True,
+        name=f'cert-pdf-warmup-{ids[0]}',
+    ).start()
+
+
+def ids_propuestas_pdf_cerradas(
+    prop: CertificacionPropuesta | None,
+) -> list[int]:
+    """Id de la aceptada + hermana cerrada (si existe) para warmup."""
+    if not prop or not prop.id:
+        return []
+    ids = [int(prop.id)]
+    otra = CertificacionPropuesta.query.filter_by(
+        company_id=prop.company_id,
+        obra_id=prop.obra_id,
+        anio=prop.anio,
+        mes=prop.mes,
+        direccion=_otra(prop.direccion),
+    ).first()
+    if otra and otra.id and (otra.estado or '') in ('aceptada', 'cerrada'):
+        ids.append(int(otra.id))
+    return ids
 
 
 def aplicar_ronda_a_borrador(
@@ -3520,6 +4330,8 @@ def aplicar_ronda_a_borrador(
     """
     if prop.estado != 'borrador':
         raise ValueError('Solo se puede copiar sobre un borrador.')
+    if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
+        raise ValueError('Esta obra ya está aceptada en el mes.')
     if not ronda or not ronda.lineas_json:
         return 0
     mapa = mapa_lineas_ronda(ronda)
@@ -3534,14 +4346,27 @@ def aplicar_ronda_a_borrador(
             if row.get('precio_hora') not in (None, '')
             else ln.precio_hora
         )
+        # Subcontrata: solo totales. No heredar inicio/fin del fichaje de la oficina.
+        if prop.direccion == DIR_SUB:
+            _escribir_campos_linea(
+                ln, hora_inicio=None, hora_fin=None, horas=horas, precio=precio,
+            )
+            if row.get('origen_horas') == 'manual_anadido':
+                ln.origen_horas = 'manual_anadido'
+            return
         if hi and hf:
-            guardar_linea(ln, hora_inicio=hi, hora_fin=hf, horas=None, precio=precio)
+            _escribir_campos_linea(ln, hora_inicio=hi, hora_fin=hf, horas=None, precio=precio)
         else:
-            guardar_linea(ln, hora_inicio=None, hora_fin=None, horas=horas, precio=precio)
+            _escribir_campos_linea(ln, hora_inicio=None, hora_fin=None, horas=horas, precio=precio)
         if row.get('origen_horas') == 'manual_anadido':
             ln.origen_horas = 'manual_anadido'
 
-    for ln in list(prop.lineas or []):
+    # Query explícita: la collection lazy puede estar stale tras borrar/recrear filas.
+    lineas_vivas = (
+        CertificacionLinea.query.filter_by(propuesta_id=prop.id).all()
+        if prop.id else list(prop.lineas or [])
+    )
+    for ln in lineas_vivas:
         if user_id is not None and ln.user_id != int(user_id):
             continue
         row = mapa.get((ln.user_id, ln.obra_id, ln.fecha))
@@ -3551,8 +4376,9 @@ def aplicar_ronda_a_borrador(
         n += 1
 
     existentes = {
-        (ln.user_id, ln.obra_id, ln.fecha) for ln in (prop.lineas or [])
+        (ln.user_id, ln.obra_id, ln.fecha) for ln in lineas_vivas
     }
+    nuevas: list[tuple[CertificacionLinea, dict]] = []
     for key, row in mapa.items():
         uid, oid, fecha_d = key
         if user_id is not None and uid != int(user_id):
@@ -3574,11 +4400,14 @@ def aplicar_ronda_a_borrador(
         )
         db.session.add(ln)
         prop.lineas.append(ln)
-        db.session.flush()
-        _aplicar_a_linea(ln, row)
-        if row.get('origen_horas') == 'manual_anadido':
-            ln.origen_horas = 'manual_anadido'
+        nuevas.append((ln, row))
         n += 1
+    if nuevas:
+        db.session.flush()
+        for ln, row in nuevas:
+            _aplicar_a_linea(ln, row)
+            if row.get('origen_horas') == 'manual_anadido':
+                ln.origen_horas = 'manual_anadido'
     return n
 
 
@@ -3605,11 +4434,14 @@ def restablecer_persona_base(
         if not ronda:
             raise ValueError('No hay un envío tuyo anterior para restablecer.')
         return aplicar_ronda_a_borrador(prop, ronda, user_id=uid)
+    if periodo_bloqueado(prop.company_id, prop.anio, prop.mes, prop.obra_id):
+        raise ValueError('Esta obra ya está aceptada en el mes.')
+    mapa = _esqueleto_mapa(prop.company_id, prop.anio, prop.mes, obra_id=prop.obra_id)
     n = 0
     for ln in prop.lineas:
         if ln.user_id != uid:
             continue
-        restablecer_linea_desde_fichaje(ln)
+        _aplicar_fichaje_a_linea(ln, mapa.get((ln.user_id, ln.obra_id, ln.fecha)))
         n += 1
     if not n:
         raise ValueError('No hay filas de ese trabajador.')
@@ -3665,10 +4497,13 @@ def contexto_mesa(
         en_mesa = r.resultado == 'en_mesa'
         # Enviada propia en mesa = misma vista que «Propuesta actual».
         misma = bool(en_mesa and es_propia and modo_prev == 'esperando')
+        et = etiquetas.get(int(r.id), str(r.secuencia or ''))
+        major = str(et).split('.', 1)[0] if et else str(r.secuencia or '')
         return {
             'id': r.id,
             'secuencia': r.secuencia,
-            'etiqueta': etiquetas.get(int(r.id), str(r.secuencia or '')),
+            'etiqueta': et,
+            'major': major,
             'direccion': r.direccion,
             'lado': _lado(r.direccion),
             'es_propia': es_propia,
@@ -3684,6 +4519,35 @@ def contexto_mesa(
 
     baraja = [_carta(r) for r in rondas]
     mesa_carta_seq = next((c['etiqueta'] for c in baraja if c['en_mesa']), None)
+
+    # Historial agrupado por nº mayor (1 / 1.2 → Ronda 1; 2 / 2.2 → Ronda 2).
+    _por_major: dict[str, list[dict]] = {}
+    _orden_major: list[str] = []
+    for c in baraja:
+        mkey = str(c.get('major') or '?')
+        if mkey not in _por_major:
+            _por_major[mkey] = []
+            _orden_major.append(mkey)
+        _por_major[mkey].append(c)
+
+    def _estado_grupo(cartas: list[dict]) -> str:
+        if any(x.get('resultado') == 'en_mesa' for x in cartas):
+            return 'en_curso'
+        if any(x.get('resultado') == 'aceptada' for x in cartas):
+            return 'aceptada'
+        if any(x.get('resultado') == 'rechazada' for x in cartas):
+            return 'rechazada'
+        return 'anterior'
+
+    # Ronda alta arriba. Dentro: base (#3) abajo, correcciones (#3.1…) hacia arriba.
+    baraja_grupos = []
+    for mkey in reversed(_orden_major):
+        cartas = _por_major[mkey]
+        baraja_grupos.append({
+            'major': mkey,
+            'estado': _estado_grupo(cartas),
+            'cartas': list(reversed(cartas)),
+        })
 
     corr_activa = bool(corr) and modo_prev == 'responder'
     ronda_sel = None
@@ -3718,14 +4582,69 @@ def contexto_mesa(
                 p.comentario_rechazo = None
 
     comparar = None
-    if modo_mesa == 'responder' and mesa_ajena is not None:
-        comparar = mesa_ajena
+    comparar_cadena: list[dict] = []
+    etiqueta_borrador = ''
+    # Cabeceras #1 / #1.2 / App / € en TODOS los modos (no solo al responder).
+    vivos = [r for r in rondas if r and (r.resultado or '') != 'retirada' and r.id]
+
+    def _ancla_cadena():
+        if ronda_sel is not None:
+            return ronda_sel
+        if mesa_ajena is not None:
+            return mesa_ajena
+        if mesa is not None:
+            return mesa
+        return vivos[-1] if vivos else None
+
+    ancla = _ancla_cadena()
+    if ancla is not None:
+        comparar = ancla
+        comparar_cadena = cadena_rondas_negociacion(rondas, ancla, etiquetas)
+
+    # Columna del borrador editable (#1, #1.3…). También tras rechazo mirando historial
+    # (mesa vacía + borrador) para etiquetar «Nueva #2» en la baraja.
+    if (
+        propia
+        and (propia.estado or '') == 'borrador'
+        and not bloqueado
+        and (
+            (modo_mesa in ('preparar', 'responder') and ronda_sel is None)
+            or (mesa is None and modo_prev == 'preparar')
+        )
+    ):
+        # Si miras una carta del historial, la etiqueta del próximo envío se calcula
+        # desde la última ronda viva (no desde la carta que estás leyendo).
+        ancla_borrador = ancla if ronda_sel is None else (vivos[-1] if vivos else None)
+        cadena_borrador = (
+            comparar_cadena
+            if ronda_sel is None
+            else (
+                cadena_rondas_negociacion(rondas, ancla_borrador, etiquetas)
+                if ancla_borrador is not None else []
+            )
+        )
+        ultima_et = (
+            cadena_borrador[-1]['etiqueta']
+            if cadena_borrador
+            else (etiqueta_ronda(ancla_borrador, etiquetas) if ancla_borrador else '')
+        )
+        if ancla_borrador is not None and (ancla_borrador.resultado or '') == 'rechazada':
+            # Tras rechazo empieza negociación nueva: 1 → 2, 3.2 → 4…
+            try:
+                etiqueta_borrador = str(int(str(ultima_et).split('.', 1)[0]) + 1)
+            except (TypeError, ValueError):
+                etiqueta_borrador = siguiente_etiqueta_propuesta(ultima_et)
+        elif ultima_et:
+            etiqueta_borrador = siguiente_etiqueta_propuesta(ultima_et)
+        else:
+            etiqueta_borrador = '1'
 
     if modo_prev == 'esperando':
         turno = 'esperando'
     elif modo_prev == 'responder':
         turno = 'te_toca'
-    elif modo_mesa == 'preparar':
+    elif modo_prev == 'preparar':
+        # Tras un rechazo (mesa vacía) sigue pudiendo enviar aunque mire historial.
         turno = 'puedes_enviar'
     elif modo_mesa == 'cerrada':
         turno = 'cerrada'
@@ -3734,6 +4653,7 @@ def contexto_mesa(
 
     chat_msgs = listar_chat(company.id, obra.id, anio, mes)
     chat_ui = []
+    _re_hash = re.compile(r'#([\d.]+)')
     for m in chat_msgs:
         if m.direccion == 'sistema':
             lado = ''
@@ -3747,20 +4667,93 @@ def contexto_mesa(
         autor_nombre = ''
         if m.autor:
             autor_nombre = f'{(m.autor.name or "").strip()} {(m.autor.lastname or "").strip()}'.strip()
+        tipo_m = (m.tipo or '').strip() or 'nota'
+        texto_ui = _texto_chat_ui(m.texto or '', autor=autor_nombre, tipo=tipo_m)
+        es_evento = tipo_m in ('envio', 'aceptacion', 'desenvio')
+        es_rechazo = tipo_m == 'rechazo'
+        es_nota = tipo_m == 'nota'
+        # Línea corta para divisores de sistema (sin caja).
+        linea = ''
+        if es_evento:
+            quien = autor_nombre or lado or ''
+            hora = m.created_at.strftime('%H:%M') if m.created_at else ''
+            m_hash = _re_hash.search(m.texto or '') or _re_hash.search(texto_ui or '')
+            etiq = m_hash.group(1) if m_hash else ''
+            if tipo_m == 'envio':
+                accion = f'envió #{etiq}' if etiq else 'envió la propuesta'
+            elif tipo_m == 'aceptacion':
+                accion = f'aceptó #{etiq}' if etiq else 'aceptó la propuesta'
+            else:
+                accion = 'retiró la propuesta'
+            partes = [p for p in (quien, accion) if p]
+            nucleo = ' '.join(partes) if partes else accion
+            linea = f'{nucleo} ({hora})' if hora else nucleo
+        elif es_rechazo:
+            # Cuerpo = solo el motivo (quita el prefijo «Ha rechazado…»).
+            motivo = texto_ui or ''
+            for pref in (
+                'Ha rechazado la propuesta:',
+                'ha rechazado la propuesta:',
+                'Rechazó la propuesta:',
+            ):
+                if motivo.lower().startswith(pref.lower()):
+                    motivo = motivo[len(pref):].strip()
+                    break
+            texto_ui = motivo or texto_ui
         chat_ui.append({
             'id': m.id,
-            'tipo': m.tipo,
-            'texto': _texto_chat_ui(m.texto or '', autor=autor_nombre, tipo=m.tipo or ''),
+            'tipo': tipo_m,
+            'texto': texto_ui,
             'cuando': m.created_at,
             'lado': lado,
             'autor': autor_nombre,
             'es_mio': es_mio,
-            'es_sistema': m.tipo != 'nota',
+            'es_sistema': not es_nota,
+            'es_evento': es_evento,
+            'es_rechazo': es_rechazo,
+            'es_nota': es_nota,
+            'linea': linea,
         })
+
+    # Solo oficina (SaaS): reabrir mes cerrado (aceptada), o restaurar una carta
+    # rechazada a la mesa. Tras un rechazo normal ambos ya tienen borrador nuevo:
+    # no hace falta reabrir para «abrir propuesta nueva».
+    puede_reabrir = False
+    if not vista_subcontrata and mesa is None:
+        if bloqueado:
+            puede_reabrir = True
+        elif any((r.resultado or '') == 'aceptada' for r in rondas):
+            puede_reabrir = True
+        elif (
+            any((r.resultado or '') == 'rechazada' for r in rondas)
+            and not (
+                propia
+                and (propia.estado or '') == 'borrador'
+                and (not ajena or (ajena.estado or '') in ('borrador', 'cerrada'))
+            )
+        ):
+            # Rechazo «atascado» (alguien no quedó en borrador): sí permite restaurar.
+            puede_reabrir = True
+
+    # Propuesta de la subcontrata (la que debe enviar normalmente).
+    prop_sub = propia if vista_subcontrata else ajena
+    cert_requerida = bool(
+        prop_sub
+        and getattr(prop_sub, 'requerida_at', None)
+        and (prop_sub.estado or '') == 'borrador'
+    )
+    puede_requerir = (
+        not vista_subcontrata
+        and not bloqueado
+        and modo_mesa == 'preparar'
+        and prop_sub is not None
+        and (prop_sub.estado or '') == 'borrador'
+    )
 
     return {
         'rondas': rondas,
         'baraja': baraja,
+        'baraja_grupos': baraja_grupos,
         'mesa': mesa,
         'mesa_carta': _carta(mesa) if mesa else None,
         'mesa_carta_seq': mesa_carta_seq,
@@ -3775,14 +4768,25 @@ def contexto_mesa(
         'corr_activa': corr_activa,
         'modo_mesa': modo_mesa,
         'turno': turno,
+        'puede_reabrir': puede_reabrir,
+        'puede_requerir': puede_requerir,
+        'cert_requerida': cert_requerida,
+        'cert_requerida_at': getattr(prop_sub, 'requerida_at', None) if prop_sub else None,
         'comparar_ronda': comparar,
+        'comparar_cadena': comparar_cadena,
+        'etiqueta_borrador': etiqueta_borrador,
         'mapa_comparar': mapa_lineas_ronda(comparar),
         'totales_comparar': totales_comparar_ronda(comparar),
         'lado_propio': _lado(propia_dir),
         'lado_ajeno': _lado(_otra(propia_dir)),
         'chat_mensajes': chat_ui,
+        # Oficina (DIR_EMP) sí muestra inicio/fin del envío; subcontrata solo totales.
+        'hist_muestra_tramo': bool(
+            ronda_sel and (ronda_sel.direccion or '') == DIR_EMP
+        ),
         'grupos_hist': agrupar_snapshot(
             ronda_sel.lineas_json if ronda_sel else None,
             modo='fecha' if modo_vista == 'fecha' else 'persona',
+            obra_id=obra.id if obra else None,
         ),
     }
