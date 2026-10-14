@@ -1,11 +1,11 @@
-"""Suplantación de sesión por administrador (probar la app como otro usuario)."""
+"""Suplantación de sesión («Entrar como») para probar la app como otro usuario."""
 from __future__ import annotations
 
 from flask import session
 from flask_login import current_user, login_user
 
 from app.models import ROLE_ADMIN, User
-from app.services.permission_service import is_admin
+from app.services.permission_service import user_can
 
 SESSION_IMPERSONATOR_KEY = 'impersonator_user_id'
 SESSION_IMPERSONATED_USER_KEY = 'impersonated_user_id'
@@ -74,10 +74,10 @@ def clear_remember_cookie(response):
 
 
 def admin_puede_impersonar(actor) -> bool:
-    if not is_admin(actor):
+    """True si el actor tiene el permiso «entrar_como» y no hay otra suplantación."""
+    if not user_can(actor, 'entrar_como', 'r'):
         return False
-    # Entrada de soporte desde /superadmin (superadmin_impersonation) sigue siendo
-    # un admin del tenant: debe poder usar «entrar como» como en login normal.
+    # No anidar: si ya estás dentro de otra sesión, no abrir una segunda.
     if impersonacion_activa():
         return False
     return True

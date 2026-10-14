@@ -17,6 +17,13 @@
 {%- endif -%}
 {%- endmacro %}
 
+{# SaaS: su propuesta vs App (≥ verde, < rojo). Subcontrata: sin color. #}
+{% macro peer_vs_plat_class(valor, plat) -%}
+{%- if not vista_subcontrata and valor is not none and valor != '' and plat is not none -%}
+{%- if (valor|float) >= (plat|float) %} is-gain{% else %} is-loss{% endif -%}
+{%- endif -%}
+{%- endmacro %}
+
 {% set resultado_txt = {
   'en_mesa': _('Actual'),
   'sustituida': _('Anterior'),
@@ -24,7 +31,8 @@
   'aceptada': _('Aceptada'),
   'retirada': _('Corregida'),
 } %}
-{% set mesa_carta_seq = mesa_carta_seq if mesa_carta_seq is defined else (mesa_carta.secuencia if mesa_carta else none) %}
+{% set mesa_carta_seq = mesa_carta_seq if mesa_carta_seq is defined else (mesa_carta.etiqueta if mesa_carta else (mesa_carta.secuencia if mesa_carta else none)) %}
+{% set ronda_sel_etiqueta = ronda_sel_etiqueta if ronda_sel_etiqueta is defined else (ronda_sel.secuencia if ronda_sel else none) %}
 
 {% set chat_mensajes = chat_mensajes if chat_mensajes is defined else [] %}
 <div class="cert-mesa-layout">
@@ -63,7 +71,7 @@
       <i class="fas fa-exclamation-circle cert-deck-alert" title="{{ _('Requiere tu respuesta') }}" aria-hidden="true"></i>
       <span class="sr-only">{{ _('Requiere tu respuesta') }}</span>
       {% endif %}
-      <em>#{{ c.secuencia }} · {{ resultado_txt.get(c.resultado, c.resultado) }}</em>
+      <em>#{{ c.etiqueta or c.secuencia }} · {{ resultado_txt.get(c.resultado, c.resultado) }}</em>
       <strong>{{ c.lado }}</strong>
       <small>
         {% if c.enviada_at %}{{ c.enviada_at.strftime('%d/%m %H:%M') }}{% endif %}
@@ -80,7 +88,7 @@
     {% if viendo_historial and ronda_sel %}
     <div class="cert-mesa-banner {% if ronda_sel.resultado == 'rechazada' %}is-bad{% elif ronda_sel.resultado == 'aceptada' %}is-ok{% else %}is-muted{% endif %}">
       <div>
-        <strong>{{ _('Historial') }} · #{{ ronda_sel.secuencia }}</strong>
+        <strong>{{ _('Historial') }} · #{{ ronda_sel_etiqueta }}</strong>
         <span>
           {{ _('Enviada por') }} {{ lado_propio if (propia and ronda_sel.direccion == propia.direccion) else lado_ajeno }}
           {% if ronda_sel.enviada_at %} · {{ ronda_sel.enviada_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
@@ -95,7 +103,7 @@
     <div class="cert-panel cert-panel--{% if ronda_sel.resultado == 'rechazada' %}bad{% elif ronda_sel.resultado == 'aceptada' %}ok{% else %}muted{% endif %}">
       <div class="cert-panel-head">
         <div>
-          <h2>{{ _('Propuesta') }} #{{ ronda_sel.secuencia }}</h2>
+          <h2>{{ _('Propuesta') }} #{{ ronda_sel_etiqueta }}</h2>
           <p>{{ _('Solo lectura · así se envió en su momento') }}</p>
         </div>
         <span class="cert-pill {{ estado_cls.get(ronda_sel.resultado if ronda_sel.resultado != 'en_mesa' else 'enviada', 'is-muted') }}">
@@ -213,7 +221,9 @@
     </div>
 
     <div class="cert-panel cert-panel--{{ estado_cls.get(propia_estado_ui, 'is-muted')|replace('is-', '') }}">
-      <form method="post" id="form-propia" class="cert-panel-form {% if modo_mesa == 'responder' %}js-mesa-responder{% endif %}">
+      <form method="post" id="form-propia" class="cert-panel-form {% if modo_mesa == 'responder' %}js-mesa-responder{% endif %}"
+            data-vista-sub="{{ '1' if vista_subcontrata else '0' }}"
+            data-editable="{{ '1' if editable else '0' }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="anio" value="{{ anio }}">
         <input type="hidden" name="mes" value="{{ mes }}">
@@ -274,13 +284,20 @@
         {% set tc = totales_comparar if totales_comparar is defined else {} %}
         {% set cmp_persona = tc.por_persona if tc else {} %}
         {% set cmp_pf = tc.por_persona_fecha if tc else {} %}
-        {% if grupos_propia %}
+        {% set puede_anadir = editable and operarios_empresa is defined and operarios_empresa and user_can(current_user, 'certificacion', 'w') and modo_vista == 'persona' %}
+        {% set uids_en_propuesta = grupos_propia|map(attribute='persona_user_id')|list if grupos_propia else [] %}
+        {% if grupos_propia or puede_anadir %}
         <div class="cert-works">
           {% for obra_g in grupos_propia %}
           {% set cmp_p = cmp_persona.get(obra_g.persona_user_id) if obra_g.persona_user_id and cmp_persona else none %}
           <details class="cert-work" data-user-id="{{ obra_g.persona_user_id or '' }}">
             <summary>
-              <span class="cert-work-name">{{ obra_g.obra.nombre if obra_g.obra else _('Obra') }}</span>
+              <span class="cert-work-name">
+                {{ obra_g.obra.nombre if obra_g.obra else _('Obra') }}
+                {% if not vista_subcontrata and obra_g.sin_fichaje %}
+                <span class="cert-sin-fichaje" title="{{ _('Hay días añadidos sin fichaje en la App') }}">*</span>
+                {% endif %}
+              </span>
               {% if modo_vista == 'persona' and editable and obra_g.persona_user_id %}
               <span class="cert-work-tools {% if not vista_subcontrata %}cert-work-tools--plat{% endif %}" onclick="event.stopPropagation()">
                 <span class="cert-work-col cert-work-col--horas">
@@ -298,11 +315,11 @@
                 </span>
                 {% endif %}
                 <span class="cert-work-col cert-work-col--horas-cmp">
-                  {% if cmp_p %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
+                  {% if cmp_p %}<span class="cert-diff{{ peer_vs_plat_class(cmp_p.horas, obra_g.plat_horas) }}" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
                 </span>
                 <span class="cert-work-col cert-work-col--imp js-work-imp" title="{{ _('Importe total de este trabajador') }}">{{ obra_g.importe }} €</span>
                 <span class="cert-work-col cert-work-col--imp-cmp">
-                  {% if cmp_p and cmp_p.importe is not none %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.importe }} €)</span>{% endif %}
+                  {% if cmp_p and cmp_p.importe is not none %}<span class="cert-diff{{ peer_vs_plat_class(cmp_p.importe, obra_g.plat_importe) }}" title="{{ lado_ajeno }}">({{ cmp_p.importe }} €)</span>{% endif %}
                 </span>
                 <span class="cert-work-col cert-work-col--btns">
                   {% if mesa_carta and not mesa_carta.es_propia %}
@@ -330,11 +347,11 @@
                 </span>
                 {% endif %}
                 <span class="cert-work-col cert-work-col--horas-cmp">
-                  {% if cmp_p %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
+                  {% if cmp_p %}<span class="cert-diff{{ peer_vs_plat_class(cmp_p.horas, obra_g.plat_horas) }}" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
                 </span>
                 <span class="cert-work-col cert-work-col--imp">{{ obra_g.importe }} €</span>
                 <span class="cert-work-col cert-work-col--imp-cmp">
-                  {% if cmp_p and cmp_p.importe is not none %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.importe }} €)</span>{% endif %}
+                  {% if cmp_p and cmp_p.importe is not none %}<span class="cert-diff{{ peer_vs_plat_class(cmp_p.importe, obra_g.plat_importe) }}" title="{{ lado_ajeno }}">({{ cmp_p.importe }} €)</span>{% endif %}
                 </span>
                 <span class="cert-work-col cert-work-col--btns" aria-hidden="true"></span>
               </span>
@@ -343,16 +360,21 @@
             <div class="cert-days">
               {% for fecha in obra_g.fechas %}
               {% set cmp_d = cmp_pf.get((obra_g.persona_user_id, fecha.fecha)) if obra_g.persona_user_id and cmp_pf else none %}
-              <details class="cert-day">
+              <details class="cert-day {% if not vista_subcontrata and fecha.sin_fichaje %}is-sin-fichaje{% endif %}">
                 <summary>
-                  <span>{{ fecha.fecha.strftime('%d/%m/%Y') }}</span>
+                  <span>
+                    {{ fecha.fecha.strftime('%d/%m/%Y') }}
+                    {% if not vista_subcontrata and fecha.sin_fichaje %}
+                    <span class="cert-sin-fichaje" title="{{ _('Añadido sin fichaje en la App') }}">*</span>
+                    {% endif %}
+                  </span>
                   <span class="js-day-stats cert-cmp-pair">
                     <span>{{ fecha.horas }} h · {{ fecha.importe }} €</span>
                     {% if not vista_subcontrata and fecha.plat_horas is not none %}
                     <span class="cert-plat" title="{{ _('Horas del fichaje real en la plataforma') }}">{{ fecha.plat_horas }} h</span>
                     {% endif %}
                     {% if cmp_d %}
-                    <span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_d.horas }} h · {{ cmp_d.importe }} €)</span>
+                    <span class="cert-diff{{ peer_vs_plat_class(cmp_d.horas, fecha.plat_horas) }}" title="{{ lado_ajeno }}">({{ cmp_d.horas }} h · {{ cmp_d.importe }} €)</span>
                     {% endif %}
                   </span>
                 </summary>
@@ -386,7 +408,11 @@
                         {% if not vista_subcontrata %}
                           {% if ln.estado_fichaje == 'borrador' %}<span class="cert-flag">{{ _('Borrador Odoo') }}</span>{% endif %}
                           {% if ln.estado_fichaje == 'facturado' %}<span class="cert-flag is-ok">{{ _('Facturado') }}</span>{% endif %}
-                          {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}<span class="cert-flag js-editado-flag">{{ _('Editado') }}</span>{% endif %}
+                          {% if ln.origen_horas == 'manual_anadido' %}
+                          <span class="cert-flag is-warn js-editado-flag" title="{{ _('No hay fichaje en la App ese día; se añadió a mano en la propuesta') }}">{{ _('Sin fichaje') }}</span>
+                          {% elif ln.origen_horas and ln.origen_horas.startswith('manual') %}
+                          <span class="cert-flag js-editado-flag">{{ _('Editado') }}</span>
+                          {% endif %}
                           {% if ln.solape %}<span class="cert-flag is-bad">{{ _('Solape') }}</span>{% endif %}
                         {% endif %}
                         {% if ln.id in falta_ids %}
@@ -399,7 +425,7 @@
                       <span class="cert-field-row">
                         <input type="time" name="l{{ ln.id }}_inicio" value="{{ ln.hora_inicio.strftime('%H:%M') if ln.hora_inicio else '' }}" {% if not editable %}disabled{% endif %} class="js-inicio">
                         {% if prev and prev.hora_inicio %}
-                        <span class="cert-diff {% if not ln.hora_inicio or ln.hora_inicio.strftime('%H:%M') != prev.hora_inicio %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.hora_inicio }})</span>
+                        <span class="cert-diff" title="{{ lado_ajeno }}">({{ prev.hora_inicio }})</span>
                         {% endif %}
                       </span>
                     </label>
@@ -408,7 +434,7 @@
                       <span class="cert-field-row">
                         <input type="time" name="l{{ ln.id }}_fin" value="{{ ln.hora_fin.strftime('%H:%M') if ln.hora_fin else '' }}" {% if not editable %}disabled{% endif %} class="js-fin">
                         {% if prev and prev.hora_fin %}
-                        <span class="cert-diff {% if not ln.hora_fin or ln.hora_fin.strftime('%H:%M') != prev.hora_fin %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.hora_fin }})</span>
+                        <span class="cert-diff" title="{{ lado_ajeno }}">({{ prev.hora_fin }})</span>
                         {% endif %}
                       </span>
                     </label>
@@ -417,7 +443,7 @@
                       <span class="cert-field-row">
                         <input type="number" step="0.01" name="l{{ ln.id }}_horas" value="{{ ln.horas if ln.horas is not none else '' }}" {% if not editable %}disabled{% endif %} class="js-horas" placeholder="0">
                         {% if prev and prev.horas is not none and prev.horas != '' %}
-                        <span class="cert-diff {% if ln.horas is none or (ln.horas|string) != (prev.horas|string) %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.horas }})</span>
+                        <span class="cert-diff{{ peer_vs_plat_class(prev.horas, item.plat_horas) }}" title="{{ lado_ajeno }}">({{ prev.horas }})</span>
                         {% endif %}
                       </span>
                     </label>
@@ -433,14 +459,14 @@
                         <input type="number" step="0.01" name="l{{ ln.id }}_precio" value="{{ precio_fila }}" {% if not editable %}disabled{% endif %} class="js-precio">
                         {% endif %}
                         {% if prev and prev.precio_hora is not none and prev.precio_hora != '' %}
-                        <span class="cert-diff {% if precio_fila is none or (precio_fila|string) != (prev.precio_hora|string) %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.precio_hora }})</span>
+                        <span class="cert-diff" title="{{ lado_ajeno }}">({{ prev.precio_hora }})</span>
                         {% endif %}
                       </span>
                     </label>
                     <div class="cert-importe js-importe cert-field-row">
                       <span>{{ item.importe }} €</span>
                       {% if prev and prev.importe is not none and prev.importe != '' %}
-                      <span class="cert-diff {% if item.importe is none or (item.importe|string) != (prev.importe|string) %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.importe }} €)</span>
+                      <span class="cert-diff{{ peer_vs_plat_class(prev.importe, item.plat_importe) }}" title="{{ lado_ajeno }}">({{ prev.importe }} €)</span>
                       {% endif %}
                     </div>
                     {% if not vista_subcontrata %}
@@ -467,9 +493,47 @@
                 </div>
               </details>
               {% endfor %}
+              {% if puede_anadir and obra_g.persona_user_id %}
+              <details class="cert-add-inline" onclick="if (!event.target.closest('.js-anadir-dia')) event.stopPropagation()">
+                <summary class="cert-add-btn">
+                  <i class="fas fa-plus" aria-hidden="true"></i>
+                  <span>{{ _('Añadir día') }}</span>
+                </summary>
+                <div class="cert-add-fields">
+                  <input type="date" name="anadir_fecha_{{ obra_g.persona_user_id }}"
+                         class="js-anadir-fecha"
+                         min="{{ cert_mes_desde }}" max="{{ cert_mes_hasta }}"
+                         aria-label="{{ _('Fecha') }}">
+                  <button type="button" class="btn-admin btn-admin-ghost js-anadir-dia"
+                          data-user-id="{{ obra_g.persona_user_id }}">{{ _('Añadir') }}</button>
+                </div>
+              </details>
+              {% endif %}
             </div>
           </details>
           {% endfor %}
+          {% if puede_anadir %}
+          <details class="cert-add-inline cert-add-inline--work js-anadir-trabajador" onclick="if (!event.target.closest('.js-anadir-dia')) event.stopPropagation()">
+            <summary class="cert-add-btn">
+              <i class="fas fa-plus" aria-hidden="true"></i>
+              <span>{{ _('Añadir trabajador') }}</span>
+            </summary>
+            <div class="cert-add-fields">
+              <select name="anadir_user_id" class="js-anadir-user" aria-label="{{ _('Trabajador') }}">
+                <option value="">{{ _('Elegir trabajador…') }}</option>
+                {% for op in operarios_empresa %}
+                {% if op.id not in uids_en_propuesta %}
+                <option value="{{ op.id }}">{{ op.name }} {{ op.lastname }}</option>
+                {% endif %}
+                {% endfor %}
+              </select>
+              <input type="date" name="anadir_fecha" class="js-anadir-fecha"
+                     min="{{ cert_mes_desde }}" max="{{ cert_mes_hasta }}"
+                     aria-label="{{ _('Fecha') }}">
+              <button type="button" class="btn-admin btn-admin-ghost js-anadir-dia">{{ _('Añadir') }}</button>
+            </div>
+          </details>
+          {% endif %}
         </div>
         {% else %}
         <div class="cert-empty">{{ _('No hay fichajes de su personal en este mes.') }}</div>
@@ -478,23 +542,15 @@
         <footer class="cert-panel-foot">
           {% if not vista_subcontrata and delta_propuesta_plat %}
           {% set dpp = delta_propuesta_plat %}
-          {# Más horas que la App = sales perdiendo (rojo). Menos = saliendo ganando (verde). #}
-          <div class="cert-delta-plat {% if dpp.delta_horas > 0 %}is-up{% elif dpp.delta_horas < 0 %}is-down{% endif %}"
-               title="{{ _('Diferencia de horas de la propuesta respecto al fichaje real') }}">
-            <strong>
-              {% if dpp.etiqueta == 'su_propuesta' %}
-                {{ _('Su propuesta vs plataforma') }}
-              {% else %}
-                {{ _('Propuesta vs plataforma') }}
-              {% endif %}
+          {# SaaS: propuesta > App = Soltec gana (verde). Menos = pierde (rojo). #}
+          <div class="cert-delta-plat {% if dpp.soltec_pierde %}is-up{% elif dpp.soltec_gana %}is-down{% endif %}"
+               title="{{ _('Para Soltec: más que el fichaje de la App es ganar; menos es perder') }}">
+            <strong class="cert-delta-plat-frase">
+              {{ dpp.frase or (_('Su propuesta vs plataforma') if dpp.etiqueta == 'su_propuesta' else _('Propuesta vs plataforma')) }}
             </strong>
-            <span class="cert-delta-plat-main">
-              {% if dpp.delta_horas > 0 %}+{% endif %}{{ dpp.delta_horas }} h
-              {% if dpp.pct_horas is not none %}({% if dpp.pct_horas > 0 %}+{% endif %}{{ dpp.pct_horas }}%){% endif %}
-            </span>
             <span class="cert-delta-plat-base">
-              {{ _('Plataforma') }}: {{ dpp.horas_plataforma }} h
-              · {{ _('Propuesta') }}: {{ dpp.horas_propuesto }} h
+              {{ _('Plataforma') }}: {{ dpp.horas_plataforma }} h · {{ dpp.importe_plataforma }} €
+              · {{ _('Propuesta') }}: {{ dpp.horas_propuesto }} h · {{ dpp.importe_propuesto }} €
             </span>
           </div>
           {% endif %}
@@ -506,7 +562,7 @@
               <span class="cert-plat" title="{{ _('Horas del fichaje real en la plataforma') }}">{{ totales_plataforma.horas }} h</span>
               {% endif %}
               {% if tc and (tc.horas or tc.importe) %}
-              <span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ tc.horas }} h · {{ tc.importe }} €)</span>
+              <span class="cert-diff{{ peer_vs_plat_class(tc.horas, totales_plataforma.horas if totales_plataforma is defined else none) }}" title="{{ lado_ajeno }}">({{ tc.horas }} h · {{ tc.importe }} €)</span>
               {% endif %}
             </strong>
           </div>

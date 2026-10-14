@@ -860,9 +860,9 @@ def resolver_solicitud_vehiculo(solicitud_id):
     
 @admin_bp.route('/impersonate/<int:user_id>', methods=['POST'])
 @login_required
-@roles_required(ROLE_ADMIN)
+@permission_required('entrar_como', 'r')
 def impersonate_user(user_id):
-    """Entrar en la app como otro usuario (solo administrador)."""
+    """Entrar en la app como otro usuario (permiso «Entrar como»)."""
     from app.services.impersonation_service import iniciar_impersonacion
     from app.utils import register_log
 

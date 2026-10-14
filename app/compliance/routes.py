@@ -1,6 +1,7 @@
 """Documentación, certificación y contratación para la empresa del SaaS."""
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -29,21 +30,25 @@ from app.services.certificacion_service import (
     agrupar,
     agrupar_por_fecha,
     agrupar_por_persona,
+    anadir_dia_manual,
     aplicar_precio_borrador,
     aplicar_precio_obra_borrador,
     aplicar_ronda_a_borrador,
+    operarios_empresa_certificacion,
     reaplicar_precios_empresa_borrador,
     reaplicar_precios_obra_borrador,
     contexto_mesa,
     contrato_asistencia,
     publicar_chat,
-    sembrar_borrador_desde_ronda_propia,
+    sembrar_borrador_desde_mesa,
     ronda_en_mesa,
     restablecer_persona_base,
     contar_borradores_odoo,
     delta_vs_plataforma,
     enriquecer_grupos_plataforma,
     enriquecer_grupos_ref_app,
+    frase_delta_plataforma,
+    marcar_sin_fichaje_grupos,
     mapa_fichaje_plataforma,
     mapa_lineas_propuesta,
     totales_plataforma_grupos,
@@ -894,7 +899,8 @@ def certificacion_empresa_obra(company_id, obra_id):
             direccion_propia=DIR_EMP,
             endpoint='compliance.certificacion_empresa_obra',
         )
-    sub, emp = sincronizar(company, anio, mes, obra_id)
+    # Sin refresco Odoo de precios en cada GET (igual que subcontrata): si no, la ficha tarda mucho.
+    sub, emp = sincronizar(company, anio, mes, obra_id, refrescar_precios=False)
     db.session.commit()
     return _render_cert(
         company, anio, mes, obra=obra, propia=emp, ajena=sub, vista_subcontrata=False,
@@ -951,7 +957,8 @@ def _render_cert(
     if modo not in ('fecha', 'persona'):
         modo = 'persona'
 
-    # Al responder: si el borrador está vacío, rellena con lo que tú enviaste antes.
+    # Al responder: el borrador debe mostrar lo que la otra parte envió
+    # (no ceros / fichaje), para poder aceptar o modificar sin «Copiar» previo.
     propia_dir = DIR_SUB if vista_subcontrata else DIR_EMP
     mesa_ahora = ronda_en_mesa(company.id, obra.id, anio, mes)
     if (
@@ -960,7 +967,7 @@ def _render_cert(
         and mesa_ahora
         and mesa_ahora.direccion != propia_dir
     ):
-        if sembrar_borrador_desde_ronda_propia(propia, propia_dir=propia_dir):
+        if sembrar_borrador_desde_mesa(propia, mesa_ahora):
             db.session.flush()
 
     if modo == 'persona':
@@ -1107,7 +1114,13 @@ def _render_cert(
         if prop_h is None:
             prop_h = tot_propia.get('horas') or 0
             prop_i = tot_propia.get('importe') or 0
-            etiqueta = 'propuesta'
+            est = (propia.estado if propia else '') or ''
+            if mesa_ctx.get('modo_mesa') == 'cerrada' or est == 'aceptada':
+                etiqueta = 'aceptada'
+            elif est == 'enviada':
+                etiqueta = 'enviada'
+            else:
+                etiqueta = 'propuesta'
         if _tiene_volumen(prop_h, prop_i) or _tiene_volumen(
             totales_plat.get('horas'), totales_plat.get('importe'),
         ):
@@ -1118,7 +1131,26 @@ def _render_cert(
                 plataforma_importe=totales_plat['importe'],
             )
             if delta_propuesta_plat is not None:
+                # Vista SaaS: más que la App = Soltec gana; menos = pierde.
+                senal = (
+                    delta_propuesta_plat.get('delta_importe')
+                    if delta_propuesta_plat.get('pct_importe') is not None
+                    else delta_propuesta_plat.get('delta_horas')
+                )
+                try:
+                    senal_f = float(senal or 0)
+                except (TypeError, ValueError):
+                    senal_f = 0.0
                 delta_propuesta_plat['etiqueta'] = etiqueta
+                # Igual o más que la App = verde; menos = rojo.
+                delta_propuesta_plat['soltec_pierde'] = senal_f < -0.05
+                delta_propuesta_plat['soltec_gana'] = not delta_propuesta_plat['soltec_pierde']
+                delta_propuesta_plat['frase'] = frase_delta_plataforma(
+                    delta_propuesta_plat,
+                    etiqueta=etiqueta,
+                    nombre_empresa=getattr(company, 'nombre', None),
+                )
+        marcar_sin_fichaje_grupos(g_propia)
 
     return render_template(
         'compliance/certificacion.html',
@@ -1160,6 +1192,9 @@ def _render_cert(
             anio_ref=anio, mes_ref=mes,
             vista_subcontrata=vista_subcontrata,
         ),
+        operarios_empresa=operarios_empresa_certificacion(company.id),
+        cert_mes_desde=date(anio, mes, 1).isoformat(),
+        cert_mes_hasta=date(anio, mes, monthrange(anio, mes)[1]).isoformat(),
         actividad=resumen_actividad(
             propia, ajena,
             bloqueado=bloqueado,
@@ -1208,7 +1243,10 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
         or restablecer_id
         or copiar_persona
         or restablecer_persona
-        or accion in ('prorrata_persona', 'guardar', 'copiar_mesa', 'nota_chat')
+        or request.form.get('anadir_dia_para')
+        or accion in (
+            'prorrata_persona', 'guardar', 'copiar_mesa', 'nota_chat', 'anadir_dia',
+        )
     )
     if fast:
         propia = CertificacionPropuesta.query.filter_by(
@@ -1317,14 +1355,65 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                     'importe_total': str(cuantizar(ti) or Decimal('0.00')),
                     'lineas': payload_lineas,
                 })
-            flash(
-                translate(
-                    'Total de {h} h repartido en {n} días.',
-                    h=horas_total,
-                    n=n,
-                ),
-                'success',
+            # Sin flash: el total se guarda al salir del campo; no molestar con aviso.
+            return _cert_redirect(
+                endpoint, company, anio, mes, obra_id,
+                desde=desde_q, hasta=hasta_q, modo=modo_q or 'persona',
             )
+        if accion == 'anadir_dia' or request.form.get('anadir_dia_para'):
+            raw_uid = request.form.get('anadir_dia_para') or request.form.get('anadir_user_id')
+            try:
+                uid = int(raw_uid or 0)
+            except (TypeError, ValueError):
+                raise ValueError(translate('Persona no válida.'))
+            raw_fecha = (
+                request.form.get(f'anadir_fecha_{uid}')
+                or request.form.get('anadir_fecha')
+                or ''
+            ).strip()
+            try:
+                fecha_add = date.fromisoformat(raw_fecha)
+            except ValueError:
+                raise ValueError(translate('Fecha no válida.'))
+            ln = anadir_dia_manual(
+                propia,
+                user_id=uid,
+                fecha=fecha_add,
+                horas=(
+                    request.form.get(f'anadir_horas_{uid}')
+                    or request.form.get('anadir_horas')
+                ),
+                company=company,
+                obra=obra,
+            )
+            db.session.commit()
+            if _cert_wants_json():
+                from flask import jsonify
+                from app.services.compliance_rules import importe_linea
+                user = ln.user
+                nombre = ''
+                if user:
+                    nombre = f'{(user.name or "").strip()} {(user.lastname or "").strip()}'.strip()
+                imp = importe_linea(ln.horas, ln.precio_hora)
+                return jsonify({
+                    'ok': True,
+                    'saved': True,
+                    'nuevo_trabajador': not any(
+                        x.user_id == uid and x.id != ln.id
+                        for x in (propia.lineas or [])
+                    ),
+                    'user_id': uid,
+                    'user_name': nombre,
+                    'fecha': ln.fecha.isoformat(),
+                    'fecha_txt': ln.fecha.strftime('%d/%m/%Y'),
+                    'linea_id': int(ln.id),
+                    'horas': str(ln.horas) if ln.horas is not None else '',
+                    'precio': str(ln.precio_hora) if ln.precio_hora is not None else '',
+                    'importe': f'{imp} €' if imp is not None else '—',
+                    'sin_fichaje': True,
+                    'vista_subcontrata': direccion_propia == DIR_SUB,
+                })
+            flash(translate('Día añadido a la propuesta.'), 'success')
             return _cert_redirect(
                 endpoint, company, anio, mes, obra_id,
                 desde=desde_q, hasta=hasta_q, modo=modo_q or 'persona',
@@ -1530,6 +1619,8 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
             guardar_fila_id
             or restablecer_id
             or accion == 'prorrata_persona'
+            or accion == 'anadir_dia'
+            or request.form.get('anadir_dia_para')
         ):
             from flask import jsonify
             return jsonify({'ok': False, 'error': str(exc)}), 400
@@ -1540,10 +1631,14 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
 
 
 def _cert_wants_json() -> bool:
-    return (
-        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        or request.accept_mimetypes.best == 'application/json'
-    )
+    if request.form.get('_ajax') == '1' or request.args.get('_ajax') == '1':
+        return True
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return True
+    best = request.accept_mimetypes.best
+    if best == 'application/json':
+        return True
+    return 'application/json' in (request.headers.get('Accept') or '')
 
 
 def _json_linea(ln):

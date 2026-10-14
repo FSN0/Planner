@@ -48,6 +48,7 @@ PERMISSION_MODULES = (
     ('soltec_alta_odoo_admin', 'Alta Odoo · entrar como admin', 'Integraciones'),
     ('soltec_portal', 'Portal Soltec', 'Integraciones'),
     ('primeros_pasos', 'Primeros pasos', 'Sistema'),
+    ('entrar_como', 'Entrar como otro usuario', 'Sistema'),
     ('etiquetas', 'Etiquetas (ver / asignar)', 'Sistema'),
     ('etiquetas_catalogo', 'Etiquetas · catálogo', 'Sistema'),
     ('configuracion', 'Configuración', 'Sistema'),
@@ -85,6 +86,7 @@ BINARY_TICK_MODULES = frozenset({
     'planificar_flota',
     'cuadrante_pasado',
     'soltec_alta_odoo_admin',
+    'entrar_como',
 })
 
 # Solo lectura en UI (entrar a pantalla; la acción cuelga de otro módulo)
@@ -340,6 +342,7 @@ MODULE_WRITE_HINTS = {
     'soltec_alta_odoo': 'Con Lectura basta para abrir',
     'soltec_alta_odoo_admin': 'Ver todos los contratos (como admin de Altas)',
     'soltec_portal': 'Con Lectura basta para abrir',
+    'entrar_como': 'Abrir la app en la sesión de otro usuario (no admins)',
     'etiquetas': 'Asignar etiquetas en fichas de personal y subcontratas',
     'etiquetas_catalogo': 'Crear, renombrar, absorber y borrar etiquetas',
     'logs': 'Marcar / gestionar avisos',
@@ -370,6 +373,7 @@ MODULE_READ_HINTS = {
     'soltec_alta_odoo': 'Abrir el panel de altas Odoo',
     'soltec_alta_odoo_admin': 'Entrar a Altas con visión completa (todos los contratos)',
     'soltec_portal': 'Abrir el portal Soltec',
+    'entrar_como': 'Usar «Entrar como» en personal (tick)',
     'etiquetas': 'Ver y filtrar por etiquetas',
     'etiquetas_catalogo': 'Gestionar el catálogo en Ajustes',
     'operario_fichaje': 'Acceso a /fichaje para fichar',

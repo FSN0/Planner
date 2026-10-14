@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014work1">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014peer2">
 {% endblock %}
 {% block wrapper %}
 {% set endpoint = 'subcontrata.certificacion_obra' if vista_subcontrata else 'compliance.certificacion_empresa_obra' %}
@@ -388,7 +388,6 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
   if (!form) return;
   var MSG_TRAMO = {{ _('La hora de fin tiene que ser posterior a la de inicio.')|tojson }};
   var MSG_FALTA = {{ _('Faltan horas')|tojson }};
-  var MSG_OK = {{ _('Fila guardada.')|tojson }};
 
   function csrfToken() {
     var el = form.querySelector('input[name="csrf_token"]');
@@ -530,6 +529,7 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     if (desde) fd.append('desde', desde.value);
     if (hasta) fd.append('hasta', hasta.value);
     fd.append(fieldName, id);
+    fd.append('_ajax', '1');
     if (fieldName === 'guardar_fila') {
       ['inicio', 'fin', 'horas', 'modo', 'precio'].forEach(function (key) {
         var input = row.querySelector('[name="l' + id + '_' + key + '"]');
@@ -563,9 +563,7 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       if (data.saved) applyLinea(row, data);
       if (data.tramo_invalido) {
         flashInline(row, data.error || MSG_TRAMO, false);
-      } else if (data.ok) {
-        flashInline(row, MSG_OK, true);
-      } else if (data.error) {
+      } else if (data.error && !data.ok) {
         flashInline(row, data.error, false);
       }
       if (typeof window.certSyncMesaActions === 'function') {
@@ -583,17 +581,16 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     });
   }
 
-  var MSG_WORK_OK = {{ _('Total guardado.')|tojson }};
   var MSG_WORK_FAIL = {{ _('No se pudo guardar el total.')|tojson }};
 
-  function flashWork(work, text, ok) {
+  function flashWorkError(work, text) {
     if (!work) return;
     var tools = work.querySelector('.cert-work-tools');
     if (!tools) return;
     var old = tools.querySelector('.js-work-msg');
     if (old) old.remove();
     var msg = document.createElement('span');
-    msg.className = 'cert-flag js-work-msg ' + (ok ? 'is-ok' : 'is-bad');
+    msg.className = 'cert-flag js-work-msg is-bad';
     msg.textContent = text;
     tools.appendChild(msg);
     setTimeout(function () { msg.remove(); }, 2500);
@@ -622,6 +619,7 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     fd.append('accion', 'prorrata_persona');
     fd.append('user_id', uid);
     fd.append('horas_total', input.value);
+    fd.append('_ajax', '1');
     work.setAttribute('data-saving', '1');
     input.classList.add('is-busy');
     return fetch(form.action || window.location.href, {
@@ -640,7 +638,7 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     }).then(function (pack) {
       var data = pack.data || {};
       if (!pack.okHttp || data.error) {
-        flashWork(work, data.error || MSG_WORK_FAIL, false);
+        flashWorkError(work, data.error || MSG_WORK_FAIL);
         return data;
       }
       (data.lineas || []).forEach(function (ln) {
@@ -656,13 +654,12 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       } else {
         recalcFromRow(work.querySelector('.cert-line:not(.cert-line--head)') || work);
       }
-      flashWork(work, MSG_WORK_OK, true);
       if (typeof window.certSyncMesaActions === 'function') {
         window.certSyncMesaActions();
       }
       return data;
     }).catch(function () {
-      flashWork(work, MSG_WORK_FAIL, false);
+      flashWorkError(work, MSG_WORK_FAIL);
     }).finally(function () {
       work.removeAttribute('data-saving');
       input.classList.remove('is-busy');
@@ -699,11 +696,17 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
   }
   form.querySelectorAll('.js-horas, .js-inicio, .js-fin, .js-precio').forEach(bindAutosave);
 
-  // Total del trabajador (33 → 100): al salir, prorratea y guarda.
+  // Total del trabajador (33 → 100): al salir, prorratea y guarda (sin aviso).
   function bindWorkAutosave(input) {
     if (!input || input.disabled) return;
     input.addEventListener('focus', function () {
       input.setAttribute('data-focus-val', String(input.value || ''));
+    });
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        input.blur();
+      }
     });
     input.addEventListener('blur', function () {
       var prev = input.getAttribute('data-focus-val');
@@ -715,6 +718,220 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     });
   }
   form.querySelectorAll('.js-work-horas').forEach(bindWorkAutosave);
+
+  var MSG_ADD_FAIL = {{ _('No se pudo añadir el día.')|tojson }};
+  var LBL_DIA = {{ _('Día')|tojson }};
+  var LBL_INICIO = {{ _('Inicio')|tojson }};
+  var LBL_FIN = {{ _('Fin')|tojson }};
+  var LBL_HORAS = {{ _('Horas')|tojson }};
+  var LBL_PRECIO = {{ _('€/h')|tojson }};
+  var LBL_IMPORTE = {{ _('Importe')|tojson }};
+  var LBL_APP = {{ _('App')|tojson }};
+  var LBL_SIN_FICH = {{ _('Sin fichaje')|tojson }};
+  var LBL_ADD_DIA = {{ _('Añadir día')|tojson }};
+  var TITLE_SIN_FICH = {{ _('Añadido sin fichaje en la App')|tojson }};
+  var TITLE_SIN_FICH_WORK = {{ _('Hay días añadidos sin fichaje en la App')|tojson }};
+  var vistaSub = form.getAttribute('data-vista-sub') === '1';
+  var conPlat = !vistaSub;
+
+  function starEl(title) {
+    var s = document.createElement('span');
+    s.className = 'cert-sin-fichaje';
+    s.title = title || TITLE_SIN_FICH;
+    s.textContent = '*';
+    return s;
+  }
+
+  function ensureWorkStar(work) {
+    if (vistaSub || !work) return;
+    var name = work.querySelector('.cert-work-name');
+    if (!name || name.querySelector('.cert-sin-fichaje')) return;
+    name.appendChild(document.createTextNode(' '));
+    name.appendChild(starEl(TITLE_SIN_FICH_WORK));
+  }
+
+  function buildDayBlock(data) {
+    var day = document.createElement('details');
+    day.className = 'cert-day' + (!vistaSub ? ' is-sin-fichaje' : '');
+    day.open = true;
+    var sum = document.createElement('summary');
+    var fechaWrap = document.createElement('span');
+    fechaWrap.appendChild(document.createTextNode(data.fecha_txt || data.fecha || ''));
+    if (!vistaSub) {
+      fechaWrap.appendChild(document.createTextNode(' '));
+      fechaWrap.appendChild(starEl(TITLE_SIN_FICH));
+    }
+    var stats = document.createElement('span');
+    stats.className = 'js-day-stats cert-cmp-pair';
+    var h = data.horas !== undefined && data.horas !== '' ? data.horas : '0';
+    var imp = data.importe || '—';
+    stats.innerHTML = '<span>' + h + ' h · ' + imp + '</span>';
+    sum.appendChild(fechaWrap);
+    sum.appendChild(stats);
+    day.appendChild(sum);
+
+    var lines = document.createElement('div');
+    lines.className = 'cert-lines';
+    var head = document.createElement('div');
+    head.className = 'cert-line cert-line--head cert-line--persona' + (conPlat ? ' cert-line--con-plat' : '');
+    head.setAttribute('aria-hidden', 'true');
+    head.innerHTML = '<span>' + LBL_DIA + '</span><span>' + LBL_INICIO + '</span><span>' + LBL_FIN +
+      '</span><span>' + LBL_HORAS + '</span><span>' + LBL_PRECIO + '</span><span>' + LBL_IMPORTE + '</span>' +
+      (conPlat ? '<span>' + LBL_APP + '</span>' : '') + '<span></span>';
+    lines.appendChild(head);
+
+    var row = document.createElement('div');
+    row.className = 'cert-line cert-line--persona is-manual' + (conPlat ? ' cert-line--con-plat' : '');
+    row.setAttribute('data-linea-id', String(data.linea_id));
+    var id = data.linea_id;
+    var flags = '';
+    if (!vistaSub) {
+      flags = '<span class="cert-flag is-warn js-editado-flag" title="' + TITLE_SIN_FICH + '">' + LBL_SIN_FICH + '</span>';
+    }
+    var precioField = vistaSub
+      ? ('<input type="hidden" name="l' + id + '_precio" value="' + (data.precio || '') + '">' +
+         '<input type="number" step="0.01" value="' + (data.precio || '') + '" disabled class="js-precio">')
+      : ('<input type="number" step="0.01" name="l' + id + '_precio" value="' + (data.precio || '') + '" class="js-precio">');
+    row.innerHTML =
+      '<div class="cert-person"><div class="cert-flags">' + flags + '</div></div>' +
+      '<label class="cert-field"><span class="cert-field-label">' + LBL_INICIO + '</span>' +
+      '<input type="time" name="l' + id + '_inicio" value="" class="js-inicio"></label>' +
+      '<label class="cert-field"><span class="cert-field-label">' + LBL_FIN + '</span>' +
+      '<input type="time" name="l' + id + '_fin" value="" class="js-fin"></label>' +
+      '<label class="cert-field"><span class="cert-field-label">' + LBL_HORAS + '</span>' +
+      '<input type="number" step="0.01" name="l' + id + '_horas" value="' + (data.horas || '') + '" class="js-horas" placeholder="0"></label>' +
+      '<input type="hidden" name="l' + id + '_modo" value="" class="js-modo">' +
+      '<label class="cert-field"><span class="cert-field-label">' + LBL_PRECIO + '</span>' + precioField + '</label>' +
+      '<div class="cert-importe js-importe"><span>' + (data.importe || '—') + '</span></div>' +
+      (conPlat ? '<div class="cert-plat-cell"><span class="text-muted">—</span></div>' : '') +
+      '<span class="cert-line-reset-spacer" aria-hidden="true"></span>';
+    lines.appendChild(row);
+    day.appendChild(lines);
+    row.querySelectorAll('.js-horas, .js-inicio, .js-fin, .js-precio').forEach(bindAutosave);
+    return day;
+  }
+
+  function buildWorkBlock(data) {
+    var work = document.createElement('details');
+    work.className = 'cert-work';
+    work.open = true;
+    work.setAttribute('data-user-id', String(data.user_id));
+    var sum = document.createElement('summary');
+    var name = document.createElement('span');
+    name.className = 'cert-work-name';
+    name.textContent = data.user_name || ('#' + data.user_id);
+    if (!vistaSub) {
+      name.appendChild(document.createTextNode(' '));
+      name.appendChild(starEl(TITLE_SIN_FICH_WORK));
+    }
+    sum.appendChild(name);
+    work.appendChild(sum);
+    var days = document.createElement('div');
+    days.className = 'cert-days';
+    days.appendChild(buildDayBlock(data));
+      var add = document.createElement('details');
+    add.className = 'cert-add-inline';
+    var refFecha = form.querySelector('.js-anadir-fecha');
+    add.innerHTML = '<summary class="cert-add-btn"><i class="fas fa-plus" aria-hidden="true"></i><span>' +
+      LBL_ADD_DIA + '</span></summary><div class="cert-add-fields">' +
+      '<input type="date" class="js-anadir-fecha" aria-label="Fecha">' +
+      '<button type="button" class="btn-admin btn-admin-ghost js-anadir-dia" data-user-id="' +
+      data.user_id + '">' + {{ _('Añadir')|tojson }} + '</button></div>';
+    var inp = add.querySelector('.js-anadir-fecha');
+    if (refFecha && inp) {
+      inp.min = refFecha.min || '';
+      inp.max = refFecha.max || '';
+    }
+    days.appendChild(add);
+    work.appendChild(days);
+    return work;
+  }
+
+  function postAnadirDia(btn) {
+    var box = btn.closest('.cert-add-fields') || btn.closest('.cert-add-inline');
+    var uid = btn.getAttribute('data-user-id') || '';
+    var fechaInp = box && box.querySelector('.js-anadir-fecha');
+    var userSel = box && box.querySelector('.js-anadir-user');
+    if (!uid && userSel) uid = userSel.value;
+    var fecha = fechaInp ? fechaInp.value : '';
+    if (!uid || !fecha) {
+      alert({{ _('Elige trabajador y fecha.')|tojson }});
+      return;
+    }
+    var fd = new FormData();
+    fd.append('csrf_token', csrfToken());
+    fd.append('anio', form.querySelector('input[name="anio"]').value);
+    fd.append('mes', form.querySelector('input[name="mes"]').value);
+    var desde = form.querySelector('input[name="desde"]');
+    var hasta = form.querySelector('input[name="hasta"]');
+    if (desde) fd.append('desde', desde.value);
+    if (hasta) fd.append('hasta', hasta.value);
+    fd.append('accion', 'anadir_dia');
+    fd.append('anadir_user_id', uid);
+    fd.append('anadir_fecha', fecha);
+    fd.append('anadir_dia_para', uid);
+    fd.append('_ajax', '1');
+    btn.disabled = true;
+    fetch(form.action || window.location.href, {
+      method: 'POST',
+      body: fd,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+      },
+      credentials: 'same-origin',
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        return { okHttp: res.ok, data: data };
+      });
+    }).then(function (pack) {
+      var data = pack.data || {};
+      if (!pack.okHttp || data.error) {
+        alert(data.error || MSG_ADD_FAIL);
+        return;
+      }
+      var works = form.querySelector('.cert-works');
+      if (!works) return;
+      var work = works.querySelector('.cert-work[data-user-id="' + data.user_id + '"]');
+      if (data.nuevo_trabajador || !work) {
+        work = buildWorkBlock(data);
+        var addWork = works.querySelector('.js-anadir-trabajador');
+        if (addWork) works.insertBefore(work, addWork);
+        else works.appendChild(work);
+        var selGlobal = form.querySelector('.js-anadir-trabajador .js-anadir-user');
+        if (selGlobal) {
+          var opt = selGlobal.querySelector('option[value="' + data.user_id + '"]');
+          if (opt) opt.remove();
+        }
+      } else {
+        var days = work.querySelector('.cert-days');
+        var addDay = days && days.querySelector(':scope > .cert-add-inline');
+        var day = buildDayBlock(data);
+        if (addDay) days.insertBefore(day, addDay);
+        else if (days) days.appendChild(day);
+        work.open = true;
+        ensureWorkStar(work);
+      }
+      if (fechaInp) fechaInp.value = '';
+      var wrap = btn.closest('details.cert-add-inline');
+      if (wrap) wrap.open = false;
+      if (typeof window.certSyncMesaActions === 'function') window.certSyncMesaActions();
+    }).catch(function () {
+      alert(MSG_ADD_FAIL);
+    }).finally(function () {
+      btn.disabled = false;
+    });
+  }
+
+  // capture: el details.cert-add-inline hace stopPropagation en bubble
+  // y si no pillamos el clic aquí, el botón no hace nada.
+  form.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('.js-anadir-dia');
+    if (!btn || !form.contains(btn)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    postAnadirDia(btn);
+  }, true);
 })();
 
 (function () {

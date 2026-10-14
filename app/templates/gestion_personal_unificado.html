@@ -52,7 +52,7 @@
       </form>
       {% endif %}
       {% endif %}
-      {% if is_admin(current_user) and user.active and user.id != current_user.id and user.role != 'admin' %}
+      {% if user_can(current_user, 'entrar_como', 'r') and user.active and user.id != current_user.id and user.role != 'admin' %}
       <form action="{{ url_for('admin.impersonate_user', user_id=user.id) }}" method="post" class="row-actions-form"
             onsubmit="return confirm({{ _('¿Entrar en la aplicación como este usuario?')|tojson }});">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

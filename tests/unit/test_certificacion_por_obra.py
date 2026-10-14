@@ -20,7 +20,9 @@ from app.services.certificacion_service import (
     enviar,
     estado_empresa_mes,
     estado_propuesta,
+    obras_ids_certificacion,
     panel_certificacion_oficina,
+    panel_certificacion_subcontrata_obras,
     periodo_bloqueado,
     repartir_propuesta_por_obras,
     resumen_estados_empresa,
@@ -576,3 +578,47 @@ def test_prorrata_persona_json_xhr_persiste(cert_ctx, monkeypatch):
     prop2 = CertificacionPropuesta.query.get(prop.id)
     assert sum(float(ln.horas) for ln in prop2.lineas) == pytest.approx(100.0)
     assert all(ln.origen_horas == 'manual_total' for ln in prop2.lineas)
+
+
+def test_obra_sin_fichaje_ni_contrato_no_sale_en_mes(cert_ctx, monkeypatch):
+    """Septiembre con fichaje sí; octubre vacío (borrador fantasma) no sale a certificar."""
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra Solo Sept')
+    u = _operario(session, company, 'OctubreVacio')
+    _fichaje(session, u, o, date(2026, 9, 10))
+    session.commit()
+
+    sincronizar(company, 2026, 9, o.id)
+    # Abrir octubre crea borradores vacíos (como al navegar el mes).
+    sincronizar(company, 2026, 10, o.id)
+    session.commit()
+
+    monkeypatch.setattr(
+        'app.services.certificacion_service.contrato_asistencia',
+        lambda *a, **k: None,
+    )
+
+    assert o.id in obras_ids_certificacion(company.id, 2026, 9)
+    assert o.id not in obras_ids_certificacion(company.id, 2026, 10)
+
+    panel_sep = panel_certificacion_subcontrata_obras(company, anio=2026, mes=9)
+    panel_oct = panel_certificacion_subcontrata_obras(company, anio=2026, mes=10)
+    assert o.id in {r['obra'].id for r in panel_sep}
+    assert o.id not in {r['obra'].id for r in panel_oct}
+
+
+def test_obra_sin_fichaje_con_contrato_si_sale(cert_ctx, monkeypatch):
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra Solo Contrato')
+    session.commit()
+    # Borradores vacíos sin fichaje
+    sincronizar(company, 2026, 10, o.id)
+    session.commit()
+
+    monkeypatch.setattr(
+        'app.services.certificacion_service.contrato_asistencia',
+        lambda *a, **k: {'hourly_rate': '25.00', 'lines': {}},
+    )
+    assert o.id in obras_ids_certificacion(company.id, 2026, 10)

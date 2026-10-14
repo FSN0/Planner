@@ -1,7 +1,5 @@
-"""Tests de suplantación de sesión por administrador."""
+"""Tests de suplantación de sesión («Entrar como»)."""
 from types import SimpleNamespace
-
-import pytest
 
 from app.services.impersonation_service import (
     puede_ser_impersonado,
@@ -31,9 +29,33 @@ def test_no_impersonar_si_ya_hay_suplantacion_activa(app):
         assert admin_puede_impersonar(admin) is False
 
 
+def test_jefe_sin_permiso_no_puede_impersonar(app):
+    jefe = SimpleNamespace(is_authenticated=True, role='jefe_obra', id=3)
+    with app.test_request_context():
+        assert admin_puede_impersonar(jefe) is False
+
+
+def test_jefe_con_permiso_puede_impersonar(app, monkeypatch):
+    jefe = SimpleNamespace(is_authenticated=True, role='jefe_obra', id=3)
+
+    def _can(user, module, action):
+        return module == 'entrar_como' and action == 'r' and user is jefe
+
+    monkeypatch.setattr(
+        'app.services.impersonation_service.user_can',
+        _can,
+    )
+    with app.test_request_context():
+        assert admin_puede_impersonar(jefe) is True
+
+
 def test_no_impersonar_admin_ni_a_si_mismo():
-    actor = SimpleNamespace(is_authenticated=True, role='admin', id=1)
-    otro_admin = SimpleNamespace(is_authenticated=True, role='admin', id=2, is_deleted=False, is_active=True)
+    actor = SimpleNamespace(
+        is_authenticated=True, role='admin', id=1, is_deleted=False, is_active=True,
+    )
+    otro_admin = SimpleNamespace(
+        is_authenticated=True, role='admin', id=2, is_deleted=False, is_active=True,
+    )
     assert puede_ser_impersonado(otro_admin, actor) is False
     assert puede_ser_impersonado(actor, actor) is False
 

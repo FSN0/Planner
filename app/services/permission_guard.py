@@ -15,6 +15,7 @@ _ADMIN_RULES = (
     ('/admin/contratacion', 'contratacion', 'r', {'POST': 'w'}),
     ('/admin/enviar_credenciales', 'trabajadores', 'w', {'POST': 'w'}),
     ('/admin/visible_cuadrante', 'trabajadores', 'w', {'POST': 'w'}),
+    ('/admin/impersonate', 'entrar_como', 'r', {'POST': 'r'}),
     ('/admin/permisos', 'permisos', 'r', {'POST': 'w'}),
     ('/admin/configuracion/etiquetas', 'etiquetas_catalogo', 'w', {'POST': 'w'}),
     ('/admin/api/etiquetas', 'etiquetas', 'r', {}),

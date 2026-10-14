@@ -301,9 +301,14 @@
     <div class="body">
       <header class="hero">
         <div class="hero-left">
-          <p class="kicker">{{ _('Certificación de horas') }}</p>
+          <p class="kicker">{{ _('Certificación de horas') }}{% if propuesta_num %} · #{{ propuesta_num }}{% endif %}</p>
           <h1 class="doc-title">{{ empresa }}</h1>
           <p class="meta">{{ sentido }} · {{ _('Periodo') }} {{ mes_txt }}</p>
+          {% if aceptada_por %}
+          <p class="meta">
+            {{ _('Aceptada por') }} {{ aceptada_por }}{% if aceptada_lado %} ({{ aceptada_lado }}){% endif %}{% if aceptada_el %} · {{ aceptada_el }}{% endif %}
+          </p>
+          {% endif %}
         </div>
         <div class="hero-right">
           <span class="badge">{{ estado_txt }}</span>
@@ -317,6 +322,12 @@
           <td><span class="label">{{ _('Total horas') }}</span><span class="value">{{ total_horas }} h</span></td>
           <td><span class="label">{{ _('Importe') }}</span><span class="value">{{ total_importe }} €</span></td>
         </tr>
+        {% if aceptada_por %}
+        <tr>
+          <td colspan="2"><span class="label">{{ _('Aceptada por') }}</span><span class="value">{{ aceptada_por }}{% if aceptada_lado %} · {{ aceptada_lado }}{% endif %}</span></td>
+          <td colspan="2"><span class="label">{{ _('Fecha de aceptación') }}</span><span class="value">{{ aceptada_el or '—' }}</span></td>
+        </tr>
+        {% endif %}
       </table>
 
       {% if obras %}

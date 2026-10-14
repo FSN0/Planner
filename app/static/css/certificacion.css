@@ -1226,9 +1226,88 @@
   background: var(--cert-bad-bg);
   color: var(--cert-bad);
 }
+.cert-flag.is-warn {
+  background: #fef3c7;
+  color: #a16207;
+}
 .cert-flag.is-muted {
   background: #f8fafc;
   color: #94a3b8;
+}
+.cert-add-inline {
+  border: 0;
+  background: transparent;
+  margin: 2px 0 4px;
+}
+.cert-add-inline > summary {
+  list-style: none;
+}
+.cert-add-inline > summary::-webkit-details-marker {
+  display: none;
+}
+.cert-add-inline > summary::before {
+  display: none !important;
+}
+.cert-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.cert-add-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+.cert-add-btn > i {
+  font-size: 0.7rem;
+}
+.cert-add-inline--work {
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+}
+.cert-add-inline--work > .cert-add-btn {
+  display: flex;
+  width: 100%;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+.cert-add-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px 8px;
+}
+.cert-add-fields select,
+.cert-add-fields input[type="date"] {
+  min-height: 32px;
+  padding: 3px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.85rem;
+}
+.cert-sin-fichaje {
+  color: #a16207;
+  font-weight: 800;
+  margin-left: 2px;
+}
+.cert-delta-plat-frase {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  font-weight: 650;
+  margin-bottom: 4px;
 }
 .cert-review {
   display: grid;
@@ -1936,13 +2015,19 @@
   margin: 0;
   font-size: 11px;
   line-height: 1.2;
-  color: #b91c1c;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.cert-diff:not(.is-mismatch) {
   color: #64748b;
   font-weight: 500;
+  white-space: nowrap;
+}
+/* SaaS: su propuesta vs App. Subcontrata no usa gain/loss. */
+.cert-diff.is-gain {
+  color: #15803d;
+  font-weight: 600;
+}
+.cert-diff.is-loss,
+.cert-diff.is-mismatch {
+  color: #b91c1c;
+  font-weight: 600;
 }
 .cert-prev::before {
   content: none;

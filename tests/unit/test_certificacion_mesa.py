@@ -11,12 +11,17 @@ from app.models import CertificacionLinea, CertificacionPropuesta, Certificacion
 from app.services.certificacion_service import (
     DIR_EMP,
     DIR_SUB,
+    _build_cert_pdf_context,
     aceptar,
+    anadir_dia_manual,
     contexto_mesa,
     desenviar,
+    etiquetas_rondas,
     enviar,
+    frase_delta_plataforma,
     ronda_en_mesa,
     rechazar,
+    sembrar_borrador_desde_mesa,
     sincronizar,
 )
 
@@ -150,7 +155,14 @@ def test_contraoferta_sustituye_mesa(mesa_ctx, monkeypatch):
     mesa = ronda_en_mesa(company.id, o.id, 2026, 10)
     assert mesa is not None
     assert mesa.direccion == DIR_EMP
-    assert mesa.secuencia == 2
+    assert mesa.secuencia == 2  # orden interno
+    et = etiquetas_rondas(
+        CertificacionRonda.query.filter_by(
+            company_id=company.id, obra_id=o.id, anio=2026, mes=10,
+        ).all()
+    )
+    assert et[first.id] == '1'
+    assert et[mesa.id] == '1.2'
     session.refresh(first)
     assert first.resultado == 'sustituida'
     session.refresh(sub)
@@ -225,3 +237,232 @@ def test_contexto_mesa_responder(mesa_ctx, monkeypatch):
     assert ctx['mesa'] is not None
     assert ctx['comparar_ronda'] is not None
     assert (u.id, o.id, date(2026, 10, 1)) in ctx['mapa_comparar']
+    assert ctx['mesa_carta_seq'] == '1'
+    assert ctx['baraja'][0]['etiqueta'] == '1'
+
+
+def test_etiquetas_nueva_propuesta_tras_rechazo(mesa_ctx, monkeypatch):
+    """Tras rechazar, el siguiente envío es #2 (no 1.2)."""
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra Etiqueta')
+    u = _operario(session, company, 'Paco')
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    for prop in (sub, emp):
+        for ln in list(prop.lineas):
+            session.delete(ln)
+    session.flush()
+    _linea(session, sub, u, o, horas='8.00')
+    session.flush()
+    enviar(sub, actor_id=u.id)
+    session.flush()
+    first = ronda_en_mesa(company.id, o.id, 2026, 10)
+    rechazar(sub, actor_id=u.id, comentario='No')
+    session.flush()
+
+    _linea(session, emp, u, o, horas='7.00')
+    session.flush()
+    enviar(emp, actor_id=u.id)
+    session.flush()
+    second = ronda_en_mesa(company.id, o.id, 2026, 10)
+    et = etiquetas_rondas(
+        CertificacionRonda.query.filter_by(
+            company_id=company.id, obra_id=o.id, anio=2026, mes=10,
+        ).all()
+    )
+    assert et[first.id] == '1'
+    assert et[second.id] == '2'
+
+
+def test_pdf_muestra_quien_acepto(mesa_ctx, monkeypatch):
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra PDF Acepta')
+    u = _operario(session, company, 'Rita')
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        'app.services.tenant_branding_service.logo_stripe_data_uri',
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        'app.services.tenant_branding_service.header_data_uri',
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        'app.services.tenant_branding_service.mark_data_uri',
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        'app.services.tenant_branding_service.get_organization_display_name',
+        lambda *a, **k: 'Org',
+    )
+    monkeypatch.setattr(
+        'app.services.tenant_branding_service.get_brand_stripe_color',
+        lambda *a, **k: '#000',
+    )
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    for ln in list(sub.lineas):
+        session.delete(ln)
+    session.flush()
+    _linea(session, sub, u, o)
+    session.flush()
+    enviar(sub, actor_id=u.id)
+    session.flush()
+    aceptar(sub, actor_id=u.id)
+    session.flush()
+    session.refresh(sub)
+
+    ctx = _build_cert_pdf_context(sub, schema_name=None, grupos=[])
+    assert 'Rita' in (ctx.get('aceptada_por') or '')
+    assert ctx.get('aceptada_el')
+    assert ctx.get('propuesta_num') == '1'
+
+
+def test_sembrar_borrador_desde_mesa_al_responder(mesa_ctx, monkeypatch):
+    """Subcontrata recibe propuesta: su borrador (a 0) se rellena con lo enviado."""
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra Sembrar')
+    u = _operario(session, company, 'Toni')
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._avisar',
+        lambda *a, **k: None,
+    )
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    for prop in (sub, emp):
+        for ln in list(prop.lineas):
+            session.delete(ln)
+    session.flush()
+    # Oficina envía 8 h; subcontrata tiene fila vacía (como tras sincronizar).
+    _linea(session, emp, u, o, horas='8.00', precio='22.00')
+    ln_sub = CertificacionLinea(
+        propuesta_id=sub.id,
+        user_id=u.id,
+        obra_id=o.id,
+        fecha=date(2026, 10, 1),
+        horas=None,
+        precio_hora=Decimal('22.00'),
+        origen_horas='vacio',
+    )
+    session.add(ln_sub)
+    sub.lineas.append(ln_sub)
+    session.flush()
+
+    enviar(emp, actor_id=u.id)
+    session.flush()
+    mesa = ronda_en_mesa(company.id, o.id, 2026, 10)
+    assert mesa is not None
+    assert mesa.direccion == DIR_EMP
+    assert mesa.lineas_json
+
+    session.refresh(sub)
+    n = sembrar_borrador_desde_mesa(sub, mesa)
+    session.flush()
+    session.refresh(ln_sub)
+    assert n == 1
+    assert float(ln_sub.horas) == pytest.approx(8.0)
+    assert float(ln_sub.precio_hora) == pytest.approx(22.0)
+    assert str(ln_sub.origen_horas).startswith('manual')
+
+    # Segunda siembra no pisa la edición manual.
+    ln_sub.horas = Decimal('9.00')
+    session.flush()
+    assert sembrar_borrador_desde_mesa(sub, mesa) == 0
+    session.refresh(ln_sub)
+    assert float(ln_sub.horas) == pytest.approx(9.0)
+
+
+def test_nombre_oficina_sin_empresa_principal(monkeypatch):
+    from app.services.certificacion_service import _nombre_oficina_certificacion
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        'app.services.tenant_branding_service.get_organization_display_name',
+        lambda: 'Soltec',
+    )
+    assert _nombre_oficina_certificacion(
+        SimpleNamespace(nombre='Empresa principal'),
+    ) == 'Soltec'
+    assert _nombre_oficina_certificacion(
+        SimpleNamespace(nombre='Empresa principal, Soltec'),
+    ) == 'Soltec'
+    assert _nombre_oficina_certificacion(
+        SimpleNamespace(nombre='Soltec Energía SL'),
+    ) == 'Soltec Energía SL'
+
+
+def test_frase_delta_plataforma_cara_barata():
+    cara = frase_delta_plataforma(
+        {'pct_importe': Decimal('25.00'), 'pct_horas': Decimal('10.00')},
+        etiqueta='propuesta',
+    )
+    assert 'más cara' in (cara or '')
+    assert 'vas a enviar' in (cara or '')
+    suya = frase_delta_plataforma(
+        {'pct_importe': Decimal('-12.50'), 'pct_horas': None},
+        etiqueta='su_propuesta',
+        nombre_empresa='Montajes Sur SL',
+    )
+    assert 'más barata' in (suya or '')
+    assert 'Montajes Sur SL' in (suya or '')
+    assert 'la empresa' not in (suya or '').lower()
+    cerrada = frase_delta_plataforma(
+        {'pct_importe': Decimal('-81.00'), 'pct_horas': None},
+        etiqueta='aceptada',
+    )
+    assert 'aceptada' in (cerrada or '')
+    assert 'vas a enviar' not in (cerrada or '')
+
+
+def test_anadir_dia_manual_sin_fichaje(mesa_ctx, monkeypatch):
+    session = mesa_ctx['session']
+    company = mesa_ctx['company']
+    o = _obra(session, 'Obra Add Day')
+    u = _operario(session, company, 'Manual')
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    monkeypatch.setattr(
+        'app.services.certificacion_service._precio_rapido_sin_odoo',
+        lambda *a, **k: Decimal('18.00'),
+    )
+    sub, _emp = sincronizar(company, 2026, 10, o.id)
+    session.flush()
+    ln = anadir_dia_manual(
+        sub,
+        user_id=u.id,
+        fecha=date(2026, 10, 15),
+        horas='6.5',
+        company=company,
+        obra=o,
+    )
+    session.flush()
+    assert ln.origen_horas == 'manual_anadido'
+    assert float(ln.horas) == pytest.approx(6.5)
+    assert ln.user_id == u.id
+    assert ln.fecha == date(2026, 10, 15)
+    # No se borra al sincronizar (no es vacio/fichaje).
+    sincronizar(company, 2026, 10, o.id, refrescar_precios=False)
+    session.flush()
+    ids = {x.id for x in CertificacionLinea.query.filter_by(propuesta_id=sub.id).all()}
+    assert ln.id in ids
