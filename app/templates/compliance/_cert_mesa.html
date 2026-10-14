@@ -5,15 +5,21 @@
 {% set comparar_ronda = comparar_ronda if comparar_ronda is defined else none %}
 {% set mesa_carta = mesa_carta if mesa_carta is defined else none %}
 {% set viendo_historial = viendo_historial if viendo_historial is defined else false %}
+{% set viendo_recibida = viendo_recibida if viendo_recibida is defined else false %}
+{% set corr_activa = corr_activa if corr_activa is defined else false %}
+{% set turno = turno if turno is defined else '' %}
+{% set mesa_ajena_id = mesa_ajena_id if mesa_ajena_id is defined else none %}
 {% set ronda_sel = ronda_sel if ronda_sel is defined else none %}
 {% set lado_propio = lado_propio if lado_propio is defined else _('Nosotros') %}
 {% set lado_ajeno = lado_ajeno if lado_ajeno is defined else _('La otra parte') %}
+{% set puede_responder = ajena and ajena.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
+{% set te_toca = turno == 'te_toca' %}
 
-{% macro url_mesa(ronda=none) -%}
+{% macro url_mesa(ronda=none, corr=false) -%}
 {%- if vista_subcontrata -%}
-{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, ronda=ronda) }}
+{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, ronda=ronda, corr=('1' if corr else none)) }}
 {%- else -%}
-{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none, ronda=ronda) }}
+{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none, ronda=ronda, corr=('1' if corr else none)) }}
 {%- endif -%}
 {%- endmacro %}
 
@@ -21,6 +27,22 @@
 {% macro peer_vs_plat_class(valor, plat) -%}
 {%- if not vista_subcontrata and valor is not none and valor != '' and plat is not none -%}
 {%- if (valor|float) >= (plat|float) %} is-gain{% else %} is-loss{% endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro delta_plat_banner() -%}
+{%- if not vista_subcontrata and delta_propuesta_plat -%}
+{% set dpp = delta_propuesta_plat %}
+<div class="cert-delta-plat {% if dpp.soltec_pierde %}is-up{% elif dpp.soltec_gana %}is-down{% endif %}"
+     title="{{ _('Para Soltec: más que el fichaje de la App es ganar; menos es perder') }}">
+  <strong class="cert-delta-plat-frase">
+    {{ dpp.frase or (_('Su propuesta vs plataforma') if dpp.etiqueta == 'su_propuesta' else _('Propuesta vs plataforma')) }}
+  </strong>
+  <span class="cert-delta-plat-base">
+    {{ _('Plataforma') }}: {{ dpp.horas_plataforma }} h · {{ dpp.importe_plataforma }} €
+    · {{ _('Propuesta') }}: {{ dpp.horas_propuesto }} h · {{ dpp.importe_propuesto }} €
+  </span>
+</div>
 {%- endif -%}
 {%- endmacro %}
 
@@ -42,36 +64,42 @@
       <strong>{{ _('Historial') }}</strong>
       <span>{{ baraja|length }} {{ _('envíos') }}</span>
     </div>
-    <a class="cert-deck-card is-actual {% if not viendo_historial %}is-active{% endif %} {% if modo_mesa == 'responder' and not viendo_historial %}is-action{% endif %}"
-       href="{{ url_mesa(none) }}">
-      {% if modo_mesa == 'responder' and not viendo_historial %}
-      <i class="fas fa-exclamation-circle cert-deck-alert" title="{{ _('Requiere tu respuesta') }}" aria-hidden="true"></i>
-      <span class="sr-only">{{ _('Requiere tu respuesta') }}</span>
+    {% set en_correccion = te_toca and corr_activa and not viendo_historial %}
+    <a class="cert-deck-card is-actual {% if en_correccion or (not viendo_historial and not te_toca) %}is-active{% endif %} {% if te_toca %}is-action{% endif %}"
+       href="{{ url_mesa(none, corr=true) if te_toca else url_mesa(none) }}">
+      {% if te_toca %}
+      <i class="fas fa-exclamation-circle cert-deck-alert" title="{{ _('Preparar corrección') }}" aria-hidden="true"></i>
+      <span class="sr-only">{{ _('Preparar corrección') }}</span>
       {% endif %}
       <em>
-        {% if mesa_carta_seq and modo_mesa in ('esperando', 'responder') and not viendo_historial %}#{{ mesa_carta_seq }} · {% endif %}{{ _('Propuesta actual') }}
+        {% if te_toca %}{{ _('Tu borrador') }}
+        {% elif mesa_carta_seq and modo_mesa == 'esperando' %}#{{ mesa_carta_seq }} · {{ _('Propuesta actual') }}
+        {% else %}{{ _('Propuesta actual') }}
+        {% endif %}
       </em>
       <strong>
         {% if modo_mesa == 'esperando' %}{{ _('Enviada · esperando respuesta') }}
-        {% elif modo_mesa == 'responder' %}{{ _('Por responder') }}
+        {% elif te_toca %}{{ _('Por responder') }}
         {% elif modo_mesa == 'cerrada' %}{{ _('Aceptada') }}
-        {% elif modo_mesa == 'historial' and mesa_carta %}
+        {% elif modo_mesa in ('historial', 'recibida') and mesa_carta %}
           {% if mesa_carta.es_propia %}{{ _('Enviada · esperando respuesta') if (propia and propia.estado == 'enviada') else _('En la mesa') }}
-          {% else %}{{ _('Por responder') }}{% endif %}
+          {% else %}{{ _('Recibida') }}{% endif %}
         {% else %}{{ _('Borrador') }}
         {% endif %}
       </strong>
-      <small>{% if mesa_carta and mesa_carta.en_mesa %}{{ mesa_carta.lado }}{% else %}{{ lado_propio }}{% endif %}</small>
+      <small>{{ lado_propio }}</small>
     </a>
     {% for c in baraja|reverse %}
     {% set requiere_accion = c.en_mesa and not c.es_propia %}
-    <a class="cert-deck-card is-{{ c.resultado }} {% if c.resultado == 'sustituida' %}is-nested{% endif %} {% if c.en_mesa and not viendo_historial %}is-active is-mesa{% elif viendo_historial and ronda_sel and ronda_sel.id == c.id %}is-active{% endif %} {% if requiere_accion %}is-action{% endif %}"
-       href="{{ url_mesa(none) if c.en_mesa else url_mesa(c.id) }}">
+    {% set carta_activa = viendo_historial and ronda_sel and ronda_sel.id == c.id %}
+    {% set href_carta = url_mesa(c.id) if (requiere_accion or not c.en_mesa) else url_mesa(none) %}
+    <a class="cert-deck-card is-{{ c.resultado }} {% if c.resultado == 'sustituida' %}is-nested{% endif %} {% if carta_activa %}is-active{% endif %} {% if c.en_mesa and not c.es_propia %}is-mesa{% endif %} {% if requiere_accion %}is-action{% endif %}"
+       href="{{ href_carta }}">
       {% if requiere_accion %}
-      <i class="fas fa-exclamation-circle cert-deck-alert" title="{{ _('Requiere tu respuesta') }}" aria-hidden="true"></i>
-      <span class="sr-only">{{ _('Requiere tu respuesta') }}</span>
+      <i class="fas fa-exclamation-circle cert-deck-alert" title="{{ _('Ver y aceptar o rechazar') }}" aria-hidden="true"></i>
+      <span class="sr-only">{{ _('Ver y aceptar o rechazar') }}</span>
       {% endif %}
-      <em>#{{ c.etiqueta or c.secuencia }} · {{ resultado_txt.get(c.resultado, c.resultado) }}</em>
+      <em>#{{ c.etiqueta or c.secuencia }} · {% if requiere_accion %}{{ _('Recibida') }}{% else %}{{ resultado_txt.get(c.resultado, c.resultado) }}{% endif %}</em>
       <strong>{{ c.lado }}</strong>
       <small>
         {% if c.enviada_at %}{{ c.enviada_at.strftime('%d/%m %H:%M') }}{% endif %}
@@ -86,29 +114,54 @@
   {# ——— Carta principal ——— #}
   <section class="cert-mesa-main">
     {% if viendo_historial and ronda_sel %}
-    <div class="cert-mesa-banner {% if ronda_sel.resultado == 'rechazada' %}is-bad{% elif ronda_sel.resultado == 'aceptada' %}is-ok{% else %}is-muted{% endif %}">
+    <div class="cert-mesa-banner {% if viendo_recibida %}is-wait{% elif ronda_sel.resultado == 'rechazada' %}is-bad{% elif ronda_sel.resultado == 'aceptada' %}is-ok{% else %}is-muted{% endif %}">
       <div>
-        <strong>{{ _('Historial') }} · #{{ ronda_sel_etiqueta }}</strong>
+        <strong>{% if viendo_recibida %}{{ _('Propuesta recibida') }}{% else %}{{ _('Historial') }}{% endif %} · #{{ ronda_sel_etiqueta }}</strong>
         <span>
           {{ _('Enviada por') }} {{ lado_propio if (propia and ronda_sel.direccion == propia.direccion) else lado_ajeno }}
           {% if ronda_sel.enviada_at %} · {{ ronda_sel.enviada_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
-          · {{ resultado_txt.get(ronda_sel.resultado, ronda_sel.resultado) }}
+          {% if viendo_recibida %}
+            · {{ _('Así la enviaron · puedes aceptarla o rechazarla. Para corregir, ve a Por responder.') }}
+          {% else %}
+            · {{ resultado_txt.get(ronda_sel.resultado, ronda_sel.resultado) }}
+          {% endif %}
         </span>
         {% if ronda_sel.comentario_rechazo %}
         <span class="cert-banner-motivo"><em>{{ _('Motivo') }}:</em> {{ ronda_sel.comentario_rechazo }}</span>
         {% endif %}
       </div>
-      <a class="btn-admin btn-admin-ghost" href="{{ url_mesa(none) }}">{{ _('Volver a la propuesta actual') }}</a>
+      {% if viendo_recibida %}
+      <a class="btn-admin btn-admin-ghost" href="{{ url_mesa(none, corr=true) }}">{{ _('Preparar corrección') }}</a>
+      {% else %}
+      <a class="btn-admin btn-admin-ghost" href="{{ url_mesa(none, corr=true) if te_toca else url_mesa(none) }}">{{ _('Volver') }}</a>
+      {% endif %}
     </div>
-    <div class="cert-panel cert-panel--{% if ronda_sel.resultado == 'rechazada' %}bad{% elif ronda_sel.resultado == 'aceptada' %}ok{% else %}muted{% endif %}">
+    <div class="cert-panel cert-panel--{% if viendo_recibida %}wait{% elif ronda_sel.resultado == 'rechazada' %}bad{% elif ronda_sel.resultado == 'aceptada' %}ok{% else %}muted{% endif %}">
       <div class="cert-panel-head">
         <div>
           <h2>{{ _('Propuesta') }} #{{ ronda_sel_etiqueta }}</h2>
-          <p>{{ _('Solo lectura · así se envió en su momento') }}</p>
+          <p>{% if viendo_recibida %}{{ _('Solo lectura · lo que hay sobre la mesa ahora') }}{% else %}{{ _('Solo lectura · así se envió en su momento') }}{% endif %}</p>
         </div>
+        {% if viendo_recibida and puede_responder %}
+        <div class="cert-panel-head-actions">
+          <form method="post" class="cert-panel-form cert-recibida-acciones" id="form-recibida">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="anio" value="{{ anio }}">
+            <input type="hidden" name="mes" value="{{ mes }}">
+            {% if modo_vista %}<input type="hidden" name="modo" value="{{ modo_vista }}">{% endif %}
+            {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
+            {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
+            <button class="btn-admin btn-admin-danger" name="accion" value="rechazar" type="submit"
+                    title="{{ _('Rechazar esta propuesta') }}">{{ _('Rechazar') }}</button>
+            <button class="btn-admin cert-btn-guardar" name="accion" value="aceptar" type="submit"
+                    title="{{ _('Aceptar tal cual esta propuesta') }}">{{ _('Aceptar') }}</button>
+          </form>
+        </div>
+        {% else %}
         <span class="cert-pill {{ estado_cls.get(ronda_sel.resultado if ronda_sel.resultado != 'en_mesa' else 'enviada', 'is-muted') }}">
-          {{ resultado_txt.get(ronda_sel.resultado, ronda_sel.resultado) }}
+          {% if viendo_recibida %}{{ _('Recibida') }}{% else %}{{ resultado_txt.get(ronda_sel.resultado, ronda_sel.resultado) }}{% endif %}
         </span>
+        {% endif %}
       </div>
       {% set grupos_hist = grupos_hist if grupos_hist is defined else [] %}
       {% if grupos_hist %}
@@ -123,28 +176,37 @@
                 {{ g.nombre or _('Persona') }}
               {% endif %}
             </span>
-            <span class="cert-work-stats">{{ g.horas }} h · {{ g.importe }} €</span>
+            <span class="cert-work-stats cert-cmp-pair">
+              <span class="cert-diff{{ peer_vs_plat_class(g.horas, g.plat_horas) }}">{{ g.horas }} h · {{ g.importe }} €</span>
+              {% if not vista_subcontrata and g.plat_horas is not none %}
+              <span class="cert-plat" title="{{ _('Horas del fichaje real en la plataforma') }}">{{ g.plat_horas }} h</span>
+              {% endif %}
+            </span>
           </summary>
           <div class="cert-days">
             {% if modo_vista == 'fecha' %}
               <div class="cert-lines">
-                <div class="cert-line cert-line--head" aria-hidden="true">
+                <div class="cert-line cert-line--head {% if not vista_subcontrata %}cert-line--con-plat{% endif %}" aria-hidden="true">
                   <span>{{ _('Persona') }}</span>
                   <span>{{ _('Inicio') }}</span>
                   <span>{{ _('Fin') }}</span>
                   <span>{{ _('Horas') }}</span>
                   <span>{{ _('€/h') }}</span>
                   <span>{{ _('Importe') }}</span>
+                  {% if not vista_subcontrata %}<span>{{ _('App') }}</span>{% endif %}
                   <span></span>
                 </div>
                 {% for row in g.lineas %}
-                <div class="cert-line">
+                <div class="cert-line {% if not vista_subcontrata %}cert-line--con-plat{% endif %}">
                   <div class="cert-person"><strong>{{ row.user_name }}</strong></div>
                   <div class="cert-field"><span class="cert-field-label">{{ _('Inicio') }}</span><span>{{ row.hora_inicio or '—' }}</span></div>
                   <div class="cert-field"><span class="cert-field-label">{{ _('Fin') }}</span><span>{{ row.hora_fin or '—' }}</span></div>
-                  <div class="cert-field"><span class="cert-field-label">{{ _('Horas') }}</span><span>{{ row.horas }} h</span></div>
+                  <div class="cert-field"><span class="cert-field-label">{{ _('Horas') }}</span><span class="cert-diff{{ peer_vs_plat_class(row.horas, row.plat_horas) }}">{{ row.horas }} h</span></div>
                   <div class="cert-field"><span class="cert-field-label">{{ _('€/h') }}</span><span>{{ row.precio_hora or '—' }}</span></div>
-                  <div class="cert-importe">{{ row.importe }} €</div>
+                  <div class="cert-importe"><span class="cert-diff{{ peer_vs_plat_class(row.importe, row.plat_importe) }}">{{ row.importe }} €</span></div>
+                  {% if not vista_subcontrata %}
+                  <div class="cert-plat-cell">{% if row.plat_horas is not none %}<span class="cert-plat">{{ row.plat_horas }} h</span>{% else %}—{% endif %}</div>
+                  {% endif %}
                   <span class="cert-line-reset-spacer" aria-hidden="true"></span>
                 </div>
                 {% endfor %}
@@ -154,26 +216,35 @@
               <details class="cert-day">
                 <summary>
                   <span>{{ day.fecha.strftime('%d/%m/%Y') }}</span>
-                  <span>{{ day.horas }} h · {{ day.importe }} €</span>
+                  <span class="cert-cmp-pair">
+                    <span class="cert-diff{{ peer_vs_plat_class(day.horas, day.plat_horas) }}">{{ day.horas }} h · {{ day.importe }} €</span>
+                    {% if not vista_subcontrata and day.plat_horas is not none %}
+                    <span class="cert-plat">{{ day.plat_horas }} h</span>
+                    {% endif %}
+                  </span>
                 </summary>
                 <div class="cert-lines">
-                  <div class="cert-line cert-line--head cert-line--persona" aria-hidden="true">
+                  <div class="cert-line cert-line--head cert-line--persona {% if not vista_subcontrata %}cert-line--con-plat{% endif %}" aria-hidden="true">
                     <span>{{ _('Día') }}</span>
                     <span>{{ _('Inicio') }}</span>
                     <span>{{ _('Fin') }}</span>
                     <span>{{ _('Horas') }}</span>
                     <span>{{ _('€/h') }}</span>
                     <span>{{ _('Importe') }}</span>
+                    {% if not vista_subcontrata %}<span>{{ _('App') }}</span>{% endif %}
                     <span></span>
                   </div>
                   {% for row in day.lineas %}
-                  <div class="cert-line cert-line--persona">
+                  <div class="cert-line cert-line--persona {% if not vista_subcontrata %}cert-line--con-plat{% endif %}">
                     <div class="cert-person"></div>
                     <div class="cert-field"><span class="cert-field-label">{{ _('Inicio') }}</span><span>{{ row.hora_inicio or '—' }}</span></div>
                     <div class="cert-field"><span class="cert-field-label">{{ _('Fin') }}</span><span>{{ row.hora_fin or '—' }}</span></div>
-                    <div class="cert-field"><span class="cert-field-label">{{ _('Horas') }}</span><span>{{ row.horas }} h</span></div>
+                    <div class="cert-field"><span class="cert-field-label">{{ _('Horas') }}</span><span class="cert-diff{{ peer_vs_plat_class(row.horas, row.plat_horas) }}">{{ row.horas }} h</span></div>
                     <div class="cert-field"><span class="cert-field-label">{{ _('€/h') }}</span><span>{{ row.precio_hora or '—' }}</span></div>
-                    <div class="cert-importe">{{ row.importe }} €</div>
+                    <div class="cert-importe"><span class="cert-diff{{ peer_vs_plat_class(row.importe, row.plat_importe) }}">{{ row.importe }} €</span></div>
+                    {% if not vista_subcontrata %}
+                    <div class="cert-plat-cell">{% if row.plat_horas is not none %}<span class="cert-plat">{{ row.plat_horas }} h</span>{% else %}—{% endif %}</div>
+                    {% endif %}
                     <span class="cert-line-reset-spacer" aria-hidden="true"></span>
                   </div>
                   {% endfor %}
@@ -186,10 +257,27 @@
         {% endfor %}
       </div>
       <footer class="cert-panel-foot">
+        {{ delta_plat_banner() }}
         <div class="cert-total">
           <span>{{ _('Total') }}</span>
-          <strong>{{ ronda_sel.horas_total or 0 }} h · {{ ronda_sel.importe_total or 0 }} €</strong>
+          <strong class="cert-cmp-pair">
+            <span class="cert-diff{{ peer_vs_plat_class(ronda_sel.horas_total, delta_propuesta_plat.horas_plataforma if delta_propuesta_plat else none) }}">{{ ronda_sel.horas_total or 0 }} h · {{ ronda_sel.importe_total or 0 }} €</span>
+            {% if not vista_subcontrata and delta_propuesta_plat %}
+            <span class="cert-plat">{{ delta_propuesta_plat.horas_plataforma }} h</span>
+            {% endif %}
+          </strong>
         </div>
+        {% if viendo_recibida and puede_responder %}
+        <div class="cert-actions cert-actions--stack">
+          <textarea name="comentario" class="cert-comment" rows="2" form="form-recibida"
+                    placeholder="{{ _('Nota al aceptar / rechazar (opcional)…') }}"></textarea>
+          <div class="cert-actions">
+            <button class="btn-admin btn-admin-danger" name="accion" value="rechazar" type="submit" form="form-recibida">{{ _('Rechazar') }}</button>
+            <button class="btn-admin cert-btn-guardar" name="accion" value="aceptar" type="submit" form="form-recibida">{{ _('Aceptar') }}</button>
+            <a class="btn-admin btn-admin-ghost" href="{{ url_mesa(none, corr=true) }}">{{ _('Preparar corrección') }}</a>
+          </div>
+        </div>
+        {% endif %}
       </footer>
       {% else %}
       <div class="cert-empty">{{ _('Este envío no tiene líneas guardadas.') }}</div>
@@ -204,9 +292,9 @@
           <strong>{{ _('Propuesta actual') }} · {{ _('enviada') }}</strong>
           <span>{{ _('Esperando respuesta de') }} {{ lado_ajeno }}{% if mesa_carta.enviada_at %} · {{ mesa_carta.enviada_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}</span>
         {% elif modo_mesa == 'responder' and mesa_carta %}
-          <strong>{{ _('Propuesta actual') }} · {{ mesa_carta.lado }}</strong>
+          <strong>{{ _('Tu corrección') }}</strong>
           <span>
-            {{ _('Puedes aceptarla, rechazarla o enviar una corrección. Debajo de cada fila ves lo que ellos enviaron.') }}
+            {{ _('Edita tu borrador y envía la corrección. Para aceptar o rechazar tal cual, abre la propuesta recibida en el historial.') }}
             {% if mesa_carta.enviada_at %} · {{ mesa_carta.enviada_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
             {% if mesa_carta.horas is not none %} · {{ mesa_carta.horas }} h{% endif %}
           </span>
@@ -218,6 +306,9 @@
           <span>{{ _('Prepara tu propuesta y envíala cuando esté lista. Si hubo un rechazo, está en el historial.') }}</span>
         {% endif %}
       </div>
+      {% if modo_mesa == 'responder' and mesa_ajena_id %}
+      <a class="btn-admin btn-admin-ghost" href="{{ url_mesa(mesa_ajena_id) }}">{{ _('Ver propuesta recibida') }}</a>
+      {% endif %}
     </div>
 
     <div class="cert-panel cert-panel--{{ estado_cls.get(propia_estado_ui, 'is-muted')|replace('is-', '') }}">
@@ -227,6 +318,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="anio" value="{{ anio }}">
         <input type="hidden" name="mes" value="{{ mes }}">
+        {% if modo_mesa == 'responder' %}<input type="hidden" name="corr" value="1">{% endif %}
         {% if modo_vista %}<input type="hidden" name="modo" value="{{ modo_vista }}">{% endif %}
         {% if desde %}<input type="hidden" name="desde" value="{{ desde.isoformat() }}">{% endif %}
         {% if hasta %}<input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">{% endif %}
@@ -241,8 +333,8 @@
               {% endif %}
             </h2>
             <p>
-              {% if comparar_ronda and modo_mesa == 'responder' %}
-                {{ _('Arriba: aceptar o rechazar tal cual. Si cambias horas, Aceptar pasa a Enviar corrección (guarda y envía).') }}
+              {% if modo_mesa == 'responder' %}
+                {{ _('Parte de lo recibido. Guarda o envía la corrección cuando esté lista.') }}
               {% elif modo_mesa == 'esperando' %}
                 {{ _('Así la ve la otra parte. Puedes corregirla (vuelve a borrador) mientras no respondan.') }}
               {% else %}
@@ -251,16 +343,19 @@
             </p>
           </div>
           <div class="cert-panel-head-actions">
-            {% if modo_mesa == 'responder' and ajena and ajena.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
-            <button class="btn-admin btn-admin-danger" name="accion" value="rechazar" type="submit"
-                    form="form-propia" title="{{ _('Rechazar la propuesta actual') }}">{{ _('Rechazar') }}</button>
-            <button class="btn-admin cert-btn-guardar js-mesa-aceptar" name="accion" value="aceptar" type="submit"
-                    form="form-propia" title="{{ _('Aceptar tal cual la propuesta actual') }}">{{ _('Aceptar') }}</button>
-            {% if editable %}
-            <button class="btn-admin cert-btn-guardar js-mesa-enviar-corr" name="accion" value="enviar" type="submit"
-                    form="form-propia" hidden
-                    title="{{ _('Guarda los cambios y envía la corrección') }}">{{ _('Enviar corrección') }}</button>
-            {% endif %}
+            {% if modo_mesa == 'responder' and editable and puede_responder %}
+            <button class="btn-admin cert-btn-guardar js-mesa-enviar-corr {% if not vista_subcontrata %}js-enviar-propuesta{% endif %}"
+                    name="accion" value="enviar" type="submit" form="form-propia"
+                    title="{{ _('Guarda los cambios y envía la corrección') }}"
+                    {% if not vista_subcontrata %}
+                    data-borradores="{{ borradores_odoo|default(0) }}"
+                    data-title="{{ _('Hay fichajes en borrador en Odoo') }}"
+                    data-text="{{ _('Hay {n} filas todavía en borrador en Odoo. ¿Quieres enviar la propuesta igualmente?', n=borradores_odoo|default(0)) }}"
+                    data-confirm="{{ _('Sí, enviar') }}"
+                    data-cancel="{{ _('Cancelar') }}"
+                    {% endif %}>
+              {{ _('Enviar corrección') }}
+            </button>
             {% elif editable and user_can(current_user, 'certificacion', 'w') %}
             <button class="btn-admin cert-btn-guardar {% if not vista_subcontrata %}js-enviar-propuesta{% endif %}"
                     name="accion" value="enviar" type="submit" form="form-propia"
@@ -540,20 +635,7 @@
         {% endif %}
 
         <footer class="cert-panel-foot">
-          {% if not vista_subcontrata and delta_propuesta_plat %}
-          {% set dpp = delta_propuesta_plat %}
-          {# SaaS: propuesta > App = Soltec gana (verde). Menos = pierde (rojo). #}
-          <div class="cert-delta-plat {% if dpp.soltec_pierde %}is-up{% elif dpp.soltec_gana %}is-down{% endif %}"
-               title="{{ _('Para Soltec: más que el fichaje de la App es ganar; menos es perder') }}">
-            <strong class="cert-delta-plat-frase">
-              {{ dpp.frase or (_('Su propuesta vs plataforma') if dpp.etiqueta == 'su_propuesta' else _('Propuesta vs plataforma')) }}
-            </strong>
-            <span class="cert-delta-plat-base">
-              {{ _('Plataforma') }}: {{ dpp.horas_plataforma }} h · {{ dpp.importe_plataforma }} €
-              · {{ _('Propuesta') }}: {{ dpp.horas_propuesto }} h · {{ dpp.importe_propuesto }} €
-            </span>
-          </div>
-          {% endif %}
+          {{ delta_plat_banner() }}
           <div class="cert-total">
             <span>{{ _('Total') }}</span>
             <strong class="js-panel-total cert-cmp-pair">
@@ -567,14 +649,12 @@
             </strong>
           </div>
           <div class="cert-actions cert-actions--stack">
-            {% if modo_mesa == 'responder' and ajena and ajena.estado == 'enviada' and not bloqueado and user_can(current_user, 'certificacion', 'w') %}
-            <textarea name="comentario" class="cert-comment" rows="2" placeholder="{{ _('Nota al aceptar / rechazar / enviar (opcional)…') }}"></textarea>
-            {% if editable %}
+            {% if modo_mesa == 'responder' and editable and puede_responder %}
+            <textarea name="comentario" class="cert-comment" rows="2" placeholder="{{ _('Nota al enviar la corrección (opcional)…') }}"></textarea>
             <div class="cert-actions">
-              <button class="btn-admin btn-admin-ghost" name="accion" value="copiar_mesa" type="submit" title="{{ _('Copiar a tu borrador las horas de la propuesta actual') }}">{{ _('Copiar su propuesta') }}</button>
-              <button class="btn-admin cert-btn-guardar" name="accion" value="guardar" type="submit">{{ _('Guardar todo') }}</button>
+              <button class="btn-admin btn-admin-ghost" name="accion" value="copiar_mesa" type="submit" title="{{ _('Copiar a tu borrador las horas de la propuesta recibida') }}">{{ _('Copiar su propuesta') }}</button>
+              <button class="btn-admin btn-admin-ghost" name="accion" value="guardar" type="submit">{{ _('Guardar todo') }}</button>
             </div>
-            {% endif %}
             {% elif editable %}
             <textarea name="comentario" class="cert-comment" rows="2" placeholder="{{ _('Nota al enviar (opcional)…') }}"></textarea>
             <div class="cert-actions">

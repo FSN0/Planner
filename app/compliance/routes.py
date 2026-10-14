@@ -47,10 +47,12 @@ from app.services.certificacion_service import (
     delta_vs_plataforma,
     enriquecer_grupos_plataforma,
     enriquecer_grupos_ref_app,
+    enriquecer_snapshot_plataforma,
     frase_delta_plataforma,
     marcar_sin_fichaje_grupos,
     mapa_fichaje_plataforma,
     mapa_lineas_propuesta,
+    totales_comparar_ronda,
     totales_plataforma_grupos,
     desenviar,
     detalle_certificacion_obra,
@@ -1023,12 +1025,14 @@ def _render_cert(
             break
 
     ronda_id = request.args.get('ronda', type=int)
+    corr = str(request.args.get('corr') or '').strip().lower() in ('1', 'true', 'yes', 'si')
     mesa_ctx = contexto_mesa(
         company, obra, anio, mes,
         propia=propia, ajena=ajena,
         vista_subcontrata=vista_subcontrata,
         ronda_id=ronda_id,
         modo_vista=modo,
+        corr=corr,
     )
     # Backfill de historial (rondas) hecho en contexto_mesa: hay que persistirlo.
     db.session.commit()
@@ -1099,39 +1103,61 @@ def _render_cert(
             except (TypeError, ValueError):
                 return False
 
-        # 1) Si estás respondiendo a su carta en mesa, compara esa.
-        # 2) Si no, la propuesta del panel (borrador / enviada / aceptada).
-        # Nunca uses totales_comparar vacío (0/0 → −100% falso).
+        # Delta vs App según la vista:
+        # - recibida/historial → la carta que estás mirando
+        # - responder (borrador) → tu borrador («vas a enviar»)
+        # - resto → tu propuesta viva
         prop_h = prop_i = None
         etiqueta = 'propuesta'
-        comparar = mesa_ctx.get('comparar_ronda')
-        if comparar and mesa_ctx.get('modo_mesa') == 'responder':
-            tc = mesa_ctx.get('totales_comparar') or {}
-            if _tiene_volumen(tc.get('horas'), tc.get('importe')):
-                prop_h = tc.get('horas') or 0
-                prop_i = tc.get('importe') or 0
+        modo_m = mesa_ctx.get('modo_mesa')
+        ronda_vista = mesa_ctx.get('ronda_sel')
+        propia_dir = DIR_SUB if vista_subcontrata else DIR_EMP
+        if modo_m in ('recibida', 'historial') and ronda_vista is not None:
+            tc_r = totales_comparar_ronda(ronda_vista)
+            if _tiene_volumen(tc_r.get('horas'), tc_r.get('importe')):
+                prop_h = tc_r.get('horas') or 0
+                prop_i = tc_r.get('importe') or 0
+            else:
+                prop_h = ronda_vista.horas_total or 0
+                prop_i = ronda_vista.importe_total or 0
+            if ronda_vista.direccion != propia_dir:
                 etiqueta = 'su_propuesta'
-        if prop_h is None:
+            elif (ronda_vista.resultado or '') == 'aceptada':
+                etiqueta = 'aceptada'
+            else:
+                etiqueta = 'enviada'
+        else:
             prop_h = tot_propia.get('horas') or 0
             prop_i = tot_propia.get('importe') or 0
             est = (propia.estado if propia else '') or ''
-            if mesa_ctx.get('modo_mesa') == 'cerrada' or est == 'aceptada':
+            if modo_m == 'cerrada' or est == 'aceptada':
                 etiqueta = 'aceptada'
             elif est == 'enviada':
                 etiqueta = 'enviada'
             else:
                 etiqueta = 'propuesta'
+        g_hist = mesa_ctx.get('grupos_hist') or []
+        if g_hist:
+            enriquecer_snapshot_plataforma(
+                g_hist, mapa_plat,
+                precio_fallback=precio_val,
+                obra_id=obra.id if obra else None,
+            )
+        plat_para_delta = (
+            totales_plataforma_grupos(g_hist)
+            if modo_m in ('recibida', 'historial') and g_hist
+            else totales_plat
+        )
         if _tiene_volumen(prop_h, prop_i) or _tiene_volumen(
-            totales_plat.get('horas'), totales_plat.get('importe'),
+            plat_para_delta.get('horas'), plat_para_delta.get('importe'),
         ):
             delta_propuesta_plat = delta_vs_plataforma(
                 propuesto_horas=prop_h,
                 propuesto_importe=prop_i,
-                plataforma_horas=totales_plat['horas'],
-                plataforma_importe=totales_plat['importe'],
+                plataforma_horas=plat_para_delta['horas'],
+                plataforma_importe=plat_para_delta['importe'],
             )
             if delta_propuesta_plat is not None:
-                # Vista SaaS: más que la App = Soltec gana; menos = pierde.
                 senal = (
                     delta_propuesta_plat.get('delta_importe')
                     if delta_propuesta_plat.get('pct_importe') is not None
@@ -1142,7 +1168,6 @@ def _render_cert(
                 except (TypeError, ValueError):
                     senal_f = 0.0
                 delta_propuesta_plat['etiqueta'] = etiqueta
-                # Igual o más que la App = verde; menos = rojo.
                 delta_propuesta_plat['soltec_pierde'] = senal_f < -0.05
                 delta_propuesta_plat['soltec_gana'] = not delta_propuesta_plat['soltec_pierde']
                 delta_propuesta_plat['frase'] = frase_delta_plataforma(
@@ -1219,6 +1244,16 @@ def _cert_redirect(endpoint, company, anio, mes, obra_id, **extra):
     kwargs = {'anio': anio, 'mes': mes, 'obra_id': obra_id}
     if endpoint.startswith('compliance.'):
         kwargs['company_id'] = company.id
+    # Tras enviar/aceptar/rechazar no volvemos a «corr»: el turno cambió.
+    accion = (request.form.get('accion') or '').strip()
+    keep_corr = accion not in ('enviar', 'aceptar', 'rechazar', 'desenviar')
+    corr = extra.pop('corr', None)
+    if corr is None and keep_corr:
+        raw = request.form.get('corr') or request.args.get('corr')
+        if str(raw or '').strip().lower() in ('1', 'true', 'yes', 'si'):
+            corr = '1'
+    if corr and keep_corr:
+        kwargs['corr'] = corr
     for key, value in extra.items():
         if value is not None and value != '':
             kwargs[key] = value

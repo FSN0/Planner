@@ -1134,6 +1134,7 @@ def agrupar_snapshot(lineas_json: list | None, *, modo: str = 'persona') -> list
         uid = r['user_id'] if r['user_id'] is not None else r['user_name']
         bucket = personas.setdefault(uid, {
             'nombre': r['user_name'],
+            'user_id': r['user_id'],
             'fechas': [],
             'horas': Decimal('0.00'),
             'importe': Decimal('0.00'),
@@ -1163,12 +1164,80 @@ def agrupar_snapshot(lineas_json: list | None, *, modo: str = 'persona') -> list
             fechas.append(d)
         out.append({
             'nombre': b['nombre'],
+            'user_id': b.get('user_id'),
             'fechas': fechas,
             'horas': cuantizar(b['horas']) or Decimal('0.00'),
             'importe': cuantizar(b['importe']) or Decimal('0.00'),
         })
     out.sort(key=lambda p: (p['nombre'] or '').lower())
     return out
+
+
+def _plat_fila_snapshot(row: dict, mapa_plat: dict, *, obra_id, precio_fb, fecha=None):
+    uid = row.get('user_id')
+    oid = row.get('obra_id') or obra_id
+    fch = fecha or row.get('fecha')
+    ref = mapa_plat.get((uid, oid, fch)) if uid and oid and fch else None
+    if not ref or ref.get('horas') is None:
+        row['plat_horas'] = None
+        row['plat_importe'] = None
+        return Decimal('0.00'), Decimal('0.00')
+    h = cuantizar(ref['horas']) or Decimal('0.00')
+    precio = row.get('precio_hora')
+    if precio is None:
+        precio = precio_fb
+    imp = importe_linea(h, precio) or Decimal('0.00')
+    row['plat_horas'] = h
+    row['plat_importe'] = imp
+    return h, imp
+
+
+def enriquecer_snapshot_plataforma(
+    grupos: list[dict],
+    mapa_plat: dict,
+    *,
+    precio_fallback=None,
+    obra_id: int | None = None,
+) -> list[dict]:
+    """Añade plat_horas / plat_importe a grupos de historial (snapshot)."""
+    precio_fb = cuantizar(precio_fallback) if precio_fallback is not None else None
+    for grupo in grupos or []:
+        # Modo persona: persona → fechas → líneas
+        if grupo.get('fechas') is not None:
+            h_obra = Decimal('0.00')
+            i_obra = Decimal('0.00')
+            for fecha in grupo.get('fechas') or []:
+                h_f = Decimal('0.00')
+                i_f = Decimal('0.00')
+                for row in fecha.get('lineas') or []:
+                    h, imp = _plat_fila_snapshot(
+                        row, mapa_plat,
+                        obra_id=obra_id, precio_fb=precio_fb,
+                        fecha=fecha.get('fecha'),
+                    )
+                    h_f += h
+                    i_f += imp
+                fecha['plat_horas'] = cuantizar(h_f) or Decimal('0.00')
+                fecha['plat_importe'] = cuantizar(i_f) or Decimal('0.00')
+                h_obra += h_f
+                i_obra += i_f
+            grupo['plat_horas'] = cuantizar(h_obra) or Decimal('0.00')
+            grupo['plat_importe'] = cuantizar(i_obra) or Decimal('0.00')
+            continue
+        # Modo fecha: día → líneas
+        h_f = Decimal('0.00')
+        i_f = Decimal('0.00')
+        for row in grupo.get('lineas') or []:
+            h, imp = _plat_fila_snapshot(
+                row, mapa_plat,
+                obra_id=obra_id, precio_fb=precio_fb,
+                fecha=grupo.get('fecha'),
+            )
+            h_f += h
+            i_f += imp
+        grupo['plat_horas'] = cuantizar(h_f) or Decimal('0.00')
+        grupo['plat_importe'] = cuantizar(i_f) or Decimal('0.00')
+    return grupos
 
 
 def sembrar_borrador_desde_mesa(
@@ -2019,7 +2088,7 @@ def frase_delta_plataforma(
                 sujeto=sujeto, pct=abs_txt,
             )
         return translate(
-            '{sujeto} cuesta lo mismo que el fichaje de la plataforma.',
+            '{sujeto} cuadra con el fichaje de la plataforma.',
             sujeto=sujeto,
         )
     pct_h = delta.get('pct_horas')
@@ -2041,7 +2110,7 @@ def frase_delta_plataforma(
                 sujeto=sujeto, pct=abs_txt,
             )
         return translate(
-            '{sujeto} tiene las mismas horas que el fichaje de la plataforma.',
+            '{sujeto} cuadra con el fichaje de la plataforma.',
             sujeto=sujeto,
         )
     return None
@@ -3558,14 +3627,21 @@ def contexto_mesa(
     vista_subcontrata: bool,
     ronda_id: int | None = None,
     modo_vista: str = 'persona',
+    corr: bool = False,
 ) -> dict:
-    """Datos para la UI de mesa única + baraja de rondas."""
+    """Datos para la UI de mesa única + baraja de rondas.
+
+    Cuando te toca responder hay dos vistas:
+    - recibida: carta ajena en mesa (solo lectura + Aceptar/Rechazar)
+    - responder (corr): borrador editable para enviar corrección
+    """
     asegurar_rondas_periodo(company.id, obra.id, anio, mes)
     _purgar_retiradas_y_renumerar(company.id, obra.id, anio, mes)
     rondas = list(_rondas_periodo(company.id, obra.id, anio, mes))
     mesa = ronda_en_mesa(company.id, obra.id, anio, mes)
     bloqueado = periodo_bloqueado(company.id, anio, mes, obra.id)
     propia_dir = DIR_SUB if vista_subcontrata else DIR_EMP
+    mesa_ajena = mesa if (mesa and mesa.direccion != propia_dir) else None
 
     _, _, sub_n, ofi_n = _nombres_certificacion(company, vista_subcontrata=vista_subcontrata)
 
@@ -3577,7 +3653,7 @@ def contexto_mesa(
         modo_prev = 'cerrada'
     elif propia and propia.estado == 'enviada':
         modo_prev = 'esperando'
-    elif mesa and mesa.direccion != propia_dir:
+    elif mesa_ajena is not None:
         modo_prev = 'responder'
     else:
         modo_prev = 'preparar'
@@ -3609,17 +3685,28 @@ def contexto_mesa(
     baraja = [_carta(r) for r in rondas]
     mesa_carta_seq = next((c['etiqueta'] for c in baraja if c['en_mesa']), None)
 
+    corr_activa = bool(corr) and modo_prev == 'responder'
     ronda_sel = None
+    viendo_recibida = False
+
     if ronda_id:
         ronda_sel = next((r for r in rondas if r.id == ronda_id), None)
-        # La carta en mesa es la propuesta actual: misma vista interactiva, no historial.
         if ronda_sel and ronda_sel.resultado == 'en_mesa':
-            ronda_sel = None
+            if mesa_ajena and ronda_sel.id == mesa_ajena.id and not corr_activa:
+                viendo_recibida = True
+            else:
+                # Carta propia en mesa (o corr forzada): vista interactiva actual.
+                ronda_sel = None
+    elif modo_prev == 'responder' and mesa_ajena and not corr_activa:
+        # Por defecto al abrir: ver lo que mandaron (aceptar sin editar).
+        ronda_sel = mesa_ajena
+        viendo_recibida = True
 
-    # Solo cartas cerradas del historial van a solo lectura.
     viendo_historial = bool(ronda_sel)
 
-    if viendo_historial:
+    if viendo_recibida:
+        modo_mesa = 'recibida'
+    elif viendo_historial:
         modo_mesa = 'historial'
     else:
         modo_mesa = modo_prev
@@ -3631,14 +3718,12 @@ def contexto_mesa(
                 p.comentario_rechazo = None
 
     comparar = None
-    if modo_mesa == 'responder':
-        # Solo se compara/contrapropuesta cuando hay una carta ajena en la mesa.
-        if mesa and mesa.direccion != propia_dir:
-            comparar = mesa
+    if modo_mesa == 'responder' and mesa_ajena is not None:
+        comparar = mesa_ajena
 
-    if modo_mesa == 'esperando':
+    if modo_prev == 'esperando':
         turno = 'esperando'
-    elif modo_mesa == 'responder':
+    elif modo_prev == 'responder':
         turno = 'te_toca'
     elif modo_mesa == 'preparar':
         turno = 'puedes_enviar'
@@ -3679,12 +3764,15 @@ def contexto_mesa(
         'mesa': mesa,
         'mesa_carta': _carta(mesa) if mesa else None,
         'mesa_carta_seq': mesa_carta_seq,
+        'mesa_ajena_id': mesa_ajena.id if mesa_ajena else None,
         'ronda_sel': ronda_sel,
         'ronda_sel_etiqueta': (
             etiquetas.get(int(ronda_sel.id), str(ronda_sel.secuencia or ''))
             if ronda_sel and ronda_sel.id else None
         ),
         'viendo_historial': viendo_historial,
+        'viendo_recibida': viendo_recibida,
+        'corr_activa': corr_activa,
         'modo_mesa': modo_mesa,
         'turno': turno,
         'comparar_ronda': comparar,

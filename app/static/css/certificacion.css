@@ -698,6 +698,14 @@
   flex: 0 0 auto;
   max-width: 100%;
 }
+.cert-recibida-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+}
 .cert-panel--ok {
   background: rgba(22, 163, 74, 0.03);
   border-color: rgba(22, 163, 74, 0.16);

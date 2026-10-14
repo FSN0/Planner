@@ -232,13 +232,26 @@ def test_contexto_mesa_responder(mesa_ctx, monkeypatch):
         propia=emp, ajena=sub,
         vista_subcontrata=False,
     )
-    assert ctx['modo_mesa'] == 'responder'
+    # Por defecto: ver lo recibido (aceptar/rechazar) sin editar.
+    assert ctx['modo_mesa'] == 'recibida'
+    assert ctx['viendo_recibida'] is True
     assert ctx['turno'] == 'te_toca'
     assert ctx['mesa'] is not None
-    assert ctx['comparar_ronda'] is not None
-    assert (u.id, o.id, date(2026, 10, 1)) in ctx['mapa_comparar']
+    assert ctx['comparar_ronda'] is None
     assert ctx['mesa_carta_seq'] == '1'
     assert ctx['baraja'][0]['etiqueta'] == '1'
+
+    ctx_corr = contexto_mesa(
+        company, o, 2026, 10,
+        propia=emp, ajena=sub,
+        vista_subcontrata=False,
+        corr=True,
+    )
+    assert ctx_corr['modo_mesa'] == 'responder'
+    assert ctx_corr['corr_activa'] is True
+    assert ctx_corr['viendo_recibida'] is False
+    assert ctx_corr['comparar_ronda'] is not None
+    assert (u.id, o.id, date(2026, 10, 1)) in ctx_corr['mapa_comparar']
 
 
 def test_etiquetas_nueva_propuesta_tras_rechazo(mesa_ctx, monkeypatch):
@@ -431,6 +444,11 @@ def test_frase_delta_plataforma_cara_barata():
     )
     assert 'aceptada' in (cerrada or '')
     assert 'vas a enviar' not in (cerrada or '')
+    igual = frase_delta_plataforma(
+        {'pct_importe': Decimal('0.00'), 'pct_horas': None},
+        etiqueta='propuesta',
+    )
+    assert 'cuadra' in (igual or '')
 
 
 def test_anadir_dia_manual_sin_fichaje(mesa_ctx, monkeypatch):

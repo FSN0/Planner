@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014peer2">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014peer3">
 {% endblock %}
 {% block wrapper %}
 {% set endpoint = 'subcontrata.certificacion_obra' if vista_subcontrata else 'compliance.certificacion_empresa_obra' %}
@@ -44,7 +44,7 @@
 {% set ajena_visible = ajena_visible if ajena_visible is defined else (ajena and ajena.estado in ('enviada', 'aceptada')) %}
 {% if propia.estado == 'cerrada' %}
   {% set propia_estado_ui = 'cerrada' %}
-{% elif modo_mesa == 'responder' %}
+{% elif modo_mesa in ('responder', 'recibida') or (turno is defined and turno == 'te_toca') %}
   {% set propia_estado_ui = 'por_responder' %}
 {% elif bloqueado and propia.estado == 'borrador' %}
   {% set propia_estado_ui = 'cerrada' %}
@@ -616,6 +616,8 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     var hasta = form.querySelector('input[name="hasta"]');
     if (desde) fd.append('desde', desde.value);
     if (hasta) fd.append('hasta', hasta.value);
+    var corr = form.querySelector('input[name="corr"]');
+    if (corr && corr.value) fd.append('corr', corr.value);
     fd.append('accion', 'prorrata_persona');
     fd.append('user_id', uid);
     fd.append('horas_total', input.value);
@@ -866,6 +868,8 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     var hasta = form.querySelector('input[name="hasta"]');
     if (desde) fd.append('desde', desde.value);
     if (hasta) fd.append('hasta', hasta.value);
+    var corr = form.querySelector('input[name="corr"]');
+    if (corr && corr.value) fd.append('corr', corr.value);
     fd.append('accion', 'anadir_dia');
     fd.append('anadir_user_id', uid);
     fd.append('anadir_fecha', fecha);
@@ -999,53 +1003,8 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
   });
 })();
 (function () {
-  var form = document.getElementById('form-propia');
-  if (!form || !form.classList.contains('js-mesa-responder')) return;
-  var btnAceptar = form.querySelector('.js-mesa-aceptar');
-  var btnEnviar = form.querySelector('.js-mesa-enviar-corr');
-  if (!btnAceptar || !btnEnviar) return;
-
-  function normNum(v) {
-    if (v === null || v === undefined || String(v).trim() === '') return '';
-    var n = parseFloat(String(v).replace(',', '.'));
-    return isFinite(n) ? n.toFixed(2) : String(v).trim();
-  }
-
-  // Aceptar solo si horas (y €/h) coinciden con lo que enviaron ellos.
-  // Tras «Guardar» no se reinicia: se sigue midiendo contra su propuesta.
-  function differsFromPeer() {
-    var peerRows = form.querySelectorAll('.cert-line[data-peer-horas]');
-    if (!peerRows.length) return false;
-    for (var i = 0; i < peerRows.length; i++) {
-      var row = peerRows[i];
-      var h = row.querySelector('.js-horas');
-      var p = row.querySelector('.js-precio');
-      if (normNum(h && h.value) !== normNum(row.getAttribute('data-peer-horas'))) {
-        return true;
-      }
-      if (normNum(p && p.value) !== normNum(row.getAttribute('data-peer-precio'))) {
-        return true;
-      }
-    }
-    var extras = form.querySelectorAll('.cert-line[data-linea-id]:not([data-peer-horas])');
-    for (var j = 0; j < extras.length; j++) {
-      var eh = extras[j].querySelector('.js-horas');
-      if (eh && normNum(eh.value) !== '') return true;
-    }
-    return false;
-  }
-
-  function syncMesaActions() {
-    var dirty = differsFromPeer();
-    form.classList.toggle('is-dirty', dirty);
-    btnAceptar.hidden = dirty;
-    btnAceptar.disabled = dirty;
-    btnEnviar.hidden = !dirty;
-  }
-  window.certSyncMesaActions = syncMesaActions;
-  form.addEventListener('input', syncMesaActions);
-  form.addEventListener('change', syncMesaActions);
-  syncMesaActions();
+  // Aceptar/Rechazar viven en la vista «recibida»; aquí solo corrección.
+  window.certSyncMesaActions = function () {};
 })();
 (function () {
   document.querySelectorAll('.js-note-toggle').forEach(function (btn) {
