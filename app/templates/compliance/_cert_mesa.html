@@ -278,7 +278,7 @@
         <div class="cert-works">
           {% for obra_g in grupos_propia %}
           {% set cmp_p = cmp_persona.get(obra_g.persona_user_id) if obra_g.persona_user_id and cmp_persona else none %}
-          <details class="cert-work">
+          <details class="cert-work" data-user-id="{{ obra_g.persona_user_id or '' }}">
             <summary>
               <span class="cert-work-name">{{ obra_g.obra.nombre if obra_g.obra else _('Obra') }}</span>
               {% if modo_vista == 'persona' and editable and obra_g.persona_user_id %}
@@ -287,7 +287,8 @@
                   <input type="text" inputmode="decimal" name="phoras_{{ obra_g.persona_user_id }}"
                          class="cert-prorrata-input js-work-horas" value="{{ obra_g.horas if obra_g.horas else '' }}"
                          placeholder="0"
-                         title="{{ _('Total horas del trabajador. Guardar todo reparte este total entre los días.') }}"
+                         data-user-id="{{ obra_g.persona_user_id }}"
+                         title="{{ _('Total horas del trabajador. Al salir del campo se guarda y reparte entre los días.') }}"
                          aria-label="{{ _('Total horas del mes') }}">
                   <em>h</em>
                 </span>
@@ -299,7 +300,7 @@
                 <span class="cert-work-col cert-work-col--horas-cmp">
                   {% if cmp_p %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
                 </span>
-                <span class="cert-work-col cert-work-col--imp" title="{{ _('Importe total de este trabajador') }}">{{ obra_g.importe }} €</span>
+                <span class="cert-work-col cert-work-col--imp js-work-imp" title="{{ _('Importe total de este trabajador') }}">{{ obra_g.importe }} €</span>
                 <span class="cert-work-col cert-work-col--imp-cmp">
                   {% if cmp_p and cmp_p.importe is not none %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.importe }} €)</span>{% endif %}
                 </span>
@@ -369,7 +370,14 @@
                   {% for item in fecha.lineas %}
                   {% set ln = item.linea %}
                   {% set prev = mapa_comparar.get((ln.user_id, ln.obra_id, ln.fecha)) if mapa_comparar else none %}
-                  <div class="cert-line {% if modo_vista == 'persona' %}cert-line--persona{% endif %} {% if not vista_subcontrata %}cert-line--con-plat{% endif %} {% if not vista_subcontrata and ln.solape %}is-overlap{% endif %} {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}is-manual{% endif %} {% if ln.id in falta_ids %}is-missing{% endif %}" data-linea-id="{{ ln.id }}">
+                  <div class="cert-line {% if modo_vista == 'persona' %}cert-line--persona{% endif %} {% if not vista_subcontrata %}cert-line--con-plat{% endif %} {% if not vista_subcontrata and ln.solape %}is-overlap{% endif %} {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}is-manual{% endif %} {% if ln.id in falta_ids %}is-missing{% endif %}"
+                       data-linea-id="{{ ln.id }}"
+                       {% if prev %}
+                       data-peer-horas="{{ prev.horas if prev.horas is not none else '' }}"
+                       data-peer-precio="{{ prev.precio_hora if prev.precio_hora is not none else '' }}"
+                       data-peer-inicio="{{ prev.hora_inicio or '' }}"
+                       data-peer-fin="{{ prev.hora_fin or '' }}"
+                       {% endif %}>
                     <div class="cert-person">
                       {% if modo_vista != 'persona' %}
                       <strong>{{ ln.user.name }} {{ ln.user.lastname }}</strong>

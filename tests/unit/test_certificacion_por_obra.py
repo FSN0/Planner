@@ -416,6 +416,45 @@ def test_detalle_obra_no_sincroniza_ni_odoo(cert_ctx, monkeypatch):
     assert detalle['empresas'][0]['precio'] == Decimal('19.50')
 
 
+def test_sincronizar_subcontrata_asigna_precio_sin_refresco(cert_ctx, monkeypatch):
+    """Portal subcontrata usa refrescar_precios=False; igual debe materializar €/h."""
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra precio sub')
+    u = _operario(session, company, 'Tarifa')
+    dia = date(2026, 10, 8)
+    session.add(RegistroFichaje(
+        user_id=u.id,
+        fecha=dia,
+        obra_real_id=o.id,
+        check_in=datetime.combine(dia, time(7, 0)),
+        check_out=datetime.combine(dia, time(15, 0)),
+        estado='Correcto',
+    ))
+    session.commit()
+
+    import app.services.certificacion_service as cs
+    monkeypatch.setattr(
+        cs, 'precio_para',
+        lambda *a, **k: Decimal('23.00'),
+    )
+
+    sub, emp = sincronizar(company, 2026, 10, o.id, refrescar_precios=False)
+    session.commit()
+    ln_sub = next(x for x in sub.lineas if x.user_id == u.id and x.fecha == dia)
+    ln_emp = next(x for x in emp.lineas if x.user_id == u.id and x.fecha == dia)
+    assert ln_sub.precio_hora == Decimal('23.00')
+    assert ln_emp.precio_hora == Decimal('23.00')
+
+    # Si ya tenía 0, también lo rellena en la siguiente sync sin refresco global.
+    ln_sub.precio_hora = Decimal('0.00')
+    session.commit()
+    sub2, _emp2 = sincronizar(company, 2026, 10, o.id, refrescar_precios=False)
+    session.commit()
+    ln_sub2 = next(x for x in sub2.lineas if x.user_id == u.id and x.fecha == dia)
+    assert ln_sub2.precio_hora == Decimal('23.00')
+
+
 def test_plataforma_ref_y_delta_propuesta(cert_ctx):
     from app.services.certificacion_service import (
         agrupar_por_persona,
@@ -469,3 +508,71 @@ def test_plataforma_ref_y_delta_propuesta(cert_ctx):
     assert d['delta_importe'] == Decimal('40.00')
     assert d['pct_horas'] == Decimal('25.00')
     assert d['pct_importe'] == Decimal('25.00')
+
+
+def test_prorrata_persona_json_xhr_persiste(cert_ctx, monkeypatch):
+    """XHR prorrata_persona guarda el total y devuelve líneas + importe."""
+    from app.compliance.routes import _post_cert
+
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    app = cert_ctx['app']
+    o = _obra(session, 'Obra Autosave Total')
+    u = _operario(session, company, 'Autosave')
+    prop = CertificacionPropuesta(
+        company_id=company.id, obra_id=o.id, anio=2026, mes=10,
+        direccion=DIR_SUB, estado='borrador',
+    )
+    session.add(prop)
+    session.flush()
+    lids = []
+    for d in (1, 2):
+        ln = CertificacionLinea(
+            propuesta_id=prop.id,
+            user_id=u.id,
+            obra_id=o.id,
+            fecha=date(2026, 10, d),
+            horas=Decimal('8.00'),
+            precio_hora=Decimal('10.00'),
+            origen_horas='app',
+        )
+        session.add(ln)
+        session.flush()
+        lids.append(ln.id)
+    session.commit()
+    monkeypatch.setattr(
+        'app.services.certificacion_service.periodo_bloqueado',
+        lambda *a, **k: False,
+    )
+    with app.test_request_context(
+        '/subcontrata/certificacion/obra/%s' % o.id,
+        method='POST',
+        data={
+            'accion': 'prorrata_persona',
+            'user_id': str(u.id),
+            'horas_total': '100',
+            'anio': '2026',
+            'mes': '10',
+        },
+        headers={
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+        },
+    ):
+        resp = _post_cert(
+            company, 2026, 10, o.id,
+            direccion_propia=DIR_SUB,
+            endpoint='subcontrata.certificacion_obra',
+        )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['ok'] is True
+    assert data['saved'] is True
+    assert float(data['horas_total']) == pytest.approx(100.0)
+    assert float(data['importe_total']) == pytest.approx(1000.0)
+    assert len(data['lineas']) == 2
+    assert {ln['linea_id'] for ln in data['lineas']} == set(lids)
+    session.expire_all()
+    prop2 = CertificacionPropuesta.query.get(prop.id)
+    assert sum(float(ln.horas) for ln in prop2.lineas) == pytest.approx(100.0)
+    assert all(ln.origen_horas == 'manual_total' for ln in prop2.lineas)

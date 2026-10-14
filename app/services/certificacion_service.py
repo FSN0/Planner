@@ -514,12 +514,20 @@ def sincronizar(
             vistos.add(key)
             user = users.get(fila['user_id'])
             ln = actuales.get(key)
-            # Refrescar €/h del contrato (incl. tarifa por persona) salvo edición manual.
+            # €/h del contrato: siempre si falta (subcontrata entra con refrescar_precios=False
+            # y antes las filas nuevas quedaban a 0). refrescar_precios=True además
+            # actualiza tarifas no editadas a mano.
             manual = bool(ln and ln.origen_horas and str(ln.origen_horas).startswith('manual'))
-            need_precio = refrescar_precios and (
-                ln is None or ln.precio_hora is None or (
-                    not manual and ln.origen_horas in ('vacio', 'fichaje')
-                )
+            sin_precio = (
+                ln is None
+                or ln.precio_hora is None
+                or (cuantizar(ln.precio_hora) or Decimal('0.00')) <= 0
+            )
+            need_precio = sin_precio or (
+                refrescar_precios
+                and not manual
+                and ln is not None
+                and ln.origen_horas in ('vacio', 'fichaje')
             )
             if need_precio:
                 precio = precio_para(

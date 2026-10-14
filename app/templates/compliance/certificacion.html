@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014plat3">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261014work1">
 {% endblock %}
 {% block wrapper %}
 {% set endpoint = 'subcontrata.certificacion_obra' if vista_subcontrata else 'compliance.certificacion_empresa_obra' %}
@@ -163,7 +163,10 @@
             </span>
             <strong>{{ precio }} €</strong>
             {% if vista_subcontrata %}
-            <em class="cert-precio-hint">{{ _('Acordado para esta obra') }}</em>
+            <em class="cert-precio-hint">
+              {% if precio_origen == 'contrato' %}{{ _('Fijado por el contrato de asistencia') }}
+              {% else %}{{ _('Acordado para esta obra') }}{% endif %}
+            </em>
             {% endif %}
           </div>
           {% elif vista_subcontrata and precio is not none and precio > 0 %}
@@ -173,7 +176,7 @@
             {% if contrato %}
             <em class="cert-precio-hint">{{ _('Fijado por el contrato') }} {{ contrato.name or ('#' ~ contrato.contract_id) }}</em>
             {% else %}
-            <em class="cert-precio-hint">{{ _('Acordado para esta obra') }}</em>
+            <em class="cert-precio-hint">{{ _('Fijado por el contrato de asistencia') }}</em>
             {% endif %}
           </div>
           {% endif %}
@@ -403,7 +406,11 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     if (fin && data.hora_fin !== undefined) fin.value = data.hora_fin || '';
     if (horas) horas.value = data.horas || '';
     if (precio && data.precio) precio.value = data.precio;
-    if (importe) importe.textContent = data.importe || '—';
+    if (importe) {
+      var impMain = importe.querySelector('span:not(.cert-diff)');
+      if (impMain) impMain.textContent = data.importe || '—';
+      else importe.textContent = data.importe || '—';
+    }
 
     row.querySelectorAll('.js-falta-flag').forEach(function (el) { el.remove(); });
     if (inicio) inicio.classList.remove('is-invalid');
@@ -453,6 +460,12 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     };
   }
 
+  function updateWorkImp(work, wI) {
+    if (!work) return;
+    var impCol = work.querySelector('.js-work-imp');
+    if (impCol) impCol.textContent = fmt(wI) + ' €';
+  }
+
   function recalcFromRow(row) {
     var day = row.closest('.cert-day');
     var work = row.closest('.cert-work');
@@ -464,7 +477,10 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
         dI += v.h * v.p;
       });
       var dayStats = day.querySelector('.js-day-stats');
-      if (dayStats) dayStats.textContent = fmtPair(dH, dI);
+      if (dayStats) {
+        var dayMain = dayStats.querySelector(':scope > span:first-child') || dayStats;
+        dayMain.textContent = fmtPair(dH, dI);
+      }
     }
     if (work) {
       var wH = 0, wI = 0;
@@ -475,6 +491,7 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       });
       var inp = work.querySelector('.js-work-horas');
       if (inp) inp.value = fmt(wH);
+      updateWorkImp(work, wI);
       var workStats = work.querySelector('.js-work-stats');
       if (workStats) workStats.textContent = fmtPair(wH, wI);
     }
@@ -499,10 +516,11 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     setTimeout(function () { msg.remove(); }, 2500);
   }
 
-  function postFila(btn, fieldName) {
-    var row = btn.closest('.cert-line');
-    if (!row || btn.disabled) return;
-    var id = btn.value;
+  function postFilaRow(row, fieldName, opts) {
+    opts = opts || {};
+    if (!row || row.getAttribute('data-saving') === '1') return Promise.resolve();
+    var id = opts.id || row.getAttribute('data-linea-id');
+    if (!id) return Promise.resolve();
     var fd = new FormData();
     fd.append('csrf_token', csrfToken());
     fd.append('anio', form.querySelector('input[name="anio"]').value);
@@ -518,9 +536,12 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
         if (input) fd.append(input.name, input.value);
       });
     }
-    btn.disabled = true;
-    btn.classList.add('is-busy');
-    fetch(form.action || window.location.href, {
+    row.setAttribute('data-saving', '1');
+    if (opts.btn) {
+      opts.btn.disabled = true;
+      opts.btn.classList.add('is-busy');
+    }
+    return fetch(form.action || window.location.href, {
       method: 'POST',
       body: fd,
       headers: {
@@ -528,6 +549,7 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
         'Accept': 'application/json',
       },
       credentials: 'same-origin',
+      keepalive: true,
     }).then(function (res) {
       return res.json().then(function (data) {
         return { okHttp: res.ok, data: data };
@@ -536,7 +558,7 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       var data = pack.data || {};
       if (!pack.okHttp && data.error) {
         flashInline(row, data.error, false);
-        return;
+        return data;
       }
       if (data.saved) applyLinea(row, data);
       if (data.tramo_invalido) {
@@ -546,20 +568,153 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       } else if (data.error) {
         flashInline(row, data.error, false);
       }
+      if (typeof window.certSyncMesaActions === 'function') {
+        window.certSyncMesaActions();
+      }
+      return data;
     }).catch(function () {
       flashInline(row, {{ _('No se pudo guardar la fila.')|tojson }}, false);
     }).finally(function () {
-      btn.disabled = false;
-      btn.classList.remove('is-busy');
+      row.removeAttribute('data-saving');
+      if (opts.btn) {
+        opts.btn.disabled = false;
+        opts.btn.classList.remove('is-busy');
+      }
+    });
+  }
+
+  var MSG_WORK_OK = {{ _('Total guardado.')|tojson }};
+  var MSG_WORK_FAIL = {{ _('No se pudo guardar el total.')|tojson }};
+
+  function flashWork(work, text, ok) {
+    if (!work) return;
+    var tools = work.querySelector('.cert-work-tools');
+    if (!tools) return;
+    var old = tools.querySelector('.js-work-msg');
+    if (old) old.remove();
+    var msg = document.createElement('span');
+    msg.className = 'cert-flag js-work-msg ' + (ok ? 'is-ok' : 'is-bad');
+    msg.textContent = text;
+    tools.appendChild(msg);
+    setTimeout(function () { msg.remove(); }, 2500);
+  }
+
+  function postProrrataWork(work, input) {
+    if (!work || !input || work.getAttribute('data-saving') === '1') {
+      return Promise.resolve();
+    }
+    var uid = input.getAttribute('data-user-id')
+      || work.getAttribute('data-user-id')
+      || '';
+    if (!uid) {
+      var m = String(input.name || '').match(/^phoras_(\d+)$/);
+      uid = m ? m[1] : '';
+    }
+    if (!uid) return Promise.resolve();
+    var fd = new FormData();
+    fd.append('csrf_token', csrfToken());
+    fd.append('anio', form.querySelector('input[name="anio"]').value);
+    fd.append('mes', form.querySelector('input[name="mes"]').value);
+    var desde = form.querySelector('input[name="desde"]');
+    var hasta = form.querySelector('input[name="hasta"]');
+    if (desde) fd.append('desde', desde.value);
+    if (hasta) fd.append('hasta', hasta.value);
+    fd.append('accion', 'prorrata_persona');
+    fd.append('user_id', uid);
+    fd.append('horas_total', input.value);
+    work.setAttribute('data-saving', '1');
+    input.classList.add('is-busy');
+    return fetch(form.action || window.location.href, {
+      method: 'POST',
+      body: fd,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json',
+      },
+      credentials: 'same-origin',
+      keepalive: true,
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        return { okHttp: res.ok, data: data };
+      });
+    }).then(function (pack) {
+      var data = pack.data || {};
+      if (!pack.okHttp || data.error) {
+        flashWork(work, data.error || MSG_WORK_FAIL, false);
+        return data;
+      }
+      (data.lineas || []).forEach(function (ln) {
+        var row = form.querySelector('.cert-line[data-linea-id="' + ln.linea_id + '"]');
+        if (row) applyLinea(row, ln);
+      });
+      if (data.horas_total !== undefined) {
+        input.value = data.horas_total;
+        input.setAttribute('data-focus-val', String(data.horas_total));
+      }
+      if (data.importe_total !== undefined) {
+        updateWorkImp(work, num(data.importe_total));
+      } else {
+        recalcFromRow(work.querySelector('.cert-line:not(.cert-line--head)') || work);
+      }
+      flashWork(work, MSG_WORK_OK, true);
+      if (typeof window.certSyncMesaActions === 'function') {
+        window.certSyncMesaActions();
+      }
+      return data;
+    }).catch(function () {
+      flashWork(work, MSG_WORK_FAIL, false);
+    }).finally(function () {
+      work.removeAttribute('data-saving');
+      input.classList.remove('is-busy');
     });
   }
 
   form.querySelectorAll('.js-guardar-fila').forEach(function (btn) {
-    btn.addEventListener('click', function () { postFila(btn, 'guardar_fila'); });
+    btn.addEventListener('click', function () {
+      var row = btn.closest('.cert-line');
+      postFilaRow(row, 'guardar_fila', { btn: btn, id: btn.value });
+    });
   });
   form.querySelectorAll('.js-restablecer-fila').forEach(function (btn) {
-    btn.addEventListener('click', function () { postFila(btn, 'restablecer'); });
+    btn.addEventListener('click', function () {
+      var row = btn.closest('.cert-line');
+      postFilaRow(row, 'restablecer', { btn: btn, id: btn.value });
+    });
   });
+
+  // Al salir del campo (horas / tramo / €/h), guarda la fila sin recargar.
+  function bindAutosave(input) {
+    if (!input || input.disabled) return;
+    input.addEventListener('focus', function () {
+      input.setAttribute('data-focus-val', String(input.value || ''));
+    });
+    input.addEventListener('blur', function () {
+      var prev = input.getAttribute('data-focus-val');
+      var cur = String(input.value || '');
+      if (prev === cur) return;
+      var row = input.closest('.cert-line');
+      if (!row || !form.contains(row)) return;
+      postFilaRow(row, 'guardar_fila');
+    });
+  }
+  form.querySelectorAll('.js-horas, .js-inicio, .js-fin, .js-precio').forEach(bindAutosave);
+
+  // Total del trabajador (33 → 100): al salir, prorratea y guarda.
+  function bindWorkAutosave(input) {
+    if (!input || input.disabled) return;
+    input.addEventListener('focus', function () {
+      input.setAttribute('data-focus-val', String(input.value || ''));
+    });
+    input.addEventListener('blur', function () {
+      var prev = input.getAttribute('data-focus-val');
+      var cur = String(input.value || '');
+      if (prev === cur) return;
+      var work = input.closest('.cert-work');
+      if (!work || !form.contains(work)) return;
+      postProrrataWork(work, input);
+    });
+  }
+  form.querySelectorAll('.js-work-horas').forEach(bindWorkAutosave);
 })();
 
 (function () {
@@ -632,36 +787,45 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
   var btnAceptar = form.querySelector('.js-mesa-aceptar');
   var btnEnviar = form.querySelector('.js-mesa-enviar-corr');
   if (!btnAceptar || !btnEnviar) return;
-  var skipNames = {
-    csrf_token: 1, accion: 1, comentario: 1, chat_texto: 1,
-    anio: 1, mes: 1, modo: 1, desde: 1, hasta: 1
-  };
-  var initial = [];
-  form.querySelectorAll('input, select, textarea').forEach(function (el) {
-    if (!el.name || skipNames[el.name]) return;
-    if (el.type === 'hidden' && (el.name === 'csrf_token' || el.name.indexOf('accion') === 0)) return;
-    initial.push({
-      el: el,
-      val: el.type === 'checkbox' || el.type === 'radio' ? el.checked : String(el.value || '')
-    });
-  });
-  function isDirty() {
-    for (var i = 0; i < initial.length; i++) {
-      var item = initial[i];
-      var cur = item.el.type === 'checkbox' || item.el.type === 'radio'
-        ? item.el.checked
-        : String(item.el.value || '');
-      if (cur !== item.val) return true;
+
+  function normNum(v) {
+    if (v === null || v === undefined || String(v).trim() === '') return '';
+    var n = parseFloat(String(v).replace(',', '.'));
+    return isFinite(n) ? n.toFixed(2) : String(v).trim();
+  }
+
+  // Aceptar solo si horas (y €/h) coinciden con lo que enviaron ellos.
+  // Tras «Guardar» no se reinicia: se sigue midiendo contra su propuesta.
+  function differsFromPeer() {
+    var peerRows = form.querySelectorAll('.cert-line[data-peer-horas]');
+    if (!peerRows.length) return false;
+    for (var i = 0; i < peerRows.length; i++) {
+      var row = peerRows[i];
+      var h = row.querySelector('.js-horas');
+      var p = row.querySelector('.js-precio');
+      if (normNum(h && h.value) !== normNum(row.getAttribute('data-peer-horas'))) {
+        return true;
+      }
+      if (normNum(p && p.value) !== normNum(row.getAttribute('data-peer-precio'))) {
+        return true;
+      }
+    }
+    var extras = form.querySelectorAll('.cert-line[data-linea-id]:not([data-peer-horas])');
+    for (var j = 0; j < extras.length; j++) {
+      var eh = extras[j].querySelector('.js-horas');
+      if (eh && normNum(eh.value) !== '') return true;
     }
     return false;
   }
+
   function syncMesaActions() {
-    var dirty = isDirty();
+    var dirty = differsFromPeer();
     form.classList.toggle('is-dirty', dirty);
     btnAceptar.hidden = dirty;
     btnAceptar.disabled = dirty;
     btnEnviar.hidden = !dirty;
   }
+  window.certSyncMesaActions = syncMesaActions;
   form.addEventListener('input', syncMesaActions);
   form.addEventListener('change', syncMesaActions);
   syncMesaActions();

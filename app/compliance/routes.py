@@ -1036,24 +1036,31 @@ def _render_cert(
                 return cuantizar(ln.precio_hora) or ln.precio_hora
         return None
 
-    # Subcontrata: prioriza precios ya materializados (sin Odoo en cada carga).
-    # Oficina: consulta contrato de asistencia.
+    # Oficina y subcontrata: misma tarifa (obra > empresa > contrato asistencia).
+    # La subcontrata no la edita; sí la ve para que horas × €/h cuadren al enviar.
     if vista_subcontrata:
-        contrato = None
         if precio_obra(obra) is not None:
             precio_origen = 'obra'
             precio_val = precio_obra(obra)
+            contrato = None
         elif company.precio_hora is not None:
             precio_origen = 'empresa'
             precio_val = precio_empresa(company)
+            contrato = None
         else:
             from_line = _precio_linea_util(propia) or _precio_linea_util(ajena)
             if from_line is not None:
                 precio_origen = 'contrato'
                 precio_val = from_line
+                contrato = None
             else:
-                precio_origen = 'sin'
-                precio_val = Decimal('0.00')
+                contrato = contrato_asistencia(company, obra, cache=cache_precios)
+                precio_val = precio_para(company, obra, cache=cache_precios)
+                if precio_val and precio_val > 0:
+                    precio_origen = 'contrato'
+                else:
+                    precio_origen = 'sin'
+                    precio_val = Decimal('0.00')
     else:
         contrato = contrato_asistencia(company, obra, cache=cache_precios)
         if precio_obra(obra) is not None:
@@ -1275,12 +1282,45 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
                 uid = int(request.form.get('user_id') or 0)
             except (TypeError, ValueError):
                 raise ValueError(translate('Persona no válida.'))
-            n = prorratear_horas_persona(propia, uid, request.form.get('horas_total'))
+            horas_total = request.form.get('horas_total')
+            n = prorratear_horas_persona(propia, uid, horas_total)
             db.session.commit()
+            if _cert_wants_json():
+                from flask import jsonify
+                from app.services.compliance_rules import importe_linea
+                lineas_u = [
+                    ln for ln in (propia.lineas or []) if ln.user_id == uid
+                ]
+                th = Decimal('0.00')
+                ti = Decimal('0.00')
+                payload_lineas = []
+                for ln in sorted(lineas_u, key=lambda x: x.fecha or date.min):
+                    h = cuantizar(ln.horas) or Decimal('0.00')
+                    imp = importe_linea(ln.horas, ln.precio_hora) or Decimal('0.00')
+                    th += h
+                    ti += imp
+                    payload_lineas.append({
+                        'linea_id': int(ln.id),
+                        'horas': str(ln.horas) if ln.horas is not None else '',
+                        'precio': str(ln.precio_hora) if ln.precio_hora is not None else '',
+                        'importe': f'{imp} €',
+                        'hora_inicio': '',
+                        'hora_fin': '',
+                        'editado': True,
+                    })
+                return jsonify({
+                    'ok': True,
+                    'saved': True,
+                    'user_id': uid,
+                    'n': n,
+                    'horas_total': str(cuantizar(th) or Decimal('0.00')),
+                    'importe_total': str(cuantizar(ti) or Decimal('0.00')),
+                    'lineas': payload_lineas,
+                })
             flash(
                 translate(
                     'Total de {h} h repartido en {n} días.',
-                    h=request.form.get('horas_total'),
+                    h=horas_total,
                     n=n,
                 ),
                 'success',
@@ -1486,7 +1526,11 @@ def _post_cert(company, anio, mes, obra_id, *, direccion_propia, endpoint):
         flash(translate('Certificación actualizada.'), 'success')
     except Exception as exc:
         db.session.rollback()
-        if _cert_wants_json() and (guardar_fila_id or restablecer_id):
+        if _cert_wants_json() and (
+            guardar_fila_id
+            or restablecer_id
+            or accion == 'prorrata_persona'
+        ):
             from flask import jsonify
             return jsonify({'ok': False, 'error': str(exc)}), 400
         flash(str(exc), 'danger')
