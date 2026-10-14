@@ -187,7 +187,6 @@ def test_save_matrix_from_form_clears_recipients(session, tenant_soltec, app):
         data = [
             ('notif_debounce_minutes', '10'),
             ('notif_digest_hour', '08:00'),
-            ('hora_limite_entrada', '09:00'),
             ('notif_users_panel', '0'),
         ]
         for key in event_keys():

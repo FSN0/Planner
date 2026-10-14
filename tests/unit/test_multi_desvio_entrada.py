@@ -115,6 +115,56 @@ def test_consolidar_pendientes_a_ausencia(session, tenant_soltec, user_operario,
     assert reg.estado == 'Ausencia'
 
 
+def test_corte_mismo_dia_marca_ausencia_y_fichaje_la_quita(
+    session, tenant_soltec, user_operario, user_jefe, monkeypatch,
+):
+    from app.models import ConfiguracionGlobal
+    from app.services.desvio_fichaje_service import ya_paso_hora_limite_entrada
+
+    session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+    conf = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
+    if conf:
+        conf.valor = '08:30'
+    else:
+        session.add(ConfiguracionGlobal(clave='hora_limite_entrada', valor='08:30'))
+    a = _obra(session, 'Plan corte', 'CORTE-01', jefe_id=user_jefe.id)
+    hoy = date.today()
+    session.add(RegistroFichaje(
+        user_id=user_operario.id, fecha=hoy,
+        obra_planificada_id=a.id, estado='Sin_Registro',
+    ))
+    session.commit()
+
+    monkeypatch.setattr(
+        'app.utils.timezone_utils.now_local',
+        lambda: datetime.combine(hoy, time(8, 0)),
+    )
+    assert ya_paso_hora_limite_entrada() is False
+
+    monkeypatch.setattr(
+        'app.utils.timezone_utils.now_local',
+        lambda: datetime.combine(hoy, time(8, 35)),
+    )
+    assert ya_paso_hora_limite_entrada() is True
+
+    n = consolidar_pendientes_a_ausencia(hoy)
+    session.commit()
+    assert n == 1
+    reg = RegistroFichaje.query.filter_by(
+        user_id=user_operario.id, fecha=hoy, obra_planificada_id=a.id,
+    ).first()
+    assert reg.estado == 'Ausencia'
+
+    check_in = datetime.combine(hoy, time(9, 15))
+    cerrados = resolver_plan_cumplido_por_fichaje(
+        user_operario.id, hoy, a.id, check_in=check_in,
+    )
+    session.commit()
+    assert len(cerrados) == 1
+    assert reg.estado == 'Correcto'
+    assert reg.obra_real_id == a.id
+
+
 def test_estado_falta_tiene_color_propio():
     assert estado_fichaje_agregado(['Falta']) == 'Falta'
     assert color_fichaje_agregado(['Falta']) == COLOR_FALTA

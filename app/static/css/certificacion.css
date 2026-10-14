@@ -337,12 +337,24 @@
   color: var(--cert-muted);
   line-height: 1.2;
 }
+.cert-work-tools--plat {
+  /* horas | app h | cmp h | € | cmp € | botones */
+  grid-template-columns: 4rem 3.5rem 3.75rem 4.25rem 3.75rem auto;
+}
 .cert-work-col--horas {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
   color: var(--cert-ink);
+}
+.cert-work-col--plat {
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 1px 5px;
 }
 .cert-work-col--horas-cmp,
 .cert-work-col--imp-cmp {
@@ -889,6 +901,76 @@
   background: #fff;
   min-height: 28px;
 }
+.cert-line--con-plat {
+  grid-template-columns: minmax(90px, 1.1fr) 88px 88px 110px 72px 72px 4rem 48px;
+}
+.cert-plat,
+.cert-plat-cell {
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cert-plat {
+  display: inline-block;
+  background: #f1f5f9;
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.cert-plat-cell {
+  text-align: right;
+  min-width: 0;
+}
+.cert-delta-plat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 12px;
+  color: #334155;
+}
+.cert-delta-plat strong {
+  font-size: 12px;
+  color: #0f172a;
+}
+.cert-delta-plat-main {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cert-delta-plat.is-up {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.cert-delta-plat.is-up strong,
+.cert-delta-plat.is-up .cert-delta-plat-main {
+  color: #b91c1c;
+}
+.cert-delta-plat.is-down {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+.cert-delta-plat.is-down strong,
+.cert-delta-plat.is-down .cert-delta-plat-main {
+  color: #15803d;
+}
+.cert-delta-plat-base {
+  color: #64748b;
+  font-size: 11px;
+}
+.cert-delta-plat.is-up .cert-delta-plat-base,
+.cert-delta-plat.is-down .cert-delta-plat-base {
+  color: inherit;
+  opacity: 0.75;
+}
 .cert-line--head {
   padding: 1px 4px 2px;
   color: #94a3b8;
@@ -1132,6 +1214,9 @@
 }
 .cert-line--persona {
   grid-template-columns: minmax(56px, 0.55fr) 88px 88px 110px 72px 72px 48px;
+}
+.cert-line--persona.cert-line--con-plat {
+  grid-template-columns: minmax(56px, 0.55fr) 88px 88px 110px 72px 72px 4rem 48px;
 }
 .cert-flag.is-ok {
   background: var(--cert-ok-bg);

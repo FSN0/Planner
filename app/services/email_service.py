@@ -604,7 +604,7 @@ def enviar_super_reporte_diario():
     hoy = today_local()
     ayer = hoy - timedelta(days=1)
 
-    # Asegura que los Sin_Registro de ayer ya son Ausencia a resolver.
+    # Seguridad: si el corte de ayer falló, convierte pendientes antes del mail.
     consolidar_pendientes_a_ausencia(ayer)
 
     def _falso_positivo_ausencia(reg):

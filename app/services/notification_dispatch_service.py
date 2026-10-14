@@ -32,7 +32,6 @@ from app.services.notification_catalog import (
     CONTEXTUAL_RECIPIENTS,
     DEFAULT_DEBOUNCE_MINUTES,
     DEFAULT_DIGEST_HOUR,
-    DEFAULT_HORA_LIMITE_ENTRADA,
     DELIVERY_MODES,
     MODE_DEBOUNCE,
     MODE_DIGEST,
@@ -433,11 +432,6 @@ def matrix_for_ui() -> dict:
             by_group[group] = []
             groups.append({'name': group, 'events': by_group[group]})
         by_group[group].append(ev)
-    hora_limite = (
-        get_tenant_config('hora_limite_entrada', default=DEFAULT_HORA_LIMITE_ENTRADA)
-        or DEFAULT_HORA_LIMITE_ENTRADA
-    )
-
     recipient_opts = []
     for rk in include_role_keys():
         lbl = role_display_label(rk) or rk
@@ -458,7 +452,6 @@ def matrix_for_ui() -> dict:
         'events': [e for g in groups for e in g['events']],
         'debounce_minutes': get_debounce_minutes(),
         'digest_hour': get_digest_hour(),
-        'hora_limite_entrada': hora_limite,
         'mode_labels': {m: mode_label(m) for m in DELIVERY_MODES},
         'role_users': office_users_by_role(),
         'recipient_opts': recipient_opts,
@@ -475,10 +468,6 @@ def save_matrix_from_form(form) -> None:
     set_tenant_config(CONFIG_DEBOUNCE_MINUTES, str(max(1, min(minutes, 24 * 60))))
     hour = (form.get('notif_digest_hour') or DEFAULT_DIGEST_HOUR).strip()
     set_tenant_config(CONFIG_DIGEST_HOUR, hour if len(hour) >= 4 else DEFAULT_DIGEST_HOUR)
-
-    hora_limite = (form.get('hora_limite_entrada') or '').strip()
-    if hora_limite:
-        set_tenant_config('hora_limite_entrada', hora_limite)
 
     for key, *_rest in NOTIFICATION_EVENTS:
         mode = form.get(f'notif__{key}__mode') or MODE_OFF

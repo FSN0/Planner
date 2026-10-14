@@ -348,6 +348,9 @@ def _esqueleto(company_id: int, anio: int, mes: int, obra_id: int | None = None)
                             solapes.add(ka)
                             solapes.add(kb)
 
+    # check_in/out en BD son naive UTC; la certificación muestra reloj local del tenant.
+    from app.utils.timezone_utils import utc_to_local
+
     filas = []
     for key, items in grupos.items():
         user_id, obra_id, fecha = key
@@ -364,12 +367,19 @@ def _esqueleto(company_id: int, anio: int, mes: int, obra_id: int | None = None)
                 inicio_h = reg.check_in
             if reg.check_out and (fin_h is None or reg.check_out > fin_h):
                 fin_h = reg.check_out
+        inicio_local = utc_to_local(inicio_h) if inicio_h else None
+        fin_local = utc_to_local(fin_h) if fin_h else None
         filas.append({
             'user_id': user_id,
             'obra_id': obra_id,
             'fecha': fecha,
-            'hora_inicio': inicio_h.time().replace(second=0, microsecond=0) if inicio_h else None,
-            'hora_fin': fin_h.time().replace(second=0, microsecond=0) if fin_h and alguna else None,
+            'hora_inicio': (
+                inicio_local.time().replace(second=0, microsecond=0) if inicio_local else None
+            ),
+            'hora_fin': (
+                fin_local.time().replace(second=0, microsecond=0)
+                if fin_local and alguna else None
+            ),
             'horas': horas if alguna else None,
             'estado_fichaje': estado_fichaje_agregado([r.estado_odoo for r in items]),
             'solape': key in solapes,
@@ -1614,6 +1624,107 @@ def enriquecer_grupos_ref_app(grupos: list[dict], mapa_propia: dict) -> list[dic
         obra['horas_app'] = cuantizar(h_obra) or Decimal('0.00')
         obra['importe_app'] = cuantizar(i_obra) or Decimal('0.00')
     return grupos
+
+
+def mapa_fichaje_plataforma(
+    company_id: int, anio: int, mes: int, obra_id: int,
+) -> dict:
+    """Clave (user_id, obra_id, fecha) → fila de ``_esqueleto`` (fichaje real)."""
+    return {
+        (f['user_id'], f['obra_id'], f['fecha']): f
+        for f in _esqueleto(company_id, anio, mes, obra_id=obra_id)
+    }
+
+
+def enriquecer_grupos_plataforma(
+    grupos: list[dict],
+    mapa_plat: dict,
+    *,
+    precio_fallback=None,
+) -> list[dict]:
+    """Añade plat_horas / plat_importe (fichaje real) en línea, día y trabajador.
+
+    Solo para la oficina SaaS: la subcontrata no ve el fichaje de plataforma.
+    El importe usa el €/h de la línea (o el fallback del contrato).
+    """
+    precio_fb = cuantizar(precio_fallback) if precio_fallback is not None else None
+    for obra in grupos or []:
+        h_obra = Decimal('0.00')
+        i_obra = Decimal('0.00')
+        for fecha in obra.get('fechas') or []:
+            h_f = Decimal('0.00')
+            i_f = Decimal('0.00')
+            for item in fecha.get('lineas') or []:
+                ln = item.get('linea')
+                if not ln:
+                    item['plat_horas'] = None
+                    item['plat_importe'] = None
+                    continue
+                ref = mapa_plat.get((ln.user_id, ln.obra_id, ln.fecha))
+                if not ref or ref.get('horas') is None:
+                    item['plat_horas'] = None
+                    item['plat_importe'] = None
+                    continue
+                h = cuantizar(ref['horas']) or Decimal('0.00')
+                precio = ln.precio_hora if ln.precio_hora is not None else precio_fb
+                imp = importe_linea(h, precio) or Decimal('0.00')
+                item['plat_horas'] = h
+                item['plat_importe'] = imp
+                h_f += h
+                i_f += imp
+            fecha['plat_horas'] = cuantizar(h_f) or Decimal('0.00')
+            fecha['plat_importe'] = cuantizar(i_f) or Decimal('0.00')
+            h_obra += h_f
+            i_obra += i_f
+        obra['plat_horas'] = cuantizar(h_obra) or Decimal('0.00')
+        obra['plat_importe'] = cuantizar(i_obra) or Decimal('0.00')
+    return grupos
+
+
+def totales_plataforma_grupos(grupos: list[dict] | None) -> dict:
+    th = Decimal('0.00')
+    ti = Decimal('0.00')
+    for obra in grupos or []:
+        th += obra.get('plat_horas') or Decimal('0.00')
+        ti += obra.get('plat_importe') or Decimal('0.00')
+    return {
+        'horas': cuantizar(th) or Decimal('0.00'),
+        'importe': cuantizar(ti) or Decimal('0.00'),
+    }
+
+
+def delta_vs_plataforma(
+    *,
+    propuesto_horas,
+    propuesto_importe,
+    plataforma_horas,
+    plataforma_importe,
+) -> dict | None:
+    """Desviación de una propuesta (p. ej. subcontrata) frente al fichaje real."""
+    ph = cuantizar(propuesto_horas) or Decimal('0.00')
+    pi = cuantizar(propuesto_importe) or Decimal('0.00')
+    rh = cuantizar(plataforma_horas) or Decimal('0.00')
+    ri = cuantizar(plataforma_importe) or Decimal('0.00')
+    if rh == 0 and ri == 0 and ph == 0 and pi == 0:
+        return None
+    dh = cuantizar(ph - rh) or Decimal('0.00')
+    di = cuantizar(pi - ri) or Decimal('0.00')
+    pct_h = None
+    pct_i = None
+    if rh != 0:
+        pct_h = cuantizar((dh / rh) * Decimal('100')) or Decimal('0.00')
+    if ri != 0:
+        pct_i = cuantizar((di / ri) * Decimal('100')) or Decimal('0.00')
+    return {
+        'horas_propuesto': ph,
+        'importe_propuesto': pi,
+        'horas_plataforma': rh,
+        'importe_plataforma': ri,
+        'delta_horas': dh,
+        'delta_importe': di,
+        'pct_horas': pct_h,
+        'pct_importe': pct_i,
+    }
 
 
 def estado_propuesta(

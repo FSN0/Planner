@@ -106,7 +106,7 @@
           <div class="config-block-icon config-block-icon--blue"><i class="fas fa-clock"></i></div>
           <div>
             <h2>{{ _('Horario y planificación') }}</h2>
-            <p>{{ _('Zona horaria de la empresa y custodia del jefe. El informe diario de fichajes se configura en Correos.') }}</p>
+            <p>{{ _('Zona horaria de la empresa y custodia del jefe. La hora límite de entrada está en Fichajes.') }}</p>
           </div>
         </header>
         <div class="config-block-body">
@@ -168,6 +168,17 @@
                   {{ _('Activado: el primer fichaje sin plan se acepta solo. Desactivado: aparece como «paracaidista» en auditoría para revisar.') }}
                 </p>
               </div>
+            </div>
+
+            <div class="config-field mt-4">
+              <label for="hora_limite_entrada">{{ _('Hora límite de entrada') }}</label>
+              <input type="time" id="hora_limite_entrada" name="hora_limite_entrada"
+                     class="form-control form-control-sm"
+                     style="max-width:8rem;"
+                     value="{{ configs.get('hora_limite_entrada', '08:30') }}">
+              <p class="config-field-hint">
+                {{ _('A esa hora, quien esté planificado y no haya fichado aparece como ausencia en auditoría. Si ficha más tarde, la ausencia se quita sola. El correo del día cerrado sigue saliendo al día siguiente a esta misma hora.') }}
+              </p>
             </div>
 
             {% if tenant_has_fichaje_operario %}
@@ -464,15 +475,9 @@
                          id="notif_digest_hour" name="notif_digest_hour"
                          value="{{ notif_matrix.digest_hour }}">
                 </div>
-                <div>
-                  <label class="admin-form-label" for="hora_limite_entrada">{{ _('Hora límite de entrada') }}</label>
-                  <input type="time" class="admin-form-control" style="width:8rem;"
-                         id="hora_limite_entrada" name="hora_limite_entrada"
-                         value="{{ notif_matrix.hora_limite_entrada }}">
-                </div>
               </div>
               <p class="admin-form-switch-hint mb-0 mt-2">
-                {{ _('Agrupar: espera N minutos sin eventos nuevos. Digest: envía a la hora indicada. Hora límite: cuándo se cierra el día y se envía el informe diario (si el evento está activo).') }}
+                {{ _('Agrupar: espera N minutos sin eventos nuevos. Digest: envía a la hora indicada. La hora límite de entrada (ausencias del día e informe del día cerrado) se configura en Fichajes.') }}
               </p>
             </div>
 

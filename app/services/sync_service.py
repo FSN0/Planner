@@ -501,13 +501,15 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     "Auto-asignación por Fichaje Físico",
                 )
 
-    # Cierre de día anterior: pendientes → Ausencia (aún no Falta).
-    # Hoy no se marca Ausencia por hora límite: puede fichar más tarde.
+    # Días cerrados: Sin_Registro → Ausencia.
+    # Hoy: solo tras la hora límite de entrada; si ficha después, se autorresuelve.
+    from app.services.desvio_fichaje_service import (
+        consolidar_pendientes_a_ausencia,
+        ya_paso_hora_limite_entrada,
+    )
     if fecha_obj < today_local():
-        from app.services.desvio_fichaje_service import consolidar_pendientes_a_ausencia
         consolidar_pendientes_a_ausencia(fecha_obj)
     elif fecha_obj == today_local():
-        # Solo exenciones por baja/vacaciones; no convertir Sin_Registro→Ausencia.
         from app.services.leave_service import user_has_approved_leave
         candidatos = RegistroFichaje.query.filter(
             RegistroFichaje.fecha == fecha_obj,
@@ -517,15 +519,8 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             if user_has_approved_leave(reg.user_id, fecha_obj):
                 reg.estado = 'Exento_Ausencia'
                 reg.notas_resolucion = 'Cubierto por ausencia planificada (no cuenta como ausencia).'
-        # Revertir Ausencias tempranas inventadas por el corte antiguo (sin fichaje).
-        ausencias_tempranas = RegistroFichaje.query.filter_by(
-            fecha=fecha_obj, estado='Ausencia'
-        ).all()
-        for reg in ausencias_tempranas:
-            if not reg.check_in and not reg.obra_real_id:
-                if (reg.notas_resolucion or '').startswith('Generada automáticamente'):
-                    reg.estado = 'Sin_Registro'
-                    reg.notas_resolucion = None
+        if ya_paso_hora_limite_entrada():
+            consolidar_pendientes_a_ausencia(fecha_obj)
 
     if desvios_a_notificar:
         db.session.flush()

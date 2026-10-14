@@ -41,8 +41,12 @@ from app.services.certificacion_service import (
     ronda_en_mesa,
     restablecer_persona_base,
     contar_borradores_odoo,
+    delta_vs_plataforma,
+    enriquecer_grupos_plataforma,
     enriquecer_grupos_ref_app,
+    mapa_fichaje_plataforma,
     mapa_lineas_propuesta,
+    totales_plataforma_grupos,
     desenviar,
     detalle_certificacion_obra,
     enviar,
@@ -1068,6 +1072,47 @@ def _render_cert(
                 if precio_origen == 'sin' and contrato:
                     precio_origen = 'contrato'
 
+    totales_plat = {'horas': 0, 'importe': 0}
+    delta_propuesta_plat = None
+    if not vista_subcontrata:
+        mapa_plat = mapa_fichaje_plataforma(company.id, anio, mes, obra.id)
+        enriquecer_grupos_plataforma(g_propia, mapa_plat, precio_fallback=precio_val)
+        totales_plat = totales_plataforma_grupos(g_propia)
+
+        def _tiene_volumen(h, i):
+            try:
+                return float(h or 0) > 0 or float(i or 0) > 0
+            except (TypeError, ValueError):
+                return False
+
+        # 1) Si estás respondiendo a su carta en mesa, compara esa.
+        # 2) Si no, la propuesta del panel (borrador / enviada / aceptada).
+        # Nunca uses totales_comparar vacío (0/0 → −100% falso).
+        prop_h = prop_i = None
+        etiqueta = 'propuesta'
+        comparar = mesa_ctx.get('comparar_ronda')
+        if comparar and mesa_ctx.get('modo_mesa') == 'responder':
+            tc = mesa_ctx.get('totales_comparar') or {}
+            if _tiene_volumen(tc.get('horas'), tc.get('importe')):
+                prop_h = tc.get('horas') or 0
+                prop_i = tc.get('importe') or 0
+                etiqueta = 'su_propuesta'
+        if prop_h is None:
+            prop_h = tot_propia.get('horas') or 0
+            prop_i = tot_propia.get('importe') or 0
+            etiqueta = 'propuesta'
+        if _tiene_volumen(prop_h, prop_i) or _tiene_volumen(
+            totales_plat.get('horas'), totales_plat.get('importe'),
+        ):
+            delta_propuesta_plat = delta_vs_plataforma(
+                propuesto_horas=prop_h,
+                propuesto_importe=prop_i,
+                plataforma_horas=totales_plat['horas'],
+                plataforma_importe=totales_plat['importe'],
+            )
+            if delta_propuesta_plat is not None:
+                delta_propuesta_plat['etiqueta'] = etiqueta
+
     return render_template(
         'compliance/certificacion.html',
         company=company,
@@ -1087,6 +1132,8 @@ def _render_cert(
         modo_vista=modo,
         totales_propia=tot_propia,
         totales_ajena=totales_grupos(g_ajena) if ajena_visible else {'horas': 0, 'importe': 0, 'filas': 0},
+        totales_plataforma=totales_plat,
+        delta_propuesta_plat=delta_propuesta_plat,
         estado=estado_propuesta(
             company.id, obra.id, anio, mes, vista_subcontrata=vista_subcontrata,
         ),

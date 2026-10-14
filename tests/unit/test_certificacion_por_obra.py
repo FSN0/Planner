@@ -414,3 +414,58 @@ def test_detalle_obra_no_sincroniza_ni_odoo(cert_ctx, monkeypatch):
     assert len(detalle['empresas']) == 1
     assert detalle['empresas'][0]['estado'] == 'borrador'
     assert detalle['empresas'][0]['precio'] == Decimal('19.50')
+
+
+def test_plataforma_ref_y_delta_propuesta(cert_ctx):
+    from app.services.certificacion_service import (
+        agrupar_por_persona,
+        delta_vs_plataforma,
+        enriquecer_grupos_plataforma,
+        mapa_fichaje_plataforma,
+        totales_plataforma_grupos,
+    )
+
+    session = cert_ctx['session']
+    company = cert_ctx['company']
+    o = _obra(session, 'Obra plat')
+    u = _operario(session, company, 'Luis')
+    dia = date(2026, 10, 5)
+    session.add(RegistroFichaje(
+        user_id=u.id,
+        fecha=dia,
+        obra_real_id=o.id,
+        check_in=datetime.combine(dia, time(7, 0)),
+        check_out=datetime.combine(dia, time(15, 0)),
+        estado='Correcto',
+    ))
+    session.commit()
+
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    # Oficina edita al alza; el fichaje real sigue en 8 h.
+    ln = next(x for x in emp.lineas if x.user_id == u.id and x.fecha == dia)
+    ln.horas = Decimal('10.00')
+    ln.precio_hora = Decimal('20.00')
+    ln.origen_horas = 'manual_total'
+    session.commit()
+
+    from app.compliance.routes import _grupos_como_persona
+    grupos = _grupos_como_persona(agrupar_por_persona(emp), obra_real=o)
+    mapa = mapa_fichaje_plataforma(company.id, 2026, 10, o.id)
+    enriquecer_grupos_plataforma(grupos, mapa, precio_fallback=Decimal('20.00'))
+    item = grupos[0]['fechas'][0]['lineas'][0]
+    assert item['plat_horas'] == Decimal('8.00')
+    assert item['plat_importe'] == Decimal('160.00')
+    tot = totales_plataforma_grupos(grupos)
+    assert tot['horas'] == Decimal('8.00')
+    assert tot['importe'] == Decimal('160.00')
+
+    d = delta_vs_plataforma(
+        propuesto_horas=Decimal('10.00'),
+        propuesto_importe=Decimal('200.00'),
+        plataforma_horas=tot['horas'],
+        plataforma_importe=tot['importe'],
+    )
+    assert d['delta_horas'] == Decimal('2.00')
+    assert d['delta_importe'] == Decimal('40.00')
+    assert d['pct_horas'] == Decimal('25.00')
+    assert d['pct_importe'] == Decimal('25.00')

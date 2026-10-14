@@ -282,7 +282,7 @@
             <summary>
               <span class="cert-work-name">{{ obra_g.obra.nombre if obra_g.obra else _('Obra') }}</span>
               {% if modo_vista == 'persona' and editable and obra_g.persona_user_id %}
-              <span class="cert-work-tools" onclick="event.stopPropagation()">
+              <span class="cert-work-tools {% if not vista_subcontrata %}cert-work-tools--plat{% endif %}" onclick="event.stopPropagation()">
                 <span class="cert-work-col cert-work-col--horas">
                   <input type="text" inputmode="decimal" name="phoras_{{ obra_g.persona_user_id }}"
                          class="cert-prorrata-input js-work-horas" value="{{ obra_g.horas if obra_g.horas else '' }}"
@@ -291,6 +291,11 @@
                          aria-label="{{ _('Total horas del mes') }}">
                   <em>h</em>
                 </span>
+                {% if not vista_subcontrata %}
+                <span class="cert-work-col cert-work-col--plat" title="{{ _('Horas del fichaje real en la plataforma') }}">
+                  {% if obra_g.plat_horas is not none %}{{ obra_g.plat_horas }} h{% else %}—{% endif %}
+                </span>
+                {% endif %}
                 <span class="cert-work-col cert-work-col--horas-cmp">
                   {% if cmp_p %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
                 </span>
@@ -316,8 +321,13 @@
                 </span>
               </span>
               {% else %}
-              <span class="cert-work-tools cert-work-tools--ro js-work-stats">
+              <span class="cert-work-tools cert-work-tools--ro js-work-stats {% if not vista_subcontrata %}cert-work-tools--plat{% endif %}">
                 <span class="cert-work-col cert-work-col--horas">{{ obra_g.horas }} h</span>
+                {% if not vista_subcontrata %}
+                <span class="cert-work-col cert-work-col--plat" title="{{ _('Horas del fichaje real en la plataforma') }}">
+                  {% if obra_g.plat_horas is not none %}{{ obra_g.plat_horas }} h{% else %}—{% endif %}
+                </span>
+                {% endif %}
                 <span class="cert-work-col cert-work-col--horas-cmp">
                   {% if cmp_p %}<span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_p.horas }} h)</span>{% endif %}
                 </span>
@@ -337,25 +347,29 @@
                   <span>{{ fecha.fecha.strftime('%d/%m/%Y') }}</span>
                   <span class="js-day-stats cert-cmp-pair">
                     <span>{{ fecha.horas }} h · {{ fecha.importe }} €</span>
+                    {% if not vista_subcontrata and fecha.plat_horas is not none %}
+                    <span class="cert-plat" title="{{ _('Horas del fichaje real en la plataforma') }}">{{ fecha.plat_horas }} h</span>
+                    {% endif %}
                     {% if cmp_d %}
                     <span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ cmp_d.horas }} h · {{ cmp_d.importe }} €)</span>
                     {% endif %}
                   </span>
                 </summary>
                 <div class="cert-lines">
-                  <div class="cert-line cert-line--head {% if modo_vista == 'persona' %}cert-line--persona{% endif %}" aria-hidden="true">
+                  <div class="cert-line cert-line--head {% if modo_vista == 'persona' %}cert-line--persona{% endif %} {% if not vista_subcontrata %}cert-line--con-plat{% endif %}" aria-hidden="true">
                     <span>{% if modo_vista == 'persona' %}{{ _('Día') }}{% else %}{{ _('Persona') }}{% endif %}</span>
                     <span>{{ _('Inicio') }}</span>
                     <span>{{ _('Fin') }}</span>
                     <span>{{ _('Horas') }}</span>
                     <span>{{ _('€/h') }}</span>
                     <span>{{ _('Importe') }}</span>
+                    {% if not vista_subcontrata %}<span title="{{ _('Horas del fichaje real en la plataforma') }}">{{ _('App') }}</span>{% endif %}
                     <span></span>
                   </div>
                   {% for item in fecha.lineas %}
                   {% set ln = item.linea %}
                   {% set prev = mapa_comparar.get((ln.user_id, ln.obra_id, ln.fecha)) if mapa_comparar else none %}
-                  <div class="cert-line {% if modo_vista == 'persona' %}cert-line--persona{% endif %} {% if not vista_subcontrata and ln.solape %}is-overlap{% endif %} {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}is-manual{% endif %} {% if ln.id in falta_ids %}is-missing{% endif %}" data-linea-id="{{ ln.id }}">
+                  <div class="cert-line {% if modo_vista == 'persona' %}cert-line--persona{% endif %} {% if not vista_subcontrata %}cert-line--con-plat{% endif %} {% if not vista_subcontrata and ln.solape %}is-overlap{% endif %} {% if ln.origen_horas and ln.origen_horas.startswith('manual') %}is-manual{% endif %} {% if ln.id in falta_ids %}is-missing{% endif %}" data-linea-id="{{ ln.id }}">
                     <div class="cert-person">
                       {% if modo_vista != 'persona' %}
                       <strong>{{ ln.user.name }} {{ ln.user.lastname }}</strong>
@@ -421,6 +435,15 @@
                       <span class="cert-diff {% if item.importe is none or (item.importe|string) != (prev.importe|string) %}is-mismatch{% endif %}" title="{{ lado_ajeno }}">({{ prev.importe }} €)</span>
                       {% endif %}
                     </div>
+                    {% if not vista_subcontrata %}
+                    <div class="cert-plat-cell" title="{{ _('Horas del fichaje real en la plataforma') }}">
+                      {% if item.plat_horas is not none %}
+                      <span class="cert-plat">{{ item.plat_horas }} h</span>
+                      {% else %}
+                      <span class="text-muted">—</span>
+                      {% endif %}
+                    </div>
+                    {% endif %}
                     {% if editable and not vista_subcontrata %}
                     <span class="cert-line-actions">
                       <button type="button" class="cert-line-reset js-restablecer-fila" value="{{ ln.id }}" title="{{ _('Restablecer desde fichaje') }}">
@@ -445,10 +468,35 @@
         {% endif %}
 
         <footer class="cert-panel-foot">
+          {% if not vista_subcontrata and delta_propuesta_plat %}
+          {% set dpp = delta_propuesta_plat %}
+          {# Más horas que la App = sales perdiendo (rojo). Menos = saliendo ganando (verde). #}
+          <div class="cert-delta-plat {% if dpp.delta_horas > 0 %}is-up{% elif dpp.delta_horas < 0 %}is-down{% endif %}"
+               title="{{ _('Diferencia de horas de la propuesta respecto al fichaje real') }}">
+            <strong>
+              {% if dpp.etiqueta == 'su_propuesta' %}
+                {{ _('Su propuesta vs plataforma') }}
+              {% else %}
+                {{ _('Propuesta vs plataforma') }}
+              {% endif %}
+            </strong>
+            <span class="cert-delta-plat-main">
+              {% if dpp.delta_horas > 0 %}+{% endif %}{{ dpp.delta_horas }} h
+              {% if dpp.pct_horas is not none %}({% if dpp.pct_horas > 0 %}+{% endif %}{{ dpp.pct_horas }}%){% endif %}
+            </span>
+            <span class="cert-delta-plat-base">
+              {{ _('Plataforma') }}: {{ dpp.horas_plataforma }} h
+              · {{ _('Propuesta') }}: {{ dpp.horas_propuesto }} h
+            </span>
+          </div>
+          {% endif %}
           <div class="cert-total">
             <span>{{ _('Total') }}</span>
             <strong class="js-panel-total cert-cmp-pair">
               <span>{{ totales_propia.horas }} h · {{ totales_propia.importe }} €</span>
+              {% if not vista_subcontrata and totales_plataforma and totales_plataforma.horas %}
+              <span class="cert-plat" title="{{ _('Horas del fichaje real en la plataforma') }}">{{ totales_plataforma.horas }} h</span>
+              {% endif %}
               {% if tc and (tc.horas or tc.importe) %}
               <span class="cert-diff is-mismatch" title="{{ lado_ajeno }}">({{ tc.horas }} h · {{ tc.importe }} €)</span>
               {% endif %}

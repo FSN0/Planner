@@ -4575,7 +4575,7 @@ def configuracion_global():
             hora_corte_activa=False,
             conforme_jornada_activo=False,
             notif_matrix={'debounce_minutes': 15, 'digest_hour': '08:00',
-                          'hora_limite_entrada': '08:30', 'role_users': [],
+                          'role_users': [],
                           'events': [], 'recipient_opts': []},
             brand_has_logo=False,
             brand_has_header=False,
@@ -5169,6 +5169,15 @@ def update_config():
     if 'fichajes' in section_keys:
         primer_fichaje_val = 'True' if request.form.get('aceptar_primer_fichaje') else 'False'
         _upsert('aceptar_primer_fichaje', primer_fichaje_val)
+
+        hora_limite = (request.form.get('hora_limite_entrada') or '').strip()
+        if hora_limite:
+            try:
+                from datetime import datetime as _dt_hora
+                _dt_hora.strptime(hora_limite, '%H:%M')
+                _upsert('hora_limite_entrada', hora_limite)
+            except ValueError:
+                flash(translate('Hora límite de entrada no válida.'), 'warning')
 
         from app.services.fichaje_operario_service import (
             CONFIG_FICHAJE_GEO,

@@ -243,26 +243,39 @@ def flush_notification_queues():
 def verificar_hora_corte():
     with app.app_context():
         from app.models import ConfiguracionGlobal
-        from datetime import datetime, timedelta
+        from datetime import timedelta
         from app.services.email_service import enviar_super_reporte_diario
         from app.services.sync_service import procesar_fichajes_diarios
-        from app.services.desvio_fichaje_service import consolidar_pendientes_a_ausencia
-        from app.utils.timezone_utils import now_local, today_local
+        from app.services.desvio_fichaje_service import (
+            consolidar_pendientes_a_ausencia,
+            hora_limite_entrada_str,
+            ya_paso_hora_limite_entrada,
+        )
+        from app.utils.timezone_utils import today_local
 
         def _run_for_tenant(_tenant_data):
+            if not ya_paso_hora_limite_entrada():
+                return
+
+            hora_str = hora_limite_entrada_str()
+            hoy = today_local()
+
+            # Plataforma: a la hora límite, ausencias del propio día.
+            from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+            if tenant_muestra_auditoria_fichajes():
+                app.logger.info(
+                    f">>> CORTE ENTRADA ({hora_str}). "
+                    f"Marcando ausencias de HOY en auditoría."
+                )
+                procesar_fichajes_diarios()
+                consolidar_pendientes_a_ausencia(hoy)
+
+            # Correo: informe del día YA cerrado (ayer), una vez por mañana.
             from app.services.tenant_modules import hora_corte_activa
             if not hora_corte_activa():
                 return
 
-            conf_hora = ConfiguracionGlobal.query.filter_by(clave='hora_limite_entrada').first()
-            hora_str = conf_hora.valor if conf_hora else "08:30"
-            hora_corte = datetime.strptime(hora_str, "%H:%M").time()
-            ahora_local = now_local()
-
-            if ahora_local.time() < hora_corte:
-                return
-
-            hoy_str = today_local().strftime('%Y-%m-%d')
+            hoy_str = hoy.strftime('%Y-%m-%d')
             conf_ultimo = ConfiguracionGlobal.query.filter_by(clave='ultimo_reporte_enviado').first()
             if conf_ultimo and conf_ultimo.valor == hoy_str:
                 return
@@ -271,8 +284,7 @@ def verificar_hora_corte():
                 f">>> HORA DE REPORTE ({hora_str}). "
                 f"Consolidando ausencias de AYER y enviando reporte del día cerrado."
             )
-            procesar_fichajes_diarios()
-            consolidar_pendientes_a_ausencia(today_local() - timedelta(days=1))
+            consolidar_pendientes_a_ausencia(hoy - timedelta(days=1))
             enviar_super_reporte_diario()
 
             if not conf_ultimo:
@@ -283,7 +295,7 @@ def verificar_hora_corte():
         try:
             # Todos los tenants activos: con o sin Odoo. Sin ERP el adaptador
             # local no trae fichajes externos, pero sí siembra Sin_Registro
-            # desde asignaciones reales y consolida ausencias del día anterior.
+            # desde asignaciones reales y marca ausencias tras el corte.
             _for_each_tenant(_run_for_tenant, solo_odoo=False)
         finally:
             _cleanup_db_session()

@@ -134,8 +134,10 @@ EVENT_HELP = {
         '(desvío plan ≠ real). Suele ir al jefe de la obra del plan y/o de la real.'
     ),
     'hora_corte_reporte': (
-        'Informe del día ya cerrado: ausencias sin fichar y desvíos/paracaidistas pendientes. '
-        'Se dispara a la hora límite de entrada. «No enviar» lo apaga por completo.'
+        'Informe del día ya cerrado: ausencias sin fichar y desvíos/paracaidistas pendientes de ayer. '
+        'Se dispara a la hora límite de entrada (configurada en Fichajes). '
+        'Las ausencias del propio día se marcan en la plataforma a esa hora; este correo es el resumen del día anterior. '
+        '«No enviar» apaga solo el correo, no el marcado en auditoría.'
     ),
     'acceso_pin': (
         'Correo al propio usuario con el enlace para definir o cambiar el PIN de fichaje en móvil.'

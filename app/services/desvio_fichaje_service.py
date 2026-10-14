@@ -1031,10 +1031,42 @@ def resolver_plan_cumplido_por_fichaje(user_id, fecha, obra_id, check_in=None):
     return cerrados
 
 
+def hora_limite_entrada_str():
+    """Hora de corte de entrada (HH:MM) del tenant; default 08:30."""
+    from app.services.config_service import get_tenant_config
+    from app.services.notification_catalog import DEFAULT_HORA_LIMITE_ENTRADA
+
+    raw = get_tenant_config(
+        'hora_limite_entrada',
+        default=DEFAULT_HORA_LIMITE_ENTRADA,
+    )
+    return (raw or DEFAULT_HORA_LIMITE_ENTRADA).strip() or DEFAULT_HORA_LIMITE_ENTRADA
+
+
+def ya_paso_hora_limite_entrada(ahora=None):
+    """True si la hora local del tenant ya alcanzó la hora límite de entrada."""
+    from datetime import datetime
+
+    from app.utils.timezone_utils import now_local
+    from app.services.notification_catalog import DEFAULT_HORA_LIMITE_ENTRADA
+
+    ahora = ahora or now_local()
+    hora_str = hora_limite_entrada_str()
+    try:
+        corte = datetime.strptime(hora_str, '%H:%M').time()
+    except ValueError:
+        corte = datetime.strptime(DEFAULT_HORA_LIMITE_ENTRADA, '%H:%M').time()
+    return ahora.time() >= corte
+
+
 def consolidar_pendientes_a_ausencia(fecha):
     """
-    Al cerrar el día: Sin_Registro sin fichaje → Ausencia (aún no es Falta).
+    Sin_Registro sin fichaje → Ausencia (aún no es Falta).
+
+    Se usa al pasar la hora límite del propio día y al cerrar días anteriores.
     No toca Conflicto/Paracaidista ni filas con check_in.
+    Si más tarde ficha en la obra del plan, ``resolver_plan_cumplido_por_fichaje``
+    quita la ausencia.
     """
     from app.models import RegistroFichaje
     from app.services.leave_service import user_has_approved_leave
