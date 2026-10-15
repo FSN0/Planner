@@ -687,13 +687,12 @@ def create_app():
                     and current_user.role != ROLE_OPERARIO
                 ):
                     if current_user.role == ROLE_ADMIN_SUBCONTRATA:
-                        from app.models import CertificacionPropuesta
-                        from app.services.certificacion_service import DIR_EMP
-                        cert_entrantes = CertificacionPropuesta.query.filter_by(
-                            company_id=current_user.company_id,
-                            direccion=DIR_EMP,
-                            estado='enviada',
-                        ).count()
+                        from app.services.certificacion_avisos_service import (
+                            badge_pendientes_subcontrata,
+                        )
+                        cert_entrantes = badge_pendientes_subcontrata(
+                            current_user.company_id,
+                        )
                     else:
                         from app.services.certificacion_service import (
                             propuestas_entrantes_oficina,

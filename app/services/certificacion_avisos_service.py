@@ -220,6 +220,26 @@ def pares_pendientes_mes(
     return out
 
 
+def badge_pendientes_subcontrata(company_id: int | None) -> int:
+    """Badge de nav de la subcontrata: pares (obra, mes) con acción en su tejado.
+
+    Cuenta tanto «recibida» (oficina envió) como «requerida» (le pidieron
+    completar). Antes el badge solo miraba propuestas enviadas de oficina y
+    las requeridas no aparecían en la barra.
+    """
+    if not company_id:
+        return 0
+    rows = CertificacionPropuesta.query.filter_by(company_id=int(company_id)).all()
+    by_pair: dict[tuple[int, int, int], list] = defaultdict(list)
+    for r in rows:
+        by_pair[(int(r.obra_id), int(r.anio), int(r.mes))].append(r)
+    return sum(
+        1
+        for pair_rows in by_pair.values()
+        if _motivo_accion_pendiente(pair_rows, vista_subcontrata=True)
+    )
+
+
 def _pares_pendientes_rango(
     *,
     company_id: int | None = None,

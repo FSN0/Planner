@@ -118,15 +118,17 @@ tr.audit-row-highlight {
 {% set visible_sections = auditoria_sections %}
 {% if tenant_has_odoo %}
 {% set fichaje_col = _('Fichaje Odoo') %}
-{% set sin_fichaje_lbl = _('Sin registro Odoo') %}
 {% set toolbar_sub = _('Odoo vs planificación') %}
 {% set odoo_extra = 4 %}
 {% else %}
 {% set fichaje_col = _('Fichaje real') %}
-{% set sin_fichaje_lbl = _('Sin fichaje') %}
 {% set toolbar_sub = _('Plan vs fichaje') %}
 {% set odoo_extra = 0 %}
 {% endif %}
+{# Cola Ausencias: tres tonos de problema (no ha fichado / pendiente / fuera de plan). #}
+{% set ausencia_no_fichado_lbl = _('No ha fichado') %}
+{% set ausencia_pendiente_lbl = _('Pendiente en esta obra') %}
+{% set ausencia_ficho_otra_lbl = _('Fichó en otra obra') %}
 {% set geo_extra = 1 if muestra_geo_audit else 0 %}
 {% set metrics_col = 6 + geo_extra %}
 {% set after_metrics = metrics_col + odoo_extra %}
@@ -569,14 +571,20 @@ tr.audit-row-highlight {
                                 <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
                                 {{ celda_operario(reg) }}
                                 {{ celda_obra_link(reg.obra_planificada) }}
-                                <td data-sort-value="{% if es_espejo %}desvio{% else %}ausencia{% endif %}">
+                                {% set aus_prob = reg.ausencia_problema if reg.ausencia_problema is defined else none %}
+                                <td data-sort-value="{% if es_espejo %}ficho_otra{% elif aus_prob == 'pendiente_otra_obra' %}pendiente{% else %}no_fichado{% endif %}">
                                   {% if es_espejo %}
-                                    <span class="badge-soft badge-soft-amber" style="font-size: 0.65rem;" title="{{ _('También en Desviaciones de plan') }}">{{ _('Desvío de plan') }}</span>
+                                    <span class="badge-soft badge-soft-amber" style="font-size: 0.65rem;" title="{{ _('Estaba planificado aquí y fichó en otra obra (fuera de plan)') }}">{{ ausencia_ficho_otra_lbl }}</span>
                                     {% if reg.obra_real %}
                                     <div class="text-muted small mt-1">{{ _('Fichó en') }} {{ reg.obra_real.codigo }}</div>
                                     {% endif %}
+                                  {% elif aus_prob == 'pendiente_otra_obra' %}
+                                    <span class="badge-soft badge-soft-blue" style="font-size: 0.65rem;" title="{{ _('Sigue planificado aquí; ya ha fichado en otra obra (puede fichar luego)') }}">{{ ausencia_pendiente_lbl }}</span>
+                                    {% if reg.ausencia_ficho_en is defined and reg.ausencia_ficho_en %}
+                                    <div class="text-muted small mt-1">{{ _('Fichó en') }} {{ reg.ausencia_ficho_en.codigo }}</div>
+                                    {% endif %}
                                   {% else %}
-                                    <span class="text-danger font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-times-circle"></i> {{ sin_fichaje_lbl }}</span>
+                                    <span class="text-danger font-weight-bold" style="font-size: 0.75rem;" title="{{ _('Planificado y sin ninguna marca ese día') }}"><i class="fas fa-times-circle"></i> {{ ausencia_no_fichado_lbl }}</span>
                                   {% endif %}
                                 </td>
                                 {{ celda_notas(reg) }}

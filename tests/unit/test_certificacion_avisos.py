@@ -105,12 +105,12 @@ def test_avisos_subcontrata_recibida_y_requerida(
         )
         assert pares8.get((company_subcontrata.id, obra.id)) == 'requerida'
 
-        # Oficina no ve el requerimiento como aviso propio
+        # Oficina también ve el requerimiento en el hub (ya se lo pidió)
         pares8_ofi = pares_pendientes_mes(
             anio=2026, mes=8, company_id=company_subcontrata.id, obra_id=obra.id,
             vista_subcontrata=False,
         )
-        assert (company_subcontrata.id, obra.id) not in pares8_ofi
+        assert pares8_ofi.get((company_subcontrata.id, obra.id)) == 'requerida'
 
         scope = scope_obra(obra.id, company_id=company_subcontrata.id, vista_subcontrata=True)
         r = resumen_avisos(
@@ -121,6 +121,36 @@ def test_avisos_subcontrata_recibida_y_requerida(
         assert r['actual'] is True
         assert r['motivo_actual'] == 'requerida'
         assert r['prev'] >= 1
+
+
+def test_badge_subcontrata_suma_recibida_y_requerida(
+    session, tenant_soltec, company_subcontrata, app,
+):
+    from app.services.certificacion_avisos_service import badge_pendientes_subcontrata
+    from app.utils.timezone_utils import utc_now
+
+    obra = _obra(session, tenant_soltec, 'Obra badge nav')
+    # Solo recibida
+    _prop(
+        session, tenant_soltec, company_subcontrata, obra,
+        anio=2026, mes=7, estado='enviada', direccion=DIR_EMP,
+    )
+    # Solo requerida
+    _prop(
+        session, tenant_soltec, company_subcontrata, obra,
+        anio=2026, mes=8, estado='borrador', direccion=DIR_SUB,
+        requerida_at=utc_now(),
+    )
+    # Borrador sin requerir: no cuenta
+    _prop(
+        session, tenant_soltec, company_subcontrata, obra,
+        anio=2026, mes=9, estado='borrador', direccion=DIR_SUB,
+    )
+
+    with app.app_context():
+        session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}'))
+        assert badge_pendientes_subcontrata(company_subcontrata.id) == 2
+        assert badge_pendientes_subcontrata(None) == 0
 
 
 def test_reactivar_avisos_clears_dismiss(session, tenant_soltec, company_internal, app):

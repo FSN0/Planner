@@ -873,11 +873,73 @@ def repartir_secciones_auditoria(pendientes):
             ausencias.append(r)
         elif r.estado == 'Paracaidista':
             paracaidistas.append(r)
+    enriquecer_problema_ausencias(ausencias)
     return {
         'conflictos': conflictos,
         'ausencias': ausencias,
         'paracaidistas': paracaidistas,
     }
+
+
+# Problema visible en cola Ausencias (UI).
+AUSENCIA_NO_HA_FICHADO = 'no_ha_fichado'          # rojo: cero marcas ese día
+AUSENCIA_PENDIENTE_OBRA = 'pendiente_otra_obra'   # azul: fichó en otra del plan
+AUSENCIA_FICHO_OTRA = 'ficho_otra_obra'           # ámbar: espejo de desvío plan≠real
+
+
+def enriquecer_problema_ausencias(ausencias):
+    """Clasifica cada fila de Ausencias para el texto/color del problema.
+
+    - Espejo plan de Conflicto → «Fichó en otra obra» (fuera de plan).
+    - Ausencia pura + marca en otra obra ese día → «Pendiente en esta obra».
+    - Ausencia pura sin ninguna marca → «No ha fichado».
+    """
+    from app.models import RegistroFichaje
+
+    seeds = []
+    for r in ausencias or []:
+        if getattr(r, 'desvio_espejo', None) == 'plan':
+            # No mutar DesvioEspejoView (__slots__); la plantilla usa es_espejo.
+            continue
+        seeds.append(r)
+
+    if not seeds:
+        return
+
+    user_ids = {getattr(r, 'user_id', None) for r in seeds}
+    user_ids.discard(None)
+    fechas = {getattr(r, 'fecha', None) for r in seeds}
+    fechas.discard(None)
+    hermanos_por_clave = {}
+    if user_ids and fechas:
+        hermanos = (
+            RegistroFichaje.query
+            .filter(
+                RegistroFichaje.user_id.in_(user_ids),
+                RegistroFichaje.fecha.in_(fechas),
+                RegistroFichaje.obra_real_id.isnot(None),
+            )
+            .all()
+        )
+        for h in hermanos:
+            hermanos_por_clave.setdefault((h.user_id, h.fecha), []).append(h)
+
+    for r in seeds:
+        plan_id = getattr(r, 'obra_planificada_id', None)
+        clave = (getattr(r, 'user_id', None), getattr(r, 'fecha', None))
+        ficho_en = None
+        for h in hermanos_por_clave.get(clave, []):
+            if h.id == getattr(r, 'id', None):
+                continue
+            if h.obra_real_id and h.obra_real_id != plan_id:
+                ficho_en = getattr(h, 'obra_real', None)
+                break
+        if ficho_en is not None:
+            r.ausencia_problema = AUSENCIA_PENDIENTE_OBRA
+            r.ausencia_ficho_en = ficho_en
+        else:
+            r.ausencia_problema = AUSENCIA_NO_HA_FICHADO
+            r.ausencia_ficho_en = None
 
 
 def notificar_desvio_inmediato(registro, *, omitir_lado_real=False):

@@ -413,3 +413,54 @@ def test_labels_resolucion_desvio():
     assert label_resolucion_plan(DECISION_LIBERAR) == 'Desasignado'
     assert label_resolucion_plan(DECISION_MANTENER_FALTA) == 'Falta confirmada'
     assert label_resolucion_real(DECISION_ACEPTAR) == 'Aceptado'
+
+
+def test_problema_ausencia_no_ha_fichado_vs_pendiente(session, tenant_soltec, desvio_ctx):
+    """Ausencia pura: rojo si no fichó; azul si ya fichó en otra obra."""
+    from app.services.desvio_fichaje_service import (
+        AUSENCIA_NO_HA_FICHADO,
+        AUSENCIA_PENDIENTE_OBRA,
+        enriquecer_problema_ausencias,
+    )
+
+    session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+    op = desvio_ctx.operario
+    obra_a = desvio_ctx.obra_x
+    obra_b = desvio_ctx.obra_y
+    fecha = date.today()
+
+    aus_sola = RegistroFichaje(
+        user_id=op.id,
+        fecha=fecha,
+        obra_planificada_id=obra_a.id,
+        obra_real_id=None,
+        estado='Ausencia',
+    )
+    session.add(aus_sola)
+    session.flush()
+    enriquecer_problema_ausencias([aus_sola])
+    assert aus_sola.ausencia_problema == AUSENCIA_NO_HA_FICHADO
+
+    # Multi-plan: fichó en B (Correcto) y sigue Ausencia en A.
+    session.add(RegistroFichaje(
+        user_id=op.id,
+        fecha=fecha,
+        obra_planificada_id=obra_b.id,
+        obra_real_id=obra_b.id,
+        check_in=datetime.combine(fecha, time(8, 0)),
+        estado='Correcto',
+    ))
+    aus_multi = RegistroFichaje(
+        user_id=op.id,
+        fecha=fecha,
+        obra_planificada_id=obra_a.id,
+        obra_real_id=None,
+        estado='Ausencia',
+    )
+    session.add(aus_multi)
+    session.flush()
+    enriquecer_problema_ausencias([aus_sola, aus_multi])
+    assert aus_sola.ausencia_problema == AUSENCIA_PENDIENTE_OBRA
+    assert aus_sola.ausencia_ficho_en.id == obra_b.id
+    assert aus_multi.ausencia_problema == AUSENCIA_PENDIENTE_OBRA
+    assert aus_multi.ausencia_ficho_en.id == obra_b.id
