@@ -1327,6 +1327,48 @@ class Adapter(BaseSyncAdapter):
             )
             return []
 
+    def _primary_admin_subcontrata_category_id(self):
+        """ID estable de la categoría a escribir (menor id entre las que coinciden)."""
+        ids = sorted(int(i) for i in (self._admin_subcontrata_category_ids() or []) if i)
+        return ids[0] if ids else None
+
+    def set_admin_subcontrata_category(self, partner_id: int, *, enabled: bool) -> None:
+        """Añade o quita la etiqueta admin-subcontrata en res.partner (sin tocar el resto)."""
+        pid = int(partner_id)
+        admin_ids = set(int(i) for i in (self._admin_subcontrata_category_ids() or []) if i)
+        if not admin_ids:
+            raise ValueError(
+                'En Odoo no hay ninguna etiqueta de contacto «admin» + «subcontrata». '
+                'Créala antes de designar administradores desde Planner.'
+            )
+        if enabled:
+            cat_id = self._primary_admin_subcontrata_category_id()
+            if not cat_id:
+                raise ValueError('No se pudo resolver la etiqueta admin subcontrata en Odoo.')
+            # (4, id) = vincular sin borrar otras categorías.
+            commands = [(4, int(cat_id))]
+        else:
+            # Quitar todas las que encajan por si hubo más de una.
+            commands = [(3, int(cid)) for cid in sorted(admin_ids)]
+        try:
+            self.models.execute_kw(
+                self.db_name, self.uid, self.pwd,
+                'res.partner', 'write',
+                [[pid], {'category_id': commands}],
+            )
+        except Exception as exc:
+            logger.exception(
+                "[Odoo Adapter - Tenant %s] write category_id partner=%s enabled=%s: %s",
+                self.tenant_id, pid, enabled, exc,
+            )
+            raise ValueError(
+                f'No se pudo actualizar la etiqueta en Odoo: {exc}'
+            ) from exc
+        logger.info(
+            "[Odoo Adapter - Tenant %s] partner %s admin_subcontrata=%s (cats=%s)",
+            self.tenant_id, pid, enabled, sorted(admin_ids),
+        )
+
     @staticmethod
     def _category_id_set(raw) -> set:
         found = set()

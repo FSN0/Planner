@@ -946,6 +946,7 @@ def worker_panel(user_id):
     if user_can(current_user, 'valoraciones', 'w'):
         from app.services.rating_service import obras_participadas_usuario
         obras_valoracion = obras_participadas_usuario(worker.id)
+    from app.services.admin_subcontrata_role_service import puede_gestionar_admin_subcontrata
     return render_template(
         "admin_worker_panel.html",
         worker=worker,
@@ -975,6 +976,10 @@ def worker_panel(user_id):
         reputation_score=rep_score,
         reputation_count=rep_count,
         obras_valoracion=obras_valoracion,
+        puede_admin_subcontrata=(
+            user_can(current_user, 'trabajadores', 'w')
+            and puede_gestionar_admin_subcontrata(worker)
+        ),
     )
 
 
@@ -3350,6 +3355,42 @@ def visible_cuadrante(user_id):
         'success',
     )
     return redirect(request.referrer or url_for('admin.personal'))
+
+
+@admin_bp.route("/admin_subcontrata_rol/<int:user_id>", methods=["POST"])
+@login_required
+@permission_required('trabajadores', 'w')
+def admin_subcontrata_rol(user_id):
+    """Promueve o quita admin de subcontrata y escribe la etiqueta en Odoo."""
+    from app.services.admin_subcontrata_role_service import set_admin_subcontrata
+
+    user = User.query.get_or_404(user_id)
+    make_admin = request.form.get('make_admin') in ('1', 'on', 'true', 'yes')
+    try:
+        set_admin_subcontrata(user, make_admin=make_admin, actor=current_user)
+        db.session.commit()
+        if make_admin:
+            flash(
+                translate(
+                    'Es admin de la subcontrata. La etiqueta se ha escrito también en Odoo.'
+                ),
+                'success',
+            )
+        else:
+            flash(
+                translate(
+                    'Ya no es admin de la subcontrata. La etiqueta se ha quitado también en Odoo.'
+                ),
+                'success',
+            )
+    except ValueError as exc:
+        db.session.rollback()
+        flash(translate(str(exc)), 'danger')
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception('admin_subcontrata_rol user=%s', user_id)
+        flash(translate('No se pudo actualizar el rol: {error}', error=exc), 'danger')
+    return redirect(request.referrer or url_for('admin.worker_panel', user_id=user_id))
 
 
 @admin_bp.route("/enviar_informacion_acceso/<int:user_id>", methods=["POST"])

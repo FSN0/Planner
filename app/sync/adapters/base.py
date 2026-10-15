@@ -128,6 +128,15 @@ class BaseSyncAdapter(ABC):
         """
         return []
 
+    def set_admin_subcontrata_category(self, partner_id: int, *, enabled: bool) -> None:
+        """Opcional. Añade/quita en Odoo la etiqueta admin-subcontrata del contacto.
+
+        Solo aplica a adaptadores Odoo (res.partner.category). Por defecto no soportado.
+        """
+        raise NotImplementedError(
+            'Este motor de sincronización no puede escribir etiquetas de admin subcontrata en Odoo.'
+        )
+
     def get_viajes_diarios(self, fecha=None, fecha_hasta=None) -> list:
         """
         Opcional. Viajes / trayectos de flota (cobertura por fecha inicio–fin).

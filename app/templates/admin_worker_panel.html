@@ -257,6 +257,7 @@
               <span class="entity-meta-item-label">{{ _('Rol') }}</span>
               <span class="entity-meta-item-value">
                 {% if worker.role == 'operario' %}{{ _('Operario') }}
+                {% elif worker.role == 'admin_subcontrata' %}{{ _('Admin subcontrata') }}
                 {% elif worker.role == 'jefe_obra' %}{{ _('Jefe de obra') }}
                 {% elif worker.role == 'rrhh' %}{{ _('RRHH / Administrativo') }}
                 {% elif worker.role == 'laboral' %}{{ _('Laboral') }}
@@ -305,6 +306,18 @@
                       title="{{ _('Si está oculto, no sale en el planificador ni en el tablero') }}">
                 <i class="fas {{ 'fa-eye-slash' if worker.visible_en_cuadrante else 'fa-eye' }}"></i>
                 {{ _('Ocultar del cuadrante') if worker.visible_en_cuadrante else _('Mostrar en el cuadrante') }}
+              </button>
+            </form>
+            {% endif %}
+            {% if puede_admin_subcontrata|default(false) %}
+            <form action="{{ url_for('admin.admin_subcontrata_rol', user_id=worker.id) }}" method="post" class="d-inline mb-0"
+                  onsubmit="return confirm({% if worker.role == 'admin_subcontrata' %}{{ _('¿Quitar el rol de admin de la subcontrata? También se quitará la etiqueta en Odoo.')|tojson }}{% else %}{{ _('¿Hacer admin de esta subcontrata? Se escribirá la etiqueta en Odoo para que pueda entrar al portal.')|tojson }}{% endif %});">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="make_admin" value="{{ '0' if worker.role == 'admin_subcontrata' else '1' }}">
+              <button type="submit" class="btn-admin {% if worker.role == 'admin_subcontrata' %}btn-admin-ghost{% endif %}"
+                      title="{% if worker.role == 'admin_subcontrata' %}{{ _('Quita el acceso de admin al portal y la etiqueta en Odoo') }}{% else %}{{ _('Designa admin del portal de la subcontrata y escribe la etiqueta en Odoo') }}{% endif %}">
+                <i class="fas {{ 'fa-user-minus' if worker.role == 'admin_subcontrata' else 'fa-user-shield' }}"></i>
+                {{ _('Quitar admin subcontrata') if worker.role == 'admin_subcontrata' else _('Hacer admin subcontrata') }}
               </button>
             </form>
             {% endif %}
