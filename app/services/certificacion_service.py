@@ -3871,6 +3871,10 @@ CERT_PDF_HEADER_MM = 14
 CERT_PDF_PAGE_MM = 297
 
 
+# wkhtmltopdf/Qt cuelga con facilidad si se lanza desde un Thread o sin tope.
+CERT_PDF_TIMEOUT_SEC = 45
+
+
 def _pdfkit_options_cert(*, header_html_path: str | None = None) -> dict:
     opts = {
         'page-size': 'A4',
@@ -3889,9 +3893,83 @@ def _pdfkit_options_cert(*, header_html_path: str | None = None) -> dict:
     if header_html_path:
         opts['header-html'] = header_html_path
         opts['header-spacing'] = '0'
-        # Cabecera con ?page=; no hace falta esperar 300 ms (ralentizaba cada descarga).
-        opts['javascript-delay'] = '80'
+        # 0: la cabecera corre subst() en <script> al final; no hace falta delay.
+        opts['javascript-delay'] = '0'
     return opts
+
+
+def _wkhtmltopdf_cmd() -> str:
+    import shutil
+    from flask import current_app
+
+    configured = (
+        current_app.config.get('WKHTMLTOPDF_CMD')
+        or current_app.config.get('PDFKIT_WKHTMLTOPDF')
+        or ''
+    ).strip()
+    if configured:
+        return configured
+    found = shutil.which('wkhtmltopdf')
+    if found:
+        return found
+    raise RuntimeError('wkhtmltopdf no está instalado')
+
+
+def _pdfkit_opts_to_argv(opts: dict) -> list[str]:
+    argv = []
+    for key, value in (opts or {}).items():
+        flag = f'--{key}'
+        if value is None or value == '':
+            argv.append(flag)
+        else:
+            argv.extend([flag, str(value)])
+    return argv
+
+
+_pdf_gen_lock = threading.Lock()
+
+
+def _render_wkhtml_pdf(html_doc: str, opts: dict, *, timeout: int = CERT_PDF_TIMEOUT_SEC) -> bytes:
+    """Llama a wkhtmltopdf en proceso aparte con timeout duro (nunca cuelga 5 min)."""
+    import os
+    import subprocess
+    import tempfile
+
+    wkhtml = _wkhtmltopdf_cmd()
+    # Un solo wkhtmltopdf a la vez: varios concurrentes (warmup+click) se pisan en Qt.
+    acquired = _pdf_gen_lock.acquire(timeout=max(5, timeout))
+    if not acquired:
+        raise TimeoutError('Otro PDF se está generando; reintenta en unos segundos.')
+    try:
+        with tempfile.TemporaryDirectory(prefix='cert_pdf_') as td:
+            html_path = os.path.join(td, 'body.html')
+            out_path = os.path.join(td, 'out.pdf')
+            with open(html_path, 'w', encoding='utf-8') as fh:
+                fh.write(html_doc)
+            cmd = [wkhtml, *_pdfkit_opts_to_argv(opts), html_path, out_path]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    timeout=timeout,
+                    capture_output=True,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise TimeoutError(
+                    f'wkhtmltopdf superó {timeout}s generando el PDF'
+                ) from exc
+            if proc.returncode != 0 or not os.path.isfile(out_path):
+                err = (proc.stderr or b'').decode('utf-8', 'replace')[:500]
+                raise RuntimeError(
+                    f'wkhtmltopdf falló (code={proc.returncode}): {err or "sin detalle"}'
+                )
+            with open(out_path, 'rb') as fh:
+                pdf_bytes = fh.read()
+            if not pdf_bytes.startswith(b'%PDF'):
+                raise RuntimeError('wkhtmltopdf no devolvió un PDF válido')
+            return pdf_bytes
+    finally:
+        _pdf_gen_lock.release()
 
 
 def _cert_pdf_cache_dir(schema_name: str | None) -> str:
@@ -4132,14 +4210,36 @@ def _render_cert_header_html(prop: CertificacionPropuesta, *, schema_name: str |
     return template.render(_=translate, **ctx)
 
 
+def pdf_cache_path_if_ready(
+    prop: CertificacionPropuesta,
+    *,
+    schema_name: str | None = None,
+) -> str | None:
+    """Ruta del PDF en disco si ya está cacheado (descarga instantánea)."""
+    import os
+    from flask import g
+
+    if schema_name is None:
+        tenant = getattr(g, 'current_tenant', None)
+        schema_name = getattr(tenant, 'schema_name', None) if tenant else None
+    path = _cert_pdf_cache_path(prop, schema_name)
+    if path and os.path.isfile(path) and os.path.getsize(path) > 8:
+        return path
+    return None
+
+
 def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = None) -> bytes | None:
-    """Genera el PDF (un solo pase wkhtmltopdf). Aceptadas/cerradas se cachean en disco."""
+    """Genera el PDF (un solo pase wkhtmltopdf). Aceptadas/cerradas se cachean en disco.
+
+    Nunca usa hilos con Qt: wkhtmltopdf se lanza en subprocess con timeout.
+    """
     import os
     import tempfile
+    import time
 
     header_path = None
+    t0 = time.perf_counter()
     try:
-        import pdfkit
         from flask import current_app, g
 
         if schema_name is None:
@@ -4156,11 +4256,6 @@ def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = Non
             except OSError:
                 pass
 
-        config = None
-        wkhtml = current_app.config.get('WKHTMLTOPDF_CMD') or current_app.config.get('PDFKIT_WKHTMLTOPDF')
-        if wkhtml:
-            config = pdfkit.configuration(wkhtmltopdf=wkhtml)
-
         header_html = _render_cert_header_html(prop, schema_name=schema_name)
         fd, header_path = tempfile.mkstemp(suffix='.html', prefix='cert_hdr_')
         with os.fdopen(fd, 'w', encoding='utf-8') as fh:
@@ -4175,11 +4270,7 @@ def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = Non
             overlay_page_count=None,
             include_inline_banner=False,
         )
-        pdf_bytes = pdfkit.from_string(
-            final_html, False, options=opts, configuration=config,
-        )
-        if not pdf_bytes or not pdf_bytes.startswith(b'%PDF'):
-            return None
+        pdf_bytes = _render_wkhtml_pdf(final_html, opts, timeout=CERT_PDF_TIMEOUT_SEC)
 
         if cache_path:
             try:
@@ -4199,13 +4290,21 @@ def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = Non
             except OSError:
                 pass
 
+        current_app.logger.info(
+            'cert PDF: generado prop_id=%s en %.0fms size=%s cache=%s',
+            getattr(prop, 'id', None),
+            (time.perf_counter() - t0) * 1000,
+            len(pdf_bytes),
+            bool(cache_path),
+        )
         return pdf_bytes
     except Exception:
         try:
             from flask import current_app
             current_app.logger.exception(
-                'cert PDF: fallo generando propuesta_id=%s',
+                'cert PDF: fallo generando propuesta_id=%s (%.0fms)',
                 getattr(prop, 'id', None),
+                (time.perf_counter() - t0) * 1000,
             )
         except Exception:
             pass
@@ -4222,53 +4321,57 @@ _warmup_pdf_inflight: set[tuple] = set()
 _warmup_pdf_lock = threading.Lock()
 
 
-def _warmup_pdf_worker(app, schema_name: str, prop_ids: list[int]) -> None:
-    """Hilo: genera y cachea PDFs de propuestas ya aceptadas/cerradas."""
+def _warmup_pdf_process_main(schema_name: str, prop_ids: list[int]) -> None:
+    """Proceso hijo (spawn): genera PDFs sin compartir Qt/SQLAlchemy con el request."""
     from sqlalchemy import text
-    from app import db, is_safe_schema_name
-    from flask import g
 
-    key = (schema_name, tuple(sorted(prop_ids)))
-    try:
-        with app.app_context():
-            if not is_safe_schema_name(schema_name):
-                return
-            try:
-                db.session.execute(text('SET search_path TO public'))
-                from app.models import Tenant
-                tenant = Tenant.query.filter_by(schema_name=schema_name, is_active=True).first()
-                if tenant:
-                    g.current_tenant = tenant
-                db.session.execute(text(f'SET search_path TO {schema_name}, public'))
-                for pid in prop_ids:
-                    prop = cargar_propuesta_para_pdf(pid)
-                    if not prop or (prop.estado or '') not in ('aceptada', 'cerrada'):
-                        continue
-                    pdf_propuesta(prop, schema_name=schema_name)
-                    app.logger.info(
-                        'cert PDF: warmup listo prop_id=%s estado=%s schema=%s',
-                        pid, prop.estado, schema_name,
-                    )
-            except Exception:
-                app.logger.exception(
-                    'cert PDF: warmup falló schema=%s ids=%s', schema_name, prop_ids,
+    # Import lazy: el proceso spawn no arrastra el estado del padre.
+    from app import create_app, db, is_safe_schema_name
+
+    app = create_app()
+    with app.app_context():
+        if not is_safe_schema_name(schema_name):
+            return
+        try:
+            db.session.execute(text('SET search_path TO public'))
+            from app.models import Tenant
+            from flask import g
+
+            tenant = Tenant.query.filter_by(schema_name=schema_name, is_active=True).first()
+            if tenant:
+                g.current_tenant = tenant
+            db.session.execute(text(f'SET search_path TO {schema_name}, public'))
+            for pid in prop_ids:
+                prop = cargar_propuesta_para_pdf(pid)
+                if not prop or (prop.estado or '') not in ('aceptada', 'cerrada'):
+                    continue
+                # Si ya está en caché, no regenerar.
+                if pdf_cache_path_if_ready(prop, schema_name=schema_name):
+                    continue
+                pdf_propuesta(prop, schema_name=schema_name)
+                app.logger.info(
+                    'cert PDF: warmup listo prop_id=%s estado=%s schema=%s',
+                    pid, prop.estado, schema_name,
                 )
-            finally:
-                try:
-                    db.session.remove()
-                except Exception:
-                    pass
-    finally:
-        with _warmup_pdf_lock:
-            _warmup_pdf_inflight.discard(key)
+        except Exception:
+            app.logger.exception(
+                'cert PDF: warmup falló schema=%s ids=%s', schema_name, prop_ids,
+            )
+        finally:
+            try:
+                db.session.remove()
+            except Exception:
+                pass
 
 
 def programar_warmup_pdf_certificacion(
     *prop_ids,
     schema_name: str | None = None,
 ) -> None:
-    """Tras aceptar: precarga el PDF en disco en segundo plano (no bloquea la UI)."""
-    from flask import current_app, g, has_app_context
+    """Tras aceptar: precarga el PDF en un proceso hijo (no Thread: Qt cuelga)."""
+    import multiprocessing
+
+    from flask import g, has_app_context
 
     ids = []
     for raw in prop_ids:
@@ -4290,12 +4393,32 @@ def programar_warmup_pdf_certificacion(
         if key in _warmup_pdf_inflight:
             return
         _warmup_pdf_inflight.add(key)
-    app = current_app._get_current_object()
+
+    def _runner():
+        try:
+            ctx = multiprocessing.get_context('spawn')
+            proc = ctx.Process(
+                target=_warmup_pdf_process_main,
+                args=(schema_name, ids),
+                name=f'cert-pdf-warmup-{ids[0]}',
+                daemon=True,
+            )
+            proc.start()
+            # No join: el request no espera. Tope de vida del hijo ~timeout*N.
+            proc.join(CERT_PDF_TIMEOUT_SEC * max(1, len(ids)) + 15)
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(5)
+        finally:
+            with _warmup_pdf_lock:
+                _warmup_pdf_inflight.discard(key)
+
+    # El Process se lanza desde un Thread ligero solo para no bloquear el response;
+    # wkhtmltopdf vive en el Process (spawn), nunca en este Thread.
     threading.Thread(
-        target=_warmup_pdf_worker,
-        args=(app, schema_name, ids),
+        target=_runner,
         daemon=True,
-        name=f'cert-pdf-warmup-{ids[0]}',
+        name=f'cert-pdf-warmup-boot-{ids[0]}',
     ).start()
 
 

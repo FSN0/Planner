@@ -316,9 +316,19 @@
     ev.stopPropagation();
     var loading = window.SP_pageLoading;
     if (loading && loading.show) loading.show({{ _('Generando PDF…')|tojson }});
-    fetch(a.href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 55000) : null;
+    fetch(a.href, {
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      signal: ctrl ? ctrl.signal : undefined,
+    })
       .then(function (res) {
+        var ctype = (res.headers.get('Content-Type') || '').toLowerCase();
         if (!res.ok) throw new Error({{ _('No se pudo generar el PDF')|tojson }});
+        if (ctype.indexOf('application/pdf') === -1) {
+          throw new Error({{ _('No se pudo generar el PDF')|tojson }});
+        }
         var disp = res.headers.get('Content-Disposition') || '';
         var match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disp);
         var name = match ? decodeURIComponent(match[1].replace(/["']/g, '')) : 'certificacion.pdf';
@@ -335,17 +345,17 @@
         setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
       })
       .catch(function (err) {
+        var msg = (err && err.name === 'AbortError')
+          ? {{ _('La generación del PDF tardó demasiado. Reintenta.')|tojson }}
+          : ((err && err.message) || {{ _('No se pudo generar el PDF')|tojson }});
         if (typeof Swal !== 'undefined') {
-          Swal.fire({
-            icon: 'error',
-            title: {{ _('Error')|tojson }},
-            text: (err && err.message) || {{ _('No se pudo generar el PDF')|tojson }},
-          });
+          Swal.fire({ icon: 'error', title: {{ _('Error')|tojson }}, text: msg });
         } else {
-          window.alert((err && err.message) || 'PDF');
+          window.alert(msg);
         }
       })
       .finally(function () {
+        if (timer) clearTimeout(timer);
         if (loading && loading.hide) loading.hide();
       });
   });

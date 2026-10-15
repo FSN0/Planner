@@ -327,12 +327,24 @@ def certificacion_pdf(propuesta_id):
     )
     from app.services.i18n_service import translate
 
+    from app.services.certificacion_service import pdf_cache_path_if_ready
+
     prop = cargar_propuesta_para_pdf(propuesta_id)
     if prop is None or prop.company_id != current_user.company_id:
         abort(403)
     # La subcontrata solo descarga el PDF cuando ya hay acuerdo (aceptada).
     if (prop.estado or '') != 'aceptada':
         abort(403)
+    cached = pdf_cache_path_if_ready(prop)
+    if cached:
+        return send_file(
+            cached,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=nombre_archivo_pdf(prop),
+            max_age=0,
+            conditional=False,
+        )
     pdf = pdf_propuesta(prop)
     if pdf:
         return send_file(

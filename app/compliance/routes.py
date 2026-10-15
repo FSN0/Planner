@@ -2037,10 +2037,22 @@ def _aplicar_lineas(prop, solo_id=None, *, bloquear_precio=False, excluir_users=
 def certificacion_pdf(company_id, propuesta_id):
     _exigir(has_certificacion)
     from io import BytesIO
+    from app.services.certificacion_service import pdf_cache_path_if_ready
 
     prop = cargar_propuesta_para_pdf(propuesta_id)
     if prop is None or prop.company_id != company_id:
         abort(404)
+    # Caché caliente: sirve el fichero sin regenerar (ms, no minutos).
+    cached = pdf_cache_path_if_ready(prop)
+    if cached:
+        return send_file(
+            cached,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=nombre_archivo_pdf(prop),
+            max_age=0,
+            conditional=False,
+        )
     pdf = pdf_propuesta(prop)
     if pdf:
         return send_file(

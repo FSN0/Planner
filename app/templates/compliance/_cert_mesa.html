@@ -1358,7 +1358,18 @@
             </div>
             {% elif propia.estado == 'aceptada' or (ajena and ajena.estado == 'aceptada') %}
             <div class="cert-actions">
-              {% set pdf_id = propia.id if propia.estado == 'aceptada' else (ajena.id if ajena else none) %}
+              {# Preferir la aceptada (subcontrata solo puede bajar aceptada). #}
+              {% if propia and propia.estado == 'aceptada' %}
+                {% set pdf_id = propia.id %}
+              {% elif ajena and ajena.estado == 'aceptada' %}
+                {% set pdf_id = ajena.id %}
+              {% elif not vista_subcontrata and propia and propia.estado == 'cerrada' %}
+                {% set pdf_id = propia.id %}
+              {% elif not vista_subcontrata and ajena and ajena.estado == 'cerrada' %}
+                {% set pdf_id = ajena.id %}
+              {% else %}
+                {% set pdf_id = none %}
+              {% endif %}
               {% if pdf_id %}
               <a class="btn-admin btn-admin-ghost js-cert-pdf-dl" href="{{ url_for('subcontrata.certificacion_pdf', propuesta_id=pdf_id) if vista_subcontrata else url_for('compliance.certificacion_pdf', company_id=company.id, propuesta_id=pdf_id) }}" data-no-page-loading>
                 <i class="fas fa-file-pdf" aria-hidden="true"></i> {{ _('PDF') }}
