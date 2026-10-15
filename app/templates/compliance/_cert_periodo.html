@@ -28,9 +28,9 @@
       {# Vista de obra/mesa: el estado de ESTA propuesta manda (texto + color). #}
       <span class="cert-status {{ cert_period_status_cls|default('is-muted') }}">{{ cert_period_status }}</span>
       {% elif cert_period_status and cert_period_status_cls|default('') == 'is-bad' %}
-      <span class="cert-status is-bad" title="{{ _('Hay acción pendiente en tu tejado: mira las filas con * o «por revisar» / «requerida».') }}">{{ cert_period_status }}</span>
+      <span class="cert-status is-bad" title="{{ _('Hay acción pendiente en tu tejado: mira las filas marcadas.') }}">{{ cert_period_status }}</span>
       {% elif _aviso_mes %}
-      <span class="cert-status is-bad" title="{{ _('Hay algo pendiente de tu lado este mes (propuesta recibida o requerimiento). Las filas marcadas indican en qué obra o empresa.') }}">{% if cert_avisos.motivo_actual == 'requerida' %}{{ _('requerida') }}{% else %}{{ _('por revisar') }}{% endif %}</span>
+      <span class="cert-status is-bad" title="{{ _('Hay algo pendiente de tu lado este mes. Las filas marcadas indican en qué obra o empresa.') }}">{% if cert_avisos.motivo_actual == 'requerida' %}{{ _('requerida') }}{% else %}{{ _('por revisar') }}{% endif %}</span>
       {% elif cert_period_status %}
       <span class="cert-status {{ cert_period_status_cls|default('is-muted') }}">{{ cert_period_status }}</span>
       {% endif %}

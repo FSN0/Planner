@@ -419,6 +419,60 @@ def test_detalle_obra_no_sincroniza_ni_odoo(cert_ctx, monkeypatch):
     assert detalle['empresas'][0]['precio'] == Decimal('19.50')
 
 
+def test_detalle_obra_omite_empresa_interna(cert_ctx, monkeypatch):
+    """La empresa principal (is_internal) no sale en el hub de obra."""
+    from app.services import certificacion_service as cs
+
+    session = cert_ctx['session']
+    sub = cert_ctx['company']
+    internal = cert_ctx['internal']
+    o = _obra(session, 'Obra Sin Soltec')
+    u_sub = _operario(session, sub, 'Externo')
+    _fichaje(session, u_sub, o, date(2026, 10, 12))
+    # Propuesta fantasma de la principal (no debe listarse).
+    session.add(CertificacionPropuesta(
+        company_id=internal.id, obra_id=o.id, anio=2026, mes=10,
+        direccion=DIR_EMP, estado='borrador',
+    ))
+    session.add(CertificacionPropuesta(
+        company_id=sub.id, obra_id=o.id, anio=2026, mes=10,
+        direccion=DIR_EMP, estado='borrador',
+    ))
+    session.commit()
+
+    monkeypatch.setattr(
+        'app.services.panel_scope_service.certificacion_obra_ids',
+        lambda _user: None,
+    )
+    admin = User(
+        email='admin.nosoltec@cert.test',
+        password_hash=generate_password_hash('x'),
+        role='admin',
+        name='Admin',
+        lastname='NoSoltec',
+        dni='NOSOL1',
+        company_id=internal.id,
+        active=True,
+        email_verified=True,
+        is_deleted=False,
+    )
+    session.add(admin)
+    session.flush()
+
+    detalle = cs.detalle_certificacion_obra(admin, o.id, anio=2026, mes=10)
+    assert detalle is not None
+    ids = {e['company'].id for e in detalle['empresas']}
+    assert sub.id in ids
+    assert internal.id not in ids
+
+    with pytest.raises(ValueError, match='empresa principal'):
+        sincronizar(internal, 2026, 10, o.id)
+
+    # Sin fichaje de internos en volumen.
+    filas = panel_certificacion_oficina(admin, anio=2026, mes=10)
+    assert all(r['company'].id != internal.id for r in filas)
+
+
 def test_sincronizar_subcontrata_asigna_precio_sin_refresco(cert_ctx, monkeypatch):
     """Portal subcontrata usa refrescar_precios=False; igual debe materializar €/h."""
     session = cert_ctx['session']

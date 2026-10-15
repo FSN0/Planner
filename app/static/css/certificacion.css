@@ -629,6 +629,13 @@
   --cert-tools-gap: 8px;
   overflow-x: auto;
 }
+/* Pintado diferido: personas/días cerrados no layout-ean hasta abrirlos. */
+.cert-works .cert-work,
+.cert-works .cert-day,
+.cert-works .cert-persona-day {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
+}
 /* Sin borde lateral en obra/día: el 1px + radius metía cada nivel en otra vertical. */
 .cert-works--cadena > .cert-work,
 .cert-works--cadena .cert-day {
@@ -1288,7 +1295,11 @@
   border: 1px solid var(--cert-line);
   border-radius: 8px;
   background: #fff;
-  overflow: hidden;
+  /* visible: si no, la columna de horas (#1) se recorta y no se puede editar. */
+  overflow: visible;
+}
+.cert-works--cadena > .cert-work {
+  overflow-x: auto;
 }
 .cert-work > summary,
 .cert-day > summary {

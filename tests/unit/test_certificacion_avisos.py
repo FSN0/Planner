@@ -105,12 +105,12 @@ def test_avisos_subcontrata_recibida_y_requerida(
         )
         assert pares8.get((company_subcontrata.id, obra.id)) == 'requerida'
 
-        # Oficina también ve el requerimiento en el hub (ya se lo pidió)
+        # Oficina NO ve «requerida» como aviso: es acción de la subcontrata.
         pares8_ofi = pares_pendientes_mes(
             anio=2026, mes=8, company_id=company_subcontrata.id, obra_id=obra.id,
             vista_subcontrata=False,
         )
-        assert pares8_ofi.get((company_subcontrata.id, obra.id)) == 'requerida'
+        assert (company_subcontrata.id, obra.id) not in pares8_ofi
 
         scope = scope_obra(obra.id, company_id=company_subcontrata.id, vista_subcontrata=True)
         r = resumen_avisos(

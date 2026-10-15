@@ -3,7 +3,7 @@
 {% block body_class %}layout-admin{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005sub">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261015stack3">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/certificacion.css') }}?v=20261015edit2">
 {% endblock %}
 {% block wrapper %}
 {% set endpoint = 'subcontrata.certificacion_obra' if vista_subcontrata else 'compliance.certificacion_empresa_obra' %}
@@ -56,7 +56,8 @@
 {% set sin_contrato_periodo = sin_contrato_periodo if sin_contrato_periodo is defined else false %}
 {% set mostrar_sin_contrato = mostrar_sin_contrato if mostrar_sin_contrato is defined else false %}
 {% set mes_completo = mes_completo if mes_completo is defined else (not (desde or hasta)) %}
-{% set editable = propia.estado == 'borrador' and not bloqueado and user_can(current_user, 'certificacion', 'w') and not viendo_historial and not sin_contrato_periodo and mes_completo %}
+{# Sin contrato Odoo NO bloquea editar: hay fichajes que preparar; el envío sí exige tarifa. #}
+{% set editable = propia.estado == 'borrador' and not bloqueado and user_can(current_user, 'certificacion', 'w') and not viendo_historial and mes_completo %}
 {% set contrato = contrato if contrato is defined else none %}
 {% set modo_vista = modo_vista if modo_vista is defined else 'persona' %}
 {% set corr_activa = corr_activa if corr_activa is defined else false %}
@@ -118,9 +119,15 @@
           <a class="btn-admin btn-admin-ghost" href="{{ url_for('subcontrata.certificacion', anio=anio, mes=mes) }}">
             <i class="fas fa-arrow-left" aria-hidden="true"></i> {{ _('Volver') }}
           </a>
+          <a class="btn-admin btn-admin-ghost" href="{{ url_for(endpoint, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, corr=tab_corr, ronda=tab_ronda, refrescar=1) }}" title="{{ _('Vuelve a leer los fichajes de la App para este mes') }}">
+            <i class="fas fa-sync-alt" aria-hidden="true"></i> {{ _('Actualizar fichajes') }}
+          </a>
           {% else %}
           <a class="btn-admin btn-admin-ghost" href="{{ url_for('compliance.certificacion_empresa', company_id=company.id, anio=anio, mes=mes, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none) }}">
             <i class="fas fa-arrow-left" aria-hidden="true"></i> {{ _('Volver') }}
+          </a>
+          <a class="btn-admin btn-admin-ghost" href="{{ url_for(endpoint, company_id=company.id, obra_id=obra.id, anio=anio, mes=mes, modo=modo_vista, corr=tab_corr, ronda=tab_ronda, desde=desde.isoformat() if desde else none, hasta=hasta.isoformat() if hasta else none, refrescar=1) }}" title="{{ _('Vuelve a leer los fichajes de la App para este mes') }}">
+            <i class="fas fa-sync-alt" aria-hidden="true"></i> {{ _('Actualizar fichajes') }}
           </a>
           {% endif %}
           {# Reabrir en hero solo si el mes está cerrado (aceptada). Tras un rechazo
@@ -140,7 +147,6 @@
           {% endif %}
         </div>
         <div class="cert-hero-precio">
-          {% if not sin_contrato_periodo %}
           {% if not vista_subcontrata and user_can(current_user, 'certificacion', 'w') %}
           <form method="post" class="cert-precio" id="cert-precio" data-precio="{{ precio }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -149,7 +155,7 @@
             <input type="hidden" name="modo" value="{{ modo_vista }}">
             {% if precio_propio_obra %}<input type="hidden" name="ambito" value="obra">{% endif %}
             <span class="cert-precio-label">
-              {{ _('Precio') }}{% if precio_propio_obra %} · {{ _('obra') }}{% elif precio_origen == 'empresa' %} · {{ _('manual') }}{% endif %}
+              {{ _('Precio') }}{% if precio_propio_obra %} · {{ _('obra') }}{% elif precio_origen == 'empresa' %} · {{ _('manual') }}{% elif sin_contrato_periodo %} · {{ _('sin contrato') }}{% endif %}
             </span>
             <button type="button" class="cert-precio-view" id="cert-precio-view" title="{{ _('Editar precio (vacío = contrato de asistencia)') }}">
               <strong>{{ precio }} €</strong>
@@ -158,13 +164,15 @@
             <div class="cert-precio-edit" id="cert-precio-edit" hidden>
               <input type="number" name="precio_hora" step="0.01" min="0"
                      value="{{ precio if precio_propio_obra or precio_origen == 'empresa' else '' }}"
-                     inputmode="decimal" placeholder="{{ _('Contrato') }}">
+                     inputmode="decimal" placeholder="{{ _('€/h') }}">
               <em>€/h</em>
               <button type="submit" name="accion" value="precio" class="btn-admin btn-admin-ghost">{{ _('Guardar') }}</button>
               <button type="button" class="btn-admin btn-admin-ghost" id="cert-precio-cancel">{{ _('Cancelar') }}</button>
             </div>
             {% if precio_origen == 'contrato' and contrato %}
             <em class="cert-precio-hint">{{ _('Fijado por el contrato') }} {{ contrato.name or ('#' ~ contrato.contract_id) }}</em>
+            {% elif sin_contrato_periodo %}
+            <em class="cert-precio-hint">{{ _('No hay contrato Odoo: fija un precio para poder enviar') }}</em>
             {% endif %}
           </form>
           {% elif precio_origen == 'contrato' and contrato %}
@@ -196,7 +204,6 @@
             <em class="cert-precio-hint">{{ _('Fijado por el contrato de asistencia') }}</em>
             {% endif %}
           </div>
-          {% endif %}
           {% endif %}
         </div>
       </div>
@@ -286,6 +293,16 @@
         <span>
           {{ _('Estás viendo un trozo del mes. Enviar, aceptar, rechazar o editar solo se puede en el mes completo.') }}
           <a href="{{ cert_period_clear_url }}">{{ _('Volver al mes completo') }}</a>
+        </span>
+      </div>
+    </div>
+    {% elif sin_contrato_periodo and not vista_subcontrata %}
+    <div class="cert-banner is-warn">
+      <i class="fas fa-file-contract" aria-hidden="true"></i>
+      <div>
+        <strong>{{ _('Sin contrato de asistencia Odoo en este mes') }}</strong>
+        <span>
+          {{ _('Puedes editar horas y fijar un precio manual (€/h). Para enviar hace falta precio de obra/empresa o un contrato vinculado.') }}
         </span>
       </div>
     </div>
@@ -543,13 +560,14 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
     if (!work) return;
     var summary = work.querySelector(':scope > summary');
     if (!summary) return;
-    var inp = summary.querySelector('.js-work-horas');
-    if (inp) {
-      inp.value = fmt(wH);
-      return;
-    }
+    var hv = fmt(wH);
+    // Solo el total del mes (sin data-fecha); los del día se actualizan aparte.
+    summary.querySelectorAll('.js-work-horas:not([data-fecha])').forEach(function (inp) {
+      inp.value = hv;
+      inp.setAttribute('data-focus-val', hv);
+    });
     var ro = summary.querySelector('.js-work-total-horas');
-    if (ro) ro.textContent = fmt(wH) + ' h';
+    if (ro) ro.textContent = hv + ' h';
   }
 
   var DELTA_I18N = {
@@ -642,14 +660,22 @@ document.querySelectorAll('.cert-line').forEach(function (row) {
       });
       var dayStats = day.querySelector('.js-day-stats');
       if (dayStats) {
+        var dayInp = dayStats.querySelector('.js-work-horas[data-fecha], .js-day-prorrata');
+        if (dayInp) {
+          var dHv = fmt(dH);
+          dayInp.value = dHv;
+          dayInp.setAttribute('data-focus-val', dHv);
+        }
         var dayH = dayStats.querySelector('.js-day-horas');
         var dayI = dayStats.querySelector('.js-day-imp');
         if (dayH || dayI) {
           if (dayH) dayH.textContent = fmt(dH) + ' h';
           if (dayI) dayI.textContent = fmt(dI) + ' €';
-        } else {
+        } else if (!dayInp) {
           var dayMain = dayStats.querySelector(':scope > span:first-child') || dayStats;
           dayMain.textContent = fmtPair(dH, dI);
+        } else if (dayI) {
+          dayI.textContent = fmt(dI) + ' €';
         }
       }
     }

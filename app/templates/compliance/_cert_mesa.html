@@ -570,7 +570,7 @@
 
     {% else %}
     {# ——— Turno / estado de la mesa ——— #}
-    <div class="cert-mesa-banner {% if turno == 'te_toca' or turno == 'esperando' or cert_requerida %}is-wait{% elif turno == 'cerrada' %}is-ok{% else %}is-muted{% endif %}">
+    <div class="cert-mesa-banner {% if turno == 'te_toca' or turno == 'esperando' or (cert_requerida and vista_subcontrata) %}is-wait{% elif turno == 'cerrada' %}is-ok{% else %}is-muted{% endif %}">
       <div>
         {% if modo_mesa == 'esperando' and mesa_carta %}
           <strong>{{ _('Propuesta actual') }} · {{ _('enviada') }}</strong>
@@ -590,9 +590,6 @@
           <span>
             {% if cert_requerida and vista_subcontrata %}
               {{ _('Soltec te ha requerido completar y enviar esta certificación.') }}
-              {% if cert_requerida_at %} · {{ cert_requerida_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
-            {% elif cert_requerida and not vista_subcontrata %}
-              {{ _('Ya se ha requerido a la subcontrata completar esta certificación.') }}
               {% if cert_requerida_at %} · {{ cert_requerida_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
             {% else %}
               {{ _('Prepara tu propuesta y envíala cuando esté lista. Si hubo un rechazo, está en el historial.') }}
@@ -723,7 +720,7 @@
           {% endif %}
           {% for obra_g in grupos_propia %}
           {% set cmp_p = cmp_persona.get(obra_g.persona_user_id) if obra_g.persona_user_id and cmp_persona else none %}
-          <details class="cert-work" data-user-id="{{ obra_g.persona_user_id or '' }}" {% if modo_vista == 'fecha' %}open{% endif %}>
+          <details class="cert-work" data-user-id="{{ obra_g.persona_user_id or '' }}">
             <summary>
               <span class="cert-work-name">
                 {% if modo_vista == 'fecha' %}
@@ -735,8 +732,8 @@
                 <span class="cert-sin-fichaje" title="{{ _('Hay días añadidos sin fichaje en la App') }}">*</span>
                 {% endif %}
               </span>
-              {% if modo_vista == 'persona' and usar_cabeceras and editable and con_borrador_col and obra_g.persona_user_id %}
-              <span class="{{ tools_cadena_cls }}" onclick="event.stopPropagation()">
+              {% if modo_vista == 'persona' and editable and obra_g.persona_user_id and (usar_cabeceras or con_borrador_col) %}
+              <span class="{{ tools_cadena_cls if usar_cabeceras else 'cert-work-tools' ~ tools_plat }}" onclick="event.stopPropagation()">
                 {% for col in comparar_cadena %}
                 <span class="cert-work-col cert-work-col--chain">
                   {{ cadena_celda_persona(col.totales, obra_g.persona_user_id, obra_g.plat_horas) }}
@@ -862,7 +859,7 @@
                     </span>
                     {% endfor %}
                     {% if con_borrador_col %}
-                      {% if modo_vista == 'fecha' and editable %}
+                      {% if editable and modo_vista == 'fecha' %}
                       <span class="cert-work-col cert-work-col--horas" onclick="event.stopPropagation()">
                         <input type="text" inputmode="decimal"
                                class="cert-prorrata-input js-day-prorrata"
@@ -870,6 +867,18 @@
                                placeholder="0"
                                data-fecha="{{ fecha.fecha.isoformat() }}"
                                title="{{ _('Total horas del día (#{n}). Al salir se guarda y reparte entre las personas.', n=etiqueta_borrador or '') }}"
+                               aria-label="{{ _('Horas del día') }}">
+                        <em>h</em>
+                      </span>
+                      {% elif editable and modo_vista == 'persona' and obra_g.persona_user_id %}
+                      <span class="cert-work-col cert-work-col--horas" onclick="event.stopPropagation()">
+                        <input type="text" inputmode="decimal"
+                               class="cert-prorrata-input js-work-horas"
+                               value="{{ fecha.horas if fecha.horas else '' }}"
+                               placeholder="0"
+                               data-user-id="{{ obra_g.persona_user_id }}"
+                               data-fecha="{{ fecha.fecha.isoformat() }}"
+                               title="{{ _('Horas de este trabajador en el día (#{n}). Al salir se guarda.', n=etiqueta_borrador or '') }}"
                                aria-label="{{ _('Horas del día') }}">
                         <em>h</em>
                       </span>
@@ -918,6 +927,19 @@
                              placeholder="0"
                              data-fecha="{{ fecha.fecha.isoformat() }}"
                              title="{{ _('Total horas del día. Al salir se reparte entre las personas.') }}"
+                             aria-label="{{ _('Horas del día') }}">
+                      <em>h</em>
+                      · {{ fecha.importe }} €
+                    </span>
+                    {% elif modo_vista == 'persona' and editable and obra_g.persona_user_id %}
+                    <span onclick="event.stopPropagation()">
+                      <input type="text" inputmode="decimal"
+                             class="cert-prorrata-input js-work-horas"
+                             value="{{ fecha.horas if fecha.horas else '' }}"
+                             placeholder="0"
+                             data-user-id="{{ obra_g.persona_user_id }}"
+                             data-fecha="{{ fecha.fecha.isoformat() }}"
+                             title="{{ _('Horas de este trabajador en el día. Al salir se guarda.') }}"
                              aria-label="{{ _('Horas del día') }}">
                       <em>h</em>
                       · {{ fecha.importe }} €

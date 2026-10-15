@@ -92,6 +92,7 @@ from app.services.certificacion_service import (
     requerir_accion,
     restablecer_linea_desde_fichaje,
     resumen_actividad,
+    cargar_par_certificacion,
     sincronizar,
     totales,
     totales_grupos,
@@ -827,6 +828,9 @@ def certificacion_empresa(company_id):
     """Hub: obras del mes para esta subcontrata."""
     _exigir(has_certificacion)
     company = Company.query.get_or_404(company_id)
+    if getattr(company, 'is_internal', False):
+        # La empresa principal no se certifica a sí misma.
+        abort(404)
     anio, mes, desde, hasta = _periodo()
     from app.services.panel_scope_service import certificacion_obra_ids
     allowed = certificacion_obra_ids(current_user)
@@ -894,6 +898,8 @@ def certificacion_empresa(company_id):
 def certificacion_empresa_obra(company_id, obra_id):
     _exigir(has_certificacion)
     company = Company.query.get_or_404(company_id)
+    if getattr(company, 'is_internal', False):
+        abort(404)
     anio, mes, desde, hasta = _periodo()
     from app.services.panel_scope_service import certificacion_obra_ids
     from app.models import Obra
@@ -910,9 +916,17 @@ def certificacion_empresa_obra(company_id, obra_id):
             direccion_propia=DIR_EMP,
             endpoint='compliance.certificacion_empresa_obra',
         )
-    # Sin refresco Odoo de precios en cada GET (igual que subcontrata): si no, la ficha tarda mucho.
-    sub, emp = sincronizar(company, anio, mes, obra_id, refrescar_precios=False)
-    db.session.commit()
+    # GET: no reconstruir fichajes cada vez (solo ?refrescar=1 o primer acceso vacío).
+    forzar = str(request.args.get('refrescar') or '').strip().lower() in (
+        '1', 'true', 'yes', 'si',
+    )
+    sub, emp, did_sync = cargar_par_certificacion(
+        company, anio, mes, obra_id,
+        forzar_sync=forzar,
+        refrescar_precios=False,
+    )
+    if did_sync:
+        db.session.commit()
     return _render_cert(
         company, anio, mes, obra=obra, propia=emp, ajena=sub, vista_subcontrata=False,
         desde=desde, hasta=hasta,
@@ -1082,8 +1096,9 @@ def _render_cert(
         modo_vista=modo,
         corr=corr,
     )
-    # Backfill de historial (rondas) hecho en contexto_mesa: hay que persistirlo.
-    db.session.commit()
+    # Solo commit si el backfill de rondas escribió algo.
+    if db.session.dirty or db.session.new or db.session.deleted:
+        db.session.commit()
 
     cache_precios: dict = {}
 
@@ -1096,23 +1111,27 @@ def _render_cert(
         return None
 
     # Oficina y subcontrata: misma tarifa (obra > empresa > contrato asistencia).
-    # La subcontrata no la edita; sí la ve para que horas × €/h cuadren al enviar.
-    # Contrato del mes (solape con vigencia), no el vigente «hoy».
-    contrato = contrato_asistencia_mes(company, obra, anio, mes, cache=cache_precios)
-    contrato_inicio, contrato_fin = rango_vigencia_contrato(contrato)
+    # Si ya hay override local, no pegamos a Odoo en cada pintado.
+    propio_obra = precio_obra(obra)
+    propio_emp = company.precio_hora is not None
+    contrato = None
+    contrato_inicio = contrato_fin = None
     fecha_tarifa = None
-    if contrato_inicio or contrato_fin:
-        mes_ini, mes_fin = date(anio, mes, 1), date(anio, mes, monthrange(anio, mes)[1])
-        fecha_tarifa = max(mes_ini, contrato_inicio or mes_ini)
-        if contrato_fin:
-            fecha_tarifa = min(fecha_tarifa, contrato_fin)
-    sin_contrato_periodo = contrato is None
+    if propio_obra is None and not propio_emp:
+        contrato = contrato_asistencia_mes(company, obra, anio, mes, cache=cache_precios)
+        contrato_inicio, contrato_fin = rango_vigencia_contrato(contrato)
+        if contrato_inicio or contrato_fin:
+            mes_ini, mes_fin = date(anio, mes, 1), date(anio, mes, monthrange(anio, mes)[1])
+            fecha_tarifa = max(mes_ini, contrato_inicio or mes_ini)
+            if contrato_fin:
+                fecha_tarifa = min(fecha_tarifa, contrato_fin)
+    sin_contrato_periodo = (propio_obra is None and not propio_emp and contrato is None)
 
     if vista_subcontrata:
-        if precio_obra(obra) is not None:
+        if propio_obra is not None:
             precio_origen = 'obra'
-            precio_val = precio_obra(obra)
-        elif company.precio_hora is not None:
+            precio_val = propio_obra
+        elif propio_emp:
             precio_origen = 'empresa'
             precio_val = precio_empresa(company)
         else:
@@ -1133,17 +1152,20 @@ def _render_cert(
                 precio_origen = 'sin'
                 precio_val = Decimal('0.00')
     else:
-        if precio_obra(obra) is not None:
+        if propio_obra is not None:
             precio_origen = 'obra'
-        elif company.precio_hora is not None:
+            precio_val = propio_obra
+        elif propio_emp:
             precio_origen = 'empresa'
+            precio_val = precio_empresa(company)
         elif contrato:
             precio_origen = 'contrato'
+            precio_val = precio_para(
+                company, obra, fecha=fecha_tarifa, cache=cache_precios,
+            )
         else:
             precio_origen = 'sin'
-        precio_val = precio_para(
-            company, obra, fecha=fecha_tarifa, cache=cache_precios,
-        )
+            precio_val = Decimal('0.00')
         if not precio_val or precio_val <= 0:
             from_line = _precio_linea_util(propia) or _precio_linea_util(ajena)
             if from_line is not None:

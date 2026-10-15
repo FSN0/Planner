@@ -119,6 +119,19 @@ def _parse_fecha_contrato(raw) -> date | None:
         return None
 
 
+def _odoo_req_cache() -> dict:
+    """Cache por request HTTP (evita repegar a Odoo en el mismo pintado de mesa)."""
+    try:
+        from flask import g
+        store = getattr(g, '_cert_odoo_cache', None)
+        if store is None:
+            store = {}
+            g._cert_odoo_cache = store
+        return store
+    except Exception:
+        return {}
+
+
 def contrato_asistencia(
     company: Company,
     obra: Obra | None,
@@ -135,9 +148,9 @@ def contrato_asistencia(
     project_id = _ext_odoo_id(obra)
     if not partner_id or not project_id:
         return None
-    store = cache if cache is not None else {}
+    store = cache if cache is not None else _odoo_req_cache()
     if date_from is not None and date_to is not None:
-        key = (partner_id, project_id, f'{date_from.isoformat()}:{date_to.isoformat()}')
+        key = ('rates', partner_id, project_id, f'{date_from.isoformat()}:{date_to.isoformat()}')
         kwargs = {
             'partner_id': partner_id,
             'project_id': project_id,
@@ -146,7 +159,7 @@ def contrato_asistencia(
         }
     else:
         on_date = (fecha or date.today()).isoformat()
-        key = (partner_id, project_id, on_date)
+        key = ('rates', partner_id, project_id, on_date)
         kwargs = {
             'partner_id': partner_id,
             'project_id': project_id,
@@ -604,6 +617,57 @@ def _get_or_create(
     return row
 
 
+def _cargar_propuestas_periodo(
+    company_id: int, obra_id: int, anio: int, mes: int,
+) -> list[CertificacionPropuesta]:
+    """Carga el par de propuestas del periodo con líneas y usuarios (sin N+1)."""
+    from sqlalchemy.orm import selectinload, joinedload
+
+    return (
+        CertificacionPropuesta.query
+        .options(
+            selectinload(CertificacionPropuesta.lineas)
+            .joinedload(CertificacionLinea.user),
+            selectinload(CertificacionPropuesta.lineas)
+            .joinedload(CertificacionLinea.obra),
+        )
+        .filter_by(
+            company_id=company_id, obra_id=obra_id, anio=anio, mes=mes,
+        )
+        .all()
+    )
+
+
+def cargar_par_certificacion(
+    company: Company,
+    anio: int,
+    mes: int,
+    obra_id: int,
+    *,
+    forzar_sync: bool = False,
+    refrescar_precios: bool = False,
+) -> tuple[CertificacionPropuesta, CertificacionPropuesta, bool]:
+    """
+    Par SUB+EMP para pintar la mesa.
+
+    Por defecto NO reconstruye desde fichajes (eso era el cuello de botella de cada GET).
+    Sincroniza solo si falta el par o forzar_sync=True (?refrescar=1 / «Actualizar fichajes»).
+
+    Returns: (sub, emp, did_sync)
+    """
+    if not forzar_sync:
+        rows = _cargar_propuestas_periodo(company.id, obra_id, anio, mes)
+        sub = next((r for r in rows if r.direccion == DIR_SUB), None)
+        emp = next((r for r in rows if r.direccion == DIR_EMP), None)
+        # Par ya creado (aunque esté vacío): no re-escanear fichajes en cada GET.
+        if sub is not None and emp is not None:
+            return sub, emp, False
+    sub, emp = sincronizar(
+        company, anio, mes, obra_id, refrescar_precios=refrescar_precios,
+    )
+    return sub, emp, True
+
+
 def sincronizar(
     company: Company, anio: int, mes: int, obra_id: int,
     *,
@@ -613,6 +677,8 @@ def sincronizar(
 
     refrescar_precios=False evita pegarse a Odoo (útil en portal subcontrata / post-guardado).
     """
+    if getattr(company, 'is_internal', False):
+        raise ValueError('La empresa principal no se certifica a sí misma.')
     obra = Obra.query.get(obra_id)
     esqueleto = _esqueleto(company.id, anio, mes, obra_id=obra_id)
     esqueleto_map = {(f['user_id'], f['obra_id'], f['fecha']): f for f in esqueleto}
@@ -1016,6 +1082,9 @@ def cadena_rondas_negociacion(
         [r for r in (rondas or []) if r and r.resultado != 'retirada' and r.id],
         key=lambda r: (r.secuencia or 0, r.id or 0),
     )
+    # Memo: la misma ronda puede pedirse mapa/totales varias veces en un request.
+    mapas: dict[int, dict] = {}
+    totales_cache: dict[int, dict] = {}
     out: list[dict] = []
     for r in vivos:
         e = et.get(int(r.id), '')
@@ -1023,12 +1092,16 @@ def cadena_rondas_negociacion(
             continue
         if (r.secuencia or 0, r.id or 0) > ancla_key:
             continue
+        rid = int(r.id)
+        if rid not in mapas:
+            mapas[rid] = mapa_lineas_ronda(r)
+            totales_cache[rid] = totales_comparar_ronda(r)
         out.append({
-            'id': int(r.id),
+            'id': rid,
             'etiqueta': e,
             'ronda': r,
-            'mapa': mapa_lineas_ronda(r),
-            'totales': totales_comparar_ronda(r),
+            'mapa': mapas[rid],
+            'totales': totales_cache[rid],
             'direccion': r.direccion,
             'resultado': r.resultado,
         })
@@ -1038,14 +1111,22 @@ def cadena_rondas_negociacion(
 def _purgar_retiradas_y_renumerar(company_id: int, obra_id: int, anio: int, mes: int) -> None:
     """Corregir no deja carta fantasma: borra retiradas y resecuencia 1..N sin huecos."""
     todas = _rondas_periodo(company_id, obra_id, anio, mes)
-    for r in list(todas):
-        if r.resultado == 'retirada':
-            db.session.delete(r)
-    db.session.flush()
+    retiradas = [r for r in todas if r.resultado == 'retirada']
     vivas = sorted(
-        _rondas_periodo(company_id, obra_id, anio, mes),
+        [x for x in todas if (x.resultado or '') != 'retirada'],
         key=lambda x: (x.secuencia or 0, x.id or 0),
     )
+    needs_renum = any((r.secuencia or 0) != i for i, r in enumerate(vivas, start=1))
+    if not retiradas and not needs_renum:
+        return
+    for r in retiradas:
+        db.session.delete(r)
+    if retiradas:
+        db.session.flush()
+        vivas = sorted(
+            _rondas_periodo(company_id, obra_id, anio, mes),
+            key=lambda x: (x.secuencia or 0, x.id or 0),
+        )
     for i, r in enumerate(vivas, start=1):
         if r.secuencia != i:
             r.secuencia = i
@@ -1566,10 +1647,19 @@ def enviar(
     obra = obra or (Obra.query.get(prop.obra_id) if prop.obra_id else None)
     if contrato is None and company is not None and obra is not None:
         contrato = contrato_asistencia_mes(company, obra, prop.anio, prop.mes)
-    if not contrato:
+    # Tarifa local (obra/empresa) basta para enviar aunque Odoo no traiga contrato.
+    tiene_tarifa_local = bool(
+        (obra is not None and precio_obra(obra) is not None)
+        or (company is not None and company.precio_hora is not None)
+        or any(
+            (ln.precio_hora is not None and ln.precio_hora > 0)
+            for ln in (prop.lineas or [])
+        )
+    )
+    if not contrato and not tiene_tarifa_local:
         raise ValueError(
-            'No hay un contrato de asistencia vinculado a este periodo. '
-            'No se puede enviar la propuesta.'
+            'No hay contrato de asistencia ni precio (€/h) para este periodo. '
+            'Fija un precio de obra/empresa o vincula el contrato antes de enviar.'
         )
     con_horas = [
         ln for ln in (prop.lineas or [])
@@ -2592,13 +2682,19 @@ def _meses_contrato_asistencia_obra(
     project_id = _ext_odoo_id(obra)
     if not partner_id or not project_id:
         return set()
-    try:
-        from app.sync.dispatcher import get_sync_adapter
-        adapter = get_sync_adapter()
-        lister = getattr(adapter, 'list_attendance_contracts', None)
-        rows = lister(partner_id, project_id) if callable(lister) else []
-    except Exception:
-        rows = []
+    store = _odoo_req_cache()
+    cache_key = ('list_contracts', partner_id, project_id, hasta.isoformat())
+    if cache_key in store:
+        rows = store[cache_key]
+    else:
+        try:
+            from app.sync.dispatcher import get_sync_adapter
+            adapter = get_sync_adapter()
+            lister = getattr(adapter, 'list_attendance_contracts', None)
+            rows = lister(partner_id, project_id) if callable(lister) else []
+        except Exception:
+            rows = []
+        store[cache_key] = rows
     meses: set[tuple[int, int]] = set()
     for row in rows or []:
         d0 = _parse_fecha_contrato(row.get('date_start'))
@@ -2623,8 +2719,13 @@ def panel_meses_obra(
     vista_subcontrata: bool,
     meses_atras: int = 17,
     meses_adelante: int = 1,
+    consultar_contratos_odoo: bool = False,
 ) -> list[dict]:
-    """Meses de la obra: con contrato de asistencia, fichaje/propuesta, o el mes abierto."""
+    """Meses de la obra: fichaje/propuesta o mes abierto.
+
+    consultar_contratos_odoo=False (defecto): no llama a Odoo en cada pintado.
+    Los meses con contrato sin fichaje/propuesta aparecen al forzar refresco.
+    """
     propia_dir = DIR_SUB if vista_subcontrata else DIR_EMP
     props = CertificacionPropuesta.query.filter_by(
         company_id=company_id, obra_id=obra_id,
@@ -2639,7 +2740,10 @@ def panel_meses_obra(
     tope = date(tope_a, tope_m, 1)
     # Último día del mes tope.
     _, tope_fin = _mes_rango(tope_a, tope_m)
-    meses_contrato = _meses_contrato_asistencia_obra(company, obra, hasta=tope_fin)
+    meses_contrato = (
+        _meses_contrato_asistencia_obra(company, obra, hasta=tope_fin)
+        if consultar_contratos_odoo else set()
+    )
 
     usuarios = [
         u.id for u in User.query.filter(
@@ -3055,19 +3159,30 @@ def panel_certificacion_oficina(
         )
         .all()
     ) if periodos else []
+    internas = {
+        c.id for c in Company.query.filter(
+            Company.is_internal.is_(True),
+        ).all()
+    }
     for prop in pend:
+        if prop.company_id in internas:
+            continue
         if allowed is None or prop.obra_id in allowed:
             company_ids.add(prop.company_id)
 
     # Propuestas del mes ancla en alcance
     props_mes = CertificacionPropuesta.query.filter_by(anio=anio, mes=mes).all()
     for prop in props_mes:
+        if prop.company_id in internas:
+            continue
         if allowed is None or prop.obra_id in allowed:
             company_ids.add(prop.company_id)
 
     from app.services.certificacion_avisos_service import pares_pendientes_mes
     pares_aviso = pares_pendientes_mes(anio=anio, mes=mes, user=user)
     for cid, oid in pares_aviso:
+        if cid in internas:
+            continue
         if allowed is not None and oid not in allowed:
             continue
         company_ids.add(cid)
@@ -3361,7 +3476,14 @@ def panel_certificacion_obras(
         )
         .all()
     ) if periodos else []
+    internas = {
+        c.id for c in Company.query.filter(
+            Company.is_internal.is_(True),
+        ).all()
+    }
     for prop in pend:
+        if prop.company_id in internas:
+            continue
         if allowed is not None and prop.obra_id not in allowed:
             continue
         bucket = por_obra.setdefault(prop.obra_id, {
@@ -3372,6 +3494,8 @@ def panel_certificacion_obras(
 
     props_mes = CertificacionPropuesta.query.filter_by(anio=anio, mes=mes).all()
     for prop in props_mes:
+        if prop.company_id in internas:
+            continue
         if allowed is not None and prop.obra_id not in allowed:
             continue
         bucket = por_obra.setdefault(prop.obra_id, {
@@ -3383,6 +3507,8 @@ def panel_certificacion_obras(
     from app.services.certificacion_avisos_service import pares_pendientes_mes
     pares_aviso = pares_pendientes_mes(anio=anio, mes=mes, user=user)
     for cid, oid in pares_aviso:
+        if cid in internas:
+            continue
         if allowed is not None and oid not in allowed:
             continue
         bucket = por_obra.setdefault(oid, {
@@ -3397,6 +3523,8 @@ def panel_certificacion_obras(
     obras = {o.id: o for o in Obra.query.filter(Obra.id.in_(list(por_obra))).all()}
     props_por_obra: dict[int, list] = defaultdict(list)
     for prop in props_mes:
+        if prop.company_id in internas:
+            continue
         if prop.obra_id in por_obra:
             props_por_obra[prop.obra_id].append(prop)
 
@@ -3512,10 +3640,16 @@ def detalle_certificacion_obra(
         anio=anio, mes=mes, desde=desde, hasta=hasta,
         obra_ids={obra_id} if allowed is None else ({obra_id} & allowed),
     )
-    # Incluir empresas con propuesta aunque el filtro de fechas no pille fichaje
+    # Incluir empresas con propuesta aunque el filtro de fechas no pille fichaje.
+    # Nunca la empresa principal (is_internal).
+    internas = {
+        c.id for c in Company.query.filter(Company.is_internal.is_(True)).all()
+    }
     props_obra = CertificacionPropuesta.query.filter_by(obra_id=obra_id, anio=anio, mes=mes).all()
     props_por_company: dict[int, list] = defaultdict(list)
     for p in props_obra:
+        if p.company_id in internas:
+            continue
         props_por_company[p.company_id].append(p)
     estados_por_company = {
         cid: _estado_desde_par(rows, vista_subcontrata=False)
@@ -3546,11 +3680,15 @@ def detalle_certificacion_obra(
     )
 
     company_ids = {f['company_id'] for f in filas} | set(props_por_company)
-    company_ids |= {cid for (cid, oid) in pares_aviso if oid == obra_id}
+    company_ids |= {
+        cid for (cid, oid) in pares_aviso
+        if oid == obra_id and cid not in internas
+    }
+    company_ids -= internas
     user_ids = {f['user_id'] for f in filas}
     users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
     companies = {
-        c.id: c for c in Company.query.filter(Company.id.in_(list(company_ids))).all()
+        c.id: c for c in Company.query.filter(Company.id.in_(list(company_ids) or [-1])).all()
     } if company_ids else {}
 
     precios_company = {
@@ -4898,8 +5036,14 @@ def contexto_mesa(
         'comparar_ronda': comparar,
         'comparar_cadena': comparar_cadena,
         'etiqueta_borrador': etiqueta_borrador,
-        'mapa_comparar': mapa_lineas_ronda(comparar),
-        'totales_comparar': totales_comparar_ronda(comparar),
+        'mapa_comparar': (
+            comparar_cadena[-1]['mapa'] if comparar_cadena
+            else mapa_lineas_ronda(comparar)
+        ),
+        'totales_comparar': (
+            comparar_cadena[-1]['totales'] if comparar_cadena
+            else totales_comparar_ronda(comparar)
+        ),
         'lado_propio': _lado(propia_dir),
         'lado_ajeno': _lado(_otra(propia_dir)),
         'chat_mensajes': chat_ui,

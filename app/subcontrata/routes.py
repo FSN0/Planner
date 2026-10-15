@@ -304,10 +304,18 @@ def certificacion_obra(obra_id):
             direccion_propia=DIR_SUB,
             endpoint='subcontrata.certificacion_obra',
         )
-    # Sin refresco de precios Odoo en cada carga: si no, cada "Guardar" + redirect
-    # tarda mucho y la subcontrata percibe que no se ha guardado.
-    sub, emp = sincronizar(company, anio, mes, obra_id, refrescar_precios=False)
-    db.session.commit()
+    from app.services.certificacion_service import cargar_par_certificacion
+    from app import db
+    forzar = str(request.args.get('refrescar') or '').strip().lower() in (
+        '1', 'true', 'yes', 'si',
+    )
+    sub, emp, did_sync = cargar_par_certificacion(
+        company, anio, mes, obra_id,
+        forzar_sync=forzar,
+        refrescar_precios=False,
+    )
+    if did_sync:
+        db.session.commit()
     return _render_cert(
         company, anio, mes, obra=obra, propia=sub, ajena=emp, vista_subcontrata=True,
     )

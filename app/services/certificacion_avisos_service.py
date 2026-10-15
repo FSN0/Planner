@@ -2,7 +2,7 @@
 
 Aviso = hay acción pendiente visible en el hub:
   - recibida: la otra parte te envió una propuesta (aceptar / rechazar / contrapropuesta)
-  - requerida: Soltec pidió a la subcontrata completar/enviar (pendiente hasta que envíe)
+  - requerida: solo en portal subcontrata (Soltec pidió completar/enviar; no es aviso de oficina)
 
 No cuenta fichaje sin abrir, borradores nunca enviados ni «meses sin cerrar».
 Se puede silenciar por alcance+mes; un cambio real (enviar/aceptar/requerir/…) lo reactiva.
@@ -169,8 +169,8 @@ def _pares_con_propuesta(
 def _motivo_accion_pendiente(rows: list, *, vista_subcontrata: bool) -> str | None:
     """Motivo de aviso en el tejado del lado indicado, o None.
 
-    ``requerida`` se ve en ambos lados: la subcontrata debe completar, y la
-    oficina ve en el hub que ya se le ha pedido (icono / etiqueta «requerida»).
+    ``requerida`` solo en el tejado de la subcontrata (Soltec le pidió completar).
+    La oficina no lo ve como aviso: ella ya sabe que lo pidió; no es acción suya.
     """
     if any((r.estado or '') == 'aceptada' for r in rows):
         return None
@@ -179,7 +179,9 @@ def _motivo_accion_pendiente(rows: list, *, vista_subcontrata: bool) -> str | No
     ajena = by.get(ajena_dir)
     if ajena and (ajena.estado or '') == 'enviada':
         return 'recibida'
-    # Pedido a la subcontrata de completar/enviar (sigue en borrador).
+    # Solo la subcontrata tiene «requerida» pendiente en su tejado.
+    if not vista_subcontrata:
+        return None
     sub = by.get(DIR_SUB)
     if (
         sub

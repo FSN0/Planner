@@ -15,6 +15,7 @@ from app.services.certificacion_service import (
     aceptar,
     anadir_dia_manual,
     cadena_rondas_negociacion,
+    cargar_par_certificacion,
     contexto_mesa,
     desenviar,
     etiquetas_rondas,
@@ -725,3 +726,38 @@ def test_reabrir_tras_rechazar(mesa_ctx, monkeypatch):
     assert sub.estado == 'enviada'
     assert float(sub.lineas[0].horas) == pytest.approx(9.0)
     assert 'viernes' not in (mesa.comentario_rechazo or '')
+
+
+def test_cargar_par_no_resync_si_ya_hay_datos(mesa_ctx, monkeypatch):
+    """GET repetido no debe volver a escanear fichajes."""
+    company = mesa_ctx['company']
+    session = mesa_ctx['session']
+    o = _obra(session, 'Obra Lazy Sync')
+    _operario(session, company, 'Luis')
+    sub, emp = sincronizar(company, 2026, 10, o.id)
+    session.flush()
+
+    calls = {'n': 0}
+    real_esqueleto = __import__(
+        'app.services.certificacion_service', fromlist=['_esqueleto']
+    )._esqueleto
+
+    def _spy(*a, **k):
+        calls['n'] += 1
+        return real_esqueleto(*a, **k)
+
+    monkeypatch.setattr(
+        'app.services.certificacion_service._esqueleto', _spy,
+    )
+    sub2, emp2, did_sync = cargar_par_certificacion(
+        company, 2026, 10, o.id, forzar_sync=False,
+    )
+    assert did_sync is False
+    assert calls['n'] == 0
+    assert sub2.id == sub.id and emp2.id == emp.id
+
+    _, _, did_force = cargar_par_certificacion(
+        company, 2026, 10, o.id, forzar_sync=True, refrescar_precios=False,
+    )
+    assert did_force is True
+    assert calls['n'] == 1
