@@ -1,8 +1,9 @@
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, g
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, g, send_file, abort
 from flask_login import login_required, current_user
 from app import db
 from datetime import datetime
 import json
+import os
 from sqlalchemy import or_, and_
 from app.models import Nota, Obra, User, nota_obra, nota_user, Asignacion
 from app.services.permission_service import user_can
@@ -204,7 +205,37 @@ def obtener_nota(nota_id):
         'obras_ids': [o.id for o in nota.obras],
         'users_ids': [u.id for u in nota.usuarios_implicados],
         'sugerencias': sugerencias,
+        'tiene_informe_pdf': bool(
+            (nota.informe_pdf_path or '').strip()
+            and os.path.isfile(nota.informe_pdf_path)
+        ),
+        'informe_url': url_for('notas.descargar_informe', nota_id=nota.id),
     })
+
+
+@notas_bp.route('/<int:nota_id>/informe.pdf', methods=['GET'])
+@login_required
+def descargar_informe(nota_id):
+    """Descarga el PDF de informe (generado al crear y enviado por correo)."""
+    nota = Nota.query.get_or_404(nota_id)
+    if not _puede_ver_nota(nota):
+        abort(403)
+
+    from app.services.nota_informe_service import ensure_informe_pdf
+
+    tenant = getattr(g, 'current_tenant', None)
+    schema_name = getattr(tenant, 'schema_name', None) if tenant else None
+    path = ensure_informe_pdf(nota, schema_name=schema_name)
+    if not path or not os.path.isfile(path):
+        abort(404)
+
+    download_name = (nota.informe_pdf_nombre or os.path.basename(path) or 'informe.pdf')
+    return send_file(
+        path,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=download_name,
+    )
 
 @notas_bp.route('/<int:nota_id>/editar', methods=['POST'])
 @login_required
@@ -254,6 +285,8 @@ def eliminar_nota(nota_id):
         return jsonify({'success': False, 'message': 'No autorizado para eliminar esta nota'}), 403
 
     try:
+        from app.services.nota_informe_service import clear_informe_pdf_file
+        clear_informe_pdf_file(nota)
         # Desvincula jobs de audio (por si la FK aún no tiene ON DELETE SET NULL)
         NotaAudioJob.query.filter_by(nota_id=nota.id).update(
             {NotaAudioJob.nota_id: None}, synchronize_session=False,

@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import html
+import os
 import re
 
 from flask import current_app
 
+from app import db
 from app.models import Nota, User
 from app.services.email_service import send_email
 from app.services.i18n_service import translate
@@ -213,22 +215,78 @@ def _safe_pdf_filename(nota: Nota) -> str:
     return f'informe_{base}_{nota.id}.pdf'
 
 
+def get_informe_uploads_dir() -> str:
+    base = os.path.join(current_app.root_path, '..', 'uploads', 'notas_informes')
+    base = os.path.abspath(base)
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def persist_informe_pdf(nota: Nota, pdf_bytes: bytes) -> str | None:
+    """Guarda el PDF en disco y actualiza la nota. Devuelve la ruta o None."""
+    if not nota or not pdf_bytes:
+        return None
+    filename = _safe_pdf_filename(nota)
+    dest = os.path.join(get_informe_uploads_dir(), filename)
+    try:
+        old_path = (nota.informe_pdf_path or '').strip()
+        with open(dest, 'wb') as fh:
+            fh.write(pdf_bytes)
+        nota.informe_pdf_path = dest
+        nota.informe_pdf_nombre = filename
+        db.session.add(nota)
+        db.session.commit()
+        if old_path and old_path != dest and os.path.isfile(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+        return dest
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.warning(
+            'Informe reunión: no se pudo guardar PDF nota_id=%s: %s',
+            getattr(nota, 'id', None), exc,
+        )
+        return None
+
+
+def clear_informe_pdf_file(nota: Nota) -> None:
+    """Borra el fichero en disco (no toca la BD). Usar antes de eliminar la nota."""
+    path = (getattr(nota, 'informe_pdf_path', None) or '').strip()
+    if path and os.path.isfile(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def ensure_informe_pdf(nota: Nota, *, schema_name: str | None = None) -> str | None:
+    """
+    Devuelve la ruta del PDF adjunto. Si no existe, lo genera y lo persiste
+    (reuniones antiguas o regeneración bajo demanda).
+    """
+    path = (nota.informe_pdf_path or '').strip()
+    if path and os.path.isfile(path):
+        return path
+    try:
+        pdf_bytes = render_informe_pdf_bytes(nota, schema_name=schema_name)
+    except Exception as exc:
+        current_app.logger.warning(
+            'Informe reunión: no se pudo generar PDF nota_id=%s: %s',
+            getattr(nota, 'id', None), exc,
+        )
+        return None
+    return persist_informe_pdf(nota, pdf_bytes)
+
+
 def send_informe_to_author(nota_id: int, *, schema_name: str | None = None) -> bool:
     """
-    Genera PDF y lo envía únicamente al autor de la nota (un destinatario).
+    Genera PDF, lo adjunta a la reunión y lo envía únicamente al autor.
     """
     nota = Nota.query.get(nota_id)
     if not nota:
         current_app.logger.warning('Informe reunión: nota %s no encontrada', nota_id)
-        return False
-
-    autor = nota.autor or User.query.get(nota.autor_id)
-    email = (getattr(autor, 'email', None) or '').strip()
-    if not email:
-        current_app.logger.info(
-            'Informe reunión: autor sin email (nota_id=%s autor_id=%s)',
-            nota_id, nota.autor_id,
-        )
         return False
 
     try:
@@ -239,13 +297,24 @@ def send_informe_to_author(nota_id: int, *, schema_name: str | None = None) -> b
         )
         return False
 
+    filename = _safe_pdf_filename(nota)
+    persist_informe_pdf(nota, pdf_bytes)
+
+    autor = nota.autor or User.query.get(nota.autor_id)
+    email = (getattr(autor, 'email', None) or '').strip()
+    if not email:
+        current_app.logger.info(
+            'Informe reunión: autor sin email (nota_id=%s autor_id=%s); PDF adjunto igual',
+            nota_id, nota.autor_id,
+        )
+        return True
+
     subject = translate('Informe de reunión: {titulo}', titulo=nota.titulo)
     body = translate(
         'Adjuntamos el informe PDF de la reunión «{titulo}» ({fecha}).',
         titulo=nota.titulo,
         fecha=nota.fecha.strftime('%d/%m/%Y') if nota.fecha else '',
     )
-    filename = _safe_pdf_filename(nota)
 
     return bool(send_email(
         subject,

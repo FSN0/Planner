@@ -342,54 +342,25 @@
   /* horas | app h | cmp h | € | cmp € | botones */
   grid-template-columns: 4rem 3.5rem 3.75rem 4.25rem 3.75rem auto;
 }
-.cert-work-tools--cadena {
-  /* [#1] [#1.2] … | h#tú | € peer | € tú | botones — anchos fijos para alinear filas */
-  --cert-tools-gap: 8px;
-  display: grid;
-  grid-template-columns:
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    4.5rem
-    4.5rem
-    4.5rem
-    3.6rem;
-  column-gap: var(--cert-tools-gap);
-  flex: 0 0 auto;
-  margin-left: auto;
-  justify-items: end;
-  align-items: center;
-  padding-right: 0;
-  box-sizing: border-box;
-}
-.cert-work-tools--plat.cert-work-tools--cadena {
-  /* [#1] [#1.2] … | h#tú | App | € peer | € tú | botones */
-  grid-template-columns:
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    4.5rem
-    3.5rem
-    4.5rem
-    4.5rem
-    3.6rem;
-}
-/* Historial / recibida / esperando (también subcontrata sin App). */
+.cert-work-tools--cadena,
 .cert-work-tools--hist-cadena {
+  /*
+   * Flex fila + anchos fijos por tipo de celda.
+   * NO usar grid + repeat(var(--cert-chain-n)): si n queda en 0 los valores
+   * se apilan en una sola columna. Cada .cert-work-col--* lleva su ancho.
+   */
   --cert-tools-gap: 8px;
-  display: grid;
-  grid-template-columns:
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    4.5rem;
-  column-gap: var(--cert-tools-gap);
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--cert-tools-gap);
   flex: 0 0 auto;
   margin-left: auto;
-  justify-items: end;
-  align-items: center;
   padding-right: 0;
   box-sizing: border-box;
-}
-.cert-work-tools--plat.cert-work-tools--hist-cadena {
-  grid-template-columns:
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    3.5rem
-    4.5rem;
+  grid-template-columns: none !important;
 }
 /* Días anidados: sin padding extra para que las columnas coincidan con persona/cabecera. */
 .cert-works--cadena .cert-days,
@@ -493,57 +464,30 @@
   margin-left: auto;
   flex: 0 0 auto;
 }
-/* Footer: mismo riel derecho que .cert-works--cadena. */
+/* Footer: misma fila flex que .cert-works--cadena. */
 .cert-panel--cadena {
   --cert-pad-x: 8px;
   --cert-tools-gap: 8px;
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 4.5rem + 4.5rem + 4.5rem + 3.6rem
-    + ((var(--cert-chain-n, 0) + 3) * var(--cert-tools-gap))
-  );
-}
-.cert-panel--cadena.cert-panel--hist {
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 4.5rem
-    + (var(--cert-chain-n, 0) * var(--cert-tools-gap))
-  );
-}
-.cert-panel--cadena.cert-panel--plat {
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 4.5rem + 3.5rem + 4.5rem + 4.5rem + 3.6rem
-    + ((var(--cert-chain-n, 0) + 4) * var(--cert-tools-gap))
-  );
-}
-.cert-panel--cadena.cert-panel--hist.cert-panel--plat {
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 3.5rem + 4.5rem
-    + ((var(--cert-chain-n, 0) + 1) * var(--cert-tools-gap))
-  );
 }
 .cert-panel--cadena .cert-panel-foot {
   padding-left: 0;
   padding-right: 0;
 }
 .cert-panel--cadena .cert-total {
-  position: relative;
-  padding-left: var(--cert-pad-x);
-  padding-right: calc(var(--cert-tools-w) + var(--cert-pad-x));
+  display: flex;
   align-items: center;
+  padding-left: var(--cert-pad-x);
+  padding-right: var(--cert-pad-x);
   box-sizing: border-box;
 }
 .cert-panel--cadena .cert-total > .cert-work-tools {
-  position: absolute;
-  right: var(--cert-pad-x);
-  top: 50%;
-  transform: translateY(-50%);
-  width: var(--cert-tools-w) !important;
-  min-width: var(--cert-tools-w) !important;
-  max-width: var(--cert-tools-w) !important;
-  margin: 0 !important;
-  display: grid;
-  align-items: center;
-  justify-items: end;
-  column-gap: var(--cert-tools-gap, 8px);
+  position: static;
+  transform: none;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 0 0 auto !important;
+  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   /* Anula .cert-total span { uppercase… } sobre la rejilla. */
   text-transform: none;
@@ -658,11 +602,19 @@
   text-overflow: ellipsis;
 }
 .cert-work-col--chain {
+  box-sizing: border-box;
+  flex: 0 0 3.4rem !important;
+  width: 3.4rem !important;
+  min-width: 3.4rem !important;
+  max-width: 3.4rem !important;
   text-align: right;
   font-size: 11px;
   font-weight: 600;
   color: #64748b;
   min-height: 1.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cert-work-col--imp-peer {
   color: #64748b;
@@ -672,35 +624,10 @@
   min-height: 1.2em;
 }
 .cert-works--cadena {
-  --cert-chain-n: 0;
+  /* Nunca --cert-chain-n: 0 aquí: anula el inline del HTML. */
   --cert-pad-x: 8px;
   --cert-tools-gap: 8px;
-  /* Subcontrata (sin App): n cols + €  → misma vertical al expandir fechas. */
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 4.5rem + 4.5rem + 4.5rem + 3.6rem
-    + ((var(--cert-chain-n, 0) + 3) * var(--cert-tools-gap))
-  );
   overflow-x: auto;
-}
-/* Historial / enviada / rechazada: sin columna borrador ni botones. */
-.cert-works--cadena.cert-works--hist {
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 4.5rem
-    + (var(--cert-chain-n, 0) * var(--cert-tools-gap))
-  );
-}
-/* Oficina: + App */
-.cert-works--cadena.cert-works--plat {
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 4.5rem + 3.5rem + 4.5rem + 4.5rem + 3.6rem
-    + ((var(--cert-chain-n, 0) + 4) * var(--cert-tools-gap))
-  );
-}
-.cert-works--cadena.cert-works--hist.cert-works--plat {
-  --cert-tools-w: calc(
-    (var(--cert-chain-n, 0) * 3.4rem) + 3.5rem + 4.5rem
-    + ((var(--cert-chain-n, 0) + 1) * var(--cert-tools-gap))
-  );
 }
 /* Sin borde lateral en obra/día: el 1px + radius metía cada nivel en otra vertical. */
 .cert-works--cadena > .cert-work,
@@ -721,19 +648,22 @@
   box-sizing: border-box;
 }
 /*
- * Riel derecho absoluto: cabecera, obra, día, persona y fila comparten la MISMA
- * vertical (right + --cert-tools-w), también en subcontrata al expandir fechas.
+ * Fila flex: nombre a la izquierda, herramientas a la derecha.
+ * Anchos fijos en cada .cert-work-col--* → mismas verticales al expandir.
+ * Sin position:absolute ni --cert-tools-w (fallaba si --cert-chain-n=0).
  */
 .cert-works--cadena > .cert-chain-head,
 .cert-works--cadena .cert-work > summary,
 .cert-works--cadena .cert-day > summary,
 .cert-works--cadena .cert-persona-day > summary.cert-persona-day-head,
 .cert-works--cadena .cert-line--hist-row {
-  position: relative;
+  display: flex;
+  align-items: center;
   box-sizing: border-box;
   padding-left: var(--cert-pad-x);
-  padding-right: calc(var(--cert-tools-w) + var(--cert-pad-x));
+  padding-right: var(--cert-pad-x);
   min-height: 28px;
+  position: relative;
 }
 .cert-works--cadena > .cert-chain-head > .cert-work-tools--cadena,
 .cert-works--cadena > .cert-chain-head > .cert-work-tools--hist-cadena,
@@ -745,16 +675,15 @@
 .cert-works--cadena .cert-persona-day > summary > .cert-work-tools--hist-cadena,
 .cert-works--cadena .cert-line--hist-row > .cert-work-tools--cadena,
 .cert-works--cadena .cert-line--hist-row > .cert-work-tools--hist-cadena {
-  position: absolute;
-  right: var(--cert-pad-x);
-  top: 50%;
-  transform: translateY(-50%);
-  width: var(--cert-tools-w) !important;
-  min-width: var(--cert-tools-w) !important;
-  max-width: var(--cert-tools-w) !important;
-  margin: 0 !important;
-  flex: none !important;
-  justify-items: end;
+  position: static;
+  top: auto;
+  right: auto;
+  transform: none;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 0 0 auto !important;
+  flex: 0 0 auto !important;
   padding-right: 0;
   box-sizing: border-box;
 }
@@ -848,7 +777,10 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  width: 100%;
+  flex: 0 0 4.5rem !important;
+  width: 4.5rem !important;
+  min-width: 4.5rem !important;
+  max-width: 4.5rem !important;
   color: var(--cert-ink);
   text-align: right;
   box-sizing: border-box;
@@ -860,11 +792,15 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  width: 100%;
   box-sizing: border-box;
   text-align: right;
+  /* width lo fija cada modificador; NUNCA width:100% (apilaba en 1 col). */
 }
 .cert-work-col--plat {
+  flex: 0 0 3.5rem !important;
+  width: 3.5rem !important;
+  min-width: 3.5rem !important;
+  max-width: 3.5rem !important;
   color: #334155;
   font-size: 11px;
   font-weight: 600;
@@ -885,6 +821,13 @@
   font-weight: 600;
   padding-left: 2px;
 }
+.cert-work-col--imp,
+.cert-work-col--imp-peer {
+  flex: 0 0 4.5rem !important;
+  width: 4.5rem !important;
+  min-width: 4.5rem !important;
+  max-width: 4.5rem !important;
+}
 .cert-work-col--imp {
   color: var(--cert-ink);
 }
@@ -893,7 +836,10 @@
   align-items: center;
   justify-content: flex-end;
   gap: 3px;
-  width: 100%;
+  flex: 0 0 3.6rem !important;
+  width: 3.6rem !important;
+  min-width: 3.6rem !important;
+  max-width: 3.6rem !important;
   min-height: 28px;
 }
 .cert-work-btn,
@@ -1503,28 +1449,25 @@
   overflow-x: auto;
 }
 .cert-line--cadena {
-  /* left(inicio/fin/precio) | [#h…] | h#tú | €peer | €tú | btn — mismos anchos que .cert-work-tools--cadena */
-  display: grid;
-  grid-template-columns:
-    minmax(22rem, 1.4fr)
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    4.5rem
-    4.5rem
-    4.5rem
-    3.6rem;
+  /* left | tools flex (anchos fijos) — sin repeat(--cert-chain-n) */
+  display: flex;
   align-items: center;
   column-gap: 8px;
   min-width: max-content;
+  grid-template-columns: none;
 }
 .cert-line--con-plat.cert-line--cadena {
-  grid-template-columns:
-    minmax(22rem, 1.4fr)
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    4.5rem
-    3.5rem
-    4.5rem
-    4.5rem
-    3.6rem;
+  grid-template-columns: none;
+}
+.cert-line--cadena > .cert-line-left {
+  flex: 1 1 auto;
+  min-width: 12rem;
+}
+.cert-line--cadena > .cert-work-tools,
+.cert-line--cadena > .cert-work-tools--cadena,
+.cert-line--cadena > .cert-work-tools--hist-cadena {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .cert-line--cadena .cert-line-left {
   display: flex;
@@ -1957,24 +1900,10 @@
 .cert-line--persona.cert-line--con-plat {
   grid-template-columns: minmax(56px, 0.55fr) 88px 88px 110px 72px 72px 4rem 48px;
 }
-.cert-line--persona.cert-line--cadena {
-  grid-template-columns:
-    minmax(12rem, 1fr)
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    4.5rem
-    4.5rem
-    4.5rem
-    3.6rem;
-}
+.cert-line--persona.cert-line--cadena,
 .cert-line--persona.cert-line--con-plat.cert-line--cadena {
-  grid-template-columns:
-    minmax(12rem, 1fr)
-    repeat(var(--cert-chain-n, 0), 3.4rem)
-    4.5rem
-    3.5rem
-    4.5rem
-    4.5rem
-    3.6rem;
+  display: flex;
+  grid-template-columns: none;
 }
 .cert-flag.is-ok {
   background: var(--cert-ok-bg);

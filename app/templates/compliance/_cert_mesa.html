@@ -43,6 +43,9 @@
 {% set tools_cadena_cls = 'cert-work-tools' ~ tools_plat %}
 {% endif %}
 {% set tools_hist_cls = 'cert-work-tools' ~ tools_plat ~ ' cert-work-tools--hist-cadena' %}
+{# Variables de rejilla en el HTML (fuente de verdad). Nunca dejar que el CSS
+   asuma 0 columnas si el markup ya pintó #1 / #1.2 / …. #}
+{% set cert_chain_style = '--cert-chain-n: ' ~ n_cadena ~ ';' %}
 
 {% macro url_mesa(ronda=none, corr=false) -%}
 {%- if vista_subcontrata -%}
@@ -273,7 +276,7 @@
       </div>
     </div>
     <div class="cert-panel cert-panel--{% if viendo_recibida %}wait{% elif ronda_sel.resultado == 'rechazada' %}bad{% elif ronda_sel.resultado == 'aceptada' %}ok{% else %}muted{% endif %}{% if tiene_cadena %} cert-panel--cadena cert-panel--hist{% if not vista_subcontrata %} cert-panel--plat{% endif %}{% endif %}"
-         {% if tiene_cadena %}style="--cert-chain-n: {{ n_cadena }}"{% endif %}>
+         {% if tiene_cadena %}style="{{ cert_chain_style }}"{% endif %}>
       <div class="cert-panel-head">
         <div>
           <h2>{{ _('Propuesta') }} #{{ ronda_sel_etiqueta }}</h2>
@@ -355,7 +358,7 @@
         {% endif %}
       {%- endmacro %}
       {% if grupos_hist %}
-      <div class="cert-works {% if tiene_cadena %}cert-works--cadena cert-works--hist{% if not vista_subcontrata %} cert-works--plat{% endif %}{% endif %}" {% if tiene_cadena %}style="--cert-chain-n: {{ n_cadena }}"{% endif %}>
+      <div class="cert-works {% if tiene_cadena %}cert-works--cadena cert-works--hist{% if not vista_subcontrata %} cert-works--plat{% endif %}{% endif %}" {% if tiene_cadena %}style="{{ cert_chain_style }}"{% endif %}>
         {% if tiene_cadena %}
         <div class="cert-chain-head {% if not vista_subcontrata %}cert-chain-head--plat{% endif %} cert-chain-head--hist" aria-hidden="true">
           <span class="cert-chain-head-name"></span>
@@ -613,7 +616,7 @@
     </div>
 
     <div class="cert-panel cert-panel--{{ estado_cls.get(propia_estado_ui, 'is-muted')|replace('is-', '') }}{% if usar_cabeceras %} cert-panel--cadena{% if not con_borrador_col %} cert-panel--hist{% endif %}{% if not vista_subcontrata %} cert-panel--plat{% endif %}{% endif %}"
-         {% if usar_cabeceras %}style="--cert-chain-n: {{ n_cadena }}"{% endif %}>
+         {% if usar_cabeceras %}style="{{ cert_chain_style }}"{% endif %}>
       <form method="post" id="form-propia" class="cert-panel-form {% if modo_mesa == 'responder' %}js-mesa-responder{% endif %}"
             data-vista-sub="{{ '1' if vista_subcontrata else '0' }}"
             data-editable="{{ '1' if editable else '0' }}">
@@ -686,7 +689,7 @@
         {% set puede_anadir = editable and operarios_empresa is defined and operarios_empresa and user_can(current_user, 'certificacion', 'w') and modo_vista == 'persona' %}
         {% set uids_en_propuesta = grupos_propia|map(attribute='persona_user_id')|list if grupos_propia else [] %}
         {% if grupos_propia or puede_anadir %}
-        <div class="cert-works {% if usar_cabeceras %}cert-works--cadena{% if not con_borrador_col %} cert-works--hist{% endif %}{% if not vista_subcontrata %} cert-works--plat{% endif %}{% endif %}" {% if usar_cabeceras %}style="--cert-chain-n: {{ n_cadena }}"{% endif %}>
+        <div class="cert-works {% if usar_cabeceras %}cert-works--cadena{% if not con_borrador_col %} cert-works--hist{% endif %}{% if not vista_subcontrata %} cert-works--plat{% endif %}{% endif %}" {% if usar_cabeceras %}style="{{ cert_chain_style }}"{% endif %}>
           {% if usar_cabeceras %}
           <div class="cert-chain-head {% if not vista_subcontrata %}cert-chain-head--plat{% endif %}{% if not con_borrador_col %} cert-chain-head--hist{% endif %}" aria-hidden="true">
             <span class="cert-chain-head-name"></span>

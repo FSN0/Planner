@@ -1423,6 +1423,9 @@ class Nota(db.Model):
     contenido = db.Column(db.Text, nullable=False)
     fecha = db.Column(db.Date, default=date.today, nullable=False)
     es_privada = db.Column(db.Boolean, default=False, nullable=False)
+    # Copia del PDF enviado por correo al crear la reunión (descargable en la app)
+    informe_pdf_path = db.Column(db.String(500), nullable=True)
+    informe_pdf_nombre = db.Column(db.String(255), nullable=True)
     
     autor_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=_utc_now)
@@ -1433,6 +1436,10 @@ class Nota(db.Model):
     # Las notas aparecerán mágicamente en Obra.notas y User.notas_implicado
     obras = db.relationship('Obra', secondary=nota_obra, backref=db.backref('notas', lazy='dynamic'))
     usuarios_implicados = db.relationship('User', secondary=nota_user, backref=db.backref('notas_implicado', lazy='dynamic'))
+
+    @property
+    def tiene_informe_pdf(self) -> bool:
+        return bool(self.informe_pdf_path)
 
     def __repr__(self):
         return f'<Nota {self.titulo} - Autor: {self.autor_id}>'

@@ -348,6 +348,14 @@
 /* --- Bitácora / reuniones --- */
 .bitacora-page {
   gap: 1rem !important;
+  padding-bottom: 5rem !important;
+  /* El scroll vertical debe vivir en .admin-main, no en la tarjeta */
+  min-height: 0;
+}
+.bitacora-page > .bitacora-toolbar,
+.bitacora-page > .nota-audio-bg-banner,
+.bitacora-page > .bitacora-card {
+  flex-shrink: 0;
 }
 .bitacora-toolbar {
   display: flex;
@@ -379,7 +387,16 @@
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
-  overflow: hidden;
+  /* visible: overflow:hidden + table-responsive atrapaba la rueda del ratón */
+  overflow: visible;
+}
+.bitacora-table-wrap {
+  width: 100%;
+  min-width: 0;
+  padding: 0.85rem 1rem 1rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
 }
 .bitacora-table {
   width: 100% !important;

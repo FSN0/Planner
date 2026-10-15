@@ -139,6 +139,8 @@ def test_send_informe_solo_autor():
         autor=autor,
         obras=[],
         usuarios_implicados=[otro],
+        informe_pdf_path=None,
+        informe_pdf_nombre=None,
     )
     mock_app = SimpleNamespace(
         logger=SimpleNamespace(warning=lambda *a, **k: None, info=lambda *a, **k: None),
@@ -150,9 +152,50 @@ def test_send_informe_solo_autor():
                 'app.services.nota_informe_service.render_informe_pdf_bytes',
                 return_value=b'%PDF',
             ):
-                with patch('app.services.nota_informe_service.send_email', return_value=True) as send:
-                    ok = send_informe_to_author(99)
+                with patch(
+                    'app.services.nota_informe_service.persist_informe_pdf',
+                    return_value='/tmp/informe.pdf',
+                ) as persist:
+                    with patch('app.services.nota_informe_service.send_email', return_value=True) as send:
+                        ok = send_informe_to_author(99)
     assert ok is True
+    persist.assert_called_once()
     send.assert_called_once()
     recipients = send.call_args[0][1]
     assert recipients == ['juan@empresa.com']
+
+
+def test_send_informe_sin_email_persiste_pdf():
+    autor = SimpleNamespace(id=1, email='', name='Juan', lastname='Pérez')
+    nota = SimpleNamespace(
+        id=100,
+        titulo='Daily',
+        contenido='Acta',
+        fecha=SimpleNamespace(strftime=lambda f: '01/01/2026'),
+        es_privada=True,
+        autor_id=1,
+        autor=autor,
+        obras=[],
+        usuarios_implicados=[],
+        informe_pdf_path=None,
+        informe_pdf_nombre=None,
+    )
+    mock_app = SimpleNamespace(
+        logger=SimpleNamespace(warning=lambda *a, **k: None, info=lambda *a, **k: None),
+    )
+    with patch('app.services.nota_informe_service.current_app', mock_app):
+        with patch('app.services.nota_informe_service.Nota') as NotaModel:
+            NotaModel.query.get.return_value = nota
+            with patch(
+                'app.services.nota_informe_service.render_informe_pdf_bytes',
+                return_value=b'%PDF',
+            ):
+                with patch(
+                    'app.services.nota_informe_service.persist_informe_pdf',
+                    return_value='/tmp/informe.pdf',
+                ) as persist:
+                    with patch('app.services.nota_informe_service.send_email') as send:
+                        ok = send_informe_to_author(100)
+    assert ok is True
+    persist.assert_called_once()
+    send.assert_not_called()
