@@ -2005,6 +2005,9 @@ def resolver_fichaje():
                     db.session.refresh(registro)
                 except Exception:
                     pass
+            closed_extra = []
+            if accion == ACCION_LIBERAR_PLAZA and scope == 'future':
+                closed_extra = list(un.get('closed_registro_ids') or [])
             resultado = aplicar_accion_desvio(registro, accion, current_user)
             if notas_desasign and accion == ACCION_LIBERAR_PLAZA:
                 base = (registro.notas_resolucion or resultado.get('message') or '').strip()
@@ -2046,6 +2049,7 @@ def resolver_fichaje():
                 'success': True,
                 'resolved': resultado.get('resolved'),
                 'dismiss_row': resultado.get('dismiss_for_viewer', True),
+                'closed_registro_ids': closed_extra,
                 'message': translate(resultado.get('message') or 'OK'),
                 'ack_plan': resultado.get('ack_plan'),
                 'ack_real': resultado.get('ack_real'),
@@ -2286,10 +2290,21 @@ def resolver_fichaje():
         )
         # Al no reventar aquí, el commit funcionará y dejará el histórico
         db.session.commit()
+        closed_ids = []
+        if (
+            accion == 'borrar_planificacion'
+            and scope == 'future'
+            and 'un' in locals()
+            and isinstance(un, dict)
+        ):
+            closed_ids = list(un.get('closed_registro_ids') or [])
         return jsonify({
             'success': True,
             'registro_id': registro.id,
             'estado': registro.estado,
+            'resolved': True,
+            'dismiss_row': True,
+            'closed_registro_ids': closed_ids,
             'message': translate('Resolución guardada.'),
         })
         

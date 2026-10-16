@@ -52,8 +52,11 @@
         fetch(u.create, { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(payload) })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data.success) { toast(t('Marca registrada en el libro'), true); setTimeout(function () { location.reload(); }, 700); }
-                else alert(data.error || t('Error'));
+                if (data.success) {
+                    toast(t('Marca registrada en el libro'), true);
+                    var histBody = document.querySelector('#collapseHistorial tbody, #historialTable tbody');
+                    if (histBody) histBody.removeAttribute('data-loaded');
+                } else alert(data.error || t('Error'));
             })
             .catch(function () { alert(t('Error de red')); });
     };
@@ -122,8 +125,11 @@
         fetch(u.fix, { method: 'POST', headers: csrfHeaders(), body: JSON.stringify(payload) })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data.success) { toast(t('Marca corregida (original anulada)'), true); setTimeout(function () { location.reload(); }, 700); }
-                else alert(data.error || t('Error'));
+                if (data.success) {
+                    toast(t('Marca corregida (original anulada)'), true);
+                    var histBody = document.querySelector('#collapseHistorial tbody, #historialTable tbody');
+                    if (histBody) histBody.removeAttribute('data-loaded');
+                } else alert(data.error || t('Error'));
             })
             .catch(function () { alert(t('Error de red')); });
     };
@@ -140,8 +146,11 @@
         })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data.success) { toast(t('Marca anulada'), true); setTimeout(function () { location.reload(); }, 700); }
-                else alert(data.error || t('Error'));
+                if (data.success) {
+                    toast(t('Marca anulada'), true);
+                    var histBody = document.querySelector('#collapseHistorial tbody, #historialTable tbody');
+                    if (histBody) histBody.removeAttribute('data-loaded');
+                } else alert(data.error || t('Error'));
             })
             .catch(function () { alert(t('Error de red')); });
     };

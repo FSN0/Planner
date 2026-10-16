@@ -1018,7 +1018,7 @@ tr.audit-row-highlight {
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
 <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
 <script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260929b"></script>
-<script src="{{ url_for('static', filename='js/auditoria_marcas.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auditoria_marcas.js') }}?v=20261016noreload"></script>
 
 <script>
 var dtCorrecciones = null;
@@ -1789,21 +1789,57 @@ var AUDIT_RESOLVE_I18N = {{ {
         actions.innerHTML = '<span class="text-muted small">' + txt + '</span>';
     }
 
+    function decCardBadge(card) {
+        if (!card) return;
+        var badge = card.querySelector('.badge-count, .badge');
+        if (!badge) return;
+        var count = parseInt(badge.innerText, 10);
+        if (!isNaN(count) && count > 0) badge.innerText = String(count - 1);
+    }
+
     function removeDesvioRow(row, id) {
         if (!row) return;
-        var card = row.closest('.card-modern');
-        if (card) {
-            var badge = card.querySelector('.badge-count, .badge');
-            if (badge) {
-                var count = parseInt(badge.innerText, 10);
-                if (!isNaN(count) && count > 0) badge.innerText = count - 1;
-            }
-        }
+        decCardBadge(row.closest('.card-modern'));
         var detail = document.getElementById('desvio-detail-' + id);
         if (detail) detail.remove();
         row.remove();
         removeEspejoRows(id);
     }
+
+    /** Quita la fila resuelta sin recargar la página (todas las secciones). */
+    function dismissAuditRow(id, extraIds) {
+        var ids = [String(id)].concat((extraIds || []).map(String));
+        var seen = {};
+        ids.forEach(function (rid) {
+            if (!rid || seen[rid]) return;
+            seen[rid] = true;
+            var row = document.getElementById('row-' + rid);
+            if (row) {
+                removeDesvioRow(row, rid);
+                return;
+            }
+            // Espejos sueltos (plan/real) si no había fila principal visible
+            removeEspejoRows(rid);
+            var hist = document.getElementById('hist-row-' + rid);
+            if (hist) {
+                decCardBadge(hist.closest('.card-modern'));
+                hist.remove();
+            }
+        });
+        // Histórico / correcciones: marcar para recargar al abrir (sin full reload).
+        ['historialTableBody', 'correccionesTableBody', 'tbodyHistorial', 'tbodyCorrecciones'].forEach(function (tid) {
+            var tb = document.getElementById(tid);
+            if (tb) tb.removeAttribute('data-loaded');
+        });
+        document.querySelectorAll('[data-seccion-tbody]').forEach(function (tb) {
+            tb.removeAttribute('data-loaded');
+        });
+        var histBody = document.querySelector('#collapseHistorial tbody, #historialTable tbody');
+        if (histBody) histBody.removeAttribute('data-loaded');
+        var corrBody = document.querySelector('#collapseCorrecciones tbody, #correccionesTable tbody');
+        if (corrBody) corrBody.removeAttribute('data-loaded');
+    }
+    window.dismissAuditRow = dismissAuditRow;
 
     function applyDesvioPartialUpdate(id, data) {
         var row = document.getElementById('row-' + id);
@@ -1944,22 +1980,25 @@ var AUDIT_RESOLVE_I18N = {{ {
                 } else {
                     alert(data.message || {{ _('Se ha generado una solicitud de baja.')|tojson }});
                 }
-                softReloadAuditoria(700);
+                restoreRow(row);
                 return;
             }
 
-            // Feedback rápido y recarga de filas (mantiene scroll / secciones abiertas).
-            // Evita filas zombis en otras secciones tras desasignar a futuro u otras resoluciones.
-            if (row) {
-                row.style.transition = 'opacity 0.2s ease';
-                row.style.opacity = '0.45';
-                row.style.pointerEvents = 'none';
-            }
             if (data.message) {
                 try { showToast(data.message, true); } catch (e) { /* ignore */ }
             }
-            // Recarga con todo cerrado; el histórico se consulta a mano.
-            softReloadAuditoria(320, null);
+
+            // Desvío a medias: actualizar paneles in-place, sin recargar.
+            var partial = (data.dismiss_row === false) || (
+                data.resolved === false && (data.ack_plan || data.ack_real)
+            );
+            if (partial) {
+                applyDesvioPartialUpdate(id, data);
+                return;
+            }
+
+            // Resuelto del todo: quitar fila(s) y espejos sin full reload.
+            dismissAuditRow(id, data.closed_registro_ids || []);
         })
         .catch(function (err) {
             console.error('Error critico:', err);
@@ -2094,7 +2133,8 @@ var AUDIT_RESOLVE_I18N = {{ {
             var data = result.data;
             if (result.ok && data.success) {
                 showToast(data.aviso || t.reopened || 'OK', true);
-                softReloadAuditoria(700, {
+                // Reabrir reinserta en pendientes: hace falta refrescar (solo aquí).
+                softReloadAuditoria(400, {
                     seccion: data.seccion || 'ausencias',
                     registroId: id
                 });
