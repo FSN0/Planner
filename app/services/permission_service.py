@@ -37,6 +37,7 @@ AUDITORIA_FICHAJES_SECTIONS = frozenset({
     'conflictos',
     'paracaidistas',
     'ausencias',
+    'comodin',
     'modificacion_odoo',
     'historico_global',
 })

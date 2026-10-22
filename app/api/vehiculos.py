@@ -82,6 +82,13 @@ def api_list_vehicles():
             fechas = []
 
     results = []
+    # Opción genérica: el jefe pide «cualquier coche»; flota elige al resolver.
+    if not q or 'cualquier' in q or 'cualquiera' in q or 'generico' in q or 'genérico' in q:
+        results.append({
+            'id': 'CUALQUIERA',
+            'text': '🚗 CUALQUIERA (solicitud genérica)',
+        })
+
     for v in vehicles:
         text = v.label()
         if q and q not in text.lower() and q not in (v.marca or '').lower() and q not in (v.modelo or '').lower():
@@ -126,7 +133,8 @@ def api_planificador_vehicle_action():
     notas = (data.get('notas') or '').strip() or None
     accion = (data.get('accion') or 'ASIGNAR').upper()
 
-    if not worker_id or not vehicle_id:
+    from app.services.vehicle_assignment_service import _is_vehiculo_cualquiera
+    if not worker_id or vehicle_id in (None, ''):
         return jsonify({'success': False, 'error': translate('Faltan worker_id o vehicle_id')}), 400
     if not start_date_str or not end_date_str:
         return jsonify({'success': False, 'error': translate('Faltan fechas start/end')}), 400
@@ -154,10 +162,15 @@ def api_planificador_vehicle_action():
         return jsonify({'success': False, 'error': translate('El rango no contiene días laborables válidos.')}), 400
 
     try:
+        vid_arg = None if _is_vehiculo_cualquiera(vehicle_id) else int(vehicle_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': translate('vehicle_id inválido')}), 400
+
+    try:
         result = process_vehicle_assignment_action(
             actor_user=current_user,
             worker_id=int(worker_id),
-            vehicle_id=int(vehicle_id),
+            vehicle_id=vid_arg if vid_arg is not None else 'CUALQUIERA',
             date_list=fechas,
             notas=notas,
             overwrite_mode=overwrite_mode,

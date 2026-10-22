@@ -181,6 +181,25 @@
               </p>
             </div>
 
+            <div class="config-field mt-4">
+              <label for="fichaje_obras_comodin">{{ _('Obras comodín') }}</label>
+              {% set comodin_sel = obras_comodin_selected|default([]) %}
+              <select id="fichaje_obras_comodin" name="fichaje_obras_comodin" multiple
+                      class="form-control form-control-sm"
+                      style="width:100%;"
+                      data-placeholder="{{ _('Escribe para buscar una obra…') }}"
+                      {% if not user_can(current_user, 'configuracion', 'w') %}disabled{% endif %}>
+                {% for obra in obras_comodin_opciones|default([]) %}
+                <option value="{{ obra.id }}"{% if obra.id in comodin_sel %} selected{% endif %}>
+                  {{ obra.codigo }} — {{ obra.nombre }}
+                </option>
+                {% endfor %}
+              </select>
+              <p class="config-field-hint">
+                {{ _('Fichajes en estas obras (p. ej. Varios) van a la sección Comodín de auditoría y no generan desvío, ausencia ni «sin planificar».') }}
+              </p>
+            </div>
+
             {% if tenant_has_fichaje_operario %}
             <hr class="my-4">
             <div class="config-switch-box">
@@ -898,4 +917,24 @@
     </div>
   </main>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  if (typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
+  var $el = jQuery('#fichaje_obras_comodin');
+  if (!$el.length) return;
+  $el.select2({
+    width: '100%',
+    placeholder: $el.data('placeholder') || '',
+    allowClear: true,
+    closeOnSelect: false,
+    language: {
+      noResults: function () { return {{ _('Sin resultados')|tojson }}; },
+      searching: function () { return {{ _('Buscando…')|tojson }}; }
+    }
+  });
+})();
+</script>
 {% endblock %}

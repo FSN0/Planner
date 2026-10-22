@@ -171,6 +171,7 @@ tr.audit-row-highlight {
     {% set var_conflictos = var_conflictos if var_conflictos is defined else ((pendientes | selectattr('estado', 'equalto', 'Conflicto') | list) + (pendientes | selectattr('estado', 'equalto', 'Disputa') | list)) %}
     {% set var_paracaidistas = var_paracaidistas if var_paracaidistas is defined else (pendientes | selectattr('estado', 'equalto', 'Paracaidista') | list) %}
     {% set var_ausencias = var_ausencias if var_ausencias is defined else (pendientes | selectattr('estado', 'equalto', 'Ausencia') | list) %}
+    {% set var_comodin = var_comodin if var_comodin is defined else [] %}
 
     <div class="auditoria-stats">
       {% if 'conflictos' in visible_sections %}
@@ -186,6 +187,11 @@ tr.audit-row-highlight {
       {% if 'ausencias' in visible_sections %}
       <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseAusencias" title="{{ _('Ir a ausencias') }}">
         <i class="fas fa-user-slash"></i> {{ var_ausencias|length }} {{ _('ausencias') }}
+      </span>
+      {% endif %}
+      {% if 'comodin' in visible_sections %}
+      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseComodin" title="{{ _('Ir a comodín') }}">
+        <i class="fas fa-asterisk"></i> {{ var_comodin|length }} {{ _('comodín') }}
       </span>
       {% endif %}
       {% if (correcciones_total|default(0) > 0 or correcciones) and 'modificacion_odoo' in visible_sections %}
@@ -528,6 +534,74 @@ tr.audit-row-highlight {
                 </div>
                 {% else %}
                 <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> {{ _('No hay fichajes sin planificar') }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if 'comodin' in visible_sections %}
+        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-comodin">
+            <div class="auditoria-section-header card-header collapsed" data-target="#collapseComodin" role="button" aria-expanded="false" data-tour="audit-comodin-toggle">
+                <h6 class="auditoria-section-title mb-0" style="color: #64748b;">
+                    <span class="section-icon-wrap section-icon-wrap--archive"><i class="fas fa-asterisk"></i></span>
+                    {{ _('Comodín') }}
+                    <span class="badge-count badge-count-muted">{{ var_comodin|length }}</span>
+                </h6>
+                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
+            </div>
+            <div id="collapseComodin" class="collapse">
+                {% if var_comodin %}
+                <div class="audit-table-wrap">
+                    <table id="auditComodinTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
+                        <thead>
+                            <tr>
+                                {{ audit_sort_th(0, 'Día', '8%', '', 'date') }}
+                                {{ audit_sort_th(1, 'Operario', '16%') }}
+                                {{ audit_sort_th(2, 'Planificado', '22%') }}
+                                {{ audit_sort_th(3, 'Fichó en', '22%') }}
+                                {{ audit_sort_th(4, 'Entrada', '8%', 'center', 'time') }}
+                                {{ audit_sort_th(5, 'Salida', '8%', 'center', 'time') }}
+                                {{ audit_sort_th(6, 'Notas', '16%') }}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reg in var_comodin %}
+                            <tr id="row-{{ reg.id }}"
+                                class="fila-fichaje-auditoria audit-data-row"
+                                data-user-id="{{ reg.user_id }}"
+                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
+                                {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
+                                data-tour-audit-row
+                                style="cursor: pointer;">
+                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
+                                {{ celda_operario(reg) }}
+                                {{ celda_obra_link(reg.obra_planificada) }}
+                                {{ celda_obra_link(reg.obra_real) }}
+                                <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
+                                    {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
+                                </td>
+                                <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
+                                    {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
+                                </td>
+                                {{ celda_notas(reg) }}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small px-3 py-2 mb-0 border-top">
+                    {{ _('Cola de seguimiento: salen solas cuando RRHH corrige el fichaje (p. ej. modificación Odoo). No generan desvío ni ausencia.') }}
+                    {% if obras_comodin_labels %}
+                    · {{ _('Obras:') }} {{ obras_comodin_labels|join(', ') }}
+                    {% endif %}
+                </p>
+                {% else %}
+                <div class="auditoria-empty border-top">
+                  <i class="fas fa-check-circle"></i> {{ _('No hay fichajes en obras comodín') }}
+                  {% if obras_comodin_labels %}
+                  <div class="text-muted small mt-1">{{ _('Configuradas:') }} {{ obras_comodin_labels|join(', ') }}</div>
+                  {% endif %}
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -1159,6 +1233,7 @@ function applyAuditoriaDeepLink() {
         conflictos: '#collapseConflictos',
         paracaidistas: '#collapseParacaidistas',
         ausencias: '#collapseAusencias',
+        comodin: '#collapseComodin',
     };
     const section = sectionMap[seccion] || '#collapseConflictos';
     openAuditoriaSection(section);
@@ -1218,6 +1293,7 @@ function restoreAuditoriaFocus() {
         desviaciones: '#collapseConflictos',
         paracaidistas: '#collapseParacaidistas',
         ausencias: '#collapseAusencias',
+        comodin: '#collapseComodin',
         historial: '#collapseHistorial',
         correcciones: '#collapseCorrecciones'
     };

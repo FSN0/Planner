@@ -836,6 +836,57 @@ def solicitudes_list():
     )
 
 
+@admin_bp.route('/solicitudes-vehiculo/<int:solicitud_id>')
+@login_required
+@permission_required('solicitudes_vehiculos', 'r')
+def solicitud_vehiculo_detail(solicitud_id):
+    """Ficha de solicitud de flota (calendario empleado + candidatos vehículo)."""
+    from app.utils.nav_back import resolve_back_url
+    from app.services.panel_scope_service import PANEL_SOLICITUDES, user_panel_mode
+    from app.services.vehicle_solicitud_service import vehicle_candidate_states
+
+    solicitud = SolicitudVehiculo.query.get_or_404(solicitud_id)
+    if user_panel_mode(current_user, PANEL_SOLICITUDES) != 'office':
+        if solicitud.requested_by_id != current_user.id:
+            flash(translate('No tienes acceso a esta solicitud.'), 'danger')
+            return redirect(url_for('admin.solicitudes_list', seccion='vehiculos'))
+
+    can_resolve = can_resolve_solicitudes_flota(current_user)
+    fecha_inicio = solicitud.fecha_inicio
+    fecha_fin = solicitud.fecha_fin
+    cal_initial_date = fecha_inicio or fecha_fin or date.today()
+
+    vehicle_candidates, candidate_states = vehicle_candidate_states(
+        fecha_inicio, fecha_fin, empleado_id=solicitud.empleado_id,
+    )
+    # Nombres de ocupantes para la tabla
+    ocupante_ids = {
+        st['ocupante_id'] for st in candidate_states.values() if st.get('ocupante_id')
+    }
+    ocupantes = {}
+    if ocupante_ids:
+        for u in User.query.filter(User.id.in_(ocupante_ids)).all():
+            ocupantes[u.id] = f"{u.name or ''} {u.lastname or ''}".strip()
+
+    back_url = resolve_back_url('admin.solicitudes_list', seccion='vehiculos')
+    return render_template(
+        'admin_solicitud_vehiculo_detail.html',
+        solicitud=solicitud,
+        can_resolve_vehiculo=can_resolve,
+        back_url=back_url,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        cal_initial_date=cal_initial_date,
+        vehicle_candidates=vehicle_candidates,
+        candidate_states=candidate_states,
+        ocupantes=ocupantes,
+        total_days_req=(
+            (fecha_fin - fecha_inicio).days + 1
+            if fecha_inicio and fecha_fin else 1
+        ),
+    )
+
+
 @admin_bp.route('/solicitudes-vehiculo/<int:solicitud_id>/resolver', methods=['POST'])
 @login_required
 @permission_required('solicitudes_vehiculos', 'w')
@@ -843,19 +894,28 @@ def resolver_solicitud_vehiculo(solicitud_id):
     from app.services.vehicle_solicitud_service import VehicleSolicitudService
 
     solicitud = SolicitudVehiculo.query.get_or_404(solicitud_id)
-    decision = request.form.get('decision') or (request.get_json() or {}).get('decision')
+    payload = request.get_json(silent=True) or {}
+    decision = request.form.get('decision') or payload.get('decision')
+    vehiculo_id = request.form.get('vehiculo_id') or payload.get('vehiculo_id')
     if not decision:
         flash(translate('Falta la decisión (aceptar/denegar).'), 'danger')
-        return redirect(url_for('admin.solicitudes_list', seccion='vehiculos'))
+        return redirect(url_for('admin.solicitud_vehiculo_detail', solicitud_id=solicitud_id))
 
     try:
-        mensaje = VehicleSolicitudService.resolve(solicitud, decision, current_user)
+        mensaje = VehicleSolicitudService.resolve(
+            solicitud, decision, current_user, vehiculo_id=vehiculo_id,
+        )
         flash(translate(mensaje), 'success')
     except Exception as e:
         db.session.rollback()
         flash(translate(str(e)), 'danger')
+        return redirect(url_for('admin.solicitud_vehiculo_detail', solicitud_id=solicitud_id))
 
-    return redirect(url_for('admin.solicitudes_list', seccion='vehiculos', estado=request.args.get('estado', 'todas')))
+    return redirect(url_for(
+        'admin.solicitudes_list',
+        seccion='vehiculos',
+        estado=request.args.get('estado', 'todas'),
+    ))
 
     
 @admin_bp.route('/impersonate/<int:user_id>', methods=['POST'])
@@ -4683,10 +4743,35 @@ def configuracion_global():
         resolve_tenant_logo_path,
         resolve_tenant_mark_only_path,
     )
-    from app.models import Etiqueta
+    from app.models import Etiqueta, Obra
     from app.services.etiqueta_service import list_etiquetas
     from app.services.permission_service import user_can as _uc
     from app.services.documentacion_service import aviso_dias as _aviso_dias_doc
+    from app.services.desvio_fichaje_service import (
+        CONFIG_OBRAS_COMODIN,
+        parse_obras_comodin_ids,
+    )
+
+    # Incluye finalizadas si ya están marcadas como comodín (para no perderlas
+    # al reabrir el desplegable); el resto, solo activas.
+    _sel_comodin_prev = parse_obras_comodin_ids(
+        configs_dict.get(CONFIG_OBRAS_COMODIN, '')
+    )
+    obras_comodin_opciones = (
+        Obra.query
+        .filter(
+            db.or_(
+                Obra.estado != 'Finalizada',
+                Obra.id.in_(_sel_comodin_prev or [-1]),
+            )
+        )
+        .order_by(Obra.codigo.asc(), Obra.nombre.asc())
+        .limit(800)
+        .all()
+    )
+    obras_comodin_selected = sorted(
+        parse_obras_comodin_ids(configs_dict.get(CONFIG_OBRAS_COMODIN, ''))
+    )
 
     return render_template(
         'admin_configuracion.html',
@@ -4712,6 +4797,8 @@ def configuracion_global():
         etiquetas_subcontrata=list_etiquetas(Etiqueta.TIPO_SUBCONTRATA, active_only=False),
         can_manage_etiquetas=_uc(current_user, 'etiquetas_catalogo', 'w'),
         aviso_dias_documentacion=_aviso_dias_doc(),
+        obras_comodin_opciones=obras_comodin_opciones,
+        obras_comodin_selected=obras_comodin_selected,
     )
 
 
@@ -5240,6 +5327,25 @@ def update_config():
                 _upsert('hora_limite_entrada', hora_limite)
             except ValueError:
                 flash(translate('Hora límite de entrada no válida.'), 'warning')
+
+        from app.services.desvio_fichaje_service import (
+            CONFIG_OBRAS_COMODIN,
+            parse_obras_comodin_ids,
+            serialize_obras_comodin_ids,
+        )
+        raw_comodin = request.form.getlist('fichaje_obras_comodin')
+        ids_comodin = parse_obras_comodin_ids(raw_comodin)
+        if ids_comodin:
+            from app.models import Obra as _ObraComodin
+            # Cualquier obra existente (también finalizadas): el comodín puede
+            # seguir recibiendo fichajes históricos aunque ya no esté activa.
+            valid_ids = {
+                o.id for o in _ObraComodin.query.filter(
+                    _ObraComodin.id.in_(ids_comodin),
+                ).all()
+            }
+            ids_comodin = ids_comodin & valid_ids
+        _upsert(CONFIG_OBRAS_COMODIN, serialize_obras_comodin_ids(ids_comodin))
 
         from app.services.fichaje_operario_service import (
             CONFIG_FICHAJE_GEO,

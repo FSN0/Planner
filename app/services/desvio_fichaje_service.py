@@ -16,6 +16,7 @@ Matriz:
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from app.models import Obra, ROLE_ADMIN, ROLE_JEFE, ROLE_LABORAL, ROLE_RRHH
@@ -23,6 +24,109 @@ from app.services.core_assignment_service import CoreAssignmentService
 from app.utils.timezone_utils import utc_now
 
 logger = logging.getLogger(__name__)
+
+# Obras «comodín» (p. ej. Varios): el fichaje real no entra en desvío/ausencia/
+# paracaidista; se revisa en la sección Comodín hasta corrección RRHH/Odoo.
+CONFIG_OBRAS_COMODIN = 'fichaje_obras_comodin'
+
+
+def parse_obras_comodin_ids(raw) -> set:
+    """Parsea JSON `[1,2]` o lista CSV a set de int."""
+    if raw is None or raw == '':
+        return set()
+    if isinstance(raw, (set, frozenset, list, tuple)):
+        out = set()
+        for x in raw:
+            try:
+                out.add(int(x))
+            except (TypeError, ValueError):
+                continue
+        return out
+    text = str(raw).strip()
+    if not text:
+        return set()
+    if text.startswith('['):
+        try:
+            data = json.loads(text)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, list):
+            return parse_obras_comodin_ids(data)
+    out = set()
+    for part in text.replace(';', ',').split(','):
+        part = part.strip()
+        if part.isdigit():
+            out.add(int(part))
+    return out
+
+
+def obras_comodin_ids() -> set:
+    """IDs de obra comodín del tenant actual (vacío = feature apagada)."""
+    try:
+        from app.services.config_service import get_tenant_config
+        return parse_obras_comodin_ids(get_tenant_config(CONFIG_OBRAS_COMODIN, default=''))
+    except Exception:
+        logger.debug('obras_comodin_ids: sin config de tenant', exc_info=True)
+        return set()
+
+
+def es_obra_comodin(obra_id, comodin_ids=None) -> bool:
+    if not obra_id:
+        return False
+    ids = obras_comodin_ids() if comodin_ids is None else parse_obras_comodin_ids(comodin_ids)
+    try:
+        return int(obra_id) in ids
+    except (TypeError, ValueError):
+        return False
+
+
+def serialize_obras_comodin_ids(ids) -> str:
+    cleaned = sorted(parse_obras_comodin_ids(ids))
+    return json.dumps(cleaned)
+
+
+def _comodin_nombre_codigo_sets(comodin_ids) -> tuple:
+    """Nombres/códigos de las obras comodín (match por etiqueta si hay IDs duplicados)."""
+    ids = parse_obras_comodin_ids(comodin_ids)
+    names: set = set()
+    codes: set = set()
+    if not ids:
+        return names, codes
+    try:
+        for o in Obra.query.filter(Obra.id.in_(ids)).all():
+            n = (getattr(o, 'nombre', None) or '').strip().casefold()
+            c = (getattr(o, 'codigo', None) or '').strip().casefold()
+            if n:
+                names.add(n)
+            if c:
+                codes.add(c)
+    except Exception:
+        logger.debug('comodin nombre/codigo: sin obras', exc_info=True)
+    return names, codes
+
+
+def registro_es_comodin(registro, comodin_ids=None, *, _names=None, _codes=None) -> bool:
+    """True si el fichaje real es en obra comodín (por id o por código/nombre)."""
+    ids = obras_comodin_ids() if comodin_ids is None else parse_obras_comodin_ids(comodin_ids)
+    if not ids:
+        return False
+    rid = getattr(registro, 'obra_real_id', None)
+    if es_obra_comodin(rid, ids):
+        return True
+    obra = getattr(registro, 'obra_real', None)
+    if obra is None:
+        return False
+    if es_obra_comodin(getattr(obra, 'id', None), ids):
+        return True
+    if _names is None or _codes is None:
+        _names, _codes = _comodin_nombre_codigo_sets(ids)
+    n = (getattr(obra, 'nombre', None) or '').strip().casefold()
+    c = (getattr(obra, 'codigo', None) or '').strip().casefold()
+    if n and n in _names:
+        return True
+    if c and c in _codes:
+        return True
+    return False
 
 ACCION_LIBERAR_PLAZA = 'liberar_plaza'
 ACCION_MANTENER_FALTA = 'mantener_falta'
@@ -847,20 +951,33 @@ class DesvioEspejoView:
         return getattr(self._reg, name)
 
 
-def repartir_secciones_auditoria(pendientes):
+def repartir_secciones_auditoria(pendientes, comodin_ids=None):
     """
     Conflicto/Disputa → desviaciones.
     Ausencia + espejo plan de desvíos aún sin ack_plan → ausencias.
     Paracaidista + espejo real de desvíos aún sin ack_real → sin planificar.
 
+    Si obra_real está en obras comodín del tenant → sección «comodin» (sin
+    espejos en ausencias/paracaidistas ni fila en desviaciones).
+
     Si un lado del desvío ya está resuelto (ack), no se proyecta en Ausencias /
     Sin planificar: esa decisión ya está tomada; el desvío sigue arriba hasta
     cerrar el otro lado (el panel resuelto se ve en verde ahí).
     """
+    ids_comodin = (
+        obras_comodin_ids() if comodin_ids is None else parse_obras_comodin_ids(comodin_ids)
+    )
+    names_comodin, codes_comodin = _comodin_nombre_codigo_sets(ids_comodin)
     conflictos = []
     ausencias = []
     paracaidistas = []
+    comodin = []
     for r in pendientes or []:
+        if registro_es_comodin(
+            r, ids_comodin, _names=names_comodin, _codes=codes_comodin,
+        ):
+            comodin.append(r)
+            continue
         if r.estado in ('Conflicto', 'Disputa'):
             conflictos.append(r)
             ui = getattr(r, 'desvio_ui', None) or {}
@@ -878,6 +995,7 @@ def repartir_secciones_auditoria(pendientes):
         'conflictos': conflictos,
         'ausencias': ausencias,
         'paracaidistas': paracaidistas,
+        'comodin': comodin,
     }
 
 
@@ -943,7 +1061,12 @@ def enriquecer_problema_ausencias(ausencias):
 
 
 def notificar_desvio_inmediato(registro, *, omitir_lado_real=False):
-    """Desvío plan≠real → matriz ``desvio_fichaje`` (debounce/digest/inmediato/off)."""
+    """Desvío plan≠real → matriz ``desvio_fichaje`` (debounce/digest/inmediato/off).
+
+    No notifica si el fichaje real es en obra comodín (cola de seguimiento, no desvío).
+    """
+    if registro is not None and registro_es_comodin(registro):
+        return
     from app.services.email_service import notificar_desvio_fichaje
     notificar_desvio_fichaje(registro, omitir_lado_real=omitir_lado_real)
 

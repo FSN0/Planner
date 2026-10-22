@@ -1,0 +1,499 @@
+{% extends "base.html" %}
+
+{% block title %}{{ _('Solicitud vehículo') }} #{{ solicitud.id }}{% endblock %}
+{% block body_class %}layout-admin{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20261005pick">
+<style>
+  .sv-detail-page .sv-resumen-compact {
+    padding: 0.85rem 1rem;
+  }
+  .sv-detail-page .sv-resumen-frase {
+    font-size: 0.9rem;
+    margin-bottom: 0.65rem;
+  }
+  .sv-detail-page .solicitud-meta-grid {
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: 0.5rem 1rem;
+  }
+  .sv-detail-page .sv-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 0;
+    align-items: stretch;
+  }
+  @media (max-width: 991px) {
+    .sv-detail-page .sv-split { grid-template-columns: 1fr; }
+  }
+  .sv-detail-page .sv-split-col {
+    padding: 0.85rem 1rem;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* height:0 + min-height:100% → la lista no estira el grid; toma la altura del calendario */
+  .sv-detail-page .sv-split-col--list {
+    border-right: 1px solid var(--color-border-strong, #e2e8f0);
+    height: 0;
+    min-height: 100%;
+    overflow: hidden;
+  }
+  @media (max-width: 991px) {
+    .sv-detail-page .sv-split-col--list {
+      border-right: 0;
+      border-bottom: 1px solid var(--color-border-strong, #e2e8f0);
+      height: auto;
+      min-height: 0;
+      overflow: visible;
+    }
+  }
+  .sv-detail-page .sv-split-col--list > .d-flex,
+  .sv-detail-page .sv-split-col--list > .text-muted.small {
+    flex-shrink: 0;
+  }
+  .sv-detail-page .sv-cal-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.65rem;
+    flex-shrink: 0;
+  }
+  .sv-detail-page .sv-cal-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin: 0;
+    color: #0f172a;
+  }
+  .sv-detail-page .sv-cal-title a {
+    color: #2563eb;
+    text-decoration: none;
+  }
+  .sv-detail-page .sv-cal-title a:hover { text-decoration: underline; }
+  .sv-candidate-row.is-selected { outline: 2px solid #2563eb; outline-offset: -2px; background: #eff6ff !important; }
+  .sv-candidate-row { cursor: pointer; }
+  /* La lista crece hasta la altura del calendario (columna hermana) */
+  .sv-detail-page .sv-candidates-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+  .sv-detail-page .sv-candidates-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+  }
+  .sv-detail-page .sv-split-col--cal .solicitud-calendar-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  @media (max-width: 991px) {
+    .sv-detail-page .sv-candidates-scroll {
+      flex: none;
+      max-height: min(22rem, 45vh);
+    }
+  }
+</style>
+{% endblock %}
+
+{% block wrapper %}
+<div class="admin-shell">
+  {% include "_admin_sidebar.html" %}
+
+  <main class="admin-main admin-main--compact solicitud-detail-page sv-detail-page">
+
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <a href="{{ back_url }}" class="btn-admin btn-admin-ghost" style="padding: 0.25rem 0.5rem;">
+          <i class="fas fa-arrow-left"></i>
+        </a>
+        <h1 class="page-toolbar-title">{{ _('Solicitud vehículo') }} #{{ solicitud.id }}</h1>
+        {% if solicitud.accion == 'DESASIGNAR' %}
+          <span class="badge-soft badge-soft-red">{{ _('Desasignar') }}</span>
+        {% else %}
+          <span class="badge-soft badge-soft-blue">{{ _('Asignar') }}</span>
+        {% endif %}
+        {% if not solicitud.vehiculo_id and solicitud.estado in ('PENDIENTE', 'EN_PROCESO') %}
+          <span class="badge-soft badge-soft-gray">{{ _('Cualquiera') }}</span>
+        {% endif %}
+        {% set est = solicitud.estado %}
+        {% if est == 'PENDIENTE' %}<span class="badge-soft badge-soft-amber">{{ _('Pendiente') }}</span>
+        {% elif est == 'EN_PROCESO' %}<span class="badge-soft badge-soft-blue">{{ _('En proceso') }}</span>
+        {% elif est == 'CUMPLIDA' %}<span class="badge-soft badge-soft-green">{{ _('Cumplida') }}</span>
+        {% elif est == 'CERRADA_PARCIAL' %}<span class="badge-soft badge-soft-gray">{{ _('Cerrada P.') }}</span>
+        {% elif est == 'DENEGADA' %}<span class="badge-soft badge-soft-red">{{ _('Denegada') }}</span>
+        {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {# —— 1. Descripción compacta (ancho completo) —— #}
+    <section class="admin-panel solicitud-resumen-panel mb-3">
+      <div class="sv-resumen-compact">
+        {% set emp_nom = ((solicitud.empleado.name ~ ' ' ~ solicitud.empleado.lastname)|trim) if solicitud.empleado else _('el operario') %}
+        {% if fecha_inicio and fecha_fin %}
+          {% set rango_txt = _('del {start} al {end}').format(start=fecha_inicio.strftime('%d/%m/%Y'), end=fecha_fin.strftime('%d/%m/%Y')) %}
+        {% else %}
+          {% set rango_txt = _('el periodo indicado') %}
+        {% endif %}
+        <p class="sv-resumen-frase">
+          {% if solicitud.accion == 'DESASIGNAR' %}
+            {{ _('Solicitud para desasignar el vehículo de {emp} {rango}.', emp=emp_nom, rango=rango_txt) }}
+          {% elif solicitud.vehiculo %}
+            {{ _('Solicitud para asignar {veh} a {emp} {rango}.', veh=solicitud.vehiculo.label(), emp=emp_nom, rango=rango_txt) }}
+          {% else %}
+            {{ _('Solicitud de cualquier vehículo para {emp} {rango}.', emp=emp_nom, rango=rango_txt) }}
+          {% endif %}
+        </p>
+        <div class="solicitud-meta-grid">
+          <div class="solicitud-meta-item">
+            <label>{{ _('Operario') }}</label>
+            {% if solicitud.empleado %}
+              <a href="{{ url_for('admin.worker_panel', user_id=solicitud.empleado.id) }}" class="table-link-primary font-weight-bold">
+                {{ solicitud.empleado.name }} {{ solicitud.empleado.lastname }}
+              </a>
+            {% else %}—{% endif %}
+          </div>
+          <div class="solicitud-meta-item">
+            <label>{{ _('Vehículo pedido') }}</label>
+            {% if solicitud.vehiculo %}
+              <a href="{{ url_for('admin.vehicle_panel', vehiculo_id=solicitud.vehiculo.id) }}" class="table-link-primary">
+                {{ solicitud.vehiculo.label() }}
+              </a>
+            {% elif solicitud.estado in ('PENDIENTE', 'EN_PROCESO') %}
+              <span class="font-weight-bold">{{ _('Cualquiera') }}</span>
+            {% else %}—{% endif %}
+          </div>
+          <div class="solicitud-meta-item">
+            <label>{{ _('Rango') }}</label>
+            {% if fecha_inicio and fecha_fin %}
+              {{ fecha_inicio.strftime('%d/%m/%Y') }} — {{ fecha_fin.strftime('%d/%m/%Y') }}
+            {% else %}—{% endif %}
+          </div>
+          <div class="solicitud-meta-item">
+            <label>{{ _('Solicitante') }}</label>
+            {% if solicitud.requested_by %}
+              {{ solicitud.requested_by.name }} {{ solicitud.requested_by.lastname }}
+            {% else %}—{% endif %}
+          </div>
+          {% if solicitud.notas %}
+          <div class="solicitud-meta-item solicitud-meta-item--full">
+            <label>{{ _('Notas') }}</label>
+            <div class="solicitud-meta-notes">{{ solicitud.notas }}</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    {# —— 2. Izquierda vehículos · derecha calendario —— #}
+    <section class="admin-panel admin-panel-flush">
+      <div class="sv-split">
+        <div class="sv-split-col sv-split-col--list">
+          {% if solicitud.accion != 'DESASIGNAR' %}
+          <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+            <h2 class="admin-panel-title mb-0" style="font-size:0.85rem;">
+              <i class="fas fa-car text-primary mr-1"></i>{{ _('Vehículos') }}
+              <span class="badge-soft badge-soft-gray ml-1">{{ vehicle_candidates|length }}</span>
+            </h2>
+            <div>
+              <button class="btn-admin btn-admin-ghost" type="button" id="btnToggleBusy"
+                      data-state="visible" onclick="toggleSvRowVisibility('busy')" style="font-size:0.64rem; padding:0.2rem 0.4rem;">
+                <i class="fas fa-eye-slash"></i> {{ _('Ocupados') }}
+              </button>
+              <button class="btn-admin btn-admin-ghost" type="button" id="btnTogglePartial"
+                      data-state="visible" onclick="toggleSvRowVisibility('partial')" style="font-size:0.64rem; padding:0.2rem 0.4rem;">
+                <i class="fas fa-eye-slash"></i> {{ _('Parciales') }}
+              </button>
+            </div>
+          </div>
+          <p class="text-muted small mb-2">{{ _('Clic para seleccionar y ver el calendario.') }}</p>
+          {% if vehicle_candidates %}
+          <div class="sv-candidates-scroll">
+            <table class="filterable-table admin-data-table mb-0" id="svCandidatesTable">
+              <thead>
+                <tr class="header-row">
+                  <th style="width:1.75rem;" class="text-center"></th>
+                  <th>{{ _('Vehículo') }}</th>
+                  <th class="text-center" style="width:4.5rem;">{{ _('Disp.') }}</th>
+                  <th>{{ _('Ocupado por') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for v in vehicle_candidates %}
+                {% set st = candidate_states.get(v.id, {}) %}
+                {% set status = st.get('status', 'FREE') %}
+                <tr class="sv-candidate-row data-row {% if status == 'BUSY' %}row-busy{% elif status == 'PARTIAL' %}row-partial{% else %}row-free{% endif %}"
+                    data-vehiculo-id="{{ v.id }}"
+                    data-vehiculo-label="{{ v.label() }}"
+                    data-vehiculo-url="{{ url_for('admin.vehicle_panel', vehiculo_id=v.id) }}"
+                    data-status="{{ status }}"
+                    style="{% if status == 'PARTIAL' %}background:#fffbeb;{% elif status == 'BUSY' %}background:#fef2f2;{% endif %}">
+                  <td class="text-center no-row-nav">
+                    <input type="radio" name="sv_vehiculo_pick" value="{{ v.id }}" class="sv-veh-radio"
+                           {% if solicitud.vehiculo_id == v.id %}checked{% endif %}
+                           {% if not can_resolve_vehiculo or solicitud.estado not in ('PENDIENTE', 'EN_PROCESO') %}disabled{% endif %}>
+                  </td>
+                  <td>{{ v.label() }}</td>
+                  <td class="text-center">
+                    {% if status == 'FREE' %}<span class="badge-soft badge-soft-green">{{ _('Libre') }}</span>
+                    {% elif status == 'PARTIAL' %}<span class="badge-soft badge-soft-amber">{{ _('Parcial') }}</span>
+                    {% else %}<span class="badge-soft badge-soft-red">{{ _('Ocupado') }}</span>
+                    {% endif %}
+                    {% if st.get('days_busy') %}
+                    <div class="text-muted" style="font-size:0.65rem;">{{ st.days_busy }}/{{ total_days_req }}d</div>
+                    {% endif %}
+                  </td>
+                  <td class="text-muted small">
+                    {% if st.get('ocupante_id') %}{{ ocupantes.get(st.ocupante_id, '—') }}{% else %}—{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-muted small">{{ _('No hay vehículos activos.') }}</div>
+          {% endif %}
+          {% else %}
+          <p class="text-muted small mb-0">
+            {{ _('Desasignación') }}{% if solicitud.vehiculo %}: <strong>{{ solicitud.vehiculo.label() }}</strong>{% endif %}
+          </p>
+          {% endif %}
+        </div>
+
+        <div class="sv-split-col sv-split-col--cal">
+          <div class="sv-cal-head">
+            <h2 class="sv-cal-title" id="sv-cal-heading">
+              {{ _('Calendario del operario') }}
+            </h2>
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn-admin btn-admin-primary active" id="btn-view-worker"
+                      onclick="switchSvCalendar('worker')">
+                <i class="fas fa-user-hard-hat"></i>{{ _('Operario') }}</button>
+              <button type="button" class="btn-admin btn-admin-ghost" id="btn-view-vehicle" disabled
+                      onclick="switchSvCalendar('vehiculo')" title="{{ _('Elige un vehículo en la lista') }}">
+                <i class="fas fa-car"></i>{{ _('Vehículo') }}</button>
+            </div>
+          </div>
+          <div class="solicitud-calendar-wrap">
+            <div id="solicitud-vehiculo-calendar"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {% if can_resolve_vehiculo and solicitud.estado in ('PENDIENTE', 'EN_PROCESO') %}
+    <div class="admin-actions-bar mt-3">
+      <div class="admin-actions-text">
+        <span class="text-muted small" id="sv-selected-label">
+          {% if solicitud.vehiculo %}
+            {{ _('Vehículo:') }} <strong>{{ solicitud.vehiculo.label() }}</strong>
+          {% elif solicitud.accion == 'DESASIGNAR' %}
+            {{ _('Se desasignará el vehículo indicado en el periodo.') }}
+          {% else %}
+            {{ _('Elige un vehículo en la lista para aprobar.') }}
+          {% endif %}
+        </span>
+      </div>
+      <div class="admin-actions-buttons">
+        <form id="svApproveForm" method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=solicitud.id) }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="decision" value="aceptar">
+          <input type="hidden" name="vehiculo_id" id="svApproveVehiculoId" value="{{ solicitud.vehiculo_id or '' }}">
+          <button type="submit" class="btn-admin btn-admin-primary" id="svBtnApprove"
+                  {% if not solicitud.vehiculo_id and solicitud.accion != 'DESASIGNAR' %}disabled{% endif %}
+                  onclick="return confirmSvApprove();">
+            <i class="fas fa-check"></i> {{ _('Aprobar') }}
+          </button>
+        </form>
+        <form method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=solicitud.id) }}" class="d-inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="decision" value="denegar">
+          <button type="submit" class="btn-admin btn-admin-danger"
+                  onclick="return confirm({{ _('¿Denegar esta solicitud?')|tojson }});">
+            <i class="fas fa-ban"></i> {{ _('Denegar') }}
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+  </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
+<script src="{{ url_for('static', filename='js/select2_fixed_dropdown.js') }}"></script>
+<script src="{{ url_for('static', filename='js/universal_calendar.js') }}?v=20261022sv2"></script>
+<script>
+(function () {
+  var t = window.SP_T || function (key) { return key; };
+  var EMPLEADO_ID = {{ solicitud.empleado_id|tojson }};
+  var EMPLEADO_NOMBRE = {% if solicitud.empleado %}{{ ((solicitud.empleado.name ~ ' ' ~ solicitud.empleado.lastname)|trim)|tojson }}{% else %}''{% endif %};
+  var INITIAL_VEH = {{ solicitud.vehiculo_id|tojson }};
+  var GLOBAL_START = {{ (fecha_inicio.strftime('%Y-%m-%d') if fecha_inicio else None)|tojson }};
+  var GLOBAL_END = {{ (fecha_fin.strftime('%Y-%m-%d') if fecha_fin else None)|tojson }};
+  var CAL_GOTO = {{ (cal_initial_date.strftime('%Y-%m-%d') if cal_initial_date else None)|tojson }};
+  var selectedVehiculoId = INITIAL_VEH ? String(INITIAL_VEH) : null;
+  var selectedVehiculoLabel = {% if solicitud.vehiculo %}{{ solicitud.vehiculo.label()|tojson }}{% else %}null{% endif %};
+  var selectedVehiculoUrl = {% if solicitud.vehiculo %}{{ url_for('admin.vehicle_panel', vehiculo_id=solicitud.vehiculo.id)|tojson }}{% else %}null{% endif %};
+
+  function updateCalHeading(mode) {
+    var el = document.getElementById('sv-cal-heading');
+    if (!el) return;
+    if (mode === 'vehiculo' && selectedVehiculoId) {
+      var name = selectedVehiculoLabel || ('#' + selectedVehiculoId);
+      var href = selectedVehiculoUrl || ('/admin/vehicle_panel/' + selectedVehiculoId);
+      el.innerHTML = t('Calendario del vehículo') + ' · <a href="' + href + '">' + name + '</a>';
+    } else {
+      var emp = EMPLEADO_NOMBRE || t('operario');
+      el.textContent = t('Calendario del operario') + (emp ? (' · ' + emp) : '');
+    }
+  }
+
+  window.initSvCalendar = function (context, id) {
+    if (window.svCalendar) {
+      try { window.svCalendar.destroy(); } catch (e) { /* ignore */ }
+    }
+    if (!id) return;
+    window.svCalendar = new UniversalCalendarManager('solicitud-vehiculo-calendar', {
+      context: context,
+      id: id,
+      mode: 'empleados',
+      readonly: true,
+      compact: true,
+      hideInercia: true
+    });
+    setTimeout(function () {
+      if (window.svCalendar && window.svCalendar.calendar && CAL_GOTO) {
+        window.svCalendar.calendar.gotoDate(CAL_GOTO);
+      }
+      if (window.svCalendar && window.svCalendar.calendar && GLOBAL_START && GLOBAL_END) {
+        var bg = [];
+        var curr = moment(GLOBAL_START);
+        var end = moment(GLOBAL_END);
+        while (curr.isSameOrBefore(end)) {
+          bg.push({ start: curr.format('YYYY-MM-DD'), display: 'background', backgroundColor: 'rgba(34, 197, 94, 0.35)' });
+          curr.add(1, 'days');
+        }
+        window.svCalendar.calendar.addEventSource(bg);
+      }
+    }, 250);
+  };
+
+  window.switchSvCalendar = function (mode) {
+    var btnW = document.getElementById('btn-view-worker');
+    var btnV = document.getElementById('btn-view-vehicle');
+    if (mode === 'vehiculo') {
+      if (!selectedVehiculoId) return;
+      if (btnW) btnW.className = 'btn-admin btn-admin-ghost';
+      if (btnV) { btnV.className = 'btn-admin btn-admin-primary active'; btnV.disabled = false; }
+      updateCalHeading('vehiculo');
+      initSvCalendar('vehiculo', parseInt(selectedVehiculoId, 10));
+    } else {
+      if (btnW) btnW.className = 'btn-admin btn-admin-primary active';
+      if (btnV) btnV.className = 'btn-admin btn-admin-ghost';
+      updateCalHeading('worker');
+      if (EMPLEADO_ID) initSvCalendar('worker', EMPLEADO_ID);
+    }
+  };
+
+  function selectVehicle(vid, label, url, fromRadio) {
+    selectedVehiculoId = String(vid);
+    selectedVehiculoLabel = label || '';
+    selectedVehiculoUrl = url || ('/admin/vehicle_panel/' + selectedVehiculoId);
+    var hidden = document.getElementById('svApproveVehiculoId');
+    if (hidden) hidden.value = selectedVehiculoId;
+    var btn = document.getElementById('svBtnApprove');
+    if (btn) btn.disabled = false;
+    var lbl = document.getElementById('sv-selected-label');
+    if (lbl) {
+      lbl.innerHTML = t('Vehículo:') + ' <strong><a href="' + selectedVehiculoUrl + '">' +
+        (selectedVehiculoLabel || ('#' + selectedVehiculoId)) + '</a></strong>';
+    }
+    document.querySelectorAll('.sv-candidate-row').forEach(function (r) {
+      r.classList.toggle('is-selected', String(r.getAttribute('data-vehiculo-id')) === selectedVehiculoId);
+    });
+    if (!fromRadio) {
+      var radio = document.querySelector('.sv-veh-radio[value="' + selectedVehiculoId + '"]');
+      if (radio && !radio.disabled) radio.checked = true;
+    }
+    var btnV = document.getElementById('btn-view-vehicle');
+    if (btnV) btnV.disabled = false;
+    switchSvCalendar('vehiculo');
+  }
+
+  window.confirmSvApprove = function () {
+    var hid = document.getElementById('svApproveVehiculoId');
+    if (!hid || !hid.value) {
+      alert(t('Elige un vehículo en la lista.'));
+      return false;
+    }
+    return confirm(t('¿Aprobar y crear las asignaciones con este vehículo?'));
+  };
+
+  window.toggleSvRowVisibility = function (type) {
+    var btnId = type === 'busy' ? 'btnToggleBusy' : 'btnTogglePartial';
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    var cur = btn.getAttribute('data-state') || 'visible';
+    var next = cur === 'visible' ? 'hidden' : 'visible';
+    btn.setAttribute('data-state', next);
+    btn.innerHTML = next === 'visible'
+      ? '<i class="fas fa-eye-slash"></i> ' + (type === 'busy' ? t('Ocupados') : t('Parciales'))
+      : '<i class="fas fa-eye"></i> ' + (type === 'busy' ? t('Ocupados') : t('Parciales'));
+    var showBusy = (document.getElementById('btnToggleBusy') || {}).getAttribute('data-state') !== 'hidden';
+    var showPartial = (document.getElementById('btnTogglePartial') || {}).getAttribute('data-state') !== 'hidden';
+    document.querySelectorAll('#svCandidatesTable tbody tr.sv-candidate-row').forEach(function (row) {
+      var ok = true;
+      if (row.classList.contains('row-busy') && !showBusy) ok = false;
+      if (row.classList.contains('row-partial') && !showPartial) ok = false;
+      row.style.display = ok ? '' : 'none';
+    });
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    updateCalHeading('worker');
+    if (EMPLEADO_ID) {
+      setTimeout(function () { initSvCalendar('worker', EMPLEADO_ID); }, 200);
+    }
+    document.querySelectorAll('.sv-candidate-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('a, button')) return;
+        selectVehicle(
+          row.getAttribute('data-vehiculo-id'),
+          row.getAttribute('data-vehiculo-label'),
+          row.getAttribute('data-vehiculo-url'),
+          false
+        );
+      });
+    });
+    document.querySelectorAll('.sv-veh-radio').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        if (!radio.checked) return;
+        var row = radio.closest('.sv-candidate-row');
+        selectVehicle(
+          radio.value,
+          row ? row.getAttribute('data-vehiculo-label') : '',
+          row ? row.getAttribute('data-vehiculo-url') : null,
+          true
+        );
+      });
+    });
+    if (selectedVehiculoId) {
+      document.querySelectorAll('.sv-candidate-row').forEach(function (r) {
+        r.classList.toggle('is-selected', String(r.getAttribute('data-vehiculo-id')) === selectedVehiculoId);
+      });
+      var btnV = document.getElementById('btn-view-vehicle');
+      if (btnV) btnV.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

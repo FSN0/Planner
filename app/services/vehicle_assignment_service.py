@@ -72,6 +72,14 @@ def _needs_leave_overwrite(vehicle_id, worker_id, day):
     return False
 
 
+def _is_vehiculo_cualquiera(vehicle_id) -> bool:
+    if vehicle_id is None or vehicle_id == '':
+        return True
+    return str(vehicle_id).strip().upper() in (
+        'CUALQUIERA', 'GENERICO', 'ANY', 'QUALQUIERA',
+    )
+
+
 def process_vehicle_assignment_action(
     actor_user, worker_id, vehicle_id, date_list,
     *, notas=None, overwrite_mode='check', accion='ASIGNAR',
@@ -79,6 +87,7 @@ def process_vehicle_assignment_action(
     """
     Modo directo (flag por rol + W): muta el cuadrante.
     Modo solicitud: crea SolicitudVehiculo.
+    vehicle_id «CUALQUIERA» / None → siempre solicitud (flota elige el coche).
 
     overwrite_mode: 'check' | 'overwrite' | 'only_free'
       - mismo usuario+vehículo ese día → skip
@@ -86,11 +95,14 @@ def process_vehicle_assignment_action(
       - conductor de ausencia aprobada → libre (se sustituye al asignar)
     """
     worker = User.query.get(worker_id)
-    vehicle = Vehiculo.query.get(vehicle_id)
+    cualquiera = _is_vehiculo_cualquiera(vehicle_id)
+    vehicle = None if cualquiera else Vehiculo.query.get(vehicle_id)
 
-    if not worker or not vehicle:
+    if not worker:
+        return {'success': False, 'error': 'Trabajador no encontrado'}
+    if not cualquiera and not vehicle:
         return {'success': False, 'error': 'Trabajador o vehículo no encontrados'}
-    if not vehicle.active:
+    if vehicle is not None and not vehicle.active:
         return {'success': False, 'error': 'El vehículo no está activo'}
 
     valid_dates = _parse_dates(date_list)
@@ -104,6 +116,59 @@ def process_vehicle_assignment_action(
         user_assigns_vehicles_direct,
         user_assigns_vehicles_via_solicitud,
     )
+
+    # «CUALQUIERA» no se puede materializar: siempre buzón de flota.
+    if cualquiera:
+        if accion == 'DESASIGNAR':
+            return {
+                'success': False,
+                'error': 'Para desasignar hay que indicar el vehículo concreto.',
+            }
+        if not (
+            user_assigns_vehicles_via_solicitud(actor_user)
+            or user_assigns_vehicles_direct(actor_user)
+        ):
+            return {'success': False, 'error': 'Sin permiso para solicitar vehículos'}
+
+        dates_for_request = []
+        skip_leave = 0
+        for d in valid_dates:
+            if user_has_approved_leave(worker.id, d):
+                skip_leave += 1
+                continue
+            dates_for_request.append(d)
+        if not dates_for_request:
+            msg = (
+                f'Sin solicitud: el trabajador tiene ausencia aprobada '
+                f'({skip_leave} día(s)).'
+                if skip_leave else 'No hay fechas válidas para la solicitud.'
+            )
+            return {'success': True, 'action': 'assigned', 'message': msg}
+
+        sol, status = VehicleSolicitudService.create_solicitud(
+            requested_by_id=actor_user.id,
+            empleado_id=worker.id,
+            vehiculo_id=None,
+            dates=dates_for_request,
+            accion=accion,
+            notas=notas,
+        )
+        if status == 'new':
+            msg = (
+                f'Solicitud de cualquier vehículo enviada '
+                f'({len(dates_for_request)}d).'
+            )
+        elif status == 'merged':
+            msg = 'Solicitud de cualquier vehículo existente ampliada.'
+        else:
+            msg = 'Ya existía una solicitud de cualquier vehículo equivalente.'
+        return {
+            'success': True,
+            'action': 'requested',
+            'message': msg,
+            'solicitud_id': sol.id,
+            'cualquiera': True,
+        }
 
     puede_directo = user_assigns_vehicles_direct(actor_user)
 

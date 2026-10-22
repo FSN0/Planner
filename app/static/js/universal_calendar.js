@@ -1256,7 +1256,7 @@ class UniversalCalendarManager {
     _initVehicleSelect($select, workerId, placeholder) {
         if (typeof $ === 'undefined' || !$.fn.select2) return $select;
         return this.initPanelSelect2($select, {
-            placeholder: placeholder || t('Opcional: asignar vehículo...'),
+            placeholder: placeholder || t("Vehículo o 'CUALQUIERA'..."),
             allowClear: true,
             ajax: {
                 url: '/api/v6/vehicles',

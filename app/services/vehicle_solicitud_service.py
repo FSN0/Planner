@@ -51,6 +51,66 @@ def log_nueva_solicitud_vehiculo(solicitud):
     )
 
 
+def vehicle_candidate_states(fecha_inicio, fecha_fin, *, empleado_id=None):
+    """
+    Disponibilidad de cada vehículo activo en [fecha_inicio, fecha_fin].
+    FREE / PARTIAL / BUSY (días con asignación efectiva que ocupa de verdad).
+    Retorna (lista Vehiculo, {vehiculo_id: {status, days_busy, ocupante}}).
+    """
+    from app.models import AsignacionVehiculo
+    from app.services.leave_service import user_has_approved_leave
+
+    if not fecha_inicio or not fecha_fin:
+        return [], {}
+
+    total_days = (fecha_fin - fecha_inicio).days + 1
+    if total_days < 1:
+        return [], {}
+
+    vehiculos = (
+        Vehiculo.query.filter_by(active=True)
+        .order_by(Vehiculo.matricula.asc().nullslast(), Vehiculo.nombre.asc())
+        .all()
+    )
+    if not vehiculos:
+        return [], {}
+
+    asignaciones = AsignacionVehiculo.query.filter(
+        AsignacionVehiculo.fecha >= fecha_inicio,
+        AsignacionVehiculo.fecha <= fecha_fin,
+        AsignacionVehiculo.estado == 'efectiva',
+    ).all()
+
+    busy_dates = {}  # vid -> set(dates)
+    ocupante = {}  # vid -> user_id del ocupante más reciente (si hay)
+    for av in asignaciones:
+        if getattr(av, 'estado', 'efectiva') == 'no_usada':
+            continue
+        if user_has_approved_leave(av.user_id, av.fecha):
+            continue
+        # El propio solicitante con ese coche no cuenta como conflicto de flota
+        if empleado_id and av.user_id == empleado_id:
+            continue
+        busy_dates.setdefault(av.vehiculo_id, set()).add(av.fecha)
+        ocupante[av.vehiculo_id] = av.user_id
+
+    states = {}
+    for v in vehiculos:
+        days_busy = len(busy_dates.get(v.id, set()))
+        if days_busy == 0:
+            status = 'FREE'
+        elif days_busy >= total_days:
+            status = 'BUSY'
+        else:
+            status = 'PARTIAL'
+        states[v.id] = {
+            'status': status,
+            'days_busy': days_busy,
+            'ocupante_id': ocupante.get(v.id),
+        }
+    return vehiculos, states
+
+
 class VehicleSolicitudService:
 
     @staticmethod
@@ -75,8 +135,7 @@ class VehicleSolicitudService:
             raise ValueError("No hay fechas válidas")
         if not empleado_id:
             raise ValueError("empleado_id es obligatorio")
-        if not vehiculo_id:
-            raise ValueError("vehiculo_id es obligatorio para solicitud concreta")
+        # vehiculo_id None → «CUALQUIERA» (flota elige el coche al resolver)
 
         start_date = min(valid)
         end_date = max(valid)
@@ -136,11 +195,13 @@ class VehicleSolicitudService:
         return q.order_by(SolicitudVehiculo.created_at.desc()).all()
 
     @staticmethod
-    def resolve(solicitud, decision, actor, *, overwrite=True):
+    def resolve(solicitud, decision, actor, *, overwrite=True, vehiculo_id=None):
         """
         decision: 'aceptar' | 'denegar'
         Aceptar ASIGNAR → crea AsignacionVehiculo por cada día del rango.
         Aceptar DESASIGNAR → desasigna esos días.
+        Si la solicitud es «CUALQUIERA» (vehiculo_id null), hay que pasar
+        ``vehiculo_id`` al aceptar ASIGNAR; queda guardado en la solicitud.
         """
         if not can_resolve_solicitudes_flota(actor):
             raise PermissionError("No tienes permiso para resolver solicitudes de vehículo.")
@@ -161,8 +222,24 @@ class VehicleSolicitudService:
 
         if not solicitud.empleado_id:
             raise ValueError("Solicitud sin empleado.")
-        if not solicitud.vehiculo_id and (solicitud.accion or 'ASIGNAR') == 'ASIGNAR':
-            raise ValueError("Solicitud de asignación sin vehículo.")
+
+        accion = (solicitud.accion or 'ASIGNAR').upper()
+        vid = solicitud.vehiculo_id
+        if not vid and accion == 'ASIGNAR':
+            try:
+                vid = int(vehiculo_id) if vehiculo_id not in (None, '', 'CUALQUIERA') else None
+            except (TypeError, ValueError):
+                vid = None
+            if not vid:
+                raise ValueError(
+                    "Esta solicitud pide cualquier vehículo: elige uno concreto para aprobarla."
+                )
+            veh = Vehiculo.query.get(vid)
+            if not veh or not veh.active:
+                raise ValueError("El vehículo elegido no está disponible.")
+            solicitud.vehiculo_id = vid
+        elif not vid and accion == 'DESASIGNAR':
+            raise ValueError("Solicitud de desasignación sin vehículo.")
 
         days = []
         curr = solicitud.fecha_inicio
@@ -170,7 +247,6 @@ class VehicleSolicitudService:
             days.append(curr)
             curr += timedelta(days=1)
 
-        accion = (solicitud.accion or 'ASIGNAR').upper()
         count = 0
         omitidos_ausencia = 0
 

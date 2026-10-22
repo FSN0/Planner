@@ -389,9 +389,11 @@ def test_repartir_secciones_proyecta_espejos():
     para = SimpleNamespace(id=4, estado='Paracaidista', desvio_ui=None)
 
     out = repartir_secciones_auditoria(
-        [desvio, desvio_ack_plan, desvio_ack_real, ausencia, para]
+        [desvio, desvio_ack_plan, desvio_ack_real, ausencia, para],
+        comodin_ids=set(),
     )
     assert len(out['conflictos']) == 3
+    assert out['comodin'] == []
     assert ausencia in out['ausencias']
     assert para in out['paracaidistas']
     espejos_aus = [x for x in out['ausencias'] if isinstance(x, DesvioEspejoView)]
@@ -399,6 +401,107 @@ def test_repartir_secciones_proyecta_espejos():
     # Lado ack no se proyecta: ausencia resuelta sale del listado de Ausencias.
     assert {e.id for e in espejos_aus} == {1, 5}  # sin id=2 (ack_plan)
     assert {e.id for e in espejos_para} == {1, 2}  # sin id=5 (ack_real)
+
+
+def test_repartir_secciones_obra_comodin_fuera_de_otras_colas():
+    from app.services.desvio_fichaje_service import (
+        DesvioEspejoView,
+        parse_obras_comodin_ids,
+        repartir_secciones_auditoria,
+        serialize_obras_comodin_ids,
+    )
+
+    assert parse_obras_comodin_ids('[20, 30]') == {20, 30}
+    assert parse_obras_comodin_ids('20,30') == {20, 30}
+    assert serialize_obras_comodin_ids({30, 20}) == '[20, 30]'
+
+    desvio_comodin = SimpleNamespace(
+        id=1,
+        estado='Conflicto',
+        obra_planificada_id=10,
+        obra_real_id=20,
+        desvio_ui={
+            'es_desvio': True,
+            'ack_plan': False,
+            'ack_real': False,
+        },
+    )
+    desvio_normal = SimpleNamespace(
+        id=2,
+        estado='Conflicto',
+        obra_planificada_id=11,
+        obra_real_id=21,
+        desvio_ui={
+            'es_desvio': True,
+            'ack_plan': False,
+            'ack_real': False,
+        },
+    )
+    para_comodin = SimpleNamespace(
+        id=3, estado='Paracaidista', obra_real_id=20, desvio_ui=None,
+    )
+    para_normal = SimpleNamespace(
+        id=4, estado='Paracaidista', obra_real_id=99, desvio_ui=None,
+    )
+    ausencia = SimpleNamespace(
+        id=5, estado='Ausencia', obra_real_id=None, desvio_ui=None,
+    )
+
+    out = repartir_secciones_auditoria(
+        [desvio_comodin, desvio_normal, para_comodin, para_normal, ausencia],
+        comodin_ids={20},
+    )
+    assert {r.id for r in out['comodin']} == {1, 3}
+    assert {r.id for r in out['conflictos']} == {2}
+    assert ausencia in out['ausencias']
+    assert para_normal in out['paracaidistas']
+    assert not any(isinstance(x, DesvioEspejoView) and x.id == 1 for x in out['ausencias'])
+    assert not any(isinstance(x, DesvioEspejoView) and x.id == 1 for x in out['paracaidistas'])
+    espejos_aus = [x for x in out['ausencias'] if isinstance(x, DesvioEspejoView)]
+    espejos_para = [x for x in out['paracaidistas'] if isinstance(x, DesvioEspejoView)]
+    assert {e.id for e in espejos_aus} == {2}
+    assert {e.id for e in espejos_para} == {2}
+
+
+def test_notificar_desvio_omitido_si_obra_comodin(monkeypatch):
+    from app.services import desvio_fichaje_service as svc
+
+    called = {'n': 0}
+
+    def _fake_notif(registro, *, omitir_lado_real=False):
+        called['n'] += 1
+
+    monkeypatch.setattr(
+        'app.services.email_service.notificar_desvio_fichaje',
+        _fake_notif,
+    )
+    monkeypatch.setattr(svc, 'obras_comodin_ids', lambda: {20})
+    monkeypatch.setattr(svc, '_comodin_nombre_codigo_sets', lambda _ids: (set(), set()))
+
+    reg = SimpleNamespace(obra_real_id=20, obra_real=None)
+    svc.notificar_desvio_inmediato(reg)
+    assert called['n'] == 0
+
+    reg2 = SimpleNamespace(obra_real_id=21, obra_real=None)
+    svc.notificar_desvio_inmediato(reg2)
+    assert called['n'] == 1
+
+
+def test_registro_es_comodin_por_nombre_si_id_distinto(monkeypatch):
+    from app.services import desvio_fichaje_service as svc
+
+    monkeypatch.setattr(
+        svc, '_comodin_nombre_codigo_sets',
+        lambda _ids: ({'varios'}, {'var'}),
+    )
+    obra = SimpleNamespace(id=99, nombre='Varios', codigo='VAR')
+    reg = SimpleNamespace(obra_real_id=99, obra_real=obra)
+    assert svc.registro_es_comodin(reg, {20}) is True
+    reg2 = SimpleNamespace(
+        obra_real_id=50,
+        obra_real=SimpleNamespace(id=50, nombre='Otra', codigo='X'),
+    )
+    assert svc.registro_es_comodin(reg2, {20}) is False
 
 
 def test_labels_resolucion_desvio():

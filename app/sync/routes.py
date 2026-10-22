@@ -1094,21 +1094,33 @@ def auditoria_fichajes():
             pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
         except Exception:
             current_app.logger.exception('enriquecer_pendientes_desvio falló; se muestran sin UI desvío')
-        from app.services.desvio_fichaje_service import repartir_secciones_auditoria
+        from app.services.desvio_fichaje_service import (
+            obras_comodin_ids,
+            repartir_secciones_auditoria,
+        )
+        _comodin_ids = obras_comodin_ids()
         try:
-            _secciones = repartir_secciones_auditoria(pendientes)
+            _secciones = repartir_secciones_auditoria(pendientes, comodin_ids=_comodin_ids)
             var_conflictos = _secciones['conflictos']
             var_ausencias = _secciones['ausencias']
             var_paracaidistas = _secciones['paracaidistas']
+            var_comodin = _secciones.get('comodin') or []
         except Exception:
             current_app.logger.exception('repartir_secciones_auditoria falló')
-            var_conflictos = [
-                r for r in pendientes if r.estado in ('Conflicto', 'Disputa')
-            ]
-            var_ausencias = [r for r in pendientes if r.estado == 'Ausencia']
-            var_paracaidistas = [
-                r for r in pendientes if r.estado == 'Paracaidista'
-            ]
+            from app.services.desvio_fichaje_service import registro_es_comodin as _reg_comodin
+            var_conflictos = []
+            var_ausencias = []
+            var_paracaidistas = []
+            var_comodin = []
+            for r in pendientes:
+                if _reg_comodin(r, _comodin_ids):
+                    var_comodin.append(r)
+                elif r.estado in ('Conflicto', 'Disputa'):
+                    var_conflictos.append(r)
+                elif r.estado == 'Ausencia':
+                    var_ausencias.append(r)
+                elif r.estado == 'Paracaidista':
+                    var_paracaidistas.append(r)
         historial = []
         correcciones = []
         # El histórico pagina este total (todo lo ya cerrado, no solo 500 días).
@@ -1118,7 +1130,15 @@ def auditoria_fichajes():
         correcciones_total = (
             RegistroFichaje.query.filter(*filtros_correcciones).count()
         )
-        visible_sections = laboral_auditoria_sections(current_user)
+        visible_sections = set(laboral_auditoria_sections(current_user))
+        obras_comodin_labels = []
+        if not _comodin_ids:
+            visible_sections.discard('comodin')
+        else:
+            obras_comodin_labels = [
+                f"{(o.codigo or '').strip()} — {(o.nombre or '').strip()}".strip(' —')
+                for o in Obra.query.filter(Obra.id.in_(_comodin_ids)).order_by(Obra.codigo.asc()).all()
+            ]
 
         from app.services.fichaje_geo_audit_service import (
             contar_geo_dudosa,
@@ -1161,6 +1181,8 @@ def auditoria_fichajes():
             var_conflictos=var_conflictos,
             var_ausencias=var_ausencias,
             var_paracaidistas=var_paracaidistas,
+            var_comodin=var_comodin,
+            obras_comodin_labels=obras_comodin_labels,
             historial=historial,
             correcciones=correcciones,
             historial_total=historial_total,
@@ -1646,6 +1668,16 @@ def _seccion_auditoria_para_estado(estado: str) -> str:
     if est in ('Ausencia', 'Sin_Registro', 'Retraso'):
         return 'ausencias'
     return 'ausencias'
+
+
+def _seccion_auditoria_para_registro(registro) -> str:
+    """Como ``_seccion_auditoria_para_estado`` pero respeta obras comodín."""
+    from app.services.desvio_fichaje_service import registro_es_comodin
+    if registro is not None and registro_es_comodin(registro):
+        return 'comodin'
+    return _seccion_auditoria_para_estado(
+        getattr(registro, 'estado', None) if registro is not None else None
+    )
 
 
 def _cerrar_hermanos_placeholder(registro, accion, estado_anterior=None):
@@ -2456,7 +2488,9 @@ def reabrir_fichaje():
             target_date=registro.fecha,
         )
         db.session.commit()
-        seccion = _seccion_auditoria_para_estado(previo)
+        # Tras reabrir, el estado vuelve a previo; la sección mira también obra_real
+        # (comodín) sobre el registro ya restaurado.
+        seccion = _seccion_auditoria_para_registro(registro)
         aviso = translate('Clasificación restaurada; vuelve a pendientes.')
         if reasignado:
             aviso = translate(

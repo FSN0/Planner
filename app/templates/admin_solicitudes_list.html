@@ -160,12 +160,12 @@
                 <th class="col-mobile-hide">{{ _('Petición') }}</th>
                 <th class="col-mobile-hide">{{ _('Periodo') }}</th>
                 <th>{{ _('Estado') }}</th>
-                {% if can_resolve_vehiculo %}<th class="text-right">{{ _('Acciones') }}</th>{% endif %}
               </tr>
             </thead>
             <tbody>
               {% for s in solicitudes_vehiculo %}
-              <tr class="data-row">
+              {% set detail_url = url_for('admin.solicitud_vehiculo_detail', solicitud_id=s.id) %}
+              <tr class="data-row" data-row-href="{{ detail_url }}">
                 <td class="col-mobile-omit"><span class="cell-code">#{{ s.id }}</span></td>
                 <td>
                   {% if s.accion == 'DESASIGNAR' %}
@@ -175,9 +175,15 @@
                   {% endif %}
                 </td>
                 <td class="col-identity">
-                  {% if s.vehiculo %}{{ s.vehiculo.label() }}{% else %}<span class="text-muted">—</span>{% endif %}
+                  {% if s.vehiculo %}
+                    {{ s.vehiculo.label() }}
+                  {% elif s.estado in ('PENDIENTE', 'EN_PROCESO') %}
+                    <span class="badge-soft badge-soft-gray">{{ _('Cualquiera') }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
                 </td>
-                <td>
+                <td class="no-row-nav">
                   {% if s.empleado %}
                     <a href="{{ url_for('admin.worker_panel', user_id=s.empleado.id) }}" class="table-link-primary">
                       {{ s.empleado.name }} {{ s.empleado.lastname }}
@@ -207,30 +213,6 @@
                   {% elif est == 'CANCELADA' %}<span class="badge-soft badge-soft-gray">{{ _('Cancelada') }}</span>
                   {% endif %}
                 </td>
-                {% if can_resolve_vehiculo %}
-                <td class="text-right no-row-nav">
-                  {% if s.estado in ('PENDIENTE', 'EN_PROCESO') %}
-                  <form method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=s.id) }}" class="d-inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="decision" value="aceptar">
-                    <button type="submit" class="btn-admin btn-admin-primary" style="font-size: 0.7rem;"
-                            onclick="return confirm({{ _('¿Aprobar y crear asignaciones de vehículo?')|tojson }});">
-                      {{ _('Aprobar') }}
-                    </button>
-                  </form>
-                  <form method="post" action="{{ url_for('admin.resolver_solicitud_vehiculo', solicitud_id=s.id) }}" class="d-inline">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="decision" value="denegar">
-                    <button type="submit" class="btn-admin btn-admin-ghost" style="font-size: 0.7rem;"
-                            onclick="return confirm({{ _('¿Denegar esta solicitud?')|tojson }});">
-                      {{ _('Denegar') }}
-                    </button>
-                  </form>
-                  {% else %}
-                    <span class="text-muted">—</span>
-                  {% endif %}
-                </td>
-                {% endif %}
               </tr>
               {% endfor %}
             </tbody>
@@ -431,6 +413,9 @@
   document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('solicitudesTable')) {
       initClickableTableRows('solicitudesTable');
+    }
+    if (document.getElementById('solicitudesVehiculoTable')) {
+      initClickableTableRows('solicitudesVehiculoTable');
     }
   });
 </script>
