@@ -1,0 +1,105 @@
+{# Cola «Por resolver»: tabla densa, una fila por caso. El detalle se pinta en el panel derecho. #}
+
+{# Aviso del día en curso: no ocupa sitio en la lista; el botón «Hoy en curso» lo despliega. #}
+<div class="aud-hoy-src" hidden data-count="{{ hoy_sin_fichar + avisos_hoy|length }}">
+  <p class="aud-hoy-note">
+    {{ _('Aviso: el día no ha terminado. Si al cerrar sigue sin fichar, pasará a «No fichó».') }}
+  </p>
+  {% if hoy_sin_fichar %}
+    <p class="aud-hoy-line"><strong>{{ hoy_sin_fichar }}</strong> {{ _('plazas planificadas aún sin fichar.') }}</p>
+  {% endif %}
+  {% if avisos_hoy %}
+    <p class="aud-hoy-line">{{ _('Con plan en varias obras y fichaje solo en una:') }}</p>
+    <ul class="aud-hoy-list">
+      {% for a in avisos_hoy %}
+        <li class="fila-fichaje-auditoria" data-user-id="{{ a.user.id }}" data-fecha="{{ hoy.isoformat() }}" title="{{ _('Ver el día completo') }}">
+          <span class="aud-strong">{{ a.user.nombre }}</span>
+          <span class="aud-muted">{{ a.plan.nombre if a.plan else '—' }}{% if a.parcial %} · {{ _('ya fichó en otra') }}{% endif %}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if not hoy_sin_fichar and not avisos_hoy %}
+    <p class="aud-hoy-line">{{ _('Nada pendiente de fichar hoy.') }}</p>
+  {% endif %}
+</div>
+
+<script type="application/json" id="audCasosData">{{ casos_json|tojson }}</script>
+
+{% if not casos %}
+<div class="aud-empty">
+  <i class="far fa-check-circle"></i>
+  <div class="aud-empty-title">{{ _('Todo al día') }}</div>
+  <div class="aud-empty-sub">
+    {{ _('No hay fichajes pendientes de decidir.') }}
+    {% if comodin_count %}{{ _('Hay {n} registros de obras comodín en el historial; no requieren acción.').replace('{n}', comodin_count|string) }}{% endif %}
+  </div>
+</div>
+{% else %}
+<table class="aud-grid" id="audCases">
+  <thead>
+    <tr>
+      <th data-csort="fecha">{{ _('Día') }}</th>
+      <th data-csort="persona">{{ _('Persona') }}</th>
+      <th data-csort="peso">{{ _('Caso') }}</th>
+      <th>{{ _('Planificado') }}</th>
+      <th>{{ _('Fichó') }}</th>
+      <th data-csort="resp">{{ _('Responsable') }}</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in casos %}
+    {% set primera = c.acciones[0] if c.acciones else none %}
+    <tr class="aud-case aud-case--{{ c.tipo }}"
+        id="row-{{ c.id }}"
+        data-case-id="{{ c.id }}"
+        data-tipo="{{ c.tipo }}"
+        data-peso="{{ c.peso }}"
+        data-user-id="{{ c.user_id }}"
+        data-fecha="{{ c.fecha.isoformat() if c.fecha else '' }}"
+        data-geo="{{ 'dudosa' if c.geo_dudosa else '' }}"
+        data-persona="{{ c.user_nombre|lower }}"
+        data-resp="{{ c.responsable|lower }}"
+        data-search="{{ (c.user_nombre ~ ' ' ~ (c.plan.nombre if c.plan else '') ~ ' ' ~ (c.real.nombre if c.real else '') ~ ' ' ~ c.responsable)|lower }}">
+      <td class="aud-nowrap aud-muted">{{ c.fecha.strftime('%d/%m') if c.fecha else '' }}</td>
+      <td class="aud-ell">
+        <a class="aud-link aud-strong" href="{{ url_for('admin.worker_panel', user_id=c.user_id) }}"
+           onclick="event.stopPropagation()" title="{{ _('Abrir ficha de la persona') }}">{{ c.user_nombre }}</a>
+        {% if c.geo_dudosa %}<i class="fas fa-map-marker-alt aud-geo-ico" title="{{ _('Ubicación dudosa') }}"></i>{% endif %}
+      </td>
+      <td class="aud-nowrap"><span class="aud-chip aud-chip--{{ c.tipo }}"{% if c.tipo == 'disputa' %} title="{{ _('Los jefes ya firmaron y no coinciden. Solo oficina.') }}"{% endif %}>{{ _(c.tipo_label) }}</span></td>
+      <td class="aud-ell" title="{{ c.plan.nombre if c.plan else '' }}">
+        {% if c.plan %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=c.plan.id) }}" onclick="event.stopPropagation()">{{ c.plan.nombre }}</a>{% else %}—{% endif %}
+      </td>
+      <td class="aud-ell" title="{{ c.real.nombre if c.real else '' }}">
+        {% if c.real %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=c.real.id) }}" onclick="event.stopPropagation()">{{ c.real.nombre }}</a>{% if c.entrada %} <span class="aud-hours">{{ c.entrada }}</span>{% endif %}
+        {% else %}<span class="aud-none">{{ _('Sin fichaje') }}</span>{% endif %}
+      </td>
+      <td class="aud-ell aud-muted" title="{{ c.responsable }}">
+        {% if c.responsable_id %}<a class="aud-link" href="{{ url_for('admin.worker_panel', user_id=c.responsable_id) }}" onclick="event.stopPropagation()">{{ c.responsable }}</a>{% else %}{{ c.responsable }}{% endif %}
+      </td>
+      <td class="aud-right no-row-nav">
+        {% if primera %}
+          <button type="button" class="aud-btn aud-btn--ghost aud-btn--sm js-audit-resolve"
+                  data-registro-id="{{ c.id }}" data-accion="{{ primera.accion }}"
+                  title="{{ _(primera.title) }}">{{ _(primera.label) }}</button>
+        {% elif c.esperando %}
+          <span class="aud-muted" title="{{ c.esperando }}"><i class="far fa-hourglass"></i></span>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if antiguos %}
+<div class="aud-older">
+  <span>{{ _('Hay {n} casos más antiguos que {d} días sin resolver.').replace('{n}', antiguos|string).replace('{d}', (rango_dias or '')|string) }}</span>
+  <a href="#" class="js-aud-rango" data-rango="todo">{{ _('Ver todos') }}</a>
+</div>
+{% endif %}
+{% if truncado %}
+<div class="aud-older"><span>{{ _('Se muestran los 500 casos más recientes.') }}</span></div>
+{% endif %}

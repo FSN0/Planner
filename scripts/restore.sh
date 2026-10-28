@@ -79,13 +79,16 @@ rm -f "$RESTORE_LOG"
 echo "      → Base de datos restaurada"
 
 # --- Restaurar uploads ---
+# El tar guarda `uploads/...`. No se extrae sobre `/app` porque `uploads` es un
+# volumen montado y tar falla al intentar cambiarle modo/mtime al mount point.
 if [ -f "$UPLOADS_FILE" ]; then
     echo -e "${YELLOW}[3/4] Restaurando uploads...${NC}"
-    # web está parado: arrancar solo para tar, o usar un contenedor efímero
     docker compose -f "$COMPOSE_FILE" start web
     sleep 2
-    docker compose -f "$COMPOSE_FILE" exec -T web rm -rf /app/uploads/*
-    cat "$UPLOADS_FILE" | docker compose -f "$COMPOSE_FILE" exec -T web tar -xzf - -C /app
+    docker compose -f "$COMPOSE_FILE" exec -T web \
+        sh -c 'find /app/uploads -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+    cat "$UPLOADS_FILE" | docker compose -f "$COMPOSE_FILE" exec -T web \
+        tar -xzf - -C /app/uploads --strip-components=1 --no-same-owner --no-same-permissions
     docker compose -f "$COMPOSE_FILE" stop web
     echo "      → Uploads restaurados"
 else

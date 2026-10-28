@@ -13,7 +13,7 @@
         migrate migrate-new backup restore test test-db test-unit test-integration \
         test-ledger test-pwa test-erp test-informe test-pin test-plan test-comercial \
         test-oficina test-onboarding lan-tunnel logs shell db-shell clean init-saas \
-        odoo-creds odoo-creds-prod ship
+        odoo-creds odoo-creds-prod ship agent-readonly
 
 # Detectar compose file según entorno
 DEV_COMPOSE  = docker-compose.yml
@@ -140,6 +140,9 @@ migrate-prod: ## Aplicar migraciones en producción (funciona aunque web esté p
 	docker compose -f $(PROD_COMPOSE) up -d db
 	@sleep 3
 	docker compose -f $(PROD_COMPOSE) run --rm --no-deps web flask db upgrade
+
+agent-readonly: ## Provisiona rol/vistas agent_* (Soltec) y regenera CONECTOR_AGENTE.txt
+	@COMPOSE_FILE=$(PROD_COMPOSE) bash scripts/ensure_agent_readonly.sh
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BACKUPS

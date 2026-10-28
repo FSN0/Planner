@@ -4122,13 +4122,17 @@ def _cert_pdf_cache_dir(schema_name: str | None) -> str:
     return base
 
 
+# Subir al corregir layout (p. ej. hojas en blanco por overlays).
+_CERT_PDF_CACHE_VER = 2
+
+
 def _cert_pdf_fingerprint(prop: CertificacionPropuesta) -> str:
     """Identidad del contenido para invalidar la caché al cambiar estado/líneas."""
     lineas = list(prop.lineas or [])
     horas = sum(float(ln.horas or 0) for ln in lineas)
     aceptar = prop.aceptada_at.isoformat() if prop.aceptada_at else ''
     quien = prop.respondida_por_id or ''
-    return f'{prop.estado}_{aceptar}_{quien}_{len(lineas)}_{horas:.2f}'
+    return f'v{_CERT_PDF_CACHE_VER}_{prop.estado}_{aceptar}_{quien}_{len(lineas)}_{horas:.2f}'
 
 
 def _cert_pdf_cache_path(prop: CertificacionPropuesta, schema_name: str | None) -> str | None:
@@ -4325,8 +4329,8 @@ def html_propuesta(
         schema_name = getattr(tenant, 'schema_name', None) if tenant else None
     grupos = agrupar(prop)
     if overlay_page_count is None:
-        # +1 de margen: mejor una marca de agua de más que quedarse corto.
-        overlay_page_count = _estimate_cert_pages(grupos) + 1
+        # Solo para vista HTML; el PDF mide páginas reales (dos pases).
+        overlay_page_count = _estimate_cert_pages(grupos)
     ctx = _build_cert_pdf_context(
         prop,
         schema_name=schema_name,
@@ -4367,7 +4371,10 @@ def pdf_cache_path_if_ready(
 
 
 def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = None) -> bytes | None:
-    """Genera el PDF (un solo pase wkhtmltopdf). Aceptadas/cerradas se cachean en disco.
+    """Genera el PDF (dos pases wkhtmltopdf). Aceptadas/cerradas se cachean en disco.
+
+    1) Sin capas absolute → contar hojas reales.
+    2) Marca de agua solo en esas hojas (si no, wkhtmltopdf pinta plantilla vacía).
 
     Nunca usa hilos con Qt: wkhtmltopdf se lanza en subprocess con timeout.
     """
@@ -4401,11 +4408,21 @@ def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = Non
 
         opts = _pdfkit_options_cert(header_html_path=header_path)
 
-        # Un solo pase: estimar páginas (marca de agua) evita regenerar el PDF entero.
+        # Sin overlays: las capas absolute (marca de agua) alargaban el HTML
+        # y generaban hojas solo con franja/plantilla.
+        probe_html = html_propuesta(
+            prop,
+            schema_name=schema_name,
+            overlay_page_count=0,
+            include_inline_banner=False,
+        )
+        page_count = _count_pdf_pages(
+            _render_wkhtml_pdf(probe_html, opts, timeout=CERT_PDF_TIMEOUT_SEC)
+        )
         final_html = html_propuesta(
             prop,
             schema_name=schema_name,
-            overlay_page_count=None,
+            overlay_page_count=page_count,
             include_inline_banner=False,
         )
         pdf_bytes = _render_wkhtml_pdf(final_html, opts, timeout=CERT_PDF_TIMEOUT_SEC)
@@ -4429,8 +4446,9 @@ def pdf_propuesta(prop: CertificacionPropuesta, *, schema_name: str | None = Non
                 pass
 
         current_app.logger.info(
-            'cert PDF: generado prop_id=%s en %.0fms size=%s cache=%s',
+            'cert PDF: generado prop_id=%s pages=%s en %.0fms size=%s cache=%s',
             getattr(prop, 'id', None),
+            page_count,
             (time.perf_counter() - t0) * 1000,
             len(pdf_bytes),
             bool(cache_path),

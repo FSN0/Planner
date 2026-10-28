@@ -11,6 +11,9 @@
     {% elif st == 'Cambio_Tajo' %}
         {% set dot_class = 'dot-auto' %}
         {% set dot_title = _('Cambio de tajo') %}
+    {% elif st == 'Aceptado_Odoo' %}
+        {% set dot_class = 'dot-auto' %}
+        {% set dot_title = _('Sin planificar (aceptado desde Odoo)') %}
     {% elif st == 'Exento_Ausencia' %}
         {% set dot_class = '' %}
         {% set ns_dot.style = 'background:#7c3aed;' %}
@@ -18,7 +21,7 @@
     {% elif st == 'Sobreescrito_RRHH' %}
         {% set dot_class = '' %}
         {% set ns_dot.style = 'background:#7c3aed;' %}
-        {% set dot_title = _('Corregido por RRHH / ERP') %}
+        {% set dot_title = _('Corregido en Odoo') %}
     {% elif st == 'Ausencia' or st == 'Pendiente' or st == 'Retraso' %}
         {% set dot_class = 'dot-warning' %}
         {% set dot_title = _(st) %}

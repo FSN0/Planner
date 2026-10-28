@@ -102,6 +102,141 @@ def _format_fichaje_log_detail(
     return detail
 
 
+def _sembrar_patas_plan(fecha_obj):
+    """Una fila `Sin_Registro` por cada asignación del día que aún no tiene registro."""
+    from app.models import Asignacion, RegistroFichaje
+    from app.services.leave_service import user_has_approved_leave
+
+    for asig in Asignacion.query.filter_by(fecha=fecha_obj).all():
+        registro = RegistroFichaje.query.filter_by(
+            user_id=asig.user_id,
+            fecha=fecha_obj,
+            obra_planificada_id=asig.obra_id,
+        ).first()
+        if registro:
+            continue
+        # Ya fichó / resolvió en esa obra (p. ej. Paracaidista aceptado):
+        # no sembrar Sin_Registro→Ausencia fantasma.
+        ya_en_obra = RegistroFichaje.query.filter(
+            RegistroFichaje.user_id == asig.user_id,
+            RegistroFichaje.fecha == fecha_obj,
+            RegistroFichaje.obra_real_id == asig.obra_id,
+        ).first()
+        if ya_en_obra:
+            if not ya_en_obra.obra_planificada_id:
+                ya_en_obra.obra_planificada_id = asig.obra_id
+            continue
+        estado_ini = (
+            'Exento_Ausencia'
+            if user_has_approved_leave(asig.user_id, fecha_obj)
+            else 'Sin_Registro'
+        )
+        db.session.add(RegistroFichaje(
+            user_id=asig.user_id,
+            fecha=fecha_obj,
+            obra_planificada_id=asig.obra_id,
+            estado=estado_ini,
+            notas_resolucion=(
+                'Exento: ausencia planificada aprobada (Odoo/manual).'
+                if estado_ini == 'Exento_Ausencia' else None
+            ),
+        ))
+        db.session.flush()
+
+
+def _es_casa_inercia(user_id, obra_id, fecha_obj):
+    """True si estar en `obra_id` ese día es lo esperado por inercia (sin plan en otras obras)."""
+    from app.models import Asignacion
+    from app.services.inercia_service import casa_en_fecha
+
+    otras = Asignacion.query.filter(
+        Asignacion.user_id == user_id,
+        Asignacion.fecha == fecha_obj,
+        Asignacion.obra_id != obra_id,
+    ).first()
+    if otras:
+        return False
+    return casa_en_fecha(user_id, fecha_obj) == obra_id
+
+
+def _procesar_fichaje_dia_corregido(
+    local_user, local_obra, fecha_obj, f, check_in_dt, check_out_dt, *, plan_exacto,
+):
+    """Fichaje de Odoo en un día que RRHH ya corrigió. Devuelve True si lo gestiona aquí.
+
+    - Planificado en esa obra: no se gestiona aquí (queda `Correcto`).
+    - No planificado: se acepta tal cual como `Aceptado_Odoo` (igual que aceptarlo a
+      mano: se asigna a la obra), sin generar desvío ni notificación.
+    """
+    from app.models import Asignacion, RegistroFichaje, SystemLog
+    from app.services.core_assignment_service import CoreAssignmentService
+    from app.services.desvio_fichaje_service import ESTADO_ACEPTADO_ODOO
+
+    filas = RegistroFichaje.query.filter_by(
+        user_id=local_user.id, fecha=fecha_obj, obra_real_id=local_obra.id,
+    ).all()
+    gestionada = False
+    for r in filas:
+        if r.estado == ESTADO_ACEPTADO_ODOO:
+            r.check_in = check_in_dt
+            r.check_out = check_out_dt
+            r.nota_odoo = _merge_fichaje_notes(r.nota_odoo, f.get('note'))
+            _apply_odoo_metrics(r, f)
+            gestionada = True
+        elif r.estado in ('Correcto_Automatico', 'Paracaidista'):
+            r.estado = ESTADO_ACEPTADO_ODOO
+            r.obra_planificada_id = None
+            r.notas_resolucion = 'Sin planificar: aceptado desde Odoo (RRHH corrigió el día).'
+            r.fecha_auditoria = utc_now()
+            r.check_in = check_in_dt
+            r.check_out = check_out_dt
+            _apply_odoo_metrics(r, f)
+            gestionada = True
+    if gestionada:
+        return True
+    if plan_exacto:
+        return False
+    if filas:
+        # Patas del plan (Conflicto…) con este fichaje: las cierra aplicar_correccion_odoo_dia.
+        return True
+    if _es_casa_inercia(local_user.id, local_obra.id, fecha_obj):
+        return False
+
+    nuevo = RegistroFichaje(
+        user_id=local_user.id,
+        fecha=fecha_obj,
+        obra_planificada_id=None,
+        obra_real_id=local_obra.id,
+        estado=ESTADO_ACEPTADO_ODOO,
+        check_in=check_in_dt,
+        check_out=check_out_dt,
+        nota_odoo=f.get('note'),
+        notas_resolucion='Sin planificar: aceptado desde Odoo (RRHH corrigió el día).',
+        fecha_auditoria=utc_now(),
+    )
+    db.session.add(nuevo)
+    _apply_odoo_metrics(nuevo, f)
+    obra_label = CoreAssignmentService.format_obra_label(local_obra)
+    db.session.add(SystemLog(
+        timestamp=check_in_dt or utc_now(),
+        category='fichaje_app',
+        action='Fichaje [Aceptado desde Odoo]',
+        detail=_format_fichaje_log_detail(
+            obra_label, check_in_dt, check_out_dt, f.get('note'),
+        ) + ' Sin planificar: aceptado desde Odoo (corrección de RRHH).',
+        target_user_id=local_user.id,
+        target_date=fecha_obj,
+    ))
+    if not Asignacion.query.filter_by(
+        user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id,
+    ).first():
+        CoreAssignmentService.asignar(
+            local_user.id, local_obra.id, fecha_obj, None,
+            'Aceptado desde Odoo (corrección de RRHH)',
+        )
+    return True
+
+
 def procesar_fichajes_diarios(fecha_str=None):
     """
     Motor central de validación de fichajes.
@@ -213,42 +348,7 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                 fichajes_unicos[key].get('estado_odoo'), f.get('estado_odoo')
             )
 
-    todas_asig = Asignacion.query.filter_by(fecha=fecha_obj).all()
-    from app.services.leave_service import user_has_approved_leave
-    for asig in todas_asig:
-        registro = RegistroFichaje.query.filter_by(
-            user_id=asig.user_id,
-            fecha=fecha_obj,
-            obra_planificada_id=asig.obra_id,
-        ).first()
-        if not registro:
-            # Ya fichó / resolvió en esa obra (p. ej. Paracaidista aceptado):
-            # no sembrar Sin_Registro→Ausencia fantasma.
-            ya_en_obra = RegistroFichaje.query.filter(
-                RegistroFichaje.user_id == asig.user_id,
-                RegistroFichaje.fecha == fecha_obj,
-                RegistroFichaje.obra_real_id == asig.obra_id,
-            ).first()
-            if ya_en_obra:
-                if not ya_en_obra.obra_planificada_id:
-                    ya_en_obra.obra_planificada_id = asig.obra_id
-                continue
-            estado_ini = (
-                'Exento_Ausencia'
-                if user_has_approved_leave(asig.user_id, fecha_obj)
-                else 'Sin_Registro'
-            )
-            db.session.add(RegistroFichaje(
-                user_id=asig.user_id,
-                fecha=fecha_obj,
-                obra_planificada_id=asig.obra_id,
-                estado=estado_ini,
-                notas_resolucion=(
-                    'Exento: ausencia planificada aprobada (Odoo/manual).'
-                    if estado_ini == 'Exento_Ausencia' else None
-                ),
-            ))
-            db.session.flush()
+    _sembrar_patas_plan(fecha_obj)
 
     # Inercia (casa) NO siembra Sin_Registro/Ausencia: solo clasifica fichajes
     # reales. Sin asignación firme ese día → no se espera a nadie ahí.
@@ -282,10 +382,17 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
             obras_odoo_del_usuario.extend(obras_por_usuario_odoo.get(str(oid_u), []))
 
         if str(odoo_obra_id) not in obras_odoo_del_usuario:
+            estado_anterior = reg_local.estado
+            plan_id_reg = reg_local.obra_planificada_id
+            # Estaba planificado ahí y cumplió: Odoo dice que no estuvo → el plan
+            # se conserva y esa pata acaba en falta automática (no se borra el plan).
+            conservar_plan = bool(
+                plan_id_reg == o_real.id and estado_anterior == 'Correcto'
+            )
             asig_fantasma = Asignacion.query.filter_by(
                 user_id=u_local.id, fecha=fecha_obj, obra_id=o_real.id
             ).first()
-            if asig_fantasma:
+            if asig_fantasma and not conservar_plan:
                 CoreAssignmentService.desasignar(
                     u_local.id, o_real.id, fecha_obj, 1,
                     "Fichaje Anulado por Odoo",
@@ -309,17 +416,29 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                         accion = "Modificado de Obra"
                     break
 
-            estado_anterior = reg_local.estado
+            # Campo 9: obra de plan que tenía esta fila (trazabilidad plan vs Odoo).
             datos_string = (
                 f"{o_real.id}||{o_real.codigo or ''}||{o_real.nombre}||"
                 f"{o_nueva_id}||{o_nueva_cod}||{o_nueva_nom}||{accion}||{estado_anterior}"
+                f"||{plan_id_reg or ''}"
             )
 
             reg_local.estado = 'Sobreescrito_RRHH'
             reg_local.obra_real_id = None
             reg_local.notas_resolucion = datos_string
+            # Si la fila era la pata del plan (desvío Z→X, o plan conservado), se
+            # libera la clave para que la pata se re-siembre y se evalúe aparte.
+            if plan_id_reg and (plan_id_reg != o_real.id or conservar_plan):
+                reg_local.obra_planificada_id = None
 
     db.session.flush()
+    # Patas del plan que antes colgaban de una fila ahora sobrescrita.
+    _sembrar_patas_plan(fecha_obj)
+    from app.services.desvio_fichaje_service import (
+        aplicar_correccion_odoo_dia,
+        usuarios_con_correccion_odoo,
+    )
+    usuarios_corregidos = usuarios_con_correccion_odoo(fecha_obj)
 
     desvios_a_notificar = []
 
@@ -342,6 +461,14 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
         plan_exacto = Asignacion.query.filter_by(
             user_id=local_user.id, fecha=fecha_obj, obra_id=local_obra.id
         ).first()
+
+        # Odoo manda: si RRHH corrigió el día, el fichaje no planificado se acepta
+        # tal cual (sin desvío ni acción) y queda marcado como «sin planificar».
+        if local_user.id in usuarios_corregidos and _procesar_fichaje_dia_corregido(
+            local_user, local_obra, fecha_obj, f, check_in_dt, check_out_dt,
+            plan_exacto=bool(plan_exacto),
+        ):
+            continue
 
         nuevo_estado = ''
         nuevo_plan_id = None
@@ -501,6 +628,14 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
                     "Auto-asignación por Fichaje Físico",
                 )
 
+    # Odoo manda: en días ya cerrados que RRHH corrigió, las patas del plan que
+    # siguen abiertas pasan solas a Falta (como pulsar «Confirmar falta»).
+    if usuarios_corregidos and fecha_obj < today_local():
+        db.session.flush()
+        for uid in usuarios_corregidos:
+            aplicar_correccion_odoo_dia(uid, fecha_obj)
+        db.session.flush()
+
     # Días cerrados: Sin_Registro → Ausencia.
     # Hoy: solo tras la hora límite de entrada; si ficha después, se autorresuelve.
     from app.services.desvio_fichaje_service import (
@@ -528,6 +663,8 @@ def _procesar_fichajes_diarios_impl(fecha_obj, fecha_str):
         vistos = set()
         reales_avisados = set()
         for reg in desvios_a_notificar:
+            if reg.user_id in usuarios_corregidos:
+                continue  # RRHH ya corrigió ese día en Odoo: nada que avisar
             key = (reg.user_id, reg.fecha, reg.obra_planificada_id, reg.obra_real_id)
             if key in vistos:
                 continue

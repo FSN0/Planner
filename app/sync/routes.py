@@ -1051,111 +1051,159 @@ def commit_empleados():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
     
+# Periodo compartido entre Por resolver / Cumplimiento / Historial.
+_RANGOS_AUDITORIA = {'7': 7, '30': 30, '90': 90, '180': 180}
+_RANGO_AUDITORIA_DEFECTO = '30'
+# «Sin límite» en cumplimiento: tope práctico para no tumbar el agregado.
+_CUMPLIMIENTO_TODO_DIAS = 730
+# Compatibilidad con nombres antiguos.
+_RANGOS_COLA = _RANGOS_AUDITORIA
+_RANGO_COLA_DEFECTO = _RANGO_AUDITORIA_DEFECTO
+_RANGOS_CUMPLIMIENTO = dict(_RANGOS_AUDITORIA)
+
+
+def _auditoria_accesible():
+    from app.services.permission_service import user_can
+    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+    return user_can(current_user, 'auditoria_fichajes', 'r') and tenant_muestra_auditoria_fichajes()
+
+
+def _scope_auditoria():
+    return registro_fichaje_scope_clause(current_user, PANEL_AUDITORIA_FICHAJES)
+
+
+def _contexto_cola(rango):
+    """Casos pendientes (uno por persona-día y tipo) + avisos del día en curso."""
+    from flask import current_app
+    from app.services import auditoria_casos_service as acs
+    from app.services.desvio_fichaje_service import enriquecer_pendientes_desvio
+    from app.services.fichaje_geo_audit_service import entrada_geo_por_registros
+    from app.services.geocerca_service import geocerca_activa
+    from app.utils.timezone_utils import today_local
+
+    hoy = today_local()
+    scope = _scope_auditoria()
+    filtros = [RegistroFichaje.estado.in_(acs.ESTADOS_PENDIENTES)]
+    if scope is not None:
+        filtros.append(scope)
+
+    antiguos = 0
+    if rango != 'todo':
+        limite = hoy - timedelta(days=_RANGOS_COLA.get(rango, 30))
+        antiguos = RegistroFichaje.query.filter(*filtros, RegistroFichaje.fecha < limite).count()
+        filtros.append(RegistroFichaje.fecha >= limite)
+
+    pendientes = (
+        RegistroFichaje.query
+        .options(*_AUDITORIA_EAGER)
+        .filter(*filtros)
+        .order_by(RegistroFichaje.fecha.desc())
+        .limit(_AUDITORIA_PENDIENTES_LIMIT)
+        .all()
+    )
+    try:
+        pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
+    except Exception:
+        current_app.logger.exception('enriquecer_pendientes_desvio falló; se muestran sin UI desvío')
+
+    geo = entrada_geo_por_registros(list(pendientes))
+    cola = acs.construir_cola(
+        pendientes, current_user,
+        hoy=hoy,
+        puede_resolver=can_resolve_fichajes(current_user),
+        geo_por_registro=geo,
+    )
+
+    q_hoy = RegistroFichaje.query.filter(
+        RegistroFichaje.fecha == hoy, RegistroFichaje.estado == 'Sin_Registro',
+    )
+    if scope is not None:
+        q_hoy = q_hoy.filter(scope)
+
+    casos = cola['casos']
+    return {
+        'casos': casos,
+        'casos_json': [acs.caso_a_json(c) for c in casos],
+        'avisos_hoy': cola['avisos_hoy'],
+        'comodin_count': len(cola['comodin']),
+        'hoy_sin_fichar': q_hoy.count(),
+        'antiguos': antiguos,
+        'rango': rango,
+        'rango_dias': _RANGOS_COLA.get(rango),
+        'geo_dudosa_count': sum(1 for c in casos if c.get('geo_dudosa')),
+        'muestra_geo_audit': geocerca_activa(),
+        'hoy': hoy,
+        'truncado': len(pendientes) >= _AUDITORIA_PENDIENTES_LIMIT,
+    }
+
+
+def _kpis_auditoria(hoy):
+    """Cifras de cabecera: último día cerrado y decisiones recientes."""
+    from app import db
+
+    scope = _scope_auditoria()
+    base = [
+        RegistroFichaje.obra_planificada_id.isnot(None),
+        RegistroFichaje.estado.notin_(('Exento_Ausencia', 'Sin_Registro')),
+    ]
+    if scope is not None:
+        base.append(scope)
+
+    ultimo = (
+        db.session.query(func.max(RegistroFichaje.fecha))
+        .filter(RegistroFichaje.fecha < hoy, *base)
+        .scalar()
+    )
+    planificados = cumplen = 0
+    if ultimo:
+        q = RegistroFichaje.query.filter(RegistroFichaje.fecha == ultimo, *base)
+        planificados = q.count()
+        cumplen = q.filter(RegistroFichaje.estado.in_(('Correcto', 'Retraso'))).count()
+
+    q_res = RegistroFichaje.query.filter(
+        RegistroFichaje.resuelto_por_id.isnot(None),
+        RegistroFichaje.fecha_auditoria >= datetime.utcnow() - timedelta(days=7),
+    )
+    if scope is not None:
+        q_res = q_res.filter(scope)
+
+    return {
+        'ultimo_dia': ultimo,
+        'ultimo_dia_txt': ultimo.strftime('%d/%m') if ultimo else '',
+        'planificados': planificados,
+        'cumplen': cumplen,
+        'cumplimiento': round(100.0 * cumplen / planificados) if planificados else None,
+        'resueltos_7d': q_res.count(),
+    }
+
+
 @sync_bp.route('/auditoria')
 @login_required
 def auditoria_fichajes():
     from flask import current_app
     from app.services.permission_service import user_can
-    from app.services.fichaje_operario_service import (
-        tenant_muestra_auditoria_fichajes,
-        tenant_tiene_fichaje_operario_module,
-    )
-    if not user_can(current_user, 'auditoria_fichajes', 'r') or not tenant_muestra_auditoria_fichajes():
+    from app.services.fichaje_operario_service import tenant_tiene_fichaje_operario_module
+
+    if not _auditoria_accesible():
         flash("Acceso denegado.", "danger")
         return redirect(url_for('main.dashboard'))
 
     try:
-        # 1. FILTROS BASE MÚLTIPLES
-        filtros_pendientes = [RegistroFichaje.estado.in_(
-            ['Conflicto', 'Disputa', 'Paracaidista', 'Ausencia']
-        )]
-        filtros_historial = [_clausula_en_historial()]
-        filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH']
+        rango = (request.args.get('rango') or _RANGO_COLA_DEFECTO).strip()
+        if rango not in _RANGOS_COLA and rango != 'todo':
+            rango = _RANGO_COLA_DEFECTO
+        ctx = _contexto_cola(rango)
 
-        # 2. Alcance de obras (matriz: panel auditoría de fichajes)
-        scope_clause = registro_fichaje_scope_clause(current_user, PANEL_AUDITORIA_FICHAJES)
-        if scope_clause is not None:
-            filtros_pendientes.append(scope_clause)
-            filtros_historial.append(scope_clause)
-            filtros_correcciones.append(scope_clause)
+        # Enlaces antiguos (notificaciones, paneles): seccion / registro_id / user_id / fecha.
+        seccion = (request.args.get('seccion') or '').strip()
+        registro_id = request.args.get('registro_id', type=int)
+        tab = (request.args.get('tab') or '').strip()
+        if tab not in ('resolver', 'cumplimiento', 'historial'):
+            tab = 'historial' if seccion in ('historial', 'correcciones', 'odoo') else 'resolver'
 
-        # 3. Solo pendientes en la carga inicial (historial/correcciones = lazy).
-        # Evita timeout «Esta página no funciona» a la primera visita.
-        pendientes = (
-            RegistroFichaje.query
-            .options(*_AUDITORIA_EAGER)
-            .filter(*filtros_pendientes)
-            .order_by(RegistroFichaje.fecha.desc())
-            .limit(_AUDITORIA_PENDIENTES_LIMIT)
-            .all()
-        )
-        from app.services.desvio_fichaje_service import enriquecer_pendientes_desvio
-        try:
-            pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
-        except Exception:
-            current_app.logger.exception('enriquecer_pendientes_desvio falló; se muestran sin UI desvío')
-        from app.services.desvio_fichaje_service import (
-            obras_comodin_ids,
-            repartir_secciones_auditoria,
-        )
-        _comodin_ids = obras_comodin_ids()
-        try:
-            _secciones = repartir_secciones_auditoria(pendientes, comodin_ids=_comodin_ids)
-            var_conflictos = _secciones['conflictos']
-            var_ausencias = _secciones['ausencias']
-            var_paracaidistas = _secciones['paracaidistas']
-            var_comodin = _secciones.get('comodin') or []
-        except Exception:
-            current_app.logger.exception('repartir_secciones_auditoria falló')
-            from app.services.desvio_fichaje_service import registro_es_comodin as _reg_comodin
-            var_conflictos = []
-            var_ausencias = []
-            var_paracaidistas = []
-            var_comodin = []
-            for r in pendientes:
-                if _reg_comodin(r, _comodin_ids):
-                    var_comodin.append(r)
-                elif r.estado in ('Conflicto', 'Disputa'):
-                    var_conflictos.append(r)
-                elif r.estado == 'Ausencia':
-                    var_ausencias.append(r)
-                elif r.estado == 'Paracaidista':
-                    var_paracaidistas.append(r)
-        historial = []
-        correcciones = []
-        # El histórico pagina este total (todo lo ya cerrado, no solo 500 días).
-        historial_total = (
-            RegistroFichaje.query.filter(*filtros_historial).count()
-        )
-        correcciones_total = (
-            RegistroFichaje.query.filter(*filtros_correcciones).count()
-        )
-        visible_sections = set(laboral_auditoria_sections(current_user))
-        obras_comodin_labels = []
-        if not _comodin_ids:
-            visible_sections.discard('comodin')
-        else:
-            obras_comodin_labels = [
-                f"{(o.codigo or '').strip()} — {(o.nombre or '').strip()}".strip(' —')
-                for o in Obra.query.filter(Obra.id.in_(_comodin_ids)).order_by(Obra.codigo.asc()).all()
-            ]
-
-        from app.services.fichaje_geo_audit_service import (
-            contar_geo_dudosa,
-            entrada_geo_por_registros,
-        )
-        from app.services.geocerca_service import geocerca_activa
-
-        geo_por_registro = entrada_geo_por_registros(list(pendientes))
-        geo_dudosa_count = contar_geo_dudosa(geo_por_registro)
-        muestra_geo_audit = geocerca_activa()
-
-        trabajadores_marca = []
-        obras_marca = []
-        es_oficina_auditoria = (
-            user_panel_mode(current_user, PANEL_AUDITORIA_FICHAJES) == 'office'
-        )
-        if can_resolve_fichajes(current_user) and es_oficina_auditoria:
+        es_oficina = user_panel_mode(current_user, PANEL_AUDITORIA_FICHAJES) == 'office'
+        trabajadores_marca, obras_marca = [], []
+        if can_resolve_fichajes(current_user) and es_oficina:
             trabajadores_marca = (
                 User.query
                 .filter(
@@ -1177,29 +1225,20 @@ def auditoria_fichajes():
 
         return render_template(
             'sync/auditoria.html',
-            pendientes=pendientes,
-            var_conflictos=var_conflictos,
-            var_ausencias=var_ausencias,
-            var_paracaidistas=var_paracaidistas,
-            var_comodin=var_comodin,
-            obras_comodin_labels=obras_comodin_labels,
-            historial=historial,
-            correcciones=correcciones,
-            historial_total=historial_total,
-            correcciones_total=correcciones_total,
-            auditoria_lazy=True,
-            auditoria_sections=visible_sections,
-            visible_sections=visible_sections,
+            **ctx,
+            kpis=_kpis_auditoria(ctx['hoy']),
+            tab_inicial=tab,
+            focus_registro_id=registro_id,
+            focus_user_id=request.args.get('user_id', type=int),
+            focus_fecha=(request.args.get('fecha') or '').strip()[:10],
+            historial_q_inicial=str(registro_id) if (tab == 'historial' and registro_id) else '',
             can_resolve=can_resolve_fichajes(current_user),
             can_resolve_fichajes=can_resolve_fichajes(current_user),
-            es_oficina_auditoria=es_oficina_auditoria,
+            es_oficina_auditoria=es_oficina,
             can_unassign_cuadrante_pasado=can_unassign_cuadrante_pasado(current_user),
             can_sync_fichajes=user_can(current_user, 'auditoria_fichajes', 'w') or user_can(current_user, 'sync_odoo', 'w'),
             trabajadores_marca=trabajadores_marca,
             obras_marca=obras_marca,
-            geo_por_registro=geo_por_registro,
-            geo_dudosa_count=geo_dudosa_count,
-            muestra_geo_audit=muestra_geo_audit,
             puede_ver_mapa_fichajes=(
                 user_can(current_user, 'mapa_fichajes', 'r')
                 and tenant_tiene_fichaje_operario_module()
@@ -1211,35 +1250,64 @@ def auditoria_fichajes():
         return redirect(url_for('main.dashboard'))
 
 
-def _clausula_en_historial():
-    """Cerrados, y también un desvío al que ya le han decidido un lado.
+@sync_bp.route('/auditoria/cola', methods=['GET'])
+@login_required
+def auditoria_cola():
+    """Fragmento de «Por resolver»: se refresca tras cada decisión sin recargar la página."""
+    from flask import current_app
 
-    Confirmar falta en el plan deja el estado en Conflicto hasta que se acepta
-    el fichaje del otro lado. Esa decisión tiene que poder reabrirse.
-    """
-    fuera = (
-        'Conflicto', 'Disputa', 'Paracaidista', 'Ausencia',
-        'Sin_Registro', 'Sobreescrito_RRHH',
-    )
-    cerrado = ~RegistroFichaje.estado.in_(fuera)
-    parcial = and_(
-        RegistroFichaje.estado.in_(('Conflicto', 'Disputa')),
-        or_(
-            RegistroFichaje.desvio_ack_plan_at.isnot(None),
-            RegistroFichaje.desvio_ack_real_at.isnot(None),
-        ),
-    )
-    return or_(cerrado, parcial)
+    if not _auditoria_accesible():
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
+    try:
+        rango = (request.args.get('rango') or _RANGO_COLA_DEFECTO).strip()
+        if rango not in _RANGOS_COLA and rango != 'todo':
+            rango = _RANGO_COLA_DEFECTO
+        ctx = _contexto_cola(rango)
+        html = render_template(
+            'sync/_auditoria_cola.html',
+            **ctx,
+            can_resolve_fichajes=can_resolve_fichajes(current_user),
+        )
+        kpis = _kpis_auditoria(ctx['hoy'])
+        return jsonify({
+            'success': True,
+            'html': html,
+            'count': len(ctx['casos']),
+            'avisos': len(ctx['avisos_hoy']),
+            'comodin_count': ctx['comodin_count'],
+            'resueltos_7d': kpis['resueltos_7d'],
+        })
+    except Exception:
+        current_app.logger.exception('Fallo al refrescar la cola de auditoría')
+        return jsonify({'success': False, 'error': translate('No se pudo cargar la sección')}), 500
 
 
-def _auditoria_filtros_jefe():
-    filtros_historial = [_clausula_en_historial()]
-    filtros_correcciones = [RegistroFichaje.estado == 'Sobreescrito_RRHH']
-    scope_clause = registro_fichaje_scope_clause(current_user, PANEL_AUDITORIA_FICHAJES)
-    if scope_clause is not None:
-        filtros_historial.append(scope_clause)
-        filtros_correcciones.append(scope_clause)
-    return filtros_historial, filtros_correcciones
+@sync_bp.route('/auditoria/cumplimiento', methods=['GET'])
+@login_required
+def auditoria_cumplimiento():
+    """Cumplimiento del plan y calidad de planificación (agregados)."""
+    from flask import current_app
+    from app.services.auditoria_cumplimiento_service import calcular_cumplimiento
+    from app.utils.timezone_utils import today_local
+
+    if not _auditoria_accesible():
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
+    try:
+        raw = (request.args.get('dias') or _RANGO_AUDITORIA_DEFECTO).strip()
+        if raw == 'todo':
+            dias = _CUMPLIMIENTO_TODO_DIAS
+        else:
+            dias = _RANGOS_AUDITORIA.get(raw, int(_RANGO_AUDITORIA_DEFECTO))
+        hoy = today_local()
+        data = calcular_cumplimiento(
+            hoy - timedelta(days=dias), hoy - timedelta(days=1),
+            scope_clause=_scope_auditoria(), hoy=hoy,
+            q=(request.args.get('q') or '').strip(),
+        )
+        return jsonify({'success': True, **data})
+    except Exception:
+        current_app.logger.exception('Fallo al calcular cumplimiento de fichajes')
+        return jsonify({'success': False, 'error': translate('No se pudo cargar la sección')}), 500
 
 
 def _auditoria_visible_para_jefe(registro):
@@ -1316,107 +1384,6 @@ def _aplicar_busqueda_historial(query, q_text):
     return query.filter(or_(*clauses))
 
 
-_ORIGENES_HISTORIAL = ('ausencia', 'sin_planificar', 'desvio', 'cumplio', 'decisiones')
-
-
-def _origen_historial(registro):
-    """De qué cola salió la línea: ausencia, fichaje sin planificar o desvío."""
-    estado = (registro.estado or '').strip()
-    previo = (registro.estado_antes_resolucion or '').strip()
-    plan_id = registro.obra_planificada_id
-    real_id = registro.obra_real_id
-    decision_plan = (registro.desvio_decision_plan or '').strip()
-    decision_real = (registro.desvio_decision_real or '').strip()
-    if (
-        estado in ('Conflicto', 'Disputa', 'Resuelto_Movido', 'Resuelto_Dividido', 'Cambio_Tajo')
-        or previo in ('Conflicto', 'Disputa')
-        or decision_plan or decision_real
-        or registro.desvio_ack_plan_at or registro.desvio_ack_real_at
-    ):
-        return 'desvio'
-    if (
-        estado in ('Paracaidista', 'Resuelto_Asignado')
-        or previo == 'Paracaidista'
-        or (
-            estado == 'Resuelto_Ignorado'
-            and real_id and not plan_id
-        )
-    ):
-        return 'sin_planificar'
-    if estado in ('Correcto', 'Correcto_Automatico'):
-        return 'cumplio'
-    if (
-        estado in ('Falta', 'Resuelto_Ausencia', 'Resuelto_Falta', 'Ausencia', 'Sin_Registro', 'Retraso')
-        or previo in ('Ausencia', 'Sin_Registro', 'Retraso')
-        or (plan_id and not real_id)
-    ):
-        return 'ausencia'
-    if real_id and not plan_id:
-        return 'sin_planificar'
-    if plan_id and real_id and plan_id != real_id:
-        return 'desvio'
-    return 'cumplio'
-
-
-def _expr_origen_historial():
-    """Misma clasificación que ``_origen_historial``, para filtrar y ordenar en SQL."""
-    plan_id = RegistroFichaje.obra_planificada_id
-    real_id = RegistroFichaje.obra_real_id
-    decision_plan = func.nullif(func.trim(RegistroFichaje.desvio_decision_plan), '')
-    decision_real = func.nullif(func.trim(RegistroFichaje.desvio_decision_real), '')
-    desvio = or_(
-        RegistroFichaje.estado.in_((
-            'Conflicto', 'Disputa', 'Resuelto_Movido', 'Resuelto_Dividido', 'Cambio_Tajo',
-        )),
-        RegistroFichaje.estado_antes_resolucion.in_(('Conflicto', 'Disputa')),
-        decision_plan.isnot(None),
-        decision_real.isnot(None),
-        RegistroFichaje.desvio_ack_plan_at.isnot(None),
-        RegistroFichaje.desvio_ack_real_at.isnot(None),
-    )
-    sin_plan = or_(
-        RegistroFichaje.estado.in_(('Paracaidista', 'Resuelto_Asignado')),
-        RegistroFichaje.estado_antes_resolucion == 'Paracaidista',
-        and_(
-            RegistroFichaje.estado == 'Resuelto_Ignorado',
-            real_id.isnot(None),
-            plan_id.is_(None),
-        ),
-    )
-    cumplio = RegistroFichaje.estado.in_(('Correcto', 'Correcto_Automatico'))
-    ausencia = or_(
-        RegistroFichaje.estado.in_((
-            'Falta', 'Resuelto_Ausencia', 'Resuelto_Falta',
-            'Ausencia', 'Sin_Registro', 'Retraso',
-        )),
-        RegistroFichaje.estado_antes_resolucion.in_(('Ausencia', 'Sin_Registro', 'Retraso')),
-        and_(plan_id.isnot(None), real_id.is_(None)),
-    )
-    return case(
-        (desvio, 'desvio'),
-        (sin_plan, 'sin_planificar'),
-        (cumplio, 'cumplio'),
-        (ausencia, 'ausencia'),
-        (and_(real_id.isnot(None), plan_id.is_(None)), 'sin_planificar'),
-        (and_(plan_id.isnot(None), real_id.isnot(None), plan_id != real_id), 'desvio'),
-        else_='cumplio',
-    )
-
-
-def _momento_auditoria_historial(registro):
-    """Cuándo se tomó la decisión, no cuándo se creó el desvío."""
-    candidatos = []
-    if registro.desvio_ack_plan_at:
-        candidatos.append(registro.desvio_ack_plan_at)
-    if registro.desvio_ack_real_at:
-        candidatos.append(registro.desvio_ack_real_at)
-    if (registro.estado or '') not in ('Conflicto', 'Disputa') and registro.fecha_auditoria:
-        candidatos.append(registro.fecha_auditoria)
-    elif not candidatos and registro.fecha_auditoria:
-        candidatos.append(registro.fecha_auditoria)
-    return max(candidatos) if candidatos else None
-
-
 def _expr_momento_auditoria():
     from sqlalchemy import case as sql_case
     cerrado = sql_case(
@@ -1430,7 +1397,7 @@ def _expr_momento_auditoria():
     )
 
 
-def _aplicar_orden_historial(query, sort_key, direction):
+def _aplicar_orden_historial(query, sort_key, direction, expr_origen=None):
     """Orden SQL de todo el histórico. La página solo recorta después."""
     from sqlalchemy import asc, desc, func, nullslast
     from sqlalchemy.orm import aliased
@@ -1459,7 +1426,7 @@ def _aplicar_orden_historial(query, sort_key, direction):
         query = query.outerjoin(auditor, auditor.id == RegistroFichaje.resuelto_por_id)
         col = func.lower(func.coalesce(auditor.name, ''))
     elif key == 'origen':
-        col = _expr_origen_historial()
+        col = expr_origen if expr_origen is not None else RegistroFichaje.estado
     elif key in ('obra', 'trazabilidad'):
         obra_plan = aliased(Obra)
         obra_real = aliased(Obra)
@@ -1501,110 +1468,135 @@ def _historial_pagina_args():
     return max(1, page), per_page, sort, direction
 
 
-@sync_bp.route('/auditoria/seccion/<seccion>', methods=['GET'])
-@login_required
-def auditoria_fichajes_seccion(seccion):
-    """Carga diferida de histórico / correcciones (evita tumbar la 1ª visita)."""
-    from flask import current_app
-    from app.services.permission_service import user_can
-    from app.services.fichaje_operario_service import tenant_muestra_auditoria_fichajes
+def _obra_txt(obra):
+    if not obra:
+        return ''
+    return (obra.nombre or obra.codigo or '').strip()
 
-    if not user_can(current_user, 'auditoria_fichajes', 'r') or not tenant_muestra_auditoria_fichajes():
+
+def _fecha_param(nombre):
+    raw = (request.args.get(nombre) or '').strip()
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw[:10], '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _fila_historial(registro, comodin_ids, puede_resolver):
+    from app.services import auditoria_casos_service as acs
+    from app.services.desvio_fichaje_service import es_falta_automatica
+
+    origen = acs.origen_registro(registro, comodin_ids)
+    parcial = registro.estado in ('Conflicto', 'Disputa')
+    nota = ''
+    if registro.estado != 'Sobreescrito_RRHH' and not es_falta_automatica(registro):
+        nota = (registro.notas_resolucion or registro.nota_odoo or '').strip()[:240]
+    user = registro.user
+    return {
+        'id': registro.id,
+        'user_id': registro.user_id,
+        'fecha': registro.fecha,
+        'fecha_iso': registro.fecha.isoformat() if registro.fecha else '',
+        'fecha_txt': registro.fecha.strftime('%d/%m/%Y') if registro.fecha else '',
+        'persona': f"{(user.name or '').strip()} {(user.lastname or '').strip()}".strip() if user else '',
+        'plan': _obra_txt(registro.obra_planificada),
+        'plan_id': registro.obra_planificada_id,
+        'real': _obra_txt(registro.obra_real),
+        'real_id': registro.obra_real_id,
+        'entrada': acs._hhmm(registro.check_in),
+        'salida': acs._hhmm(registro.check_out),
+        'resultado': acs.resultado_registro(registro, comodin_ids),
+        'origen': origen,
+        'origen_label': acs.ETIQUETA_ORIGEN[origen],
+        'quien': acs.quien_y_cuando(registro, origen),
+        'nota': nota,
+        'puede_reabrir': bool(
+            puede_resolver
+            and origen == acs.ORIGEN_MANUAL
+            and (registro.estado in acs.ESTADOS_REABRIBLES or parcial)
+        ),
+    }
+
+
+@sync_bp.route('/auditoria/historial', methods=['GET'])
+@login_required
+def auditoria_historial():
+    """Todo lo que ya no es trabajo: decisiones, correcciones de Odoo, comodín y cumplimientos."""
+    from flask import current_app
+    from app.services import auditoria_casos_service as acs
+
+    if not _auditoria_accesible():
         return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
-    if seccion not in ('historial', 'correcciones'):
-        return jsonify({'success': False, 'error': translate('Sección desconocida')}), 400
 
     try:
-        filtros_historial, filtros_correcciones = _auditoria_filtros_jefe()
+        page, per_page, sort_key, direction = _historial_pagina_args()
         q_text = (request.args.get('q') or '').strip()
-        hist_page = hist_pages = hist_per_page = hist_total = None
-        if seccion == 'historial':
-            page, per_page, sort_key, direction = _historial_pagina_args()
-            # Salto «Ver ausencia / Ver fichaje»: búsqueda exacta por id sin filtrar
-            # por estado (un lado puede estar ack y el registro seguir en Conflicto).
-            if q_text.isdigit():
-                rid = int(q_text)
-                reg = (
-                    RegistroFichaje.query
-                    .options(*_AUDITORIA_EAGER)
-                    .filter(RegistroFichaje.id == rid)
-                    .first()
-                )
-                registros = (
-                    [reg] if reg and _auditoria_visible_para_jefe(reg) else []
-                )
-                hist_total = len(registros)
-                hist_page, hist_pages, hist_per_page = 1, 1, per_page
-            else:
-                # Todo lo cerrado (también Correcto). Se pagina en SQL: un límite
-                # de 500 dejaba fuera junio y febrero y la ordenación solo veía eso.
-                base = _aplicar_busqueda_historial(
-                    RegistroFichaje.query.filter(*filtros_historial),
-                    q_text,
-                )
-                origen = (request.args.get('origen') or '').strip()
-                if origen not in _ORIGENES_HISTORIAL:
-                    origen = ''
-                if origen == 'decisiones':
-                    base = base.filter(_expr_origen_historial() != 'cumplio')
-                elif origen:
-                    base = base.filter(_expr_origen_historial() == origen)
-                hist_total = base.order_by(None).count()
-                hist_per_page = per_page
-                hist_pages = max(1, (hist_total + per_page - 1) // per_page) if hist_total else 1
-                hist_page = min(page, hist_pages)
-                registros = (
-                    _aplicar_orden_historial(
-                        base.options(*_AUDITORIA_EAGER),
-                        sort_key,
-                        direction,
-                    )
-                    .offset((hist_page - 1) * per_page)
-                    .limit(per_page)
-                    .all()
-                )
-        else:
-            registros = (
-                RegistroFichaje.query
-                .options(*_AUDITORIA_EAGER)
-                .filter(*filtros_correcciones)
-                .order_by(RegistroFichaje.fecha.desc())
-                .limit(_AUDITORIA_CORRECCIONES_LIMIT)
-                .all()
-            )
+        origen = (request.args.get('origen') or '').strip()
+        if origen not in acs.ORIGENES:
+            origen = ''
+        incluir_auto = (request.args.get('incluir_auto') or '') == '1'
+        scope = _scope_auditoria()
+        comodin = acs.comodin_obra_ids_expandidos()
+        expr_origen = acs.expr_origen_sql(comodin)
 
-        from app.services.fichaje_geo_audit_service import entrada_geo_por_registros
-        from app.services.geocerca_service import geocerca_activa
-        geo_por_registro = entrada_geo_por_registros(registros)
-        visible_sections = laboral_auditoria_sections(current_user)
-        html = render_template(
-            'sync/_auditoria_seccion_rows.html',
-            seccion=seccion,
-            registros=registros,
-            geo_por_registro=geo_por_registro,
-            muestra_geo_audit=geocerca_activa(),
-            can_resolve_fichajes=can_resolve_fichajes(current_user),
-            visible_sections=visible_sections,
-            origen_historial=_origen_historial,
-            momento_auditoria_historial=_momento_auditoria_historial,
+        if q_text.isdigit():
+            # Salto «ver en el historial» desde un enlace: por id, sin filtrar estado.
+            base = RegistroFichaje.query.filter(RegistroFichaje.id == int(q_text))
+            if scope is not None:
+                base = base.filter(scope)
+            conteos = None
+        else:
+            base = RegistroFichaje.query.filter(acs.condicion_en_historial(comodin))
+            if scope is not None:
+                base = base.filter(scope)
+            base = _aplicar_busqueda_historial(base, q_text)
+            desde, hasta = _fecha_param('desde'), _fecha_param('hasta')
+            if desde:
+                base = base.filter(RegistroFichaje.fecha >= desde)
+            if hasta:
+                base = base.filter(RegistroFichaje.fecha <= hasta)
+            obra_id = request.args.get('obra_id', type=int)
+            if obra_id:
+                base = base.filter(or_(
+                    RegistroFichaje.obra_planificada_id == obra_id,
+                    RegistroFichaje.obra_real_id == obra_id,
+                ))
+            # Conteos por origen con el resto de filtros aplicados (para los chips).
+            conteos = {
+                o: base.order_by(None).filter(expr_origen == o).count() for o in acs.ORIGENES
+            }
+            if origen:
+                base = base.filter(expr_origen == origen)
+            elif not incluir_auto:
+                base = base.filter(expr_origen != acs.ORIGEN_AUTO)
+
+        total = base.order_by(None).count()
+        pages = max(1, (total + per_page - 1) // per_page) if total else 1
+        page = min(page, pages)
+        registros = (
+            _aplicar_orden_historial(base.options(*_AUDITORIA_EAGER), sort_key, direction, expr_origen)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
         )
-        payload = {
+        puede = can_resolve_fichajes(current_user)
+        filas = [_fila_historial(r, comodin, puede) for r in registros]
+        html = render_template('sync/_auditoria_historial_rows.html', filas=filas)
+        return jsonify({
             'success': True,
             'html': html,
-            'count': len(registros),
-            'q': q_text,
-        }
-        if hist_total is not None:
-            payload.update({
-                'total': hist_total,
-                'page': hist_page,
-                'pages': hist_pages,
-                'per_page': hist_per_page,
-            })
-        return jsonify(payload)
+            'total': total,
+            'page': page,
+            'pages': pages,
+            'per_page': per_page,
+            'conteos': conteos,
+        })
     except Exception:
-        current_app.logger.exception('Fallo sección auditoría %s', seccion)
+        current_app.logger.exception('Fallo al cargar historial de auditoría')
         return jsonify({'success': False, 'error': translate('No se pudo cargar la sección')}), 500
+
 
 ACCION_RESOLUCION_TITULOS = {
     'ignorar': 'Ignorar',
@@ -2375,6 +2367,13 @@ def reabrir_fichaje():
     )
     if registro.estado not in _ESTADOS_RESUELTOS and not desvio_parcial:
         return jsonify({'success': False, 'error': translate('Solo se pueden reabrir registros ya resueltos.')}), 400
+
+    from app.services.desvio_fichaje_service import es_falta_automatica
+    if es_falta_automatica(registro):
+        return jsonify({
+            'success': False,
+            'error': translate('Es una falta automática por una corrección de RRHH en Odoo; no se reabre.'),
+        }), 400
 
     previo = _previo_para_reabrir(registro)
     if not previo and not desvio_parcial:

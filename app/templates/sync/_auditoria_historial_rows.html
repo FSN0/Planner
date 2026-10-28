@@ -1,0 +1,43 @@
+{% if not filas %}
+<tr><td colspan="6" class="aud-table-empty">{{ _('No hay registros con estos filtros.') }}</td></tr>
+{% else %}
+{% for f in filas %}
+<tr class="fila-fichaje-auditoria" id="hist-row-{{ f.id }}" data-user-id="{{ f.user_id }}" data-fecha="{{ f.fecha_iso }}">
+  <td class="aud-nowrap">{{ f.fecha_txt }}</td>
+  <td>
+    <div class="aud-strong">
+      {% if f.user_id %}
+        <a class="aud-link" href="{{ url_for('admin.worker_panel', user_id=f.user_id) }}" onclick="event.stopPropagation()">{{ f.persona }}</a>
+      {% else %}{{ f.persona }}{% endif %}
+    </div>
+  </td>
+  <td>
+    <div class="aud-hist-obras">
+      {% if f.plan %}
+        <span>
+          <span class="aud-side-k">{{ _('Plan') }}</span>
+          {% if f.plan_id %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=f.plan_id) }}" onclick="event.stopPropagation()">{{ f.plan }}</a>{% else %}{{ f.plan }}{% endif %}
+        </span>
+      {% endif %}
+      {% if f.real %}
+        <span>
+          <span class="aud-side-k">{{ _('Fichó') }}</span>
+          {% if f.real_id %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=f.real_id) }}" onclick="event.stopPropagation()">{{ f.real }}</a>{% else %}{{ f.real }}{% endif %}
+          {% if f.entrada %} <span class="aud-hours">{{ f.entrada }}{% if f.salida %}–{{ f.salida }}{% endif %}</span>{% endif %}
+        </span>
+      {% endif %}
+    </div>
+    <div class="aud-hist-result">{{ f.resultado }}</div>
+    {% if f.nota %}<div class="aud-case-note">{{ f.nota }}</div>{% endif %}
+  </td>
+  <td><span class="aud-origin aud-origin--{{ f.origen }}">{{ _(f.origen_label) }}</span></td>
+  <td class="aud-muted">{{ f.quien }}</td>
+  <td class="aud-right no-row-nav">
+    {% if f.puede_reabrir %}
+      <button type="button" class="aud-btn aud-btn--ghost aud-btn--sm js-aud-reabrir" data-registro-id="{{ f.id }}"
+              title="{{ _('Vuelve a la cola de pendientes') }}">{{ _('Reabrir') }}</button>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+{% endif %}

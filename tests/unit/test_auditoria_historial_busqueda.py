@@ -7,14 +7,20 @@ from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from app.models import Company, Obra, RegistroFichaje, User
+from app.services.auditoria_casos_service import (
+    ORIGEN_AUTO,
+    ORIGEN_COMODIN,
+    ORIGEN_MANUAL,
+    ORIGEN_ODOO,
+    condicion_en_historial,
+    expr_origen_sql,
+    origen_registro,
+)
 from app.sync.routes import (
     _ESTADOS_HISTORIAL_DECISION,
     _aplicar_busqueda_historial,
     _aplicar_orden_historial,
-    _clausula_en_historial,
-    _expr_origen_historial,
-    _momento_auditoria_historial,
-    _origen_historial,
+    _fila_historial,
 )
 
 
@@ -120,95 +126,87 @@ def test_falta_confirmada_en_desvio_abierto_entra_en_historial(hist_ctx):
     ids = {
         row.id for row in RegistroFichaje.query.filter(
             RegistroFichaje.user_id == u.id,
-            _clausula_en_historial(),
+            condicion_en_historial(set()),
         )
     }
     assert cerrado_lado.id in ids
     assert abierto.id not in ids
 
 
-def test_origen_separa_ausencia_fichaje_y_desvio(hist_ctx):
+def test_origen_distingue_decision_odoo_automatico_y_comodin(hist_ctx):
     session = hist_ctx['session']
     company = hist_ctx['company']
     u = _user(session, company, 'RUIZ', 'LLORENS', 'ruiz.origen@hist.test')
     plan = Obra(nombre='CENTRO DE DIA', codigo='S25/158', estado='En Curso', is_deleted=False)
     real = Obra(nombre='URGENCIAS', codigo='S26/027', estado='En Curso', is_deleted=False)
-    session.add_all([plan, real])
+    comodin = Obra(nombre='VACACIONES', codigo='COM', estado='En Curso', is_deleted=False)
+    session.add_all([plan, real, comodin])
     session.flush()
 
-    ausencia = _reg(session, u, estado='Resuelto_Falta', dia=date(2026, 9, 30))
-    ausencia.obra_planificada_id = plan.id
-    ausencia.estado_antes_resolucion = 'Ausencia'
-    ausencia.fecha_auditoria = datetime(2026, 9, 30, 9, 0)
+    manual = _reg(session, u, estado='Resuelto_Falta', dia=date(2026, 9, 30))
+    manual.obra_planificada_id = plan.id
+    manual.fecha_auditoria = datetime(2026, 9, 30, 9, 0)
 
-    sin_plan = _reg(session, u, estado='Resuelto_Asignado', dia=date(2026, 9, 29))
-    sin_plan.obra_real_id = real.id
-    sin_plan.estado_antes_resolucion = 'Paracaidista'
-    sin_plan.fecha_auditoria = datetime(2026, 9, 29, 9, 0)
+    odoo = _reg(session, u, estado='Sobreescrito_RRHH', dia=date(2026, 9, 29))
+    odoo.obra_real_id = real.id
+    odoo.notas_resolucion = f'{plan.id}||S25/158||CENTRO DE DIA||{real.id}||S26/027||URGENCIAS||Modificado de Obra||Correcto'
 
-    desvio = _reg(session, u, estado='Conflicto', dia=date(2026, 10, 13))
-    desvio.obra_planificada_id = plan.id
-    desvio.obra_real_id = real.id
-    desvio.desvio_decision_plan = 'mantener_falta'
-    desvio.desvio_ack_plan_at = datetime(2026, 10, 13, 16, 40)
-    desvio.fecha_auditoria = datetime(2026, 10, 13, 8, 0)
+    aceptado = _reg(session, u, estado='Aceptado_Odoo', dia=date(2026, 9, 28))
+    aceptado.obra_real_id = real.id
+
+    falta_auto = _reg(session, u, estado='Falta', dia=date(2026, 9, 27))
+    falta_auto.obra_planificada_id = plan.id
+    falta_auto.notas_resolucion = 'Falta automática: RRHH corrigió el día en Odoo'
 
     cumplio = _reg(session, u, estado='Correcto', dia=date(2026, 10, 7))
     cumplio.obra_planificada_id = plan.id
     cumplio.obra_real_id = plan.id
     cumplio.estado_antes_resolucion = None
-    cumplio.fecha_auditoria = datetime(2026, 10, 7, 8, 32)
+
+    pendiente_comodin = _reg(session, u, estado='Paracaidista', dia=date(2026, 10, 8))
+    pendiente_comodin.obra_real_id = comodin.id
     session.commit()
 
+    com_ids = {comodin.id}
     esperado = {
-        ausencia.id: 'ausencia',
-        sin_plan.id: 'sin_planificar',
-        desvio.id: 'desvio',
-        cumplio.id: 'cumplio',
+        manual.id: ORIGEN_MANUAL,
+        odoo.id: ORIGEN_ODOO,
+        aceptado.id: ORIGEN_ODOO,
+        falta_auto.id: ORIGEN_ODOO,
+        cumplio.id: ORIGEN_AUTO,
+        pendiente_comodin.id: ORIGEN_COMODIN,
     }
-    expr = _expr_origen_historial()
-    for reg in (ausencia, sin_plan, desvio, cumplio):
-        assert _origen_historial(reg) == esperado[reg.id]
-        sql_key = session.query(expr).filter(RegistroFichaje.id == reg.id).scalar()
-        assert sql_key == esperado[reg.id]
+    expr = expr_origen_sql(com_ids)
+    for reg in (manual, odoo, aceptado, falta_auto, cumplio, pendiente_comodin):
+        assert origen_registro(reg, com_ids) == esperado[reg.id]
+        assert session.query(expr).filter(RegistroFichaje.id == reg.id).scalar() == esperado[reg.id]
 
-    solo_ausencia = RegistroFichaje.query.filter(
+    # El comodín pendiente cuenta como historial; un pendiente normal no.
+    en_hist = {
+        r.id for r in RegistroFichaje.query.filter(
+            RegistroFichaje.user_id == u.id, condicion_en_historial(com_ids),
+        )
+    }
+    assert pendiente_comodin.id in en_hist
+    assert RegistroFichaje.query.filter(
         RegistroFichaje.user_id == u.id,
-        _expr_origen_historial() == 'ausencia',
-    ).all()
-    assert [r.id for r in solo_ausencia] == [ausencia.id]
+        condicion_en_historial(set()),
+        RegistroFichaje.id == pendiente_comodin.id,
+    ).count() == 0
 
-    assert _momento_auditoria_historial(desvio) == datetime(2026, 10, 13, 16, 40)
-    orden = _aplicar_orden_historial(
-        RegistroFichaje.query.filter(RegistroFichaje.user_id == u.id),
-        'hora_reg',
-        'desc',
-    ).all()
-    assert orden[0].id == desvio.id
+    filas = {r.id: _fila_historial(r, com_ids, True) for r in (manual, odoo, falta_auto, cumplio)}
+    assert filas[manual.id]['puede_reabrir'] is True
+    assert filas[odoo.id]['puede_reabrir'] is False
+    assert filas[falta_auto.id]['puede_reabrir'] is False
+    assert filas[cumplio.id]['puede_reabrir'] is False
+    assert 'Odoo cambió la obra' in filas[odoo.id]['resultado']
+    assert 'automática' in filas[falta_auto.id]['resultado']
 
     from flask import render_template
     with hist_ctx['app'].test_request_context('/'):
-        html = render_template(
-            'sync/_auditoria_seccion_rows.html',
-            seccion='historial',
-            registros=[ausencia, sin_plan, desvio, cumplio],
-            geo_por_registro={},
-            muestra_geo_audit=False,
-            can_resolve_fichajes=True,
-            origen_historial=_origen_historial,
-            momento_auditoria_historial=_momento_auditoria_historial,
-            tenant_has_odoo=False,
-        )
-    assert 'badge-soft-amber">Ausencia' in html
-    assert 'badge-soft-blue">Sin planificar' in html
-    assert 'badge-soft-red">Desviación' in html
-    assert 'S25/158' in html and 'CENTRO DE DIA' in html
-    assert 'S26/027' in html and 'URGENCIAS' in html
-    fila_desvio = html.split(f'hist-row-{desvio.id}', 1)[1].split('hist-row-', 1)[0]
-    assert 'fa-arrow-right' in fila_desvio
-    assert '13/10/26 18:40' in fila_desvio
-    fila_ausencia = html.split(f'hist-row-{ausencia.id}', 1)[1].split('hist-row-', 1)[0]
-    assert 'S26/027' not in fila_ausencia
+        html = render_template('sync/_auditoria_historial_rows.html', filas=list(filas.values()))
+    assert 'aud-origin--odoo' in html and 'aud-origin--manual' in html and 'aud-origin--auto' in html
+    assert html.count('js-aud-reabrir') == 1
 
 
 def test_estados_decision_cubren_ausencia_y_desasignar():

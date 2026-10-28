@@ -95,6 +95,10 @@ if [ "$MIGRATE" = true ]; then
     docker compose -f $COMPOSE_FILE run --rm --no-deps web flask db upgrade
 fi
 
+# --- Bridge Corporate AI Agent (rol RO + vistas Soltec) ---
+print_step "Provisionando acceso readonly para el agente (tenant Soltec)..."
+COMPOSE_FILE=$COMPOSE_FILE bash scripts/ensure_agent_readonly.sh
+
 # --- Limpieza ---
 print_step "Limpiando imágenes antiguas..."
 docker image prune -f
@@ -115,4 +119,5 @@ echo ""
 echo "  Panel:  https://${DOMAIN:-signaplan.com}/superadmin"
 echo "  Logs:   docker compose -f $COMPOSE_FILE logs -f"
 echo "  Estado: docker compose -f $COMPOSE_FILE ps"
+echo "  Agente: docs/sql/CONECTOR_AGENTE.txt  (datos del conector Planner)"
 echo -e "${GREEN}════════════════════════════════════════${NC}"

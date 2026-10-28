@@ -17,7 +17,7 @@ from app.utils.timezone_utils import today_local
 OPEN_SOLICITUD = ('PENDIENTE', 'EN_PROCESO')
 FICHAJE_INCIDENTES = ('Conflicto', 'Paracaidista', 'Ausencia')
 FICHAJE_OK = (
-    'Correcto', 'Correcto_Automatico',
+    'Correcto', 'Correcto_Automatico', 'Aceptado_Odoo',
     'Resuelto_Movido', 'Resuelto_Asignado', 'Resuelto_Dividido',
     'Resuelto_Ignorado', 'Resuelto_Falta', 'Resuelto_Ausencia',
     'Exento_Ausencia', 'Cerrado_Multiobra',

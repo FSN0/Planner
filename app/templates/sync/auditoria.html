@@ -2,144 +2,21 @@
 {% block title %}{{ _('Auditoría de Fichajes') }}{% endblock %}
 {% block body_class %}layout-admin{% endblock %}
 
-{% macro audit_sort_th(col, label, width='', align='', sort_type='', col_key='', title='') %}
-<th class="sortable-col" style="width: {{ width }};{% if align %} text-align: {{ align }};{% endif %}" data-col-index="{{ col }}"{% if col_key %} data-col-key="{{ col_key }}"{% endif %} data-sort="none"{% if sort_type %} data-sort-type="{{ sort_type }}"{% endif %}{% if title %} title="{{ title }}"{% endif %} onclick="sortAdminTable(this)"><span class="sortable-label">{{ _(label) }}</span><i class="fas fa-sort sort-icon"></i></th>
-{% endmacro %}
-
-{% macro audit_metric_val(val) -%}
-{%- if val is not none -%}{{ '%.2f'|format(val|float) }}{%- else -%}—{%- endif -%}
-{%- endmacro %}
-
-{% macro celda_notas(reg) %}
-<td class="align-middle" data-sort-value="{{ (reg.nota_odoo or '')|lower }}">
-    {% if reg.nota_odoo %}
-        <span class="d-block text-muted nota-fichaje-bloque" title="{{ reg.nota_odoo }}">
-            <i class="fas fa-sticky-note text-warning mr-1"></i>{{ reg.nota_odoo }}
-        </span>
-    {% else %}
-        <span class="text-muted">-</span>
-    {% endif %}
-</td>
-{% endmacro %}
-
-{% macro celda_obra_link(obra, es_mia=false) %}
-<td class="audit-obra-cell{% if es_mia %} audit-obra-cell--mia{% endif %}" data-sort-value="{{ (obra.nombre if obra else '')|lower }}">
-    {% if obra %}
-    <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-        {% if es_mia %}<span class="audit-obra-mia" title="{{ _('Esta es tu obra') }}">{{ _('Tuya') }}</span>{% endif %}
-        <a href="{{ url_for('admin.obra_panel', obra_id=obra.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ _('Ir a {name}', name=obra.nombre) }}">{{ obra.codigo }}</a>
-        <span class="text-muted flex-shrink-0 mr-1">-</span>
-        <span class="text-muted text-truncate" style="font-size: 0.8rem;" title="{{ obra.nombre }}">{{ obra.nombre }}</span>
-    </div>
-    {% else %}
-    <span class="text-muted">—</span>
-    {% endif %}
-</td>
-{% endmacro %}
-
-{% macro celda_operario(reg) %}
-<td data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
-    {% if reg.user %}
-    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user" title="{{ reg.user.categoria_profesional or _('Externo') }}">{{ reg.user.name }} {{ reg.user.lastname }}</a>
-    {% else %}
-    <span class="text-muted">—</span>
-    {% endif %}
-</td>
-{% endmacro %}
-
-{% macro celda_metricas_odoo(reg) %}
-{% if tenant_has_odoo %}
-<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_ud if reg.odoo_ud is not none else '' }}">{{ audit_metric_val(reg.odoo_ud) }}</td>
-<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_total_hh if reg.odoo_total_hh is not none else '' }}">{{ audit_metric_val(reg.odoo_total_hh) }}</td>
-<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_mod if reg.odoo_mod is not none else '' }}">{{ audit_metric_val(reg.odoo_mod) }}</td>
-<td class="align-middle text-center odoo-metric-col" data-sort-value="{{ reg.odoo_moe if reg.odoo_moe is not none else '' }}">{{ audit_metric_val(reg.odoo_moe) }}</td>
-{% endif %}
-{% endmacro %}
-
-{% macro audit_th_metricas_odoo(col_start) %}
-{% if tenant_has_odoo %}
-{{ audit_sort_th(col_start, 'UD', '4.5%', 'center', 'num', 'odoo_ud') }}
-{{ audit_sort_th(col_start + 1, 'HH', '4.5%', 'center', 'num', 'odoo_hh') }}
-{{ audit_sort_th(col_start + 2, 'MOD', '4.5%', 'center', 'num', 'odoo_mod') }}
-{{ audit_sort_th(col_start + 3, 'MOE', '4.5%', 'center', 'num', 'odoo_moe') }}
-{% endif %}
-{% endmacro %}
-
-{% macro celda_geo(reg) %}
-{% set g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}
-<td class="align-middle text-center geo-audit-cell" data-sort-value="{{ g.geo_estado if g else '' }}">
-    {% if g and g.geo_estado == 'dudosa' %}
-        <span class="text-warning font-weight-bold" style="font-size:0.72rem;"
-              title="{{ _('Ubicación no coincide con la obra fichada') }}{% if g.distancia_metros %} · {{ g.distancia_metros|int }} m{% endif %}{% if g.nota_ubicacion %} · {{ g.nota_ubicacion }}{% endif %}">
-            <i class="fas fa-exclamation-triangle"></i>
-            {% if g.distancia_metros %}<span class="d-block">{{ g.distancia_metros|int }} m</span>{% endif %}
-        </span>
-    {% elif g and g.geo_estado == 'coincide' %}
-        <span class="text-success" title="{{ _('Ubicación coherente con la obra') }}"><i class="fas fa-map-marker-alt"></i></span>
-    {% elif g and g.geo_estado == 'sin_ubicacion' %}
-        <span class="text-muted" title="{{ _('Sin GPS en la entrada') }}"><i class="fas fa-location-slash"></i></span>
-    {% else %}
-        <span class="text-muted">—</span>
-    {% endif %}
-</td>
-{% endmacro %}
-
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260922b">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap4.min.css">
-<style>
-tr.audit-row-highlight > td {
-  background-color: #fef9c3 !important;
-}
-tr.audit-row-highlight {
-  box-shadow: inset 4px 0 0 #f59e0b;
-}
-.audit-desvio-panel-highlight {
-  outline: 2px solid #f59e0b;
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
-}
-.auditoria-stat--active {
-  outline: 2px solid #f59e0b;
-  outline-offset: 2px;
-}
-.odoo-metric-col {
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  color: #334155;
-  white-space: nowrap;
-}
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auditoria_fichajes.css') }}?v=20261023e">
 {% endblock %}
 
 {% block wrapper %}
-{% set auditoria_sections = auditoria_sections if auditoria_sections is defined else visible_sections %}
-{% set visible_sections = auditoria_sections %}
-{% if tenant_has_odoo %}
-{% set fichaje_col = _('Fichaje Odoo') %}
-{% set toolbar_sub = _('Odoo vs planificación') %}
-{% set odoo_extra = 4 %}
-{% else %}
-{% set fichaje_col = _('Fichaje real') %}
-{% set toolbar_sub = _('Plan vs fichaje') %}
-{% set odoo_extra = 0 %}
-{% endif %}
-{# Cola Ausencias: tres tonos de problema (no ha fichado / pendiente / fuera de plan). #}
-{% set ausencia_no_fichado_lbl = _('No ha fichado') %}
-{% set ausencia_pendiente_lbl = _('Pendiente en esta obra') %}
-{% set ausencia_ficho_otra_lbl = _('Fichó en otra obra') %}
-{% set geo_extra = 1 if muestra_geo_audit else 0 %}
-{% set metrics_col = 6 + geo_extra %}
-{% set after_metrics = metrics_col + odoo_extra %}
 <div class="admin-shell auditoria-page">
   {% include "_admin_sidebar.html" %}
-  <main class="admin-main admin-main--compact">
+  <main class="admin-main admin-main--compact aud">
 
     <div class="page-toolbar">
       <div class="page-toolbar-left">
         <h1 class="page-toolbar-title">{{ _('Auditoría de fichajes') }}</h1>
-        <span class="page-toolbar-count">{{ toolbar_sub }}</span>
+        <span class="page-toolbar-count">{{ _('Planificado frente a fichado') }}</span>
       </div>
       <div class="page-toolbar-actions">
         {% with tour_id='fichajes', tour_label=_('Tutorial fichajes'), tour_href=url_for('admin.personal', tour='fichajes', mode='solo') %}
@@ -151,14 +28,14 @@ tr.audit-row-highlight {
         </button>
         {% endif %}
         {% if can_sync_fichajes and tenant_has_odoo %}
-        <select id="diasSync" class="form-control custom-select mr-2">
+        <select id="diasSync" class="form-control custom-select mr-2" aria-label="{{ _('Días a sincronizar') }}">
           <option value="0">{{ _('Solo hoy') }}</option>
           <option value="7" selected>{{ _('Últimos 7 días') }}</option>
           <option value="15">{{ _('Últimos 15 días') }}</option>
           <option value="30">{{ _('Último mes') }}</option>
           <option value="60">{{ _('Dos meses') }}</option>
         </select>
-        <button onclick="forzarSyncFichajes()" class="btn-admin btn-admin-primary">
+        <button type="button" onclick="forzarSyncFichajes()" class="btn-admin btn-admin-primary">
           <i class="fas fa-sync-alt"></i> {{ _('Sincronizar') }}
         </button>
         <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
@@ -168,791 +45,128 @@ tr.audit-row-highlight {
       </div>
     </div>
 
-    {% set var_conflictos = var_conflictos if var_conflictos is defined else ((pendientes | selectattr('estado', 'equalto', 'Conflicto') | list) + (pendientes | selectattr('estado', 'equalto', 'Disputa') | list)) %}
-    {% set var_paracaidistas = var_paracaidistas if var_paracaidistas is defined else (pendientes | selectattr('estado', 'equalto', 'Paracaidista') | list) %}
-    {% set var_ausencias = var_ausencias if var_ausencias is defined else (pendientes | selectattr('estado', 'equalto', 'Ausencia') | list) %}
-    {% set var_comodin = var_comodin if var_comodin is defined else [] %}
+    {# --- Cifras de cabecera (cuatro, no siete) --- #}
+    <section class="aud-kpis" aria-label="{{ _('Resumen') }}">
+      <div class="aud-kpi {{ 'aud-kpi--alert' if casos else 'aud-kpi--ok' }}" id="audKpiPorResolver">
+        <div class="aud-kpi-label">{{ _('Por resolver') }}</div>
+        <div class="aud-kpi-value" data-kpi="count">{{ casos|length }}</div>
+        <div class="aud-kpi-sub">{{ _('casos que necesitan una decisión') }}</div>
+      </div>
+      <div class="aud-kpi">
+        <div class="aud-kpi-label">{{ _('Hoy en curso') }}</div>
+        <div class="aud-kpi-value" data-kpi="hoy">{{ hoy_sin_fichar + avisos_hoy|length }}</div>
+        <div class="aud-kpi-sub">{{ _('plazas aún sin fichar (solo aviso)') }}</div>
+      </div>
+      <div class="aud-kpi">
+        <div class="aud-kpi-label">{{ _('Cumplimiento') }}{% if kpis.ultimo_dia_txt %} · {{ kpis.ultimo_dia_txt }}{% endif %}</div>
+        <div class="aud-kpi-value">{% if kpis.cumplimiento is not none %}{{ kpis.cumplimiento }}%{% else %}—{% endif %}</div>
+        <div class="aud-kpi-sub">
+          {% if kpis.planificados %}{{ _('{a} de {b} fueron donde estaban planificados').replace('{a}', kpis.cumplen|string).replace('{b}', kpis.planificados|string) }}{% else %}{{ _('Sin días planificados cerrados') }}{% endif %}
+        </div>
+      </div>
+      <div class="aud-kpi">
+        <div class="aud-kpi-label">{{ _('Resueltos · 7 días') }}</div>
+        <div class="aud-kpi-value" data-kpi="resueltos">{{ kpis.resueltos_7d }}</div>
+        <div class="aud-kpi-sub">{{ _('decisiones tomadas por personas') }}</div>
+      </div>
+    </section>
 
-    <div class="auditoria-stats">
-      {% if 'conflictos' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--danger auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseConflictos" title="{{ _('Ir a desviaciones') }}">
-        <i class="fas fa-random"></i> {{ var_conflictos|length }} {{ _('desviaciones') }}
-      </span>
-      {% endif %}
-      {% if 'paracaidistas' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--info auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseParacaidistas" title="{{ _('Ir a sin planificar') }}">
-        <i class="fas fa-parachute-box"></i> {{ var_paracaidistas|length }} {{ _('sin planificar') }}
-      </span>
-      {% endif %}
-      {% if 'ausencias' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseAusencias" title="{{ _('Ir a ausencias') }}">
-        <i class="fas fa-user-slash"></i> {{ var_ausencias|length }} {{ _('ausencias') }}
-      </span>
-      {% endif %}
-      {% if 'comodin' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseComodin" title="{{ _('Ir a comodín') }}">
-        <i class="fas fa-asterisk"></i> {{ var_comodin|length }} {{ _('comodín') }}
-      </span>
-      {% endif %}
-      {% if (correcciones_total|default(0) > 0 or correcciones) and 'modificacion_odoo' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseCorrecciones" title="{{ _('Ir a modificaciones Odoo') }}">
-        <i class="fas fa-pen"></i> {{ correcciones_total|default(correcciones|length) }} {{ _('cambios Odoo') }}
-      </span>
-      {% endif %}
-      {% if muestra_geo_audit and geo_dudosa_count %}
-      <span class="auditoria-stat auditoria-stat--warning auditoria-stat-link" role="button" tabindex="0" id="auditGeoDudosaStat" data-audit-target="#collapseHistorial" title="{{ _('Filtrar ubicación dudosa') }}">
-        <i class="fas fa-map-marker-alt"></i> {{ geo_dudosa_count }} {{ _('ubic. dudosa') }}
-      </span>
-      {% if puede_ver_mapa_fichajes %}
-      <a href="{{ url_for('admin.mapa_fichajes', solo_dudosos=1) }}" class="auditoria-stat auditoria-stat--warning" style="text-decoration:none;" title="{{ _('Ver en mapa') }}">
-        <i class="fas fa-map"></i> {{ _('Mapa') }}
-      </a>
-      {% endif %}
-      {% endif %}
-      {% if 'historico_global' in visible_sections %}
-      <span class="auditoria-stat auditoria-stat--muted auditoria-stat-link" role="button" tabindex="0" data-audit-target="#collapseHistorial" title="{{ _('Ir al histórico') }}">
-        <i class="fas fa-archive"></i> {{ historial_total|default(historial|length) }} {{ _('en histórico') }}
-      </span>
-      {% endif %}
+    {# --- Pestañas + búsqueda/periodo compartidos a la derecha --- #}
+    <div class="aud-tabs-row">
+      <nav class="aud-tabs" role="tablist">
+        <button type="button" class="aud-tab" role="tab" data-tab="resolver">
+          {{ _('Por resolver') }}<span class="aud-tab-count {{ 'is-alert' if casos else '' }}" id="audTabCount">{{ casos|length }}</span>
+        </button>
+        <button type="button" class="aud-tab" role="tab" data-tab="cumplimiento">{{ _('Cumplimiento') }}</button>
+        <button type="button" class="aud-tab" role="tab" data-tab="historial">{{ _('Historial') }}</button>
+      </nav>
+      <div class="aud-tabs-tools">
+        <input type="search" class="aud-input aud-input--search" id="audSearch"
+               placeholder="{{ _('Buscar persona, DNI u obra…') }}"
+               value="{{ historial_q_inicial }}">
+        <select class="aud-select" id="audPeriodo" aria-label="{{ _('Periodo') }}">
+          <option value="7" {{ 'selected' if rango == '7' }}>{{ _('Últimos 7 días') }}</option>
+          <option value="30" {{ 'selected' if rango == '30' }}>{{ _('Últimos 30 días') }}</option>
+          <option value="90" {{ 'selected' if rango == '90' }}>{{ _('Últimos 90 días') }}</option>
+          <option value="180" {{ 'selected' if rango == '180' }}>{{ _('Últimos 6 meses') }}</option>
+          <option value="todo" {{ 'selected' if rango == 'todo' }}>{{ _('Sin límite') }}</option>
+        </select>
+      </div>
     </div>
 
-    <div class="accordion auditoria-accordion" id="accordionAuditoria">
-
-        {% if 'conflictos' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-desviaciones">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseConflictos" role="button" aria-expanded="false" data-tour="audit-desviaciones-toggle">
-                <h6 class="auditoria-section-title text-danger mb-0">
-                    <span class="section-icon-wrap section-icon-wrap--danger"><i class="fas fa-random"></i></span>
-                    {{ _('Desviaciones de plan') }}
-                    <span class="badge-count badge-count-danger">{{ var_conflictos|length }}</span>
-                </h6>
-                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-            </div>
-            <div id="collapseConflictos" class="collapse">
-                {% if var_conflictos %}
-                <div class="audit-table-wrap">
-                    <table id="auditConflictosTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
-                        <thead>
-                            <tr>
-                                {{ audit_sort_th(0, 'Día', '7%', '', 'date', 'dia') }}
-                                {{ audit_sort_th(1, 'Operario', '13%', '', '', 'operario') }}
-                                {{ audit_sort_th(2, 'Asignación original', '16%', '', '', 'plan') }}
-                                {{ audit_sort_th(3, fichaje_col, '16%', '', '', 'fichaje') }}
-                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time', 'entrada') }}
-                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time', 'salida') }}
-                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center', '', 'ubicacion') }}{% endif %}
-                                {{ audit_th_metricas_odoo(metrics_col) }}
-                                {{ audit_sort_th(after_metrics, 'Notas', '7%' if muestra_geo_audit else '8%', '', '', 'notas') }}
-                                {{ audit_sort_th(after_metrics + 1, 'Resolución', '15%' if muestra_geo_audit else '18%', 'right', '', 'resolucion') }}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for reg in var_conflictos %}
-                            {% set desvio = reg.desvio_ui if reg.desvio_ui is defined else none %}
-                            {% set desvio_colspan = after_metrics + 2 %}
-                            {% set btns = desvio.botones if desvio else [] %}
-                            {% set btns_plan = btns | selectattr('lado', 'equalto', 'plan') | list %}
-                            {% set btns_real = btns | selectattr('lado', 'equalto', 'real') | list %}
-                            {% set btns_ambos = btns | selectattr('lado', 'equalto', 'ambos') | list %}
-                            <tr id="row-{{ reg.id }}"
-                                class="fila-fichaje-auditoria audit-data-row audit-desvio-main{% if desvio and desvio.mia_plan %} audit-desvio-main--mia-plan{% endif %}{% if desvio and desvio.mia_real %} audit-desvio-main--mia-real{% endif %}"
-                                data-desvio-toggle="{{ reg.id }}"
-                                data-user-id="{{ reg.user_id }}"
-                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
-                                {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
-                                {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %}
-                                data-tour-audit-row
-                                aria-expanded="false"
-                                style="cursor: pointer;"
-                                title="{{ _('Clic: historial del día. Chevron: expandir resolución.') }}">
-                                <td class="font-weight-bold text-dark audit-desvio-expand" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">
-                                    <i class="fas fa-chevron-right audit-desvio-chevron text-muted mr-1" aria-hidden="true"></i>{{ reg.fecha.strftime('%d/%m/%Y') }}
-                                </td>
-                                {{ celda_operario(reg) }}
-                                {{ celda_obra_link(reg.obra_planificada, es_mia=(desvio.mia_plan if desvio else false)) }}
-                                {{ celda_obra_link(reg.obra_real, es_mia=(desvio.mia_real if desvio else false)) }}
-                                <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
-                                    {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                                </td>
-                                <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
-                                    {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                                </td>
-                                {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
-                                {{ celda_metricas_odoo(reg) }}
-                                {{ celda_notas(reg) }}
-                                <td class="text-right no-row-nav audit-resolve-cell audit-desvio-expand" data-sort-value="">
-                                    <span class="audit-desvio-status" aria-label="{{ _('Estado del desvío') }}">
-                                      {% if desvio %}
-                                        <span class="audit-desvio-dot {% if desvio.ack_plan %}is-ok{% else %}is-pending{% endif %}"
-                                              title="{% if desvio.ack_plan %}{{ _('Plan OK') }}{% else %}{{ _('Plan pendiente') }}{% endif %}">P</span>
-                                        <span class="audit-desvio-dot {% if desvio.ack_real %}is-ok{% else %}is-pending{% endif %}"
-                                              title="{% if desvio.ack_real %}{{ _('Fichaje OK') }}{% else %}{{ _('Fichaje pendiente') }}{% endif %}">F</span>
-                                      {% endif %}
-                                    </span>
-                                    <span class="text-muted small d-none d-md-inline">{{ _('Expandir') }}</span>
-                                </td>
-                            </tr>
-                            <tr id="desvio-detail-{{ reg.id }}" class="audit-desvio-detail" hidden>
-                                <td colspan="{{ desvio_colspan }}" class="audit-desvio-detail-cell no-row-nav">
-                                    {% if can_resolve|default(can_resolve_fichajes) and btns_ambos %}
-                                    <div class="audit-desvio-ambos mb-2">
-                                      {% for btn in btns_ambos %}
-                                        {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
-                                        <button type="button"
-                                                class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
-                                                data-registro-id="{{ reg.id }}"
-                                                data-accion="{{ btn.accion }}"
-                                                title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
-                                      {% endfor %}
-                                      <span class="text-muted small ml-2">{{ _('Atajo (gestionas ambos lados)') }}</span>
-                                    </div>
-                                    {% endif %}
-                                    <div class="audit-desvio-panels">
-                                        <div class="audit-desvio-panel audit-desvio-panel--plan{% if desvio and desvio.mia_plan %} is-mia{% endif %}{% if desvio and desvio.ack_plan %} is-resolved{% endif %}">
-                                            <div class="audit-desvio-panel-head">
-                                                <span class="badge-soft badge-soft-amber">{{ _('Ausencia / pendiente') }}</span>
-                                                {% if desvio and desvio.mia_plan %}<span class="audit-obra-mia">{{ _('Tuya') }}</span>{% endif %}
-                                                {% if desvio and desvio.ack_plan %}
-                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _(desvio.ack_plan_label or 'Resuelto') }}</span>
-                                                {% else %}
-                                                <span class="text-muted small ml-auto">{{ _('Estaba planificado aquí y aún no ha fichado') }}</span>
-                                                {% endif %}
-                                            </div>
-                                            <div class="audit-desvio-panel-body">
-                                                {% if reg.obra_planificada %}
-                                                <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra">{{ reg.obra_planificada.codigo }}</a>
-                                                <span class="text-muted">— {{ reg.obra_planificada.nombre }}</span>
-                                                {% else %}
-                                                <span class="text-muted">—</span>
-                                                {% endif %}
-                                                {% if desvio and desvio.planificado_por %}
-                                                <div class="audit-desvio-meta">
-                                                  {% if desvio.planificado_por_es_jefe %}
-                                                  <span class="audit-desvio-meta-k">{{ _('Responsable obra') }}</span>
-                                                  {% else %}
-                                                  <span class="audit-desvio-meta-k">{{ _('Planificado por') }}</span>
-                                                  {% endif %}
-                                                  {{ desvio.planificado_por }}
-                                                </div>
-                                                {% endif %}
-                                                {% if desvio and desvio.ack_plan and desvio.ack_plan_por %}
-                                                <div class="audit-desvio-meta" data-ack-plan-por="1">
-                                                  <span class="audit-desvio-meta-k">{{ _(desvio.ack_plan_label or 'Resuelto') }} {{ _('por') }}</span> {{ desvio.ack_plan_por }}
-                                                </div>
-                                                {% endif %}
-                                            </div>
-                                            <div class="audit-desvio-panel-actions">
-                                                <button type="button"
-                                                        class="btn btn-admin btn-admin-ghost btn-audit js-desvio-jump no-row-nav"
-                                                        data-desvio-jump="plan"
-                                                        data-registro-id="{{ reg.id }}"
-                                                        data-user-id="{{ reg.user_id }}"
-                                                        data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
-                                                        title="{{ _('Abrir la fila en Ausencias o en el histórico') }}">
-                                                  <i class="fas fa-external-link-alt"></i> {{ _('Ver ausencia') }}
-                                                </button>
-                                                {% if can_resolve|default(can_resolve_fichajes) %}
-                                                  {% for btn in btns_plan %}
-                                                    {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
-                                                    <button type="button"
-                                                            class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
-                                                            data-registro-id="{{ reg.id }}"
-                                                            data-accion="{{ btn.accion }}"
-                                                            title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
-                                                  {% else %}
-                                                    {% if desvio and desvio.ack_plan %}
-                                                    <span class="text-muted small" data-ack-plan-status="1">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}</span>
-                                                    {% elif not (desvio and desvio.mia_plan) and not es_oficina_auditoria|default(false) %}
-                                                    <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
-                                                    {% endif %}
-                                                  {% endfor %}
-                                                {% else %}
-                                                <span class="text-muted small">{{ _('Solo lectura') }}</span>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                        <div class="audit-desvio-panel audit-desvio-panel--real{% if desvio and desvio.mia_real %} is-mia{% endif %}{% if desvio and desvio.ack_real %} is-resolved{% endif %}">
-                                            <div class="audit-desvio-panel-head">
-                                                <span class="badge-soft badge-soft-blue">{{ _('Fichaje sin planificar') }}</span>
-                                                {% if desvio and desvio.mia_real %}<span class="audit-obra-mia">{{ _('Tuya') }}</span>{% endif %}
-                                                {% if desvio and desvio.ack_real %}
-                                                <span class="text-success small ml-auto"><i class="fas fa-check"></i> {{ _(desvio.ack_real_label or 'Aceptado') }}</span>
-                                                {% else %}
-                                                <span class="text-muted small ml-auto">{{ _('Ha fichado aquí sin estar planificado') }}</span>
-                                                {% endif %}
-                                            </div>
-                                            <div class="audit-desvio-panel-body">
-                                                {% if reg.obra_real %}
-                                                <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra">{{ reg.obra_real.codigo }}</a>
-                                                <span class="text-muted">— {{ reg.obra_real.nombre }}</span>
-                                                {% if reg.check_in %}<span class="audit-chip audit-chip-in ml-2"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% endif %}
-                                                {% else %}
-                                                <span class="text-muted">—</span>
-                                                {% endif %}
-                                                {% if desvio and desvio.ack_real and desvio.ack_real_por %}
-                                                <div class="audit-desvio-meta" data-ack-real-por="1">
-                                                  <span class="audit-desvio-meta-k">{{ _(desvio.ack_real_label or 'Aceptado') }} {{ _('por') }}</span> {{ desvio.ack_real_por }}
-                                                </div>
-                                                {% endif %}
-                                            </div>
-                                            <div class="audit-desvio-panel-actions">
-                                                <button type="button"
-                                                        class="btn btn-admin btn-admin-ghost btn-audit js-desvio-jump no-row-nav"
-                                                        data-desvio-jump="real"
-                                                        data-registro-id="{{ reg.id }}"
-                                                        data-user-id="{{ reg.user_id }}"
-                                                        data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
-                                                        title="{{ _('Abrir la fila en Sin planificar o en el histórico') }}">
-                                                  <i class="fas fa-external-link-alt"></i> {{ _('Ver fichaje sin planificar') }}
-                                                </button>
-                                                {% if can_resolve|default(can_resolve_fichajes) %}
-                                                  {% for btn in btns_real %}
-                                                    {% set btn_outline = 'warning' if btn.style == 'warning' else ('danger' if btn.style == 'danger' else 'primary') %}
-                                                    <button type="button"
-                                                            class="btn btn-outline-{{ btn_outline }} btn-audit js-audit-resolve"
-                                                            data-registro-id="{{ reg.id }}"
-                                                            data-accion="{{ btn.accion }}"
-                                                            title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
-                                                  {% else %}
-                                                    {% if desvio and desvio.ack_real %}
-                                                    <span class="text-muted small" data-ack-real-status="1">{{ _(desvio.ack_real_label or 'Ya aceptado') }}</span>
-                                                    {% elif not (desvio and desvio.mia_real) and not es_oficina_auditoria|default(false) %}
-                                                    <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
-                                                    {% endif %}
-                                                  {% endfor %}
-                                                {% else %}
-                                                <span class="text-muted small">{{ _('Solo lectura') }}</span>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {% if desvio and desvio.disputa and es_oficina_auditoria %}
-                                    <div class="mt-2"><span class="badge-soft badge-soft-amber">{{ _('Disputa entre jefes — solo oficina') }}</span></div>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> {{ _('No hay desviaciones pendientes') }}</div>
-                {% endif %}
-            </div>
-        </div>
+    {# ===== Por resolver ===== #}
+    <section class="aud-panel" data-panel="resolver" hidden>
+      <div class="aud-filters">
+        <button type="button" class="aud-pill is-active js-aud-tipo" data-tipo="">{{ _('Todos') }} <small data-count-tipo=""></small></button>
+        <button type="button" class="aud-pill js-aud-tipo" data-tipo="no_ficho">{{ _('No fichó') }} <small data-count-tipo="no_ficho"></small></button>
+        <button type="button" class="aud-pill js-aud-tipo" data-tipo="otra_obra">{{ _('Fue a otra obra') }} <small data-count-tipo="otra_obra"></small></button>
+        <button type="button" class="aud-pill js-aud-tipo" data-tipo="sin_planificar">{{ _('Sin planificar') }} <small data-count-tipo="sin_planificar"></small></button>
+        <button type="button" class="aud-pill js-aud-tipo" data-tipo="disputa" title="{{ _('Los jefes de las dos obras ya decidieron y no coinciden. Solo oficina puede cerrarlo.') }}">{{ _('Desacuerdo · oficina') }} <small data-count-tipo="disputa"></small></button>
+        {% if muestra_geo_audit %}
+        <button type="button" class="aud-pill js-aud-geo" id="audGeoPill" title="{{ _('Solo fichajes con ubicación dudosa') }}">
+          <i class="fas fa-map-marker-alt"></i> {{ _('Ubicación dudosa') }} <small data-count-geo="">{{ geo_dudosa_count }}</small>
+        </button>
         {% endif %}
-
-        {% if 'paracaidistas' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-paracaidistas">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseParacaidistas" role="button" aria-expanded="false" data-tour="audit-paracaidistas-toggle">
-                <h6 class="auditoria-section-title text-info mb-0">
-                    <span class="section-icon-wrap section-icon-wrap--info"><i class="fas fa-parachute-box"></i></span>
-                    {{ _('Fichajes sin planificar') }}
-                    <span class="badge-count badge-count-info">{{ var_paracaidistas|length }}</span>
-                </h6>
-                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-            </div>
-            <div id="collapseParacaidistas" class="collapse">
-                {% if var_paracaidistas %}
-                <div class="audit-table-wrap">
-                    <table id="auditParacaidistasTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
-                        <thead>
-                            <tr>
-                                {{ audit_sort_th(0, 'Día', '7%', '', 'date', 'dia') }}
-                                {{ audit_sort_th(1, 'Operario', '13%', '', '', 'operario') }}
-                                {{ audit_sort_th(2, 'Estado anterior', '10%', '', '', 'estado_ant') }}
-                                {{ audit_sort_th(3, fichaje_col, '16%', '', '', 'fichaje') }}
-                                {{ audit_sort_th(4, 'Entrada', '7%', 'center', 'time', 'entrada') }}
-                                {{ audit_sort_th(5, 'Salida', '7%', 'center', 'time', 'salida') }}
-                                {% if muestra_geo_audit %}{{ audit_sort_th(6, 'Ubicación', '7%', 'center', '', 'ubicacion') }}{% endif %}
-                                {{ audit_th_metricas_odoo(metrics_col) }}
-                                {{ audit_sort_th(after_metrics, 'Notas', '10%' if muestra_geo_audit else '12%', '', '', 'notas') }}
-                                {{ audit_sort_th(after_metrics + 1, 'Resolución', '11%' if muestra_geo_audit else '16%', 'right', '', 'resolucion') }}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for reg in var_paracaidistas %}
-                            {% set es_espejo = reg.desvio_espejo is defined and reg.desvio_espejo == 'real' %}
-                            {% set desvio = reg.desvio_ui if es_espejo and reg.desvio_ui is defined else none %}
-                            {% set btns_real = (desvio.botones if desvio else []) | selectattr('lado', 'equalto', 'real') | list %}
-                            <tr id="{% if es_espejo %}row-espejo-real-{{ reg.id }}{% else %}row-{{ reg.id }}{% endif %}"
-                                class="fila-fichaje-auditoria audit-data-row{% if es_espejo %} audit-desvio-espejo{% endif %}"
-                                {% if es_espejo %}data-desvio-espejo="real" data-desvio-registro-id="{{ reg.id }}"{% endif %}
-                                data-user-id="{{ reg.user_id }}"
-                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
-                                {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
-                                {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %}
-                                data-tour-audit-row
-                                style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                {{ celda_operario(reg) }}
-                                <td data-sort-value="{% if es_espejo %}desvio{% else %}libre{% endif %}">
-                                  {% if es_espejo %}
-                                    <span class="badge-soft badge-soft-amber" style="font-size: 0.65rem;" title="{{ _('También en Desviaciones de plan') }}">{{ _('Desvío de plan') }}</span>
-                                    {% if reg.obra_planificada %}
-                                    <div class="text-muted small mt-1">{{ _('Venía de') }} {{ reg.obra_planificada.codigo }}</div>
-                                    {% endif %}
-                                  {% else %}
-                                    <span class="text-muted font-italic" style="font-size: 0.75rem;">{{ _('Libre / Inercia') }}</span>
-                                  {% endif %}
-                                </td>
-                                {{ celda_obra_link(reg.obra_real) }}
-                                <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
-                                    {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                                </td>
-                                <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
-                                    {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                                </td>
-                                {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
-                                {{ celda_metricas_odoo(reg) }}
-                                {{ celda_notas(reg) }}
-                                <td class="text-right no-row-nav" data-sort-value="" {% if es_espejo %}onclick="event.stopPropagation();"{% endif %}>
-                                    {% if can_resolve|default(can_resolve_fichajes) %}
-                                      {% if es_espejo %}
-                                        {% for btn in btns_real %}
-                                        <button type="button" class="btn btn-outline-primary btn-audit mr-1 js-audit-resolve"
-                                                data-registro-id="{{ reg.id }}" data-accion="{{ btn.accion }}"
-                                                title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
-                                        {% else %}
-                                          {% if desvio and desvio.ack_real %}
-                                          <span class="text-muted small">{{ _(desvio.ack_real_label or 'Ya aceptado') }}{% if desvio.ack_real_por %} · {{ desvio.ack_real_por }}{% endif %}</span>
-                                          {% elif not (desvio and desvio.mia_real) and not es_oficina_auditoria|default(false) %}
-                                          <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
-                                          {% endif %}
-                                        {% endfor %}
-                                      {% else %}
-                                    <button type="button" class="btn btn-outline-primary btn-audit mr-1 js-audit-resolve" data-tour="audit-aceptar" data-registro-id="{{ reg.id }}" data-accion="anadir" title="{{ _('Asignar oficialmente a esta obra') }}">{{ _('Aceptar') }}</button>
-                                      {% endif %}
-                                    {% else %}
-                                    <span class="text-muted small">{{ _('Solo lectura') }}</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> {{ _('No hay fichajes sin planificar') }}</div>
-                {% endif %}
-            </div>
+        <button type="button" class="aud-pill aud-pill--soft" id="audHoyBtn" title="{{ _('Aviso del día en curso. No requiere acción.') }}">
+          <i class="far fa-clock"></i> {{ _('Hoy en curso') }} <small id="audHoyCount">{{ hoy_sin_fichar + avisos_hoy|length }}</small>
+        </button>
+      </div>
+      <div class="aud-hoy-pop" id="audHoyPop" hidden></div>
+      <div class="aud-split" id="audSplit">
+        <div class="aud-list" id="audColaBody">
+          {% include 'sync/_auditoria_cola.html' %}
         </div>
-        {% endif %}
+        <aside class="aud-detail" id="audDetail" aria-live="polite"></aside>
+      </div>
+    </section>
 
-        {% if 'comodin' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-comodin">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseComodin" role="button" aria-expanded="false" data-tour="audit-comodin-toggle">
-                <h6 class="auditoria-section-title mb-0" style="color: #64748b;">
-                    <span class="section-icon-wrap section-icon-wrap--archive"><i class="fas fa-asterisk"></i></span>
-                    {{ _('Comodín') }}
-                    <span class="badge-count badge-count-muted">{{ var_comodin|length }}</span>
-                </h6>
-                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-            </div>
-            <div id="collapseComodin" class="collapse">
-                {% if var_comodin %}
-                <div class="audit-table-wrap">
-                    <table id="auditComodinTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
-                        <thead>
-                            <tr>
-                                {{ audit_sort_th(0, 'Día', '8%', '', 'date') }}
-                                {{ audit_sort_th(1, 'Operario', '16%') }}
-                                {{ audit_sort_th(2, 'Planificado', '22%') }}
-                                {{ audit_sort_th(3, 'Fichó en', '22%') }}
-                                {{ audit_sort_th(4, 'Entrada', '8%', 'center', 'time') }}
-                                {{ audit_sort_th(5, 'Salida', '8%', 'center', 'time') }}
-                                {{ audit_sort_th(6, 'Notas', '16%') }}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for reg in var_comodin %}
-                            <tr id="row-{{ reg.id }}"
-                                class="fila-fichaje-auditoria audit-data-row"
-                                data-user-id="{{ reg.user_id }}"
-                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
-                                {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %}
-                                data-tour-audit-row
-                                style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                {{ celda_operario(reg) }}
-                                {{ celda_obra_link(reg.obra_planificada) }}
-                                {{ celda_obra_link(reg.obra_real) }}
-                                <td class="text-center" data-sort-value="{{ reg.check_in.strftime('%H%M') if reg.check_in else '' }}">
-                                    {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                                </td>
-                                <td class="text-center" data-sort-value="{{ reg.check_out.strftime('%H%M') if reg.check_out else '' }}">
-                                    {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                                </td>
-                                {{ celda_notas(reg) }}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <p class="text-muted small px-3 py-2 mb-0 border-top">
-                    {{ _('Cola de seguimiento: salen solas cuando RRHH corrige el fichaje (p. ej. modificación Odoo). No generan desvío ni ausencia.') }}
-                    {% if obras_comodin_labels %}
-                    · {{ _('Obras:') }} {{ obras_comodin_labels|join(', ') }}
-                    {% endif %}
-                </p>
-                {% else %}
-                <div class="auditoria-empty border-top">
-                  <i class="fas fa-check-circle"></i> {{ _('No hay fichajes en obras comodín') }}
-                  {% if obras_comodin_labels %}
-                  <div class="text-muted small mt-1">{{ _('Configuradas:') }} {{ obras_comodin_labels|join(', ') }}</div>
-                  {% endif %}
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+    {# ===== Cumplimiento ===== #}
+    <section class="aud-panel" data-panel="cumplimiento" hidden>
+      <div class="aud-filters">
+        <span class="aud-muted">{{ _('¿Se ficha donde se planificó? ¿Quién planifica bien? ¿Cuánto corrige RRHH en Odoo?') }}</span>
+      </div>
+      <div id="audCumpBody"><div class="aud-loading">{{ _('Cargando…') }}</div></div>
+    </section>
 
-        {% if 'ausencias' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;" data-tour="audit-ausencias">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseAusencias" role="button" aria-expanded="false" data-tour="audit-ausencias-toggle">
-                <h6 class="auditoria-section-title mb-0" style="color: #d97706;">
-                    <span class="section-icon-wrap section-icon-wrap--warning"><i class="fas fa-user-slash"></i></span>
-                    {{ _('Ausencias') }}
-                    <span class="badge-count badge-count-warning">{{ var_ausencias|length }}</span>
-                </h6>
-                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-            </div>
-            <div id="collapseAusencias" class="collapse">
-                {% if var_ausencias %}
-                <div class="audit-table-wrap">
-                    <table id="auditAusenciasTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
-                        <thead>
-                            <tr>
-                                {{ audit_sort_th(0, 'Día', '7%', '', 'date') }}
-                                {{ audit_sort_th(1, 'Operario', '15%') }}
-                                {{ audit_sort_th(2, 'Asignación original', '28%') }}
-                                {{ audit_sort_th(3, 'Problema', '12%') }}
-                                {{ audit_sort_th(4, 'Notas', '15%') }}
-                                {{ audit_sort_th(5, 'Resolución', '23%', 'right') }}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for reg in var_ausencias %}
-                            {% set es_espejo = reg.desvio_espejo is defined and reg.desvio_espejo == 'plan' %}
-                            {% set desvio = reg.desvio_ui if es_espejo and reg.desvio_ui is defined else none %}
-                            {% set btns_plan = (desvio.botones if desvio else []) | selectattr('lado', 'equalto', 'plan') | list %}
-                            <tr id="{% if es_espejo %}row-espejo-plan-{{ reg.id }}{% else %}row-{{ reg.id }}{% endif %}"
-                                class="fila-fichaje-auditoria audit-data-row{% if es_espejo %} audit-desvio-espejo{% endif %}"
-                                {% if es_espejo %}data-desvio-espejo="plan" data-desvio-registro-id="{{ reg.id }}"{% endif %}
-                                data-user-id="{{ reg.user_id }}"
-                                data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}"
-                                style="cursor: pointer;">
-                                <td class="font-weight-bold text-dark" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                {{ celda_operario(reg) }}
-                                {{ celda_obra_link(reg.obra_planificada) }}
-                                {% set aus_prob = reg.ausencia_problema if reg.ausencia_problema is defined else none %}
-                                <td data-sort-value="{% if es_espejo %}ficho_otra{% elif aus_prob == 'pendiente_otra_obra' %}pendiente{% else %}no_fichado{% endif %}">
-                                  {% if es_espejo %}
-                                    <span class="badge-soft badge-soft-amber" style="font-size: 0.65rem;" title="{{ _('Estaba planificado aquí y fichó en otra obra (fuera de plan)') }}">{{ ausencia_ficho_otra_lbl }}</span>
-                                    {% if reg.obra_real %}
-                                    <div class="text-muted small mt-1">{{ _('Fichó en') }} {{ reg.obra_real.codigo }}</div>
-                                    {% endif %}
-                                  {% elif aus_prob == 'pendiente_otra_obra' %}
-                                    <span class="badge-soft badge-soft-blue" style="font-size: 0.65rem;" title="{{ _('Sigue planificado aquí; ya ha fichado en otra obra (puede fichar luego)') }}">{{ ausencia_pendiente_lbl }}</span>
-                                    {% if reg.ausencia_ficho_en is defined and reg.ausencia_ficho_en %}
-                                    <div class="text-muted small mt-1">{{ _('Fichó en') }} {{ reg.ausencia_ficho_en.codigo }}</div>
-                                    {% endif %}
-                                  {% else %}
-                                    <span class="text-danger font-weight-bold" style="font-size: 0.75rem;" title="{{ _('Planificado y sin ninguna marca ese día') }}"><i class="fas fa-times-circle"></i> {{ ausencia_no_fichado_lbl }}</span>
-                                  {% endif %}
-                                </td>
-                                {{ celda_notas(reg) }}
-                                <td class="text-right no-row-nav" data-sort-value="" {% if es_espejo %}onclick="event.stopPropagation();"{% endif %}>
-                                    {% if can_resolve|default(can_resolve_fichajes) %}
-                                      {% if es_espejo %}
-                                        {% for btn in btns_plan %}
-                                        <button type="button" class="btn btn-outline-{% if btn.style == 'warning' %}warning text-dark{% elif btn.style == 'danger' %}danger{% else %}primary{% endif %} btn-audit mr-1 js-audit-resolve"
-                                                data-registro-id="{{ reg.id }}" data-accion="{{ btn.accion }}"
-                                                title="{{ _(btn.title) }}">{{ _(btn.label) }}</button>
-                                        {% else %}
-                                          {% if desvio and desvio.ack_plan %}
-                                          <span class="text-muted small">{{ _(desvio.ack_plan_label or 'Ya resuelto') }}{% if desvio.ack_plan_por %} · {{ desvio.ack_plan_por }}{% endif %}</span>
-                                          {% elif not (desvio and desvio.mia_plan) and not es_oficina_auditoria|default(false) %}
-                                          <span class="text-muted small">{{ _('Esperando al jefe de esta obra') }}</span>
-                                          {% endif %}
-                                        {% endfor %}
-                                      {% else %}
-                                    <button type="button" class="btn btn-outline-warning btn-audit text-dark mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="borrar_planificacion" title="{{ _('Quita la planificación de esta obra (estaba mal / ya no aplica)') }}">{{ _('Desasignar') }}</button>
-                                    <button type="button" class="btn btn-outline-danger btn-audit mr-1 js-audit-resolve" data-registro-id="{{ reg.id }}" data-accion="confirmar_ausencia" title="{{ _('Falta real: sigue planificado con marca de falta en el calendario') }}">{{ _('Confirmar falta') }}</button>
-                                      {% endif %}
-                                    {% else %}
-                                    <span class="text-muted small">{{ _('Solo lectura') }}</span>
-                                    {% endif %}
-
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="auditoria-empty border-top"><i class="fas fa-check-circle"></i> {{ _('No hay ausencias registradas') }}</div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if (correcciones_total|default(0) > 0 or correcciones) and 'modificacion_odoo' in visible_sections %}
-        <div class="auditoria-section card-modern card" style="overflow: hidden;">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseCorrecciones" role="button" aria-expanded="false">
-                <h6 class="auditoria-section-title mb-0" style="color: #c2410c;">
-                    <span class="section-icon-wrap section-icon-wrap--odoo"><i class="fas fa-pen-fancy"></i></span>
-                    {{ _('Modificaciones Odoo (RRHH)') }}
-                    <span class="badge-count badge-count-odoo">{{ correcciones_total|default(correcciones|length) }}</span>
-                </h6>
-                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-            </div>
-            <div id="collapseCorrecciones" class="collapse">
-                <div class="audit-table-wrap">
-                    <table id="correccionesTable" class="table table-audit audit-sortable-table filterable-table mb-0" style="table-layout: fixed; width: 100%;">
-                        <thead>
-                            <tr>
-                                {{ audit_sort_th(0, 'Fecha', '', '', 'date') }}
-                                {{ audit_sort_th(1, 'Operario') }}
-                                {{ audit_sort_th(2, 'Acción Odoo') }}
-                                {{ audit_sort_th(3, 'Antes') }}
-                                {{ audit_sort_th(4, 'Después') }}
-                                {{ audit_sort_th(5, 'Estado previo') }}
-                            </tr>
-                        </thead>
-                        <tbody id="correccionesTableBody" data-lazy-seccion="correcciones" data-loaded="0">
-                            {% if correcciones %}
-                            {% for reg in correcciones %}
-                            {% set datos = reg.notas_resolucion.split('||') if reg.notas_resolucion else [] %}
-                            <tr class="fila-fichaje-auditoria audit-data-row" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" style="cursor: pointer;">
-                                <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="font-weight-bold text-dark align-middle">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                                <td class="align-middle" data-sort-value="{{ reg.user.lastname|lower }}">
-                                    <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
-                                        <i class="fas fa-user text-muted mr-1" style="font-size:0.65rem;"></i>{{ reg.user.name }} {{ reg.user.lastname }}
-                                    </a>
-                                </td>
-                                {% if datos|length >= 8 %}
-                                <td class="align-middle">
-                                    {% if datos[6] == 'Borrado en Odoo' %}
-                                        <span class="badge-soft badge-soft-red"><i class="fas fa-trash-alt mr-1"></i>{{ _(datos[6]) }}</span>
-                                    {% else %}
-                                        <span class="badge-soft badge-soft-amber"><i class="fas fa-edit mr-1"></i>{{ _(datos[6]) }}</span>
-                                    {% endif %}
-                                </td>
-                                <td class="align-middle">
-                                    <a href="{{ url_for('admin.obra_panel', obra_id=datos[0]) }}" class="link-obra text-muted" style="text-decoration: line-through;">
-                                        {{ datos[1] }} — {{ datos[2] }}
-                                    </a>
-                                </td>
-                                <td class="align-middle">
-                                    {% if datos[3] != "" %}
-                                        <a href="{{ url_for('admin.obra_panel', obra_id=datos[3]) }}" class="link-obra">
-                                            {{ datos[4] }} — {{ datos[5] }}
-                                        </a>
-                                    {% else %}
-                                        <span class="text-danger font-weight-bold"><i class="fas fa-times mr-1"></i>{{ _('Sin obra') }}</span>
-                                    {% endif %}
-                                </td>
-                                <td class="align-middle text-muted small font-weight-bold">{{ _(datos[7]) }}</td>
-                                {% else %}
-                                <td colspan="4" class="align-middle text-muted">{{ reg.notas_resolucion }}</td>
-                                {% endif %}
-                            </tr>
-                            {% endfor %}
-                            {% else %}
-                            <tr class="audit-lazy-placeholder"><td colspan="6" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _('Cargando…') }}</td></tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if 'historico_global' in visible_sections %}
-        <div class="auditoria-section card-modern card mb-4" style="overflow: hidden;" data-tour="audit-historico">
-            <div class="auditoria-section-header card-header collapsed" data-target="#collapseHistorial" role="button" aria-expanded="false" data-tour="audit-historico-toggle">
-                <h6 class="auditoria-section-title mb-0 text-secondary">
-                    <span class="section-icon-wrap section-icon-wrap--archive"><i class="fas fa-history"></i></span>
-                    {{ _('Histórico global') }}
-                    <span class="badge-count badge-count-muted">{{ historial_total|default(historial|length) }}</span>
-                </h6>
-                <i class="fas fa-chevron-down text-muted chevron-icon"></i>
-            </div>
-            <div id="collapseHistorial" class="collapse">
-                <div class="audit-historial-toolbar px-3 pt-3 pb-2 d-flex flex-wrap align-items-center" style="gap:0.5rem;">
-                    <div class="input-group input-group-sm" style="max-width:22rem;">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fas fa-search"></i></span>
-                        </div>
-                        <input type="search" id="historialSearchInput" class="form-control"
-                               placeholder="{{ _('Operario, DNI, obra, nota…') }}"
-                               autocomplete="off"
-                               aria-label="{{ _('Buscar en histórico') }}">
-                    </div>
-                    <select id="historialOrigenFilter" class="form-control form-control-sm" style="max-width:13rem;"
-                            aria-label="{{ _('Filtrar por origen') }}">
-                        <option value="">{{ _('Todos los orígenes') }}</option>
-                        <option value="ausencia">{{ _('Ausencia') }}</option>
-                        <option value="sin_planificar">{{ _('Sin planificar') }}</option>
-                        <option value="desvio">{{ _('Desviación') }}</option>
-                        <option value="cumplio">{{ _('Cumplió el plan') }}</option>
-                        <option value="decisiones">{{ _('Solo decisiones') }}</option>
-                    </select>
-                    <span class="text-muted small" id="historialSearchHint">
-                        {{ _('Histórico completo, por páginas. Arriba, el día de trabajo más reciente.') }}
-                    </span>
-                </div>
-                <div class="audit-table-wrap">
-            <table id="historialTable" class="table table-audit table-audit--historial audit-sortable-table filterable-table mb-0">
-                <thead>
-                    <tr>
-                        {% set hist_metrics = metrics_col + 1 %}
-                        {% set hist_after = after_metrics + 1 %}
-                        {{ audit_sort_th(0, 'Fecha', '5.8rem', '', 'date', 'fecha') }}
-                        {{ audit_sort_th(1, 'Operario', '10rem', '', '', 'operario') }}
-                        {{ audit_sort_th(2, 'Origen', '7.2rem', '', '', 'origen') }}
-                        {{ audit_sort_th(3, 'Estado final', '7.5rem', '', '', 'estado') }}
-                        {{ audit_sort_th(4, 'Obra', 'auto', '', '', 'obra') }}
-                        {{ audit_sort_th(5, 'Entrada', '5.2rem', 'center', 'time', 'entrada') }}
-                        {{ audit_sort_th(6, 'Salida', '5.2rem', 'center', 'time', 'salida') }}
-                        {% if muestra_geo_audit %}{{ audit_sort_th(7, 'Ubicación', '2.4rem', 'center', '', 'ubicacion') }}{% endif %}
-                        {% if tenant_has_odoo %}
-                        {{ audit_sort_th(hist_metrics, 'UD', '2.6rem', 'center', 'num', 'odoo_ud') }}
-                        {{ audit_sort_th(hist_metrics + 1, 'HH', '2.6rem', 'center', 'num', 'odoo_hh') }}
-                        {{ audit_sort_th(hist_metrics + 2, 'MOD', '2.6rem', 'center', 'num', 'odoo_mod') }}
-                        {{ audit_sort_th(hist_metrics + 3, 'MOE', '2.6rem', 'center', 'num', 'odoo_moe') }}
-                        {% endif %}
-                        {{ audit_sort_th(hist_after, 'Notas', '7rem', '', '', 'notas') }}
-                        {{ audit_sort_th(hist_after + 1, 'Auditado por', '6.5rem', '', '', 'auditor') }}
-                        {{ audit_sort_th(hist_after + 2, 'Auditado', '6.4rem', '', 'date', 'hora_reg', _('Primer clic: la auditoría más reciente')) }}
-                        {% if can_resolve_fichajes %}
-                        <th style="width:5.8rem;" class="text-center no-sort no-col-hide" data-col-key="accion">{{ _('Acción') }}</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody id="historialTableBody" data-lazy-seccion="historial" data-loaded="0">
-                    {% if historial %}
-                    {% for reg in historial %}
-                    <tr id="hist-row-{{ reg.id }}" class="fila-fichaje-auditoria audit-data-row" data-registro-id="{{ reg.id }}" data-user-id="{{ reg.user_id }}" data-fecha="{{ reg.fecha.strftime('%Y-%m-%d') }}" {% if reg.user and reg.user.dni %}data-dni="{{ reg.user.dni }}"{% endif %} {% set _g = geo_por_registro.get(reg.id) if geo_por_registro is defined else none %}{% if _g and _g.geo_estado %}data-geo-estado="{{ _g.geo_estado }}"{% endif %} data-tour-historico-row style="cursor: pointer;">
-                        <td data-order="{{ reg.fecha.strftime('%Y%m%d') }}" data-sort-value="{{ reg.fecha.strftime('%Y%m%d') }}" class="text-dark font-weight-bold">{{ reg.fecha.strftime('%d/%m/%Y') }}</td>
-                        <td data-sort-value="{{ (reg.user.lastname if reg.user else '')|lower }}">
-                            {% if reg.user %}
-                            <a href="{{ url_for('admin.worker_panel', user_id=reg.user.id) }}" class="link-user">
-                                {{ reg.user.name }} {{ reg.user.lastname }}
-                            </a>
-                            {% else %}
-                            <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if reg.estado == 'Correcto' %}
-                                <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('Validado directamente del calendario') }}"><span class="status-dot dot-success"></span>{{ _('Correcto') }}</span>
-                            {% elif reg.estado == 'Correcto_Automatico' %}
-                                <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('El sistema lo asignó por inercia del día anterior') }}"><span class="status-dot dot-auto"></span>{{ _('Inercia (Auto)') }}</span>
-                            {% elif reg.estado == 'Cambio_Tajo' %}
-                                <span class="font-weight-bold" style="font-size:0.75rem;" title="{{ _('Fichó en otra obra; el cuadrante sigue el reloj') }}"><span class="status-dot dot-auto"></span>{{ _('Cambio de tajo') }}</span>
-                            {% elif reg.estado == 'Resuelto_Movido' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Reasignación manual') }}"><span class="status-dot dot-success"></span>{{ _('Reasignado') }}</span>
-                            {% elif reg.estado == 'Resuelto_Asignado' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Asignación manual') }}"><span class="status-dot dot-success"></span>{{ _('Asignado') }}</span>
-                            {% elif reg.estado == 'Resuelto_Dividido' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Multitarea manual') }}"><span class="status-dot dot-success"></span>{{ _('Multitarea') }}</span>
-                            
-                            {% elif reg.estado == 'Resuelto_Ausencia' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>{{ _('Ausencia OK') }}</span>
-                            
-                            {% elif reg.estado == 'Resuelto_Falta' %}
-                                <span class="text-success font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion }}"><span class="status-dot dot-success"></span>{{ _('Desasignado') }}</span>
-
-                            {% elif reg.estado == 'Falta' %}
-                                <span class="font-weight-bold" style="font-size:0.75rem; color:#e11d48;" title="{{ reg.notas_resolucion }}"><span class="status-dot" style="background:#e11d48;"></span>{{ _('Falta') }}</span>
-                            
-                            {% else %}
-                                <span class="text-secondary font-weight-bold" style="font-size:0.75rem;" title="{{ reg.notas_resolucion if reg.notas_resolucion else _('Ignorado o Falta justificada') }}"><span class="status-dot dot-secondary"></span>{{ _('Ignorado/Justif.') }}</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="d-flex align-items-center justify-content-center w-100">
-                                <div class="px-1" style="width: 45%; min-width: 0;">
-                                    {% if reg.obra_planificada %}
-                                        <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                            <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_planificada.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.codigo }}</a>
-                                            <span class="text-muted flex-shrink-0 mr-1">-</span>
-                                            <span class="text-muted text-truncate" style="font-size: 0.75rem;" title="{{ reg.obra_planificada.nombre }}">{{ reg.obra_planificada.nombre }}</span>
-                                        </div>
-                                    {% else %}
-                                        <span class="text-muted font-italic text-center d-block" style="font-size: 0.75rem;">{{ _('Sin Plan') }}</span>
-                                    {% endif %}
-                                </div>
-                                <div class="text-center" style="width: 10%;">
-                                    <i class="fas fa-arrow-right flow-arrow"></i>
-                                </div>
-                                <div class="px-1" style="width: 45%; min-width: 0;">
-                                   {% if reg.obra_real %}
-                                        <div class="d-flex align-items-center justify-content-start text-left" style="width: 100%; min-width: 0;">
-                                            <a href="{{ url_for('admin.obra_panel', obra_id=reg.obra_real.id) }}" class="link-obra flex-shrink-0 mr-1" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.codigo }}</a>
-                                            <span class="text-muted flex-shrink-0 mr-1">-</span>
-                                            <span class="text-muted text-truncate" style="font-size: 0.75rem;" title="{{ reg.obra_real.nombre }}">{{ reg.obra_real.nombre }}</span>
-                                        </div>
-                                    {% else %}
-                                        <span class="text-muted font-italic text-center d-block" style="font-size: 0.75rem;">{{ _('Falta') }}</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </td>
-                        <td class="text-center">
-                            {% if reg.check_in %}<span class="audit-chip audit-chip-in"><i class="fas fa-sign-in-alt"></i>{{ reg.check_in|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                        </td>
-                        <td class="text-center">
-                            {% if reg.check_out %}<span class="audit-chip audit-chip-out"><i class="fas fa-sign-out-alt"></i>{{ reg.check_out|format_time }}</span>{% else %}<span class="audit-chip audit-chip-muted">—</span>{% endif %}
-                        </td>
-                        {% if muestra_geo_audit %}{{ celda_geo(reg) }}{% endif %}
-                        {{ celda_metricas_odoo(reg) }}
-                        {{ celda_notas(reg) }}
-                        <td>
-                            {% if reg.resuelto_por %}
-                                <a href="{{ url_for('admin.worker_panel', user_id=reg.resuelto_por.id) }}" class="link-user" style="font-size: 0.75rem;">
-                                    <i class="fas fa-user-shield text-muted mr-1"></i>{{ reg.resuelto_por.name }}
-                                </a>
-                            {% else %}
-                                <span class="text-muted font-weight-bold" style="font-size: 0.75rem;"><i class="fas fa-robot text-primary mr-1"></i>{{ _('Sistema') }}</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-muted" data-order="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '0' }}" data-sort-value="{{ reg.fecha_auditoria.strftime('%Y%m%d%H%M') if reg.fecha_auditoria else '' }}">
-                            {{ reg.fecha_auditoria.strftime('%d/%m/%y %H:%M') if reg.fecha_auditoria else '—' }}
-                        </td>
-                        {% if can_resolve_fichajes %}
-                        <td class="text-center" onclick="event.stopPropagation();">
-                            {% if (reg.estado or '').startswith('Resuelto_') or reg.estado == 'Falta' %}
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary"
-                                    style="font-size:0.7rem; padding:0.15rem 0.45rem;"
-                                    title="{{ _('Vuelve al estado anterior para poder auditarla de nuevo') }}"
-                                    onclick="reabrirResolucion({{ reg.id }}, this)">
-                                <i class="fas fa-undo"></i> {{ _('Reabrir') }}
-                            </button>
-                            {% else %}
-                            <span class="text-muted" style="font-size:0.7rem;">—</span>
-                            {% endif %}
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% endfor %}
-                    {% endif %}
-                </tbody>
-            </table>
-                </div>
-                <div id="historialPager" class="d-flex flex-wrap align-items-center px-3 pb-3" style="gap:0.5rem;"></div>
-            </div>
-        </div>
-        {% endif %}
-
-    </div>{# /accordionAuditoria #}
+    {# ===== Historial ===== #}
+    <section class="aud-panel" data-panel="historial" hidden>
+      <div class="aud-filters">
+        <button type="button" class="aud-pill is-active js-aud-origen" data-origen="">{{ _('Todo') }} <small data-count-origen=""></small></button>
+        <button type="button" class="aud-pill js-aud-origen" data-origen="manual">{{ _('Decisión manual') }} <small data-count-origen="manual"></small></button>
+        <button type="button" class="aud-pill js-aud-origen" data-origen="odoo">{{ _('Corregido en Odoo') }} <small data-count-origen="odoo"></small></button>
+        <button type="button" class="aud-pill js-aud-origen" data-origen="comodin">{{ _('Obra comodín') }} <small data-count-origen="comodin"></small></button>
+        <button type="button" class="aud-pill js-aud-origen" data-origen="auto">{{ _('Automático') }} <small data-count-origen="auto"></small></button>
+      </div>
+      <div class="aud-filters">
+        <label class="aud-check" title="{{ _('Los cumplimientos y cierres sin intervención se ocultan salvo que los pidas') }}">
+          <input type="checkbox" id="audHistAuto"> {{ _('Incluir cumplimientos automáticos') }}
+        </label>
+        <span class="aud-spacer"></span>
+        <select class="aud-select" id="audHistPer" aria-label="{{ _('Filas por página') }}">
+          <option value="25">25</option><option value="50">50</option><option value="100">100</option>
+        </select>
+      </div>
+      <div class="aud-card" style="padding:0.5rem 1rem;">
+        <table class="aud-table" id="audHistTable">
+          <thead>
+            <tr>
+              <th data-sort="fecha">{{ _('Fecha') }}</th>
+              <th data-sort="operario">{{ _('Persona') }}</th>
+              <th data-sort="obra">{{ _('Qué pasó') }}</th>
+              <th data-sort="origen">{{ _('Origen') }}</th>
+              <th data-sort="hora_reg">{{ _('Quién y cuándo') }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="audHistBody"><tr><td colspan="6" class="aud-table-empty">{{ _('Cargando…') }}</td></tr></tbody>
+        </table>
+        <div class="aud-pager" id="audHistPager"></div>
+      </div>
+    </section>
 
     <div id="customToast">
-        <i class="fas fa-spinner fa-spin text-info" id="toastIcon"></i>
-        <span id="toastMsg" class="font-weight-bold" style="font-size: 0.85rem;">{{ _('Procesando…') }}</span>
+      <i class="fas fa-spinner fa-spin text-info" id="toastIcon"></i>
+      <span id="toastMsg" class="font-weight-bold" style="font-size: 0.85rem;">{{ _('Procesando…') }}</span>
     </div>
 
   </main>
@@ -962,1356 +176,115 @@ tr.audit-row-highlight {
   {% include 'components/_person_day_timeline_modal.html' %}
 {% endwith %}
 
-{% if can_resolve_fichajes and es_oficina_auditoria %}
-<div class="modal fade" id="modalMarcaManual" tabindex="-1" role="dialog" aria-hidden="true"
-     data-url-list="{{ url_for('sync.listar_marcas_dia') }}"
-     data-url-create="{{ url_for('sync.registrar_marca_auditoria') }}"
-     data-url-fix="{{ url_for('sync.corregir_marca_auditoria') }}"
-     data-url-anular="{{ url_for('sync.anular_marca_auditoria') }}">
-  <div class="modal-dialog modal-lg" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-clock mr-2"></i>{{ _('Registrar / corregir marca') }}</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="{{ _('Cerrar') }}"><span aria-hidden="true">&times;</span></button>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted small mb-3">
-          {{ _('Las correcciones no borran el pasado: se anula la marca anterior y se añade una nueva. Ambas quedan en el libro de jornada con motivo y autor.') }}
-        </p>
-        <ul class="nav nav-tabs mb-3" role="tablist">
-          <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tabMarcaAlta" role="tab">{{ _('Registrar marca') }}</a></li>
-          <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tabMarcaCorregir" role="tab" id="tabCorregirLink">{{ _('Corregir / anular') }}</a></li>
-        </ul>
-        <div class="tab-content">
-          <div class="tab-pane fade show active" id="tabMarcaAlta" role="tabpanel">
-            <div class="form-row">
-              <div class="form-group col-md-6">
-                <label>{{ _('Trabajador') }}</label>
-                <select id="marcaUserId" class="form-control">
-                  <option value="">—</option>
-                  {% for u in trabajadores_marca %}
-                  <option value="{{ u.id }}">{{ u.lastname }}, {{ u.name }} ({{ u.dni }})</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="form-group col-md-3">
-                <label>{{ _('Tipo') }}</label>
-                <select id="marcaTipo" class="form-control">
-                  <option value="entrada">{{ _('Entrada') }}</option>
-                  <option value="salida">{{ _('Salida') }}</option>
-                  <option value="pausa_inicio">{{ _('Inicio pausa') }}</option>
-                  <option value="pausa_fin">{{ _('Fin pausa') }}</option>
-                </select>
-              </div>
-              <div class="form-group col-md-3">
-                <label>{{ _('Fecha y hora') }}</label>
-                <input type="datetime-local" id="marcaOcurrido" class="form-control">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group col-md-6">
-                <label>{{ _('Obra') }} <span class="text-muted">({{ _('opcional') }})</span></label>
-                <select id="marcaObraId" class="form-control">
-                  <option value="">—</option>
-                  {% for o in obras_marca %}
-                  <option value="{{ o.id }}">{{ o.nombre }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="form-group col-md-6">
-                <label>{{ _('Motivo') }} <span class="text-danger">*</span></label>
-                <input type="text" id="marcaMotivo" class="form-control" maxlength="500"
-                       placeholder="{{ _('Ej: olvido de fichaje / corrección tras consulta') }}">
-              </div>
-            </div>
-            <button type="button" class="btn btn-primary" onclick="guardarMarcaManual()">
-              <i class="fas fa-save mr-1"></i>{{ _('Guardar en el libro') }}
-            </button>
-          </div>
-          <div class="tab-pane fade" id="tabMarcaCorregir" role="tabpanel">
-            <div class="form-row">
-              <div class="form-group col-md-6">
-                <label>{{ _('Trabajador') }}</label>
-                <select id="corrUserId" class="form-control">
-                  <option value="">—</option>
-                  {% for u in trabajadores_marca %}
-                  <option value="{{ u.id }}">{{ u.lastname }}, {{ u.name }} ({{ u.dni }})</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="form-group col-md-4">
-                <label>{{ _('Día laboral') }}</label>
-                <input type="date" id="corrFecha" class="form-control">
-              </div>
-              <div class="form-group col-md-2 d-flex align-items-end">
-                <button type="button" class="btn btn-outline-secondary btn-block" onclick="cargarMarcasDia()">{{ _('Cargar') }}</button>
-              </div>
-            </div>
-            <div id="corrLista" class="mb-3" style="max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:.5rem;">
-              <span class="text-muted small">{{ _('Elige trabajador y día, luego Cargar.') }}</span>
-            </div>
-            <div class="form-row">
-              <div class="form-group col-md-4">
-                <label>{{ _('Nueva fecha/hora') }}</label>
-                <input type="datetime-local" id="corrOcurrido" class="form-control">
-              </div>
-              <div class="form-group col-md-4">
-                <label>{{ _('Nueva obra') }}</label>
-                <select id="corrObraId" class="form-control">
-                  <option value="">{{ _('(sin cambiar)') }}</option>
-                  {% for o in obras_marca %}
-                  <option value="{{ o.id }}">{{ o.nombre }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="form-group col-md-4">
-                <label>{{ _('Motivo') }} <span class="text-danger">*</span></label>
-                <input type="text" id="corrMotivo" class="form-control" maxlength="500">
-              </div>
-            </div>
-            <div class="d-flex" style="gap:.5rem;">
-              <button type="button" class="btn btn-primary" onclick="corregirMarcaSeleccionada()">
-                <i class="fas fa-pen mr-1"></i>{{ _('Corregir (anular + nueva)') }}
-              </button>
-              <button type="button" class="btn btn-outline-danger" onclick="anularMarcaSeleccionada()">
-                <i class="fas fa-ban mr-1"></i>{{ _('Solo anular') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
-
+{% include 'sync/_auditoria_modal_marca.html' %}
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/fichaje_estado.js') }}"></script>
 <script src="{{ url_for('static', filename='js/person_day_timeline.js') }}?v=20260929b"></script>
 <script src="{{ url_for('static', filename='js/auditoria_marcas.js') }}?v=20261016noreload"></script>
-
 <script>
-var dtCorrecciones = null;
-var dtHistorial = null;
-var SP_HISTORIAL_DATE_COL = {{ (6 + (1 if muestra_geo_audit else 0) + (4 if tenant_has_odoo else 0) + 2) }};
-var SP_GEO_FILTER_DUDOSA = false;
-
-function applyGeoDudosaFilter(active) {
-    SP_GEO_FILTER_DUDOSA = !!active;
-    document.querySelectorAll('.fila-fichaje-auditoria').forEach(function (row) {
-        if (!SP_GEO_FILTER_DUDOSA) {
-            row.style.display = '';
-            return;
-        }
-        row.style.display = row.getAttribute('data-geo-estado') === 'dudosa' ? '' : 'none';
-    });
-    var stat = document.getElementById('auditGeoDudosaStat');
-    if (stat) {
-        stat.classList.toggle('auditoria-stat--active', SP_GEO_FILTER_DUDOSA);
-    }
-}
-
-function auditRowCell(row, col) {
-    if (row && row.anCells && row.anCells[col]) return row.anCells[col];
-    if (row && row.nTr && row.nTr.cells && row.nTr.cells[col]) return row.nTr.cells[col];
-    return null;
-}
-
-function auditCellSortKey(cell, kind) {
-    var raw = '';
-    if (cell) {
-        raw = cell.getAttribute('data-order');
-        if (raw == null || raw === '') raw = cell.getAttribute('data-sort-value');
-        if (raw == null || raw === '') raw = (cell.textContent || '').replace(/\s+/g, ' ').trim();
-    }
-    if (kind === 'date' && typeof parseAdminDateSortValue === 'function') {
-        return parseAdminDateSortValue(raw);
-    }
-    if (kind === 'time' && typeof parseAdminTimeSortValue === 'function') {
-        return parseAdminTimeSortValue(raw);
-    }
-    if (kind === 'num' || kind === 'rating') {
-        var n = parseFloat(String(raw).replace(/\s/g, '').replace(',', '.'));
-        return isNaN(n) ? 0 : n;
-    }
-    return String(raw || '').toLocaleLowerCase();
-}
-
-function bindAuditHeaderSort(tableId) {
-    var table = document.getElementById(tableId);
-    if (!table || !$.fn.DataTable.isDataTable(table)) return;
-    var $table = $(table);
-    $table.find('thead').off('click.spAuditSort').on('click.spAuditSort', 'th.sortable-col', function (e) {
-        if (e.target.closest && e.target.closest('.sp-col-prefs, .sp-col-prefs-btn')) return;
-        e.preventDefault();
-        e.stopPropagation();
-        var th = this;
-        var col = parseInt(th.getAttribute('data-col-index'), 10);
-        if (isNaN(col)) col = Array.prototype.indexOf.call(th.parentNode.children, th);
-        var kind = th.getAttribute('data-sort-type') || 'text';
-        var cur = th.getAttribute('data-sort') || 'none';
-        var next = (kind === 'date' || kind === 'time')
-            ? (cur === 'desc' ? 'asc' : 'desc')
-            : (cur === 'asc' ? 'desc' : 'asc');
-        var api = $table.DataTable();
-        var settings = api.settings()[0];
-        var master = settings.aiDisplayMaster.slice();
-        master.sort(function (ia, ib) {
-            var ka = auditCellSortKey(auditRowCell(settings.aoData[ia], col), kind);
-            var kb = auditCellSortKey(auditRowCell(settings.aoData[ib], col), kind);
-            var cmp;
-            if (typeof ka === 'number' && typeof kb === 'number') cmp = ka - kb;
-            else cmp = String(ka).localeCompare(String(kb), 'es', { numeric: true, sensitivity: 'base' });
-            if (cmp === 0) return ia - ib;
-            return next === 'asc' ? cmp : -cmp;
-        });
-        settings.aiDisplayMaster = master;
-        settings.aaSorting = [];
-        table.querySelectorAll('thead th.sortable-col').forEach(function (other) {
-            if (other === th) return;
-            other.setAttribute('data-sort', 'none');
-            var otherIcon = other.querySelector('.sort-icon');
-            if (otherIcon) otherIcon.className = 'fas fa-sort sort-icon';
-        });
-        th.setAttribute('data-sort', next);
-        var icon = th.querySelector('.sort-icon');
-        if (icon) icon.className = 'fas fa-sort-' + (next === 'asc' ? 'up' : 'down') + ' sort-icon';
-        api.page(0);
-        api.draw(false);
-    });
-}
-
-function initAuditDataTable(tableId, options) {
-    var $el = $('#' + tableId);
-    if (!$el.length || $.fn.DataTable.isDataTable($el)) return;
-    $el.find('tbody tr').each(function () {
-        if ($(this).find('> td[colspan]').length) $(this).remove();
-    });
-    // El clic lo atiende bindAuditHeaderSort: ordena las 500 filas, no el texto dd/mm ni la página visible.
-    $el.find('thead th[onclick]').removeAttr('onclick');
-    var dtLang = {es:'es-ES', en:'en-GB', pt:'pt-PT', fr:'fr-FR'}[window.SP_LOCALE || 'es'] || 'es-ES';
-    var opts = $.extend({}, {
-        ordering: false,
-        order: [],
-        language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/' + dtLang + '.json' }
-    }, options || {});
-    opts.ordering = false;
-    opts.order = [];
-    opts.columnDefs = [{ targets: 'no-sort', orderable: false }];
-    var api = $el.DataTable(opts);
-    bindAuditHeaderSort(tableId);
-    return api;
-}
-
-function openAuditoriaSection(collapseSelector) {
-    var $collapse = $(collapseSelector);
-    if (!$collapse.length) return;
-    var $section = $collapse.closest('.auditoria-section');
-    var alreadyOpen = $collapse.hasClass('show');
-    if (!alreadyOpen) $collapse.collapse('show');
-    setTimeout(function() {
-        if ($section.length) {
-            $section[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    }, alreadyOpen ? 0 : 400);
-}
-window.openAuditoriaSection = openAuditoriaSection;
-
-function applyAuditoriaDeepLink() {
-    const params = new URLSearchParams(window.location.search);
-    const userId = params.get('user_id');
-    const fecha = params.get('fecha');
-    const registroId = params.get('registro_id');
-    const seccion = (params.get('seccion') || '').toLowerCase();
-    if (!userId && !fecha && !registroId) return;
-
-    const sectionMap = {
-        conflictos: '#collapseConflictos',
-        paracaidistas: '#collapseParacaidistas',
-        ausencias: '#collapseAusencias',
-        comodin: '#collapseComodin',
-    };
-    const section = sectionMap[seccion] || '#collapseConflictos';
-    openAuditoriaSection(section);
-
-    setTimeout(function () {
-        let target = null;
-        if (registroId) {
-            target = document.getElementById('row-' + registroId);
-        }
-        if (!target && userId && fecha) {
-            document.querySelectorAll('.fila-fichaje-auditoria').forEach(function (row) {
-                if (String(row.getAttribute('data-user-id')) !== String(userId)) return;
-                if (row.getAttribute('data-fecha') !== fecha) return;
-                if (!target || row.closest('.collapse.show')) target = row;
-            });
-        }
-        if (!target) return;
-        target.classList.add('audit-row-highlight');
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 500);
-}
-window.applyAuditoriaDeepLink = applyAuditoriaDeepLink;
-
-var AUDIT_UI_STATE_KEY = 'sp_auditoria_ui';
-
-/** Tras resolver/reabrir: a dónde saltar al recargar (el resto queda cerrado). */
-function softReloadAuditoria(delayMs, focus) {
-    try {
-        sessionStorage.setItem(AUDIT_UI_STATE_KEY, JSON.stringify({
-            t: Date.now(),
-            focus: focus || null
-        }));
-    } catch (e) { /* ignore */ }
-    var ms = (typeof delayMs === 'number') ? delayMs : 350;
-    setTimeout(function () { window.location.reload(); }, ms);
-}
-window.softReloadAuditoria = softReloadAuditoria;
-
-function restoreAuditoriaFocus() {
-    var raw;
-    try {
-        raw = sessionStorage.getItem(AUDIT_UI_STATE_KEY);
-        sessionStorage.removeItem(AUDIT_UI_STATE_KEY);
-    } catch (e) {
-        return false;
-    }
-    if (!raw) return false;
-    var st;
-    try { st = JSON.parse(raw); } catch (e) { return false; }
-    if (!st || (Date.now() - (st.t || 0)) > 90000) return false;
-    var focus = st.focus;
-    if (!focus) return false;
-
-    var registroId = focus.registroId ? String(focus.registroId) : '';
-    var seccionMap = {
-        conflictos: '#collapseConflictos',
-        desviaciones: '#collapseConflictos',
-        paracaidistas: '#collapseParacaidistas',
-        ausencias: '#collapseAusencias',
-        comodin: '#collapseComodin',
-        historial: '#collapseHistorial',
-        correcciones: '#collapseCorrecciones'
-    };
-
-    if (focus.historial) {
-        var q = focus.historialQ != null ? String(focus.historialQ) : registroId;
-        window.historialSearchQ = q;
-        var input = document.getElementById('historialSearchInput');
-        if (input) input.value = q;
-        openAuditoriaSection('#collapseHistorial');
-        // shown.bs.collapse refresca; forzar búsqueda por id tras abrir
-        setTimeout(function () {
-            if (typeof window.refreshHistorialTable !== 'function') return;
-            window.refreshHistorialTable(q, function () {
-                var row = document.getElementById('hist-row-' + registroId)
-                    || document.querySelector('#historialTableBody tr[data-registro-id="' + registroId + '"]');
-                if (row) {
-                    row.classList.add('audit-row-highlight');
-                    try { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { row.scrollIntoView(true); }
-                }
-            });
-        }, 200);
-        return true;
-    }
-
-    var sel = seccionMap[focus.seccion] || null;
-    if (sel) {
-        openAuditoriaSection(sel);
-        setTimeout(function () {
-            var row = registroId
-                ? (document.getElementById('row-' + registroId)
-                    || document.getElementById('row-espejo-plan-' + registroId)
-                    || document.getElementById('row-espejo-real-' + registroId)
-                    || document.querySelector(sel + ' tr[data-registro-id="' + registroId + '"]'))
-                : null;
-            if (row) {
-                row.classList.add('audit-row-highlight');
-                try { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { row.scrollIntoView(true); }
-            }
-        }, 450);
-        return true;
-    }
-    return false;
-}
-
-$(document).ready(function() {
-    ['auditConflictosTable', 'auditParacaidistasTable', 'auditAusenciasTable'].forEach(function(id) {
-        if (document.getElementById(id)) applyDefaultDateSort(id, 0);
-    });
-
-    $('.auditoria-stat-link').on('click', function() {
-        openAuditoriaSection($(this).data('audit-target'));
-    }).on('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openAuditoriaSection($(this).data('audit-target'));
-        }
-    });
-
-    $('#auditGeoDudosaStat').on('click', function (e) {
-        e.stopPropagation();
-        applyGeoDudosaFilter(!SP_GEO_FILTER_DUDOSA);
-        openAuditoriaSection('#collapseHistorial');
-    });
-
-    // Acordeón: cada sección se abre/cierra de forma independiente
-    $('#accordionAuditoria').on('click', '.auditoria-section-header[data-target]', function (e) {
-        e.preventDefault();
-        const $header = $(this);
-        const $target = $($header.data('target'));
-        $target.collapse('toggle');
-    });
-    $('#accordionAuditoria').on('hidden.bs.collapse shown.bs.collapse', '.collapse', function () {
-        const $header = $(this).prev('.auditoria-section-header');
-        const isOpen = $(this).hasClass('show');
-        $header.toggleClass('collapsed', !isOpen);
-        $header.attr('aria-expanded', isOpen ? 'true' : 'false');
-    });
-
-    var historialSearchTimer = null;
-    window.historialSearchQ = window.historialSearchQ || '';
-    var historialSearchQ = window.historialSearchQ;
-    window.historialState = window.historialState || {
-        q: historialSearchQ,
-        page: 1,
-        sort: 'fecha',
-        dir: 'desc',
-        perPage: 25,
-        origen: ''
-    };
-
-    function destroyAuditDataTable(tableId) {
-        var $el = $('#' + tableId);
-        if ($el.length && $.fn.DataTable && $.fn.DataTable.isDataTable($el)) {
-            try { $el.DataTable().destroy(); } catch (e) { /* ignore */ }
-        }
-        if (tableId === 'historialTable') dtHistorial = null;
-        if (tableId === 'correccionesTable') dtCorrecciones = null;
-    }
-
-    function historialColCount() {
-        var table = document.getElementById('historialTable');
-        if (!table) return 12;
-        var ths = table.querySelectorAll('thead tr:first-child th');
-        return ths.length || 12;
-    }
-
-    function loadAuditoriaSeccion(seccion, $tbody, onDone, opts) {
-        opts = opts || {};
-        var force = !!opts.force;
-        var q = (opts.q != null) ? String(opts.q) : '';
-        if (!$tbody.length) {
-            if (onDone) onDone();
-            return;
-        }
-        if (!force && $tbody.attr('data-loaded') === '1' && seccion !== 'historial') {
-            if (onDone) onDone();
-            return;
-        }
-        // Histórico: permitir recarga con búsqueda aunque ya estuviera cargado
-        if (!force && seccion === 'historial' && $tbody.attr('data-loaded') === '1' && q === ($tbody.attr('data-q') || '')) {
-            if (onDone) onDone();
-            return;
-        }
-        // IMPORTANTE: destruir DataTables ANTES de tocar el tbody
-        if (seccion === 'historial') destroyAuditDataTable('historialTable');
-        if (seccion === 'correcciones') destroyAuditDataTable('correccionesTable');
-
-        var cols = seccion === 'historial' ? historialColCount() : 16;
-        $tbody.html(
-            '<tr class="audit-lazy-placeholder"><td colspan="' + cols +
-            '" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin mr-1"></i>{{ _("Cargando…") }}</td></tr>'
-        );
-        var url = {{ url_for('sync.auditoria_fichajes_seccion', seccion='__SEC__')|tojson }}.replace('__SEC__', seccion);
-        function addParam(key, value) {
-            if (value == null || value === '') return;
-            url += (url.indexOf('?') >= 0 ? '&' : '?') + key + '=' + encodeURIComponent(value);
-        }
-        if (q) addParam('q', q);
-        if (seccion === 'historial') {
-            var st = window.historialState || {};
-            addParam('page', st.page || 1);
-            addParam('per_page', st.perPage || 25);
-            addParam('sort', st.sort || 'fecha');
-            addParam('dir', st.dir || 'desc');
-            addParam('origen', st.origen || '');
-        }
-        fetch(url, {
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (!data || !data.success) {
-                $tbody.html(
-                    '<tr><td colspan="' + cols +
-                    '" class="text-center text-danger py-3">' +
-                    ((data && data.error) || {{ _('Error al cargar')|tojson }}) +
-                    '</td></tr>'
-                );
-                if (onDone) onDone({ empty: true, error: true });
-                return;
-            }
-            // Vacío: tbody sin filas (DataTables no admite una sola celda con colspan)
-            var html = (data.html || '').trim();
-            $tbody.html(html);
-            $tbody.attr('data-loaded', '1');
-            $tbody.attr('data-q', q || '');
-            var count = data.count || 0;
-            var total = (data.total != null) ? data.total : count;
-            var hint = document.getElementById('historialSearchHint');
-            if (hint && seccion === 'historial') {
-                hint.textContent = q
-                    ? ({{ _('Resultados')|tojson }} + ': ' + total)
-                    : {{ _('Histórico completo, por páginas. Arriba, el día de trabajo más reciente.')|tojson }};
-            }
-            if (seccion === 'historial') {
-                if (data.page) window.historialState.page = data.page;
-                renderHistorialPager(data);
-                paintHistorialSortHeaders();
-            }
-            if (onDone) onDone({ empty: total === 0, count: count, total: total });
-        })
-        .catch(function() {
-            $tbody.html(
-                '<tr><td colspan="' + cols +
-                '" class="text-center text-danger py-3">{{ _("Error de red") }}</td></tr>'
-            );
-            if (onDone) onDone({ empty: true, error: true });
-        });
-    }
-
-    function paintHistorialSortHeaders() {
-        var table = document.getElementById('historialTable');
-        if (!table) return;
-        var st = window.historialState;
-        table.querySelectorAll('thead th.sortable-col').forEach(function (th) {
-            th.removeAttribute('onclick');
-            var key = th.getAttribute('data-col-key');
-            var active = key && key === st.sort;
-            th.setAttribute('data-sort', active ? st.dir : 'none');
-            var icon = th.querySelector('.sort-icon');
-            if (!icon) return;
-            icon.className = 'fas sort-icon ' + (
-                active ? (st.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'
-            );
-        });
-    }
-
-    function renderHistorialPager(data) {
-        var el = document.getElementById('historialPager');
-        if (!el) return;
-        var total = data.total || 0;
-        var page = data.page || 1;
-        var pages = data.pages || 1;
-        var per = data.per_page || 25;
-        if (!total) {
-            el.innerHTML = '';
-            return;
-        }
-        var start = (page - 1) * per + 1;
-        var end = Math.min(page * per, total);
-        el.innerHTML =
-            '<span class="text-muted small">' + start + '–' + end + ' / ' + total + '</span>' +
-            '<button type="button" class="btn btn-sm btn-outline-secondary" data-hist-page="' + (page - 1) + '"' +
-                (page <= 1 ? ' disabled' : '') + '>{{ _("Anterior") }}</button>' +
-            '<label class="small mb-0 text-muted">{{ _("Página") }} ' +
-                '<input type="number" id="historialPageInput" min="1" max="' + pages + '" value="' + page + '" ' +
-                'class="form-control form-control-sm d-inline-block" style="width:4.5rem;"> / ' + pages +
-            '</label>' +
-            '<button type="button" class="btn btn-sm btn-outline-secondary" data-hist-page="' + (page + 1) + '"' +
-                (page >= pages ? ' disabled' : '') + '>{{ _("Siguiente") }}</button>';
-    }
-
-    function refreshHistorialTable(q, onReady) {
-        var nextQ = q || '';
-        if (nextQ !== (window.historialState.q || '')) {
-            window.historialState.page = 1;
-        }
-        window.historialState.q = nextQ;
-        window.historialSearchQ = nextQ;
-        historialSearchQ = nextQ;
-        var $body = $('#historialTableBody');
-        loadAuditoriaSeccion('historial', $body, function (meta) {
-            meta = meta || {};
-            var table = document.getElementById('historialTable');
-            if (table) {
-                table.querySelectorAll('tbody tr').forEach(function (tr) {
-                    if (tr.querySelector('td[colspan]')) tr.remove();
-                });
-                table.querySelectorAll('.sp-col-hidden').forEach(function (cell) {
-                    cell.classList.remove('sp-col-hidden');
-                    cell.style.display = '';
-                });
-            }
-            destroyAuditDataTable('historialTable');
-            dtHistorial = null;
-            if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
-            paintHistorialSortHeaders();
-            if (typeof onReady === 'function') onReady(meta);
-        }, { force: true, q: nextQ });
-    }
-    window.refreshHistorialTable = refreshHistorialTable;
-
-    $('#historialTable').on('click', 'thead th.sortable-col', function (e) {
-        if (e.target.closest && e.target.closest('.sp-col-prefs, .sp-col-prefs-btn')) return;
-        e.preventDefault();
-        e.stopPropagation();
-        var key = this.getAttribute('data-col-key') || 'fecha';
-        var kind = this.getAttribute('data-sort-type') || 'text';
-        var st = window.historialState;
-        if (st.sort === key) {
-            st.dir = st.dir === 'asc' ? 'desc' : 'asc';
-        } else {
-            st.sort = key;
-            st.dir = (kind === 'date' || kind === 'time') ? 'desc' : 'asc';
-        }
-        st.page = 1;
-        refreshHistorialTable(st.q);
-    });
-    $('#historialPager').on('click', '[data-hist-page]', function () {
-        if (this.disabled) return;
-        var n = parseInt(this.getAttribute('data-hist-page'), 10);
-        var pages = parseInt($('#historialPageInput').attr('max'), 10) || 1;
-        if (!n || n < 1 || n > pages || n === window.historialState.page) return;
-        window.historialState.page = n;
-        refreshHistorialTable(window.historialState.q);
-    });
-    $('#historialPager').on('change', '#historialPageInput', function () {
-        var pages = parseInt(this.max, 10) || 1;
-        var n = parseInt(this.value, 10);
-        if (!n || n < 1) n = 1;
-        if (n > pages) n = pages;
-        this.value = n;
-        if (n === window.historialState.page) return;
-        window.historialState.page = n;
-        refreshHistorialTable(window.historialState.q);
-    });
-
-    function clearAuditoriaRowHighlight() {
-        document.querySelectorAll('tr.audit-row-highlight').forEach(function (r) {
-            r.classList.remove('audit-row-highlight');
-        });
-    }
-
-    function highlightAuditoriaRow(el) {
-        clearAuditoriaRowHighlight();
-        if (!el) return;
-        el.classList.add('audit-row-highlight');
-        try {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } catch (e) {
-            el.scrollIntoView(true);
-        }
-    }
-
-    function findHistorialRow(registroId, userId, fecha) {
-        var idStr = String(registroId || '');
-        var byId = document.getElementById('hist-row-' + idStr);
-        if (byId) return byId;
-        var body = document.getElementById('historialTableBody');
-        if (!body) return null;
-        var tr = body.querySelector('tr[data-registro-id="' + idStr + '"]');
-        if (tr) return tr;
-        if (userId && fecha) {
-            var hit = body.querySelector(
-                'tr[data-user-id="' + String(userId) + '"][data-fecha="' + String(fecha) + '"]'
-            );
-            if (hit) return hit;
-        }
-        return null;
-    }
-
-    function jumpToDesvioLado(lado, registroId, userId, fecha) {
-        var idStr = String(registroId || '');
-        if (!idStr || (lado !== 'plan' && lado !== 'real')) return;
-
-        clearAuditoriaRowHighlight();
-
-        var espejo = document.getElementById('row-espejo-' + lado + '-' + idStr);
-        if (espejo) {
-            openAuditoriaSection(lado === 'plan' ? '#collapseAusencias' : '#collapseParacaidistas');
-            setTimeout(function () { highlightAuditoriaRow(espejo); }, 420);
-            return;
-        }
-
-        // Pendiente en esa sección sin espejo (p. ej. solo ausencia / solo libre)
-        var sectionSel = lado === 'plan' ? '#collapseAusencias' : '#collapseParacaidistas';
-        var sectionRow = document.querySelector(
-            sectionSel + ' #row-' + idStr + ', ' +
-            sectionSel + ' tr[data-desvio-registro-id="' + idStr + '"]'
-        );
-        if (sectionRow) {
-            openAuditoriaSection(sectionSel);
-            setTimeout(function () { highlightAuditoriaRow(sectionRow); }, 420);
-            return;
-        }
-
-        // Lado ya ack pero el desvío sigue abierto → si ese lado está resuelto,
-        // ir al histórico; si no, ampliar la fila de Desviaciones.
-        var main = document.getElementById('row-' + idStr);
-        if (main && main.hasAttribute('data-desvio-toggle')) {
-            var detail = document.getElementById('desvio-detail-' + idStr);
-            var ladoPanel = detail && detail.querySelector(
-                lado === 'plan' ? '.audit-desvio-panel--plan' : '.audit-desvio-panel--real'
-            );
-            var ladoResuelto = !!(ladoPanel && ladoPanel.classList.contains('is-resolved'));
-            if (!ladoResuelto) {
-                openAuditoriaSection('#collapseConflictos');
-                if (detail) {
-                    detail.hidden = false;
-                    detail.style.display = '';
-                    main.classList.add('is-expanded');
-                    main.setAttribute('aria-expanded', 'true');
-                }
-                setTimeout(function () {
-                    highlightAuditoriaRow(main);
-                    if (ladoPanel) {
-                        ladoPanel.classList.add('audit-desvio-panel-highlight');
-                        try {
-                            ladoPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        } catch (e) { /* ignore */ }
-                        setTimeout(function () {
-                            ladoPanel.classList.remove('audit-desvio-panel-highlight');
-                        }, 4500);
-                    }
-                }, 420);
-                return;
-            }
-            // Lado resuelto → caer al histórico
-        }
-
-        // Cerrado del todo (o lado ya ack) → histórico global (búsqueda por id)
-        var $hist = $('#collapseHistorial');
-        var histOpen = $hist.hasClass('show');
-        var input = document.getElementById('historialSearchInput');
-        if (input) input.value = idStr;
-        historialSearchQ = idStr;
-
-        function afterHistLoad() {
-            var row = findHistorialRow(idStr, userId, fecha);
-            if (row && dtHistorial && typeof dtHistorial.row === 'function') {
-                try {
-                    var idx = dtHistorial.row(row).index();
-                    if (typeof idx === 'number' && idx >= 0) {
-                        var info = dtHistorial.page.info();
-                        var pageLen = info.length > 0 ? info.length : 25;
-                        dtHistorial.page(Math.floor(idx / pageLen)).draw(false);
-                    }
-                } catch (e) { /* ignore */ }
-            }
-            setTimeout(function () { highlightAuditoriaRow(row); }, 80);
-        }
-
-        if (histOpen) {
-            openAuditoriaSection('#collapseHistorial');
-            refreshHistorialTable(idStr, afterHistLoad);
-        } else {
-            window._auditHistorialJumpReady = afterHistLoad;
-            openAuditoriaSection('#collapseHistorial');
-        }
-    }
-    window.jumpToDesvioLado = jumpToDesvioLado;
-
-    $(document).on('click', '.js-desvio-jump', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var btn = e.currentTarget;
-        jumpToDesvioLado(
-            btn.getAttribute('data-desvio-jump'),
-            btn.getAttribute('data-registro-id'),
-            btn.getAttribute('data-user-id'),
-            btn.getAttribute('data-fecha')
-        );
-    });
-
-    $('#collapseCorrecciones').on('shown.bs.collapse', function() {
-        var $body = $('#correccionesTableBody');
-        loadAuditoriaSeccion('correcciones', $body, function() {
-            var table = document.getElementById('correccionesTable');
-            if (!dtCorrecciones) {
-                // Quitar hides CSS previos: DataTables debe arrancar con header/body alineados
-                if (table) {
-                    table.querySelectorAll('.sp-col-hidden').forEach(function (cell) {
-                        cell.classList.remove('sp-col-hidden');
-                        cell.style.display = '';
-                    });
-                }
-                dtCorrecciones = initAuditDataTable('correccionesTable', {
-                    pageLength: 10,
-                    lengthMenu: [[5, 10, 25, 50, -1], [5, 10, 25, 50, {{ _('Todos')|tojson }}]]
-                });
-                if (window.reapplyTableColumnPrefs) reapplyTableColumnPrefs(table);
-            } else if (window.reapplyTableColumnPrefs) {
-                reapplyTableColumnPrefs(table);
-            }
-        });
-    });
-    $('#collapseHistorial').on('shown.bs.collapse', function() {
-        var q = window.historialSearchQ != null ? window.historialSearchQ : historialSearchQ;
-        historialSearchQ = q || '';
-        refreshHistorialTable(historialSearchQ, function (meta) {
-            if (typeof window._auditHistorialJumpReady === 'function') {
-                var cb = window._auditHistorialJumpReady;
-                window._auditHistorialJumpReady = null;
-                cb(meta);
-            }
-        });
-    });
-
-    $('#historialOrigenFilter').on('change', function () {
-        window.historialState.origen = this.value || '';
-        window.historialState.page = 1;
-        if (!$('#collapseHistorial').hasClass('show')) return;
-        refreshHistorialTable(window.historialState.q || '');
-    });
-
-    $('#historialSearchInput').on('input', function () {
-        var val = (this.value || '').trim();
-        historialSearchQ = val;
-        window.historialSearchQ = val;
-        clearTimeout(historialSearchTimer);
-        historialSearchTimer = setTimeout(function () {
-            if (!$('#collapseHistorial').hasClass('show')) {
-                // Al abrir, el handler shown.bs.collapse ya llama refresh con historialSearchQ.
-                $('#collapseHistorial').collapse('show');
-                return;
-            }
-            refreshHistorialTable(historialSearchQ);
-        }, 350);
-    });
-
-    applyAuditoriaDeepLink();
-    // Tras definir refreshHistorialTable: salto post-resolver/reabrir (arranque todo cerrado).
-    restoreAuditoriaFocus();
-});
-
-function showToast(message, isSuccess = false) {
-    const toast = document.getElementById('customToast');
-    const icon = document.getElementById('toastIcon');
-    const text = document.getElementById('toastMsg');
-    
-    toast.classList.add('show');
-    text.innerText = message;
-    
-    if(isSuccess) {
-        icon.className = 'fas fa-check-circle text-success';
-    } else {
-        icon.className = 'fas fa-spinner fa-spin text-info';
-    }
-}
-
-var AUDIT_RESOLVE_I18N = {{ {
-  'error_prefix': _('Error:'),
-  'invalid': _('Respuesta inválida'),
-  'network': _('Error de red al resolver'),
-  'http_fail': _('Error al resolver'),
-  'reopen_confirm': _('¿Reabrir esta decisión? Vuelve a la alerta anterior. Si se desasignó, se reasigna la plaza planificada.'),
-  'reopened': _('Reabierto'),
-  'reopen_fail': _('No se pudo reabrir'),
-  'reopen_network': _('Fallo de red al reabrir.'),
+window.AUD_CFG = {{ {
+    'urls': {
+    'resolver': url_for('sync.resolver_fichaje'),
+    'reabrir': url_for('sync.reabrir_fichaje'),
+    'cola': url_for('sync.auditoria_cola'),
+    'historial': url_for('sync.auditoria_historial'),
+    'cumplimiento': url_for('sync.auditoria_cumplimiento'),
+    'sync': url_for('sync.sync_fichajes_manual'),
+    'auditoria': url_for('sync.auditoria_fichajes'),
+    'worker': url_for('admin.worker_panel', user_id=0)|replace('/0', '/__ID__'),
+    'obra': url_for('admin.obra_panel', obra_id=0)|replace('/0', '/__ID__'),
+  },
+  'rango': rango,
+  'tab': tab_inicial,
+  'focus': {'registro_id': focus_registro_id, 'user_id': focus_user_id, 'fecha': focus_fecha},
+  'can_resolve': can_resolve_fichajes,
+  'can_force_past': (can_unassign_cuadrante_pasado|default(false)),
+  'pide_solicitud': (user_assigns_via_solicitud|default(false)),
+  'i18n': {
+    'error_prefix': _('Error:'),
+    'invalid': _('Respuesta inválida'),
+    'network': _('Error de red al resolver'),
+    'http_fail': _('Error al resolver'),
+    'reopen_confirm': _('¿Reabrir esta decisión? Vuelve a la alerta anterior. Si se desasignó, se reasigna la plaza planificada.'),
+    'reopened': _('Reabierto'),
+    'reopen_fail': _('No se pudo reabrir'),
+    'reopen_network': _('Fallo de red al reabrir.'),
+    'request_created': _('Solicitud creada'),
+    'request_text': _('Se ha generado una solicitud de baja.'),
+    'unassign': _('Desasignar'),
+    'unassign_q': _('¿Solo el día del conflicto o también pendientes posteriores en esta obra?'),
+    'only_day': _('Solo este día'),
+    'day_future': _('Este día + pendientes posteriores (auditoría abierta / plan futuro no validado)'),
+    'force_adv': _('Avanzado: incluir días ya validados / pasado (no borra el libro de fichajes)'),
+    'notes': _('Notas / comentario'),
+    'notes_hint_request': _('Si eliges pendientes posteriores, se creará una solicitud de baja con este comentario.'),
+    'notes_hint': _('Comentario opcional (si la baja pasa por solicitud, irá en ella).'),
+    'continue': _('Continuar'),
+    'cancel': _('Cancelar'),
+    'force_title': _('Confirmar modo forzado'),
+    'force_text': _('Vas a desasignar también días ya validados o del pasado en esta obra. Las marcas del libro de fichajes no se borran.'),
+    'force_yes': _('Sí, forzar'),
+    'sync_today': _('Revisando fichajes de hoy...'),
+    'sync_days': _('Revisando hoy y {n} días atrás...'),
+    'sync_ok': _('¡Revisión y Sincronización completadas!'),
+    'sync_err': _('Error al conectar con Odoo:'),
+    'sync_net': _('Fallo de red al intentar sincronizar.'),
+    'timeline_loading': _('Recopilando el día completo del operario...'),
+    'loading': _('Cargando…'),
+    'd_empty': _('Selecciona un caso de la lista para ver el detalle y decidir.'),
+    'd_planned': _('Planificado'),
+    'd_clocked': _('Fichó'),
+    'd_unplanned': _('Sin planificar'),
+    'd_nopunch': _('Sin fichaje'),
+    'd_boss': _('Jefe'),
+    'd_todo': _('Qué hacer'),
+    'd_day': _('Ver el día completo'),
+    'd_geo': _('Ubicación dudosa'),
+    'd_readonly': _('Solo consulta: no tienes permiso para resolver.'),
+    'd_other': _('Le toca decidir a otra persona.'),
+    'd_no_fichar': _('Si realmente faltó, confirma la falta. Si la planificación estaba mal, quítalo de la obra.'),
+    'd_otra_obra': _('Lo habitual: fue a trabajar a otra obra. Se acepta el fichaje y se libera su plan en la obra original.'),
+    'd_sin_plan': _('Fichó donde no estaba planificado. Acéptalo para asignarlo oficialmente a esa obra.'),
+    'd_disputa': _('Los jefes de las dos obras ya firmaron y no coinciden. Solo oficina puede cerrarlo: aceptar el cambio o confirmar falta en la planificada y aceptar el fichaje.'),
+    'd_cases': _('casos'),
+    'd_all_done': _('Todo al día'),
+    'load_fail': _('No se pudo cargar la sección'),
+    'rows_of': _('de'),
+    'prev': _('Anterior'),
+    'next': _('Siguiente'),
+    'page': _('Página'),
+    'no_data': _('Sin datos en este periodo'),
+    'k_cumplen': _('Cumplen lo planificado'),
+    'k_planificados': _('Días-persona planificados'),
+    'k_sinplan': _('Fichajes sin planificar'),
+    'k_corr': _('Correcciones de RRHH en Odoo'),
+    'k_faltas': _('Faltas'),
+    'c_cumpl_title': _('Cumplimiento semanal'),
+    'c_cumpl_sub': _('% de personas planificadas que fichan en su obra, sin necesidad de intervención.'),
+    'c_corr_title': _('Correcciones de RRHH por semana'),
+    'c_corr_sub': _('Lo que RRHH ha tenido que cambiar en Odoo después de la planificación.'),
+    'c_cambio': _('Cambio de obra'),
+    'c_borrado': _('Fichaje borrado'),
+    'c_alta': _('Alta no planificada'),
+    't_jefes_title': _('Calidad de planificación por jefe de obra'),
+    't_jefes_sub': _('Cuántos días planificados se cumplen y cuánta gente aparece sin estar planificada.'),
+    'th_jefe': _('Jefe de obra'),
+    'th_obras': _('Obras'),
+    'th_plan': _('Planificados'),
+    'th_cumpl': _('Cumplen'),
+    'th_sinplan': _('Sin planificar'),
+    'th_corr': _('Correcciones RRHH'),
+    'th_lectura': _('Lectura'),
+    't_pers_title': _('Personas con más incidencias'),
+    't_pers_sub': _('Faltas, fichajes en otra obra y fichajes sin planificar en el periodo.'),
+    'th_persona': _('Persona'),
+    'th_faltas': _('Faltas'),
+    'th_otra': _('Otra obra'),
+  },
 }|tojson }};
-
-(function () {
-    function auditI18n() { return AUDIT_RESOLVE_I18N || {}; }
-
-    function csrfHeaders() {
-        var headers = { 'Content-Type': 'application/json' };
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        var token = meta ? meta.getAttribute('content') : '';
-        if (!token) {
-            var parts = ('; ' + document.cookie).split('; csrf_token=');
-            if (parts.length === 2) token = parts.pop().split(';').shift();
-        }
-        if (token) headers['X-CSRFToken'] = token;
-        return headers;
-    }
-
-    function restoreRow(row) {
-        if (!row) return;
-        row.style.opacity = '1';
-        row.style.transform = 'translateX(0)';
-        row.style.pointerEvents = 'auto';
-    }
-
-    function removeEspejoRows(id, lados) {
-        var sides = lados || ['plan', 'real'];
-        sides.forEach(function (lado) {
-            var el = document.getElementById('row-espejo-' + lado + '-' + id);
-            if (!el) return;
-            var card = el.closest('.card-modern');
-            if (card) {
-                var badge = card.querySelector('.badge-count, .badge');
-                if (badge) {
-                    var count = parseInt(badge.innerText, 10);
-                    if (!isNaN(count) && count > 0) badge.innerText = count - 1;
-                }
-            }
-            el.remove();
-        });
-    }
-
-    function markEspejoResolved(id, lado, label, por) {
-        var el = document.getElementById('row-espejo-' + lado + '-' + id);
-        if (!el) return;
-        var actions = el.querySelector('td.no-row-nav') || el.querySelector('td.text-right');
-        if (!actions) return;
-        var txt = label || {{ _('Resuelto')|tojson }};
-        if (por) txt += ' · ' + por;
-        actions.innerHTML = '<span class="text-muted small">' + txt + '</span>';
-    }
-
-    function decCardBadge(card) {
-        if (!card) return;
-        var badge = card.querySelector('.badge-count, .badge');
-        if (!badge) return;
-        var count = parseInt(badge.innerText, 10);
-        if (!isNaN(count) && count > 0) badge.innerText = String(count - 1);
-    }
-
-    function removeDesvioRow(row, id) {
-        if (!row) return;
-        decCardBadge(row.closest('.card-modern'));
-        var detail = document.getElementById('desvio-detail-' + id);
-        if (detail) detail.remove();
-        row.remove();
-        removeEspejoRows(id);
-    }
-
-    /** Quita la fila resuelta sin recargar la página (todas las secciones). */
-    function dismissAuditRow(id, extraIds) {
-        var ids = [String(id)].concat((extraIds || []).map(String));
-        var seen = {};
-        ids.forEach(function (rid) {
-            if (!rid || seen[rid]) return;
-            seen[rid] = true;
-            var row = document.getElementById('row-' + rid);
-            if (row) {
-                removeDesvioRow(row, rid);
-                return;
-            }
-            // Espejos sueltos (plan/real) si no había fila principal visible
-            removeEspejoRows(rid);
-            var hist = document.getElementById('hist-row-' + rid);
-            if (hist) {
-                decCardBadge(hist.closest('.card-modern'));
-                hist.remove();
-            }
-        });
-        // Histórico / correcciones: marcar para recargar al abrir (sin full reload).
-        ['historialTableBody', 'correccionesTableBody', 'tbodyHistorial', 'tbodyCorrecciones'].forEach(function (tid) {
-            var tb = document.getElementById(tid);
-            if (tb) tb.removeAttribute('data-loaded');
-        });
-        document.querySelectorAll('[data-seccion-tbody]').forEach(function (tb) {
-            tb.removeAttribute('data-loaded');
-        });
-        var histBody = document.querySelector('#collapseHistorial tbody, #historialTable tbody');
-        if (histBody) histBody.removeAttribute('data-loaded');
-        var corrBody = document.querySelector('#collapseCorrecciones tbody, #correccionesTable tbody');
-        if (corrBody) corrBody.removeAttribute('data-loaded');
-    }
-    window.dismissAuditRow = dismissAuditRow;
-
-    function applyDesvioPartialUpdate(id, data) {
-        var row = document.getElementById('row-' + id);
-        var detail = document.getElementById('desvio-detail-' + id);
-        if (!row) return;
-        restoreRow(row);
-
-        var dots = row.querySelectorAll('.audit-desvio-dot');
-        if (dots.length >= 2) {
-            if (data.ack_plan) {
-                dots[0].classList.add('is-ok');
-                dots[0].classList.remove('is-pending');
-                dots[0].title = {{ _('Plan OK')|tojson }};
-            }
-            if (data.ack_real) {
-                dots[1].classList.add('is-ok');
-                dots[1].classList.remove('is-pending');
-                dots[1].title = {{ _('Fichaje OK')|tojson }};
-            }
-        }
-
-        if (data.ack_plan) markEspejoResolved(id, 'plan', data.ack_plan_label || {{ _('Resuelto')|tojson }}, data.ack_plan_por);
-        if (data.ack_real) markEspejoResolved(id, 'real', data.ack_real_label || {{ _('Aceptado')|tojson }}, data.ack_real_por);
-
-        if (!detail) return;
-        if (data.ack_plan) {
-            var planPanel = detail.querySelector('.audit-desvio-panel--plan');
-            if (planPanel) {
-                planPanel.classList.add('is-resolved');
-                var planLabel = data.ack_plan_label || {{ _('Resuelto')|tojson }};
-                var head = planPanel.querySelector('.audit-desvio-panel-head .text-muted, .audit-desvio-panel-head .text-success');
-                if (head) {
-                    head.className = 'text-success small ml-auto';
-                    head.innerHTML = '<i class="fas fa-check"></i> ' + planLabel;
-                }
-                var actions = planPanel.querySelector('.audit-desvio-panel-actions');
-                if (actions) {
-                    var jumpP = actions.querySelector('.js-desvio-jump');
-                    var jumpPHtml = jumpP ? jumpP.outerHTML : '';
-                    actions.innerHTML = jumpPHtml + '<span class="text-muted small" data-ack-plan-status="1">' + planLabel + '</span>';
-                }
-                if (data.ack_plan_por) {
-                    var bodyP = planPanel.querySelector('.audit-desvio-panel-body');
-                    if (bodyP) {
-                        var metaP = bodyP.querySelector('[data-ack-plan-por]');
-                        if (!metaP) {
-                            metaP = document.createElement('div');
-                            metaP.className = 'audit-desvio-meta';
-                            metaP.setAttribute('data-ack-plan-por', '1');
-                            bodyP.appendChild(metaP);
-                        }
-                        metaP.innerHTML = '<span class="audit-desvio-meta-k">' + planLabel + ' ' + {{ _('por')|tojson }} + '</span> ' + data.ack_plan_por;
-                    }
-                }
-            }
-        }
-        if (data.ack_real) {
-            var realPanel = detail.querySelector('.audit-desvio-panel--real');
-            if (realPanel) {
-                realPanel.classList.add('is-resolved');
-                var realLabel = data.ack_real_label || {{ _('Aceptado')|tojson }};
-                var headR = realPanel.querySelector('.audit-desvio-panel-head .text-muted, .audit-desvio-panel-head .text-success');
-                if (headR) {
-                    headR.className = 'text-success small ml-auto';
-                    headR.innerHTML = '<i class="fas fa-check"></i> ' + realLabel;
-                }
-                var actionsR = realPanel.querySelector('.audit-desvio-panel-actions');
-                if (actionsR) {
-                    var jumpR = actionsR.querySelector('.js-desvio-jump');
-                    var jumpRHtml = jumpR ? jumpR.outerHTML : '';
-                    actionsR.innerHTML = jumpRHtml + '<span class="text-muted small" data-ack-real-status="1">' + realLabel + '</span>';
-                }
-                if (data.ack_real_por) {
-                    var bodyR = realPanel.querySelector('.audit-desvio-panel-body');
-                    if (bodyR) {
-                        var metaR = bodyR.querySelector('[data-ack-real-por]');
-                        if (!metaR) {
-                            metaR = document.createElement('div');
-                            metaR.className = 'audit-desvio-meta';
-                            metaR.setAttribute('data-ack-real-por', '1');
-                            bodyR.appendChild(metaR);
-                        }
-                        metaR.innerHTML = '<span class="audit-desvio-meta-k">' + realLabel + ' ' + {{ _('por')|tojson }} + '</span> ' + data.ack_real_por;
-                    }
-                }
-            }
-        }
-        // Atajo "ambos" ya no aplica si un lado quedó hecho
-        var ambos = detail.querySelector('.audit-desvio-ambos');
-        if (ambos && (data.ack_plan || data.ack_real)) ambos.remove();
-    }
-
-    window.resolver = function resolver(id, accion, extra) {
-        var t = auditI18n();
-        extra = extra || {};
-
-        if ((accion === 'liberar_plaza' || accion === 'borrar_planificacion') && !extra._desasignPromptDone) {
-            promptDesasignarAuditoria(id, accion);
-            return;
-        }
-
-        var row = document.getElementById('row-' + id);
-        var payload = { registro_id: id, accion: accion };
-        if (extra.scope) payload.scope = extra.scope;
-        if (extra.notas) payload.notas = extra.notas;
-        if (extra.force) payload.force = true;
-
-        fetch({{ url_for('sync.resolver_fichaje')|tojson }}, {
-            method: 'POST',
-            headers: csrfHeaders(),
-            body: JSON.stringify(payload)
-        })
-        .then(function (res) {
-            return res.text().then(function (raw) {
-                var data = null;
-                try { data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
-                return { ok: res.ok, status: res.status, data: data || {} };
-            });
-        })
-        .then(function (result) {
-            var data = result.data;
-            if (!result.ok) {
-                var msg = (data && data.error) || ((t.http_fail || 'Error') + ' (HTTP ' + result.status + ')');
-                throw new Error(msg);
-            }
-            if (!data.success) {
-                alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.invalid || 'Error'));
-                return;
-            }
-
-            if (data.requested) {
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire({
-                        icon: 'success',
-                        title: {{ _('Solicitud creada')|tojson }},
-                        text: data.message || {{ _('Se ha generado una solicitud de baja.')|tojson }},
-                    });
-                } else {
-                    alert(data.message || {{ _('Se ha generado una solicitud de baja.')|tojson }});
-                }
-                restoreRow(row);
-                return;
-            }
-
-            if (data.message) {
-                try { showToast(data.message, true); } catch (e) { /* ignore */ }
-            }
-
-            // Desvío a medias: actualizar paneles in-place, sin recargar.
-            var partial = (data.dismiss_row === false) || (
-                data.resolved === false && (data.ack_plan || data.ack_real)
-            );
-            if (partial) {
-                applyDesvioPartialUpdate(id, data);
-                return;
-            }
-
-            // Resuelto del todo: quitar fila(s) y espejos sin full reload.
-            dismissAuditRow(id, data.closed_registro_ids || []);
-        })
-        .catch(function (err) {
-            console.error('Error critico:', err);
-            alert((t.error_prefix || 'Error:') + ' ' + ((err && err.message) ? err.message : (t.network || 'Error de red')));
-            restoreRow(row);
-        });
-    };
-
-    function promptDesasignarAuditoria(id, accion) {
-        var t = auditI18n();
-        var pideSolicitud = {{ (user_assigns_via_solicitud|default(false))|tojson }};
-        var canForcePast = {{ (can_unassign_cuadrante_pasado|default(false))|tojson }};
-        var notasHint = pideSolicitud
-            ? {{ _('Si eliges pendientes posteriores, se creará una solicitud de baja con este comentario.')|tojson }}
-            : {{ _('Comentario opcional (si la baja pasa por solicitud, irá en ella).')|tojson }};
-
-        function continuar(scope, notas, force) {
-            window.resolver(id, accion, {
-                scope: scope,
-                notas: notas,
-                force: !!force,
-                _desasignPromptDone: true
-            });
-        }
-
-        function confirmForceThen(scope, notas) {
-            if (typeof Swal === 'undefined') {
-                if (!window.confirm({{ _('FORZAR: también se desasignarán días ya validados o del pasado. El libro de fichajes no se borra. ¿Continuar?')|tojson }})) {
-                    return;
-                }
-                continuar(scope, notas, true);
-                return;
-            }
-            Swal.fire({
-                title: {{ _('Confirmar modo forzado')|tojson }},
-                html: '<p class="text-left small mb-0">' +
-                    {{ _('Vas a desasignar también días ya validados o del pasado en esta obra. Las marcas del libro de fichajes no se borran.')|tojson }} +
-                    '</p>',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#b91c1c',
-                confirmButtonText: {{ _('Sí, forzar')|tojson }},
-                cancelButtonText: {{ _('Cancelar')|tojson }}
-            }).then(function (res) {
-                if (res.isConfirmed) continuar(scope, notas, true);
-            });
-        }
-
-        if (typeof Swal === 'undefined') {
-            var futuro = window.confirm(
-                {{ _('¿Desasignar también pendientes posteriores en esta obra? (Cancelar = solo este día)')|tojson }}
-            );
-            var notas = futuro ? (window.prompt(notasHint, '') || '') : '';
-            var force = false;
-            if (futuro && canForcePast && window.confirm({{ _('¿Forzar también días ya validados/pasado? (Cancelar = solo pendientes)')|tojson }})) {
-                force = true;
-            }
-            continuar(futuro ? 'future' : 'day', notas, force);
-            return;
-        }
-
-        var forceHtml = canForcePast
-            ? (
-                '<label class="d-block text-left small mt-3 mb-0">' +
-                '<input type="checkbox" id="audit-desasign-force" class="mr-1"> ' +
-                {{ _('Avanzado: incluir días ya validados / pasado (no borra el libro de fichajes)')|tojson }} +
-                '</label>'
-              )
-            : '';
-
-        Swal.fire({
-            title: {{ _('Desasignar')|tojson }},
-            html:
-                '<p class="text-muted small mb-3">' + {{ _('¿Solo el día del conflicto o también pendientes posteriores en esta obra?')|tojson }} + '</p>' +
-                '<div class="text-left mb-2">' +
-                '<label class="d-block mb-2"><input type="radio" name="audit-desasign-scope" value="day" checked> ' +
-                {{ _('Solo este día')|tojson }} + '</label>' +
-                '<label class="d-block"><input type="radio" name="audit-desasign-scope" value="future"> ' +
-                {{ _('Este día + pendientes posteriores (auditoría abierta / plan futuro no validado)')|tojson }} + '</label>' +
-                '</div>' +
-                forceHtml +
-                '<label class="d-block text-left text-muted small mt-3 mb-1" for="audit-desasign-notas">' +
-                {{ _('Notas / comentario')|tojson }} + '</label>' +
-                '<textarea id="audit-desasign-notas" class="form-control" rows="2" maxlength="500" placeholder="' +
-                notasHint.replace(/"/g, '&quot;') + '"></textarea>',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#d97706',
-            confirmButtonText: {{ _('Continuar')|tojson }},
-            cancelButtonText: {{ _('Cancelar')|tojson }},
-            preConfirm: function () {
-                var checked = document.querySelector('input[name="audit-desasign-scope"]:checked');
-                var scope = checked ? checked.value : 'day';
-                var notasEl = document.getElementById('audit-desasign-notas');
-                var forceEl = document.getElementById('audit-desasign-force');
-                return {
-                    scope: scope,
-                    notas: notasEl ? (notasEl.value || '').trim() : '',
-                    force: !!(forceEl && forceEl.checked && scope === 'future')
-                };
-            }
-        }).then(function (result) {
-            if (!result.isConfirmed || !result.value) return;
-            if (result.value.force) {
-                confirmForceThen(result.value.scope, result.value.notas);
-            } else {
-                continuar(result.value.scope, result.value.notas, false);
-            }
-        });
-    }
-
-    window.reabrirResolucion = function reabrirResolucion(id, btn) {
-        var t = auditI18n();
-        if (!confirm(t.reopen_confirm || 'Reabrir?')) return;
-        if (btn) {
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-        }
-        fetch({{ url_for('sync.reabrir_fichaje')|tojson }}, {
-            method: 'POST',
-            headers: csrfHeaders(),
-            body: JSON.stringify({ registro_id: id })
-        })
-        .then(function (res) {
-            return res.text().then(function (raw) {
-                var data = null;
-                try { data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
-                return { ok: res.ok, data: data || {} };
-            });
-        })
-        .then(function (result) {
-            var data = result.data;
-            if (result.ok && data.success) {
-                showToast(data.aviso || t.reopened || 'OK', true);
-                // Reabrir reinserta en pendientes: hace falta refrescar (solo aquí).
-                softReloadAuditoria(400, {
-                    seccion: data.seccion || 'ausencias',
-                    registroId: id
-                });
-                return;
-            }
-            alert((t.error_prefix || 'Error:') + ' ' + (data.error || t.reopen_fail || 'Error'));
-            if (btn) {
-                btn.disabled = false;
-                btn.style.opacity = '1';
-            }
-        })
-        .catch(function (err) {
-            console.error(err);
-            alert(t.reopen_network || 'Error de red');
-            if (btn) {
-                btn.disabled = false;
-                btn.style.opacity = '1';
-            }
-        });
-    };
-})();
-
-function forzarSyncFichajes() {
-    var diasSeleccionados = document.getElementById('diasSync').value;
-    var msj = diasSeleccionados === '0'
-        ? {{ _('Revisando fichajes de hoy...')|tojson }}
-        : {{ _('Revisando hoy y {n} días atrás...')|tojson }}.replace('{n}', diasSeleccionados);
-    showToast(msj);
-
-    function csrfHeaders() {
-        var headers = { 'Content-Type': 'application/json' };
-        var meta = document.querySelector('meta[name="csrf-token"]');
-        var token = meta ? meta.getAttribute('content') : '';
-        if (!token) {
-            var parts = ('; ' + document.cookie).split('; csrf_token=');
-            if (parts.length === 2) token = parts.pop().split(';').shift();
-        }
-        if (token) headers['X-CSRFToken'] = token;
-        return headers;
-    }
-
-    fetch({{ url_for('sync.sync_fichajes_manual')|tojson }}, {
-        method: 'POST',
-        headers: csrfHeaders(),
-        body: JSON.stringify({ dias: diasSeleccionados })
-    })
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-        if (data.success) {
-            showToast({{ _('¡Revisión y Sincronización completadas!')|tojson }}, true);
-            softReloadAuditoria(800);
-        } else {
-            alert({{ _('Error al conectar con Odoo:')|tojson }} + ' ' + data.error);
-            document.getElementById('customToast').classList.remove('show');
-        }
-    })
-    .catch(function (err) {
-        console.error('Error en Fetch:', err);
-        alert({{ _('Fallo de red al intentar sincronizar.')|tojson }});
-        document.getElementById('customToast').classList.remove('show');
-    });
-}
-
-document.addEventListener('DOMContentLoaded', function () {
-    document.addEventListener('click', function (e) {
-        var btn = e.target.closest('.js-audit-resolve');
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-        var id = parseInt(btn.getAttribute('data-registro-id'), 10);
-        var accion = btn.getAttribute('data-accion');
-        if (!id || !accion || typeof window.resolver !== 'function') return;
-        window.resolver(id, accion);
-    }, true);
-
-    document.addEventListener('click', function (e) {
-        if (e.target.closest('.js-audit-resolve') || e.target.closest('a') || e.target.closest('.no-row-nav')) return;
-        // Solo chevron / «expandir»: el clic en la fila abre el historial del día.
-        var expandHit = e.target.closest('.audit-desvio-expand');
-        if (!expandHit) return;
-        var main = expandHit.closest('[data-desvio-toggle]');
-        if (!main) return;
-        e.preventDefault();
-        e.stopPropagation();
-        var id = main.getAttribute('data-desvio-toggle');
-        var detail = document.getElementById('desvio-detail-' + id);
-        if (!detail) return;
-        var open = !detail.hidden;
-        detail.hidden = open;
-        if (!open) detail.style.display = '';
-        main.classList.toggle('is-expanded', !open);
-        main.setAttribute('aria-expanded', open ? 'false' : 'true');
-    });
-
-    PersonDayTimeline.bindRowClick('.fila-fichaje-auditoria', {
-        modalId: 'modalTimelineFichaje',
-        apiBase: '/sync/timeline_dia',
-        loadingMessage: {{ _('Recopilando el día completo del operario...')|tojson }},
-        canResolveAudit: {{ can_resolve_fichajes|tojson }},
-        auditUrl: {{ url_for('sync.auditoria_fichajes')|tojson }},
-    });
-});
 </script>
+<script src="{{ url_for('static', filename='js/auditoria_fichajes.js') }}?v=20261023d"></script>
 {% endblock %}

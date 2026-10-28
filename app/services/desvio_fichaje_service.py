@@ -1273,3 +1273,81 @@ def consolidar_pendientes_a_ausencia(fecha):
         reg.notas_resolucion = 'Pendiente de resolución: no fichó en la obra del plan ese día.'
         n += 1
     return n
+
+
+# --- Odoo manda --------------------------------------------------------------
+# Cuando RRHH corrige un día en Odoo (cambia/borra un fichaje), esa corrección es
+# la realidad: no se pide acción a nadie, pero se conserva la trazabilidad del plan.
+
+ESTADO_ACEPTADO_ODOO = 'Aceptado_Odoo'
+PREFIJO_FALTA_AUTO = 'Falta automática'
+
+_ESTADOS_PATA_PLAN_ABIERTA = ('Sin_Registro', 'Ausencia', 'Conflicto', ESTADO_DISPUTA, 'Cerrado_Multiobra')
+
+
+def es_falta_automatica(registro) -> bool:
+    return (
+        getattr(registro, 'estado', None) == ESTADO_FALTA
+        and (getattr(registro, 'notas_resolucion', None) or '').startswith(PREFIJO_FALTA_AUTO)
+    )
+
+
+def usuarios_con_correccion_odoo(fecha) -> set:
+    """IDs de usuario con alguna fila `Sobreescrito_RRHH` ese día (RRHH tocó Odoo)."""
+    from app.models import RegistroFichaje
+
+    rows = (
+        RegistroFichaje.query
+        .with_entities(RegistroFichaje.user_id)
+        .filter(
+            RegistroFichaje.fecha == fecha,
+            RegistroFichaje.estado == 'Sobreescrito_RRHH',
+        )
+        .distinct()
+        .all()
+    )
+    return {uid for (uid,) in rows if uid}
+
+
+def aplicar_correccion_odoo_dia(user_id, fecha) -> int:
+    """Patas del plan que siguen abiertas en un día corregido por RRHH → Falta automática.
+
+    Equivale a pulsar «Confirmar falta» (más aceptar el fichaje, si lo había),
+    pero sin intervención. Lo ya resuelto por una persona no se toca.
+    Devuelve cuántas patas se cerraron.
+    """
+    from app.models import RegistroFichaje
+    from app.services.inercia_service import cortar_casa
+
+    regs = RegistroFichaje.query.filter(
+        RegistroFichaje.user_id == user_id,
+        RegistroFichaje.fecha == fecha,
+        RegistroFichaje.obra_planificada_id.isnot(None),
+        RegistroFichaje.estado.in_(_ESTADOS_PATA_PLAN_ABIERTA),
+    ).all()
+    cerradas = 0
+    for reg in regs:
+        previo = reg.estado
+        plan_lbl, real_lbl = _labels_obras(reg)
+        if reg.obra_real_id and reg.obra_real_id != reg.obra_planificada_id:
+            _marcar_decision_plan(reg, None, DECISION_MANTENER_FALTA)
+            _marcar_decision_real(reg, None, DECISION_ACEPTAR)
+            _aceptar_entrada_real(reg, None)
+            nota = (
+                f"{PREFIJO_FALTA_AUTO} en '{plan_lbl}': RRHH corrigió el día en Odoo. "
+                f"El fichaje en '{real_lbl}' se acepta desde Odoo."
+            )
+        else:
+            nota = (
+                f"{PREFIJO_FALTA_AUTO} en '{plan_lbl}': RRHH corrigió el día en Odoo "
+                f"y no hay fichaje en esta obra."
+            )
+        _asegurar_asignacion_plan(reg, None)
+        cortar_casa(user_id, fecha, None)
+        reg.estado_antes_resolucion = reg.estado_antes_resolucion or previo
+        reg.estado = ESTADO_FALTA
+        reg.resuelto_por_id = None
+        reg.fecha_auditoria = utc_now()
+        reg.notas_resolucion = nota
+        cerradas += 1
+    return cerradas

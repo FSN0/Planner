@@ -8,6 +8,8 @@
 # no coincidir con ninguno de los nombres previstos.
 .env
 .env.*
+docs/sql/.agent_readonly_password
+docs/sql/CONECTOR_AGENTE.txt
 !.env.example
 !.env.*.example
 

@@ -5,7 +5,7 @@
 window.SPFichajeEstado = (function () {
     var t = window.SP_T || function (key) { return key; };
     var OK = {
-        Correcto: 1, Correcto_Automatico: 1, Cambio_Tajo: 1,
+        Correcto: 1, Correcto_Automatico: 1, Cambio_Tajo: 1, Aceptado_Odoo: 1,
         Resuelto_Movido: 1, Resuelto_Asignado: 1, Resuelto_Dividido: 1,
         Resuelto_Ignorado: 1, Resuelto_Falta: 1, Resuelto_Ausencia: 1,
         Exento_Ausencia: 1, Cerrado_Multiobra: 1,
@@ -50,7 +50,8 @@ window.SPFichajeEstado = (function () {
             Pendiente: t('Pendiente'),
             Retraso: t('Retraso'),
             Sin_Registro: t('Sin fichaje'),
-            Sobreescrito_RRHH: t('Corregido por RRHH / ERP'),
+            Sobreescrito_RRHH: t('Corregido en Odoo'),
+            Aceptado_Odoo: t('Sin planificar (aceptado desde Odoo)'),
             Exento_Ausencia: t('Exento (ausencia)'),
             Cerrado_Multiobra: t('Multi-obra cerrado'),
             Resuelto_Movido: t('Resuelto (movido)'),

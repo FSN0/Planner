@@ -72,6 +72,10 @@ services:
       POSTGRES_DB: gestion_obra_saas
     volumes:
       - postgres_data_saas:/var/lib/postgresql/data
+    # Puerto solo para el Corporate AI Agent (SaaS remoto). Por defecto 54329.
+    # Cierra el firewall a la IP del agente. Desactivar: AGENT_READONLY_DB_BIND=
+    ports:
+      - "${AGENT_READONLY_DB_BIND:-0.0.0.0}:${AGENT_READONLY_DB_PORT:-54329}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
