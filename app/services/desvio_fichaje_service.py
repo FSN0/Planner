@@ -1244,9 +1244,62 @@ def ya_paso_hora_limite_entrada(ahora=None):
     return ahora.time() >= corte
 
 
+# Prefijo en notas: historial lo marca como origen automático (no cola).
+PREFIJO_FALTA_PARCIAL_AUTO = 'Auto: falta confirmada'
+
+
+def _fichaje_real_otra_obra_ese_dia(user_id, fecha, obra_planificada_id):
+    """Obra donde sí fichó ese día, distinta de la pata de plan pendiente (o None)."""
+    from app.models import RegistroFichaje
+
+    hermanos = (
+        RegistroFichaje.query
+        .filter(
+            RegistroFichaje.user_id == user_id,
+            RegistroFichaje.fecha == fecha,
+            RegistroFichaje.obra_real_id.isnot(None),
+        )
+        .all()
+    )
+    for h in hermanos:
+        if h.obra_real_id and h.obra_real_id != obra_planificada_id:
+            return getattr(h, 'obra_real', None) or Obra.query.get(h.obra_real_id)
+    return None
+
+
+def _aplicar_falta_confirmada_auto(registro, ficho_en):
+    """Igual que el botón «Confirmar falta», sin actor humano."""
+    from app.services.inercia_service import cortar_casa
+
+    _asegurar_asignacion_plan(registro, actor=None)
+    if registro.user_id and registro.fecha:
+        cortar_casa(registro.user_id, registro.fecha, autor_id=None)
+    plan_lbl, _ = _labels_obras(registro)
+    otra_lbl = CoreAssignmentService.format_obra_label(ficho_en) if ficho_en else 'otra obra'
+    registro.estado_antes_resolucion = registro.estado_antes_resolucion or registro.estado
+    registro.estado = ESTADO_FALTA
+    registro.resuelto_por_id = None
+    registro.fecha_auditoria = utc_now()
+    registro.notas_resolucion = (
+        f"{PREFIJO_FALTA_PARCIAL_AUTO}: no fichó en '{plan_lbl}' "
+        f"(sí fichó en '{otra_lbl}')."
+    )
+
+
+def es_falta_parcial_auto(registro) -> bool:
+    notas = getattr(registro, 'notas_resolucion', None) or ''
+    return (
+        getattr(registro, 'estado', None) == ESTADO_FALTA
+        and notas.startswith(PREFIJO_FALTA_PARCIAL_AUTO)
+    )
+
+
 def consolidar_pendientes_a_ausencia(fecha):
     """
     Sin_Registro sin fichaje → Ausencia (aún no es Falta).
+
+    Excepción multi-plan: si ese día ya fichó en otra obra, se autorresuelve
+    como «Confirmar falta» (estado Falta) y no entra en la cola «No fichó».
 
     Se usa al pasar la hora límite del propio día y al cerrar días anteriores.
     No toca Conflicto/Paracaidista ni filas con check_in.
@@ -1269,8 +1322,40 @@ def consolidar_pendientes_a_ausencia(fecha):
             reg.notas_resolucion = 'Cubierto por ausencia planificada (no cuenta como ausencia).'
             n += 1
             continue
+        ficho_en = _fichaje_real_otra_obra_ese_dia(
+            reg.user_id, fecha, reg.obra_planificada_id,
+        )
+        if ficho_en is not None:
+            _aplicar_falta_confirmada_auto(reg, ficho_en)
+            n += 1
+            continue
         reg.estado = 'Ausencia'
         reg.notas_resolucion = 'Pendiente de resolución: no fichó en la obra del plan ese día.'
+        n += 1
+
+    # Ausencias ya creadas (corte anterior / sync) con el mismo patrón multi-plan.
+    n += autorresolver_ausencias_parciales(fecha)
+    return n
+
+
+def autorresolver_ausencias_parciales(fecha):
+    """Ausencia pura + fichaje real en otra obra ese día → Falta (confirmar falta)."""
+    from app.models import RegistroFichaje
+
+    ausencias = RegistroFichaje.query.filter(
+        RegistroFichaje.fecha == fecha,
+        RegistroFichaje.estado == 'Ausencia',
+    ).all()
+    n = 0
+    for reg in ausencias:
+        if reg.check_in or reg.obra_real_id:
+            continue
+        ficho_en = _fichaje_real_otra_obra_ese_dia(
+            reg.user_id, fecha, reg.obra_planificada_id,
+        )
+        if ficho_en is None:
+            continue
+        _aplicar_falta_confirmada_auto(reg, ficho_en)
         n += 1
     return n
 

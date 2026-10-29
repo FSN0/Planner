@@ -407,9 +407,14 @@ def expr_origen_sql(comodin_obra_ids):
         est.in_(_ESTADOS_ODOO),
         and_(est == 'Falta', notas.like(f'{dfs.PREFIJO_FALTA_AUTO}%')),
     )
+    es_falta_parcial_auto = and_(
+        est == 'Falta',
+        notas.like(f'{dfs.PREFIJO_FALTA_PARCIAL_AUTO}%'),
+    )
     return case(
         (es_comodin, ORIGEN_COMODIN),
         (es_odoo, ORIGEN_ODOO),
+        (es_falta_parcial_auto, ORIGEN_AUTO),
         (est.in_(_ESTADOS_AUTOMATICOS), ORIGEN_AUTO),
         else_=ORIGEN_MANUAL,
     )
@@ -467,6 +472,8 @@ def origen_registro(registro, comodin_obra_ids=()) -> str:
         return ORIGEN_COMODIN
     if est in _ESTADOS_ODOO or dfs.es_falta_automatica(registro):
         return ORIGEN_ODOO
+    if dfs.es_falta_parcial_auto(registro):
+        return ORIGEN_AUTO
     if est in _ESTADOS_AUTOMATICOS:
         return ORIGEN_AUTO
     return ORIGEN_MANUAL
@@ -484,6 +491,8 @@ def resultado_registro(registro, comodin_obra_ids=()) -> str:
         return RESULTADO_POR_ESTADO[est]
     if dfs.es_falta_automatica(registro):
         return 'Falta automática: RRHH corrigió el día en Odoo'
+    if dfs.es_falta_parcial_auto(registro):
+        return 'Falta confirmada (fichó en otra obra)'
     if est in ESTADOS_PENDIENTES and registro.obra_real_id in (comodin_obra_ids or ()):
         return 'Obra comodín. No requiere acción'
     return RESULTADO_POR_ESTADO.get(est) or est.replace('_', ' ') or '—'
