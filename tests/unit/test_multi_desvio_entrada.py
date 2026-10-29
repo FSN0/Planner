@@ -187,6 +187,42 @@ def test_autorresolver_ausencia_parcial_ya_creada(
     assert es_falta_parcial_auto(reg_a)
 
 
+def test_backfill_faltas_parciales_abiertas(session, tenant_soltec, user_operario, user_jefe):
+    """Tras un deploy: abrir rango limpia Ausencias multi-plan de días pasados."""
+    from app.services.desvio_fichaje_service import (
+        ESTADO_FALTA,
+        autorresolver_faltas_parciales_abiertas,
+        es_falta_parcial_auto,
+    )
+
+    session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+    a = _obra(session, 'Plan A', 'A-06', jefe_id=user_jefe.id)
+    b = _obra(session, 'Plan B', 'B-06', jefe_id=user_jefe.id)
+    dia = date.today() - timedelta(days=3)
+    session.add(RegistroFichaje(
+        user_id=user_operario.id, fecha=dia,
+        obra_planificada_id=b.id, obra_real_id=b.id,
+        check_in=datetime.combine(dia, time(8, 0)),
+        estado='Correcto',
+    ))
+    session.add(RegistroFichaje(
+        user_id=user_operario.id, fecha=dia,
+        obra_planificada_id=a.id, estado='Ausencia',
+    ))
+    session.commit()
+
+    n = autorresolver_faltas_parciales_abiertas(
+        desde=dia - timedelta(days=1), hasta=date.today(),
+    )
+    session.commit()
+    assert n == 1
+    reg_a = RegistroFichaje.query.filter_by(
+        user_id=user_operario.id, fecha=dia, obra_planificada_id=a.id,
+    ).first()
+    assert reg_a.estado == ESTADO_FALTA
+    assert es_falta_parcial_auto(reg_a)
+
+
 def test_corte_mismo_dia_marca_ausencia_y_fichaje_la_quita(
     session, tenant_soltec, user_operario, user_jefe, monkeypatch,
 ):

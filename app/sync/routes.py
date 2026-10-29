@@ -1075,14 +1075,36 @@ def _scope_auditoria():
 def _contexto_cola(rango):
     """Casos pendientes (uno por persona-día y tipo) + avisos del día en curso."""
     from flask import current_app
+    from app import db
     from app.services import auditoria_casos_service as acs
-    from app.services.desvio_fichaje_service import enriquecer_pendientes_desvio
+    from app.services.desvio_fichaje_service import (
+        autorresolver_faltas_parciales_abiertas,
+        enriquecer_pendientes_desvio,
+    )
     from app.services.fichaje_geo_audit_service import entrada_geo_por_registros
     from app.services.geocerca_service import geocerca_activa
     from app.utils.timezone_utils import today_local
 
     hoy = today_local()
     scope = _scope_auditoria()
+
+    # Backfill al abrir la cola: multi-plan (fichó en otra) → Falta, también
+    # días ya consolidados antes de existir esta regla (ayer, etc.).
+    try:
+        dias = _RANGOS_COLA.get(rango, 90) if rango != 'todo' else 365
+        n_auto = autorresolver_faltas_parciales_abiertas(
+            desde=hoy - timedelta(days=dias),
+            hasta=hoy,
+        )
+        if n_auto:
+            db.session.commit()
+            current_app.logger.info(
+                'auditoria: autorresueltas %s faltas parciales multi-plan', n_auto,
+            )
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('autorresolver_faltas_parciales_abiertas falló')
+
     filtros = [RegistroFichaje.estado.in_(acs.ESTADOS_PENDIENTES)]
     if scope is not None:
         filtros.append(scope)

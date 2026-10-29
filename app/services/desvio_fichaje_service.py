@@ -1339,20 +1339,74 @@ def consolidar_pendientes_a_ausencia(fecha):
 
 
 def autorresolver_ausencias_parciales(fecha):
-    """Ausencia pura + fichaje real en otra obra ese día → Falta (confirmar falta)."""
+    """Ausencia/Sin_Registro + fichaje real en otra obra ese día → Falta (confirmar falta)."""
     from app.models import RegistroFichaje
 
-    ausencias = RegistroFichaje.query.filter(
+    pendientes = RegistroFichaje.query.filter(
         RegistroFichaje.fecha == fecha,
-        RegistroFichaje.estado == 'Ausencia',
+        RegistroFichaje.estado.in_(('Ausencia', 'Sin_Registro')),
     ).all()
     n = 0
-    for reg in ausencias:
+    for reg in pendientes:
         if reg.check_in or reg.obra_real_id:
             continue
         ficho_en = _fichaje_real_otra_obra_ese_dia(
             reg.user_id, fecha, reg.obra_planificada_id,
         )
+        if ficho_en is None:
+            continue
+        _aplicar_falta_confirmada_auto(reg, ficho_en)
+        n += 1
+    return n
+
+
+def autorresolver_faltas_parciales_abiertas(*, desde=None, hasta=None):
+    """Backfill: cierra todas las patas multi-plan abiertas (p. ej. tras un deploy).
+
+    Incluye Ausencia y Sin_Registro sin marca en esa obra si el mismo día
+    ya hay fichaje real en otra. Devuelve cuántas resolvió.
+    """
+    from app.models import RegistroFichaje
+
+    q = RegistroFichaje.query.filter(
+        RegistroFichaje.estado.in_(('Ausencia', 'Sin_Registro')),
+        RegistroFichaje.check_in.is_(None),
+        RegistroFichaje.obra_real_id.is_(None),
+    )
+    if desde is not None:
+        q = q.filter(RegistroFichaje.fecha >= desde)
+    if hasta is not None:
+        q = q.filter(RegistroFichaje.fecha <= hasta)
+    pendientes = q.all()
+    if not pendientes:
+        return 0
+
+    # Una sola pasada de hermanos por (user, fecha).
+    user_ids = {r.user_id for r in pendientes if r.user_id}
+    fechas = {r.fecha for r in pendientes if r.fecha}
+    hermanos_por_clave = {}
+    if user_ids and fechas:
+        for h in (
+            RegistroFichaje.query
+            .filter(
+                RegistroFichaje.user_id.in_(user_ids),
+                RegistroFichaje.fecha.in_(fechas),
+                RegistroFichaje.obra_real_id.isnot(None),
+            )
+            .all()
+        ):
+            hermanos_por_clave.setdefault((h.user_id, h.fecha), []).append(h)
+
+    n = 0
+    for reg in pendientes:
+        clave = (reg.user_id, reg.fecha)
+        ficho_en = None
+        for h in hermanos_por_clave.get(clave, []):
+            if h.id == reg.id:
+                continue
+            if h.obra_real_id and h.obra_real_id != reg.obra_planificada_id:
+                ficho_en = getattr(h, 'obra_real', None) or Obra.query.get(h.obra_real_id)
+                break
         if ficho_en is None:
             continue
         _aplicar_falta_confirmada_auto(reg, ficho_en)
