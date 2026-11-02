@@ -1298,8 +1298,9 @@ def consolidar_pendientes_a_ausencia(fecha):
     """
     Sin_Registro sin fichaje → Ausencia (aún no es Falta).
 
-    Excepción multi-plan: si ese día ya fichó en otra obra, se autorresuelve
-    como «Confirmar falta» (estado Falta) y no entra en la cola «No fichó».
+    Multi-plan (fichó en otra obra): solo si el día ya cerró (fecha < hoy)
+    se autorresuelve como «Confirmar falta». En el día en curso queda
+    Ausencia/Sin_Registro («aún sin fichar») por si ficha más tarde.
 
     Se usa al pasar la hora límite del propio día y al cerrar días anteriores.
     No toca Conflicto/Paracaidista ni filas con check_in.
@@ -1308,7 +1309,9 @@ def consolidar_pendientes_a_ausencia(fecha):
     """
     from app.models import RegistroFichaje
     from app.services.leave_service import user_has_approved_leave
+    from app.utils.timezone_utils import today_local
 
+    dia_cerrado = fecha < today_local()
     candidatos = RegistroFichaje.query.filter(
         RegistroFichaje.fecha == fecha,
         RegistroFichaje.estado == 'Sin_Registro',
@@ -1325,7 +1328,7 @@ def consolidar_pendientes_a_ausencia(fecha):
         ficho_en = _fichaje_real_otra_obra_ese_dia(
             reg.user_id, fecha, reg.obra_planificada_id,
         )
-        if ficho_en is not None:
+        if dia_cerrado and ficho_en is not None:
             _aplicar_falta_confirmada_auto(reg, ficho_en)
             n += 1
             continue
@@ -1333,14 +1336,18 @@ def consolidar_pendientes_a_ausencia(fecha):
         reg.notas_resolucion = 'Pendiente de resolución: no fichó en la obra del plan ese día.'
         n += 1
 
-    # Ausencias ya creadas (corte anterior / sync) con el mismo patrón multi-plan.
-    n += autorresolver_ausencias_parciales(fecha)
+    if dia_cerrado:
+        n += autorresolver_ausencias_parciales(fecha)
     return n
 
 
 def autorresolver_ausencias_parciales(fecha):
-    """Ausencia/Sin_Registro + fichaje real en otra obra ese día → Falta (confirmar falta)."""
+    """Ausencia/Sin_Registro + fichaje en otra obra → Falta. Solo días ya cerrados."""
     from app.models import RegistroFichaje
+    from app.utils.timezone_utils import today_local
+
+    if fecha >= today_local():
+        return 0
 
     pendientes = RegistroFichaje.query.filter(
         RegistroFichaje.fecha == fecha,
@@ -1360,13 +1367,42 @@ def autorresolver_ausencias_parciales(fecha):
     return n
 
 
+def reabrir_auto_faltas_parciales_dia_curso(hoy=None):
+    """Deshace Falta automática multi-plan del día en curso (aún pueden fichar)."""
+    from app.models import RegistroFichaje
+    from app.utils.timezone_utils import today_local
+
+    hoy = hoy or today_local()
+    regs = RegistroFichaje.query.filter(
+        RegistroFichaje.fecha >= hoy,
+        RegistroFichaje.estado == ESTADO_FALTA,
+        RegistroFichaje.notas_resolucion.like(f'{PREFIJO_FALTA_PARCIAL_AUTO}%'),
+    ).all()
+    for reg in regs:
+        reg.estado = 'Sin_Registro'
+        reg.notas_resolucion = None
+        reg.fecha_auditoria = None
+        reg.resuelto_por_id = None
+        reg.estado_antes_resolucion = None
+    return len(regs)
+
+
 def autorresolver_faltas_parciales_abiertas(*, desde=None, hasta=None):
-    """Backfill: cierra todas las patas multi-plan abiertas (p. ej. tras un deploy).
+    """Backfill: cierra patas multi-plan de días YA CERRADOS (nunca el día en curso).
 
     Incluye Ausencia y Sin_Registro sin marca en esa obra si el mismo día
     ya hay fichaje real en otra. Devuelve cuántas resolvió.
     """
+    from datetime import timedelta
+
     from app.models import RegistroFichaje
+    from app.utils.timezone_utils import today_local
+
+    ayer = today_local() - timedelta(days=1)
+    if hasta is None or hasta > ayer:
+        hasta = ayer
+    if desde is not None and desde > hasta:
+        return 0
 
     q = RegistroFichaje.query.filter(
         RegistroFichaje.estado.in_(('Ausencia', 'Sin_Registro')),

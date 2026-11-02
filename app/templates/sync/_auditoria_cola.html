@@ -1,29 +1,5 @@
 {# Cola «Por resolver»: tabla densa, una fila por caso. El detalle se pinta en el panel derecho. #}
 
-{# Aviso del día en curso: no ocupa sitio en la lista; el botón «Hoy en curso» lo despliega. #}
-<div class="aud-hoy-src" hidden data-count="{{ hoy_sin_fichar + avisos_hoy|length }}">
-  <p class="aud-hoy-note">
-    {{ _('Aviso: el día no ha terminado. Si al cerrar sigue sin fichar, pasará a «No fichó».') }}
-  </p>
-  {% if hoy_sin_fichar %}
-    <p class="aud-hoy-line"><strong>{{ hoy_sin_fichar }}</strong> {{ _('plazas planificadas aún sin fichar.') }}</p>
-  {% endif %}
-  {% if avisos_hoy %}
-    <p class="aud-hoy-line">{{ _('Con plan en varias obras y fichaje solo en una:') }}</p>
-    <ul class="aud-hoy-list">
-      {% for a in avisos_hoy %}
-        <li class="fila-fichaje-auditoria" data-user-id="{{ a.user.id }}" data-fecha="{{ hoy.isoformat() }}" title="{{ _('Ver el día completo') }}">
-          <span class="aud-strong">{{ a.user.nombre }}</span>
-          <span class="aud-muted">{{ a.plan.nombre if a.plan else '—' }}{% if a.parcial %} · {{ _('ya fichó en otra') }}{% endif %}</span>
-        </li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-  {% if not hoy_sin_fichar and not avisos_hoy %}
-    <p class="aud-hoy-line">{{ _('Nada pendiente de fichar hoy.') }}</p>
-  {% endif %}
-</div>
-
 <script type="application/json" id="audCasosData">{{ casos_json|tojson }}</script>
 
 {% if not casos %}

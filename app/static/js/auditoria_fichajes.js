@@ -1,4 +1,4 @@
-/* Auditoría de fichajes: pestañas Por resolver / Cumplimiento / Historial.
+/* Auditoría de fichajes: Por resolver / Hoy / Cumplimiento / Historial.
  * Configuración y textos llegan en window.AUD_CFG (los pinta la plantilla). */
 (function () {
   'use strict';
@@ -15,6 +15,11 @@
     geo: false,
     hist: { page: 1, per: 25, sort: 'fecha', dir: 'desc', origen: '', loaded: false },
     cumpLoaded: false,
+    hoyLoaded: false,
+    hoyFiltro: '',
+    hoyData: null,
+    hoyFecha: null, // YYYY-MM-DD; null = día calendario actual
+    hoyDrawer: { userId: null, fecha: null, open: false },
     sel: null,
     cases: {},
     sort: { key: null, dir: 'asc' },
@@ -22,7 +27,7 @@
   var charts = {};
   var TIMELINE_OPTS = {
     modalId: 'modalTimelineFichaje',
-    apiBase: '/sync/timeline_dia',
+    apiBase: U.timeline || '/sync/timeline_dia',
     loadingMessage: T.timeline_loading,
     canResolveAudit: !!CFG.can_resolve,
     auditUrl: U.auditoria,
@@ -112,18 +117,24 @@
   function invalidateLazy() {
     state.hist.loaded = false;
     state.cumpLoaded = false;
+    state.hoyLoaded = false;
   }
 
   function switchTab(name) {
-    if (['resolver', 'cumplimiento', 'historial'].indexOf(name) < 0) name = 'resolver';
+    if (['resolver', 'hoy', 'cumplimiento', 'historial'].indexOf(name) < 0) name = 'resolver';
     state.tab = name;
     $$('.aud-tab').forEach(function (b) { b.classList.toggle('is-active', b.dataset.tab === name); });
     $$('.aud-panel').forEach(function (p) { p.hidden = p.dataset.panel !== name; });
+    // El periodo no aplica al roster de hoy.
+    var per = $('#audPeriodo');
+    if (per) per.hidden = name === 'hoy';
     try {
       var url = new URL(window.location.href);
       url.searchParams.set('tab', name);
       window.history.replaceState(null, '', url.toString());
     } catch (e) { /* ignore */ }
+    if (name !== 'hoy') closeHoyDrawer();
+    if (name === 'hoy') loadHoy(false);
     if (name === 'cumplimiento' && !state.cumpLoaded) loadCumplimiento();
     if (name === 'historial' && !state.hist.loaded) loadHistorial();
     if (name === 'resolver') {
@@ -136,6 +147,7 @@
     state.q = sharedQ();
     invalidateLazy();
     if (state.tab === 'resolver') applyColaFilters();
+    else if (state.tab === 'hoy') loadHoy(true);
     else if (state.tab === 'historial') {
       state.hist.page = 1;
       loadHistorial();
@@ -155,6 +167,210 @@
     } else if (state.tab === 'cumplimiento') {
       loadCumplimiento();
     }
+  }
+
+  /* ---------- Hoy (roster) ---------- */
+
+  function shiftIsoDate(iso, deltaDays) {
+    var p = (iso || '').split('-');
+    if (p.length !== 3) return iso;
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    d.setDate(d.getDate() + deltaDays);
+    return d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+      ('0' + d.getDate()).slice(-2);
+  }
+
+  function syncHoyNav(data) {
+    var fecha = data.hoy || state.hoyFecha;
+    var cal = data.hoy_calendario || fecha;
+    state.hoyFecha = fecha;
+    var inp = $('#audHoyFecha');
+    if (inp) {
+      inp.value = fecha || '';
+      inp.max = cal || '';
+    }
+    var next = $('#audHoyNext');
+    if (next) next.disabled = !!(data.es_hoy || (fecha && cal && fecha >= cal));
+    var goToday = $('#audHoyToday');
+    if (goToday) goToday.hidden = !!data.es_hoy;
+    var hint = $('#audHoyHint');
+    if (hint && data.hoy_txt) {
+      hint.textContent = (T.hoy_hint || 'Planificados el {d}.').replace('{d}', data.hoy_txt);
+    }
+  }
+
+  function loadHoy(force) {
+    if (state.hoyLoaded && !force) {
+      renderHoy();
+      return;
+    }
+    var body = $('#audHoyBody');
+    if (body) body.innerHTML = '<div class="aud-loading">' + escapeHtml(T.loading || 'Cargando…') + '</div>';
+    var params = { q: sharedQ() };
+    if (state.hoyFecha) params.fecha = state.hoyFecha;
+    getJson(U.hoy, params).then(function (data) {
+      if (!data || !data.success) {
+        if (body) body.innerHTML = '<div class="aud-empty"><div class="aud-empty-title">' +
+          escapeHtml((data && data.error) || T.http_fail || 'Error') + '</div></div>';
+        return;
+      }
+      state.hoyData = data;
+      state.hoyLoaded = true;
+      state.hoyFecha = data.hoy || state.hoyFecha;
+      var cnt = $('#audHoyTabCount');
+      if (cnt) cnt.textContent = (data.totales && data.totales.personas) || 0;
+      syncHoyNav(data);
+      renderHoy();
+    }).catch(function () {
+      if (body) body.innerHTML = '<div class="aud-empty"><div class="aud-empty-title">' +
+        escapeHtml(T.network || 'Error de red') + '</div></div>';
+    });
+  }
+
+  function renderHoy() {
+    var data = state.hoyData;
+    var body = $('#audHoyBody');
+    if (!body || !data) return;
+    var tot = data.totales || {};
+    var setN = function (id, n) { var el = $(id); if (el) el.textContent = n || 0; };
+    setN('#audHoyFAll', tot.personas);
+    setN('#audHoyFSin', tot.sin_fichar);
+    setN('#audHoyFAud', (tot.auditar || 0) + (tot.desvio || 0) + (tot.otra || 0));
+    setN('#audHoyFOk', tot.ok);
+    setN('#audHoyFFal', tot.falta);
+
+    function chipsOf(p) {
+      return (p.plan || p.plazas || []).concat(p.fichajes || p.extras || []);
+    }
+    var filas = (data.personas || []).filter(function (p) {
+      if (!state.hoyFiltro) return true;
+      if (state.hoyFiltro === 'auditar') {
+        return !!p.tiene_problema ||
+          chipsOf(p).some(function (c) {
+            return c.chip === 'auditar' || c.chip === 'desvio' || c.chip === 'otra';
+          });
+      }
+      if (state.hoyFiltro === 'sin_fichar') {
+        return (p.plan || p.plazas || []).some(function (c) { return c.chip === 'sin_fichar'; });
+      }
+      if (state.hoyFiltro === 'ok') return p.resumen_chip === 'ok';
+      if (state.hoyFiltro === 'falta') {
+        return (p.plan || p.plazas || []).some(function (c) { return c.chip === 'falta'; });
+      }
+      return true;
+    });
+
+    if (!filas.length) {
+      body.innerHTML = '<div class="aud-empty"><div class="aud-empty-title">' +
+        escapeHtml(T.hoy_empty || 'Nadie planificado hoy en tu alcance.') +
+        '</div></div>';
+      return;
+    }
+
+    var html = '<div class="aud-hoy-list">';
+    html += '<div class="aud-hoy-head" aria-hidden="true">' +
+      '<div></div><div>' + escapeHtml(T.hoy_plan || 'Planificación') + '</div>' +
+      '<div>' + escapeHtml(T.hoy_fichaje || 'Fichaje') + '</div></div>';
+    filas.forEach(function (p) {
+      var tono = p.tono_fila || (p.tiene_problema ? 'problema'
+        : (p.resumen_chip === 'ok' ? 'ok' : ''));
+      var toneCls = tono ? ' is-' + tono.replace('_', '-') : '';
+      // sin_marca → is-sin-marca; parcial → is-parcial
+      if (tono === 'sin_marca') toneCls = ' is-sin-marca';
+      else if (tono === 'parcial') toneCls = ' is-parcial';
+      else if (tono === 'problema') toneCls = ' is-problem';
+      else if (tono === 'ok') toneCls = ' is-ok';
+      html += '<div class="aud-hoy-row' + toneCls + ' js-aud-hoy-dia" data-user-id="' +
+        p.user_id + '" data-fecha="' + escapeHtml(p.fecha || data.hoy || '') +
+        '" data-resumen="' + escapeHtml(p.resumen_chip || '') +
+        '" title="' + escapeHtml(T.hoy_timeline || 'Ver historial del día') + '">';
+      html += '<div class="aud-hoy-person">';
+      html += linkHtml('worker', p.user_id, p.nombre, 'aud-strong');
+      if (p.categoria) html += '<span class="aud-muted"> · ' + escapeHtml(p.categoria) + '</span>';
+      html += '</div>';
+      html += '<div class="aud-hoy-col"><div class="aud-hoy-col-label">' +
+        escapeHtml(T.hoy_plan || 'Planificación') + '</div><div class="aud-hoy-plazas">';
+      (p.plan || p.plazas || []).forEach(function (c) { html += chipHtml(c, false); });
+      if (!(p.plan || p.plazas || []).length) {
+        html += '<span class="aud-muted">' + escapeHtml(T.hoy_sin_plan || '—') + '</span>';
+      }
+      html += '</div></div>';
+      html += '<div class="aud-hoy-col"><div class="aud-hoy-col-label">' +
+        escapeHtml(T.hoy_fichaje || 'Fichaje') + '</div><div class="aud-hoy-plazas">';
+      (p.fichajes || []).forEach(function (c) { html += chipHtml(c, !c.en_plan); });
+      if (!(p.fichajes || []).length) {
+        html += '<span class="aud-hoy-chip aud-hoy-chip--sin_fichar aud-hoy-chip--ghost">' +
+          '<span class="aud-hoy-chip-st">' + escapeHtml(T.hoy_sin_marca || 'Sin marca') +
+          '</span></span>';
+      }
+      html += '</div></div></div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+    markHoyRowSelected();
+  }
+
+  function obraLabel(c) {
+    var nom = (c.obra || '').trim();
+    var cod = (c.codigo || '').trim();
+    if (cod && nom) return cod + ' · ' + nom;
+    return nom || cod || '';
+  }
+
+  function chipHtml(c, fueraPlan) {
+    var chip = c.chip === 'otra' ? 'desvio' : (c.chip || 'sin_fichar');
+    var cls = 'aud-hoy-chip aud-hoy-chip--' + chip;
+    if (fueraPlan) cls += ' aud-hoy-chip--extra';
+    var titulo = obraLabel(c);
+    var label = escapeHtml(c.label || '');
+    var entrada = c.entrada ? ' · ' + escapeHtml(c.entrada) : '';
+    var inner = '<span class="aud-hoy-chip-obra">' +
+      (c.obra_id ? linkHtml('obra', c.obra_id, titulo) : escapeHtml(titulo)) +
+      '</span><span class="aud-hoy-chip-st">' + label + entrada + '</span>';
+    var dest = c.destino || (c.caso_id ? 'resolver' : '');
+    var rid = c.registro_id || c.caso_id;
+    if (rid && dest) {
+      var tip = dest === 'resolver'
+        ? (T.hoy_goto || 'Ver en Por resolver')
+        : (T.hoy_goto_hist || 'Ver en Historial');
+      return '<button type="button" class="' + cls + ' js-aud-hoy-caso" data-registro-id="' +
+        rid + '" data-destino="' + escapeHtml(dest) + '" title="' + escapeHtml(tip) + '">' +
+        inner + '</button>';
+    }
+    return '<div class="' + cls + '">' + inner + '</div>';
+  }
+
+  function openRegistroDesdeHoy(registroId, destino) {
+    var id = parseInt(registroId, 10);
+    if (!id) return;
+    // Chip de obra → Por resolver (o Historial). El cajón inferior solo al clicar la fila.
+    if (destino === 'resolver') {
+      closeHoyDrawer();
+      switchTab('resolver');
+      if (state.cases[id]) {
+        selectCase(id, true);
+        return;
+      }
+      // Puede estar fuera del rango cargado: fuerza refresh y reintenta.
+      refreshCola().then(function () {
+        if (state.cases[id]) selectCase(id, true);
+        else openRegistroDesdeHoy(id, 'historial');
+      });
+      return;
+    }
+    var qEl = $('#audSearch');
+    if (qEl) qEl.value = String(id);
+    state.q = String(id);
+    var auto = $('#audHistAuto');
+    if (auto) auto.checked = true;
+    state.hist.page = 1;
+    state.hist.origen = '';
+    state.hist.loaded = false;
+    $$('.js-aud-origen').forEach(function (b) {
+      b.classList.toggle('is-active', (b.dataset.origen || '') === '');
+    });
+    switchTab('historial');
   }
 
   /* ---------- Por resolver ---------- */
@@ -209,15 +425,6 @@
     } catch (e) { console.error('audCasosData', e); }
   }
 
-  function syncHoy() {
-    var src = $('.aud-hoy-src');
-    var pop = $('#audHoyPop');
-    if (!src || !pop) return;
-    pop.innerHTML = src.innerHTML;
-    var n = $('#audHoyCount');
-    if (n) n.textContent = src.dataset.count || '0';
-  }
-
   var QUE_HACER = {
     no_ficho: 'd_no_fichar', otra_obra: 'd_otra_obra', sin_planificar: 'd_sin_plan', disputa: 'd_disputa',
   };
@@ -227,15 +434,10 @@
     return c.entrada + (c.salida ? '–' + c.salida : '');
   }
 
-  function renderDetail(c) {
-    var box = $('#audDetail');
-    if (!box) return;
-    if (!c) {
-      box.innerHTML = '<div class="aud-d-empty">' + escapeHtml(state.sel === null && !Object.keys(state.cases).length
-        ? T.d_all_done : T.d_empty) + '</div>';
-      return;
-    }
+  function detailHtml(c, opts) {
+    opts = opts || {};
     var h = '';
+    h += '<div class="aud-d-block" data-caso-id="' + c.id + '">';
     h += '<div class="aud-d-head"><div><div class="aud-d-who">' +
       linkHtml('worker', c.user_id, c.user_nombre) + '</div>' +
       '<div class="aud-d-sub">' + escapeHtml(c.fecha_txt) +
@@ -289,9 +491,204 @@
       h += '<p>' + escapeHtml(c.esperando || (CFG.can_resolve ? T.d_other : T.d_readonly)) + '</p>';
     }
     h += '</div>';
-    h += '<button type="button" class="aud-d-link js-aud-dia" data-user-id="' + c.user_id + '" data-fecha="' + escapeHtml(c.fecha_iso) +
-      '"><i class="far fa-calendar-alt"></i> ' + escapeHtml(T.d_day) + '</button>';
-    box.innerHTML = h;
+    if (!opts.hideDayLink) {
+      h += '<button type="button" class="aud-d-link js-aud-dia" data-user-id="' + c.user_id + '" data-fecha="' + escapeHtml(c.fecha_iso) +
+        '"><i class="far fa-calendar-alt"></i> ' + escapeHtml(T.d_day) + '</button>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function renderDetail(c) {
+    var box = $('#audDetail');
+    if (!box) return;
+    if (!c) {
+      box.innerHTML = '<div class="aud-d-empty">' + escapeHtml(state.sel === null && !Object.keys(state.cases).length
+        ? T.d_all_done : T.d_empty) + '</div>';
+      return;
+    }
+    box.innerHTML = detailHtml(c);
+  }
+
+  /* ---------- Cajón Hoy: timeline + acciones ---------- */
+
+  var HOY_DRAWER_H_KEY = 'audHoyDrawerH';
+
+  function hoyDrawerHeightBounds() {
+    var vh = window.innerHeight || 800;
+    return { min: Math.round(vh * 0.16), max: Math.round(vh * 0.75) };
+  }
+
+  function applyHoyDrawerHeight(px, persist) {
+    var b = hoyDrawerHeightBounds();
+    var h = Math.max(b.min, Math.min(b.max, Math.round(Number(px) || b.min)));
+    state.hoyDrawerPx = h;
+    document.documentElement.style.setProperty('--aud-hoy-drawer-h', h + 'px');
+    var drawer = $('#audHoyDrawer');
+    if (drawer) drawer.style.height = h + 'px';
+    if (persist) {
+      try { localStorage.setItem(HOY_DRAWER_H_KEY, String(h)); } catch (e) { /* ignore */ }
+    }
+  }
+
+  function restoreHoyDrawerHeight() {
+    var saved = NaN;
+    try { saved = parseInt(localStorage.getItem(HOY_DRAWER_H_KEY), 10); } catch (e) { /* ignore */ }
+    if (saved && saved > 0) {
+      applyHoyDrawerHeight(saved, false);
+      return;
+    }
+    var fallback = Math.min(300, Math.round((window.innerHeight || 800) * 0.34));
+    applyHoyDrawerHeight(fallback, false);
+  }
+
+  function bindHoyDrawerResize() {
+    var handle = $('#audHoyDrawerResize');
+    if (!handle || handle.dataset.bound === '1') return;
+    handle.dataset.bound = '1';
+    var startY = 0;
+    var startH = 0;
+
+    function clientY(e) {
+      if (e.touches && e.touches[0]) return e.touches[0].clientY;
+      if (e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientY;
+      return e.clientY;
+    }
+    function onMove(e) {
+      if (e.cancelable) e.preventDefault();
+      applyHoyDrawerHeight(startH + (startY - clientY(e)), false);
+    }
+    function onUp() {
+      document.body.classList.remove('aud-hoy-drawer-resizing');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+      if (state.hoyDrawerPx) applyHoyDrawerHeight(state.hoyDrawerPx, true);
+    }
+    function onDown(e) {
+      var drawer = $('#audHoyDrawer');
+      if (!drawer || drawer.hidden) return;
+      e.preventDefault();
+      startY = clientY(e);
+      startH = drawer.getBoundingClientRect().height;
+      document.body.classList.add('aud-hoy-drawer-resizing');
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onUp);
+    }
+    handle.addEventListener('mousedown', onDown);
+    handle.addEventListener('touchstart', onDown, { passive: false });
+  }
+
+  function closeHoyDrawer() {
+    state.hoyDrawer = { userId: null, fecha: null, open: false };
+    var drawer = $('#audHoyDrawer');
+    if (drawer) drawer.hidden = true;
+    document.body.classList.remove('aud-hoy-drawer-open');
+    document.body.classList.remove('aud-hoy-drawer-resizing');
+    $$('.aud-hoy-row.is-selected').forEach(function (r) { r.classList.remove('is-selected'); });
+  }
+
+  function refreshHoyDrawer() {
+    if (!state.hoyDrawer.open || !state.hoyDrawer.userId || !state.hoyDrawer.fecha) return;
+    openHoyDrawer(state.hoyDrawer.userId, state.hoyDrawer.fecha, true, {
+      focusCasoId: state.hoyDrawer.focusCasoId,
+    });
+  }
+
+  function openHoyDrawer(userId, fecha, keepScroll, opts) {
+    opts = opts || {};
+    var focusCasoId = opts.focusCasoId ? parseInt(opts.focusCasoId, 10) : null;
+    var drawer = $('#audHoyDrawer');
+    var actions = $('#audHoyActions');
+    var root = $('#audHoyTimelineRoot');
+    if (!drawer || !actions || !root) return;
+
+    state.hoyDrawer = {
+      userId: String(userId),
+      fecha: String(fecha),
+      open: true,
+      focusCasoId: focusCasoId || null,
+    };
+    drawer.hidden = false;
+    document.body.classList.add('aud-hoy-drawer-open');
+
+    $$('.aud-hoy-row').forEach(function (r) {
+      r.classList.toggle('is-selected',
+        String(r.dataset.userId) === String(userId) && String(r.dataset.fecha) === String(fecha));
+    });
+    var sel = $('.aud-hoy-row.is-selected');
+    if (!keepScroll && sel) sel.scrollIntoView({ block: 'nearest' });
+
+    var title = $('#audHoyDrawerTitle');
+    if (title) {
+      var who = '';
+      if (sel) {
+        var whoEl = sel.querySelector('.aud-hoy-person .aud-link, .aud-hoy-person a, .aud-hoy-person');
+        if (whoEl) who = (whoEl.textContent || '').trim().split('·')[0].trim();
+      }
+      title.textContent = who
+        ? who + ' · ' + fecha
+        : (T.hoy_drawer_title || 'Día {d}').replace('{d}', fecha);
+    }
+
+    actions.innerHTML = '<div class="aud-loading">' + escapeHtml(T.loading || 'Cargando…') + '</div>';
+    if (window.PersonDayTimeline && typeof window.PersonDayTimeline.load === 'function') {
+      window.PersonDayTimeline.load(root, userId, fecha, {
+        apiBase: TIMELINE_OPTS.apiBase,
+        loadingMessage: TIMELINE_OPTS.loadingMessage,
+        canResolveAudit: false,
+      });
+    } else {
+      var content = root.querySelector('[data-timeline-content]');
+      if (content) {
+        content.innerHTML = '<div class="aud-d-empty">' + escapeHtml(T.load_fail || 'Error') + '</div>';
+      }
+    }
+
+    getJson(U.casos_dia, { user_id: userId, fecha: fecha }).then(function (data) {
+      if (!state.hoyDrawer.open ||
+          String(state.hoyDrawer.userId) !== String(userId) ||
+          String(state.hoyDrawer.fecha) !== String(fecha)) {
+        return;
+      }
+      if (!data || !data.success) {
+        actions.innerHTML = '<div class="aud-d-empty">' +
+          escapeHtml((data && data.error) || T.load_fail || 'Error') + '</div>';
+        return;
+      }
+      var casos = data.casos || [];
+      // Merge into state.cases so resolver() / refreshCola siguen funcionando.
+      casos.forEach(function (c) { state.cases[c.id] = c; });
+      if (!casos.length) {
+        actions.innerHTML = '<div class="aud-d-empty">' +
+          escapeHtml(T.hoy_sin_acciones || 'Nada pendiente de auditar este día.') + '</div>';
+        return;
+      }
+      actions.innerHTML = casos.map(function (c) {
+        return detailHtml(c, { hideDayLink: true });
+      }).join('');
+      if (focusCasoId) {
+        var block = actions.querySelector('.aud-d-block[data-caso-id="' + focusCasoId + '"]');
+        if (block) {
+          block.classList.add('is-focus');
+          block.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }).catch(function () {
+      actions.innerHTML = '<div class="aud-d-empty">' + escapeHtml(T.network || 'Error de red') + '</div>';
+    });
+  }
+
+  function markHoyRowSelected() {
+    if (!state.hoyDrawer.open) return;
+    $$('.aud-hoy-row').forEach(function (r) {
+      r.classList.toggle('is-selected',
+        String(r.dataset.userId) === String(state.hoyDrawer.userId) &&
+        String(r.dataset.fecha) === String(state.hoyDrawer.fecha));
+    });
   }
 
   function selectCase(id, scroll) {
@@ -362,6 +759,14 @@
     if (r && resueltos != null) r.textContent = resueltos;
   }
 
+  function setHoySinMarcaKpi(n) {
+    if (n == null) return;
+    var el = $('[data-kpi="hoy"]');
+    if (el) el.textContent = n;
+    var box = $('#audKpiSinMarca');
+    if (box) box.classList.toggle('aud-kpi--alert', Number(n) > 0);
+  }
+
   function focusCase() {
     var f = CFG.focus || {};
     var el = null;
@@ -387,8 +792,8 @@
       state.pendingId = null;
       $('#audColaBody').innerHTML = data.html;
       loadCases();
-      syncHoy();
       setCounters(data.count, data.resueltos_7d);
+      setHoySinMarcaKpi(data.planificados_sin_marca);
       state.sort.key = null;
       state.sel = null;
       applyColaFilters();
@@ -453,8 +858,14 @@
         if (data.message) window.showToast(data.message, true);
         state.hist.loaded = false;
         state.cumpLoaded = false;
+        state.hoyLoaded = false;
         // Tanto si se cierra como si queda a medias (falta el otro lado), se repinta la cola.
-        return refreshCola();
+        return refreshCola().then(function () {
+          if (state.tab === 'hoy') {
+            loadHoy(true);
+            if (state.hoyDrawer.open) refreshHoyDrawer();
+          }
+        });
       })
       .catch(function (err) {
         console.error('Error crítico:', err);
@@ -752,10 +1163,10 @@
 
   /* ---------- sincronización con Odoo ---------- */
 
-  window.forzarSyncFichajes = function () {
-    var dias = document.getElementById('diasSync').value;
-    window.showToast(dias === '0' ? T.sync_today : (T.sync_days || '').replace('{n}', dias), false);
-    fetch(U.sync, { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ dias: dias }) })
+  function lanzarSyncFichajes(dias) {
+    var d = String(dias == null ? '7' : dias);
+    window.showToast(d === '0' ? T.sync_today : (T.sync_days || '').replace('{n}', d), false);
+    fetch(U.sync, { method: 'POST', headers: csrfHeaders(), body: JSON.stringify({ dias: d }) })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (data.success) {
@@ -771,6 +1182,46 @@
         alert(T.sync_net);
         hideToast();
       });
+  }
+
+  window.forzarSyncFichajes = function () {
+    var opts = [
+      { v: '0', t: T.sync_opt_0 || 'Solo hoy' },
+      { v: '7', t: T.sync_opt_7 || 'Últimos 7 días' },
+      { v: '15', t: T.sync_opt_15 || 'Últimos 15 días' },
+      { v: '30', t: T.sync_opt_30 || 'Último mes' },
+      { v: '60', t: T.sync_opt_60 || 'Dos meses' },
+    ];
+    if (typeof Swal === 'undefined') {
+      var raw = window.prompt(T.sync_ask || '¿Cuántos días atrás sincronizar? (0 = solo hoy)', '7');
+      if (raw == null) return;
+      var n = parseInt(String(raw).trim(), 10);
+      if (isNaN(n) || n < 0) n = 7;
+      lanzarSyncFichajes(n);
+      return;
+    }
+    var radios = opts.map(function (o, i) {
+      return '<label class="d-block text-left mb-2">' +
+        '<input type="radio" name="audSyncDias" value="' + o.v + '"' + (i === 1 ? ' checked' : '') + '> ' +
+        escapeHtml(o.t) + '</label>';
+    }).join('');
+    Swal.fire({
+      title: T.sync_title || 'Sincronizar fichajes',
+      html: '<p class="text-muted small mb-3 text-left">' +
+        escapeHtml(T.sync_ask || '¿Cuántos días hacia atrás quieres sincronizar?') + '</p>' +
+        '<div class="text-left">' + radios + '</div>',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: T.sync_go || 'Sincronizar',
+      cancelButtonText: T.cancel || 'Cancelar',
+      confirmButtonColor: '#0f172a',
+      preConfirm: function () {
+        var sel = document.querySelector('input[name="audSyncDias"]:checked');
+        return sel ? sel.value : '7';
+      },
+    }).then(function (res) {
+      if (res.isConfirmed) lanzarSyncFichajes(res.value);
+    });
   };
 
   /* ---------- eventos ---------- */
@@ -892,30 +1343,97 @@
       }
     });
 
-    // «Hoy en curso» como desplegable.
-    var hoyBtn = $('#audHoyBtn');
-    var hoyPop = $('#audHoyPop');
-    if (hoyBtn && hoyPop) {
-      hoyBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        hoyPop.hidden = !hoyPop.hidden;
+    $$('.js-aud-hoy-filtro').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.hoyFiltro = b.dataset.hoyFiltro || '';
+        $$('.js-aud-hoy-filtro').forEach(function (x) {
+          x.classList.toggle('is-active', x === b);
+        });
+        renderHoy();
       });
-      document.addEventListener('click', function (e) {
-        if (!hoyPop.hidden && !e.target.closest('#audHoyPop') && !e.target.closest('#audHoyBtn')) hoyPop.hidden = true;
+    });
+    var hoyPrev = $('#audHoyPrev');
+    if (hoyPrev) {
+      hoyPrev.addEventListener('click', function () {
+        var base = state.hoyFecha || (state.hoyData && state.hoyData.hoy);
+        if (!base) return;
+        closeHoyDrawer();
+        state.hoyFecha = shiftIsoDate(base, -1);
+        state.hoyLoaded = false;
+        loadHoy(true);
       });
     }
+    var hoyNext = $('#audHoyNext');
+    if (hoyNext) {
+      hoyNext.addEventListener('click', function () {
+        var base = state.hoyFecha || (state.hoyData && state.hoyData.hoy);
+        var max = (state.hoyData && state.hoyData.hoy_calendario) || base;
+        if (!base || base >= max) return;
+        closeHoyDrawer();
+        state.hoyFecha = shiftIsoDate(base, 1);
+        state.hoyLoaded = false;
+        loadHoy(true);
+      });
+    }
+    var hoyFecha = $('#audHoyFecha');
+    if (hoyFecha) {
+      hoyFecha.addEventListener('change', function () {
+        var v = (hoyFecha.value || '').trim();
+        if (!v) return;
+        var max = hoyFecha.max || v;
+        closeHoyDrawer();
+        state.hoyFecha = v > max ? max : v;
+        state.hoyLoaded = false;
+        loadHoy(true);
+      });
+    }
+    var hoyToday = $('#audHoyToday');
+    if (hoyToday) {
+      hoyToday.addEventListener('click', function () {
+        closeHoyDrawer();
+        state.hoyFecha = (state.hoyData && state.hoyData.hoy_calendario) || null;
+        state.hoyLoaded = false;
+        loadHoy(true);
+      });
+    }
+    document.addEventListener('click', function (e) {
+      var chip = e.target.closest('.js-aud-hoy-caso');
+      if (chip) {
+        if (e.target.closest('a')) return; // enlace a obra/persona: dejar navegar
+        e.preventDefault();
+        e.stopPropagation();
+        openRegistroDesdeHoy(chip.dataset.registroId, chip.dataset.destino || 'resolver');
+        return;
+      }
+      if (e.target.closest('a, button, input')) return;
+      var row = e.target.closest('.js-aud-hoy-dia');
+      if (row) {
+        openHoyDrawer(row.dataset.userId, row.dataset.fecha, false);
+      }
+    });
+    var drawerClose = $('#audHoyDrawerClose');
+    if (drawerClose) drawerClose.addEventListener('click', closeHoyDrawer);
+    restoreHoyDrawerHeight();
+    bindHoyDrawerResize();
 
-    // Teclado: ↑/↓ recorren los casos sin soltar el ratón.
+    // Teclado: ↑/↓ en Por resolver; Escape cierra el cajón de Hoy.
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && state.hoyDrawer.open) {
+        e.preventDefault();
+        closeHoyDrawer();
+        return;
+      }
       if (state.tab !== 'resolver') return;
       if (e.target.closest('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); }
     });
-    window.addEventListener('resize', debounce(fitSplit, 120));
+    window.addEventListener('resize', debounce(function () {
+      fitSplit();
+      if (state.hoyDrawerPx) applyHoyDrawerHeight(state.hoyDrawerPx, false);
+    }, 120));
 
     loadCases();
-    syncHoy();
     applyColaFilters();
 
     var f = CFG.focus || {};

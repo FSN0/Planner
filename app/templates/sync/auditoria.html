@@ -5,7 +5,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260922b">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/auditoria_fichajes.css') }}?v=20261023e">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auditoria_fichajes.css') }}?v=20261102m">
 {% endblock %}
 
 {% block wrapper %}
@@ -28,40 +28,30 @@
         </button>
         {% endif %}
         {% if can_sync_fichajes and tenant_has_odoo %}
-        <select id="diasSync" class="form-control custom-select mr-2" aria-label="{{ _('Días a sincronizar') }}">
-          <option value="0">{{ _('Solo hoy') }}</option>
-          <option value="7" selected>{{ _('Últimos 7 días') }}</option>
-          <option value="15">{{ _('Últimos 15 días') }}</option>
-          <option value="30">{{ _('Último mes') }}</option>
-          <option value="60">{{ _('Dos meses') }}</option>
-        </select>
         <button type="button" onclick="forzarSyncFichajes()" class="btn-admin btn-admin-primary">
           <i class="fas fa-sync-alt"></i> {{ _('Sincronizar') }}
         </button>
-        <a href="{{ url_for('sync.odoo_panel') }}" class="btn-admin btn-admin-ghost">
-          <i class="fas fa-arrow-left"></i> {{ _('Sincronización Odoo') }}
-        </a>
         {% endif %}
       </div>
     </div>
 
-    {# --- Cifras de cabecera (cuatro, no siete) --- #}
+    {# --- Cifras de cabecera --- #}
     <section class="aud-kpis" aria-label="{{ _('Resumen') }}">
       <div class="aud-kpi {{ 'aud-kpi--alert' if casos else 'aud-kpi--ok' }}" id="audKpiPorResolver">
         <div class="aud-kpi-label">{{ _('Por resolver') }}</div>
         <div class="aud-kpi-value" data-kpi="count">{{ casos|length }}</div>
         <div class="aud-kpi-sub">{{ _('casos que necesitan una decisión') }}</div>
       </div>
-      <div class="aud-kpi">
-        <div class="aud-kpi-label">{{ _('Hoy en curso') }}</div>
-        <div class="aud-kpi-value" data-kpi="hoy">{{ hoy_sin_fichar + avisos_hoy|length }}</div>
-        <div class="aud-kpi-sub">{{ _('plazas aún sin fichar (solo aviso)') }}</div>
+      <div class="aud-kpi {{ 'aud-kpi--alert' if kpis.planificados_sin_marca else '' }}" id="audKpiSinMarca">
+        <div class="aud-kpi-label">{{ _('Sin fichar hoy') }}</div>
+        <div class="aud-kpi-value" data-kpi="hoy">{{ kpis.planificados_sin_marca }}</div>
+        <div class="aud-kpi-sub">{{ _('planificados sin marca en ninguna obra') }}</div>
       </div>
       <div class="aud-kpi">
-        <div class="aud-kpi-label">{{ _('Cumplimiento') }}{% if kpis.ultimo_dia_txt %} · {{ kpis.ultimo_dia_txt }}{% endif %}</div>
+        <div class="aud-kpi-label">{{ _('Cumplimiento') }}{% if kpis.ultimo_dia_txt %} · {{ _('último día cerrado') }} {{ kpis.ultimo_dia_txt }}{% endif %}</div>
         <div class="aud-kpi-value">{% if kpis.cumplimiento is not none %}{{ kpis.cumplimiento }}%{% else %}—{% endif %}</div>
         <div class="aud-kpi-sub">
-          {% if kpis.planificados %}{{ _('{a} de {b} fueron donde estaban planificados').replace('{a}', kpis.cumplen|string).replace('{b}', kpis.planificados|string) }}{% else %}{{ _('Sin días planificados cerrados') }}{% endif %}
+          {% if kpis.planificados %}{{ _('{a} de {b} ficharon en su obra planificada').replace('{a}', kpis.cumplen|string).replace('{b}', kpis.planificados|string) }}{% else %}{{ _('Sin días planificados cerrados') }}{% endif %}
         </div>
       </div>
       <div class="aud-kpi">
@@ -76,6 +66,9 @@
       <nav class="aud-tabs" role="tablist">
         <button type="button" class="aud-tab" role="tab" data-tab="resolver">
           {{ _('Por resolver') }}<span class="aud-tab-count {{ 'is-alert' if casos else '' }}" id="audTabCount">{{ casos|length }}</span>
+        </button>
+        <button type="button" class="aud-tab" role="tab" data-tab="hoy">
+          {{ _('Hoy') }}<span class="aud-tab-count" id="audHoyTabCount">—</span>
         </button>
         <button type="button" class="aud-tab" role="tab" data-tab="cumplimiento">{{ _('Cumplimiento') }}</button>
         <button type="button" class="aud-tab" role="tab" data-tab="historial">{{ _('Historial') }}</button>
@@ -107,17 +100,65 @@
           <i class="fas fa-map-marker-alt"></i> {{ _('Ubicación dudosa') }} <small data-count-geo="">{{ geo_dudosa_count }}</small>
         </button>
         {% endif %}
-        <button type="button" class="aud-pill aud-pill--soft" id="audHoyBtn" title="{{ _('Aviso del día en curso. No requiere acción.') }}">
-          <i class="far fa-clock"></i> {{ _('Hoy en curso') }} <small id="audHoyCount">{{ hoy_sin_fichar + avisos_hoy|length }}</small>
-        </button>
       </div>
-      <div class="aud-hoy-pop" id="audHoyPop" hidden></div>
       <div class="aud-split" id="audSplit">
         <div class="aud-list" id="audColaBody">
           {% include 'sync/_auditoria_cola.html' %}
         </div>
         <aside class="aud-detail" id="audDetail" aria-live="polite"></aside>
       </div>
+    </section>
+
+    {# ===== Hoy (roster planificado; navegable a días anteriores) ===== #}
+    <section class="aud-panel" data-panel="hoy" hidden>
+      <div class="aud-filters aud-hoy-nav">
+        <button type="button" class="aud-pill" id="audHoyPrev" title="{{ _('Día anterior') }}" aria-label="{{ _('Día anterior') }}">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <input type="date" class="aud-input" id="audHoyFecha" aria-label="{{ _('Fecha') }}">
+        <button type="button" class="aud-pill" id="audHoyNext" title="{{ _('Día siguiente') }}" aria-label="{{ _('Día siguiente') }}">
+          <i class="fas fa-chevron-right"></i>
+        </button>
+        <button type="button" class="aud-pill aud-pill--soft" id="audHoyToday" hidden>{{ _('Ir a hoy') }}</button>
+        <span class="aud-muted" id="audHoyHint">{{ _('Quién está planificado y en qué estado está cada obra.') }}</span>
+        <span class="aud-spacer"></span>
+        <button type="button" class="aud-pill is-active js-aud-hoy-filtro" data-hoy-filtro="">{{ _('Todos') }} <small id="audHoyFAll"></small></button>
+        <button type="button" class="aud-pill js-aud-hoy-filtro" data-hoy-filtro="sin_fichar">{{ _('Sin fichar') }} <small id="audHoyFSin"></small></button>
+        <button type="button" class="aud-pill js-aud-hoy-filtro" data-hoy-filtro="auditar">{{ _('Por auditar') }} <small id="audHoyFAud"></small></button>
+        <button type="button" class="aud-pill js-aud-hoy-filtro" data-hoy-filtro="ok">{{ _('Correctos') }} <small id="audHoyFOk"></small></button>
+        <button type="button" class="aud-pill js-aud-hoy-filtro" data-hoy-filtro="falta">{{ _('Falta') }} <small id="audHoyFFal"></small></button>
+      </div>
+      <div id="audHoyBody"><div class="aud-loading">{{ _('Cargando…') }}</div></div>
+      {# Fijo al borde inferior del viewport; la lista usa el scroll de .admin-main #}
+      <aside class="aud-hoy-drawer" id="audHoyDrawer" hidden>
+        <div class="aud-hoy-drawer-resize" id="audHoyDrawerResize" role="separator"
+             aria-orientation="horizontal" aria-label="{{ _('Redimensionar panel') }}"
+             title="{{ _('Arrastra para ampliar o reducir') }}"></div>
+        <div class="aud-hoy-drawer-bar">
+          <strong id="audHoyDrawerTitle">{{ _('Detalle del día') }}</strong>
+          <button type="button" class="aud-pill aud-pill--icon" id="audHoyDrawerClose" title="{{ _('Cerrar') }}" aria-label="{{ _('Cerrar') }}">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="aud-hoy-drawer-split">
+          <div class="aud-hoy-drawer-timeline" id="audHoyTimelineRoot" data-person-day-timeline-root>
+            <div data-timeline-meta class="person-day-timeline-meta aud-hoy-tl-meta">
+              <div class="person-day-timeline-meta-item">
+                <span class="person-day-timeline-meta-label">{{ _('Fecha') }}</span>
+                <span data-timeline-fecha class="person-day-timeline-meta-value">—</span>
+              </div>
+              <div class="person-day-timeline-meta-item">
+                <span class="person-day-timeline-meta-label">{{ _('Estado') }}</span>
+                <span data-timeline-estado class="badge-soft badge-soft-gray person-day-timeline-estado">—</span>
+              </div>
+            </div>
+            <div data-timeline-content></div>
+          </div>
+          <div class="aud-hoy-drawer-actions" id="audHoyActions">
+            <div class="aud-d-empty">{{ _('Selecciona una persona.') }}</div>
+          </div>
+        </div>
+      </aside>
     </section>
 
     {# ===== Cumplimiento ===== #}
@@ -190,8 +231,11 @@ window.AUD_CFG = {{ {
     'resolver': url_for('sync.resolver_fichaje'),
     'reabrir': url_for('sync.reabrir_fichaje'),
     'cola': url_for('sync.auditoria_cola'),
+    'hoy': url_for('sync.auditoria_hoy'),
+    'casos_dia': url_for('sync.auditoria_casos_dia'),
     'historial': url_for('sync.auditoria_historial'),
     'cumplimiento': url_for('sync.auditoria_cumplimiento'),
+    'timeline': '/sync/timeline_dia',
     'sync': url_for('sync.sync_fichajes_manual'),
     'auditoria': url_for('sync.auditoria_fichajes'),
     'worker': url_for('admin.worker_panel', user_id=0)|replace('/0', '/__ID__'),
@@ -232,6 +276,14 @@ window.AUD_CFG = {{ {
     'sync_ok': _('¡Revisión y Sincronización completadas!'),
     'sync_err': _('Error al conectar con Odoo:'),
     'sync_net': _('Fallo de red al intentar sincronizar.'),
+    'sync_title': _('Sincronizar fichajes'),
+    'sync_ask': _('¿Cuántos días hacia atrás quieres sincronizar?'),
+    'sync_go': _('Sincronizar'),
+    'sync_opt_0': _('Solo hoy'),
+    'sync_opt_7': _('Últimos 7 días'),
+    'sync_opt_15': _('Últimos 15 días'),
+    'sync_opt_30': _('Último mes'),
+    'sync_opt_60': _('Dos meses'),
     'timeline_loading': _('Recopilando el día completo del operario...'),
     'loading': _('Cargando…'),
     'd_empty': _('Selecciona un caso de la lista para ver el detalle y decidir.'),
@@ -283,8 +335,19 @@ window.AUD_CFG = {{ {
     'th_persona': _('Persona'),
     'th_faltas': _('Faltas'),
     'th_otra': _('Otra obra'),
+    'hoy_hint': _('Planificados el {d}.'),
+    'hoy_empty': _('Nadie planificado hoy en tu alcance.'),
+    'hoy_goto': _('Ver en Por resolver'),
+    'hoy_goto_hist': _('Ver en Historial'),
+    'hoy_plan': _('Planificación'),
+    'hoy_fichaje': _('Fichaje'),
+    'hoy_sin_plan': _('—'),
+    'hoy_sin_marca': _('Sin marca'),
+    'hoy_timeline': _('Ver historial del día'),
+    'hoy_drawer_title': _('Día {d}'),
+    'hoy_sin_acciones': _('Nada pendiente de auditar este día.'),
   },
 }|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/auditoria_fichajes.js') }}?v=20261023d"></script>
+<script src="{{ url_for('static', filename='js/auditoria_fichajes.js') }}?v=20261102m"></script>
 {% endblock %}

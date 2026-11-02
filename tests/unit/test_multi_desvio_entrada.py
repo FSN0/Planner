@@ -118,7 +118,7 @@ def test_consolidar_pendientes_a_ausencia(session, tenant_soltec, user_operario,
 def test_consolidar_multiplan_autorresuelve_falta(
     session, tenant_soltec, user_operario, user_jefe,
 ):
-    """Plan A+B, fichó solo en B → la pata A pasa a Falta (como confirmar falta)."""
+    """Plan A+B, fichó solo en B → en día CERRADO la pata A pasa a Falta."""
     from app.services.desvio_fichaje_service import (
         ESTADO_FALTA,
         PREFIJO_FALTA_PARCIAL_AUTO,
@@ -150,6 +150,34 @@ def test_consolidar_multiplan_autorresuelve_falta(
     assert reg_a.estado == ESTADO_FALTA
     assert es_falta_parcial_auto(reg_a)
     assert (reg_a.notas_resolucion or '').startswith(PREFIJO_FALTA_PARCIAL_AUTO)
+
+
+def test_consolidar_multiplan_hoy_no_auto_falta(
+    session, tenant_soltec, user_operario, user_jefe,
+):
+    """En el día en curso la pata sin fichar no se convierte en Falta."""
+    session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+    a = _obra(session, 'Plan A', 'A-04b', jefe_id=user_jefe.id)
+    b = _obra(session, 'Plan B', 'B-04b', jefe_id=user_jefe.id)
+    hoy = date.today()
+    session.add(RegistroFichaje(
+        user_id=user_operario.id, fecha=hoy,
+        obra_planificada_id=b.id, obra_real_id=b.id,
+        check_in=datetime.combine(hoy, time(8, 0)),
+        estado='Correcto',
+    ))
+    session.add(RegistroFichaje(
+        user_id=user_operario.id, fecha=hoy,
+        obra_planificada_id=a.id, estado='Sin_Registro',
+    ))
+    session.commit()
+
+    consolidar_pendientes_a_ausencia(hoy)
+    session.commit()
+    reg_a = RegistroFichaje.query.filter_by(
+        user_id=user_operario.id, fecha=hoy, obra_planificada_id=a.id,
+    ).first()
+    assert reg_a.estado == 'Ausencia'
 
 
 def test_autorresolver_ausencia_parcial_ya_creada(
@@ -193,12 +221,14 @@ def test_backfill_faltas_parciales_abiertas(session, tenant_soltec, user_operari
         ESTADO_FALTA,
         autorresolver_faltas_parciales_abiertas,
         es_falta_parcial_auto,
+        reabrir_auto_faltas_parciales_dia_curso,
     )
 
     session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
     a = _obra(session, 'Plan A', 'A-06', jefe_id=user_jefe.id)
     b = _obra(session, 'Plan B', 'B-06', jefe_id=user_jefe.id)
     dia = date.today() - timedelta(days=3)
+    hoy = date.today()
     session.add(RegistroFichaje(
         user_id=user_operario.id, fecha=dia,
         obra_planificada_id=b.id, obra_real_id=b.id,
@@ -209,10 +239,16 @@ def test_backfill_faltas_parciales_abiertas(session, tenant_soltec, user_operari
         user_id=user_operario.id, fecha=dia,
         obra_planificada_id=a.id, estado='Ausencia',
     ))
+    # Falta automática prematura de HOY: debe reabrirse.
+    session.add(RegistroFichaje(
+        user_id=user_operario.id, fecha=hoy,
+        obra_planificada_id=a.id, estado=ESTADO_FALTA,
+        notas_resolucion='Auto: falta confirmada: test',
+    ))
     session.commit()
 
     n = autorresolver_faltas_parciales_abiertas(
-        desde=dia - timedelta(days=1), hasta=date.today(),
+        desde=dia - timedelta(days=1), hasta=hoy,
     )
     session.commit()
     assert n == 1
@@ -221,6 +257,14 @@ def test_backfill_faltas_parciales_abiertas(session, tenant_soltec, user_operari
     ).first()
     assert reg_a.estado == ESTADO_FALTA
     assert es_falta_parcial_auto(reg_a)
+
+    n_re = reabrir_auto_faltas_parciales_dia_curso(hoy)
+    session.commit()
+    assert n_re == 1
+    reg_hoy = RegistroFichaje.query.filter_by(
+        user_id=user_operario.id, fecha=hoy, obra_planificada_id=a.id,
+    ).first()
+    assert reg_hoy.estado == 'Sin_Registro'
 
 
 def test_corte_mismo_dia_marca_ausencia_y_fichaje_la_quita(

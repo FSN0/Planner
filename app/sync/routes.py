@@ -1080,6 +1080,7 @@ def _contexto_cola(rango):
     from app.services.desvio_fichaje_service import (
         autorresolver_faltas_parciales_abiertas,
         enriquecer_pendientes_desvio,
+        reabrir_auto_faltas_parciales_dia_curso,
     )
     from app.services.fichaje_geo_audit_service import entrada_geo_por_registros
     from app.services.geocerca_service import geocerca_activa
@@ -1088,22 +1089,28 @@ def _contexto_cola(rango):
     hoy = today_local()
     scope = _scope_auditoria()
 
-    # Backfill al abrir la cola: multi-plan (fichó en otra) → Falta, también
-    # días ya consolidados antes de existir esta regla (ayer, etc.).
+    # Auto-falta multi-plan solo en días cerrados; deshace las del día en curso
+    # (aún pueden fichar en la otra obra).
     try:
+        n_reab = reabrir_auto_faltas_parciales_dia_curso(hoy)
         dias = _RANGOS_COLA.get(rango, 90) if rango != 'todo' else 365
         n_auto = autorresolver_faltas_parciales_abiertas(
             desde=hoy - timedelta(days=dias),
-            hasta=hoy,
+            hasta=hoy - timedelta(days=1),
         )
-        if n_auto:
+        if n_reab or n_auto:
             db.session.commit()
-            current_app.logger.info(
-                'auditoria: autorresueltas %s faltas parciales multi-plan', n_auto,
-            )
+            if n_auto:
+                current_app.logger.info(
+                    'auditoria: autorresueltas %s faltas parciales multi-plan', n_auto,
+                )
+            if n_reab:
+                current_app.logger.info(
+                    'auditoria: reabiertas %s auto-faltas del día en curso', n_reab,
+                )
     except Exception:
         db.session.rollback()
-        current_app.logger.exception('autorresolver_faltas_parciales_abiertas falló')
+        current_app.logger.exception('autorresolver/reabrir faltas parciales falló')
 
     filtros = [RegistroFichaje.estado.in_(acs.ESTADOS_PENDIENTES)]
     if scope is not None:
@@ -1159,10 +1166,14 @@ def _contexto_cola(rango):
     }
 
 
-def _kpis_auditoria(hoy):
-    """Cifras de cabecera: último día cerrado y decisiones recientes."""
-    from app import db
+def _kpis_auditoria(hoy, user=None):
+    """Cifras de cabecera: último día cerrado, sin marca hoy y decisiones recientes."""
+    from flask_login import current_user
 
+    from app import db
+    from app.services.auditoria_hoy_service import count_planificados_sin_marca
+
+    u = user or current_user
     scope = _scope_auditoria()
     base = [
         RegistroFichaje.obra_planificada_id.isnot(None),
@@ -1196,6 +1207,7 @@ def _kpis_auditoria(hoy):
         'cumplen': cumplen,
         'cumplimiento': round(100.0 * cumplen / planificados) if planificados else None,
         'resueltos_7d': q_res.count(),
+        'planificados_sin_marca': count_planificados_sin_marca(u, hoy=hoy),
     }
 
 
@@ -1220,7 +1232,7 @@ def auditoria_fichajes():
         seccion = (request.args.get('seccion') or '').strip()
         registro_id = request.args.get('registro_id', type=int)
         tab = (request.args.get('tab') or '').strip()
-        if tab not in ('resolver', 'cumplimiento', 'historial'):
+        if tab not in ('resolver', 'hoy', 'cumplimiento', 'historial'):
             tab = 'historial' if seccion in ('historial', 'correcciones', 'odoo') else 'resolver'
 
         es_oficina = user_panel_mode(current_user, PANEL_AUDITORIA_FICHAJES) == 'office'
@@ -1298,10 +1310,120 @@ def auditoria_cola():
             'avisos': len(ctx['avisos_hoy']),
             'comodin_count': ctx['comodin_count'],
             'resueltos_7d': kpis['resueltos_7d'],
+            'planificados_sin_marca': kpis['planificados_sin_marca'],
         })
     except Exception:
         current_app.logger.exception('Fallo al refrescar la cola de auditoría')
         return jsonify({'success': False, 'error': translate('No se pudo cargar la sección')}), 500
+
+
+@sync_bp.route('/auditoria/hoy', methods=['GET'])
+@login_required
+def auditoria_hoy():
+    """Roster de un día: planificados + estado por obra (alcance del viewer)."""
+    from datetime import date as date_cls
+
+    from flask import current_app
+    from app import db
+    from app.services.auditoria_hoy_service import roster_hoy
+    from app.services.desvio_fichaje_service import reabrir_auto_faltas_parciales_dia_curso
+    from app.utils.timezone_utils import today_local
+
+    if not _auditoria_accesible():
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
+    try:
+        hoy = today_local()
+        raw = (request.args.get('fecha') or '').strip()[:10]
+        dia = hoy
+        if raw:
+            try:
+                dia = date_cls.fromisoformat(raw)
+            except ValueError:
+                dia = hoy
+        if dia > hoy:
+            dia = hoy
+        # Si miran el día en curso, deshacer auto-faltas prematuras.
+        if dia >= hoy:
+            try:
+                if reabrir_auto_faltas_parciales_dia_curso(hoy):
+                    db.session.commit()
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception('reabrir auto-faltas día curso falló')
+        data = roster_hoy(
+            current_user,
+            hoy=dia,
+            q=(request.args.get('q') or '').strip(),
+        )
+        data['es_hoy'] = dia == hoy
+        data['hoy_calendario'] = hoy.isoformat()
+        return jsonify({'success': True, **data})
+    except Exception:
+        current_app.logger.exception('Fallo al cargar roster de hoy')
+        return jsonify({'success': False, 'error': translate('No se pudo cargar el día de hoy')}), 500
+
+
+@sync_bp.route('/auditoria/casos_dia', methods=['GET'])
+@login_required
+def auditoria_casos_dia():
+    """Casos de Por resolver de una persona en una fecha (para el cajón de Hoy)."""
+    from datetime import date as date_cls
+
+    from flask import current_app
+    from app.services import auditoria_casos_service as acs
+    from app.services.desvio_fichaje_service import enriquecer_pendientes_desvio
+    from app.services.fichaje_geo_audit_service import entrada_geo_por_registros
+    from app.utils.timezone_utils import today_local
+
+    if not _auditoria_accesible():
+        return jsonify({'success': False, 'error': translate('Acceso denegado')}), 403
+    user_id = request.args.get('user_id', type=int)
+    raw = (request.args.get('fecha') or '').strip()[:10]
+    if not user_id or not raw:
+        return jsonify({'success': False, 'error': translate('Faltan user_id o fecha')}), 400
+    try:
+        dia = date_cls.fromisoformat(raw)
+    except ValueError:
+        return jsonify({'success': False, 'error': translate('Fecha inválida')}), 400
+    try:
+        hoy = today_local()
+        scope = _scope_auditoria()
+        filtros = [
+            RegistroFichaje.user_id == user_id,
+            RegistroFichaje.fecha == dia,
+            RegistroFichaje.estado.in_(acs.ESTADOS_PENDIENTES),
+        ]
+        if scope is not None:
+            filtros.append(scope)
+        pendientes = (
+            RegistroFichaje.query
+            .options(*_AUDITORIA_EAGER)
+            .filter(*filtros)
+            .all()
+        )
+        try:
+            pendientes = enriquecer_pendientes_desvio(pendientes, current_user)
+        except Exception:
+            current_app.logger.exception('enriquecer_pendientes_desvio (casos_dia)')
+        geo = entrada_geo_por_registros(list(pendientes))
+        cola = acs.construir_cola(
+            pendientes, current_user,
+            hoy=hoy,
+            puede_resolver=can_resolve_fichajes(current_user),
+            geo_por_registro=geo,
+        )
+        # En el cajón de Hoy también mostramos avisos del día (Ausencia hoy).
+        casos = cola['casos']
+        return jsonify({
+            'success': True,
+            'casos': [acs.caso_a_json(c) for c in casos],
+            'avisos': cola['avisos_hoy'],
+            'user_id': user_id,
+            'fecha': dia.isoformat(),
+        })
+    except Exception:
+        current_app.logger.exception('Fallo al cargar casos_dia')
+        return jsonify({'success': False, 'error': translate('No se pudieron cargar las acciones')}), 500
 
 
 @sync_bp.route('/auditoria/cumplimiento', methods=['GET'])
