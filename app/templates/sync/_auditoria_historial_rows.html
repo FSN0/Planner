@@ -1,43 +1,53 @@
-{% if not filas %}
-<tr><td colspan="6" class="aud-table-empty">{{ _('No hay registros con estos filtros.') }}</td></tr>
+{% if not grupos %}
+<tr><td colspan="7" class="aud-table-empty">{{ _('No hay registros con estos filtros.') }}</td></tr>
 {% else %}
-{% for f in filas %}
-<tr class="fila-fichaje-auditoria" id="hist-row-{{ f.id }}" data-user-id="{{ f.user_id }}" data-fecha="{{ f.fecha_iso }}">
-  <td class="aud-nowrap">{{ f.fecha_txt }}</td>
+{% for g in grupos %}
+<tr class="fila-fichaje-auditoria aud-hist-day" data-user-id="{{ g.user_id or '' }}" data-fecha="{{ g.fecha_iso }}">
+  <td class="aud-nowrap">{{ g.fecha_txt }}</td>
   <td>
     <div class="aud-strong">
-      {% if f.user_id %}
-        <a class="aud-link" href="{{ url_for('admin.worker_panel', user_id=f.user_id) }}" onclick="event.stopPropagation()">{{ f.persona }}</a>
-      {% else %}{{ f.persona }}{% endif %}
+      {% if g.user_id %}
+        <a class="aud-link" href="{{ url_for('admin.worker_panel', user_id=g.user_id) }}" onclick="event.stopPropagation()">{{ g.persona }}</a>
+      {% else %}{{ g.persona }}{% endif %}
     </div>
   </td>
-  <td>
-    <div class="aud-hist-obras">
-      {% if f.plan %}
-        <span>
-          <span class="aud-side-k">{{ _('Plan') }}</span>
-          {% if f.plan_id %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=f.plan_id) }}" onclick="event.stopPropagation()">{{ f.plan }}</a>{% else %}{{ f.plan }}{% endif %}
-        </span>
-      {% endif %}
-      {% if f.real %}
-        <span>
-          <span class="aud-side-k">{{ _('Fichó') }}</span>
-          {% if f.real_id %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=f.real_id) }}" onclick="event.stopPropagation()">{{ f.real }}</a>{% else %}{{ f.real }}{% endif %}
-          {% if f.entrada %} <span class="aud-hours">{{ f.entrada }}{% if f.salida %}–{{ f.salida }}{% endif %}</span>{% endif %}
-        </span>
-      {% endif %}
+  <td class="aud-hist-events">
+    {% for e in g.eventos %}
+    <div class="aud-hist-event" id="hist-row-{{ e.id }}" data-registro-id="{{ e.id }}">
+      <div class="aud-hist-event-main">
+        <div class="aud-hist-obras">
+          {% if e.plan %}
+            <span>
+              <span class="aud-side-k">{{ _('Plan') }}</span>
+              {% if e.plan_id %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=e.plan_id) }}" onclick="event.stopPropagation()">{{ e.plan }}</a>{% else %}{{ e.plan }}{% endif %}
+            </span>
+          {% endif %}
+          {% if e.real %}
+            <span>
+              <span class="aud-side-k">{{ _('Fichó') }}</span>
+              {% if e.real_id %}<a class="aud-link" href="{{ url_for('admin.obra_panel', obra_id=e.real_id) }}" onclick="event.stopPropagation()">{{ e.real }}</a>{% else %}{{ e.real }}{% endif %}
+              {% if e.entrada %} <span class="aud-hours">{{ e.entrada }}{% if e.salida %}–{{ e.salida }}{% endif %}</span>{% endif %}
+            </span>
+          {% endif %}
+        </div>
+        <div class="aud-hist-result">{{ e.resultado }}</div>
+        {% if e.nota %}<div class="aud-case-note">{{ e.nota }}</div>{% endif %}
+      </div>
+      <div class="aud-hist-event-meta">
+        <span class="aud-origin aud-origin--{{ e.origen }}">{{ _(e.origen_label) }}</span>
+        <span class="aud-muted aud-hist-quien">{{ e.quien }}</span>
+        {% if e.puede_reabrir %}
+          <button type="button" class="aud-btn aud-btn--ghost aud-btn--sm js-aud-reabrir no-row-nav" data-registro-id="{{ e.id }}"
+                  title="{{ _('Vuelve a la cola de pendientes') }}" onclick="event.stopPropagation()">{{ _('Reabrir') }}</button>
+        {% endif %}
+      </div>
     </div>
-    <div class="aud-hist-result">{{ f.resultado }}</div>
-    {% if f.nota %}<div class="aud-case-note">{{ f.nota }}</div>{% endif %}
+    {% endfor %}
   </td>
-  <td><span class="aud-origin aud-origin--{{ f.origen }}">{{ _(f.origen_label) }}</span></td>
-  <td class="aud-muted">{{ f.quien }}</td>
-  <td class="aud-right no-row-nav">
-    {% if f.puede_reabrir %}
-      <button type="button" class="aud-btn aud-btn--ghost aud-btn--sm js-aud-reabrir" data-registro-id="{{ f.id }}"
-              title="{{ _('Vuelve a la cola de pendientes') }}">{{ _('Reabrir') }}</button>
-    {% endif %}
-  </td>
+  <td class="aud-num aud-metric">{{ g.odoo_ud or '—' }}</td>
+  <td class="aud-num aud-metric">{{ g.odoo_hh or '—' }}</td>
+  <td class="aud-num aud-metric">{{ g.odoo_mod or '—' }}</td>
+  <td class="aud-num aud-metric">{{ g.odoo_moe or '—' }}</td>
 </tr>
 {% endfor %}
 {% endif %}

@@ -40,6 +40,8 @@ _AUDITORIA_EAGER = (
     selectinload(RegistroFichaje.obra_planificada),
     selectinload(RegistroFichaje.obra_real),
     selectinload(RegistroFichaje.resuelto_por),
+    selectinload(RegistroFichaje.desvio_ack_plan_by),
+    selectinload(RegistroFichaje.desvio_ack_real_by),
 )
 _AUDITORIA_PENDIENTES_LIMIT = 500
 _AUDITORIA_HISTORIAL_PAGE = 25
@@ -1628,6 +1630,29 @@ def _fecha_param(nombre):
         return None
 
 
+def _fmt_metric_odoo(val):
+    if val is None:
+        return None
+    try:
+        return f'{float(val):.2f}'
+    except (TypeError, ValueError):
+        return None
+
+
+def _sum_metric_odoo(valores):
+    nums = []
+    for v in valores:
+        if v is None:
+            continue
+        try:
+            nums.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    if not nums:
+        return None
+    return f'{sum(nums):.2f}'
+
+
 def _fila_historial(registro, comodin_ids, puede_resolver):
     from app.services import auditoria_casos_service as acs
     from app.services.desvio_fichaje_service import es_falta_automatica
@@ -1652,10 +1677,15 @@ def _fila_historial(registro, comodin_ids, puede_resolver):
         'entrada': acs._hhmm(registro.check_in),
         'salida': acs._hhmm(registro.check_out),
         'resultado': acs.resultado_registro(registro, comodin_ids),
+        'estado': (registro.estado or '').strip(),
         'origen': origen,
         'origen_label': acs.ETIQUETA_ORIGEN[origen],
         'quien': acs.quien_y_cuando(registro, origen),
         'nota': nota,
+        'odoo_ud': _fmt_metric_odoo(registro.odoo_ud),
+        'odoo_hh': _fmt_metric_odoo(registro.odoo_total_hh),
+        'odoo_mod': _fmt_metric_odoo(registro.odoo_mod),
+        'odoo_moe': _fmt_metric_odoo(registro.odoo_moe),
         'puede_reabrir': bool(
             puede_resolver
             and origen == acs.ORIGEN_MANUAL
@@ -1664,11 +1694,107 @@ def _fila_historial(registro, comodin_ids, puede_resolver):
     }
 
 
+def _agrupar_filas_historial(filas, orden_pares=None):
+    """Una fila UI por persona+día; los registros del día van en ``eventos``."""
+    buckets = {}
+    for f in filas:
+        key = (f.get('user_id'), f.get('fecha_iso') or '')
+        buckets.setdefault(key, []).append(f)
+
+    if orden_pares is None:
+        keys = sorted(
+            buckets.keys(),
+            key=lambda k: (k[1] or '', (buckets[k][0].get('persona') or '').lower()),
+            reverse=True,
+        )
+    else:
+        keys = list(orden_pares)
+
+    grupos = []
+    for key in keys:
+        eventos = buckets.get(key) or []
+        if not eventos:
+            continue
+        eventos = sorted(eventos, key=lambda e: e.get('id') or 0)
+        head = eventos[0]
+        grupos.append({
+            'user_id': head.get('user_id'),
+            'persona': head.get('persona') or '',
+            'fecha_iso': head.get('fecha_iso') or '',
+            'fecha_txt': head.get('fecha_txt') or '',
+            'odoo_ud': _sum_metric_odoo([e.get('odoo_ud') for e in eventos]),
+            'odoo_hh': _sum_metric_odoo([e.get('odoo_hh') for e in eventos]),
+            'odoo_mod': _sum_metric_odoo([e.get('odoo_mod') for e in eventos]),
+            'odoo_moe': _sum_metric_odoo([e.get('odoo_moe') for e in eventos]),
+            'eventos': eventos,
+        })
+    return grupos
+
+
+def _query_pares_historial(base, sort_key, direction):
+    """Pares (user_id, fecha) distintos para paginar el historial agrupado."""
+    from sqlalchemy import asc, desc, func, nullslast
+
+    direction = 'asc' if (direction or '').lower() == 'asc' else 'desc'
+    order_fn = asc if direction == 'asc' else desc
+    key = (sort_key or 'fecha').strip()
+
+    q = (
+        base.order_by(None)
+        .with_entities(RegistroFichaje.user_id, RegistroFichaje.fecha)
+        .group_by(RegistroFichaje.user_id, RegistroFichaje.fecha)
+    )
+    if key == 'operario':
+        q = q.outerjoin(User, User.id == RegistroFichaje.user_id)
+        col = func.lower(func.concat(
+            func.coalesce(User.lastname, ''),
+            ' ',
+            func.coalesce(User.name, ''),
+        ))
+        q = q.order_by(
+            nullslast(order_fn(col)),
+            nullslast(order_fn(RegistroFichaje.fecha)),
+            RegistroFichaje.user_id,
+        )
+    elif key == 'odoo_ud':
+        q = q.order_by(
+            nullslast(order_fn(func.max(RegistroFichaje.odoo_ud))),
+            nullslast(order_fn(RegistroFichaje.fecha)),
+            RegistroFichaje.user_id,
+        )
+    elif key == 'odoo_hh':
+        q = q.order_by(
+            nullslast(order_fn(func.max(RegistroFichaje.odoo_total_hh))),
+            nullslast(order_fn(RegistroFichaje.fecha)),
+            RegistroFichaje.user_id,
+        )
+    elif key == 'odoo_mod':
+        q = q.order_by(
+            nullslast(order_fn(func.max(RegistroFichaje.odoo_mod))),
+            nullslast(order_fn(RegistroFichaje.fecha)),
+            RegistroFichaje.user_id,
+        )
+    elif key == 'odoo_moe':
+        q = q.order_by(
+            nullslast(order_fn(func.max(RegistroFichaje.odoo_moe))),
+            nullslast(order_fn(RegistroFichaje.fecha)),
+            RegistroFichaje.user_id,
+        )
+    else:
+        q = q.order_by(
+            nullslast(order_fn(RegistroFichaje.fecha)),
+            RegistroFichaje.user_id,
+        )
+    return q
+
+
 @sync_bp.route('/auditoria/historial', methods=['GET'])
 @login_required
 def auditoria_historial():
     """Todo lo que ya no es trabajo: decisiones, correcciones de Odoo, comodín y cumplimientos."""
     from flask import current_app
+    from sqlalchemy import tuple_
+
     from app.services import auditoria_casos_service as acs
 
     if not _auditoria_accesible():
@@ -1716,18 +1842,32 @@ def auditoria_historial():
             elif not incluir_auto:
                 base = base.filter(expr_origen != acs.ORIGEN_AUTO)
 
-        total = base.order_by(None).count()
+        # Paginar por persona+día (no por registro suelto).
+        pares_q = _query_pares_historial(base, sort_key, direction)
+        pares_sub = pares_q.subquery()
+        total = db.session.query(func.count()).select_from(pares_sub).scalar() or 0
         pages = max(1, (total + per_page - 1) // per_page) if total else 1
         page = min(page, pages)
-        registros = (
-            _aplicar_orden_historial(base.options(*_AUDITORIA_EAGER), sort_key, direction, expr_origen)
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-            .all()
-        )
+        pares = pares_q.offset((page - 1) * per_page).limit(per_page).all()
+
         puede = can_resolve_fichajes(current_user)
-        filas = [_fila_historial(r, comodin, puede) for r in registros]
-        html = render_template('sync/_auditoria_historial_rows.html', filas=filas)
+        if not pares:
+            grupos = []
+        else:
+            registros = (
+                base.order_by(None)
+                .options(*_AUDITORIA_EAGER)
+                .filter(tuple_(RegistroFichaje.user_id, RegistroFichaje.fecha).in_(pares))
+                .all()
+            )
+            filas = [_fila_historial(r, comodin, puede) for r in registros]
+            orden = [
+                (uid, fecha.isoformat() if hasattr(fecha, 'isoformat') else (fecha or ''))
+                for uid, fecha in pares
+            ]
+            grupos = _agrupar_filas_historial(filas, orden_pares=orden)
+
+        html = render_template('sync/_auditoria_historial_rows.html', grupos=grupos)
         return jsonify({
             'success': True,
             'html': html,

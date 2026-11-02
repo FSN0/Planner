@@ -498,20 +498,57 @@ def resultado_registro(registro, comodin_obra_ids=()) -> str:
     return RESULTADO_POR_ESTADO.get(est) or est.replace('_', ' ') or '—'
 
 
-def quien_y_cuando(registro, origen) -> str:
-    """«Quién lo decidió y cuándo», o la fuente si no fue una persona."""
-    cuando = ''
-    fecha_aud = getattr(registro, 'fecha_auditoria', None)
-    if fecha_aud:
+def _fmt_cuando_auditoria(dt) -> str:
+    if not dt:
+        return ''
+    try:
+        from app.utils.timezone_utils import utc_to_local
+        return utc_to_local(dt).strftime('%d/%m %H:%M')
+    except Exception:
         try:
-            from app.utils.timezone_utils import utc_to_local
-            cuando = utc_to_local(fecha_aud).strftime('%d/%m %H:%M')
+            return dt.strftime('%d/%m %H:%M')
         except Exception:
-            cuando = fecha_aud.strftime('%d/%m %H:%M')
+            return ''
+
+
+def quien_y_cuando(registro, origen) -> str:
+    """«Quién lo decidió y cuándo», o la fuente si no fue una persona.
+
+    En desvíos a medias (Conflicto/Disputa) aún no hay ``resuelto_por``: se usa
+    quién firmó el lado del plan y/o del fichaje.
+    """
     if origen == ORIGEN_ODOO:
         base = 'RRHH en Odoo'
-    elif origen == ORIGEN_AUTO or origen == ORIGEN_COMODIN:
+        cuando = _fmt_cuando_auditoria(getattr(registro, 'fecha_auditoria', None))
+        return f"{base} · {cuando}" if cuando else base
+    if origen == ORIGEN_AUTO or origen == ORIGEN_COMODIN:
         base = 'Sistema'
-    else:
-        base = _nombre(registro.resuelto_por) or '—'
+        cuando = _fmt_cuando_auditoria(getattr(registro, 'fecha_auditoria', None))
+        return f"{base} · {cuando}" if cuando else base
+
+    def _persona_cuando(user, at):
+        nom = _nombre(user)
+        cuando = _fmt_cuando_auditoria(at)
+        if nom and cuando:
+            return f'{nom} · {cuando}'
+        return nom or cuando or ''
+
+    trozos = []
+    plan_bit = _persona_cuando(
+        getattr(registro, 'desvio_ack_plan_by', None),
+        getattr(registro, 'desvio_ack_plan_at', None),
+    )
+    real_bit = _persona_cuando(
+        getattr(registro, 'desvio_ack_real_by', None),
+        getattr(registro, 'desvio_ack_real_at', None),
+    )
+    if plan_bit:
+        trozos.append(plan_bit)
+    if real_bit:
+        trozos.append(real_bit)
+    if trozos:
+        return trozos[0] if len(trozos) == 1 else '; '.join(trozos)
+
+    base = _nombre(getattr(registro, 'resuelto_por', None)) or '—'
+    cuando = _fmt_cuando_auditoria(getattr(registro, 'fecha_auditoria', None))
     return f"{base} · {cuando}" if cuando and base != '—' else base

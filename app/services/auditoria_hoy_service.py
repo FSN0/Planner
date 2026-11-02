@@ -286,6 +286,7 @@ def roster_hoy(user, *, hoy: date | None = None, q: str = '') -> dict:
             totales['plazas'] += 1
 
         fichaje_chips = []
+        regs_metricas = []
         for real_id, reg in sorted(
             fichaje_por_obra.get(uid, {}).items(),
             key=lambda it: (_hhmm(it[1].check_in) or '99', it[0]),
@@ -309,6 +310,7 @@ def roster_hoy(user, *, hoy: date | None = None, q: str = '') -> dict:
                 real_id, o, chip, label, reg,
                 entrada=_hhmm(reg.check_in), en_plan=en_plan,
             ))
+            regs_metricas.append(reg)
 
         if qn and qn not in ' '.join(search_bits):
             continue
@@ -326,6 +328,7 @@ def roster_hoy(user, *, hoy: date | None = None, q: str = '') -> dict:
             # Compat JS antiguo (por si queda caché): plazas≈plan, extras≈fuera de plan
             'plazas': plan_chips,
             'extras': [f for f in fichaje_chips if not f.get('en_plan')],
+            'metricas': _metricas_odoo_regs(regs_metricas),
             'resumen_chip': resumen,
             'tono_fila': tono,
             # Conflicto / desvío (ámbar). Sin marca total = rojo; parcial = gris.
@@ -395,3 +398,30 @@ def _hhmm(dt) -> str:
         return format_time(dt)
     except Exception:
         return dt.strftime('%H:%M')
+
+
+def _metricas_odoo_regs(regs) -> dict:
+    """Suma UD/HH/MOD/MOE de las marcas reales del día (una por obra fichada)."""
+    sums = {'ud': 0.0, 'hh': 0.0, 'mod': 0.0, 'moe': 0.0}
+    seen = {'ud': False, 'hh': False, 'mod': False, 'moe': False}
+    for r in regs or []:
+        for key, attr in (
+            ('ud', 'odoo_ud'),
+            ('hh', 'odoo_total_hh'),
+            ('mod', 'odoo_mod'),
+            ('moe', 'odoo_moe'),
+        ):
+            raw = getattr(r, attr, None)
+            if raw is None:
+                continue
+            try:
+                sums[key] += float(raw)
+                seen[key] = True
+            except (TypeError, ValueError):
+                continue
+    return {
+        'ud': f"{sums['ud']:.2f}" if seen['ud'] else None,
+        'hh': f"{sums['hh']:.2f}" if seen['hh'] else None,
+        'mod': f"{sums['mod']:.2f}" if seen['mod'] else None,
+        'moe': f"{sums['moe']:.2f}" if seen['moe'] else None,
+    }

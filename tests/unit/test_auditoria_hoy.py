@@ -95,6 +95,8 @@ def test_roster_hoy_persona_con_dos_obras(session, tenant_soltec, user_operario,
     assert p['fichajes'][0]['obra_id'] == a.id
     assert p['fichajes'][0]['en_plan'] is True
     assert p['tono_fila'] == 'parcial'  # fichó en una, falta otra → gris
+    assert 'metricas' in p
+    assert set(p['metricas']) >= {'ud', 'hh', 'mod', 'moe'}
 
 
 def test_roster_hoy_sin_marca_total_rojo(session, tenant_soltec, user_operario, user_jefe, user_admin):

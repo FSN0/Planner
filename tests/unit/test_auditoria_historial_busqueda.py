@@ -18,6 +18,7 @@ from app.services.auditoria_casos_service import (
 )
 from app.sync.routes import (
     _ESTADOS_HISTORIAL_DECISION,
+    _agrupar_filas_historial,
     _aplicar_busqueda_historial,
     _aplicar_orden_historial,
     _fila_historial,
@@ -202,11 +203,46 @@ def test_origen_distingue_decision_odoo_automatico_y_comodin(hist_ctx):
     assert 'Odoo cambió la obra' in filas[odoo.id]['resultado']
     assert 'automática' in filas[falta_auto.id]['resultado']
 
+    # Mismo día + persona → una sola fila agrupada con varios eventos.
+    mismos_dia = [
+        filas[manual.id], filas[odoo.id], filas[falta_auto.id], filas[cumplio.id],
+    ]
+    for f in mismos_dia:
+        f['fecha_iso'] = '2026-03-10'
+        f['fecha_txt'] = '10/03/2026'
+        f['user_id'] = u.id
+        f['persona'] = 'Juan Pérez'
+    grupos = _agrupar_filas_historial(mismos_dia)
+    assert len(grupos) == 1
+    assert len(grupos[0]['eventos']) == 4
+
     from flask import render_template
     with hist_ctx['app'].test_request_context('/'):
-        html = render_template('sync/_auditoria_historial_rows.html', filas=list(filas.values()))
+        html = render_template('sync/_auditoria_historial_rows.html', grupos=grupos)
     assert 'aud-origin--odoo' in html and 'aud-origin--manual' in html and 'aud-origin--auto' in html
     assert html.count('js-aud-reabrir') == 1
+    assert html.count('aud-hist-day') == 1
+    assert 'aud-metric' in html
+
+
+def test_quien_y_cuando_usa_ack_parcial_de_desvio():
+    from types import SimpleNamespace
+    from datetime import timezone
+
+    from app.services.auditoria_casos_service import ORIGEN_MANUAL, quien_y_cuando
+
+    actor = SimpleNamespace(name='Ana', lastname='Jefa')
+    reg = SimpleNamespace(
+        resuelto_por=None,
+        fecha_auditoria=None,
+        desvio_ack_plan_by=actor,
+        desvio_ack_plan_at=datetime(2026, 11, 2, 11, 30, tzinfo=timezone.utc),
+        desvio_ack_real_by=None,
+        desvio_ack_real_at=None,
+    )
+    txt = quien_y_cuando(reg, ORIGEN_MANUAL)
+    assert 'Ana Jefa' in txt
+    assert '—' not in txt
 
 
 def test_estados_decision_cubren_ausencia_y_desasignar():

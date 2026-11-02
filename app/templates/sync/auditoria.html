@@ -5,7 +5,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_layout.css') }}?v=20260922b">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/person_day_timeline.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/auditoria_fichajes.css') }}?v=20261102m">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auditoria_fichajes.css') }}?v=20261102q">
 {% endblock %}
 
 {% block wrapper %}
@@ -154,8 +154,11 @@
             </div>
             <div data-timeline-content></div>
           </div>
-          <div class="aud-hoy-drawer-actions" id="audHoyActions">
-            <div class="aud-d-empty">{{ _('Selecciona una persona.') }}</div>
+          <div class="aud-hoy-drawer-right">
+            <div class="aud-hoy-drawer-metrics" id="audHoyDrawerMetrics" hidden></div>
+            <div class="aud-hoy-drawer-actions" id="audHoyActions">
+              <div class="aud-d-empty">{{ _('Selecciona una persona.') }}</div>
+            </div>
           </div>
         </div>
       </aside>
@@ -182,6 +185,11 @@
         <label class="aud-check" title="{{ _('Los cumplimientos y cierres sin intervención se ocultan salvo que los pidas') }}">
           <input type="checkbox" id="audHistAuto"> {{ _('Incluir cumplimientos automáticos') }}
         </label>
+        <label class="aud-muted" for="audHistDesde">{{ _('Desde') }}</label>
+        <input type="date" class="aud-input" id="audHistDesde" aria-label="{{ _('Fecha desde') }}">
+        <label class="aud-muted" for="audHistHasta">{{ _('Hasta') }}</label>
+        <input type="date" class="aud-input" id="audHistHasta" aria-label="{{ _('Fecha hasta') }}">
+        <button type="button" class="aud-pill aud-pill--soft" id="audHistClearFechas" hidden>{{ _('Quitar fechas') }}</button>
         <span class="aud-spacer"></span>
         <select class="aud-select" id="audHistPer" aria-label="{{ _('Filas por página') }}">
           <option value="25">25</option><option value="50">50</option><option value="100">100</option>
@@ -193,13 +201,14 @@
             <tr>
               <th data-sort="fecha">{{ _('Fecha') }}</th>
               <th data-sort="operario">{{ _('Persona') }}</th>
-              <th data-sort="obra">{{ _('Qué pasó') }}</th>
-              <th data-sort="origen">{{ _('Origen') }}</th>
-              <th data-sort="hora_reg">{{ _('Quién y cuándo') }}</th>
-              <th></th>
+              <th>{{ _('Qué pasó') }}</th>
+              <th data-sort="odoo_ud" class="aud-num" title="{{ _('Unidades / UD (Odoo)') }}">UD</th>
+              <th data-sort="odoo_hh" class="aud-num" title="{{ _('Total horas (Odoo)') }}">HH</th>
+              <th data-sort="odoo_mod" class="aud-num" title="MOD">MOD</th>
+              <th data-sort="odoo_moe" class="aud-num" title="MOE">MOE</th>
             </tr>
           </thead>
-          <tbody id="audHistBody"><tr><td colspan="6" class="aud-table-empty">{{ _('Cargando…') }}</td></tr></tbody>
+          <tbody id="audHistBody"><tr><td colspan="7" class="aud-table-empty">{{ _('Cargando…') }}</td></tr></tbody>
         </table>
         <div class="aud-pager" id="audHistPager"></div>
       </div>
@@ -349,5 +358,5 @@ window.AUD_CFG = {{ {
   },
 }|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/auditoria_fichajes.js') }}?v=20261102m"></script>
+<script src="{{ url_for('static', filename='js/auditoria_fichajes.js') }}?v=20261102q"></script>
 {% endblock %}

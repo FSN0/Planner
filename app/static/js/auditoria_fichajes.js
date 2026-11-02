@@ -271,7 +271,7 @@
     var html = '<div class="aud-hoy-list">';
     html += '<div class="aud-hoy-head" aria-hidden="true">' +
       '<div></div><div>' + escapeHtml(T.hoy_plan || 'Planificación') + '</div>' +
-      '<div>' + escapeHtml(T.hoy_fichaje || 'Fichaje') + '</div></div>';
+      '<div>' + escapeHtml(T.hoy_fichaje || 'Fichaje') + '</div><div></div></div>';
     filas.forEach(function (p) {
       var tono = p.tono_fila || (p.tiene_problema ? 'problema'
         : (p.resumen_chip === 'ok' ? 'ok' : ''));
@@ -304,11 +304,55 @@
           '<span class="aud-hoy-chip-st">' + escapeHtml(T.hoy_sin_marca || 'Sin marca') +
           '</span></span>';
       }
-      html += '</div></div></div>';
+      html += '</div></div>';
+      html += hoyMetricasHtml(p.metricas || {});
+      html += '</div>';
     });
     html += '</div>';
     body.innerHTML = html;
     markHoyRowSelected();
+  }
+
+  function hoyMetricasHtml(m) {
+    function cell(k, label) {
+      var v = m[k];
+      return '<span title="' + escapeHtml(label) + '"><b>' + escapeHtml(label) + '</b>' +
+        escapeHtml(v != null && v !== '' ? String(v) : '—') + '</span>';
+    }
+    return '<div class="aud-hoy-metrics" aria-label="UD HH MOD MOE">' +
+      cell('ud', 'UD') + cell('hh', 'HH') +
+      cell('mod', 'MOD') + cell('moe', 'MOE') +
+      '</div>';
+  }
+
+  function hoyMetricasLineHtml(m) {
+    function cell(k, label) {
+      var v = m[k];
+      return '<span><b>' + escapeHtml(label) + '</b> ' +
+        escapeHtml(v != null && v !== '' ? String(v) : '—') + '</span>';
+    }
+    return cell('ud', 'UD') + cell('hh', 'HH') + cell('mod', 'MOD') + cell('moe', 'MOE');
+  }
+
+  function metricasPersonaHoy(userId, fecha) {
+    var data = state.hoyData;
+    var personas = (data && data.personas) || [];
+    var fechaRef = String(fecha || (data && data.hoy) || '');
+    for (var i = 0; i < personas.length; i++) {
+      var p = personas[i];
+      if (String(p.user_id) === String(userId) &&
+          String(p.fecha || (data && data.hoy) || '') === fechaRef) {
+        return p.metricas || {};
+      }
+    }
+    return {};
+  }
+
+  function renderHoyDrawerMetrics(userId, fecha) {
+    var box = $('#audHoyDrawerMetrics');
+    if (!box) return;
+    box.innerHTML = hoyMetricasLineHtml(metricasPersonaHoy(userId, fecha));
+    box.hidden = false;
   }
 
   function obraLabel(c) {
@@ -586,6 +630,8 @@
     state.hoyDrawer = { userId: null, fecha: null, open: false };
     var drawer = $('#audHoyDrawer');
     if (drawer) drawer.hidden = true;
+    var metrics = $('#audHoyDrawerMetrics');
+    if (metrics) { metrics.hidden = true; metrics.innerHTML = ''; }
     document.body.classList.remove('aud-hoy-drawer-open');
     document.body.classList.remove('aud-hoy-drawer-resizing');
     $$('.aud-hoy-row.is-selected').forEach(function (r) { r.classList.remove('is-selected'); });
@@ -634,6 +680,7 @@
         : (T.hoy_drawer_title || 'Día {d}').replace('{d}', fecha);
     }
 
+    renderHoyDrawerMetrics(userId, fecha);
     actions.innerHTML = '<div class="aud-loading">' + escapeHtml(T.loading || 'Cargando…') + '</div>';
     if (window.PersonDayTimeline && typeof window.PersonDayTimeline.load === 'function') {
       window.PersonDayTimeline.load(root, userId, fecha, {
@@ -977,10 +1024,22 @@
 
   /* ---------- Historial ---------- */
 
+  function syncHistFechasClearBtn() {
+    var btn = $('#audHistClearFechas');
+    if (!btn) return;
+    var d = ($('#audHistDesde') || {}).value || '';
+    var h = ($('#audHistHasta') || {}).value || '';
+    btn.hidden = !(d || h);
+  }
+
   function historialParams() {
     var h = state.hist;
-    var desde = '';
-    if (state.rango && state.rango !== 'todo') {
+    var desdeHist = (($('#audHistDesde') || {}).value || '').trim();
+    var hastaHist = (($('#audHistHasta') || {}).value || '').trim();
+    var desde = desdeHist;
+    var hasta = hastaHist;
+    // Si no hay rango explícito en Historial, usa el periodo compartido de la barra.
+    if (!desde && !hasta && state.rango && state.rango !== 'todo') {
       var d = new Date();
       d.setDate(d.getDate() - (parseInt(state.rango, 10) || 30));
       desde = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
@@ -989,6 +1048,7 @@
       page: h.page, per_page: h.per, sort: h.sort, dir: h.dir, origen: h.origen,
       q: sharedQ(),
       desde: desde,
+      hasta: hasta,
       incluir_auto: ($('#audHistAuto') || {}).checked ? '1' : '',
     };
   }
@@ -1021,7 +1081,7 @@
     state.hist.loaded = true;
     getJson(U.historial, historialParams()).then(function (data) {
       if (!data || !data.success) {
-        body.innerHTML = '<tr><td colspan="6" class="aud-table-empty">' + escapeHtml((data && data.error) || T.load_fail) + '</td></tr>';
+        body.innerHTML = '<tr><td colspan="7" class="aud-table-empty">' + escapeHtml((data && data.error) || T.load_fail) + '</td></tr>';
         return;
       }
       body.innerHTML = data.html;
@@ -1300,6 +1360,24 @@
     });
     var histAuto = $('#audHistAuto');
     if (histAuto) histAuto.addEventListener('change', resetHist);
+    var histDesde = $('#audHistDesde');
+    var histHasta = $('#audHistHasta');
+    function onHistFechaChange() {
+      syncHistFechasClearBtn();
+      resetHist();
+    }
+    if (histDesde) histDesde.addEventListener('change', onHistFechaChange);
+    if (histHasta) histHasta.addEventListener('change', onHistFechaChange);
+    var histClear = $('#audHistClearFechas');
+    if (histClear) {
+      histClear.addEventListener('click', function () {
+        if (histDesde) histDesde.value = '';
+        if (histHasta) histHasta.value = '';
+        syncHistFechasClearBtn();
+        resetHist();
+      });
+    }
+    syncHistFechasClearBtn();
     var hp = $('#audHistPer');
     if (hp) {
       hp.addEventListener('change', function () { state.hist.per = parseInt(hp.value, 10) || 25; resetHist(); });
