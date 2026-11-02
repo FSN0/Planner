@@ -89,6 +89,30 @@ def _falta_confirmada_en_plan(reg) -> bool:
     )
 
 
+def _fichaje_cubre_plaza(reg_plan, punch) -> bool:
+    """True si un fichaje en obra_real cubre la plaza (p. ej. tras Resuelto_Movido).
+
+    Tras «Confirmar desvío» el registro sigue con obra_planificada = obra antigua
+    y obra_real = obra aceptada; la nueva asignación no tiene pata de plan, así
+    que sin este puente Hoy pintaría «Sin fichar» frente a «Según plan».
+    """
+    if punch is None:
+        return False
+    est = (punch.estado or '').strip()
+    if not (
+        est in _OK
+        or est.startswith('Resuelto')
+        or est == 'Retraso'
+    ):
+        return False
+    if not (punch.check_in or punch.obra_real_id):
+        return False
+    if reg_plan is None:
+        return True
+    est_p = (reg_plan.estado or '').strip()
+    return est_p in ('Sin_Registro', 'Ausencia', 'Exento_Ausencia')
+
+
 def _chip_plan(reg, *, hoy: date) -> tuple[str, str]:
     """Estado de la plaza planificada (no describe el fichaje real)."""
     if reg is None:
@@ -280,8 +304,15 @@ def roster_hoy(user, *, hoy: date | None = None, q: str = '') -> dict:
             ocodigo = (o.codigo or '').strip() if o else ''
             search_bits.extend([onombre.lower(), ocodigo.lower()])
             reg = reg_por_plan.get((uid, oid))
-            chip, label = _chip_plan(reg, hoy=hoy)
-            plan_chips.append(_chip_dict(oid, o, chip, label, reg))
+            punch = fichaje_por_obra.get(uid, {}).get(oid)
+            if _fichaje_cubre_plaza(reg, punch):
+                # Plaza cubierta por marca en esa obra_real (desvío aceptado).
+                chip, label = CHIP_OK, 'Cumplió'
+                reg_chip = punch
+            else:
+                chip, label = _chip_plan(reg, hoy=hoy)
+                reg_chip = reg
+            plan_chips.append(_chip_dict(oid, o, chip, label, reg_chip))
             totales[chip] = totales.get(chip, 0) + 1
             totales['plazas'] += 1
 

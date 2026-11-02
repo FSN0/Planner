@@ -207,3 +207,43 @@ def test_roster_hoy_falta_confirmada_en_desvio_parcial(
     assert p['tono_fila'] == 'problema'
     # Sigue enlazando a Por resolver (falta aceptar el fichaje real).
     assert all(c['destino'] == 'resolver' for c in p['plan'])
+
+
+def test_roster_hoy_resuelto_movido_cubre_nueva_plaza(
+    session, tenant_soltec, user_operario, user_jefe, user_admin,
+):
+    """Tras Confirmar desvío: asignado a la obra real, registro con plan=antigua.
+
+    Sin puente plaza↔fichaje Hoy pintaba «Sin fichar» en plan y «Según plan»
+    en fichaje para la misma obra.
+    """
+    from app.services.auditoria_hoy_service import roster_hoy
+
+    session.execute(text(f'SET search_path TO {tenant_soltec.schema_name}, public'))
+    hoy = today_local()
+    mestalla = _obra(session, 'Nou Mestalla', 'S25/250', user_jefe)
+    marina = _obra(session, 'Marina Port', 'SG26/010', user_jefe)
+    # Tras liberar plan + aceptar entrada: solo asignación en obra real.
+    session.add(Asignacion(user_id=user_operario.id, obra_id=marina.id, fecha=hoy))
+    session.add(RegistroFichaje(
+        user_id=user_operario.id, fecha=hoy,
+        obra_planificada_id=mestalla.id, obra_real_id=marina.id,
+        check_in=datetime.combine(hoy, time(6, 51)),
+        estado='Resuelto_Movido',
+    ))
+    session.commit()
+
+    data = roster_hoy(user_admin, hoy=hoy)
+    p = data['personas'][0]
+    assert len(p['plan']) == 1
+    assert p['plan'][0]['obra_id'] == marina.id
+    assert p['plan'][0]['chip'] == 'ok'
+    assert p['plan'][0]['label'] == 'Cumplió'
+    assert len(p['fichajes']) == 1
+    assert p['fichajes'][0]['obra_id'] == marina.id
+    assert p['fichajes'][0]['en_plan'] is True
+    assert p['fichajes'][0]['label'] == 'Según plan'
+    assert p['fichajes'][0]['entrada']  # hora de entrada presente
+    assert p['tono_fila'] == 'ok'
+    assert data['totales']['ok'] == 1
+    assert data['totales'].get('sin_fichar', 0) == 0
